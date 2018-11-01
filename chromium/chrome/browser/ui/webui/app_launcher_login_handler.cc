@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -36,16 +37,17 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/host_zoom_map.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
 #include "net/base/escape.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/skia_util.h"
 
 using content::OpenURLParams;
 using content::Referrer;
@@ -58,15 +60,15 @@ SkBitmap GetGAIAPictureForNTP(const gfx::Image& image) {
   const int kLength = 27;
   SkBitmap bmp = skia::ImageOperations::Resize(*image.ToSkBitmap(),
       skia::ImageOperations::RESIZE_BEST, kLength, kLength);
-
-  gfx::Canvas canvas(gfx::Size(kLength, kLength), 1.0f, false);
-  canvas.DrawImageInt(gfx::ImageSkia::CreateFrom1xBitmap(bmp), 0, 0);
+  SkCanvas canvas(bmp);
 
   // Draw a gray border on the inside of the icon.
-  SkColor color = SkColorSetARGB(83, 0, 0, 0);
-  canvas.DrawRect(gfx::Rect(0, 0, kLength - 1, kLength - 1), color);
-
-  return canvas.ExtractImageRep().sk_bitmap();
+  SkPaint paint;
+  paint.setColor(SkColorSetARGB(83, 0, 0, 0));
+  paint.setStyle(SkPaint::kStroke_Style);
+  canvas.drawRect(gfx::RectToSkRect(gfx::Rect(kLength - 1, kLength - 1)),
+                  paint);
+  return bmp;
 }
 
 // Puts the |content| into an element with the given CSS class.
@@ -209,7 +211,7 @@ void AppLauncherLoginHandler::UpdateLogin() {
       sub_header = l10n_util::GetStringFUTF16(
           IDS_SYNC_PROMO_NOT_SIGNED_IN_STATUS_SUB_HEADER, signed_in_link);
 
-      content::RecordAction(
+      base::RecordAction(
           web_ui()->GetWebContents()->GetURL().spec() ==
                   chrome::kChromeUIAppsURL
               ? base::UserMetricsAction("Signin_Impression_FromAppsPageLink")
@@ -220,9 +222,9 @@ void AppLauncherLoginHandler::UpdateLogin() {
 #endif
   }
 
-  base::StringValue header_value(header);
-  base::StringValue sub_header_value(sub_header);
-  base::StringValue icon_url_value(icon_url);
+  base::Value header_value(header);
+  base::Value sub_header_value(sub_header);
+  base::Value icon_url_value(icon_url);
   base::Value is_user_signed_in(!username.empty());
   web_ui()->CallJavascriptFunctionUnsafe("ntp.updateLogin", header_value,
                                          sub_header_value, icon_url_value,

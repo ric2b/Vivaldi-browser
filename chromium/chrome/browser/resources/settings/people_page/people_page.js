@@ -81,67 +81,48 @@ Polymer({
       },
     },
 
+    /** @private */
+    showDisconnectDialog_: Boolean,
+
 // <if expr="chromeos">
     /**
-     * True if quick unlock settings should be displayed on this machine.
+     * True if fingerprint settings should be displayed on this machine.
      * @private
      */
-    quickUnlockEnabled_: {
+    fingerprintUnlockEnabled_: {
       type: Boolean,
       value: function() {
-        return loadTimeData.getBoolean('pinUnlockEnabled') ||
-            loadTimeData.getBoolean('fingerprintUnlockEnabled');
+        return loadTimeData.getBoolean('fingerprintUnlockEnabled');
       },
       readOnly: true,
-    },
-
-    /** @private {!settings.EasyUnlockBrowserProxy} */
-    easyUnlockBrowserProxy_: {
-      type: Object,
-      value: function() {
-        return settings.EasyUnlockBrowserProxyImpl.getInstance();
-      },
-    },
-
-    /**
-     * True if Easy Unlock is allowed on this machine.
-     */
-    easyUnlockAllowed_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('easyUnlockAllowed');
-      },
-      readOnly: true,
-    },
-
-    /**
-     * True if Easy Unlock is enabled.
-     */
-    easyUnlockEnabled_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('easyUnlockEnabled');
-      },
-    },
-
-    /**
-     * True if Easy Unlock's proximity detection feature is allowed.
-     */
-    easyUnlockProximityDetectionAllowed_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('easyUnlockAllowed') &&
-            loadTimeData.getBoolean('easyUnlockProximityDetectionAllowed');
-      },
-      readOnly: true,
-    },
-
-    /** @private */
-    showEasyUnlockTurnOffDialog_: {
-      type: Boolean,
-      value: false,
     },
 // </if>
+
+    /** @private {!Map<string, string>} */
+    focusConfig_: {
+      type: Object,
+      value: function() {
+        var map = new Map();
+        map.set(
+            settings.Route.SYNC.path, '#sync-status .subpage-arrow');
+// <if expr="not chromeos">
+        map.set(
+            settings.Route.MANAGE_PROFILE.path,
+            '#picture-subpage-trigger .subpage-arrow');
+// </if>
+// <if expr="chromeos">
+        map.set(
+            settings.Route.CHANGE_PICTURE.path,
+            '#picture-subpage-trigger .subpage-arrow');
+        map.set(
+            settings.Route.LOCK_SCREEN.path, '#lockScreenSubpageTrigger');
+        map.set(
+            settings.Route.ACCOUNTS.path,
+            '#manage-other-people-subpage-trigger .subpage-arrow');
+// </if>
+        return map;
+      },
+    },
   },
 
   /** @override */
@@ -163,16 +144,6 @@ Polymer({
         this.handleSyncStatus_.bind(this));
     this.addWebUIListener('sync-status-changed',
                           this.handleSyncStatus_.bind(this));
-
-// <if expr="chromeos">
-    if (this.easyUnlockAllowed_) {
-      this.addWebUIListener(
-          'easy-unlock-enabled-status',
-          this.handleEasyUnlockEnabledStatusChanged_.bind(this));
-      this.easyUnlockBrowserProxy_.getEnabledStatus().then(
-          this.handleEasyUnlockEnabledStatusChanged_.bind(this));
-    }
-// </if>
   },
 
   /** @protected */
@@ -184,12 +155,16 @@ Polymer({
       // If the sync status has not been fetched yet, optimistically display
       // the disconnect dialog. There is another check when the sync status is
       // fetched. The dialog will be closed then the user is not signed in.
-      if (this.syncStatus && !this.syncStatus.signedIn)
+      if (this.syncStatus && !this.syncStatus.signedIn) {
         settings.navigateToPreviousRoute();
-      else
-        this.$.disconnectDialog.showModal();
-    } else if (this.$.disconnectDialog.open) {
-      this.$.disconnectDialog.close();
+      } else {
+        this.showDisconnectDialog_ = true;
+        this.async(function() {
+          this.$$('#disconnectDialog').showModal();
+        }.bind(this));
+      }
+    } else if (this.showDisconnectDialog_) {
+      this.$$('#disconnectDialog').close();
     }
   },
 
@@ -253,23 +228,11 @@ Polymer({
       settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileStatsCount();
 // </if>
 
-    if (!syncStatus.signedIn && this.$.disconnectDialog.open)
-      this.$.disconnectDialog.close();
+    if (!syncStatus.signedIn && this.showDisconnectDialog_)
+      this.$$('#disconnectDialog').close();
 
     this.syncStatus = syncStatus;
   },
-
-// <if expr="chromeos">
-  /**
-   * Handler for when the Easy Unlock enabled status has changed.
-   * @private
-   */
-  handleEasyUnlockEnabledStatusChanged_: function(easyUnlockEnabled) {
-    this.easyUnlockEnabled_ = easyUnlockEnabled;
-    this.showEasyUnlockTurnOffDialog_ =
-        easyUnlockEnabled && this.showEasyUnlockTurnOffDialog_;
-  },
-// </if>
 
   /** @private */
   onPictureTap_: function() {
@@ -289,17 +252,15 @@ Polymer({
 // </if>
 
   /** @private */
-  onActivityControlsTap_: function() {
-    this.syncBrowserProxy_.openActivityControlsUrl();
-  },
-
-  /** @private */
   onSigninTap_: function() {
     this.syncBrowserProxy_.startSignIn();
   },
 
   /** @private */
   onDisconnectClosed_: function() {
+    this.showDisconnectDialog_ = false;
+    this.$$('#disconnectButton').focus();
+
     if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
       settings.navigateToPreviousRoute();
     this.fire('signout-dialog-closed');
@@ -312,7 +273,7 @@ Polymer({
 
   /** @private */
   onDisconnectCancel_: function() {
-    this.$.disconnectDialog.close();
+    this.$$('#disconnectDialog').close();
   },
 
   /** @private */
@@ -328,7 +289,7 @@ Polymer({
       this.syncBrowserProxy_.signOut(deleteProfile);
     }.bind(this));
 
-    this.$.disconnectDialog.close();
+    this.$$('#disconnectDialog').close();
   },
 
   /** @private */
@@ -373,25 +334,6 @@ Polymer({
   onConfigureLockTap_: function() {
     settings.navigateTo(settings.Route.LOCK_SCREEN);
   },
-
-  /** @private */
-  onEasyUnlockSetupTap_: function() {
-    this.easyUnlockBrowserProxy_.startTurnOnFlow();
-  },
-
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  onEasyUnlockTurnOffTap_: function(e) {
-    e.preventDefault();
-    this.showEasyUnlockTurnOffDialog_ = true;
-  },
-
-  /** @private */
-  onEasyUnlockTurnOffDialogClose_: function() {
-    this.showEasyUnlockTurnOffDialog_ = false;
-  },
 // </if>
 
   /** @private */
@@ -429,6 +371,7 @@ Polymer({
   /** @private */
   onImportDataDialogClosed_: function() {
     settings.navigateToPreviousRoute();
+    this.$.importDataDialogTrigger.focus();
   },
 // </if>
 

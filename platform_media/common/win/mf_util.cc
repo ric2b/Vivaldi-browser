@@ -10,7 +10,6 @@
 
 #include <map>
 
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/win/windows_version.h"
@@ -60,10 +59,17 @@ bool LoadMFLibrary(const char* library_name) {
   return true;
 }
 
-// LazyInstance to have a lazily evaluated, cached result available to multiple
-// threads in a safe manner.
+// Provide two separate loaders, one for the common mfplat.dll library plus
+// decoder libraries, and another one for mfreadwrite.dll.  The latter provides
+// IMFSourceReader, which is only necessary when decoding _and_ demuxing using
+// system libraries.
 class PrimaryLoader {
  public:
+  static PrimaryLoader * getInstance() {
+    static PrimaryLoader * instance = new PrimaryLoader();
+    return instance;
+  }
+
   PrimaryLoader();
 
   bool is_media_foundation_available() const {
@@ -117,6 +123,12 @@ void PrimaryLoader::ReportLoadResults() {
 
 class SecondaryLoader {
  public:
+
+  static SecondaryLoader * getInstance() {
+    static SecondaryLoader * instance = new SecondaryLoader();
+    return instance;
+  }
+
   SecondaryLoader()
       : source_reader_available_(LoadMFLibrary("mfreadwrite.dll") &&
                                  LoadMFLibrary("evr.dll")) {}
@@ -127,34 +139,26 @@ class SecondaryLoader {
   bool source_reader_available_;
 };
 
-// Provide two separate loaders, one for the common mfplat.dll library plus
-// decoder libraries, and another one for mfreadwrite.dll.  The latter provides
-// IMFSourceReader, which is only necessary when decoding _and_ demuxing using
-// system libraries.
-base::LazyInstance<PrimaryLoader> g_primary_loader = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<SecondaryLoader> g_secondary_loader =
-    LAZY_INSTANCE_INITIALIZER;
-
 }  // namespace
 
 bool LoadMFCommonLibraries() {
-  return g_primary_loader.Get().is_media_foundation_available();
+  return PrimaryLoader::getInstance()->is_media_foundation_available();
 }
 
 bool LoadMFSourceReaderLibraries() {
-  return g_secondary_loader.Get().is_source_reader_available();
+  return SecondaryLoader::getInstance()->is_source_reader_available();
 }
 
 void LoadMFAudioDecoderLibraries() {
-  g_primary_loader.Get();
+  PrimaryLoader::getInstance();
 }
 
 bool LoadMFAudioDecoderLibrary(AudioCodec codec) {
-  return g_primary_loader.Get().is_audio_decoder_available(codec);
+  return PrimaryLoader::getInstance()->is_audio_decoder_available(codec);
 }
 
 bool LoadMFVideoDecoderLibraries() {
-  return g_primary_loader.Get().is_video_decoder_available();
+  return PrimaryLoader::getInstance()->is_video_decoder_available();
 }
 
 std::string GetMFAudioDecoderLibraryName(AudioCodec codec) {

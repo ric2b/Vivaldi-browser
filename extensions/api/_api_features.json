@@ -26,6 +26,11 @@
     "dependencies": [ "permission:bookmarksPrivate" ],
     "contexts": [ "blessed_extension" ]
   },
+  "devtoolsPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:devtoolsPrivate" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "editcommand": {
     "dependencies": [ "permission:editcommand" ],
     "contexts": [ "blessed_extension" ]
@@ -55,6 +60,7 @@
     "contexts": [ "blessed_extension" ]
   },
   "savedpasswords": {
+    "vivaldi": true,
     "dependencies": [ "permission:savedpasswords" ],
     "contexts": [ "blessed_extension" ]
   },
@@ -74,6 +80,7 @@
     "contexts": [ "blessed_extension" ]
   },
   "sync": {
+    "vivaldi": true,
     "dependencies": [ "permission:sync" ],
     "contexts": [ "blessed_extension" ]
   },
@@ -101,7 +108,7 @@
     "dependencies": ["permission:webview"],
     "contexts": ["blessed_extension"]
   }, {
-    "channel": "dev",
+    "channel": "stable",
     "contexts": ["webui"],
     "matches": [
       "chrome://chrome-signin/*",

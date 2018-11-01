@@ -9,8 +9,8 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/payments/chrome_payment_request_delegate.h"
-#include "components/payments/content/payment_request_delegate.h"
 #include "components/payments/content/payment_request_web_contents_manager.h"
+#include "components/payments/core/payment_request_delegate.h"
 #include "content/public/browser/web_contents.h"
 
 namespace payments {
@@ -20,10 +20,11 @@ void CreatePaymentRequestForWebContents(
     mojo::InterfaceRequest<payments::mojom::PaymentRequest> request) {
   DCHECK(web_contents);
   PaymentRequestWebContentsManager::GetOrCreateForWebContents(web_contents)
-      ->CreatePaymentRequest(web_contents,
-                             base::MakeUnique<ChromePaymentRequestDelegate>(
-                                web_contents),
-                             std::move(request));
+      ->CreatePaymentRequest(
+          web_contents,
+          base::MakeUnique<ChromePaymentRequestDelegate>(web_contents),
+          std::move(request),
+          /*observer_for_testing=*/nullptr);
 }
 
 }  // namespace payments

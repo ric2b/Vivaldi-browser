@@ -35,10 +35,10 @@ source_set("ipc_client_sources") {
       "gpu_process_hosted_ca_layer_tree_params.h",
     ]
   }
-  if (use_ozone) {
+  if (is_linux) {
     sources += [
-      "gpu_memory_buffer_impl_ozone_native_pixmap.cc",
-      "gpu_memory_buffer_impl_ozone_native_pixmap.h",
+      "gpu_memory_buffer_impl_native_pixmap.cc",
+      "gpu_memory_buffer_impl_native_pixmap.h",
     ]
   }
   configs += [
@@ -51,13 +51,15 @@ source_set("ipc_client_sources") {
     "//gpu/command_buffer/common:common_sources",
     "//gpu/config:config_sources",
     "//gpu/ipc/common:ipc_common_sources",
-    "//ipc",
     "//ui/base/",
-    "//ui/events/ipc",
     "//ui/gfx/ipc",
     "//ui/gfx/ipc/geometry",
     "//ui/gl",
+    "//ui/latency/ipc",
     "//url/ipc:url_ipc",
+  ]
+  public_deps = [
+    "//ipc",
   ]
   if (use_ozone) {
     deps += [ "//ui/ozone" ]

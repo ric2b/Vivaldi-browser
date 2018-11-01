@@ -36,9 +36,6 @@ class ChromeBrowserState;
 
 - (instancetype)init NS_UNAVAILABLE;
 
-// Mark super designated initializer as unavailable.
-- (instancetype)initWithNibNamed:(NSString*)nibName NS_UNAVAILABLE;
-
 // Reloads the closed tab list and updates the content of the tableView.
 - (void)reloadClosedTabsList;
 
@@ -47,6 +44,10 @@ class ChromeBrowserState;
 
 // Sets the tab restore service to null.
 - (void)tabRestoreServiceDestroyed;
+
+// TODO(crbug.com/708319): Expose the view controller in preparation for a full
+// view controller conversion.
+- (UIViewController*)viewController;
 
 @end
 

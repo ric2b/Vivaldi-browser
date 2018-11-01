@@ -132,6 +132,8 @@ class VivaldiPrivateTabObserver
  public:
   ~VivaldiPrivateTabObserver() override;
 
+  void BroadcastTabInfo();
+
   // content::WebContentsObserver implementation.
   void DidChangeThemeColor(SkColor theme_color) override;
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;

@@ -13,7 +13,8 @@
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
-#include "ui/events/latency_info.h"
+#include "ui/latency/latency_info.h"
+#include "ui/latency/latency_tracker.h"
 
 namespace content {
 
@@ -21,7 +22,8 @@ class RenderWidgetHostDelegate;
 
 // Utility class for tracking the latency of events passing through
 // a given RenderWidgetHost.
-class CONTENT_EXPORT RenderWidgetHostLatencyTracker {
+class CONTENT_EXPORT RenderWidgetHostLatencyTracker
+    : NON_EXPORTED_BASE(public ui::LatencyTracker) {
  public:
   explicit RenderWidgetHostLatencyTracker();
   ~RenderWidgetHostLatencyTracker();
@@ -54,12 +56,6 @@ class CONTENT_EXPORT RenderWidgetHostLatencyTracker {
   // update from the renderer.
   void OnSwapCompositorFrame(std::vector<ui::LatencyInfo>* latencies);
 
-  // Terminates latency tracking for events that triggered rendering, also
-  // performing relevant UMA latency reporting.
-  // Called when the RenderWidgetHost receives a swap update from the GPU.
-  void OnFrameSwapped(const ui::LatencyInfo& latency,
-                      bool is_running_navigation_hint_task);
-
   // WebInputEvent coordinates are in DPIs, while LatencyInfo expects
   // coordinates in device pixels.
   void set_device_scale_factor(float device_scale_factor) {
@@ -75,13 +71,19 @@ class CONTENT_EXPORT RenderWidgetHostLatencyTracker {
   void SetDelegate(RenderWidgetHostDelegate*);
 
  private:
+  // ui::LatencyTracker:
+  void ReportRapporScrollLatency(
+      const std::string& name,
+      const ui::LatencyInfo::LatencyComponent& start_component,
+      const ui::LatencyInfo::LatencyComponent& end_component) override;
+
   int64_t last_event_id_;
   int64_t latency_component_id_;
   float device_scale_factor_;
   bool has_seen_first_gesture_scroll_update_;
-  // Whether the current stream of touch events has ever included more than one
-  // touch point.
-  bool multi_finger_gesture_;
+  // Whether the current stream of touch events includes more than one active
+  // touch point. This is set in OnInputEvent, and cleared in OnInputEventAck.
+  bool active_multi_finger_gesture_;
   // Whether the touch start for the current stream of touch events had its
   // default action prevented. Only valid for single finger gestures.
   bool touch_start_default_prevented_;

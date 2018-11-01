@@ -14,12 +14,7 @@
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/device_event_log/device_event_log.h"
-
-#if defined(USE_SYSTEM_PROTOBUF)
-#include <google/protobuf/repeated_field.h>
-#else
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
-#endif
 
 using chromeos::DBusThreadManager;
 using google::protobuf::RepeatedPtrField;
@@ -161,6 +156,10 @@ MountError MapError(CryptohomeErrorCode code) {
     case CRYPTOHOME_ERROR_KEY_LABEL_EXISTS:
     case CRYPTOHOME_ERROR_UPDATE_SIGNATURE_INVALID:
       return MOUNT_ERROR_KEY_FAILURE;
+    case CRYPTOHOME_ERROR_MOUNT_OLD_ENCRYPTION:
+      return MOUNT_ERROR_OLD_ENCRYPTION;
+    case CRYPTOHOME_ERROR_MOUNT_PREVIOUS_MIGRATION_INCOMPLETE:
+      return MOUNT_ERROR_PREVIOUS_MIGRATION_INCOMPLETE;
     default:
       NOTREACHED();
       return MOUNT_ERROR_FATAL;
@@ -219,6 +218,12 @@ class HomedirMethodsImpl : public HomedirMethods {
       for (size_t i = 0; i < request.create_keys.size(); ++i)
         FillKeyProtobuf(request.create_keys[i], create->add_keys());
     }
+
+    if (request.force_dircrypto_if_available)
+      request_proto.set_force_dircrypto_if_available(true);
+
+    if (request.to_migrate_from_ecryptfs)
+      request_proto.set_to_migrate_from_ecryptfs(true);
 
     DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
         id, auth_proto, request_proto,
@@ -291,6 +296,13 @@ class HomedirMethodsImpl : public HomedirMethods {
       const GetAccountDiskUsageCallback& callback) override {
     DBusThreadManager::Get()->GetCryptohomeClient()->GetAccountDiskUsage(
         id, base::Bind(&HomedirMethodsImpl::OnGetAccountDiskUsageCallback,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
+  }
+
+  void MigrateToDircrypto(const Identification& id,
+                          const DBusResultCallback& callback) override {
+    DBusThreadManager::Get()->GetCryptohomeClient()->MigrateToDircrypto(
+        id, base::Bind(&HomedirMethodsImpl::OnDBusResultCallback,
                        weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
@@ -453,6 +465,11 @@ class HomedirMethodsImpl : public HomedirMethods {
       }
     }
     callback.Run(true, MOUNT_ERROR_NONE);
+  }
+
+  void OnDBusResultCallback(const DBusResultCallback& callback,
+                            chromeos::DBusMethodCallStatus call_status) {
+    callback.Run(call_status == chromeos::DBUS_METHOD_CALL_SUCCESS);
   }
 
   base::WeakPtrFactory<HomedirMethodsImpl> weak_ptr_factory_;

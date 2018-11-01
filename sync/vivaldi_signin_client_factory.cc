@@ -35,7 +35,7 @@ VivaldiSigninClientFactory* VivaldiSigninClientFactory::GetInstance() {
 
 KeyedService* VivaldiSigninClientFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = static_cast<Profile*>(context);
+  Profile* profile = Profile::FromBrowserContext(context);
   VivaldiSigninClient* client = new VivaldiSigninClient(
       profile, SigninErrorControllerFactory::GetForProfile(profile));
   return client;

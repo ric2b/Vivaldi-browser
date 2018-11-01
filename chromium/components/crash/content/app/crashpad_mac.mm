@@ -66,12 +66,18 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
           base::SysNSStringToUTF8(product).append("_Mac");
 
 #if defined(GOOGLE_CHROME_BUILD)
+      // Empty means stable.
+      const bool allow_empty_channel = true;
+#else
+      const bool allow_empty_channel = false;
+#endif
       NSString* channel = base::mac::ObjCCast<NSString>(
           [outer_bundle objectForInfoDictionaryKey:@"KSChannelID"]);
       if (channel) {
         process_annotations["channel"] = base::SysNSStringToUTF8(channel);
+      } else if (allow_empty_channel) {
+        process_annotations["channel"] = "";
       }
-#endif
 
       NSString* version =
           base::mac::ObjCCast<NSString>([base::mac::FrameworkBundle()
@@ -81,6 +87,16 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
       process_annotations["plat"] = std::string("OS X");
 
       std::vector<std::string> arguments;
+
+      if (crash_reporter_client->ShouldMonitorCrashHandlerExpensively()) {
+        arguments.push_back("--monitor-self");
+      }
+
+      // Set up --monitor-self-annotation even in the absence of --monitor-self
+      // so that minidumps produced by Crashpad's generate_dump tool will
+      // contain these annotations.
+      arguments.push_back("--monitor-self-annotation=ptype=crashpad-handler");
+
       if (!browser_process) {
         // If this is an initial client that's not the browser process, it's
         // important that the new Crashpad handler also not be connected to any
@@ -90,15 +106,9 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
             "--reset-own-crash-exception-port-to-system-default");
       }
 
-      crashpad::CrashpadClient crashpad_client;
-      bool result = crashpad_client.StartHandler(handler_path,
-                                                 database_path,
-                                                 metrics_path,
-                                                 url,
-                                                 process_annotations,
-                                                 arguments,
-                                                 true,
-                                                 false);
+      bool result = GetCrashpadClient().StartHandler(
+          handler_path, database_path, metrics_path, url, process_annotations,
+          arguments, true, false);
 
       // If this is an initial client that's not the browser process, it's
       // important to sever the connection to any existing handler. If

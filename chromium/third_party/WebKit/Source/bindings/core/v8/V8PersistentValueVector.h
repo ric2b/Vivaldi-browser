@@ -31,10 +31,10 @@
 #ifndef V8PersistentValueVector_h
 #define V8PersistentValueVector_h
 
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
 #include "v8/include/v8-util.h"
 #include "v8/include/v8.h"
-#include "wtf/Allocator.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -46,15 +46,15 @@ class WTFVectorPersistentValueVectorTraits {
   static void Append(Impl* impl, v8::PersistentContainerValue value) {
     impl->push_back(value);
   }
-  static bool IsEmpty(const Impl* impl) { return impl->isEmpty(); }
+  static bool IsEmpty(const Impl* impl) { return impl->IsEmpty(); }
   static size_t Size(const Impl* impl) { return impl->size(); }
   static v8::PersistentContainerValue Get(const Impl* impl, size_t i) {
     return (i < impl->size()) ? impl->at(i) : v8::kPersistentContainerNotFound;
   }
   static void ReserveCapacity(Impl* impl, size_t capacity) {
-    impl->reserveCapacity(capacity);
+    impl->ReserveCapacity(capacity);
   }
-  static void Clear(Impl* impl) { impl->clear(); }
+  static void Clear(Impl* impl) { impl->Clear(); }
 };
 
 template <class ValueType>

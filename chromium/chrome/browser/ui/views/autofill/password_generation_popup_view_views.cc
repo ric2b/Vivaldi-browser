@@ -51,14 +51,15 @@ class PasswordTextBox : public views::View {
     SetLayoutManager(box_layout);
 
     views::Label* suggestion_label = new views::Label(
-        suggestion_text, font_list.DeriveWithWeight(gfx::Font::Weight::BOLD));
+        suggestion_text, views::Label::CustomFont{font_list.DeriveWithWeight(
+                             gfx::Font::Weight::BOLD)});
     suggestion_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     suggestion_label->SetEnabledColor(
         PasswordGenerationPopupView::kPasswordTextColor);
     AddChildView(suggestion_label);
 
     views::Label* password_label =
-        new views::Label(generated_password, font_list);
+        new views::Label(generated_password, {font_list});
     password_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     password_label->SetEnabledColor(
         PasswordGenerationPopupView::kPasswordTextColor);
@@ -176,16 +177,17 @@ void PasswordGenerationPopupViewViews::CreatePasswordView() {
 }
 
 gfx::Size PasswordGenerationPopupViewViews::GetPreferredSizeOfPasswordView() {
-  int height = kPopupBorderThickness;
+  int width = controller_->GetMinimumWidth();
+  if (password_view_)
+    width = std::max(width, password_view_->GetMinimumSize().width());
+  int height = help_label_->GetHeightForWidth(width);
   if (controller_->display_password()) {
     // Add divider height as well.
     height +=
         PasswordGenerationPopupController::kPopupPasswordSectionHeight + 1;
   }
-  int width = controller_->GetMinimumWidth();
-  int popup_width = width - 2 * kPopupBorderThickness;
-  height += help_label_->GetHeightForWidth(popup_width);
-  return gfx::Size(width, height + kPopupBorderThickness);
+  return gfx::Size(width + 2 * kPopupBorderThickness,
+                   height + 2 * kPopupBorderThickness);
 }
 
 void PasswordGenerationPopupViewViews::Show() {

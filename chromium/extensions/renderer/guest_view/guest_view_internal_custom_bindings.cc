@@ -41,7 +41,8 @@ namespace {
 // GuestViewInternalCustomBindings::RegisterView(), and accessed via
 // GuestViewInternalCustomBindings::GetViewFromID().
 using ViewMap = std::map<int, v8::Global<v8::Object>*>;
-static base::LazyInstance<ViewMap> weak_view_map = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<ViewMap>::DestructorAtExit weak_view_map =
+    LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -49,12 +50,12 @@ namespace extensions {
 
 namespace {
 
-content::RenderFrame* GetRenderFrame(v8::Handle<v8::Value> value) {
+content::RenderFrame* GetRenderFrame(v8::Local<v8::Value> value) {
   v8::Local<v8::Context> context =
       v8::Local<v8::Object>::Cast(value)->CreationContext();
   if (context.IsEmpty())
     return nullptr;
-  blink::WebLocalFrame* frame = blink::WebLocalFrame::frameForContext(context);
+  blink::WebLocalFrame* frame = blink::WebLocalFrame::FrameForContext(context);
   if (!frame)
     return nullptr;
   return content::RenderFrame::FromWebFrame(frame);
@@ -266,9 +267,9 @@ void GuestViewInternalCustomBindings::AttachIframeGuest(
 
   blink::WebLocalFrame* frame = render_frame->GetWebFrame();
   // Parent must exist.
-  blink::WebFrame* parent_frame = frame->parent();
+  blink::WebFrame* parent_frame = frame->Parent();
   DCHECK(parent_frame);
-  DCHECK(parent_frame->isWebLocalFrame());
+  DCHECK(parent_frame->IsWebLocalFrame());
 
   // Add flag to |params| to indicate that the element size is specified in
   // logical units.
@@ -345,15 +346,14 @@ void GuestViewInternalCustomBindings::GetContentWindow(
   if (!view)
     return;
 
-  blink::WebFrame* frame = view->GetWebView()->mainFrame();
+  blink::WebFrame* frame = view->GetWebView()->MainFrame();
   // TODO(lazyboy,nasko): The WebLocalFrame branch is not used when running
   // on top of out-of-process iframes. Remove it once the code is converted.
   v8::Local<v8::Value> window;
-  if (frame->isWebLocalFrame()) {
-    window = frame->mainWorldScriptContext()->Global();
+  if (frame->IsWebLocalFrame()) {
+    window = frame->MainWorldScriptContext()->Global();
   } else {
-    window =
-        frame->toWebRemoteFrame()->deprecatedMainWorldScriptContext()->Global();
+    window = frame->ToWebRemoteFrame()->GlobalProxy();
   }
   args.GetReturnValue().Set(window);
 }
@@ -373,8 +373,8 @@ void GuestViewInternalCustomBindings::GetViewFromID(
   if (map_entry == view_map.end())
     return;
 
-  auto return_object = v8::Handle<v8::Object>::New(args.GetIsolate(),
-                                                   *map_entry->second);
+  auto return_object =
+      v8::Local<v8::Object>::New(args.GetIsolate(), *map_entry->second);
   args.GetReturnValue().Set(return_object);
 }
 

@@ -23,10 +23,6 @@ class FilePath;
 class SingleThreadTaskRunner;
 }
 
-namespace blink {
-enum class WebNavigationHintType;
-}
-
 namespace storage {
 class QuotaManagerProxy;
 class SpecialStoragePolicy;
@@ -109,11 +105,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const CountExternalRequestsCallback& callback) override;
   void StopAllServiceWorkersForOrigin(const GURL& origin) override;
   void ClearAllServiceWorkersForTest(const base::Closure& callback) override;
-  void StartServiceWorkerForNavigationHint(
-      const GURL& document_url,
-      blink::WebNavigationHintType type,
-      int render_process_id,
-      const ResultCallback& callback) override;
   bool StartingExternalRequest(int64_t service_worker_version_id,
                                const std::string& request_uuid) override;
   bool FinishedExternalRequest(int64_t service_worker_version_id,
@@ -227,9 +218,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // Must be called from the IO thread.
   bool OriginHasForeignFetchRegistrations(const GURL& origin);
 
-  // Must be called from the UI thread.
-  bool IsRunningNavigationHintTask(int render_process_id) const;
-
  private:
   friend class BackgroundSyncManagerTest;
   friend class base::RefCountedThreadSafe<ServiceWorkerContextWrapper>;
@@ -270,31 +258,11 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::vector<ServiceWorkerRegistrationInfo>& registrations);
 
   void DidCheckHasServiceWorker(const CheckHasServiceWorkerCallback& callback,
-                                bool has_service_worker);
+                                content::ServiceWorkerCapability status);
 
   void DidFindRegistrationForUpdate(
       ServiceWorkerStatusCode status,
       scoped_refptr<content::ServiceWorkerRegistration> registration);
-
-  void DidCheckRenderProcessForNavigationHint(const GURL& document_url,
-                                              blink::WebNavigationHintType type,
-                                              int render_process_id,
-                                              const ResultCallback& callback);
-
-  void DidFindRegistrationForNavigationHint(
-      blink::WebNavigationHintType type,
-      int render_process_id,
-      const ResultCallback& callback,
-      ServiceWorkerStatusCode status,
-      scoped_refptr<ServiceWorkerRegistration> registration);
-
-  void DidStartServiceWorkerForNavigationHint(const GURL& pattern,
-                                              int render_process_id,
-                                              const ResultCallback& callback,
-                                              ServiceWorkerStatusCode code);
-  void DidFinishNavigationHintTaskOnUI(int render_process_id,
-                                       const ResultCallback& callback,
-                                       bool result);
 
   // The core context is only for use on the IO thread.
   // Can be null before/during init, during/after shutdown, and after
@@ -315,9 +283,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   // The ResourceContext associated with this context.
   ResourceContext* resource_context_;
-
-  // Must be touched on the UI thread.
-  std::map<int, int> navigation_hint_task_count_per_process_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerContextWrapper);
 };

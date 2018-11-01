@@ -132,6 +132,8 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
       "Passthrough Command Decoder",
       new base::Value(gpu_info.passthrough_cmd_decoder)));
   basic_info->Append(NewDescriptionValuePair(
+      "Supports overlays", new base::Value(gpu_info.supports_overlays)));
+  basic_info->Append(NewDescriptionValuePair(
       "Sandboxed", new base::Value(gpu_info.sandboxed)));
   basic_info->Append(NewDescriptionValuePair(
       "GPU0", GPUDeviceToString(gpu_info.gpu)));
@@ -216,16 +218,9 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
     const char kGDMSession[] = "GDMSESSION";
     if (env->GetVar(kGDMSession, &value))
       basic_info->Append(NewDescriptionValuePair(kGDMSession, value));
-    const char* const kAtomsToCache[] = {
-        "_NET_WM_CM_S0",
-        NULL
-    };
-    ui::X11AtomCache atom_cache(gfx::GetXDisplay(), kAtomsToCache);
-    std::string compositing_manager = XGetSelectionOwner(
-        gfx::GetXDisplay(),
-        atom_cache.GetAtom("_NET_WM_CM_S0")) != None ? "Yes" : "No";
-    basic_info->Append(
-        NewDescriptionValuePair("Compositing manager", compositing_manager));
+    basic_info->Append(NewDescriptionValuePair(
+        "Compositing manager",
+        ui::IsCompositingManagerPresent() ? "Yes" : "No"));
   }
 #endif
   std::string direct_rendering = gpu_info.direct_rendering ? "Yes" : "No";
@@ -245,7 +240,7 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
   info->Set("basic_info", basic_info);
 
 #if defined(OS_WIN)
-  std::unique_ptr<base::Value> dx_info = base::Value::CreateNullValue();
+  auto dx_info = base::MakeUnique<base::Value>();
   if (gpu_info.dx_diagnostics.children.size())
     dx_info.reset(DxDiagNodeToList(gpu_info.dx_diagnostics));
   info->Set("diagnostics", std::move(dx_info));
@@ -289,6 +284,8 @@ const char* BufferFormatToString(gfx::BufferFormat format) {
       return "BGRX_8888";
     case gfx::BufferFormat::BGRA_8888:
       return "BGRA_8888";
+    case gfx::BufferFormat::RGBA_F16:
+      return "RGBA_F16";
     case gfx::BufferFormat::YVU_420:
       return "YVU_420";
     case gfx::BufferFormat::YUV_420_BIPLANAR:

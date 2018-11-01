@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">சரியான மதிப்பை உள்ளிடவும்.  <ph name="VALID_VALUE" /> என்பது நெருக்கமாக உள்ள சரியான மதிப்பாகும்.</translation>
 <translation id="2653659639078652383">சமர்ப்பி</translation>
 <translation id="2674318244760992338">அடிக்குறிப்பு</translation>
+<translation id="2709516037105925701">தானாகநிரப்பு</translation>
 <translation id="2723001399770238859">ஆடியோ</translation>
 <translation id="2746543609216772311">மதிப்பானது <ph name="MINIMUM_DATE_OR_TIME" /> அல்லது அதற்குப் பின்பு இருக்க வேண்டும்.</translation>
 <translation id="2759744352195237655">பாப்-அப் பொத்தான்</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">கோப்பகம்</translation>
 <translation id="6934078000481955284">பிளாக்கோட்</translation>
 <translation id="6941933287844615239">மீடியாவைப் பதிவிறக்கு</translation>
+<translation id="6989848892321993519">இந்த உரையில் <ph name="MIN_CHARACTERS" /> அல்லது அதற்கு மேற்பட்ட எழுத்துக்குறிகளைப் பயன்படுத்தவும் (தற்போது 1 எழுத்துக்குறியைப் பயன்படுத்துகிறீர்கள்).</translation>
 <translation id="7057186640035488495">மூவி நேரம்</translation>
 <translation id="709897737746224366">கோரிய வடிவமைப்பில் தருக.</translation>
 <translation id="7223624360433298498">முடிவடைந்த நேரம்</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">ஒரு கோப்பை தேர்ந்தெடுக்கவும்.</translation>
 <translation id="8461852803063341183">ரேடியோ பொத்தான்</translation>
 <translation id="8511325616783751178">கீழ் தோன்றுதல் மெனு</translation>
+<translation id="8519420564908284378">இரண்டு திரைகளிலும் இயக்கு</translation>
 <translation id="8534579021159131403">நிமிடங்கள்</translation>
 <translation id="8541249477527128034">மீடியா கட்டுப்பாடு</translation>
 <translation id="8583702881314752957">விளக்கப் பட்டியல்</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">தொலைநிலை இயக்கத்தைக் கட்டுப்படுத்தவும்</translation>
 <translation id="8750798805984357768">தயவுசெய்து இந்த விருப்பங்களில் ஒன்றைத் தேர்ந்தெடுங்கள்.</translation>
 <translation id="8785498733064193001">மறுஇயக்கத்தைத் தொடங்கு</translation>
+<translation id="8845239796550121995">டிவிக்கு அனுப்புகிறது</translation>
 <translation id="8851136666856101339">முதன்மை</translation>
 <translation id="8987927404178983737">மாதம்</translation>
 <translation id="901493112792887934">நடப்பு நேரம் வினாடிகளில்</translation>

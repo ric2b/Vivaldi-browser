@@ -6,13 +6,38 @@ static_library("core") {
   sources = [
     "address_normalizer.cc",
     "address_normalizer.h",
+    "autofill_payment_instrument.cc",
+    "autofill_payment_instrument.h",
+    "basic_card_response.cc",
+    "basic_card_response.h",
     "currency_formatter.cc",
     "currency_formatter.h",
+    "journey_logger.cc",
+    "journey_logger.h",
+    "payment_address.cc",
+    "payment_address.h",
+    "payment_instrument.cc",
+    "payment_instrument.h",
+    "payment_method_data.cc",
+    "payment_method_data.h",
+    "payment_options_provider.h",
+    "payment_request_data_util.cc",
+    "payment_request_data_util.h",
+    "payment_request_delegate.h",
+    "profile_util.cc",
+    "profile_util.h",
+    "strings_util.cc",
+    "strings_util.h",
   ]
 
   deps = [
     "//base",
     "//components/autofill/core/browser",
+    "//components/strings:components_strings_grit",
+    "//components/ukm",
+    "//third_party/libphonenumber",
+    "//ui/base",
+    "//url",
   ]
 
   public_deps = [
@@ -25,7 +50,14 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "address_normalizer_unittest.cc",
+    "autofill_payment_instrument_unittest.cc",
+    "basic_card_response_unittest.cc",
     "currency_formatter_unittest.cc",
+    "journey_logger_unittest.cc",
+    "payment_address_unittest.cc",
+    "payment_method_data_unittest.cc",
+    "payment_request_data_util_unittest.cc",
+    "profile_util_unittest.cc",
   ]
 
   deps = [
@@ -33,6 +65,11 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/browser",
+    "//components/autofill/core/browser:test_support",
+    "//components/metrics/proto",
+    "//components/ukm",
+    "//components/ukm:test_support",
+    "//testing/gmock",
     "//testing/gtest",
     "//third_party/libaddressinput:test_support",
   ]

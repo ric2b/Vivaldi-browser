@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/webui/chromeos/first_run/first_run_ui.h"
 
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shelf/wm_shelf.h"
+#include "ash/shell_port.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
@@ -63,8 +63,11 @@ void SetLocalizedStrings(base::DictionaryValue* localized_strings) {
       "transitionsEnabled",
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableFirstRunUITransitions));
+  localized_strings->SetString(
+      "accessibleTitle",
+      l10n_util::GetStringUTF16(IDS_FIRST_RUN_STEP_ACCESSIBLE_TITLE));
   ash::WmShelf* shelf =
-      ash::WmShelf::ForWindow(ash::WmShell::Get()->GetPrimaryRootWindow());
+      ash::WmShelf::ForWindow(ash::ShellPort::Get()->GetPrimaryRootWindow());
   std::string shelf_alignment;
   switch (shelf->alignment()) {
     case ash::SHELF_ALIGNMENT_BOTTOM:
@@ -109,4 +112,3 @@ FirstRunUI::FirstRunUI(content::WebUI* web_ui)
 }
 
 }  // namespace chromeos
-

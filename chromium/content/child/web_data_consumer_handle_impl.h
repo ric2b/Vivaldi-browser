@@ -11,7 +11,7 @@
 
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/data_pipe.h"
-#include "mojo/public/cpp/system/watcher.h"
+#include "mojo/public/cpp/system/simple_watcher.h"
 #include "third_party/WebKit/public/platform/WebDataConsumerHandle.h"
 
 namespace content {
@@ -26,14 +26,14 @@ class CONTENT_EXPORT WebDataConsumerHandleImpl final
    public:
     ReaderImpl(scoped_refptr<Context> context, Client* client);
     ~ReaderImpl() override;
-    Result read(void* data,
+    Result Read(void* data,
                 size_t size,
                 Flags flags,
                 size_t* readSize) override;
-    Result beginRead(const void** buffer,
+    Result BeginRead(const void** buffer,
                      Flags flags,
                      size_t* available) override;
-    Result endRead(size_t readSize) override;
+    Result EndRead(size_t readSize) override;
 
    private:
     Result HandleReadResult(MojoResult);
@@ -41,18 +41,18 @@ class CONTENT_EXPORT WebDataConsumerHandleImpl final
     void OnHandleGotReadable(MojoResult);
 
     scoped_refptr<Context> context_;
-    mojo::Watcher handle_watcher_;
+    mojo::SimpleWatcher handle_watcher_;
     Client* client_;
 
     DISALLOW_COPY_AND_ASSIGN(ReaderImpl);
   };
-  std::unique_ptr<Reader> obtainReader(Client* client) override;
+  std::unique_ptr<Reader> ObtainReader(Client* client) override;
 
   explicit WebDataConsumerHandleImpl(Handle handle);
   ~WebDataConsumerHandleImpl() override;
 
  private:
-  const char* debugName() const override;
+  const char* DebugName() const override;
 
   scoped_refptr<Context> context_;
 

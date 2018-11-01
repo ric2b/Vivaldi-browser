@@ -11,6 +11,7 @@
 #include <set>
 
 #include "ash/root_window_controller.h"
+#include "ash/shell_delegate.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "services/ui/common/types.h"
@@ -43,7 +44,8 @@ namespace ash {
 
 class RootWindowController;
 class ScreenMus;
-class ShellDelegate;
+
+enum class Config;
 
 namespace test {
 class AshTestHelper;
@@ -52,7 +54,6 @@ class AshTestHelper;
 namespace mus {
 
 class AcceleratorHandler;
-class WmLookupMus;
 class WmTestHelper;
 
 // WindowManager serves as the WindowManagerDelegate and
@@ -62,14 +63,20 @@ class WmTestHelper;
 class WindowManager : public aura::WindowManagerDelegate,
                       public aura::WindowTreeClientDelegate {
  public:
-  explicit WindowManager(service_manager::Connector* connector);
+  WindowManager(service_manager::Connector* connector, Config config);
   ~WindowManager() override;
 
   void Init(std::unique_ptr<aura::WindowTreeClient> window_tree_client,
-            const scoped_refptr<base::SequencedWorkerPool>& blocking_pool);
+            const scoped_refptr<base::SequencedWorkerPool>& blocking_pool,
+            std::unique_ptr<ash::ShellDelegate> shell_delegate = nullptr);
+
+  // Blocks waiting for the initial set of displays.
+  bool WaitForInitialDisplays();
 
   // Called during shutdown to delete all the RootWindowControllers.
   void DeleteAllRootWindowControllers();
+
+  Config config() const { return config_; }
 
   ScreenMus* screen() { return screen_.get(); }
 
@@ -106,7 +113,7 @@ class WindowManager : public aura::WindowManagerDelegate,
       std::unique_ptr<aura::WindowTreeHostMus> window_tree_host);
 
  private:
-  friend class ash::test::AshTestHelper;
+  friend class test::AshTestHelper;
   friend class WmTestHelper;
 
   using RootWindowControllers = std::set<std::unique_ptr<RootWindowController>>;
@@ -140,17 +147,24 @@ class WindowManager : public aura::WindowManagerDelegate,
 
   // WindowManagerDelegate:
   void SetWindowManagerClient(aura::WindowManagerClient* client) override;
-  bool OnWmSetBounds(aura::Window* window, gfx::Rect* bounds) override;
+  void OnWmSetBounds(aura::Window* window, const gfx::Rect& bounds) override;
   bool OnWmSetProperty(
       aura::Window* window,
       const std::string& name,
       std::unique_ptr<std::vector<uint8_t>>* new_data) override;
+  void OnWmSetModalType(aura::Window* window, ui::ModalType type) override;
   void OnWmSetCanFocus(aura::Window* window, bool can_focus) override;
   aura::Window* OnWmCreateTopLevelWindow(
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override;
   void OnWmClientJankinessChanged(const std::set<aura::Window*>& client_windows,
                                   bool not_responding) override;
+  void OnWmBuildDragImage(const gfx::Point& screen_location,
+                          const SkBitmap& drag_image,
+                          const gfx::Vector2d& drag_image_offset,
+                          ui::mojom::PointerKind source) override;
+  void OnWmMoveDragImage(const gfx::Point& screen_location) override;
+  void OnWmDestroyDragImage() override;
   void OnWmWillCreateDisplay(const display::Display& display) override;
   void OnWmNewDisplay(std::unique_ptr<aura::WindowTreeHostMus> window_tree_host,
                       const display::Display& display) override;
@@ -161,8 +175,11 @@ class WindowManager : public aura::WindowManagerDelegate,
                            const gfx::Point& cursor_location,
                            const base::Callback<void(bool)>& on_done) override;
   void OnWmCancelMoveLoop(aura::Window* window) override;
-  ui::mojom::EventResult OnAccelerator(uint32_t id,
-                                       const ui::Event& event) override;
+  ui::mojom::EventResult OnAccelerator(
+      uint32_t id,
+      const ui::Event& event,
+      std::unordered_map<std::string, std::vector<uint8_t>>* properties)
+      override;
   void OnWmSetClientArea(
       aura::Window* window,
       const gfx::Insets& insets,
@@ -172,6 +189,8 @@ class WindowManager : public aura::WindowManagerDelegate,
 
   service_manager::Connector* connector_;
   display::mojom::DisplayControllerPtr display_controller_;
+
+  const Config config_;
 
   std::unique_ptr<::wm::WMState> wm_state_;
   std::unique_ptr<aura::PropertyConverter> property_converter_;
@@ -189,18 +208,21 @@ class WindowManager : public aura::WindowManagerDelegate,
 
   bool created_shell_ = false;
 
-  std::unique_ptr<WmLookupMus> lookup_;
-
   std::map<uint16_t, AcceleratorHandler*> accelerator_handlers_;
   uint16_t next_accelerator_namespace_id_ = 0u;
 
   scoped_refptr<base::SequencedWorkerPool> blocking_pool_;
 
-  // Only set in tests. If non-null this is used as the shell delegate.
-  std::unique_ptr<ShellDelegate> shell_delegate_for_test_;
+  // The ShellDelegate to install. This may be null, in which case
+  // ShellDelegateMus is used.
+  std::unique_ptr<ShellDelegate> shell_delegate_;
 
-  // See WmShellMus's constructor for details. Tests may set to false.
+  // See ShellPortMash's constructor for details. Tests may set to false.
   bool create_session_state_delegate_stub_for_test_ = true;
+
+  // State that is only valid during a drag.
+  struct DragState;
+  std::unique_ptr<DragState> drag_state_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManager);
 };

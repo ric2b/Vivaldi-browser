@@ -27,7 +27,7 @@
 #define NativeXPathNSResolver_h
 
 #include "core/xml/XPathNSResolver.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -35,7 +35,7 @@ class Node;
 
 class NativeXPathNSResolver final : public XPathNSResolver {
  public:
-  static NativeXPathNSResolver* create(Node* node) {
+  static NativeXPathNSResolver* Create(Node* node) {
     return new NativeXPathNSResolver(node);
   }
 
@@ -46,7 +46,7 @@ class NativeXPathNSResolver final : public XPathNSResolver {
  private:
   explicit NativeXPathNSResolver(Node*);
 
-  Member<Node> m_node;
+  Member<Node> node_;
 };
 
 }  // namespace blink

@@ -55,6 +55,10 @@ class PaymentRequest;
 class PaymentRequestDialog;
 }
 
+namespace safe_browsing {
+class SRTPromptController;
+}
+
 namespace security_state {
 struct SecurityInfo;
 }  // namespace security_state
@@ -97,12 +101,6 @@ void ShowWebDialogInContainer(int container_id,
                               ui::WebDialogDelegate* delegate);
 #endif  // defined(USE_ASH)
 
-#if !defined(OS_MACOSX)
-// Shows the create web app shortcut dialog box.
-void ShowCreateWebAppShortcutsDialog(gfx::NativeWindow parent_window,
-                                     content::WebContents* web_contents);
-#endif  // !defined(OS_MACOSX)
-
 // Shows the create chrome app shortcut dialog box.
 // |close_callback| may be null.
 void ShowCreateChromeAppShortcutsDialog(
@@ -117,8 +115,8 @@ content::ColorChooser* ShowColorChooser(content::WebContents* web_contents,
 
 #if defined(OS_MACOSX)
 
-// Shows a Views website settings bubble at the given anchor point.
-void ShowWebsiteSettingsBubbleViewsAtPoint(
+// Shows a Views page info bubble at the given anchor point.
+void ShowPageInfoBubbleViewsAtPoint(
     const gfx::Point& anchor_point,
     Profile* profile,
     content::WebContents* web_contents,
@@ -185,6 +183,25 @@ class ContentSettingBubbleViewsBridge {
 #endif  // OS_MACOSX
 
 #endif  // TOOLKIT_VIEWS
+
+// Values used in the Dialog.Creation UMA metric. Each value represents a
+// different type of dialog box.
+// These values are written to logs. New enum values can be added, but existing
+// enums must never be renumbered or deleted and reused.
+enum class DialogIdentifier { UNKNOWN = 0, TRANSLATE = 1, MAX_VALUE };
+
+// Record an UMA metric counting the creation of a dialog box of this type.
+void RecordDialogCreation(DialogIdentifier identifier);
+
+#if defined(OS_WIN)
+
+// Shows the Chrome Cleanup dialog asking the user if they want to clean their
+// system from unwanted software. This is called when unwanted software has been
+// detected on the system.
+void ShowSRTPrompt(Browser* browser,
+                   safe_browsing::SRTPromptController* controller);
+
+#endif  // OS_WIN
 
 }  // namespace chrome
 

@@ -25,11 +25,11 @@ std::string HexErrorCode(IOReturn error_code) {
 }  // namespace
 
 HidConnectionMac::HidConnectionMac(
-    IOHIDDeviceRef device,
+    base::ScopedCFTypeRef<IOHIDDeviceRef> device,
     scoped_refptr<HidDeviceInfo> device_info,
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner)
     : HidConnection(device_info),
-      device_(device, base::scoped_policy::RETAIN),
+      device_(std::move(device)),
       file_task_runner_(file_task_runner) {
   task_runner_ = base::ThreadTaskRunnerHandle::Get();
   DCHECK(task_runner_.get());
@@ -152,6 +152,12 @@ void HidConnectionMac::InputReportCallback(void* context,
 void HidConnectionMac::ProcessInputReport(
     scoped_refptr<net::IOBufferWithSize> buffer) {
   DCHECK(thread_checker().CalledOnValidThread());
+  DCHECK_GE(buffer->size(), 1);
+
+  uint8_t report_id = buffer->data()[0];
+  if (IsReportIdProtected(report_id))
+    return;
+
   PendingHidReport report;
   report.buffer = buffer;
   report.size = buffer->size();
@@ -161,14 +167,17 @@ void HidConnectionMac::ProcessInputReport(
 
 void HidConnectionMac::ProcessReadQueue() {
   DCHECK(thread_checker().CalledOnValidThread());
+
+  // Hold a reference to |this| to prevent a callback from freeing this object
+  // during the loop.
+  scoped_refptr<HidConnectionMac> self(this);
   while (pending_reads_.size() && pending_reports_.size()) {
     PendingHidRead read = pending_reads_.front();
     PendingHidReport report = pending_reports_.front();
 
+    pending_reads_.pop();
     pending_reports_.pop();
-    if (CompleteRead(report.buffer, report.size, read.callback)) {
-      pending_reads_.pop();
-    }
+    read.callback.Run(true, report.buffer, report.size);
   }
 }
 

@@ -8,8 +8,8 @@
 #include "modules/compositorworker/CompositorWorkerGlobalScope.h"
 #include "platform/graphics/CompositorMutableStateProvider.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/wtf/CurrentTime.h"
 #include "web/CompositorMutatorImpl.h"
-#include "wtf/CurrentTime.h"
 
 namespace blink {
 
@@ -22,102 +22,101 @@ class ScopedCompositorMutableState final {
 
  public:
   ScopedCompositorMutableState(
-      HeapHashSet<WeakMember<CompositorProxy>>& proxies,
-      CompositorMutableStateProvider* stateProvider)
-      : m_proxies(proxies) {
-    for (CompositorProxy* proxy : m_proxies) {
-      proxy->takeCompositorMutableState(
-          stateProvider->getMutableStateFor(proxy->elementId()));
+      CompositorProxyClientImpl* compositor_proxy_client,
+      CompositorMutableStateProvider* state_provider)
+      : compositor_proxy_client_(compositor_proxy_client) {
+    DCHECK(!IsMainThread());
+    DCHECK(compositor_proxy_client_);
+    for (CompositorProxy* proxy : compositor_proxy_client_->Proxies()) {
+      proxy->TakeCompositorMutableState(
+          state_provider->GetMutableStateFor(proxy->ElementId()));
     }
   }
   ~ScopedCompositorMutableState() {
-    for (CompositorProxy* proxy : m_proxies)
-      proxy->takeCompositorMutableState(nullptr);
+    for (CompositorProxy* proxy : compositor_proxy_client_->Proxies())
+      proxy->TakeCompositorMutableState(nullptr);
   }
 
  private:
-  HeapHashSet<WeakMember<CompositorProxy>>& m_proxies;
+  Member<CompositorProxyClientImpl> compositor_proxy_client_;
 };
 
 CompositorWorkerProxyClientImpl::CompositorWorkerProxyClientImpl(
     CompositorMutatorImpl* mutator)
-    : m_mutator(mutator), m_globalScope(nullptr) {
-  DCHECK(isMainThread());
+    : mutator_(mutator) {
+  DCHECK(IsMainThread());
 }
 
 DEFINE_TRACE(CompositorWorkerProxyClientImpl) {
-  visitor->trace(m_proxies);
-  CompositorAnimator::trace(visitor);
-  CompositorWorkerProxyClient::trace(visitor);
+  CompositorAnimator::Trace(visitor);
+  CompositorWorkerProxyClient::Trace(visitor);
 }
 
-void CompositorWorkerProxyClientImpl::setGlobalScope(WorkerGlobalScope* scope) {
+void CompositorWorkerProxyClientImpl::SetGlobalScope(WorkerGlobalScope* scope) {
+  DCHECK(!IsMainThread());
   TRACE_EVENT0("compositor-worker",
                "CompositorWorkerProxyClientImpl::setGlobalScope");
-  DCHECK(!m_globalScope);
+  DCHECK(!global_scope_);
+  DCHECK(!compositor_proxy_client_);
   DCHECK(scope);
-  m_globalScope = static_cast<CompositorWorkerGlobalScope*>(scope);
-  m_mutator->registerCompositorAnimator(this);
+  global_scope_ = static_cast<CompositorWorkerGlobalScope*>(scope);
+  mutator_->RegisterCompositorAnimator(this);
+  compositor_proxy_client_ = new CompositorProxyClientImpl();
 }
 
-void CompositorWorkerProxyClientImpl::dispose() {
+void CompositorWorkerProxyClientImpl::Dispose() {
+  DCHECK(!IsMainThread());
   // CompositorWorkerProxyClientImpl and CompositorMutatorImpl form a reference
   // cycle. CompositorWorkerGlobalScope and CompositorWorkerProxyClientImpl
   // also form another big reference cycle. So dispose needs to be called on
   // Worker termination to break these cycles. If not, layout test leak
   // detection will report a WorkerGlobalScope leak.
-  m_mutator->unregisterCompositorAnimator(this);
-  m_globalScope = nullptr;
+  mutator_->UnregisterCompositorAnimator(this);
+  global_scope_ = nullptr;
 }
 
-void CompositorWorkerProxyClientImpl::requestAnimationFrame() {
+void CompositorWorkerProxyClientImpl::RequestAnimationFrame() {
+  DCHECK(!IsMainThread());
   TRACE_EVENT0("compositor-worker",
                "CompositorWorkerProxyClientImpl::requestAnimationFrame");
-  m_requestedAnimationFrameCallbacks = true;
-  m_mutator->setNeedsMutate();
+  requested_animation_frame_callbacks_ = true;
+  mutator_->SetNeedsMutate();
 }
 
-bool CompositorWorkerProxyClientImpl::mutate(
-    double monotonicTimeNow,
-    CompositorMutableStateProvider* stateProvider) {
-  if (!m_globalScope)
+bool CompositorWorkerProxyClientImpl::Mutate(
+    double monotonic_time_now,
+    CompositorMutableStateProvider* state_provider) {
+  DCHECK(!IsMainThread());
+  if (!global_scope_)
     return false;
 
   TRACE_EVENT0("compositor-worker", "CompositorWorkerProxyClientImpl::mutate");
-  if (!m_requestedAnimationFrameCallbacks)
+  if (!requested_animation_frame_callbacks_)
     return false;
 
   {
-    ScopedCompositorMutableState mutableState(m_proxies, stateProvider);
-    m_requestedAnimationFrameCallbacks =
-        executeAnimationFrameCallbacks(monotonicTimeNow);
+    ScopedCompositorMutableState mutable_state(compositor_proxy_client_,
+                                               state_provider);
+    requested_animation_frame_callbacks_ =
+        ExecuteAnimationFrameCallbacks(monotonic_time_now);
   }
 
-  return m_requestedAnimationFrameCallbacks;
+  return requested_animation_frame_callbacks_;
 }
 
-bool CompositorWorkerProxyClientImpl::executeAnimationFrameCallbacks(
-    double monotonicTimeNow) {
+bool CompositorWorkerProxyClientImpl::ExecuteAnimationFrameCallbacks(
+    double monotonic_time_now) {
+  DCHECK(!IsMainThread());
   TRACE_EVENT0(
       "compositor-worker",
       "CompositorWorkerProxyClientImpl::executeAnimationFrameCallbacks");
 
-  DCHECK(m_globalScope);
+  DCHECK(global_scope_);
   // Convert to zero based document time in milliseconds consistent with
   // requestAnimationFrame.
-  double highResTimeMs =
-      1000.0 * (monotonicTimeNow - m_globalScope->timeOrigin());
-  return m_globalScope->executeAnimationFrameCallbacks(highResTimeMs);
-}
-
-void CompositorWorkerProxyClientImpl::registerCompositorProxy(
-    CompositorProxy* proxy) {
-  m_proxies.insert(proxy);
-}
-
-void CompositorWorkerProxyClientImpl::unregisterCompositorProxy(
-    CompositorProxy* proxy) {
-  m_proxies.erase(proxy);
+  double high_res_time_ms =
+      1000.0 * (monotonic_time_now - global_scope_->TimeOrigin());
+  return global_scope_->ExecuteAnimationFrameCallbacks(high_res_time_ms);
 }
 
 }  // namespace blink

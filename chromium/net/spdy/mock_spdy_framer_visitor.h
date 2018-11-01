@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "base/strings/string_piece.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -54,14 +54,13 @@ class MockSpdyFramerVisitor : public SpdyFramerVisitorInterface {
                     bool end));
   MOCK_METHOD2(OnWindowUpdate,
                void(SpdyStreamId stream_id, int delta_window_size));
-  MOCK_METHOD1(OnBlocked, void(SpdyStreamId stream_id));
   MOCK_METHOD3(OnPushPromise, void(SpdyStreamId stream_id,
                                    SpdyStreamId promised_stream_id,
                                    bool end));
   MOCK_METHOD2(OnContinuation, void(SpdyStreamId stream_id, bool end));
   MOCK_METHOD3(OnAltSvc,
                void(SpdyStreamId stream_id,
-                    base::StringPiece origin,
+                    SpdyStringPiece origin,
                     const SpdyAltSvcWireFormat::AlternativeServiceVector&
                         altsvc_vector));
   MOCK_METHOD4(OnPriority,

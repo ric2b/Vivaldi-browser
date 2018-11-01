@@ -53,9 +53,9 @@ class NotesSpecifics;
 class PasswordSpecifics;
 class PasswordSpecificsData;
 class PreferenceSpecifics;
-class PriorityPreferenceSpecifics;
 class PrinterPPDReference;
 class PrinterSpecifics;
+class PriorityPreferenceSpecifics;
 class ReadingListSpecifics;
 class SearchEngineSpecifics;
 class SessionHeader;
@@ -70,6 +70,7 @@ class TabNavigation;
 class ThemeSpecifics;
 class TimeRangeDirective;
 class TypedUrlSpecifics;
+class UserEventSpecifics;
 class WalletMaskedCreditCard;
 class WalletMetadataSpecifics;
 class WalletPostalAddress;
@@ -192,9 +193,6 @@ std::unique_ptr<base::DictionaryValue> DictionarySpecificsToValue(
 std::unique_ptr<base::DictionaryValue> ExperimentsSpecificsToValue(
     const sync_pb::ExperimentsSpecifics& proto);
 
-std::unique_ptr<base::DictionaryValue> PriorityPreferenceSpecificsToValue(
-    const sync_pb::PriorityPreferenceSpecifics& proto);
-
 std::unique_ptr<base::DictionaryValue> ExtensionSettingSpecificsToValue(
     const sync_pb::ExtensionSettingSpecifics& extension_setting_specifics);
 
@@ -237,6 +235,9 @@ std::unique_ptr<base::DictionaryValue> PreferenceSpecificsToValue(
 std::unique_ptr<base::DictionaryValue> PrinterSpecificsToValue(
     const sync_pb::PrinterSpecifics& printer_specifics);
 
+std::unique_ptr<base::DictionaryValue> PriorityPreferenceSpecificsToValue(
+    const sync_pb::PriorityPreferenceSpecifics& proto);
+
 // Sub-protocol of ReadingListSpecifics.
 std::unique_ptr<base::DictionaryValue> ReadingListSpecificsToValue(
     const sync_pb::ReadingListSpecifics& proto);
@@ -257,6 +258,9 @@ std::unique_ptr<base::DictionaryValue> ThemeSpecificsToValue(
 
 std::unique_ptr<base::DictionaryValue> TypedUrlSpecificsToValue(
     const sync_pb::TypedUrlSpecifics& typed_url_specifics);
+
+std::unique_ptr<base::DictionaryValue> UserEventSpecificsToValue(
+    const sync_pb::UserEventSpecifics& user_event_specifics);
 
 std::unique_ptr<base::DictionaryValue> WalletMaskedCreditCardToValue(
     const sync_pb::WalletMaskedCreditCard& wallet_masked_card);

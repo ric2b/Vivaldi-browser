@@ -267,7 +267,7 @@ void GetFormAndField(autofill::FormData* form,
   if (field.GetList("option_values", &optionValues)) {
     for (const auto& optionValue : *optionValues) {
       base::string16 value;
-      if (optionValue->GetAsString(&value))
+      if (optionValue.GetAsString(&value))
         fieldData->option_values.push_back(value);
     }
   }
@@ -277,7 +277,7 @@ void GetFormAndField(autofill::FormData* form,
   if (field.GetList("option_contents", &optionContents)) {
     for (const auto& optionContent : *optionContents) {
       base::string16 content;
-      if (optionContent->GetAsString(&content))
+      if (optionContent.GetAsString(&content))
         fieldData->option_contents.push_back(content);
     }
   }
@@ -316,6 +316,18 @@ void GetFormAndField(autofill::FormData* form,
                        pageURL:(const GURL&)pageURL
              completionHandler:(FetchFormsCompletionHandler)completionHandler {
   DCHECK(completionHandler);
+
+  // TODO(crbug.com/418827): Early-inject the script and replace the following
+  // if statement with a DCHECK if a race condition between the script injection
+  // and the call to the this function continues to happen.
+  // Return if the script has not been injected.
+  if (![jsAutofillManager_ hasBeenInjected]) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      completionHandler(NO, FormDataVector());
+    });
+    return;
+  }
+
   // Necessary so the values can be used inside a block.
   base::string16 formNameCopy = formName;
   GURL pageURLCopy = pageURL;
@@ -365,7 +377,7 @@ void GetFormAndField(autofill::FormData* form,
   for (const auto& formDict : *formsList) {
     // Each form list entry should be a JSON dictionary.
     const base::DictionaryValue* formData;
-    if (!formDict->GetAsDictionary(&formData))
+    if (!formDict.GetAsDictionary(&formData))
       return NO;
 
     // Form data is copied into a FormData object field-by-field.
@@ -404,7 +416,7 @@ void GetFormAndField(autofill::FormData* form,
     for (const auto& fieldDict : *fieldsList) {
       const base::DictionaryValue* field;
       autofill::FormFieldData fieldData;
-      if (fieldDict->GetAsDictionary(&field) &&
+      if (fieldDict.GetAsDictionary(&field) &&
           [self extractFormField:*field asFieldData:&fieldData]) {
         form.fields.push_back(fieldData);
       } else {

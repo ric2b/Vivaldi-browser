@@ -3,57 +3,82 @@
 <translationbundle lang="bg">
 <translation id="1152921474424827756">Достъп до <ph name="BEGIN_LINK" />кеширано копие<ph name="END_LINK" /> на <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> неочаквано затвори свързването.</translation>
+<translation id="1161325031994447685">Да се свържете отново по Wi-Fi</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Опитайте да изчистите бисквитките<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">За Vivaldi</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> не изпраща никакви данни.</translation>
 <translation id="1506687042165942984">Показване на записано (т.е. неактуално) копие на страницата.</translation>
 <translation id="1559528461873125649">Няма такъв файл или директория</translation>
+<translation id="1640244768702815859">Опитайте да <ph name="BEGIN_LINK" />отворите началната страница на сайта<ph name="END_LINK" />.</translation>
+<translation id="1645368109819982629">Неподдържан протокол</translation>
 <translation id="1710259589646384581">Операционна система</translation>
 <translation id="1728677426644403582">Преглеждате изходния код на страница</translation>
+<translation id="1734878702283171397">Опитайте да се свържете със системния администратор.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Опитайте да изпълните Диагностика на мрежата на Windows<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">Премини към <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Може би имате предвид <ph name="LINK" />?</translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Да проверите посредника и защитната стена<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Сайт без защитено свързване</translation>
+<translation id="2230458221926704099">Поправете свързването, ползвайки <ph name="BEGIN_LINK" />приложение за диагностика<ph name="END_LINK" /></translation>
+<translation id="224482879335890159">Потърсете <ph name="LINK" /> с Vivaldi</translation>
 <translation id="2292556288342944218">Блокиран достъп до интернет</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Да изпълните Диагностика на мрежата<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> изпрати недействителен отговор.</translation>
 <translation id="2609632851001447353">Вариации</translation>
 <translation id="2650446666397867134">Отказан достъп до файла</translation>
 <translation id="2705137772291741111">Прочитане на записано (кеширано) копие на сайта е невъзможно.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Да изпълните Диагностика на свързаността<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Свързването е нулирано.</translation>
 <translation id="2909946352844186028">Установена е промяна в мрежата.</translation>
+<translation id="2948083400971632585">Можете да забраните всички конфигурирани за свързване посредници от страницата с настройки.</translation>
 <translation id="3005723025932146533">Покажи записаното копие</translation>
 <translation id="3093245981617870298">Вие сте извън линия.</translation>
 <translation id="3109728660330352905">Не сте удостоверен за преглед на страницата.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Опитайте да изпълните Диагностика на свързаността<ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">Проверете настройките на посредника или се свържете с мрежовия
 администратор, за да се уверите, че сървърът посредник работи.
 Ако смятате, че не би трябвало да ползвате сървър посредник:
       <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3226128629678568754">Натиснете бутона за презареждане за повторно предаване на данните, необходими за зареждане на страницата.</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> е недостъпен понастоящем.</translation>
 <translation id="3447661539832366887">Собственикът на устройството е изключил играта с динозавъра.</translation>
 <translation id="3586931643579894722">Скрий подробностите</translation>
 <translation id="3630155396527302611">Ако вече е в списъка с програми с позволен достъп до мрежата,
 опитайте да го премахнете и да го добавите отново.</translation>
 <translation id="3658742229777143148">Редакция</translation>
+<translation id="3717027428350673159"><ph name="BEGIN_LINK" />Да проверите конфигурацията на посредника, защитната стена и DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">В случай че ползвате сървър посредник…</translation>
 <translation id="3973234410852337861">Блокиран <ph name="HOST_NAME" /></translation>
 <translation id="4021036232240155012">DNS е мрежова услуга, преобразуваща името на сайта в адрес по интернет протокол.</translation>
+<translation id="4075732493274867456">Клиентът и сървърът не поддържат общодостъпна версия или шифровъчен комплект от протокола SSL.</translation>
+<translation id="4130226655945681476">Да проверите мрежовите кабели, модема и маршрутизатора</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Да проверите конфигурациите на защитната стена и антивирусния софтуер<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Опитайте да изпълните Диагностика на мрежата<ph name="END_LINK" />.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> не приема вашето удостоверение за вписване или такова вероятно не е било предоставено.</translation>
+<translation id="4506599922270137252">Да се свържете със системния администратор</translation>
 <translation id="4522570452068850558">Подробности</translation>
+<translation id="4558551763791394412">Опитайте да забраните разширенията.</translation>
 <translation id="4708268264240856090">Прекъснато свързване</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Да изпълните Диагностика на мрежата на Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Изпълним файл</translation>
 <translation id="4764776831041365478">Страницата <ph name="URL" /> е вероятно временно недостъпна или е постоянно преместена на нов адрес.</translation>
 <translation id="5023310440958281426">Проверете правилата на администратора</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Да проверите адреса на посредника<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-битово приложение)</translation>
-<translation id="5431657950005405462">Невъзможно намиране на файла</translation>
-<translation id="5452270690849572955">Невъзможно намиране на страница от <ph name="HOST_NAME" /></translation>
+<translation id="5431657950005405462">Няма намерен файл</translation>
+<translation id="5452270690849572955">Невъзможно намиране на страницата от <ph name="HOST_NAME" /></translation>
 <translation id="5492298309214877701">Сайтът в интранета на фирмата, организацията или училището има същия адрес като външния сайт.
 <ph name="LINE_BREAK" />
 Опитайте да се свържете със системния администратор.</translation>
-<translation id="5510766032865166053">Вероятно е преместена или изтрита.</translation>
+<translation id="5510766032865166053">Вероятно е преместен или изтрит.</translation>
 <translation id="5556459405103347317">Презареди</translation>
+<translation id="5610142619324316209">Да проверите свързването</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> пренасочва твърде много пъти.</translation>
 <translation id="5675650730144413517">Неработеща страница</translation>
 <translation id="5869405914158311789">Няма достъп до сайта</translation>
 <translation id="5990559369517809815">Заявките към сървъра се блокират от разширение.</translation>
 <translation id="6146055958333702838">Проверете всички кабели и презаредете всички маршрутизатори, модеми или други мрежови устройства, които вероятно ползвате.</translation>
+<translation id="614940544461990577">Опитайте следното:</translation>
 <translation id="6165508094623778733">Научете повече</translation>
 <translation id="6203231073485539293">Проверете свързването с интернет</translation>
 <translation id="6305205051461490394"><ph name="URL" /> е недостъпен.</translation>
@@ -61,6 +86,7 @@
 <translation id="6328639280570009161">Опитайте да забраните предсказването в мрежата</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> отказва свързване.</translation>
 <translation id="6569060085658103619">Преглеждате страница на разширение</translation>
+<translation id="6685834062052613830">Да се отпишете и да завършите инсталирането</translation>
 <translation id="6711464428925977395">Нещо се обърка със сървъра посредник или адресът е неправилен.</translation>
 <translation id="6757797048963528358">Устройството премина в режим на заспиване.</translation>
 <translation id="6897140037006041989">Потребителски агент</translation>

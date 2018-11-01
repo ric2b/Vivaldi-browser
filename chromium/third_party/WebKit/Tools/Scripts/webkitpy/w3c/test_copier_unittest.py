@@ -68,9 +68,6 @@ class TestCopierTest(LoggingTestCase):
                         {'dest': 'README.txt', 'src': '/blink/w3c/dir/README.txt'}
                     ],
                     'dirname': '/blink/w3c/dir',
-                    'jstests': 0,
-                    'reftests': 0,
-                    'total_tests': 0,
                 }
             ])
 
@@ -88,9 +85,6 @@ class TestCopierTest(LoggingTestCase):
                         {'dest': 'README.txt', 'src': '/blink/w3c/dir/README.txt'}
                     ],
                     'dirname': '/blink/w3c/dir',
-                    'jstests': 0,
-                    'reftests': 0,
-                    'total_tests': 0,
                 }
             ])
 
@@ -118,47 +112,8 @@ class TestCopierTest(LoggingTestCase):
                 {
                     'copy_list': [
                         {'src': '/blink/w3c/dir1/ref-file.html', 'dest': 'ref-file.html'},
-                        {'src': '/blink/w3c/dir1/ref-file.html', 'dest': 'my-ref-test-expected.html', 'reference_support_info': {}},
                         {'src': '/blink/w3c/dir1/my-ref-test.html', 'dest': 'my-ref-test.html'}
                     ],
                     'dirname': '/blink/w3c/dir1',
-                    'jstests': 0,
-                    'reftests': 1,
-                    'total_tests': 1
                 }
             ])
-
-    def test_ref_test_without_ref_is_skipped(self):
-        host = MockHost()
-        host.filesystem = MockFileSystem(files={
-            '/blink/w3c/dir1/my-ref-test.html': '<html><head><link rel="match" href="not-here.html" /></head></html>',
-            '/mock-checkout/third_party/WebKit/LayoutTests/W3CImportExpectations': '',
-        })
-        copier = TestCopier(host, FAKE_SOURCE_REPO_DIR)
-        copier.find_importable_tests()
-        self.assertEqual(copier.import_list, [])
-        self.assertLog([
-            'WARNING: Skipping: /blink/w3c/dir1/my-ref-test.html\n',
-            'WARNING:   Reason: Ref file "/blink/w3c/dir1/not-here.html" was not found.\n'
-        ])
-
-    def test_should_try_to_convert_positive_cases(self):
-        self.assertTrue(TestCopier.should_try_to_convert({}, 'foo.css', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestCopier.should_try_to_convert({}, 'foo.htm', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestCopier.should_try_to_convert({}, 'foo.html', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestCopier.should_try_to_convert({}, 'foo.xht', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestCopier.should_try_to_convert({}, 'foo.xhtml', 'LayoutTests/external/csswg-test/x'))
-
-    def test_should_not_try_to_convert_js_test(self):
-        self.assertFalse(TestCopier.should_try_to_convert({'is_jstest': True}, 'foo.html', 'LayoutTests/external/csswg-test/x'))
-
-    def test_should_not_try_to_convert_test_in_wpt(self):
-        self.assertFalse(TestCopier.should_try_to_convert({}, 'foo.html', 'LayoutTests/external/wpt/foo'))
-
-    def test_should_not_try_to_convert_other_file_types(self):
-        self.assertFalse(TestCopier.should_try_to_convert({}, 'foo.bar', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestCopier.should_try_to_convert({}, 'foo.js', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestCopier.should_try_to_convert({}, 'foo.md', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestCopier.should_try_to_convert({}, 'foo.png', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestCopier.should_try_to_convert({}, 'foo.svg', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestCopier.should_try_to_convert({}, 'foo.svgz', 'LayoutTests/external/csswg-test/x'))

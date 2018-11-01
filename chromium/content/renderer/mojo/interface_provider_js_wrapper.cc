@@ -7,7 +7,9 @@
 #include <memory>
 #include <utility>
 
+#include "content/public/common/service_names.mojom.h"
 #include "mojo/edk/js/handle.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
@@ -26,7 +28,17 @@ InterfaceProviderJsWrapper::~InterfaceProviderJsWrapper() {
 // static
 gin::Handle<InterfaceProviderJsWrapper> InterfaceProviderJsWrapper::Create(
     v8::Isolate* isolate,
-    v8::Handle<v8::Context> context,
+    v8::Local<v8::Context> context,
+    service_manager::Connector* connector) {
+  return gin::CreateHandle(
+      isolate, new InterfaceProviderJsWrapper(isolate, context,
+                                              connector->GetWeakPtr()));
+}
+
+// static
+gin::Handle<InterfaceProviderJsWrapper> InterfaceProviderJsWrapper::Create(
+    v8::Isolate* isolate,
+    v8::Local<v8::Context> context,
     service_manager::InterfaceProvider* remote_interfaces) {
   return gin::CreateHandle(
       isolate,
@@ -50,7 +62,12 @@ InterfaceProviderJsWrapper::GetObjectTemplateBuilder(v8::Isolate* isolate) {
 mojo::Handle InterfaceProviderJsWrapper::GetInterface(
     const std::string& interface_name) {
   mojo::MessagePipe pipe;
-  if (remote_interfaces_) {
+  if (connector_) {
+    connector_->BindInterface(
+        service_manager::Identity(mojom::kBrowserServiceName,
+                                  service_manager::mojom::kInheritUserID),
+        interface_name, std::move(pipe.handle0));
+  } else if (remote_interfaces_) {
     remote_interfaces_->GetInterface(
         interface_name, std::move(pipe.handle0));
   }
@@ -61,23 +78,45 @@ void InterfaceProviderJsWrapper::AddOverrideForTesting(
     const std::string& interface_name,
     v8::Local<v8::Function> service_factory) {
   ScopedJsFactory factory(v8::Isolate::GetCurrent(), service_factory);
-  service_manager::InterfaceProvider::TestApi test_api(
-      remote_interfaces_.get());
-  test_api.SetBinderForName(
-      interface_name,
-      base::Bind(&InterfaceProviderJsWrapper::CallJsFactory,
-                 weak_factory_.GetWeakPtr(), factory));
+  BindCallback callback = base::Bind(&InterfaceProviderJsWrapper::CallJsFactory,
+                                     weak_factory_.GetWeakPtr(), factory);
+  if (remote_interfaces_) {
+    service_manager::InterfaceProvider::TestApi test_api(
+        remote_interfaces_.get());
+    test_api.SetBinderForName(interface_name, callback);
+  } else if (connector_) {
+    service_manager::Connector::TestApi test_api(connector_.get());
+    test_api.OverrideBinderForTesting(mojom::kBrowserServiceName,
+                                      interface_name, callback);
+  }
 }
 
 void InterfaceProviderJsWrapper::ClearOverridesForTesting() {
-  service_manager::InterfaceProvider::TestApi test_api(
-      remote_interfaces_.get());
-  test_api.ClearBinders();
+  if (remote_interfaces_) {
+    service_manager::InterfaceProvider::TestApi test_api(
+        remote_interfaces_.get());
+    test_api.ClearBinders();
+  } else if (connector_) {
+    service_manager::Connector::TestApi test_api(connector_.get());
+    test_api.ClearBinderOverrides();
+  }
 }
 
 InterfaceProviderJsWrapper::InterfaceProviderJsWrapper(
     v8::Isolate* isolate,
-    v8::Handle<v8::Context> context,
+    v8::Local<v8::Context> context,
+    base::WeakPtr<service_manager::Connector> connector)
+    : isolate_(isolate),
+      context_(isolate, context),
+      connector_(connector),
+      weak_factory_(this) {
+  context_.SetWeak(this, &InterfaceProviderJsWrapper::ClearContext,
+                   v8::WeakCallbackType::kParameter);
+}
+
+InterfaceProviderJsWrapper::InterfaceProviderJsWrapper(
+    v8::Isolate* isolate,
+    v8::Local<v8::Context> context,
     base::WeakPtr<service_manager::InterfaceProvider> remote_interfaces)
     : isolate_(isolate),
       context_(isolate, context),
@@ -94,12 +133,12 @@ void InterfaceProviderJsWrapper::CallJsFactory(
     return;
 
   v8::HandleScope handle_scope(isolate_);
-  v8::Handle<v8::Context> context = context_.Get(isolate_);
+  v8::Local<v8::Context> context = context_.Get(isolate_);
   v8::Context::Scope context_scope(context);
   v8::Local<v8::Value> argv[] = {
       gin::ConvertToV8(isolate_, mojo::Handle(pipe.release().value()))};
-  blink::WebLocalFrame::frameForContext(context)
-      ->callFunctionEvenIfScriptDisabled(factory.Get(isolate_),
+  blink::WebLocalFrame::FrameForContext(context)
+      ->CallFunctionEvenIfScriptDisabled(factory.Get(isolate_),
                                          v8::Undefined(isolate_), 1, argv);
 }
 

@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/login_status.h"
-#include "ash/common/system/date/date_default_view.h"
-#include "ash/common/system/date/date_view.h"
-#include "ash/common/system/date/system_info_default_view.h"
-#include "ash/common/system/date/tray_system_info.h"
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/wm_shell.h"
+#include "ash/login_status.h"
 #include "ash/shell.h"
+#include "ash/system/date/date_view.h"
+#include "ash/system/date/system_info_default_view.h"
+#include "ash/system/date/tray_system_info.h"
+#include "ash/system/tray/system_tray.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -77,7 +75,7 @@ class SystemUse24HourClockPolicyTest
 
   static base::HourClockType TestGetPrimarySystemTrayTimeHourType() {
     const ash::TraySystemInfo* tray_system_info =
-        ash::Shell::GetInstance()
+        ash::Shell::Get()
             ->GetPrimarySystemTray()
             ->GetTraySystemInfoForTesting();
     const ash::tray::TimeView* time_tray =
@@ -88,7 +86,7 @@ class SystemUse24HourClockPolicyTest
 
   static bool TestPrimarySystemTrayHasDateDefaultView() {
     const ash::TraySystemInfo* tray_system_info =
-        ash::Shell::GetInstance()
+        ash::Shell::Get()
             ->GetPrimarySystemTray()
             ->GetTraySystemInfoForTesting();
     const ash::SystemInfoDefaultView* system_info_default_view =
@@ -97,7 +95,7 @@ class SystemUse24HourClockPolicyTest
   }
 
   static void TestPrimarySystemTrayCreateDefaultView() {
-    ash::TraySystemInfo* tray_system_info = ash::Shell::GetInstance()
+    ash::TraySystemInfo* tray_system_info = ash::Shell::Get()
                                                 ->GetPrimarySystemTray()
                                                 ->GetTraySystemInfoForTesting();
     tray_system_info->CreateDefaultViewForTesting(
@@ -106,7 +104,7 @@ class SystemUse24HourClockPolicyTest
 
   static base::HourClockType TestGetPrimarySystemTrayDateHourType() {
     const ash::TraySystemInfo* tray_system_info =
-        ash::Shell::GetInstance()
+        ash::Shell::Get()
             ->GetPrimarySystemTray()
             ->GetTraySystemInfoForTesting();
     const ash::SystemInfoDefaultView* system_info_default_view =

@@ -120,6 +120,8 @@ target(link_target_type, "base") {
     "data_buffer.h",
     "data_source.cc",
     "data_source.h",
+    "decode_capabilities.cc",
+    "decode_capabilities.h",
     "decode_status.cc",
     "decode_status.h",
     "decoder_buffer.cc",
@@ -241,6 +243,8 @@ target(link_target_type, "base") {
     "user_input_monitor.h",
     "video_codecs.cc",
     "video_codecs.h",
+    "video_color_space.cc",
+    "video_color_space.h",
     "video_decoder.cc",
     "video_decoder.h",
     "video_decoder_config.cc",
@@ -342,6 +346,7 @@ target(link_target_type, "base") {
 source_set("video_facing") {
   visibility = [
     "//chromeos",
+    "//chromeos:chromeos_unittests",
     "//content/browser",
     "//content/public/common:common_sources",
     "//media/base",
@@ -434,6 +439,7 @@ source_set("unit_tests") {
     "channel_mixing_matrix_unittest.cc",
     "container_names_unittest.cc",
     "data_buffer_unittest.cc",
+    "decode_capabilities_unittest.cc",
     "decoder_buffer_queue_unittest.cc",
     "decoder_buffer_unittest.cc",
     "djb2_unittest.cc",

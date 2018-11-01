@@ -6,12 +6,6 @@ import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/ui.gni")
 
-declare_args() {
-  # Use the PCI lib to collect GPU information on Linux.
-  use_libpci = is_linux && (!is_chromecast || is_cast_desktop_build) &&
-               (use_x11 || use_ozone)
-}
-
 group("config") {
   if (is_component_build) {
     public_deps = [
@@ -22,6 +16,46 @@ group("config") {
       ":config_sources",
     ]
   }
+}
+
+# This needs to be a small target, because it links into both chrome.exe and
+# chrome.dll targets. If this target grows, that will lead to a size regression.
+# See https://crbug.com/703622
+source_set("crash_keys") {
+  sources = [
+    "gpu_crash_keys.cc",
+    "gpu_crash_keys.h",
+  ]
+}
+
+process_json_outputs = [
+  "$target_gen_dir/gpu_driver_bug_list_arrays_and_structs_autogen.h",
+  "$target_gen_dir/gpu_driver_bug_list_autogen.cc",
+  "$target_gen_dir/gpu_driver_bug_list_autogen.h",
+  "$target_gen_dir/gpu_driver_bug_list_exceptions_autogen.h",
+  "$target_gen_dir/software_rendering_list_arrays_and_structs_autogen.h",
+  "$target_gen_dir/software_rendering_list_autogen.cc",
+  "$target_gen_dir/software_rendering_list_autogen.h",
+  "$target_gen_dir/software_rendering_list_exceptions_autogen.h",
+]
+
+action("process_json") {
+  script = "process_json.py"
+
+  inputs = [
+    "gpu_driver_bug_list.json",
+    "gpu_driver_bug_workaround_type.h",
+    "gpu_feature_type.h",
+    "software_rendering_list.json",
+  ]
+
+  outputs = process_json_outputs
+
+  args = [
+    "--output-dir",
+    rebase_path("$target_gen_dir", root_build_dir),
+    "--skip-testing-data",
+  ]
 }
 
 source_set("config_sources") {
@@ -36,10 +70,8 @@ source_set("config_sources") {
     "gpu_blacklist.h",
     "gpu_control_list.cc",
     "gpu_control_list.h",
-    "gpu_control_list_jsons.h",
     "gpu_driver_bug_list.cc",
     "gpu_driver_bug_list.h",
-    "gpu_driver_bug_list_json.cc",
     "gpu_driver_bug_workaround_type.h",
     "gpu_driver_bug_workarounds.cc",
     "gpu_driver_bug_workarounds.h",
@@ -55,11 +87,8 @@ source_set("config_sources") {
     "gpu_info_collector.h",
     "gpu_info_collector_android.cc",
     "gpu_info_collector_linux.cc",
-    "gpu_info_collector_linux.h",
     "gpu_info_collector_mac.mm",
-    "gpu_info_collector_ozone.cc",
     "gpu_info_collector_win.cc",
-    "gpu_info_collector_x11.cc",
     "gpu_switches.cc",
     "gpu_switches.h",
     "gpu_test_config.cc",
@@ -68,8 +97,9 @@ source_set("config_sources") {
     "gpu_test_expectations_parser.h",
     "gpu_util.cc",
     "gpu_util.h",
-    "software_rendering_list_json.cc",
   ]
+
+  sources += process_json_outputs
 
   configs += [
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -78,6 +108,8 @@ source_set("config_sources") {
   ]
 
   deps = [
+    ":crash_keys",
+    ":process_json",
     "//base",
     "//third_party/re2",
     "//ui/gl",
@@ -88,7 +120,6 @@ source_set("config_sources") {
   include_dirs = [ "//third_party/mesa/src/include" ]
 
   if (is_win) {
-    deps += [ "//third_party/libxml" ]
     libs = [
       "dxguid.lib",
       "setupapi.lib",
@@ -101,29 +132,7 @@ source_set("config_sources") {
       ]
     }
   }
-  if (is_mac) {
-    libs = [
-      "IOKit.framework",
-      "CoreFoundation.framework",
-    ]
-  }
-  if (use_libpci) {
-    defines = [ "USE_LIBPCI=1" ]
-    deps += [ "//build/linux/libpci" ]
-  }
-  if (is_linux && use_x11) {
-    configs += [
-      "//build/config/linux:x11",
-      "//build/config/linux:xext",
-    ]
-    deps += [
-      "//third_party/libXNVCtrl",
-      "//ui/gfx/x",
-    ]
-  } else {
-    sources -= [ "gpu_info_collector_x11.cc" ]
-  }
-  if (!use_ozone) {
-    sources -= [ "gpu_info_collector_ozone.cc" ]
+  if (is_linux || is_mac) {
+    deps += [ "//third_party/angle:angle_gpu_info_util" ]
   }
 }

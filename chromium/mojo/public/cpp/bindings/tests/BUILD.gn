@@ -21,6 +21,7 @@ source_set("tests") {
     "handle_passing_unittest.cc",
     "hash_unittest.cc",
     "interface_ptr_unittest.cc",
+    "map_unittest.cc",
     "message_queue.cc",
     "message_queue.h",
     "multiplex_router_unittest.cc",
@@ -48,9 +49,9 @@ source_set("tests") {
     "//mojo/public/cpp/test_support:test_utils",
     "//mojo/public/interfaces/bindings/tests:test_associated_interfaces",
     "//mojo/public/interfaces/bindings/tests:test_export_component",
+    "//mojo/public/interfaces/bindings/tests:test_export_component2",
     "//mojo/public/interfaces/bindings/tests:test_exported_import",
     "//mojo/public/interfaces/bindings/tests:test_interfaces",
-    "//mojo/public/interfaces/bindings/tests:test_interfaces_experimental",
     "//mojo/public/interfaces/bindings/tests:test_struct_traits_interfaces",
     "//testing/gtest",
   ]
@@ -80,6 +81,7 @@ if (!is_ios) {
       "container_test_util.h",
       "variant_test_util.h",
       "wtf_hash_unittest.cc",
+      "wtf_map_unittest.cc",
       "wtf_types_unittest.cc",
     ]
 

@@ -1,0 +1,211 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "devtoolsPrivate",
+    "description": "Use the <code>vivaldi.devtoolsPrivate</code> API to manage devtools.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/devtools/devtools_private_api.h"
+    },
+    "types": [
+      {
+        "id": "DevtoolResizingStrategy",
+        "type": "object",
+        "description": "Object containing size and state for the inspected web contents. The devtools itself always uses the full size.",
+        "properties": {
+          "inspectedLeft": {
+            "type": "integer",
+            "description": "Left coordinate of inspected web contents."
+          },
+          "inspectedTop": {
+            "type": "integer",
+            "description": "Top coordinate of inspected web contents."
+          },
+          "inspectedWidth": {
+            "type": "integer",
+            "description": "Width of inspected web contents."
+          },
+          "inspectedHeight": {
+            "type": "integer",
+            "description": "Height of inspected web contents."
+          },
+          "hideInspectedContents": {
+            "type": "boolean",
+            "description": "false to hide the inspected contents, otherwise true."
+          }
+        }
+      },
+      {
+        "id": "DevtoolsWindowParams",
+        "type": "object",
+        "description": "Object containing size and state for the undocked devtools window.",
+        "properties": {
+          "left": {
+            "type": "integer",
+            "description": "Left coordinate of window."
+          },
+          "top": {
+            "type": "integer",
+            "description": "Top coordinate of window."
+          },
+          "right": {
+            "type": "integer",
+            "description": "Right coordinate of window."
+          },
+          "bottom": {
+            "type": "integer",
+            "description": "Bottom coordinate of window."
+          },
+          "maximized": {
+            "type": "boolean",
+            "description": "Should window be maximized."
+          },
+          "alwaysOnTop": {
+            "type": "boolean",
+            "description": "Should window be always on top."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getDockingStateSizes",
+        "type": "function",
+        "description": "Used to request the size and state of the inspected webview.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id of the tab changing its devtools docking state."
+          },
+          {
+            "type": "integer",
+            "name": "containerWidth",
+            "description": "The container width that can be divided for web contents and devtools."
+          },
+          {
+            "type": "integer",
+            "name": "containerHeight",
+            "description": "The container height that can be divided for web contents and devtools."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "devtoolsResizingStrategy",
+                "$ref": "DevtoolResizingStrategy"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "closeDevtools",
+        "type": "function",
+        "description": "Explicitly close the open devtools instance for the given tabId or windowId.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id of the tab to close devtools for."
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "optional": true,
+            "minimum": 1,
+            "description": "The window id (not app window id) of the window to close all open devtools for."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "success",
+                "type": "boolean",
+                "description": "true if the operation was successful, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "toggleDevtools",
+        "type": "function",
+        "description": "Toggle developer tools.",
+        "parameters": []
+      }
+    ],
+    "events": [
+      {
+        "name": "onDockingStateChanged",
+        "type": "function",
+        "description": "Fired when devtools changed its docking state.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id of the tab changing its devtools docking state."
+          },
+          {
+            "type": "string",
+            "name": "dockingState",
+            "description": "The new devtools docking state. Possible values are right, bottom or undocked."
+          }
+        ]
+      },
+      {
+        "name": "onDockingSizesChanged",
+        "type": "function",
+        "description": "Fired when devtools changed its sizes. Use |getDockingStateSizes| to read the new sizes.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id of the tab changing its devtools docking state."
+          }
+        ]
+      },
+      {
+        "name": "onClosed",
+        "type": "function",
+        "description": "Fired when docked devtools closed.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id of the tab changing its devtools docking state."
+          }
+        ]
+      },
+      {
+        "name": "onDevtoolsUndocked",
+        "type": "function",
+        "description": "Fired when devtools wants to undock and we might need to open a window for it.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id of the tab we are debugging."
+          },
+          {
+            "type": "boolean",
+            "name": "showWindow",
+            "description": "Show the initial window. May be false in which case the user likely just re-selected inspect on an existing web page."
+          },
+          {
+            "name": "params",
+            "$ref": "DevtoolsWindowParams"
+          }
+        ]
+      }
+    ]
+  }
+]

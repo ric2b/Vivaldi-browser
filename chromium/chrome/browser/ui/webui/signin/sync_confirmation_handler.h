@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -17,9 +18,10 @@ class ListValue;
 }
 
 class SyncConfirmationHandler : public content::WebUIMessageHandler,
-                                public AccountTrackerService::Observer {
+                                public AccountTrackerService::Observer,
+                                public chrome::BrowserListObserver {
  public:
-  SyncConfirmationHandler();
+  explicit SyncConfirmationHandler(Browser* browser);
   ~SyncConfirmationHandler() override;
 
   // content::WebUIMessageHandler:
@@ -28,22 +30,20 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
   // AccountTrackerService::Observer:
   void OnAccountUpdated(const AccountInfo& info) override;
 
+  // chrome::BrowserListObserver:
+  void OnBrowserRemoved(Browser* browser) override;
+
  protected:
   // Handles "confirm" message from the page. No arguments.
   // This message is sent when the user confirms that they want complete sign in
-  // with default sync settings.
+  // with default sync settings. Passed a single boolean argument: whether to
+  // configure settings before signing in.
   virtual void HandleConfirm(const base::ListValue* args);
 
   // Handles "undo" message from the page. No arguments.
   // This message is sent when the user clicks "undo" on the sync confirmation
   // dialog, which aborts signin and prevents sync from starting.
   virtual void HandleUndo(const base::ListValue* args);
-
-  // Handles "goToSettings" message from the page. No arguments.
-  // This message is sent when the user clicks on the "Settings" link in the
-  // sync confirmation dialog, which completes sign in but takes the user to the
-  // sync settings page for configuration before starting sync.
-  virtual void HandleGoToSettings(const base::ListValue* args);
 
   // Handles the web ui message sent when the html content is done being laid
   // out and it's time to resize the native view hosting it to fit. |args| is
@@ -60,6 +60,11 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
       LoginUIService::SyncConfirmationUIClosedResult result);
 
  private:
+  Profile* profile_;
+
+  // Weak reference to the browser that showed the sync confirmation dialog.
+  Browser* browser_;
+
   // Records whether the user clicked on Undo, Ok, or Settings.
   bool did_user_explicitly_interact;
 

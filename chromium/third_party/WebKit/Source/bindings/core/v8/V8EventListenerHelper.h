@@ -33,15 +33,16 @@
 
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8EventListener.h"
+#include "bindings/core/v8/V8PrivateProperty.h"
 #include "core/CoreExport.h"
+#include "platform/wtf/Allocator.h"
 #include "v8/include/v8.h"
-#include "wtf/Allocator.h"
 
 namespace blink {
 
 enum ListenerLookupType {
-  ListenerFindOnly,
-  ListenerFindOrCreate,
+  kListenerFindOnly,
+  kListenerFindOrCreate,
 };
 
 // This is a container for V8EventListener objects that uses hidden properties
@@ -50,74 +51,72 @@ class V8EventListenerHelper {
   STATIC_ONLY(V8EventListenerHelper);
 
  public:
-  static V8EventListener* existingEventListener(v8::Local<v8::Value> value,
-                                                ScriptState* scriptState) {
-    DCHECK(scriptState->isolate()->InContext());
+  static V8EventListener* ExistingEventListener(v8::Local<v8::Value> value,
+                                                ScriptState* script_state) {
+    DCHECK(script_state->GetIsolate()->InContext());
     if (!value->IsObject())
       return nullptr;
 
-    v8::Local<v8::String> listenerProperty =
-        getHiddenProperty(false, scriptState->isolate());
-    return findEventListener(v8::Local<v8::Object>::Cast(value),
-                             listenerProperty, scriptState);
+    return FindEventListener(v8::Local<v8::Object>::Cast(value), false,
+                             script_state);
   }
 
   template <typename ListenerType>
-  static V8EventListener* ensureEventListener(v8::Local<v8::Value>,
-                                              bool isAttribute,
+  static V8EventListener* EnsureEventListener(v8::Local<v8::Value>,
+                                              bool is_attribute,
                                               ScriptState*);
 
-  CORE_EXPORT static EventListener* getEventListener(ScriptState*,
+  CORE_EXPORT static EventListener* GetEventListener(ScriptState*,
                                                      v8::Local<v8::Value>,
-                                                     bool isAttribute,
+                                                     bool is_attribute,
                                                      ListenerLookupType);
 
  private:
-  static V8EventListener* findEventListener(
-      v8::Local<v8::Object> object,
-      v8::Local<v8::String> listenerProperty,
-      ScriptState* scriptState) {
-    v8::HandleScope scope(scriptState->isolate());
-    DCHECK(scriptState->isolate()->InContext());
+  static V8EventListener* FindEventListener(v8::Local<v8::Object> object,
+                                            bool is_attribute,
+                                            ScriptState* script_state) {
+    v8::Isolate* isolate = script_state->GetIsolate();
+    v8::HandleScope scope(isolate);
+    DCHECK(isolate->InContext());
+
     v8::Local<v8::Value> listener =
-        V8HiddenValue::getHiddenValue(scriptState, object, listenerProperty);
+        ListenerProperty(isolate, is_attribute).GetOrEmpty(object);
     if (listener.IsEmpty())
       return nullptr;
     return static_cast<V8EventListener*>(
         v8::External::Cast(*listener)->Value());
   }
 
-  static inline v8::Local<v8::String> getHiddenProperty(bool isAttribute,
-                                                        v8::Isolate* isolate) {
-    return isAttribute
-               ? v8AtomicString(isolate, "EventListenerList::attributeListener")
-               : v8AtomicString(isolate, "EventListenerList::listener");
+  static V8PrivateProperty::Symbol ListenerProperty(v8::Isolate* isolate,
+                                                    bool is_attribute) {
+    return V8PrivateProperty::GetSymbol(
+        isolate, is_attribute ? "EventListenerList::attributeListener"
+                              : "EventListenerList::listener");
   }
 };
 
 template <typename ListenerType>
-V8EventListener* V8EventListenerHelper::ensureEventListener(
+V8EventListener* V8EventListenerHelper::EnsureEventListener(
     v8::Local<v8::Value> value,
-    bool isAttribute,
-    ScriptState* scriptState) {
-  v8::Isolate* isolate = scriptState->isolate();
+    bool is_attribute,
+    ScriptState* script_state) {
+  v8::Isolate* isolate = script_state->GetIsolate();
   DCHECK(isolate->InContext());
   if (!value->IsObject())
     return nullptr;
 
   v8::Local<v8::Object> object = v8::Local<v8::Object>::Cast(value);
-  v8::Local<v8::String> listenerProperty =
-      getHiddenProperty(isAttribute, isolate);
 
   V8EventListener* listener =
-      findEventListener(object, listenerProperty, scriptState);
+      FindEventListener(object, is_attribute, script_state);
   if (listener)
     return listener;
 
-  listener = ListenerType::create(object, isAttribute, scriptState);
-  if (listener)
-    V8HiddenValue::setHiddenValue(scriptState, object, listenerProperty,
-                                  v8::External::New(isolate, listener));
+  listener = ListenerType::Create(object, is_attribute, script_state);
+  if (listener) {
+    ListenerProperty(isolate, is_attribute)
+        .Set(object, v8::External::New(isolate, listener));
+  }
 
   return listener;
 }

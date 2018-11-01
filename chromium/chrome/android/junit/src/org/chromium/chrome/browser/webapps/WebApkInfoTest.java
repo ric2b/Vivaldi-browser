@@ -72,7 +72,8 @@ public class WebApkInfoTest {
 
         Intent intent = new Intent();
         intent.putExtra(
-                ShortcutHelper.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
+                WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
+        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_FORCE_NAVIGATION, true);
         intent.putExtra(ShortcutHelper.EXTRA_URL, START_URL);
         intent.putExtra(ShortcutHelper.EXTRA_SOURCE, ShortcutSource.NOTIFICATION);
 
@@ -80,10 +81,12 @@ public class WebApkInfoTest {
 
         Assert.assertEquals(WebApkConstants.WEBAPK_ID_PREFIX + WebApkTestHelper.WEBAPK_PACKAGE_NAME,
                 info.id());
+        Assert.assertEquals(START_URL, info.uri().toString());
+        Assert.assertTrue(info.shouldForceNavigation());
         Assert.assertEquals(SCOPE, info.scopeUri().toString());
         Assert.assertEquals(NAME, info.name());
         Assert.assertEquals(SHORT_NAME, info.shortName());
-        Assert.assertEquals(WebDisplayMode.MinimalUi, info.displayMode());
+        Assert.assertEquals(WebDisplayMode.kMinimalUi, info.displayMode());
         Assert.assertEquals(ScreenOrientationValues.PORTRAIT, info.orientation());
         Assert.assertTrue(info.hasValidThemeColor());
         Assert.assertEquals(1L, info.themeColor());
@@ -117,7 +120,7 @@ public class WebApkInfoTest {
 
         Intent intent = new Intent();
         intent.putExtra(
-                ShortcutHelper.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
+                WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
         intent.putExtra(ShortcutHelper.EXTRA_URL, intentStartUrl);
 
         WebApkInfo info = WebApkInfo.create(intent);
@@ -149,7 +152,7 @@ public class WebApkInfoTest {
 
         Intent intent = new Intent();
         intent.putExtra(
-                ShortcutHelper.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
+                WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
         intent.putExtra(ShortcutHelper.EXTRA_URL, intentStartUrl);
 
         WebApkInfo info = WebApkInfo.create(intent);
@@ -174,7 +177,7 @@ public class WebApkInfoTest {
         WebApkTestHelper.registerWebApkWithMetaData(bundle);
         Intent intent = new Intent();
         intent.putExtra(
-                ShortcutHelper.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
+                WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
         intent.putExtra(ShortcutHelper.EXTRA_URL, START_URL);
 
         WebApkInfo info = WebApkInfo.create(intent);
@@ -199,12 +202,33 @@ public class WebApkInfoTest {
         WebApkTestHelper.registerWebApkWithMetaData(bundle);
         Intent intent = new Intent();
         intent.putExtra(
-                ShortcutHelper.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
+                WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
         intent.putExtra(ShortcutHelper.EXTRA_URL, START_URL);
 
         WebApkInfo info = WebApkInfo.create(intent);
         Map<String, String> iconUrlToMurmur2HashMap = info.iconUrlToMurmur2HashMap();
         Assert.assertEquals(1, iconUrlToMurmur2HashMap.size());
         Assert.assertTrue(iconUrlToMurmur2HashMap.containsValue(hash));
+    }
+
+    /**
+     * Prior to SHELL_APK_VERSION 2, WebAPKs did not specify
+     * {@link WebApkConstants.EXTRA_WEBAPK_FORCE_NAVIGATION} in the intent. Test that
+     * {@link WebApkInfo#shouldForceNavigation()} defaults to true when the intent extra is not
+     * specified.
+     */
+    @Test
+    public void testForceNavigationNotSpecified() {
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
+        WebApkTestHelper.registerWebApkWithMetaData(bundle);
+
+        Intent intent = new Intent();
+        intent.putExtra(
+                WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WebApkTestHelper.WEBAPK_PACKAGE_NAME);
+        intent.putExtra(ShortcutHelper.EXTRA_URL, START_URL);
+
+        WebApkInfo info = WebApkInfo.create(intent);
+        Assert.assertTrue(info.shouldForceNavigation());
     }
 }

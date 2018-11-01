@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
@@ -11,6 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_reader.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
@@ -33,9 +35,9 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/template_url_data.h"
-#include "components/user_prefs/tracked/tracked_preference_histogram_names.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension.h"
+#include "services/preferences/public/cpp/tracked/tracked_preference_histogram_names.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/chromeos_switches.h"
@@ -221,7 +223,7 @@ class PrefHashBrowserTestBase
     // Sanity check that old protected pref file is never present in modern
     // Chromes.
     EXPECT_FALSE(base::PathExists(
-        profile_dir.Append(chrome::kProtectedPreferencesFilenameDeprecated)));
+        profile_dir.Append(FILE_PATH_LITERAL("Protected Preferences"))));
 
     // Read the preferences from disk.
 
@@ -885,9 +887,9 @@ class PrefHashBrowserTestChangedSplitPref : public PrefHashBrowserTestBase {
 
     // Drop a fake extension (for the purpose of this test, dropped settings
     // don't need to be valid extension settings).
-    base::DictionaryValue* fake_extension = new base::DictionaryValue;
+    auto fake_extension = base::MakeUnique<base::DictionaryValue>();
     fake_extension->SetString("name", "foo");
-    extensions_dict->Set(std::string(32, 'a'), fake_extension);
+    extensions_dict->Set(std::string(32, 'a'), std::move(fake_extension));
   }
 
   void VerifyReactionToPrefAttack() override {

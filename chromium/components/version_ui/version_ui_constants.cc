@@ -27,6 +27,7 @@ const char kCommandLineName[] = "command_line_name";
 const char kCompany[] = "company";
 #if defined(OS_WIN)
 const char kCompiler[] = "compiler";
+const char kUpdateCohortName[] = "update_cohort_name";
 #endif
 const char kCopyright[] = "copyright";
 #if defined(OS_CHROMEOS)
@@ -54,6 +55,8 @@ const char kOSType[] = "os_type";
 #endif
 #if defined(OS_ANDROID)
 const char kOSVersion[] = "os_version";
+const char kGmsName[] = "gms_name";
+const char kGmsVersion[] = "gms_version";
 #endif
 #if defined(OS_CHROMEOS)
 const char kPlatform[] = "platform";

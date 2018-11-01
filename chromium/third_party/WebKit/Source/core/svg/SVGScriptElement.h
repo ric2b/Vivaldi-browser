@@ -22,7 +22,7 @@
 #define SVGScriptElement_h
 
 #include "core/SVGNames.h"
-#include "core/dom/ScriptLoaderClient.h"
+#include "core/dom/ScriptElementBase.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGURIReference.h"
 #include "platform/heap/Handle.h"
@@ -33,53 +33,70 @@ class ScriptLoader;
 
 class SVGScriptElement final : public SVGElement,
                                public SVGURIReference,
-                               public ScriptLoaderClient {
+                               public ScriptElementBase {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(SVGScriptElement);
 
  public:
-  static SVGScriptElement* create(Document&, bool wasInsertedByParser);
+  static SVGScriptElement* Create(Document&, bool was_inserted_by_parser);
 
-  ScriptLoader* loader() const { return m_loader.get(); }
+  ScriptLoader* Loader() const { return loader_.Get(); }
 
 #if DCHECK_IS_ON()
-  bool isAnimatableAttribute(const QualifiedName&) const override;
+  bool IsAnimatableAttribute(const QualifiedName&) const override;
 #endif
+
+  bool IsScriptElement() const override { return true; }
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  SVGScriptElement(Document&, bool wasInsertedByParser, bool alreadyStarted);
+  SVGScriptElement(Document&,
+                   bool was_inserted_by_parser,
+                   bool already_started);
 
-  void parseAttribute(const AttributeModificationParams&) override;
-  InsertionNotificationRequest insertedInto(ContainerNode*) override;
-  void didNotifySubtreeInsertionsToDocument() override;
-  void childrenChanged(const ChildrenChange&) override;
-  void didMoveToNewDocument(Document& oldDocument) override;
+  void ParseAttribute(const AttributeModificationParams&) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
+  void DidNotifySubtreeInsertionsToDocument() override;
+  void ChildrenChanged(const ChildrenChange&) override;
+  void DidMoveToNewDocument(Document& old_document) override;
 
-  void svgAttributeChanged(const QualifiedName&) override;
-  bool isURLAttribute(const Attribute&) const override;
-  bool isStructurallyExternal() const override { return hasSourceAttribute(); }
-  void finishParsingChildren() override;
+  void SvgAttributeChanged(const QualifiedName&) override;
+  bool IsURLAttribute(const Attribute&) const override;
+  bool IsStructurallyExternal() const override { return HasSourceAttribute(); }
+  void FinishParsingChildren() override;
 
-  bool haveLoadedRequiredResources() override;
+  bool HaveLoadedRequiredResources() override;
 
-  String sourceAttributeValue() const override;
-  String charsetAttributeValue() const override;
-  String typeAttributeValue() const override;
-  String languageAttributeValue() const override;
-  String forAttributeValue() const override;
-  String eventAttributeValue() const override;
-  bool asyncAttributeValue() const override;
-  bool deferAttributeValue() const override;
-  bool hasSourceAttribute() const override;
+  // ScriptElementBase overrides:
+  bool AsyncAttributeValue() const { return false; }
+  String CharsetAttributeValue() const { return String(); }
+  String CrossOriginAttributeValue() const { return String(); }
+  bool DeferAttributeValue() const { return false; }
+  String EventAttributeValue() const { return String(); }
+  String ForAttributeValue() const { return String(); }
+  String IntegrityAttributeValue() const { return String(); }
+  String LanguageAttributeValue() const { return String(); }
+  String SourceAttributeValue() const override;
+  String TypeAttributeValue() const override;
+  String TextFromChildren() override;
+  String TextContent() const override;
+  bool HasSourceAttribute() const override;
+  bool IsConnected() const override;
+  bool HasChildren() const override;
+  bool IsNonceableElement() const;
+  bool AllowInlineScriptForCSP(const AtomicString& nonce,
+                               const WTF::OrdinalNumber&,
+                               const String& script_content) override;
+  AtomicString InitiatorName() const override;
+  Document& GetDocument() const override;
+  void DispatchLoadEvent() override;
+  void DispatchErrorEvent() override;
+  void SetScriptElementForBinding(
+      HTMLScriptElementOrSVGScriptElement&) override;
 
-  void dispatchLoadEvent() override;
-
-  Element* cloneElementWithoutAttributesAndChildren() override;
-  bool layoutObjectIsNeeded(const ComputedStyle&) override { return false; }
-
-  Member<ScriptLoader> m_loader;
+  Element* CloneElementWithoutAttributesAndChildren() override;
+  bool LayoutObjectIsNeeded(const ComputedStyle&) override { return false; }
 };
 
 }  // namespace blink

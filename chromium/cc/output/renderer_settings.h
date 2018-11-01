@@ -7,7 +7,7 @@
 
 #include <stddef.h>
 
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/output/buffer_to_texture_target_map.h"
 #include "cc/resources/resource_format.h"
 
@@ -37,8 +37,6 @@ class CC_EXPORT RendererSettings {
   bool use_gpu_memory_buffer_resources = false;
   ResourceFormat preferred_tile_format;
   BufferToTextureTargetMap buffer_to_texture_target_map;
-
-  bool operator==(const RendererSettings& other) const;
 };
 
 }  // namespace cc

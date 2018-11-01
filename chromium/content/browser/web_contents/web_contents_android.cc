@@ -39,7 +39,9 @@
 #include "net/android/network_library.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/android/overscroll_refresh_handler.h"
+#include "ui/android/window_android.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
 using base::android::AttachCurrentThread;
@@ -59,7 +61,7 @@ namespace {
 
 // Track all WebContentsAndroid objects here so that we don't deserialize a
 // destroyed WebContents object.
-base::LazyInstance<base::hash_set<WebContentsAndroid*> >::Leaky
+base::LazyInstance<base::hash_set<WebContentsAndroid*>>::Leaky
     g_allocated_web_contents_androids = LAZY_INSTANCE_INITIALIZER;
 
 void JavaScriptResultCallback(const ScopedJavaGlobalRef<jobject>& callback,
@@ -129,7 +131,7 @@ ScopedJavaLocalRef<jobject> WalkAXTreeDepthFirst(
 
   const gfx::Rect& absolute_rect = node->GetPageBoundsRect();
   gfx::Rect parent_relative_rect = absolute_rect;
-  bool is_root = node->GetParent() == nullptr;
+  bool is_root = node->PlatformGetParent() == nullptr;
   if (!is_root) {
     parent_relative_rect.Offset(-parent_rect.OffsetFromOrigin());
   }
@@ -282,6 +284,21 @@ WebContentsAndroid::~WebContentsAndroid() {
 base::android::ScopedJavaLocalRef<jobject>
 WebContentsAndroid::GetJavaObject() {
   return base::android::ScopedJavaLocalRef<jobject>(obj_);
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+WebContentsAndroid::GetTopLevelNativeWindow(JNIEnv* env,
+                                            const JavaParamRef<jobject>& obj) {
+  ui::WindowAndroid* window_android = web_contents_->GetTopLevelNativeWindow();
+  if (!window_android)
+    return nullptr;
+  return window_android->GetJavaObject();
+}
+
+ScopedJavaLocalRef<jobject> WebContentsAndroid::GetMainFrame(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) const {
+  return web_contents_->GetMainFrame()->GetJavaRenderFrameHost();
 }
 
 ScopedJavaLocalRef<jstring> WebContentsAndroid::GetTitle(
@@ -692,6 +709,16 @@ void WebContentsAndroid::DismissTextHandles(
     view->DismissTextHandles();
 }
 
+void WebContentsAndroid::ShowContextMenuAtPoint(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    int x,
+    int y) {
+  RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
+  if (view)
+    view->ShowContextMenuAtPoint(gfx::Point(x, y));
+}
+
 void WebContentsAndroid::SetHasPersistentVideo(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
@@ -703,6 +730,13 @@ bool WebContentsAndroid::HasActiveEffectivelyFullscreenVideo(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
   return web_contents_->HasActiveEffectivelyFullscreenVideo();
+}
+
+ScopedJavaLocalRef<jobject> WebContentsAndroid::GetOrCreateEventForwarder(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  gfx::NativeView native_view = web_contents_->GetView()->GetNativeView();
+  return native_view->GetEventForwarder();
 }
 
 void WebContentsAndroid::OnFinishGetContentBitmap(

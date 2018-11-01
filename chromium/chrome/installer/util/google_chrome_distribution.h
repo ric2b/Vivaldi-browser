@@ -8,16 +8,7 @@
 #ifndef CHROME_INSTALLER_UTIL_GOOGLE_CHROME_DISTRIBUTION_H_
 #define CHROME_INSTALLER_UTIL_GOOGLE_CHROME_DISTRIBUTION_H_
 
-#include <memory>
-
-#include "base/strings/string16.h"
 #include "chrome/installer/util/browser_distribution.h"
-
-namespace base {
-class FilePath;
-}
-
-class AppRegistrationData;
 
 class GoogleChromeDistribution : public BrowserDistribution {
  public:
@@ -35,24 +26,6 @@ class GoogleChromeDistribution : public BrowserDistribution {
       const base::FilePath& local_data_path,
       const base::string16& distribution_data) override;
 
-  base::string16 GetActiveSetupGuid() override;
-
-  base::string16 GetShortcutName() override;
-
-  base::string16 GetIconFilename() override;
-
-  int GetIconIndex() override;
-
-  base::string16 GetBaseAppName() override;
-
-  base::string16 GetBaseAppId() override;
-
-  base::string16 GetBrowserProgIdPrefix() override;
-
-  base::string16 GetBrowserProgIdDesc() override;
-
-  base::string16 GetInstallSubDir() override;
-
   base::string16 GetPublisherName() override;
 
   base::string16 GetAppDescription() override;
@@ -64,25 +37,14 @@ class GoogleChromeDistribution : public BrowserDistribution {
   // key returned by GetVersionKey() is deleted.
   base::string16 GetDistributionData(HKEY root_key) override;
 
-  base::string16 GetUninstallRegPath() override;
-
-  base::string16 GetCommandExecuteImplClsid() override;
-
   void UpdateInstallStatus(
       bool system_install,
       installer::ArchiveType archive_type,
       installer::InstallStatus install_status) override;
 
-  bool ShouldSetExperimentLabels() override;
-
-  bool HasUserExperiments() override;
-
  protected:
   // Disallow construction from others.
   GoogleChromeDistribution();
-
-  explicit GoogleChromeDistribution(
-      std::unique_ptr<AppRegistrationData> app_reg_data);
 
  private:
   friend class BrowserDistribution;

@@ -441,7 +441,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
   if (frame->storage_type() == STORAGE_DMABUFS) {
     std::vector<int> original_fds;
     for (size_t i = 0; i < kMaxPlanes; ++i)
-      original_fds.push_back(frame->dmabuf_fd(i));
+      original_fds.push_back(frame->DmabufFd(i));
     if (!wrapping_frame->DuplicateFileDescriptors(original_fds)) {
       LOG(DFATAL) << __func__ << " Couldn't duplicate fds.";
       return nullptr;
@@ -723,7 +723,7 @@ size_t VideoFrame::shared_memory_offset() const {
 }
 
 #if defined(OS_LINUX)
-int VideoFrame::dmabuf_fd(size_t plane) const {
+int VideoFrame::DmabufFd(size_t plane) const {
   DCHECK_EQ(storage_type_, STORAGE_DMABUFS);
   DCHECK(IsValidPlane(plane, format_));
   return dmabuf_fds_[plane].get();
@@ -763,7 +763,7 @@ void VideoFrame::AddSharedMemoryHandle(base::SharedMemoryHandle handle) {
 }
 
 #if defined(OS_MACOSX)
-CVPixelBufferRef VideoFrame::cv_pixel_buffer() const {
+CVPixelBufferRef VideoFrame::CvPixelBuffer() const {
   return cv_pixel_buffer_.get();
 }
 #endif
@@ -800,6 +800,53 @@ std::string VideoFrame::AsHumanReadableString() {
                       natural_size_)
     << " timestamp:" << timestamp_.InMicroseconds();
   return s.str();
+}
+
+int VideoFrame::BitsPerChannel(VideoPixelFormat format) {
+  int bits_per_channel = 0;
+  switch (format) {
+    case media::PIXEL_FORMAT_UNKNOWN:
+      NOTREACHED();
+    // Fall through!
+    case media::PIXEL_FORMAT_I420:
+    case media::PIXEL_FORMAT_YV12:
+    case media::PIXEL_FORMAT_YV16:
+    case media::PIXEL_FORMAT_YV12A:
+    case media::PIXEL_FORMAT_YV24:
+    case media::PIXEL_FORMAT_NV12:
+    case media::PIXEL_FORMAT_NV21:
+    case media::PIXEL_FORMAT_UYVY:
+    case media::PIXEL_FORMAT_YUY2:
+    case media::PIXEL_FORMAT_ARGB:
+    case media::PIXEL_FORMAT_XRGB:
+    case media::PIXEL_FORMAT_RGB24:
+    case media::PIXEL_FORMAT_RGB32:
+    case media::PIXEL_FORMAT_MJPEG:
+    case media::PIXEL_FORMAT_MT21:
+    case media::PIXEL_FORMAT_Y8:
+    case media::PIXEL_FORMAT_I422:
+      bits_per_channel = 8;
+      break;
+    case media::PIXEL_FORMAT_YUV420P9:
+    case media::PIXEL_FORMAT_YUV422P9:
+    case media::PIXEL_FORMAT_YUV444P9:
+      bits_per_channel = 9;
+      break;
+    case media::PIXEL_FORMAT_YUV420P10:
+    case media::PIXEL_FORMAT_YUV422P10:
+    case media::PIXEL_FORMAT_YUV444P10:
+      bits_per_channel = 10;
+      break;
+    case media::PIXEL_FORMAT_YUV420P12:
+    case media::PIXEL_FORMAT_YUV422P12:
+    case media::PIXEL_FORMAT_YUV444P12:
+      bits_per_channel = 12;
+      break;
+    case media::PIXEL_FORMAT_Y16:
+      bits_per_channel = 16;
+      break;
+  }
+  return bits_per_channel;
 }
 
 // static

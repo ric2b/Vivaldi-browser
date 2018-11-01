@@ -19,6 +19,7 @@
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/surfaces/surface_id.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
@@ -31,6 +32,7 @@
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
+#include "ui/accessibility/ax_tree_id_registry.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/display/display.h"
@@ -42,6 +44,11 @@
 class SkBitmap;
 
 struct ViewHostMsg_SelectionBounds_Params;
+
+namespace cc {
+struct BeginFrameAck;
+class SurfaceInfo;
+}  // namespace cc
 
 namespace media {
 class VideoFrame;
@@ -89,10 +96,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   bool IsAura() const override;
 
   RenderWidgetHost* GetRenderWidgetHost() const override;
-  void SetBackgroundColor(SkColor color) override;
-  SkColor background_color() override;
   void SetBackgroundColorToDefault() final;
-  bool GetBackgroundOpaque() override;
   ui::TextInputClient* GetTextInputClient() override;
   void WasUnOccluded() override {}
   void WasOccluded() override {}
@@ -212,13 +216,24 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual gfx::Point AccessibilityOriginInScreen(const gfx::Rect& bounds);
   virtual gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget();
   virtual gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible();
-
+  virtual void SetMainFrameAXTreeID(ui::AXTreeIDRegistry::AXTreeID id) {}
   // Informs that the focused DOM node has changed.
   virtual void FocusedNodeChanged(bool is_editable_node,
                                   const gfx::Rect& node_bounds_in_screen) {}
 
-  virtual void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
-                                     cc::CompositorFrame frame) {}
+  // This method is called by RenderWidgetHostImpl when a new
+  // RendererCompositorFrameSink is created in the renderer. The view is
+  // expected not to return resources belonging to the old
+  // RendererCompositorFrameSink after this method finishes.
+  virtual void DidCreateNewRendererCompositorFrameSink(
+      cc::mojom::MojoCompositorFrameSinkClient*
+          renderer_compositor_frame_sink) = 0;
+
+  virtual void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+                                     cc::CompositorFrame frame) = 0;
+
+  virtual void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack) {}
+  virtual void OnSurfaceChanged(const cc::SurfaceInfo& surface_info) {}
 
   // This method exists to allow removing of displayed graphics, after a new
   // page has been loaded, to prevent the displayed URL from being out of sync
@@ -418,9 +433,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Whether this view is a popup and what kind of popup it is (select,
   // autofill...).
   blink::WebPopupType popup_type_;
-
-  // The background color of the web content.
-  SkColor background_color_;
 
   // While the mouse is locked, the cursor is hidden from the user. Mouse events
   // are still generated. However, the position they report is the last known

@@ -5,8 +5,8 @@
 #ifndef ASH_SHELL_WINDOW_WATCHER_SHELF_ITEM_DELEGATE_H_
 #define ASH_SHELL_WINDOW_WATCHER_SHELF_ITEM_DELEGATE_H_
 
-#include "ash/common/shelf/shelf_item_delegate.h"
-#include "ash/common/shelf/shelf_item_types.h"
+#include "ash/public/cpp/shelf_item.h"
+#include "ash/public/cpp/shelf_item_delegate.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 
@@ -22,12 +22,11 @@ class WindowWatcherShelfItemDelegate : public ShelfItemDelegate {
   ~WindowWatcherShelfItemDelegate() override;
 
   // ShelfItemDelegate:
-  ShelfAction ItemSelected(ui::EventType event_type,
-                           int event_flags,
-                           int64_t display_id,
-                           ShelfLaunchSource source) override;
-  ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
-  void ExecuteCommand(uint32_t command_id, int event_flags) override;
+  void ItemSelected(std::unique_ptr<ui::Event> event,
+                    int64_t display_id,
+                    ShelfLaunchSource source,
+                    const ItemSelectedCallback& callback) override;
+  void ExecuteCommand(uint32_t command_id, int32_t event_flags) override;
   void Close() override;
 
  private:

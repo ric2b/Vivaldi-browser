@@ -17,16 +17,16 @@
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
+#include "cc/base/devtools_instrumentation.h"
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/base/synced_property.h"
-#include "cc/debug/devtools_instrumentation.h"
 #include "cc/debug/traced_value.h"
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scrollbar_animation_controller.h"
+#include "cc/layers/effect_tree_layer_list_iterator.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/layers/layer.h"
-#include "cc/layers/layer_iterator.h"
 #include "cc/layers/layer_list_iterator.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/scrollbar_layer_impl_base.h"
@@ -243,26 +243,30 @@ void LayerTreeImpl::UpdateScrollbars(int scroll_layer_id, int clip_layer_id) {
   }
 
   bool scrollbar_needs_animation = false;
+  bool clip_layer_size_did_change = false;
   bool scroll_layer_size_did_change = false;
   bool y_offset_did_change = false;
   for (ScrollbarLayerImplBase* scrollbar : ScrollbarsFor(scroll_layer_id)) {
     if (scrollbar->orientation() == HORIZONTAL) {
       scrollbar_needs_animation |= scrollbar->SetCurrentPos(current_offset.x());
-      scrollbar_needs_animation |=
+      clip_layer_size_did_change |=
           scrollbar->SetClipLayerLength(clip_size.width());
-      scrollbar_needs_animation |= scroll_layer_size_did_change |=
+      scroll_layer_size_did_change |=
           scrollbar->SetScrollLayerLength(scroll_size.width());
     } else {
       scrollbar_needs_animation |= y_offset_did_change |=
           scrollbar->SetCurrentPos(current_offset.y());
-      scrollbar_needs_animation |=
+      clip_layer_size_did_change |=
           scrollbar->SetClipLayerLength(clip_size.height());
-      scrollbar_needs_animation |= scroll_layer_size_did_change |=
+      scroll_layer_size_did_change |=
           scrollbar->SetScrollLayerLength(scroll_size.height());
     }
     scrollbar_needs_animation |=
         scrollbar->SetVerticalAdjust(clip_layer->bounds_delta().y());
   }
+
+  scrollbar_needs_animation |=
+      (clip_layer_size_did_change || scroll_layer_size_did_change);
 
   if (y_offset_did_change && IsViewportLayerId(scroll_layer_id))
     TRACE_COUNTER_ID1("cc", "scroll_offset_y", scroll_layer->id(),
@@ -272,8 +276,16 @@ void LayerTreeImpl::UpdateScrollbars(int scroll_layer_id, int clip_layer_id) {
     ScrollbarAnimationController* controller =
         layer_tree_host_impl_->ScrollbarAnimationControllerForId(
             scroll_layer_id);
-    if (controller)
-      controller->DidScrollUpdate(scroll_layer_size_did_change);
+    if (!controller)
+      return;
+
+    // TODO(chaopeng) clip_layer_size_did_change should call DidResize after
+    // crbug.com/701810 got fixed.
+    if (scroll_layer_size_did_change) {
+      controller->DidResize();
+    } else {
+      controller->DidScrollUpdate();
+    }
   }
 }
 
@@ -485,10 +497,12 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
                                             max_page_scale_factor());
   target_tree->SetDeviceScaleFactor(device_scale_factor());
   target_tree->set_painted_device_scale_factor(painted_device_scale_factor());
-  target_tree->SetDeviceColorSpace(device_color_space_);
+  target_tree->SetRasterColorSpace(raster_color_space_);
   target_tree->elastic_overscroll()->PushPendingToActive();
 
   target_tree->set_content_source_id(content_source_id());
+
+  target_tree->set_local_surface_id(local_surface_id());
 
   target_tree->pending_page_scale_animation_ =
       std::move(pending_page_scale_animation_);
@@ -527,6 +541,23 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
     target_tree->set_hud_layer(NULL);
 
   target_tree->has_ever_been_drawn_ = false;
+
+  // Note: this needs to happen after SetPropertyTrees.
+  target_tree->ShowScrollbars();
+}
+
+void LayerTreeImpl::ShowScrollbars() {
+  LayerTreeHostCommon::CallFunctionForEveryLayer(this, [this](
+                                                           LayerImpl* layer) {
+    if (!layer->needs_show_scrollbars())
+      return;
+    ScrollbarAnimationController* controller =
+        layer_tree_host_impl_->ScrollbarAnimationControllerForId(layer->id());
+    if (controller) {
+      controller->DidRequestShowFromMainThread();
+      layer->set_needs_show_scrollbars(false);
+    }
+  });
 }
 
 void LayerTreeImpl::MoveChangeTrackingToLayers() {
@@ -624,17 +655,40 @@ void LayerTreeImpl::RemoveFromElementMap(LayerImpl* layer) {
 }
 
 void LayerTreeImpl::AddToOpacityAnimationsMap(int id, float opacity) {
-  opacity_animations_map_[id] = opacity;
+  if (LayerImpl* layer = LayerById(id))
+    element_id_to_opacity_animations_[layer->element_id()] = opacity;
 }
 
-void LayerTreeImpl::AddToTransformAnimationsMap(int id,
-                                                gfx::Transform transform) {
-  transform_animations_map_[id] = transform;
+void LayerTreeImpl::SetTransformMutated(ElementId element_id,
+                                        const gfx::Transform& transform) {
+  DCHECK_EQ(1u, property_trees()->element_id_to_transform_node_index.count(
+                    element_id));
+  element_id_to_transform_animations_[element_id] = transform;
+  if (!property_trees()->transform_tree.OnTransformAnimated(element_id,
+                                                            transform))
+    return;
+
+  if (LayerImpl* layer = LayerByElementId(element_id))
+    layer->set_was_ever_ready_since_last_transform_animation(false);
+
+  set_needs_update_draw_properties();
 }
 
-void LayerTreeImpl::AddToFilterAnimationsMap(int id,
-                                             const FilterOperations& filters) {
-  filter_animations_map_[id] = filters;
+void LayerTreeImpl::SetOpacityMutated(ElementId element_id, float opacity) {
+  DCHECK_EQ(
+      1u, property_trees()->element_id_to_effect_node_index.count(element_id));
+  element_id_to_opacity_animations_[element_id] = opacity;
+  if (property_trees()->effect_tree.OnOpacityAnimated(element_id, opacity))
+    set_needs_update_draw_properties();
+}
+
+void LayerTreeImpl::SetFilterMutated(ElementId element_id,
+                                     const FilterOperations& filters) {
+  DCHECK_EQ(
+      1u, property_trees()->element_id_to_effect_node_index.count(element_id));
+  element_id_to_filter_animations_[element_id] = filters;
+  if (property_trees()->effect_tree.OnFilterAnimated(element_id, filters))
+    set_needs_update_draw_properties();
 }
 
 LayerImpl* LayerTreeImpl::InnerViewportContainerLayer() const {
@@ -668,17 +722,28 @@ void LayerTreeImpl::SetCurrentlyScrollingNode(ScrollNode* node) {
 
   ScrollTree& scroll_tree = property_trees()->scroll_tree;
   ScrollNode* old_node = scroll_tree.CurrentlyScrollingNode();
-  // TODO(pdr): Refactor these to not use owning_layer_id.
+
+  ElementId old_element_id = old_node ? old_node->element_id : ElementId();
+  ElementId new_element_id = node ? node->element_id : ElementId();
+
+#if DCHECK_IS_ON()
   int old_layer_id = old_node ? old_node->owning_layer_id : Layer::INVALID_ID;
   int new_layer_id = node ? node->owning_layer_id : Layer::INVALID_ID;
+  DCHECK(old_layer_id == LayerIdByElementId(old_element_id));
+  DCHECK(new_layer_id == LayerIdByElementId(new_element_id));
+#endif
 
-  if (old_layer_id == new_layer_id)
+  if (old_element_id == new_element_id)
     return;
 
+  // TODO(pdr): Make the scrollbar animation controller lookup based on
+  // element ids instead of layer ids.
   ScrollbarAnimationController* old_animation_controller =
-      layer_tree_host_impl_->ScrollbarAnimationControllerForId(old_layer_id);
+      layer_tree_host_impl_->ScrollbarAnimationControllerForId(
+          LayerIdByElementId(old_element_id));
   ScrollbarAnimationController* new_animation_controller =
-      layer_tree_host_impl_->ScrollbarAnimationControllerForId(new_layer_id);
+      layer_tree_host_impl_->ScrollbarAnimationControllerForId(
+          LayerIdByElementId(new_element_id));
 
   if (old_animation_controller)
     old_animation_controller->DidScrollEnd();
@@ -710,61 +775,54 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
   // frame to a newly-committed property tree.
   if (layer_list_.empty())
     return;
-  std::vector<int> layer_ids_to_remove;
-  for (auto& layer_id_to_opacity : opacity_animations_map_) {
-    const int id = layer_id_to_opacity.first;
-    if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id)) {
-      EffectNode* node = property_trees_.effect_tree.Node(
-          property_trees_.layer_id_to_effect_node_index[id]);
+  auto element_id_to_opacity = element_id_to_opacity_animations_.begin();
+  while (element_id_to_opacity != element_id_to_opacity_animations_.end()) {
+    const ElementId id = element_id_to_opacity->first;
+    if (EffectNode* node =
+            property_trees_.effect_tree.FindNodeFromElementId(id)) {
       if (!node->is_currently_animating_opacity ||
-          node->opacity == layer_id_to_opacity.second) {
-        layer_ids_to_remove.push_back(id);
+          node->opacity == element_id_to_opacity->second) {
+        element_id_to_opacity_animations_.erase(element_id_to_opacity++);
         continue;
       }
-      node->opacity = layer_id_to_opacity.second;
+      node->opacity = element_id_to_opacity->second;
       property_trees_.effect_tree.set_needs_update(true);
     }
+    ++element_id_to_opacity;
   }
-  for (auto id : layer_ids_to_remove)
-    opacity_animations_map_.erase(id);
-  layer_ids_to_remove.clear();
 
-  for (auto& layer_id_to_transform : transform_animations_map_) {
-    const int id = layer_id_to_transform.first;
-    if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
-                                         id)) {
-      TransformNode* node = property_trees_.transform_tree.Node(
-          property_trees_.layer_id_to_transform_node_index[id]);
-      if (!node->is_currently_animating ||
-          node->local == layer_id_to_transform.second) {
-        layer_ids_to_remove.push_back(id);
+  auto element_id_to_filter = element_id_to_filter_animations_.begin();
+  while (element_id_to_filter != element_id_to_filter_animations_.end()) {
+    const ElementId id = element_id_to_filter->first;
+    if (EffectNode* node =
+            property_trees_.effect_tree.FindNodeFromElementId(id)) {
+      if (!node->is_currently_animating_filter ||
+          node->filters == element_id_to_filter->second) {
+        element_id_to_filter_animations_.erase(element_id_to_filter++);
         continue;
       }
-      node->local = layer_id_to_transform.second;
+      node->filters = element_id_to_filter->second;
+      property_trees_.effect_tree.set_needs_update(true);
+    }
+    ++element_id_to_filter;
+  }
+
+  auto element_id_to_transform = element_id_to_transform_animations_.begin();
+  while (element_id_to_transform != element_id_to_transform_animations_.end()) {
+    const ElementId id = element_id_to_transform->first;
+    if (TransformNode* node =
+            property_trees_.transform_tree.FindNodeFromElementId(id)) {
+      if (!node->is_currently_animating ||
+          node->local == element_id_to_transform->second) {
+        element_id_to_transform_animations_.erase(element_id_to_transform++);
+        continue;
+      }
+      node->local = element_id_to_transform->second;
       node->needs_local_transform_update = true;
       property_trees_.transform_tree.set_needs_update(true);
     }
+    ++element_id_to_transform;
   }
-  for (auto id : layer_ids_to_remove)
-    transform_animations_map_.erase(id);
-  layer_ids_to_remove.clear();
-
-  for (auto& layer_id_to_filters : filter_animations_map_) {
-    const int id = layer_id_to_filters.first;
-    if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id)) {
-      EffectNode* node = property_trees_.effect_tree.Node(
-          property_trees_.layer_id_to_effect_node_index[id]);
-      if (!node->is_currently_animating_filter ||
-          node->filters == layer_id_to_filters.second) {
-        layer_ids_to_remove.push_back(id);
-        continue;
-      }
-      node->filters = layer_id_to_filters.second;
-      property_trees_.effect_tree.set_needs_update(true);
-    }
-  }
-  for (auto id : layer_ids_to_remove)
-    filter_animations_map_.erase(id);
 
   LayerTreeHostCommon::CallFunctionForEveryLayer(this, [](LayerImpl* layer) {
     layer->UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
@@ -926,11 +984,11 @@ void LayerTreeImpl::SetDeviceScaleFactor(float device_scale_factor) {
   layer_tree_host_impl_->SetNeedUpdateGpuRasterizationStatus();
 }
 
-void LayerTreeImpl::SetDeviceColorSpace(
-    const gfx::ColorSpace& device_color_space) {
-  if (device_color_space == device_color_space_)
+void LayerTreeImpl::SetRasterColorSpace(
+    const gfx::ColorSpace& raster_color_space) {
+  if (raster_color_space == raster_color_space_)
     return;
-  device_color_space_ = device_color_space;
+  raster_color_space_ = raster_color_space;
 }
 
 SyncedProperty<ScaleGroup>* LayerTreeImpl::page_scale_factor() {
@@ -999,13 +1057,12 @@ static void SetElementIdForTesting(LayerImpl* layer) {
 void LayerTreeImpl::SetElementIdsForTesting() {
   LayerListIterator<LayerImpl> it(root_layer_for_testing_);
   for (; it != LayerListIterator<LayerImpl>(nullptr); ++it) {
-    SetElementIdForTesting(*it);
+    if (!it->element_id())
+      SetElementIdForTesting(*it);
   }
 }
 
-bool LayerTreeImpl::UpdateDrawProperties(
-    bool update_lcd_text,
-    bool force_skip_verify_visible_rect_calculations) {
+bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
   if (!needs_update_draw_properties_)
     return true;
 
@@ -1037,10 +1094,6 @@ bool LayerTreeImpl::UpdateDrawProperties(
     // We verify visible rect calculations whenever we verify clip tree
     // calculations except when this function is explicitly passed a flag asking
     // us to skip it.
-    bool verify_visible_rect_calculations =
-        force_skip_verify_visible_rect_calculations
-            ? false
-            : settings().verify_clip_tree_calculations;
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
         layer_list_[0], DrawViewportSize(),
         layer_tree_host_impl_->DrawTransform(), device_scale_factor(),
@@ -1050,8 +1103,7 @@ bool LayerTreeImpl::UpdateDrawProperties(
         OverscrollElasticityLayer(), resource_provider()->max_texture_size(),
         can_render_to_separate_surface,
         settings().layer_transforms_should_scale_layer_contents,
-        settings().verify_clip_tree_calculations,
-        verify_visible_rect_calculations, &render_surface_layer_list_,
+        settings().use_layer_lists, &render_surface_layer_list_,
         &property_trees_);
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
     if (const char* client_name = GetClientNameForMetrics()) {
@@ -1075,24 +1127,23 @@ bool LayerTreeImpl::UpdateDrawProperties(
     occlusion_tracker.set_minimum_tracking_size(
         settings().minimum_occlusion_tracking_size);
 
-    // LayerIterator is used here instead of CallFunctionForEveryLayer to only
-    // UpdateTilePriorities on layers that will be visible (and thus have valid
-    // draw properties) and not because any ordering is required.
-    LayerIterator end = LayerIterator::End(&render_surface_layer_list_);
-    for (LayerIterator it = LayerIterator::Begin(&render_surface_layer_list_);
-         it != end; ++it) {
+    for (EffectTreeLayerListIterator it(this);
+         it.state() != EffectTreeLayerListIterator::State::END; ++it) {
       occlusion_tracker.EnterLayer(it);
 
-      if (it.represents_itself()) {
-        it->draw_properties().occlusion_in_content_space =
-            occlusion_tracker.GetCurrentOcclusionForLayer(it->DrawTransform());
+      if (it.state() == EffectTreeLayerListIterator::State::LAYER) {
+        LayerImpl* layer = it.current_layer();
+        layer->draw_properties().occlusion_in_content_space =
+            occlusion_tracker.GetCurrentOcclusionForLayer(
+                layer->DrawTransform());
       }
 
-      if (it.represents_contributing_render_surface()) {
+      if (it.state() ==
+          EffectTreeLayerListIterator::State::CONTRIBUTING_SURFACE) {
         const RenderSurfaceImpl* occlusion_surface =
             occlusion_tracker.OcclusionSurfaceForContributingSurface();
         gfx::Transform draw_transform;
-        RenderSurfaceImpl* render_surface = it->GetRenderSurface();
+        RenderSurfaceImpl* render_surface = it.current_render_surface();
         if (occlusion_surface) {
           // We are calculating transform between two render surfaces. So, we
           // need to apply the surface contents scale at target and remove the
@@ -1116,7 +1167,7 @@ bool LayerTreeImpl::UpdateDrawProperties(
         if (LayerImpl* mask = render_surface->MaskLayer()) {
           mask->draw_properties().occlusion_in_content_space =
               occlusion_tracker.GetCurrentOcclusionForContributingSurface(
-                  draw_transform * it->DrawTransform());
+                  draw_transform * render_surface->SurfaceScale());
         }
       }
 
@@ -1178,7 +1229,7 @@ void LayerTreeImpl::BuildLayerListAndPropertyTreesForTesting() {
 }
 
 void LayerTreeImpl::BuildPropertyTreesForTesting() {
-  PropertyTreeBuilder::PreCalculateMetaInformationForTesting(layer_list_[0]);
+  SetElementIdsForTesting();
   property_trees_.needs_rebuild = true;
   property_trees_.transform_tree.set_source_to_parent_updates_allowed(true);
   PropertyTreeBuilder::BuildPropertyTrees(
@@ -1250,14 +1301,16 @@ void LayerTreeImpl::RegisterLayer(LayerImpl* layer) {
 void LayerTreeImpl::UnregisterLayer(LayerImpl* layer) {
   DCHECK(LayerById(layer->id()));
   layers_that_should_push_properties_.erase(layer);
-  transform_animations_map_.erase(layer->id());
-  opacity_animations_map_.erase(layer->id());
+  element_id_to_transform_animations_.erase(layer->element_id());
+  element_id_to_opacity_animations_.erase(layer->element_id());
+  element_id_to_filter_animations_.erase(layer->element_id());
   layer_id_map_.erase(layer->id());
 }
 
 // These manage ownership of the LayerImpl.
 void LayerTreeImpl::AddLayer(std::unique_ptr<LayerImpl> layer) {
   DCHECK(std::find(layers_->begin(), layers_->end(), layer) == layers_->end());
+  DCHECK(layer);
   layers_->push_back(std::move(layer));
   set_needs_update_draw_properties();
 }
@@ -1417,29 +1470,26 @@ const gfx::Rect LayerTreeImpl::ViewportRectForTilePriority() const {
 
 std::unique_ptr<ScrollbarAnimationController>
 LayerTreeImpl::CreateScrollbarAnimationController(int scroll_layer_id) {
-  DCHECK(!settings().scrollbar_fade_out_delay.is_zero());
-  DCHECK(!settings().scrollbar_fade_out_duration.is_zero());
-  base::TimeDelta fade_out_delay = settings().scrollbar_fade_out_delay;
+  DCHECK(!settings().scrollbar_fade_delay.is_zero());
+  DCHECK(!settings().scrollbar_fade_duration.is_zero());
+  base::TimeDelta fade_delay = settings().scrollbar_fade_delay;
   base::TimeDelta fade_out_resize_delay =
       settings().scrollbar_fade_out_resize_delay;
-  base::TimeDelta fade_out_duration = settings().scrollbar_fade_out_duration;
+  base::TimeDelta fade_duration = settings().scrollbar_fade_duration;
   switch (settings().scrollbar_animator) {
     case LayerTreeSettings::ANDROID_OVERLAY: {
       return ScrollbarAnimationController::
           CreateScrollbarAnimationControllerAndroid(
-              scroll_layer_id, layer_tree_host_impl_, fade_out_delay,
-              fade_out_resize_delay, fade_out_duration);
+              scroll_layer_id, layer_tree_host_impl_, fade_delay,
+              fade_out_resize_delay, fade_duration);
     }
     case LayerTreeSettings::AURA_OVERLAY: {
-      DCHECK(!settings().scrollbar_show_delay.is_zero());
-      base::TimeDelta show_delay = settings().scrollbar_show_delay;
       base::TimeDelta thinning_duration =
           settings().scrollbar_thinning_duration;
       return ScrollbarAnimationController::
           CreateScrollbarAnimationControllerAuraOverlay(
-              scroll_layer_id, layer_tree_host_impl_, show_delay,
-              fade_out_delay, fade_out_resize_delay, fade_out_duration,
-              thinning_duration);
+              scroll_layer_id, layer_tree_host_impl_, fade_delay,
+              fade_out_resize_delay, fade_duration, thinning_duration);
     }
     case LayerTreeSettings::NO_ANIMATOR:
       NOTREACHED();
@@ -1470,12 +1520,10 @@ void LayerTreeImpl::SetNeedsRedraw() {
 
 void LayerTreeImpl::GetAllPrioritizedTilesForTracing(
     std::vector<PrioritizedTile>* prioritized_tiles) const {
-  LayerIterator end = LayerIterator::End(&render_surface_layer_list_);
-  for (LayerIterator it = LayerIterator::Begin(&render_surface_layer_list_);
-       it != end; ++it) {
-    if (!it.represents_itself())
-      continue;
+  for (auto it = layer_list_.rbegin(); it != layer_list_.rend(); ++it) {
     LayerImpl* layer_impl = *it;
+    if (!layer_impl->is_drawn_render_surface_layer_list_member())
+      continue;
     layer_impl->GetAllPrioritizedTilesForTracing(prioritized_tiles);
   }
 }
@@ -1485,10 +1533,8 @@ void LayerTreeImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   state->SetInteger("source_frame_number", source_frame_number_);
 
   state->BeginArray("render_surface_layer_list");
-  LayerIterator end = LayerIterator::End(&render_surface_layer_list_);
-  for (LayerIterator it = LayerIterator::Begin(&render_surface_layer_list_);
-       it != end; ++it) {
-    if (!it.represents_itself())
+  for (auto it = layer_list_.rbegin(); it != layer_list_.rend(); ++it) {
+    if (!(*it)->is_drawn_render_surface_layer_list_member())
       continue;
     TracedValue::AppendIDRef(*it, state);
   }
@@ -1739,11 +1785,6 @@ void LayerTreeImpl::RemoveSurfaceLayer(LayerImpl* layer) {
       std::find(surface_layers_.begin(), surface_layers_.end(), layer);
   DCHECK(it != surface_layers_.end());
   surface_layers_.erase(it);
-}
-
-template <typename LayerType>
-static inline bool LayerClipsSubtree(LayerType* layer) {
-  return layer->masks_to_bounds() || layer->mask_layer();
 }
 
 static bool PointHitsRect(

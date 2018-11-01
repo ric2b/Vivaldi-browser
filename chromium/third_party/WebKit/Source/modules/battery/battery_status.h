@@ -6,7 +6,7 @@
 #define BLINK_MODULES_BATTERY_BATTERY_STATUS_H_
 
 #include "modules/ModulesExport.h"
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 #include <cmath>
 #include <limits>
@@ -32,10 +32,10 @@ class MODULES_EXPORT BatteryStatus final {
   BatteryStatus(const BatteryStatus&) = default;
   BatteryStatus& operator=(const BatteryStatus&) = default;
 
-  bool charging() const { return charging_; }
+  bool Charging() const { return charging_; }
   double charging_time() const { return charging_time_; }
   double discharging_time() const { return discharging_time_; }
-  double level() const { return level_; }
+  double Level() const { return level_; }
 
  private:
   double EnsureTwoSignificantDigits(double level) {

@@ -39,6 +39,9 @@ Polymer({
 
     /** @private */
     googleNowAvailable_: Boolean,
+
+    /** @type {?Map<string, string>} */
+    focusConfig_: Object,
   },
 
   /** @private {?settings.SearchEnginesBrowserProxy} */
@@ -54,16 +57,14 @@ Polymer({
     // Omnibox search engine
     var updateSearchEngines = function(searchEngines) {
       this.set('searchEngines_', searchEngines.defaults);
+      this.requestHotwordInfoUpdate_();
     }.bind(this);
     this.browserProxy_.getSearchEnginesList().then(updateSearchEngines);
     cr.addWebUIListener('search-engines-changed', updateSearchEngines);
 
-    // Hotword (OK Google)
+    // Hotword (OK Google) listener
     cr.addWebUIListener(
         'hotword-info-update', this.hotwordInfoUpdate_.bind(this));
-    this.browserProxy_.getHotwordInfo().then(function(hotwordInfo) {
-      this.hotwordInfoUpdate_(hotwordInfo);
-    }.bind(this));
 
     // Google Now cards in the launcher
     cr.addWebUIListener(
@@ -72,6 +73,10 @@ Polymer({
     this.browserProxy_.getGoogleNowAvailability().then(function(available) {
         this.googleNowAvailabilityUpdate_(available);
     }.bind(this));
+
+    this.focusConfig_ = new Map();
+    this.focusConfig_.set(
+        settings.Route.SEARCH_ENGINES.path, '#subpage-trigger .subpage-arrow');
   },
 
   /** @private */
@@ -99,6 +104,13 @@ Polymer({
     // Do not set the pref directly, allow Chrome to run the setup app instead.
     this.browserProxy_.setHotwordSearchEnabled(
         !!this.hotwordSearchEnablePref_.value);
+  },
+
+  /** @private */
+  requestHotwordInfoUpdate_: function() {
+    this.browserProxy_.getHotwordInfo().then(function(hotwordInfo) {
+      this.hotwordInfoUpdate_(hotwordInfo);
+    }.bind(this));
   },
 
   /**
@@ -165,5 +177,23 @@ Polymer({
    */
   doNothing_: function(event) {
     event.stopPropagation();
-  }
+  },
+
+  /**
+   * @param {!chrome.settingsPrivate.PrefObject} pref
+   * @return {boolean}
+   * @private
+   */
+  isDefaultSearchControlledByPolicy_: function(pref) {
+    return pref.controlledBy == chrome.settingsPrivate.ControlledBy.USER_POLICY;
+  },
+
+  /**
+   * @param {!chrome.settingsPrivate.PrefObject} pref
+   * @return {boolean}
+   * @private
+   */
+  isDefaultSearchEngineEnforced_: function(pref) {
+    return pref.enforcement == chrome.settingsPrivate.Enforcement.ENFORCED;
+  },
 });

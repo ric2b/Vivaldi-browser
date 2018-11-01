@@ -34,7 +34,7 @@
 #include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -45,7 +45,7 @@ class NavigatorDoNotTrack final : public GarbageCollected<NavigatorDoNotTrack>,
   USING_GARBAGE_COLLECTED_MIXIN(NavigatorDoNotTrack);
 
  public:
-  static NavigatorDoNotTrack& from(Navigator&);
+  static NavigatorDoNotTrack& From(Navigator&);
   static String doNotTrack(Navigator&);
 
   String doNotTrack();
@@ -54,7 +54,7 @@ class NavigatorDoNotTrack final : public GarbageCollected<NavigatorDoNotTrack>,
 
  private:
   explicit NavigatorDoNotTrack(Navigator&);
-  static const char* supplementName();
+  static const char* SupplementName();
 };
 
 }  // namespace blink

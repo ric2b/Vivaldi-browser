@@ -53,6 +53,10 @@ target(modules_target_type, "modules") {
   visibility = [ "//third_party/WebKit/*" ]
 
   sources = [
+    "EventModules.h",
+    "EventModulesFactory.h",
+    "EventTargetModules.h",
+    "ModulesExport.h",
     "ModulesInitializer.cpp",
     "ModulesInitializer.h",
   ]
@@ -93,6 +97,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/accessibility",
     "//third_party/WebKit/Source/modules/app_banner",
     "//third_party/WebKit/Source/modules/audio_output_devices",
+    "//third_party/WebKit/Source/modules/background_fetch",
     "//third_party/WebKit/Source/modules/background_sync",
     "//third_party/WebKit/Source/modules/battery",
     "//third_party/WebKit/Source/modules/beacon",
@@ -123,6 +128,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/installation",
     "//third_party/WebKit/Source/modules/installedapp",
     "//third_party/WebKit/Source/modules/media_capabilities",
+    "//third_party/WebKit/Source/modules/media_controls",
     "//third_party/WebKit/Source/modules/mediacapturefromelement",
     "//third_party/WebKit/Source/modules/mediarecorder",
     "//third_party/WebKit/Source/modules/mediasession",
@@ -233,6 +239,7 @@ source_set("unit_tests") {
 
   sources = [
     "accessibility/AXObjectTest.cpp",
+    "background_fetch/BackgroundFetchManagerTest.cpp",
     "cachestorage/CacheTest.cpp",
     "canvas/HTMLCanvasElementModuleTest.cpp",
     "canvas2d/CanvasRenderingContext2DAPITest.cpp",
@@ -240,6 +247,7 @@ source_set("unit_tests") {
     "canvas2d/CanvasRenderingContext2DUsageTrackingTest.cpp",
     "compositorworker/AnimationWorkletThreadTest.cpp",
     "compositorworker/CompositorWorkerThreadTest.cpp",
+    "credentialmanager/CredentialsContainerTest.cpp",
     "credentialmanager/PasswordCredentialTest.cpp",
     "csspaint/PaintRenderingContext2DTest.cpp",
     "csspaint/PaintWorkletTest.cpp",
@@ -250,6 +258,7 @@ source_set("unit_tests") {
     "fetch/BytesConsumerForDataConsumerHandleTest.cpp",
     "fetch/BytesConsumerTest.cpp",
     "fetch/BytesConsumerTestUtil.cpp",
+    "fetch/BytesConsumerTestUtil.h",
     "fetch/DataConsumerHandleTestUtil.cpp",
     "fetch/DataConsumerHandleTestUtil.h",
     "fetch/FetchDataLoaderTest.cpp",
@@ -264,6 +273,8 @@ source_set("unit_tests") {
     "indexeddb/IDBTransactionTest.cpp",
     "indexeddb/MockWebIDBDatabase.cpp",
     "indexeddb/MockWebIDBDatabase.h",
+    "media_controls/MediaControlsImplTest.cpp",
+    "media_controls/MediaControlsOrientationLockDelegateTest.cpp",
     "mediastream/MediaConstraintsTest.cpp",
     "notifications/NotificationDataTest.cpp",
     "notifications/NotificationImageLoaderTest.cpp",
@@ -291,6 +302,7 @@ source_set("unit_tests") {
     "serviceworkers/ServiceWorkerContainerTest.cpp",
     "webaudio/AudioBasicProcessorHandlerTest.cpp",
     "webaudio/AudioContextTest.cpp",
+    "webaudio/AudioWorkletGlobalScopeTest.cpp",
     "webaudio/AudioWorkletThreadTest.cpp",
     "webaudio/BaseAudioContextTest.cpp",
     "webaudio/ConvolverNodeTest.cpp",
@@ -311,7 +323,7 @@ source_set("unit_tests") {
   deps = [
     ":modules",
     ":modules_testing",
-    "//components/payments/content:payment_request_blink",
+    "//components/payments/content:mojom_blink",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",

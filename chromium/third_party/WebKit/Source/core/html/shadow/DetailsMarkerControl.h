@@ -32,7 +32,7 @@
 #define DetailsMarkerControl_h
 
 #include "core/html/HTMLDivElement.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -41,18 +41,18 @@ class HTMLSummaryElement;
 class DetailsMarkerControl final : public HTMLDivElement {
  public:
   explicit DetailsMarkerControl(Document&);
-  static DetailsMarkerControl* create(Document&);
+  static DetailsMarkerControl* Create(Document&);
 
  private:
-  LayoutObject* createLayoutObject(const ComputedStyle&) override;
-  bool layoutObjectIsNeeded(const ComputedStyle&) override;
+  LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
+  bool LayoutObjectIsNeeded(const ComputedStyle&) override;
 
-  HTMLSummaryElement* summaryElement();
+  HTMLSummaryElement* SummaryElement();
 };
 
-inline DetailsMarkerControl* DetailsMarkerControl::create(Document& document) {
+inline DetailsMarkerControl* DetailsMarkerControl::Create(Document& document) {
   DetailsMarkerControl* element = new DetailsMarkerControl(document);
-  element->setShadowPseudoId(AtomicString("-webkit-details-marker"));
+  element->SetShadowPseudoId(AtomicString("-webkit-details-marker"));
   return element;
 }
 

@@ -29,7 +29,7 @@ class ChromeDuplicateDownloadInfoBarDelegate
       InfoBarService* infobar_service,
       content::DownloadItem* download_item,
       const base::FilePath& file_path,
-      const DownloadTargetDeterminerDelegate::FileSelectedCallback&
+      const DownloadTargetDeterminerDelegate::ConfirmationCallback&
           file_selected_callback);
 
   // content::DownloadItem::Observer
@@ -39,7 +39,19 @@ class ChromeDuplicateDownloadInfoBarDelegate
   ChromeDuplicateDownloadInfoBarDelegate(
       content::DownloadItem* download_item,
       const base::FilePath& file_path,
-      const DownloadTargetDeterminerDelegate::FileSelectedCallback& callback);
+      const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback);
+
+  // UMA histogram enum for duplicate infobar. Keep this in sync with
+  // MobileDownloadDuplcaiteInfobar in histograms.xml. This should be
+  // append only.
+  enum DuplicateInfobarType {
+    INFOBAR_SHOWN = 0,
+    INFOBAR_DOWNLOAD_CANCELED,
+    INFOBAR_NO_DOWNLOAD_DIR,
+    INFOBAR_CREATE_NEW_FILE,
+    INFOBAR_MAX
+  };
+  void RecordDuplicateInfobarType(DuplicateInfobarType type);
 
   // DownloadOverwriteInfoBarDelegate:
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
@@ -63,7 +75,7 @@ class ChromeDuplicateDownloadInfoBarDelegate
 
   // A callback to download target determiner to notify that file selection
   // is made (or cancelled).
-  DownloadTargetDeterminerDelegate::FileSelectedCallback
+  DownloadTargetDeterminerDelegate::ConfirmationCallback
       file_selected_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeDuplicateDownloadInfoBarDelegate);

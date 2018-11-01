@@ -23,7 +23,6 @@ static_library("ntp_tiles") {
     "most_visited_sites.h",
     "ntp_tile.cc",
     "ntp_tile.h",
-    "ntp_tile_source.h",
     "popular_sites.h",
     "popular_sites_impl.cc",
     "popular_sites_impl.h",
@@ -31,8 +30,11 @@ static_library("ntp_tiles") {
     "pref_names.h",
     "switches.cc",
     "switches.h",
+    "tile_source.h",
+    "tile_visual_type.h",
     "webui/ntp_tiles_internals_message_handler.cc",
     "webui/ntp_tiles_internals_message_handler.h",
+    "webui/ntp_tiles_internals_message_handler_client.cc",
     "webui/ntp_tiles_internals_message_handler_client.h",
     "webui/popular_sites_internals_message_handler.cc",
     "webui/popular_sites_internals_message_handler.h",
@@ -49,7 +51,7 @@ static_library("ntp_tiles") {
     "//components/favicon/core",
     "//components/favicon_base",
     "//components/google/core/browser",
-    "//components/image_fetcher",
+    "//components/image_fetcher/core",
     "//components/pref_registry",
     "//components/prefs",
     "//components/rappor/public",
@@ -97,7 +99,7 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/favicon/core",
     "//components/favicon_base",
-    "//components/image_fetcher",
+    "//components/image_fetcher/core",
     "//components/pref_registry:pref_registry",
     "//components/rappor:test_support",
     "//components/sync_preferences:test_support",
@@ -112,8 +114,8 @@ source_set("unit_tests") {
 if (is_android) {
   java_cpp_enum("ntp_tiles_enums_java") {
     sources = [
-      "metrics.h",
-      "ntp_tile_source.h",
+      "tile_source.h",
+      "tile_visual_type.h",
     ]
   }
 }

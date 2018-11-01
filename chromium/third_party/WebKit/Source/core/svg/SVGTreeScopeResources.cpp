@@ -9,148 +9,224 @@
 #include "core/layout/svg/LayoutSVGResourceContainer.h"
 #include "core/layout/svg/SVGResourcesCache.h"
 #include "core/svg/SVGUseElement.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
-SVGTreeScopeResources::SVGTreeScopeResources(TreeScope* treeScope) {
-  // Whenever an object of SVGTreeScopeResources is created, to keep the code
-  // behave as before,
-  // the document should also have an instance of SVGDocumentExtensions created.
-  // Thus below line is added.
-  treeScope->document().accessSVGExtensions();
-}
+SVGTreeScopeResources::SVGTreeScopeResources(TreeScope* tree_scope)
+    : tree_scope_(tree_scope) {}
 
 SVGTreeScopeResources::~SVGTreeScopeResources() = default;
 
-void SVGTreeScopeResources::updateResource(
+static LayoutSVGResourceContainer* LookupResource(TreeScope& tree_scope,
+                                                  const AtomicString& id) {
+  Element* element = tree_scope.GetElementById(id);
+  if (!element)
+    return nullptr;
+  LayoutObject* layout_object = element->GetLayoutObject();
+  if (!layout_object || !layout_object->IsSVGResourceContainer())
+    return nullptr;
+  return ToLayoutSVGResourceContainer(layout_object);
+}
+
+void SVGTreeScopeResources::UpdateResource(
     const AtomicString& id,
     LayoutSVGResourceContainer* resource) {
   DCHECK(resource);
-  if (id.isEmpty())
+  if (resource->IsRegistered() || id.IsEmpty())
     return;
-  // Replaces resource if already present, to handle potential id changes.
-  m_resources.set(id, resource);
-
-  SVGPendingElements* pendingElements = m_pendingResources.take(id);
-  if (!pendingElements)
-    return;
-  // Update cached resources of pending clients.
-  for (Element* clientElement : *pendingElements) {
-    DCHECK(clientElement->hasPendingResources());
-    clearHasPendingResourcesIfPossible(*clientElement);
-
-    LayoutObject* layoutObject = clientElement->layoutObject();
-    if (!layoutObject)
-      continue;
-    DCHECK(layoutObject->isSVG());
-
-    StyleDifference diff;
-    diff.setNeedsFullLayout();
-    SVGResourcesCache::clientStyleChanged(layoutObject, diff,
-                                          layoutObject->styleRef());
-    layoutObject->setNeedsLayoutAndFullPaintInvalidation(
-        LayoutInvalidationReason::SvgResourceInvalidated);
+  // Lookup the current resource. (Could differ from what's in the map if an
+  // element was just added/removed.)
+  LayoutSVGResourceContainer* current_resource =
+      LookupResource(*tree_scope_, id);
+  // Lookup the currently registered resource.
+  auto it = resources_.Find(id);
+  if (it != resources_.end()) {
+    // Is the local map up-to-date already?
+    if (it->value == current_resource)
+      return;
+    UnregisterResource(it);
   }
+  if (current_resource)
+    RegisterResource(id, current_resource);
 }
 
-void SVGTreeScopeResources::removeResource(const AtomicString& id) {
-  if (id.isEmpty())
+void SVGTreeScopeResources::UpdateResource(
+    const AtomicString& old_id,
+    const AtomicString& new_id,
+    LayoutSVGResourceContainer* resource) {
+  RemoveResource(old_id, resource);
+  UpdateResource(new_id, resource);
+}
+
+void SVGTreeScopeResources::RemoveResource(
+    const AtomicString& id,
+    LayoutSVGResourceContainer* resource) {
+  DCHECK(resource);
+  if (!resource->IsRegistered() || id.IsEmpty())
     return;
-  m_resources.erase(id);
+  auto it = resources_.Find(id);
+  // If this is not the currently registered resource for this id, then do
+  // nothing.
+  if (it == resources_.end() || it->value != resource)
+    return;
+  UnregisterResource(it);
+  // If the layout tree is being torn down, then don't attempt to update the
+  // map, since that layout object is likely to be stale already.
+  if (resource->DocumentBeingDestroyed())
+    return;
+  // Another resource could now be current. Perform a lookup and potentially
+  // update the map.
+  LayoutSVGResourceContainer* current_resource =
+      LookupResource(*tree_scope_, id);
+  if (!current_resource)
+    return;
+  // Since this is a removal, don't allow re-adding the resource.
+  if (current_resource == resource)
+    return;
+  RegisterResource(id, current_resource);
 }
 
-LayoutSVGResourceContainer* SVGTreeScopeResources::resourceById(
+void SVGTreeScopeResources::RegisterResource(
+    const AtomicString& id,
+    LayoutSVGResourceContainer* resource) {
+  DCHECK(!id.IsEmpty());
+  DCHECK(resource);
+  DCHECK(!resource->IsRegistered());
+
+  resources_.Set(id, resource);
+  resource->SetRegistered(true);
+
+  NotifyPendingClients(id);
+}
+
+void SVGTreeScopeResources::UnregisterResource(ResourceMap::iterator it) {
+  LayoutSVGResourceContainer* resource = it->value;
+  DCHECK(resource);
+  DCHECK(resource->IsRegistered());
+
+  resource->DetachAllClients(it->key);
+
+  resource->SetRegistered(false);
+  resources_.erase(it);
+}
+
+LayoutSVGResourceContainer* SVGTreeScopeResources::ResourceById(
     const AtomicString& id) const {
-  if (id.isEmpty())
+  if (id.IsEmpty())
     return nullptr;
-  return m_resources.at(id);
+  return resources_.at(id);
 }
 
-void SVGTreeScopeResources::addPendingResource(const AtomicString& id,
+void SVGTreeScopeResources::AddPendingResource(const AtomicString& id,
                                                Element& element) {
   DCHECK(element.isConnected());
 
-  if (id.isEmpty())
+  if (id.IsEmpty())
     return;
-  auto result = m_pendingResources.insert(id, nullptr);
-  if (result.isNewEntry)
-    result.storedValue->value = new SVGPendingElements;
-  result.storedValue->value->insert(&element);
+  auto result = pending_resources_.insert(id, nullptr);
+  if (result.is_new_entry)
+    result.stored_value->value = new SVGPendingElements;
+  result.stored_value->value->insert(&element);
 
-  element.setHasPendingResources();
+  element.SetHasPendingResources();
 }
 
-bool SVGTreeScopeResources::isElementPendingResource(
+bool SVGTreeScopeResources::IsElementPendingResource(
     Element& element,
     const AtomicString& id) const {
-  if (id.isEmpty())
+  if (id.IsEmpty())
     return false;
-  const SVGPendingElements* pendingElements = m_pendingResources.at(id);
-  return pendingElements && pendingElements->contains(&element);
+  const SVGPendingElements* pending_elements = pending_resources_.at(id);
+  return pending_elements && pending_elements->Contains(&element);
 }
 
-void SVGTreeScopeResources::clearHasPendingResourcesIfPossible(
+void SVGTreeScopeResources::ClearHasPendingResourcesIfPossible(
     Element& element) {
   // This algorithm takes time proportional to the number of pending resources
   // and need not.
   // If performance becomes an issue we can keep a counted set of elements and
   // answer the question efficiently.
-  for (const auto& entry : m_pendingResources) {
-    SVGPendingElements* elements = entry.value.get();
+  for (const auto& entry : pending_resources_) {
+    SVGPendingElements* elements = entry.value.Get();
     DCHECK(elements);
-    if (elements->contains(&element))
+    if (elements->Contains(&element))
       return;
   }
-  element.clearHasPendingResources();
+  element.ClearHasPendingResources();
 }
 
-void SVGTreeScopeResources::removeElementFromPendingResources(
+void SVGTreeScopeResources::RemoveElementFromPendingResources(
     Element& element) {
-  if (m_pendingResources.isEmpty() || !element.hasPendingResources())
+  if (pending_resources_.IsEmpty() || !element.HasPendingResources())
     return;
   // Remove the element from pending resources.
-  Vector<AtomicString> toBeRemoved;
-  for (const auto& entry : m_pendingResources) {
-    SVGPendingElements* elements = entry.value.get();
+  Vector<AtomicString> to_be_removed;
+  for (const auto& entry : pending_resources_) {
+    SVGPendingElements* elements = entry.value.Get();
     DCHECK(elements);
-    DCHECK(!elements->isEmpty());
+    DCHECK(!elements->IsEmpty());
 
     elements->erase(&element);
-    if (elements->isEmpty())
-      toBeRemoved.push_back(entry.key);
+    if (elements->IsEmpty())
+      to_be_removed.push_back(entry.key);
   }
-  m_pendingResources.removeAll(toBeRemoved);
+  pending_resources_.RemoveAll(to_be_removed);
 
-  clearHasPendingResourcesIfPossible(element);
+  ClearHasPendingResourcesIfPossible(element);
 }
 
-void SVGTreeScopeResources::notifyResourceAvailable(const AtomicString& id) {
-  if (id.isEmpty())
+void SVGTreeScopeResources::NotifyPendingClients(const AtomicString& id) {
+  DCHECK(!id.IsEmpty());
+  SVGPendingElements* pending_elements = pending_resources_.Take(id);
+  if (!pending_elements)
+    return;
+  // Update cached resources of pending clients.
+  for (Element* client_element : *pending_elements) {
+    DCHECK(client_element->HasPendingResources());
+    ClearHasPendingResourcesIfPossible(*client_element);
+
+    LayoutObject* layout_object = client_element->GetLayoutObject();
+    if (!layout_object)
+      continue;
+    DCHECK(layout_object->IsSVG());
+
+    StyleDifference diff;
+    diff.SetNeedsFullLayout();
+    SVGResourcesCache::ClientStyleChanged(layout_object, diff,
+                                          layout_object->StyleRef());
+    layout_object->SetNeedsLayoutAndFullPaintInvalidation(
+        LayoutInvalidationReason::kSvgResourceInvalidated);
+  }
+}
+
+void SVGTreeScopeResources::NotifyResourceAvailable(const AtomicString& id) {
+  if (id.IsEmpty())
     return;
   // Get pending elements for this id.
-  SVGPendingElements* pendingElements = m_pendingResources.take(id);
-  if (!pendingElements)
+  SVGPendingElements* pending_elements = pending_resources_.Take(id);
+  if (!pending_elements)
     return;
   // Rebuild pending resources for each client of a pending resource that is
   // being removed.
-  for (Element* clientElement : *pendingElements) {
-    DCHECK(clientElement->hasPendingResources());
-    if (!clientElement->hasPendingResources())
+  for (Element* client_element : *pending_elements) {
+    DCHECK(client_element->HasPendingResources());
+    if (!client_element->HasPendingResources())
       continue;
     // TODO(fs): Ideally we'd always resolve pending resources async instead of
     // inside insertedInto and svgAttributeChanged. For now we only do it for
     // <use> since that would stamp out DOM.
-    if (isSVGUseElement(clientElement))
-      toSVGUseElement(clientElement)->invalidateShadowTree();
+    if (isSVGUseElement(client_element))
+      toSVGUseElement(client_element)->InvalidateShadowTree();
     else
-      clientElement->buildPendingResource();
+      client_element->BuildPendingResource();
 
-    clearHasPendingResourcesIfPossible(*clientElement);
+    ClearHasPendingResourcesIfPossible(*client_element);
   }
 }
 
 DEFINE_TRACE(SVGTreeScopeResources) {
-  visitor->trace(m_pendingResources);
+  visitor->Trace(pending_resources_);
+  visitor->Trace(tree_scope_);
 }
 }

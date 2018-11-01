@@ -4,8 +4,8 @@
 
 #include "ash/drag_drop/drag_drop_controller.h"
 
-#include "ash/common/drag_drop/drag_image_view.h"
 #include "ash/drag_drop/drag_drop_tracker.h"
+#include "ash/drag_drop/drag_image_view.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/command_line.h"
@@ -262,7 +262,7 @@ void DispatchGesture(ui::EventType gesture_type, gfx::Point location) {
       Shell::GetPrimaryRootWindow()->GetHost()->GetEventSource();
   ui::EventSourceTestApi event_source_test(event_source);
   ui::EventDispatchDetails details =
-      event_source_test.SendEventToProcessor(&gesture_event);
+      event_source_test.SendEventToSink(&gesture_event);
   CHECK(!details.dispatcher_destroyed);
 }
 
@@ -691,7 +691,7 @@ TEST_F(DragDropControllerTest, SyntheticEventsDuringDragDrop) {
                               mouse_move_location, ui::EventTimeForNow(), 0, 0);
     ui::EventDispatchDetails details = Shell::GetPrimaryRootWindow()
                                            ->GetHost()
-                                           ->event_processor()
+                                           ->event_sink()
                                            ->OnEventFromSource(&mouse_move);
     ASSERT_FALSE(details.dispatcher_destroyed);
   }
@@ -783,7 +783,6 @@ TEST_F(DragDropControllerTest, CaptureLostCancelsDragDrop) {
   ASSERT_TRUE(capture_window);
   EXPECT_EQ("0x0", capture_window->bounds().size().ToString());
   EXPECT_EQ(NULL, capture_window->GetEventHandlerForPoint(gfx::Point()));
-  EXPECT_EQ(NULL, capture_window->GetTopWindowContainingPoint(gfx::Point()));
 
   aura::client::GetCaptureClient(widget->GetNativeView()->GetRootWindow())
       ->SetCapture(NULL);
@@ -937,8 +936,7 @@ class DragImageWindowObserver : public aura::WindowObserver {
 // across displays when drag is cancelled.
 TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
   UpdateDisplay("400x400,400x400");
-  aura::Window::Windows root_windows =
-      Shell::GetInstance()->GetAllRootWindows();
+  aura::Window::Windows root_windows = Shell::Get()->GetAllRootWindows();
   for (aura::Window::Windows::iterator iter = root_windows.begin();
        iter != root_windows.end(); ++iter) {
     aura::client::SetDragDropClient(*iter, drag_drop_controller_.get());
@@ -1015,7 +1013,7 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
 // Verifies that a drag is aborted if a display is disconnected during the drag.
 TEST_F(DragDropControllerTest, DragCancelOnDisplayDisconnect) {
   UpdateDisplay("400x400,400x400");
-  for (aura::Window* root : Shell::GetInstance()->GetAllRootWindows()) {
+  for (aura::Window* root : Shell::Get()->GetAllRootWindows()) {
     aura::client::SetDragDropClient(root, drag_drop_controller_.get());
   }
 
@@ -1068,20 +1066,28 @@ TEST_F(DragDropControllerTest, TouchDragDropCompletesOnFling) {
   gfx::Point end = start + gfx::Vector2d(drag_view->bounds().width() / 3, 0);
 
   base::TimeTicks timestamp = ui::EventTimeForNow();
-  ui::TouchEvent press(ui::ET_TOUCH_PRESSED, start, 0, timestamp);
+  ui::TouchEvent press(
+      ui::ET_TOUCH_PRESSED, start, timestamp,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   generator.Dispatch(&press);
 
   DispatchGesture(ui::ET_GESTURE_LONG_PRESS, start);
   UpdateDragData(&data);
   timestamp += base::TimeDelta::FromMilliseconds(10);
-  ui::TouchEvent move1(ui::ET_TOUCH_MOVED, mid, 0, timestamp);
+  ui::TouchEvent move1(
+      ui::ET_TOUCH_MOVED, mid, timestamp,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   generator.Dispatch(&move1);
   // Doing two moves instead of one will guarantee to generate a fling at the
   // end.
   timestamp += base::TimeDelta::FromMilliseconds(10);
-  ui::TouchEvent move2(ui::ET_TOUCH_MOVED, end, 0, timestamp);
+  ui::TouchEvent move2(
+      ui::ET_TOUCH_MOVED, end, timestamp,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   generator.Dispatch(&move2);
-  ui::TouchEvent release(ui::ET_TOUCH_RELEASED, end, 0, timestamp);
+  ui::TouchEvent release(
+      ui::ET_TOUCH_RELEASED, end, timestamp,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   generator.Dispatch(&release);
 
   EXPECT_TRUE(drag_drop_controller_->drag_start_received_);

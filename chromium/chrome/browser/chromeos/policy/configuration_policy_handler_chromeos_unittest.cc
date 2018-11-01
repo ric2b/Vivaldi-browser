@@ -237,7 +237,7 @@ TEST(NetworkConfigurationPolicyHandlerTest, ValidONC) {
   PolicyMap policy_map;
   policy_map.Set(key::kOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::StringValue>(kTestONC), nullptr);
+                 base::MakeUnique<base::Value>(kTestONC), nullptr);
   std::unique_ptr<NetworkConfigurationPolicyHandler> handler(
       NetworkConfigurationPolicyHandler::CreateForUserPolicy());
   PolicyErrorMap errors;
@@ -262,7 +262,7 @@ TEST(NetworkConfigurationPolicyHandlerTest, JSONParseError) {
   PolicyMap policy_map;
   policy_map.Set(key::kOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::StringValue>(kTestONC), nullptr);
+                 base::MakeUnique<base::Value>(kTestONC), nullptr);
   std::unique_ptr<NetworkConfigurationPolicyHandler> handler(
       NetworkConfigurationPolicyHandler::CreateForUserPolicy());
   PolicyErrorMap errors;
@@ -288,7 +288,7 @@ TEST(NetworkConfigurationPolicyHandlerTest, Sanitization) {
   PolicyMap policy_map;
   policy_map.Set(key::kOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::StringValue>(kTestONC), nullptr);
+                 base::MakeUnique<base::Value>(kTestONC), nullptr);
   std::unique_ptr<NetworkConfigurationPolicyHandler> handler(
       NetworkConfigurationPolicyHandler::CreateForUserPolicy());
   PolicyErrorMap errors;
@@ -317,9 +317,10 @@ TEST(PinnedLauncherAppsPolicyHandler, PrefTranslation) {
   EXPECT_TRUE(prefs.GetValue(prefs::kPolicyPinnedLauncherApps, &value));
   EXPECT_TRUE(base::Value::Equals(&expected_pinned_apps, value));
 
-  base::StringValue entry1("abcdefghijklmnopabcdefghijklmnop");
+  base::Value entry1("abcdefghijklmnopabcdefghijklmnop");
   auto entry1_dict = base::MakeUnique<base::DictionaryValue>();
-  entry1_dict->Set(ash::launcher::kPinnedAppsPrefAppIDPath, entry1.DeepCopy());
+  entry1_dict->Set(ash::launcher::kPinnedAppsPrefAppIDPath,
+                   entry1.CreateDeepCopy());
   expected_pinned_apps.Append(std::move(entry1_dict));
   list.Append(entry1.CreateDeepCopy());
   policy_map.Set(key::kPinnedLauncherApps, POLICY_LEVEL_MANDATORY,

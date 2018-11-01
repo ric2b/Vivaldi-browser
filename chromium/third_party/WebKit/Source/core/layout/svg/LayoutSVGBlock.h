@@ -26,55 +26,66 @@ namespace blink {
 
 class SVGElement;
 
+// A common class of SVG objects that delegate layout, paint, etc. tasks to
+// LayoutBlockFlow. It has two coordinate spaces:
+// - local SVG coordinate space: similar to LayoutSVGModelObject, the space
+//   that localSVGTransform() applies.
+// - local HTML coordinate space: defined by frameRect() as if the local SVG
+//   coordinate space created a containing block. Like other LayoutBlockFlow
+//   objects, LayoutSVGBlock's frameRect() is also in physical coordinates with
+//   flipped blocks direction in the "containing block".
 class LayoutSVGBlock : public LayoutBlockFlow {
  public:
   explicit LayoutSVGBlock(SVGElement*);
 
-  void mapLocalToAncestor(const LayoutBoxModelObject* ancestor,
-                          TransformState&,
-                          MapCoordinatesFlags = ApplyContainerFlip) const final;
-  void mapAncestorToLocal(const LayoutBoxModelObject* ancestor,
-                          TransformState&,
-                          MapCoordinatesFlags = ApplyContainerFlip) const final;
-  const LayoutObject* pushMappingToContainer(
-      const LayoutBoxModelObject* ancestorToStopAt,
-      LayoutGeometryMap&) const final;
-
-  AffineTransform localSVGTransform() const final { return m_localTransform; }
-
-  PaintLayerType layerTypeRequired() const final { return NoPaintLayer; }
-
- protected:
-  void willBeDestroyed() override;
-  bool mapToVisualRectInAncestorSpaceInternal(
+  // These mapping functions map coordinates in HTML spaces.
+  void MapLocalToAncestor(
       const LayoutBoxModelObject* ancestor,
       TransformState&,
-      VisualRectFlags = DefaultVisualRectFlags) const final;
+      MapCoordinatesFlags = kApplyContainerFlip) const final;
+  void MapAncestorToLocal(
+      const LayoutBoxModelObject* ancestor,
+      TransformState&,
+      MapCoordinatesFlags = kApplyContainerFlip) const final;
+  const LayoutObject* PushMappingToContainer(
+      const LayoutBoxModelObject* ancestor_to_stop_at,
+      LayoutGeometryMap&) const final;
 
-  AffineTransform m_localTransform;
+  AffineTransform LocalSVGTransform() const final { return local_transform_; }
 
-  bool isOfType(LayoutObjectType type) const override {
-    return type == LayoutObjectSVG || LayoutBlockFlow::isOfType(type);
+  PaintLayerType LayerTypeRequired() const final { return kNoPaintLayer; }
+
+ protected:
+  void WillBeDestroyed() override;
+  bool MapToVisualRectInAncestorSpaceInternal(
+      const LayoutBoxModelObject* ancestor,
+      TransformState&,
+      VisualRectFlags = kDefaultVisualRectFlags) const final;
+
+  AffineTransform local_transform_;
+
+  bool IsOfType(LayoutObjectType type) const override {
+    return type == kLayoutObjectSVG || LayoutBlockFlow::IsOfType(type);
   }
 
  private:
-  LayoutRect absoluteVisualRect() const final;
+  LayoutRect AbsoluteVisualRect() const final;
 
-  bool allowsOverflowClip() const final;
+  bool AllowsOverflowClip() const final;
 
-  void absoluteRects(Vector<IntRect>&,
-                     const LayoutPoint& accumulatedOffset) const final;
+  void AbsoluteRects(Vector<IntRect>&,
+                     const LayoutPoint& accumulated_offset) const final;
 
-  void updateFromStyle() final;
-  void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) final;
+  void UpdateFromStyle() final;
+  void StyleDidChange(StyleDifference, const ComputedStyle* old_style) final;
 
-  bool nodeAtPoint(HitTestResult&,
-                   const HitTestLocation& locationInContainer,
-                   const LayoutPoint& accumulatedOffset,
+  bool NodeAtPoint(HitTestResult&,
+                   const HitTestLocation& location_in_container,
+                   const LayoutPoint& accumulated_offset,
                    HitTestAction) override;
 
   // The inherited version doesn't check for SVG effects.
-  bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const override {
+  bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override {
     return false;
   }
 };

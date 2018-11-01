@@ -5,12 +5,7 @@
 #ifndef IOS_CLEAN_CHROME_BROWSER_UI_COMMANDS_SETTINGS_COMMANDS_H_
 #define IOS_CLEAN_CHROME_BROWSER_UI_COMMANDS_SETTINGS_COMMANDS_H_
 
-// ======                        New Architecture                         =====
-// =         This code is only used in the new iOS Chrome architecture.       =
-// ============================================================================
-
-// Command protocol for commands relating to the Settings UI.
-// (Commands are for communicating into or within the coordinator layer).
+// Commands relating to the Settings UI.
 @protocol SettingsCommands
 // Display the settings UI.
 - (void)showSettings;

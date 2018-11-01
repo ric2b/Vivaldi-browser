@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "services/ui/public/interfaces/cursor.mojom.h"
+#include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 
 namespace gfx {
@@ -67,9 +67,9 @@ class ServerWindowObserver {
                                       float new_opacity) {}
 
   virtual void OnWindowPredefinedCursorChanged(ServerWindow* window,
-                                               mojom::Cursor cursor_id) {}
+                                               mojom::CursorType cursor_id) {}
   virtual void OnWindowNonClientCursorChanged(ServerWindow* window,
-                                              mojom::Cursor cursor_id) {}
+                                              mojom::CursorType cursor_id) {}
 
   virtual void OnWindowTextInputStateChanged(ServerWindow* window,
                                              const ui::TextInputState& state) {}

@@ -1,8 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
+<translation id="1620510694547887537">Камера</translation>
 <translation id="1768717197362323622">Мілісекунди</translation>
 <translation id="1822429046913737220">д.п./п.п.</translation>
+<translation id="1989112275319619282">Переглянути</translation>
 <translation id="2429669115401274487">пп</translation>
 <translation id="2732718972699418926">дп</translation>
 <translation id="2841013758207633010">Час</translation>
@@ -24,6 +26,7 @@
 <translation id="6727102863431372879">Встановити</translation>
 <translation id="7102218676258945610">Хвилини</translation>
 <translation id="7138678301420049075">Інше</translation>
+<translation id="723171743924126238">Вибрати зображення</translation>
 <translation id="7575803462290353686">Вибрати час</translation>
 <translation id="7781164152564914424">Вибрати місяць</translation>
 <translation id="7821540960913969614">Вибрати дату</translation>

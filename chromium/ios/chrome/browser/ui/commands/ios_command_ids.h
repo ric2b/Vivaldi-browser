@@ -52,6 +52,7 @@
 #define IDC_SHOW_CONTEXTUAL_SEARCH_SETTINGS            40919
 #define IDC_CLOSE_SETTINGS_AND_OPEN_URL                40920
 #define IDC_REQUEST_DESKTOP_SITE                       40921
+#define IDC_REQUEST_MOBILE_SITE                        40922
 #define IDC_CLEAR_BROWSING_DATA_IOS                    40924
 #define IDC_SHOW_MAIL_COMPOSER                         40926
 #define IDC_RESET_ALL_WEBVIEWS                         40928
@@ -76,6 +77,7 @@
 #define IDC_SHOW_SYNC_PASSPHRASE_SETTINGS              40952
 #define IDC_SHOW_QR_SCANNER                            40953
 #define IDC_SHOW_SUGGESTIONS                           40955
+#define IDC_SHOW_AUTOFILL_SETTINGS                     40956
 // clang-format on
 
 #endif  // IOS_CHROME_BROWSER_UI_COMMANDS_IOS_COMMAND_IDS_H_

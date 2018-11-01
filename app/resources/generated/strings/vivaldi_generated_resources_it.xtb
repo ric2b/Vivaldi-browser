@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
 <translation id="1018656279737460067">Operazione annullata</translation>
-<translation id="1030173864176315846">Ho stampato con successo <ph name="PAGE_NUMBER" /> 1 pagine con <ph name="PRINTER_NAME" /> 2</translation>
+<translation id="1030173864176315846">Ho stampato con successo <ph name="PAGE_NUMBER" /> pagine con <ph name="PRINTER_NAME" /></translation>
 <translation id="1031362278801463162">Caricamento anteprima in corso</translation>
 <translation id="1049795001945932310">&amp;Impostazioni lingua</translation>
 <translation id="1056898198331236512">Avviso</translation>
@@ -15,7 +15,7 @@
 <translation id="1181037720776840403">Rimuovi</translation>
 <translation id="1187722533808055681">Riattivazioni</translation>
 <translation id="119944043368869598">Cancella tutto</translation>
-<translation id="1218323606465324064">Sto stampando <ph name="PAGE_NUMBER" /> 1 pagine su <ph name="PRINTER_NAME" /> 2</translation>
+<translation id="1218323606465324064">Sto stampando <ph name="PAGE_NUMBER" /> pagine su <ph name="PRINTER_NAME" /></translation>
 <translation id="1221825588892235038">Solo selezione</translation>
 <translation id="1244303850296295656">Errore delle estensioni</translation>
 <translation id="1278049586634282054">Ispeziona viste:</translation>
@@ -69,7 +69,7 @@
 <translation id="2076269580855484719">Nascondi questo plug-in</translation>
 <translation id="2087822576218954668">Stampa: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Ricarica &amp;frame</translation>
-<translation id="2115291620696624944">Errore nella stampa di <ph name="PAGE_NUMBER" /> 1 pagine con <ph name="PRINTER_NAME" /> 2</translation>
+<translation id="2115291620696624944">Errore nella stampa di <ph name="PAGE_NUMBER" /> pagine con <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Aggiorna il plug-in</translation>
 <translation id="2147827593068025794">Sincronizzazione in background</translation>
 <translation id="2148892889047469596">Trasmetti scheda</translation>
@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Digita una scorciatoia</translation>
 <translation id="2509495747794740764">Il valore Scala deve essere un numero compreso tra 10 e 200.</translation>
 <translation id="2509857212037838238">Installa <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Numero attività keep-alive</translation>
 <translation id="2550212893339833758">Memoria scambiata</translation>
 <translation id="2580924999637585241">Totale: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -201,7 +202,7 @@
 <translation id="3925842537050977900">Rimuovi dalla piattaforma</translation>
 <translation id="3927932062596804919">Non consentire</translation>
 <translation id="3936390757709632190">&amp;Apri audio in nuova scheda</translation>
-<translation id="3936999098172113189">In attesa di stampare <ph name="PAGE_NUMBER" /> 1 pagine su <ph name="PRINTER_NAME" /> 2</translation>
+<translation id="3936999098172113189">In attesa di stampare <ph name="PAGE_NUMBER" /> pagine su <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Indietro</translation>
 <translation id="3948116654032448504">&amp;Cerca <ph name="SEARCH_ENGINE" /> per immagini</translation>
 <translation id="3978267865113951599">(Interrotto)</translation>
@@ -366,6 +367,7 @@
 <translation id="6273677812470008672">Qualità</translation>
 <translation id="6295855836753816081">Salvataggio in corso...</translation>
 <translation id="6308937455967653460">Salva lin&amp;k come...</translation>
+<translation id="6326855256003666642">Numero attività Keep-alive</translation>
 <translation id="6348109281845364640">Errore nell'impostare la stampante</translation>
 <translation id="6370021412472292592">Impossibile caricare il manifesto.</translation>
 <translation id="6398765197997659313">Esci da schermo intero</translation>
@@ -405,7 +407,7 @@
 <translation id="6955446738988643816">Ispeziona Popup</translation>
 <translation id="6970856801391541997">Stampa pagine specifiche</translation>
 <translation id="6974053822202609517">Da destra a sinistra</translation>
-<translation id="6982896539684144327">Stampante <ph name="VENDOR_NAME" /> 1 rilevata</translation>
+<translation id="6982896539684144327">Stampante <ph name="VENDOR_NAME" /> rilevata</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">Seleziona una destinazione</translation>
 <translation id="7005848115657603926">Intervallo di pagine non valido; utilizza <ph name="EXAMPLE_PAGE_RANGE" /></translation>

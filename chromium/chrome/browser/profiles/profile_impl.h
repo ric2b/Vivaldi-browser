@@ -27,8 +27,6 @@
 
 class PrefService;
 
-class TrackedPreferenceValidationDelegate;
-
 #if defined(OS_CHROMEOS)
 namespace chromeos {
 class KioskTest;
@@ -98,6 +96,7 @@ class ProfileImpl : public Profile {
   net::URLRequestContextGetter* CreateMediaRequestContextForStoragePartition(
       const base::FilePath& partition_path,
       bool in_memory) override;
+  void RegisterInProcessServices(StaticServiceMap* services) override;
 
   // Profile implementation:
   scoped_refptr<base::SequencedTaskRunner> GetIOTaskRunner() override;
@@ -191,6 +190,10 @@ class ProfileImpl : public Profile {
   std::unique_ptr<domain_reliability::DomainReliabilityMonitor>
   CreateDomainReliabilityMonitor(PrefService* local_state);
 
+  // Creates an instance of the Identity Service for this Profile, populating it
+  // with the appropriate instances of its dependencies.
+  std::unique_ptr<service_manager::Service> CreateIdentityService();
+
   PrefChangeRegistrar pref_change_registrar_;
 
   base::FilePath path_;
@@ -212,11 +215,6 @@ class ProfileImpl : public Profile {
   std::unique_ptr<policy::ConfigurationPolicyProvider>
       configuration_policy_provider_;
   std::unique_ptr<policy::ProfilePolicyConnector> profile_policy_connector_;
-
-  // Keep |pref_validation_delegate_| above |prefs_| so that the former outlives
-  // the latter.
-  std::unique_ptr<TrackedPreferenceValidationDelegate>
-      pref_validation_delegate_;
 
   // Keep |prefs_| on top for destruction order because |extension_prefs_|,
   // |io_data_| and others store pointers to |prefs_| and shall be destructed

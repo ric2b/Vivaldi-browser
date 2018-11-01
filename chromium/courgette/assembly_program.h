@@ -8,14 +8,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <map>
 #include <memory>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "courgette/courgette.h"
 #include "courgette/image_utils.h"
+#include "courgette/instruction_utils.h"
 #include "courgette/label_manager.h"
 #include "courgette/memory_allocator.h"
 
@@ -55,49 +56,6 @@ class Instruction {
   DISALLOW_COPY_AND_ASSIGN(Instruction);
 };
 
-// An interface to receive emitted instructions parsed from an executable.
-class InstructionReceptor {
- public:
-  InstructionReceptor() = default;
-  virtual ~InstructionReceptor() = default;
-
-  // Generates an entire base relocation table.
-  virtual CheckBool EmitPeRelocs() = 0;
-
-  // Generates an ELF style relocation table for X86.
-  virtual CheckBool EmitElfRelocation() = 0;
-
-  // Generates an ELF style relocation table for ARM.
-  virtual CheckBool EmitElfARMRelocation() = 0;
-
-  // Following instruction will be assembled at address 'rva'.
-  virtual CheckBool EmitOrigin(RVA rva) = 0;
-
-  // Generates a single byte of data or machine instruction.
-  virtual CheckBool EmitSingleByte(uint8_t byte) = 0;
-
-  // Generates multiple bytes of data or machine instructions.
-  virtual CheckBool EmitMultipleBytes(const uint8_t* bytes, size_t len) = 0;
-
-  // Generates a 4-byte relative reference to address of 'label'.
-  virtual CheckBool EmitRel32(Label* label) = 0;
-
-  // Generates a 4-byte relative reference to address of 'label' for ARM.
-  virtual CheckBool EmitRel32ARM(uint16_t op,
-                                 Label* label,
-                                 const uint8_t* arm_op,
-                                 uint16_t op_size) = 0;
-
-  // Generates a 4-byte absolute reference to address of 'label'.
-  virtual CheckBool EmitAbs32(Label* label) = 0;
-
-  // Generates an 8-byte absolute reference to address of 'label'.
-  virtual CheckBool EmitAbs64(Label* label) = 0;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(InstructionReceptor);
-};
-
 // An AssemblyProgram is the result of disassembling an executable file.
 //
 // * The disassembler creates labels in the AssemblyProgram and emits
@@ -120,20 +78,23 @@ class InstructionReceptor {
 class AssemblyProgram {
  public:
   using LabelHandler = base::Callback<void(Label*)>;
-  using LabelHandlerMap = std::map<OP, LabelHandler>;
-
-  // A callback for GenerateInstructions() to emit instructions. The first
-  // argument (AssemblyProgram*) is provided for Label-related feature access.
-  // The second argument (InstructionReceptor*) is a receptor for instructions.
-  // The callback (which gets called in 2 passes) should return true on success,
-  // and false otherwise.
-  using InstructionGenerator =
-      base::Callback<CheckBool(AssemblyProgram*, InstructionReceptor*)>;
 
   AssemblyProgram(ExecutableType kind, uint64_t image_base);
   ~AssemblyProgram();
 
   ExecutableType kind() const { return kind_; }
+  const std::vector<Label*>& abs32_label_annotations() const {
+    return abs32_label_annotations_;
+  }
+  const std::vector<Label*>& rel32_label_annotations() const {
+    return rel32_label_annotations_;
+  }
+  std::vector<Label*>* mutable_abs32_label_annotations() {
+    return &abs32_label_annotations_;
+  }
+  std::vector<Label*>* mutable_rel32_label_annotations() {
+    return &rel32_label_annotations_;
+  }
 
   // Traverses RVAs in |abs32_visitor| and |rel32_visitor| to precompute Labels.
   void PrecomputeLabels(RvaVisitor* abs32_visitor, RvaVisitor* rel32_visitor);
@@ -152,18 +113,15 @@ class AssemblyProgram {
   // Looks up rel32 label. Returns null if none found.
   Label* FindRel32Label(RVA rva);
 
-  std::unique_ptr<EncodedProgram> Encode() const;
-
-  // For each |instruction| in |instructions_|, looks up its opcode from
-  // |handler_map| for a handler. If a handler exists, invoke it by passing the
-  // |instruction|'s label. We assume that |handler_map| has correct keys, i.e.,
-  // opcodes for an instruction that have label.
-  void HandleInstructionLabels(const LabelHandlerMap& handler_map) const;
-
   // Calls |gen| in 2 passes to emit instructions. In pass 1 we provide a
   // receptor to count space requirement. In pass 2 we provide a receptor to
-  // store instructions.
-  CheckBool GenerateInstructions(const InstructionGenerator& gen);
+  // store instructions. If |annotate_labels| is true, then extracts Label
+  // annotations into |*_label_annotations_|.
+  CheckBool GenerateInstructions(const InstructionGenerator& gen,
+                                 bool annotate_labels);
+
+  // Returns an EncodeProgram that converts program to encoded form.
+  std::unique_ptr<EncodedProgram> Encode() const;
 
   // TODO(huangs): Implement these in InstructionStoreReceptor.
   // Instructions will be assembled in the order they are emitted.
@@ -230,6 +188,11 @@ class AssemblyProgram {
   // separate abs32 and rel32 labels.
   LabelManager abs32_label_manager_;
   LabelManager rel32_label_manager_;
+
+  // Label pointers for each abs32 and rel32 location, sorted by file offset.
+  // These are used by Label adjustment during patch generation.
+  std::vector<Label*> abs32_label_annotations_;
+  std::vector<Label*> rel32_label_annotations_;
 
   DISALLOW_COPY_AND_ASSIGN(AssemblyProgram);
 };

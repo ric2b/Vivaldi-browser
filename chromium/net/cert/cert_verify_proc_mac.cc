@@ -197,17 +197,23 @@ void CopyCertChainToVerifyResult(CFArrayRef cert_chain,
   }
   if (!verified_cert) {
     NOTREACHED();
+    verify_result->cert_status |= CERT_STATUS_INVALID;
     return;
   }
 
-  verify_result->verified_cert =
-      X509Certificate::CreateFromHandle(verified_cert, verified_chain);
+  scoped_refptr<X509Certificate> verified_cert_with_chain =
+      x509_util::CreateX509CertificateFromSecCertificate(verified_cert,
+                                                         verified_chain);
+  if (verified_cert_with_chain)
+    verify_result->verified_cert = std::move(verified_cert_with_chain);
+  else
+    verify_result->cert_status |= CERT_STATUS_INVALID;
 }
 
 // Returns true if the certificate uses MD2, MD4, MD5, or SHA1, and false
 // otherwise. A return of false also includes the case where the signature
 // algorithm couldn't be conclusively labeled as weak.
-bool CertUsesWeakHash(X509Certificate::OSCertHandle cert_handle) {
+bool CertUsesWeakHash(SecCertificateRef cert_handle) {
   x509_util::CSSMCachedCertificate cached_cert;
   OSStatus status = cached_cert.Init(cert_handle);
   if (status)
@@ -273,34 +279,14 @@ bool IsWeakChainBasedOnHashingAlgorithms(
   return !leaf_uses_weak_hash && intermediates_contain_weak_hash;
 }
 
-using ExtensionsMap = std::map<net::der::Input, net::ParsedExtension>;
-
-// Helper that looks up an extension by OID given a map of extensions.
-bool GetExtensionValue(const ExtensionsMap& extensions,
-                       const net::der::Input& oid,
-                       net::der::Input* value) {
-  auto it = extensions.find(oid);
-  if (it == extensions.end())
-    return false;
-  *value = it->second.value;
-  return true;
-}
-
 // Checks if |*cert| has a Certificate Policies extension containing either
 // of |ev_policy_oid| or anyPolicy.
 bool HasPolicyOrAnyPolicy(const ParsedCertificate* cert,
                           const der::Input& ev_policy_oid) {
-  der::Input extension_value;
-  if (!GetExtensionValue(cert->unparsed_extensions(), CertificatePoliciesOid(),
-                         &extension_value)) {
-    return false;
-  }
-
-  std::vector<der::Input> policies;
-  if (!ParseCertificatePoliciesExtension(extension_value, &policies))
+  if (!cert->has_policy_oids())
     return false;
 
-  for (const der::Input& policy_oid : policies) {
+  for (const der::Input& policy_oid : cert->policy_oids()) {
     if (policy_oid == ev_policy_oid || policy_oid == AnyPolicy())
       return true;
   }
@@ -324,18 +310,11 @@ void GetCandidateEVPolicy(const X509Certificate* cert_input,
   if (!cert)
     return;
 
-  der::Input extension_value;
-  if (!GetExtensionValue(cert->unparsed_extensions(), CertificatePoliciesOid(),
-                         &extension_value)) {
-    return;
-  }
-
-  std::vector<der::Input> policies;
-  if (!ParseCertificatePoliciesExtension(extension_value, &policies))
+  if (!cert->has_policy_oids())
     return;
 
   EVRootCAMetadata* metadata = EVRootCAMetadata::GetInstance();
-  for (const der::Input& policy_oid : policies) {
+  for (const der::Input& policy_oid : cert->policy_oids()) {
     if (metadata->IsEVPolicyOID(policy_oid)) {
       *ev_policy_oid = policy_oid.AsString();
 
@@ -638,12 +617,12 @@ class OSXKnownRootHelper {
       return false;
     SecCertificateRef root_ref = reinterpret_cast<SecCertificateRef>(
         const_cast<void*>(CFArrayGetValueAtIndex(chain, n - 1)));
-    SHA256HashValue hash = X509Certificate::CalculateFingerprint256(root_ref);
+    SHA256HashValue hash = x509_util::CalculateFingerprint256(root_ref);
     return known_roots_.find(hash) != known_roots_.end();
   }
 
  private:
-  friend struct base::DefaultLazyInstanceTraits<OSXKnownRootHelper>;
+  friend struct base::LazyInstanceTraitsBase<OSXKnownRootHelper>;
 
   OSXKnownRootHelper() {
     CFArrayRef cert_array = NULL;
@@ -658,7 +637,7 @@ class OSXKnownRootHelper {
     for (CFIndex i = 0, size = CFArrayGetCount(cert_array); i < size; ++i) {
       SecCertificateRef cert = reinterpret_cast<SecCertificateRef>(
           const_cast<void*>(CFArrayGetValueAtIndex(cert_array, i)));
-      known_roots_.insert(X509Certificate::CalculateFingerprint256(cert));
+      known_roots_.insert(x509_util::CalculateFingerprint256(cert));
     }
   }
 
@@ -804,7 +783,9 @@ int VerifyWithGivenFlags(X509Certificate* cert,
     }
 
     ScopedCFTypeRef<CFMutableArrayRef> cert_array(
-        cert->CreateOSCertChainForCert());
+        x509_util::CreateSecCertificateArrayForX509Certificate(cert));
+    if (!cert_array)
+      return ERR_CERT_INVALID;
 
     // Beginning with the certificate chain as supplied by the server, attempt
     // to verify the chain. If a failure is encountered, trim a certificate

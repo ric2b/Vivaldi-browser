@@ -313,9 +313,9 @@ void NativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
       vivaldi::ui_tools::GetActiveWebViewGuest(this);
   if (current_webviewguest) {
     content::NativeWebKeyboardEvent synth_event(
-        blink::WebInputEvent::RawKeyDown, blink::WebInputEvent::NoModifiers,
+        blink::WebInputEvent::kRawKeyDown, blink::WebInputEvent::kNoModifiers,
         ui::EventTimeForNow());
-    synth_event.windowsKeyCode = code;
+    synth_event.windows_key_code = code;
     current_webviewguest->web_contents()->GetDelegate()
         ->HandleKeyboardEvent(web_view_->GetWebContents(), synth_event);
   }

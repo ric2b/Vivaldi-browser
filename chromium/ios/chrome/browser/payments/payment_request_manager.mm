@@ -14,20 +14,24 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
+#include "components/payments/core/payment_address.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/payments/js_payment_request_manager.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_coordinator.h"
 #include "ios/chrome/browser/procedural_block_types.h"
+#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
+#import "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #include "ios/web/public/favicon_status.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/navigation_manager.h"
 #include "ios/web/public/payments/payment_request.h"
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/public/url_scheme_util.h"
-#import "ios/web/public/web_state/crw_web_view_proxy.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
+#import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
@@ -47,6 +51,9 @@ const NSTimeInterval kNoopInterval = 0.1;
 // PaymentResponse.complete().
 const NSTimeInterval kTimeoutInterval = 60.0;
 
+NSString* kAbortMessage = @"The payment request was aborted.";
+NSString* kCancelMessage = @"The payment request was canceled.";
+
 }  // namespace
 
 @interface PaymentRequestManager ()<CRWWebStateObserver,
@@ -57,7 +64,7 @@ const NSTimeInterval kTimeoutInterval = 60.0;
   // PersonalDataManager used to manage user credit cards and addresses.
   autofill::PersonalDataManager* _personalDataManager;
 
-  // Object that owns an instance of web::PaymentRequest as provided by the page
+  // Object that has a copy of web::PaymentRequest as provided by the page
   // invoking the PaymentRequest API. Also caches credit cards and addresses
   // provided by the _personalDataManager and manages selected ones for the
   // current PaymentRequest flow.
@@ -72,10 +79,6 @@ const NSTimeInterval kTimeoutInterval = 60.0;
   // Boolean to track if the current WebState is enabled (JS callback is set
   // up).
   BOOL _webStateEnabled;
-
-  // Boolean to track if the script has been injected in the current page. This
-  // is a faster check than asking the JS controller.
-  BOOL _isScriptInjected;
 
   // True when close has been called and the PaymentRequest coordinator has
   // been destroyed.
@@ -106,9 +109,6 @@ const NSTimeInterval kTimeoutInterval = 60.0;
 // Invokes the callback once the request has been terminated.
 - (void)terminateRequestWithErrorMessage:(NSString*)errorMessage
                                 callback:(ProceduralBlockWithBool)callback;
-
-// Initialize the PaymentRequest JavaScript.
-- (void)initializeWebViewForPaymentRequest;
 
 // Handler for injected JavaScript callbacks.
 - (BOOL)handleScriptCommand:(const base::DictionaryValue&)JSONCommand;
@@ -224,8 +224,7 @@ const NSTimeInterval kTimeoutInterval = 60.0;
 }
 
 - (void)cancelRequest {
-  [self terminateRequestWithErrorMessage:@"The payment request was canceled."
-                                callback:nil];
+  [self terminateRequestWithErrorMessage:kCancelMessage callback:nil];
 }
 
 - (void)terminateRequestWithErrorMessage:(NSString*)errorMessage
@@ -283,15 +282,6 @@ const NSTimeInterval kTimeoutInterval = 60.0;
   }
 }
 
-- (void)initializeWebViewForPaymentRequest {
-  if (_enabled) {
-    DCHECK(_webStateEnabled);
-
-    [_paymentRequestJsManager inject];
-    _isScriptInjected = YES;
-  }
-}
-
 - (BOOL)handleScriptCommand:(const base::DictionaryValue&)JSONCommand {
   if (![self webStateContentIsSecureHTML]) {
     return NO;
@@ -325,19 +315,18 @@ const NSTimeInterval kTimeoutInterval = 60.0;
   //   if the intersection is empty.
 
   const base::DictionaryValue* paymentRequestData;
-  web::PaymentRequest paymentRequest;
+  web::PaymentRequest webPaymentRequest;
   if (!message.GetDictionary("payment_request", &paymentRequestData)) {
     DLOG(ERROR) << "JS message parameter 'payment_request' is missing";
     return NO;
   }
-  if (!paymentRequest.FromDictionaryValue(*paymentRequestData)) {
+  if (!webPaymentRequest.FromDictionaryValue(*paymentRequestData)) {
     DLOG(ERROR) << "JS message parameter 'payment_request' is invalid";
     return NO;
   }
 
-  _paymentRequest.reset(
-      new PaymentRequest(base::MakeUnique<web::PaymentRequest>(paymentRequest),
-                         _personalDataManager));
+  _paymentRequest =
+      base::MakeUnique<PaymentRequest>(webPaymentRequest, _personalDataManager);
 
   UIImage* pageFavicon = nil;
   web::NavigationItem* navigationItem =
@@ -374,22 +363,13 @@ const NSTimeInterval kTimeoutInterval = 60.0;
   __weak PaymentRequestManager* weakSelf = self;
 
   ProceduralBlockWithBool cancellationCallback = ^(BOOL) {
-    PaymentRequestManager* strongSelf = weakSelf;
-    // Early return if the manager has been deallocated.
-    if (!strongSelf)
-      return;
-    [[strongSelf paymentRequestJsManager]
+    [[weakSelf paymentRequestJsManager]
         resolveAbortPromiseWithCompletionHandler:nil];
   };
 
   ProceduralBlock callback = ^{
-    PaymentRequestManager* strongSelf = weakSelf;
-    // Early return if the manager has been deallocated.
-    if (!strongSelf)
-      return;
-    [strongSelf
-        terminateRequestWithErrorMessage:@"The payment request was aborted."
-                                callback:cancellationCallback];
+    [weakSelf terminateRequestWithErrorMessage:kAbortMessage
+                                      callback:cancellationCallback];
   };
 
   [_paymentRequestCoordinator displayErrorWithCallback:callback];
@@ -406,13 +386,7 @@ const NSTimeInterval kTimeoutInterval = 60.0;
 
   __weak PaymentRequestManager* weakSelf = self;
   ProceduralBlock callback = ^{
-    PaymentRequestManager* strongSelf = weakSelf;
-    // Early return if the manager has been deallocated.
-    if (!strongSelf)
-      return;
-    [strongSelf
-        terminateRequestWithErrorMessage:@"The payment request was canceled."
-                                callback:nil];
+    [weakSelf terminateRequestWithErrorMessage:kCancelMessage callback:nil];
   };
 
   [_paymentRequestCoordinator displayErrorWithCallback:callback];
@@ -441,12 +415,8 @@ const NSTimeInterval kTimeoutInterval = 60.0;
 
   __weak PaymentRequestManager* weakSelf = self;
   ProceduralBlock callback = ^{
-    PaymentRequestManager* strongSelf = weakSelf;
-    // Early return if the manager has been deallocated.
-    if (!strongSelf)
-      return;
-    [strongSelf dismissUI];
-    [strongSelf.paymentRequestJsManager
+    [weakSelf dismissUI];
+    [weakSelf.paymentRequestJsManager
         resolveResponsePromiseWithCompletionHandler:nil];
   };
 
@@ -535,8 +505,20 @@ const NSTimeInterval kTimeoutInterval = 60.0;
 
 - (void)paymentRequestCoordinatorDidCancel:
     (PaymentRequestCoordinator*)coordinator {
-  [self terminateRequestWithErrorMessage:@"The payment request was canceled."
-                                callback:nil];
+  [self terminateRequestWithErrorMessage:kCancelMessage callback:nil];
+}
+
+- (void)paymentRequestCoordinatorDidSelectSettings:
+    (PaymentRequestCoordinator*)coordinator {
+  ProceduralBlockWithBool callback = ^(BOOL) {
+    UIWindow* mainWindow = [[UIApplication sharedApplication] keyWindow];
+    DCHECK(mainWindow);
+    GenericChromeCommand* command =
+        [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_AUTOFILL_SETTINGS];
+    [mainWindow chromeExecuteCommand:command];
+  };
+
+  [self terminateRequestWithErrorMessage:kCancelMessage callback:callback];
 }
 
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
@@ -549,7 +531,7 @@ const NSTimeInterval kTimeoutInterval = 60.0;
 }
 
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
-         didSelectShippingAddress:(web::PaymentAddress)shippingAddress {
+         didSelectShippingAddress:(payments::PaymentAddress)shippingAddress {
   [_paymentRequestJsManager updateShippingAddress:shippingAddress
                                 completionHandler:nil];
   [self setUnblockEventQueueTimer];
@@ -570,9 +552,7 @@ const NSTimeInterval kTimeoutInterval = 60.0;
     didCommitNavigationWithDetails:
         (const web::LoadCommittedDetails&)load_details {
   [self dismissUI];
-  _isScriptInjected = NO;
   [self enableCurrentWebState];
-  [self initializeWebViewForPaymentRequest];
 }
 
 @end

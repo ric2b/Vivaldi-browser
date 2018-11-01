@@ -22,7 +22,6 @@ specific_include_rules = {
     "+content/browser/loader/resource_request_info_impl.h",
     "+content/browser/loader/upload_progress_tracker.h",
     "+content/common/content_export.h",
-    "+content/public/browser/resource_dispatcher_host_delegate.h",
     "+content/public/common/resource_response.h",
 
     # TODO: these all have to be removed.
@@ -32,36 +31,6 @@ specific_include_rules = {
     "+content/common/resource_messages.h",
     "+content/common/resource_request_completion_status.h",
     "+content/common/view_messages.h",
-  ],
-  "async_revalidation_driver\.(cc|h)": [
-    "-content",
-    "+content/browser/loader/async_revalidation_driver.h",
-    "+content/common/content_export.h",
-    "+content/public/browser/resource_throttle.h",
-  ],
-  "async_revalidation_driver_unittest\.cc": [
-    "-content",
-    "+content/browser/loader/async_revalidation_driver.h",
-
-    # TODO: these all have to be removed.
-    # Only one test needs these, so that can stay in content while the other
-    # tests move.
-    "+content/public/browser/client_certificate_delegate.h",
-    "+content/public/common/content_client.h",
-    "+content/public/test/test_browser_thread_bundle.h",
-    "+content/test/test_content_browser_client.h",
-  ],
-  "async_revalidation_manager\.(cc|h)": [
-    "-content",
-    "+content/browser/loader/async_revalidation_driver.h",
-    "+content/browser/loader/async_revalidation_manager.h",
-    "+content/browser/loader/resource_request_info_impl.h",
-    "+content/browser/loader/resource_scheduler.h",
-    "+content/public/browser/resource_throttle.h",
-
-    # TODO: To be replaced by mojo.
-    "+content/common/resource_messages.h",
-    "+content/common/resource_request.h",
   ],
   "downloaded_temp_file_impl\.(cc|h)": [
     "-content",
@@ -101,7 +70,6 @@ specific_include_rules = {
     "+content/common/resource_request_completion_status.h",
     "+content/common/url_loader.mojom.h",
     "+content/public/browser/global_request_id.h",
-    "+content/public/browser/resource_dispatcher_host_delegate.h",
     "+content/public/common/resource_response.h",
     "+content/public/common/resource_type.h",
   ],
@@ -147,7 +115,6 @@ specific_include_rules = {
   "resource_dispatcher_host_impl\.(cc|h)": [
     "-content",
     "+content/browser/loader/async_resource_handler.h",
-    "+content/browser/loader/async_revalidation_manager.h",
     "+content/browser/loader/global_routing_id.h",
     "+content/browser/loader/loader_delegate.h",
     "+content/browser/loader/mojo_async_resource_handler.h",
@@ -180,11 +147,7 @@ specific_include_rules = {
     "+content/browser/bad_message.h",
     "+content/browser/blob_storage/chrome_blob_storage_context.h",
     "+content/browser/child_process_security_policy_impl.h",
-    "+content/browser/download/save_types.h",
-    "+content/browser/frame_host/frame_tree.h",
-    "+content/browser/frame_host/navigation_handle_impl.h",
     "+content/browser/frame_host/navigation_request_info.h",
-    "+content/browser/frame_host/navigator.h",
     "+content/browser/loader/cross_site_resource_handler.h",
     "+content/browser/loader/detachable_resource_handler.h",
     "+content/browser/loader/intercepting_resource_handler.h",
@@ -204,16 +167,13 @@ specific_include_rules = {
     "+content/browser/streams/stream_context.h",
     "+content/browser/streams/stream_registry.h",
     "+content/common/content_export.h",
-    "+content/common/navigation_params.h",
     "+content/common/net/url_request_service_worker_data.h",
-    "+content/common/site_isolation_policy.h",
     "+content/public/browser/browser_thread.h",
     "+content/public/browser/navigation_ui_data.h",
     "+content/public/browser/plugin_service.h",
     "+content/public/browser/resource_request_details.h",
     "+content/public/browser/stream_handle.h",
     "+content/public/browser/stream_info.h",
-    "+content/public/browser/web_contents_observer.h",
     "+content/public/common/browser_side_navigation_policy.h",
     "+content/public/common/content_features.h",
     "+content/public/common/content_switches.h",
@@ -364,7 +324,6 @@ specific_include_rules = {
     "+content/common/resource_request.h",
     "+content/common/url_loader.mojom.h",
     "+content/common/url_loader_factory.mojom.h",
-    "+content/public/browser/browser_thread.h",
   ],
   "url_loader_factory_impl_unittest\.cc": [
     "-content",

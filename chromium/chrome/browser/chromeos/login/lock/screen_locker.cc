@@ -7,14 +7,13 @@
 #include <string>
 #include <vector>
 
-#include "ash/common/wallpaper/wallpaper_controller.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm/wm_event.h"
-#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
+#include "ash/wallpaper/wallpaper_controller.h"
 #include "ash/wm/lock_state_controller.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/wm_event.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
@@ -23,6 +22,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -40,6 +40,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/screenlock_icon_provider.h"
 #include "chrome/browser/ui/webui/chromeos/login/screenlock_icon_source.h"
 #include "chrome/common/chrome_switches.h"
@@ -58,7 +59,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/url_data_source.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "media/audio/sounds/sounds_manager.h"
@@ -158,12 +158,11 @@ ScreenLocker::ScreenLocker(const user_manager::UserList& users)
   manager->Initialize(SOUND_UNLOCK,
                       bundle.GetRawDataResource(IDR_SOUND_UNLOCK_WAV));
 
-  ash::Shell::GetInstance()
-      ->lock_state_controller()
-      ->SetLockScreenDisplayedCallback(base::Bind(
-          base::IgnoreResult(&AccessibilityManager::PlayEarcon),
-          base::Unretained(AccessibilityManager::Get()), chromeos::SOUND_LOCK,
-          PlaySoundOption::SPOKEN_FEEDBACK_ENABLED));
+  ash::Shell::Get()->lock_state_controller()->SetLockScreenDisplayedCallback(
+      base::Bind(base::IgnoreResult(&AccessibilityManager::PlayEarcon),
+                 base::Unretained(AccessibilityManager::Get()),
+                 chromeos::SOUND_LOCK,
+                 PlaySoundOption::SPOKEN_FEEDBACK_ENABLED));
 }
 
 void ScreenLocker::Init() {
@@ -186,7 +185,7 @@ void ScreenLocker::Init() {
 }
 
 void ScreenLocker::OnAuthFailure(const AuthFailure& error) {
-  content::RecordAction(UserMetricsAction("ScreenLocker_OnLoginFailure"));
+  base::RecordAction(UserMetricsAction("ScreenLocker_OnLoginFailure"));
   if (authentication_start_time_.is_null()) {
     LOG(ERROR) << "Start time is not set at authentication failure";
   } else {
@@ -362,7 +361,7 @@ void ScreenLocker::ClearErrors() {
 
 void ScreenLocker::Signout() {
   web_ui()->ClearErrors();
-  content::RecordAction(UserMetricsAction("ScreenLocker_Signout"));
+  base::RecordAction(UserMetricsAction("ScreenLocker_Signout"));
   // We expect that this call will not wait for any user input.
   // If it changes at some point, we will need to force exit.
   chrome::AttemptUserExit();
@@ -413,7 +412,7 @@ void ScreenLocker::HandleLockScreenRequest() {
   if (g_screen_lock_observer->session_started() &&
       user_manager::UserManager::Get()->CanCurrentUserLock()) {
     ScreenLocker::Show();
-    ash::Shell::GetInstance()->lock_state_controller()->OnStartingLock();
+    ash::Shell::Get()->lock_state_controller()->OnStartingLock();
   } else {
     // If the current user's session cannot be locked or the user has not
     // completed all sign-in steps yet, log out instead. The latter is done to
@@ -429,7 +428,7 @@ void ScreenLocker::HandleLockScreenRequest() {
 
 // static
 void ScreenLocker::Show() {
-  content::RecordAction(UserMetricsAction("ScreenLocker_Show"));
+  base::RecordAction(UserMetricsAction("ScreenLocker_Show"));
   DCHECK(base::MessageLoopForUI::IsCurrent());
 
   // Check whether the currently logged in user is a guest account and if so,
@@ -473,12 +472,11 @@ void ScreenLocker::Hide() {
   }
 
   DCHECK(screen_locker_);
-  base::Callback<void(void)> callback =
-      base::Bind(&ScreenLocker::ScheduleDeletion);
-  ash::Shell::GetInstance()->lock_state_controller()->
-    OnLockScreenHide(callback);
+  SessionControllerClient::Get()->RunUnlockAnimation(
+      base::Bind(&ScreenLocker::ScheduleDeletion));
 }
 
+// static
 void ScreenLocker::ScheduleDeletion() {
   // Avoid possible multiple calls.
   if (screen_locker_ == NULL)
@@ -504,7 +502,7 @@ ScreenLocker::~ScreenLocker() {
   ClearErrors();
 
   VLOG(1) << "Moving wallpaper to unlocked container";
-  ash::WmShell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
+  ash::Shell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
 
   screen_locker_ = NULL;
   bool state = false;
@@ -538,7 +536,7 @@ void ScreenLocker::ScreenLockReady() {
   UMA_HISTOGRAM_TIMES("ScreenLocker.ScreenLockTime", delta);
 
   VLOG(1) << "Moving wallpaper to locked container";
-  ash::WmShell::Get()->wallpaper_controller()->MoveToLockedContainer();
+  ash::Shell::Get()->wallpaper_controller()->MoveToLockedContainer();
 
   bool state = true;
   VLOG(1) << "Emitting SCREEN_LOCK_STATE_CHANGED with state=" << state;

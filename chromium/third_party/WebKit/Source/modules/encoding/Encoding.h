@@ -5,7 +5,7 @@
 #ifndef Encoding_h
 #define Encoding_h
 
-#include "wtf/text/Unicode.h"
+#include "platform/wtf/text/Unicode.h"
 
 namespace blink {
 
@@ -13,7 +13,7 @@ namespace Encoding {
 
 // The Encoding Standard has a definition of whitespace that differs from
 // WTF::isWhiteSpace() (it excludes vertical tab).
-bool isASCIIWhiteSpace(UChar);
+bool IsASCIIWhiteSpace(UChar);
 
 }  // namespace Encoding
 

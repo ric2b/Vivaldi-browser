@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @implements {SDK.TargetManager.Observer}
+ * @implements {SDK.SDKModelObserver<!Security.SecurityModel>}
  * @unrestricted
  */
 Security.SecurityPanel = class extends UI.PanelWithSidebar {
@@ -26,9 +26,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
     /** @type {!Map<!Network.NetworkLogView.MixedContentFilterValues, number>} */
     this._filterRequestCounts = new Map();
 
-    /** @type {!Map<!SDK.Target, !Array<!Common.EventTarget.EventDescriptor>>}*/
-    this._eventListeners = new Map();
-    SDK.targetManager.observeTargets(this, SDK.Target.Capability.Network);
+    SDK.targetManager.observeModels(Security.SecurityModel, this);
   }
 
   /**
@@ -198,6 +196,9 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
       var oldSecurityState = originState.securityState;
       originState.securityState = this._securityStateMin(oldSecurityState, securityState);
       if (oldSecurityState !== originState.securityState) {
+        let securityDetails = /** @type {?Protocol.Network.SecurityDetails} */ (request.securityDetails());
+        if (securityDetails)
+          originState.securityDetails = securityDetails;
         this._sidebarTree.updateOrigin(origin, securityState);
         if (originState.originView)
           originState.originView.setSecurityState(securityState);
@@ -262,8 +263,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
   }
 
   showCertificateViewer() {
-    var securityModel = Security.SecurityModel.fromTarget(this._target);
-    securityModel.showCertificateViewer();
+    this._securityModel.showCertificateViewer();
   }
 
   /**
@@ -277,58 +277,42 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!Security.SecurityModel} securityModel
    */
-  targetAdded(target) {
-    if (this._target)
+  modelAdded(securityModel) {
+    if (this._securityModel)
       return;
 
-    var listeners = [];
-    var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(target);
-    if (resourceTreeModel) {
-      listeners = listeners.concat([
-        resourceTreeModel.addEventListener(
-            SDK.ResourceTreeModel.Events.MainFrameNavigated, this._onMainFrameNavigated, this),
-        resourceTreeModel.addEventListener(
-            SDK.ResourceTreeModel.Events.InterstitialShown, this._onInterstitialShown, this),
-        resourceTreeModel.addEventListener(
-            SDK.ResourceTreeModel.Events.InterstitialHidden, this._onInterstitialHidden, this),
-      ]);
+    this._securityModel = securityModel;
+    var resourceTreeModel = securityModel.resourceTreeModel();
+    var networkManager = securityModel.networkManager();
+    this._eventListeners = [
+      securityModel.addEventListener(
+          Security.SecurityModel.Events.SecurityStateChanged, this._onSecurityStateChanged, this),
+      resourceTreeModel.addEventListener(
+          SDK.ResourceTreeModel.Events.MainFrameNavigated, this._onMainFrameNavigated, this),
+      resourceTreeModel.addEventListener(
+          SDK.ResourceTreeModel.Events.InterstitialShown, this._onInterstitialShown, this),
+      resourceTreeModel.addEventListener(
+          SDK.ResourceTreeModel.Events.InterstitialHidden, this._onInterstitialHidden, this),
+      networkManager.addEventListener(SDK.NetworkManager.Events.ResponseReceived, this._onResponseReceived, this),
+      networkManager.addEventListener(SDK.NetworkManager.Events.RequestFinished, this._onRequestFinished, this),
+    ];
 
-      if (resourceTreeModel.isInterstitialShowing())
-        this._onInterstitialShown();
-    }
-
-    var networkManager = SDK.NetworkManager.fromTarget(target);
-    if (networkManager) {
-      listeners = listeners.concat([
-        networkManager.addEventListener(SDK.NetworkManager.Events.ResponseReceived, this._onResponseReceived, this),
-        networkManager.addEventListener(SDK.NetworkManager.Events.RequestFinished, this._onRequestFinished, this),
-      ]);
-    }
-
-    var securityModel = Security.SecurityModel.fromTarget(target);
-    if (securityModel) {
-      listeners = listeners.concat([securityModel.addEventListener(
-          Security.SecurityModel.Events.SecurityStateChanged, this._onSecurityStateChanged, this)]);
-    }
-
-    this._target = target;
-    this._eventListeners.set(target, listeners);
+    if (resourceTreeModel.isInterstitialShowing())
+      this._onInterstitialShown();
   }
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!Security.SecurityModel} securityModel
    */
-  targetRemoved(target) {
-    if (this._target !== target)
+  modelRemoved(securityModel) {
+    if (this._securityModel !== securityModel)
       return;
 
-    delete this._target;
-
-    Common.EventTarget.removeEventListeners(this._eventListeners.get(target));
-    this._eventListeners.delete(target);
+    delete this._securityModel;
+    Common.EventTarget.removeEventListeners(this._eventListeners);
   }
 
   /**
@@ -347,11 +331,14 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
     // explanations to reflect the new counts.
     this._mainView.refreshExplanations();
 
-    if (request) {
-      var origin = Common.ParsedURL.extractOrigin(request.url());
-      this._sidebarTree.setMainOrigin(origin);
+    // If we could not find a matching request (as in the case of clicking
+    // through an interstitial, see https://crbug.com/669309), set the origin
+    // based upon the url data from the MainFrameNavigated event itself.
+    let origin = Common.ParsedURL.extractOrigin(request ? request.url() : frame.url);
+    this._sidebarTree.setMainOrigin(origin);
+
+    if (request)
       this._processRequest(request);
-    }
   }
 
   _onInterstitialShown() {
@@ -704,7 +691,8 @@ Security.SecurityMainView = class extends UI.VBox {
       return;
 
     if (this._insecureContentStatus &&
-        (this._insecureContentStatus.ranMixedContent || this._insecureContentStatus.displayedMixedContent)) {
+        (this._insecureContentStatus.ranMixedContent || this._insecureContentStatus.displayedMixedContent ||
+         this._insecureContentStatus.containedMixedForm)) {
       if (this._insecureContentStatus.ranMixedContent) {
         this._addMixedContentExplanation(
             this._securityExplanationsMain, this._insecureContentStatus.ranInsecureContentStyle,
@@ -713,6 +701,13 @@ Security.SecurityMainView = class extends UI.VBox {
                 'You have recently allowed non-secure content (such as scripts or iframes) to run on this site.'),
             Network.NetworkLogView.MixedContentFilterValues.BlockOverridden,
             showBlockOverriddenMixedContentInNetworkPanel);
+      }
+      if (this._insecureContentStatus.containedMixedForm) {
+        this._addMixedFormExplanation(
+            // TODO(elawrence): Replace |displayedInsecureContentStyle| with |containedMixedFormStyle|. https://crbug.com/705003
+            this._securityExplanationsMain, this._insecureContentStatus.displayedInsecureContentStyle,
+            Common.UIString('Non-secure Form'),
+            Common.UIString('The page includes a form with a non-secure "action" attribute.'));
       }
       if (this._insecureContentStatus.displayedMixedContent) {
         this._addMixedContentExplanation(
@@ -798,6 +793,19 @@ Security.SecurityMainView = class extends UI.VBox {
 
     requestsAnchor.href = '';
     requestsAnchor.addEventListener('click', networkFilterFn);
+  }
+
+  /**
+   * @param {!Element} parent
+   * @param {!Protocol.Security.SecurityState} securityState
+   * @param {string} summary
+   * @param {string} description
+   */
+  _addMixedFormExplanation(parent, securityState, summary, description) {
+    var mixedContentExplanation = /** @type {!Protocol.Security.SecurityStateExplanation} */ (
+        {'securityState': securityState, 'summary': summary, 'description': description});
+
+    this._addExplanation(parent, mixedContentExplanation);
   }
 
   _addContentWithCertErrorsExplanations() {

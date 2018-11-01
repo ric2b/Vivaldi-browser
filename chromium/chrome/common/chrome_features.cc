@@ -4,6 +4,8 @@
 
 #include "chrome/common/chrome_features.h"
 
+#include "base/command_line.h"
+#include "chrome/common/chrome_switches.h"
 #include "extensions/features/features.h"
 #include "ppapi/features/features.h"
 
@@ -21,6 +23,10 @@ const base::Feature kAllowAutoplayUnmutedInWebappManifestScope{
 // Enables Javascript execution via AppleScript.
 const base::Feature kAppleScriptExecuteJavaScript{
     "AppleScriptExecuteJavaScript", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Use the Toolkit-Views Task Manager window.
+const base::Feature kViewsTaskManager{"ViewsTaskManager",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
@@ -65,6 +71,17 @@ const base::Feature kBackspaceGoesBackFeature {
 const base::Feature kBlockPromptsIfDismissedOften{
     "BlockPromptsIfDismissedOften", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables or disables whether permission prompts are automatically blocked
+// after the user has ignored them too many times.
+const base::Feature kBlockPromptsIfIgnoredOften{
+    "BlockPromptsIfIgnoredOften", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(OS_MACOSX)
+// Enables the new bookmark app system (e.g. Add To Applications on Mac).
+const base::Feature kBookmarkApps{"BookmarkAppsMac",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // Fixes for browser hang bugs are deployed in a field trial in order to measure
 // their impact. See crbug.com/478209.
 const base::Feature kBrowserHangFixesExperiment{
@@ -74,7 +91,20 @@ const base::Feature kBrowserHangFixesExperiment{
 // Enables or disables the browser's touch bar.
 const base::Feature kBrowserTouchBar{"BrowserTouchBar",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables or disables keyboard focus for the tab strip.
+const base::Feature kTabStripKeyboardFocus{"TabStripKeyboardFocus",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
+
+// Whether to trigger app banner installability checks on page load.
+const base::Feature kCheckInstallabilityForBannerOnLoad{
+    "CheckInstallabilityForBannerOnLoad", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(OS_WIN)
+const base::Feature kCleanupToolUI{"CleanupToolUI",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 #if defined(OS_ANDROID)
 // Experiment to make Geolocation permissions in the omnibox and the default
@@ -83,15 +113,17 @@ const base::Feature kConsistentOmniboxGeolocation{
     "ConsistentOmniboxGeolocation", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_ANDROID)
+// Experiment to extract structured metadata for app indexing.
+const base::Feature kCopylessPaste{"CopylessPaste",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(OS_WIN)
 // Enables or disables desktop ios promotion, which shows a promotion to the
 // user promoting Chrome for iOS.
 const base::Feature kDesktopIOSPromotion{"DesktopIOSPromotion",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Disables the AutoImport feature on first run. See crbug.com/555550
-const base::Feature kDisableFirstRunAutoImportWin{
-    "DisableFirstRunAutoImport", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 // Experiment to display a toggle allowing users to opt-out of persisting a
@@ -163,7 +195,7 @@ const base::Feature kMaterialDesignHistory{"MaterialDesignHistory",
 // Enables or disables the Material Design version of chrome://settings.
 // Also affects chrome://help.
 const base::Feature kMaterialDesignSettings{"MaterialDesignSettings",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 // Enables media content bitstream remoting, an optimization that can activate
@@ -187,10 +219,15 @@ const base::Feature kModuleDatabase{"ModuleDatabase",
 
 // Enables the use of native notification centers instead of using the Message
 // Center for displaying the toasts.
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
 #if defined(OS_MACOSX)
 const base::Feature kNativeNotifications{"NativeNotifications",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
-#endif  // defined(OS_MACOSX)
+#else
+const base::Feature kNativeNotifications{"NativeNotifications",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+#endif  // BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
 
 // If enabled, the list of content suggestions on the New Tab page will contain
 // pages that the user downloaded for later use.
@@ -201,12 +238,12 @@ const base::Feature kOfflinePageDownloadSuggestionsFeature{
 const base::Feature kPermissionsBlacklist{
     "PermissionsBlacklist", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables postscript generation instead of emf when printing to postscript
+// Enables PostScript generation instead of EMF when printing to PostScript
 // capable printers.
 #if defined(OS_WIN)
 const base::Feature kPostScriptPrinting{"PostScriptPrinting",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // OS_WIN
+#endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Prefer HTML content by hiding Flash from the list of plugins.
@@ -295,5 +332,15 @@ const base::Feature kEHVInputOnImeMenu{"EmojiHandwritingVoiceInput",
 const base::Feature kCrosCompUpdates{"CrosCompUpdates",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
+
+bool PrefServiceEnabled() {
+  return base::FeatureList::IsEnabled(features::kPrefService) ||
+#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+             switches::kMusConfig) == switches::kMash;
+#else
+         false;
+#endif
+}
 
 }  // namespace features

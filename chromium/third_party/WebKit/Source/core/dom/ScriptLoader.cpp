@@ -26,168 +26,141 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
+#include "core/dom/ClassicScript.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentParserTiming.h"
 #include "core/dom/IgnoreDestructiveWriteCountIncrementer.h"
-#include "core/dom/ScriptLoaderClient.h"
+#include "core/dom/Script.h"
+#include "core/dom/ScriptElementBase.h"
 #include "core/dom/ScriptRunner.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/dom/Text.h"
 #include "core/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/SubresourceIntegrity.h"
-#include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/CrossOriginAttribute.h"
-#include "core/html/HTMLScriptElement.h"
 #include "core/html/imports/HTMLImport.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/inspector/ConsoleMessage.h"
-#include "core/svg/SVGScriptElement.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
-#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/text/StringBuilder.h"
+#include "platform/wtf/text/StringHash.h"
 #include "public/platform/WebCachePolicy.h"
-#include "wtf/StdLibExtras.h"
-#include "wtf/text/StringBuilder.h"
-#include "wtf/text/StringHash.h"
 
 namespace blink {
 
-ScriptLoader::ScriptLoader(Element* element,
-                           bool parserInserted,
-                           bool alreadyStarted,
-                           bool createdDuringDocumentWrite)
-    : m_element(element),
-      m_startLineNumber(WTF::OrdinalNumber::beforeFirst()),
-      m_haveFiredLoad(false),
-      m_willBeParserExecuted(false),
-      m_willExecuteWhenDocumentFinishedParsing(false),
-      m_createdDuringDocumentWrite(createdDuringDocumentWrite),
-      m_asyncExecType(ScriptRunner::None),
-      m_documentWriteIntervention(
-          DocumentWriteIntervention::DocumentWriteInterventionNone) {
-  DCHECK(m_element);
-
+ScriptLoader::ScriptLoader(ScriptElementBase* element,
+                           bool parser_inserted,
+                           bool already_started,
+                           bool created_during_document_write)
+    : element_(element),
+      start_line_number_(WTF::OrdinalNumber::BeforeFirst()),
+      have_fired_load_(false),
+      will_be_parser_executed_(false),
+      will_execute_when_document_finished_parsing_(false),
+      created_during_document_write_(created_during_document_write),
+      async_exec_type_(ScriptRunner::kNone),
+      document_write_intervention_(
+          DocumentWriteIntervention::kDocumentWriteInterventionNone) {
   // https://html.spec.whatwg.org/#already-started
   // "The cloning steps for script elements must set the "already started"
   //  flag on the copy if it is set on the element being cloned."
   // TODO(hiroshige): Cloning is implemented together with
   // {HTML,SVG}ScriptElement::cloneElementWithoutAttributesAndChildren().
   // Clean up these later.
-  if (alreadyStarted)
-    m_alreadyStarted = true;
+  if (already_started)
+    already_started_ = true;
 
-  if (parserInserted) {
+  if (parser_inserted) {
     // https://html.spec.whatwg.org/#parser-inserted
     // "It is set by the HTML parser and the XML parser
     //  on script elements they insert"
-    m_parserInserted = true;
+    parser_inserted_ = true;
 
     // https://html.spec.whatwg.org/#non-blocking
     // "It is unset by the HTML parser and the XML parser
     //  on script elements they insert."
-    m_nonBlocking = false;
+    non_blocking_ = false;
   }
 
-  if (parserInserted && element->document().scriptableDocumentParser() &&
-      !element->document().isInDocumentWrite())
-    m_startLineNumber =
-        element->document().scriptableDocumentParser()->lineNumber();
+  if (parser_inserted &&
+      element_->GetDocument().GetScriptableDocumentParser() &&
+      !element_->GetDocument().IsInDocumentWrite()) {
+    start_line_number_ =
+        element_->GetDocument().GetScriptableDocumentParser()->LineNumber();
+  }
 }
 
 ScriptLoader::~ScriptLoader() {}
 
 DEFINE_TRACE(ScriptLoader) {
-  visitor->trace(m_element);
-  visitor->trace(m_resource);
-  visitor->trace(m_pendingScript);
-  PendingScriptClient::trace(visitor);
+  visitor->Trace(element_);
+  visitor->Trace(resource_);
+  visitor->Trace(pending_script_);
+  PendingScriptClient::Trace(visitor);
 }
 
-void ScriptLoader::setFetchDocWrittenScriptDeferIdle() {
-  DCHECK(!m_createdDuringDocumentWrite);
-  m_documentWriteIntervention =
-      DocumentWriteIntervention::FetchDocWrittenScriptDeferIdle;
+void ScriptLoader::SetFetchDocWrittenScriptDeferIdle() {
+  DCHECK(!created_during_document_write_);
+  document_write_intervention_ =
+      DocumentWriteIntervention::kFetchDocWrittenScriptDeferIdle;
 }
 
-void ScriptLoader::didNotifySubtreeInsertionsToDocument() {
-  if (!m_parserInserted)
-    prepareScript();  // FIXME: Provide a real starting line number here.
+void ScriptLoader::DidNotifySubtreeInsertionsToDocument() {
+  if (!parser_inserted_)
+    PrepareScript();  // FIXME: Provide a real starting line number here.
 }
 
-void ScriptLoader::childrenChanged() {
-  if (!m_parserInserted && m_element->isConnected())
-    prepareScript();  // FIXME: Provide a real starting line number here.
+void ScriptLoader::ChildrenChanged() {
+  if (!parser_inserted_ && element_->IsConnected())
+    PrepareScript();  // FIXME: Provide a real starting line number here.
 }
 
-void ScriptLoader::handleSourceAttribute(const String& sourceUrl) {
-  if (ignoresLoadRequest() || sourceUrl.isEmpty())
+void ScriptLoader::HandleSourceAttribute(const String& source_url) {
+  if (IgnoresLoadRequest() || source_url.IsEmpty())
     return;
 
-  prepareScript();  // FIXME: Provide a real starting line number here.
+  PrepareScript();  // FIXME: Provide a real starting line number here.
 }
 
-void ScriptLoader::handleAsyncAttribute() {
+void ScriptLoader::HandleAsyncAttribute() {
   // https://html.spec.whatwg.org/#non-blocking
   // "In addition, whenever a script element whose "non-blocking" flag is set
   //  has an async content attribute added, the element's "non-blocking" flag
   //  must be unset."
-  m_nonBlocking = false;
+  non_blocking_ = false;
 }
 
-void ScriptLoader::detachPendingScript() {
-  if (!m_pendingScript)
+void ScriptLoader::DetachPendingScript() {
+  if (!pending_script_)
     return;
-  m_pendingScript->dispose();
-  m_pendingScript = nullptr;
+  pending_script_->Dispose();
+  pending_script_ = nullptr;
 }
 
-static bool isLegacySupportedJavaScriptLanguage(const String& language) {
-  // Mozilla 1.8 accepts javascript1.0 - javascript1.7, but WinIE 7 accepts only
-  // javascript1.1 - javascript1.3.
-  // Mozilla 1.8 and WinIE 7 both accept javascript and livescript.
-  // WinIE 7 accepts ecmascript and jscript, but Mozilla 1.8 doesn't.
-  // Neither Mozilla 1.8 nor WinIE 7 accept leading or trailing whitespace.
-  // We want to accept all the values that either of these browsers accept, but
-  // not other values.
-
-  // FIXME: This function is not HTML5 compliant. These belong in the MIME
-  // registry as "text/javascript<version>" entries.
-  return equalIgnoringASCIICase(language, "javascript") ||
-         equalIgnoringASCIICase(language, "javascript1.0") ||
-         equalIgnoringASCIICase(language, "javascript1.1") ||
-         equalIgnoringASCIICase(language, "javascript1.2") ||
-         equalIgnoringASCIICase(language, "javascript1.3") ||
-         equalIgnoringASCIICase(language, "javascript1.4") ||
-         equalIgnoringASCIICase(language, "javascript1.5") ||
-         equalIgnoringASCIICase(language, "javascript1.6") ||
-         equalIgnoringASCIICase(language, "javascript1.7") ||
-         equalIgnoringASCIICase(language, "livescript") ||
-         equalIgnoringASCIICase(language, "ecmascript") ||
-         equalIgnoringASCIICase(language, "jscript");
+void ScriptLoader::DispatchErrorEvent() {
+  element_->DispatchErrorEvent();
 }
 
-void ScriptLoader::dispatchErrorEvent() {
-  m_element->dispatchEvent(Event::create(EventTypeNames::error));
+void ScriptLoader::DispatchLoadEvent() {
+  element_->DispatchLoadEvent();
+  SetHaveFiredLoadEvent(true);
 }
 
-void ScriptLoader::dispatchLoadEvent() {
-  if (ScriptLoaderClient* client = this->client())
-    client->dispatchLoadEvent();
-  setHaveFiredLoadEvent(true);
-}
-
-bool ScriptLoader::isValidScriptTypeAndLanguage(
+bool ScriptLoader::IsValidScriptTypeAndLanguage(
     const String& type,
     const String& language,
-    LegacyTypeSupport supportLegacyTypes) {
+    LegacyTypeSupport support_legacy_types) {
   // FIXME: isLegacySupportedJavaScriptLanguage() is not valid HTML5. It is used
   // here to maintain backwards compatibility with existing layout tests. The
   // specific violations are:
@@ -195,104 +168,104 @@ bool ScriptLoader::isValidScriptTypeAndLanguage(
   //   text/javascript.
   // - Allowing a different set of languages for language= and type=. language=
   //   supports Javascript 1.1 and 1.4-1.6, but type= does not.
-  if (type.isEmpty()) {
-    return language.isEmpty() ||  // assume text/javascript.
-           MIMETypeRegistry::isSupportedJavaScriptMIMEType("text/" +
+  if (type.IsEmpty()) {
+    return language.IsEmpty() ||  // assume text/javascript.
+           MIMETypeRegistry::IsSupportedJavaScriptMIMEType("text/" +
                                                            language) ||
-           isLegacySupportedJavaScriptLanguage(language);
+           MIMETypeRegistry::IsLegacySupportedJavaScriptLanguage(language);
   } else if (RuntimeEnabledFeatures::moduleScriptsEnabled() &&
              type == "module") {
     return true;
-  } else if (MIMETypeRegistry::isSupportedJavaScriptMIMEType(
-                 type.stripWhiteSpace()) ||
-             (supportLegacyTypes == AllowLegacyTypeInTypeAttribute &&
-              isLegacySupportedJavaScriptLanguage(type))) {
+  } else if (MIMETypeRegistry::IsSupportedJavaScriptMIMEType(
+                 type.StripWhiteSpace()) ||
+             (support_legacy_types == kAllowLegacyTypeInTypeAttribute &&
+              MIMETypeRegistry::IsLegacySupportedJavaScriptLanguage(type))) {
     return true;
   }
 
   return false;
 }
 
-bool ScriptLoader::isScriptTypeSupported(
-    LegacyTypeSupport supportLegacyTypes) const {
-  return isValidScriptTypeAndLanguage(client()->typeAttributeValue(),
-                                      client()->languageAttributeValue(),
-                                      supportLegacyTypes);
+bool ScriptLoader::IsScriptTypeSupported(
+    LegacyTypeSupport support_legacy_types) const {
+  return IsValidScriptTypeAndLanguage(element_->TypeAttributeValue(),
+                                      element_->LanguageAttributeValue(),
+                                      support_legacy_types);
 }
 
 // https://html.spec.whatwg.org/#prepare-a-script
-bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
-                                 LegacyTypeSupport supportLegacyTypes) {
+bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
+                                 LegacyTypeSupport support_legacy_types) {
   // 1. "If the script element is marked as having "already started", then
   //     abort these steps at this point. The script is not executed."
-  if (m_alreadyStarted)
+  if (already_started_)
     return false;
-
-  ScriptLoaderClient* client = this->client();
 
   // 2. "If the element has its "parser-inserted" flag set, then
   //     set was-parser-inserted to true and unset the element's
   //     "parser-inserted" flag.
   //     Otherwise, set was-parser-inserted to false."
-  bool wasParserInserted;
-  if (m_parserInserted) {
-    wasParserInserted = true;
-    m_parserInserted = false;
+  bool was_parser_inserted;
+  if (parser_inserted_) {
+    was_parser_inserted = true;
+    parser_inserted_ = false;
   } else {
-    wasParserInserted = false;
+    was_parser_inserted = false;
   }
 
   // 3. "If was-parser-inserted is true and the element does not have an
   //     async attribute, then set the element's "non-blocking" flag to true."
-  if (wasParserInserted && !client->asyncAttributeValue())
-    m_nonBlocking = true;
+  if (was_parser_inserted && !element_->AsyncAttributeValue())
+    non_blocking_ = true;
 
   // 4. "If the element has no src attribute, and its child nodes, if any,
   //     consist only of comment nodes and empty Text nodes,
   //     then abort these steps at this point. The script is not executed."
   // FIXME: HTML5 spec says we should check that all children are either
   // comments or empty text nodes.
-  if (!client->hasSourceAttribute() && !m_element->hasChildren())
+  if (!element_->HasSourceAttribute() && !element_->HasChildren())
     return false;
 
   // 5. "If the element is not connected, then abort these steps.
   //     The script is not executed."
-  if (!m_element->isConnected())
+  if (!element_->IsConnected())
     return false;
 
   // 6.
   // TODO(hiroshige): Annotate and/or cleanup this step.
-  if (!isScriptTypeSupported(supportLegacyTypes))
+  if (!IsScriptTypeSupported(support_legacy_types))
     return false;
 
   // 7. "If was-parser-inserted is true,
   //     then flag the element as "parser-inserted" again,
   //     and set the element's "non-blocking" flag to false."
-  if (wasParserInserted) {
-    m_parserInserted = true;
-    m_nonBlocking = false;
+  if (was_parser_inserted) {
+    parser_inserted_ = true;
+    non_blocking_ = false;
   }
 
   // 8. "Set the element's "already started" flag."
-  m_alreadyStarted = true;
+  already_started_ = true;
 
   // 9. "If the element is flagged as "parser-inserted", but the element's
   // node document is not the Document of the parser that created the element,
   // then abort these steps."
   // FIXME: If script is parser inserted, verify it's still in the original
   // document.
-  Document& elementDocument = m_element->document();
-  Document* contextDocument = elementDocument.contextDocument();
-  if (!contextDocument)
+  Document& element_document = element_->GetDocument();
+  Document* context_document = element_document.ContextDocument();
+  if (!element_document.ExecutingFrame())
+    return false;
+  if (!context_document || !context_document->ExecutingFrame())
     return false;
 
   // 10. "If scripting is disabled for the script element, then abort these
   //      steps at this point. The script is not executed."
-  if (!contextDocument->allowExecutingScripts(m_element))
+  if (!context_document->CanExecuteScripts(kAboutToExecuteScript))
     return false;
 
   // 13.
-  if (!isScriptForEventSupported())
+  if (!IsScriptForEventSupported())
     return false;
 
   // 14. "If the script element has a charset attribute,
@@ -303,23 +276,23 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   //      be the same as the encoding of the script element's node document."
   // TODO(hiroshige): Should we handle failure in getting an encoding?
   String encoding;
-  if (!client->charsetAttributeValue().isEmpty())
-    encoding = client->charsetAttributeValue();
+  if (!element_->CharsetAttributeValue().IsEmpty())
+    encoding = element_->CharsetAttributeValue();
   else
-    encoding = elementDocument.characterSet();
+    encoding = element_document.characterSet();
 
   // Steps 15--20 are handled in fetchScript().
 
   // 21. "If the element has a src content attribute, run these substeps:"
-  if (client->hasSourceAttribute()) {
-    FetchRequest::DeferOption defer = FetchRequest::NoDefer;
-    if (!m_parserInserted || client->asyncAttributeValue() ||
-        client->deferAttributeValue())
-      defer = FetchRequest::LazyLoad;
-    if (m_documentWriteIntervention ==
-        DocumentWriteIntervention::FetchDocWrittenScriptDeferIdle)
-      defer = FetchRequest::IdleLoad;
-    if (!fetchScript(client->sourceAttributeValue(), encoding, defer))
+  if (element_->HasSourceAttribute()) {
+    FetchParameters::DeferOption defer = FetchParameters::kNoDefer;
+    if (!parser_inserted_ || element_->AsyncAttributeValue() ||
+        element_->DeferAttributeValue())
+      defer = FetchParameters::kLazyLoad;
+    if (document_write_intervention_ ==
+        DocumentWriteIntervention::kFetchDocWrittenScriptDeferIdle)
+      defer = FetchParameters::kIdleLoad;
+    if (!FetchScript(element_->SourceAttributeValue(), encoding, defer))
       return false;
   }
 
@@ -349,10 +322,10 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   // Since the asynchronous, low priority fetch for doc.written blocked
   // script is not for execution, return early from here. Watch for its
   // completion to be able to remove it from the memory cache.
-  if (m_documentWriteIntervention ==
-      DocumentWriteIntervention::FetchDocWrittenScriptDeferIdle) {
-    m_pendingScript = PendingScript::create(m_element, m_resource.get());
-    m_pendingScript->watchForLoad(this);
+  if (document_write_intervention_ ==
+      DocumentWriteIntervention::kFetchDocWrittenScriptDeferIdle) {
+    pending_script_ = CreatePendingScript();
+    pending_script_->WatchForLoad(this);
     return true;
   }
 
@@ -372,13 +345,13 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   //    and the element has been flagged as "parser-inserted",
   //    and the element does not have an async attribute"
   // TODO(hiroshige): Check the script's type and implement "module" case.
-  if (client->hasSourceAttribute() && client->deferAttributeValue() &&
-      m_parserInserted && !client->asyncAttributeValue()) {
+  if (element_->HasSourceAttribute() && element_->DeferAttributeValue() &&
+      parser_inserted_ && !element_->AsyncAttributeValue()) {
     // This clause is implemented by the caller-side of prepareScript():
     // - HTMLParserScriptRunner::requestDeferredScript(), and
     // - TODO(hiroshige): Investigate XMLDocumentParser::endElementNs()
-    m_willExecuteWhenDocumentFinishedParsing = true;
-    m_willBeParserExecuted = true;
+    will_execute_when_document_finished_parsing_ = true;
+    will_be_parser_executed_ = true;
 
     return true;
   }
@@ -389,12 +362,12 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   //    and the element has been flagged as "parser-inserted",
   //    and the element does not have an async attribute"
   // TODO(hiroshige): Check the script's type.
-  if (client->hasSourceAttribute() && m_parserInserted &&
-      !client->asyncAttributeValue()) {
+  if (element_->HasSourceAttribute() && parser_inserted_ &&
+      !element_->AsyncAttributeValue()) {
     // This clause is implemented by the caller-side of prepareScript():
     // - HTMLParserScriptRunner::requestParsingBlockingScript()
     // - TODO(hiroshige): Investigate XMLDocumentParser::endElementNs()
-    m_willBeParserExecuted = true;
+    will_be_parser_executed_ = true;
 
     return true;
   }
@@ -413,15 +386,15 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   // Part of the condition check is done in
   // HTMLParserScriptRunner::processScriptElementInternal().
   // TODO(hiroshige): Clean up the split condition check.
-  if (!client->hasSourceAttribute() && m_parserInserted &&
-      !elementDocument.isScriptExecutionReady()) {
+  if (!element_->HasSourceAttribute() && parser_inserted_ &&
+      !element_document.IsScriptExecutionReady()) {
     // The former part of this clause is
     // implemented by the caller-side of prepareScript():
     // - HTMLParserScriptRunner::requestParsingBlockingScript()
     // - TODO(hiroshige): Investigate XMLDocumentParser::endElementNs()
-    m_willBeParserExecuted = true;
+    will_be_parser_executed_ = true;
     // "Set the element's "ready to be parser-executed" flag."
-    m_readyToBeParserExecuted = true;
+    ready_to_be_parser_executed_ = true;
 
     return true;
   }
@@ -432,19 +405,19 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   //    and the element does not have an async attribute,
   //    and the element does not have the "non-blocking" flag set"
   // TODO(hiroshige): Check the script's type and implement "module" case.
-  if (client->hasSourceAttribute() && !client->asyncAttributeValue() &&
-      !m_nonBlocking) {
+  if (element_->HasSourceAttribute() && !element_->AsyncAttributeValue() &&
+      !non_blocking_) {
     // "Add the element to the end of the list of scripts that will execute
     // in order as soon as possible associated with the node document of the
     // script element at the time the prepare a script algorithm started."
-    m_pendingScript = PendingScript::create(m_element, m_resource.get());
-    m_asyncExecType = ScriptRunner::InOrder;
+    pending_script_ = CreatePendingScript();
+    async_exec_type_ = ScriptRunner::kInOrder;
     // TODO(hiroshige): Here |contextDocument| is used as "node document"
     // while Step 14 uses |elementDocument| as "node document". Fix this.
-    contextDocument->scriptRunner()->queueScriptForExecution(this,
-                                                             m_asyncExecType);
+    context_document->GetScriptRunner()->QueueScriptForExecution(
+        this, async_exec_type_);
     // Note that watchForLoad can immediately call pendingScriptFinished.
-    m_pendingScript->watchForLoad(this);
+    pending_script_->WatchForLoad(this);
     // The part "When the script is ready..." is implemented in
     // ScriptRunner::notifyScriptReady().
     // TODO(hiroshige): Annotate it.
@@ -455,26 +428,20 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   // 4th Clause:
   // - "If the script's type is "classic", and the element has a src attribute"
   // TODO(hiroshige): Check the script's type and implement "module" case.
-  if (client->hasSourceAttribute()) {
+  if (element_->HasSourceAttribute()) {
     // "The element must be added to the set of scripts that will execute
     //  as soon as possible of the node document of the script element at the
     //  time the prepare a script algorithm started."
-    m_pendingScript = PendingScript::create(m_element, m_resource.get());
-    m_asyncExecType = ScriptRunner::Async;
-    LocalFrame* frame = m_element->document().frame();
-    if (frame) {
-      ScriptState* scriptState = ScriptState::forMainWorld(frame);
-      if (scriptState)
-        ScriptStreamer::startStreaming(
-            m_pendingScript.get(), ScriptStreamer::Async, frame->settings(),
-            scriptState, frame->frameScheduler()->loadingTaskRunner());
-    }
+    pending_script_ = CreatePendingScript();
+    async_exec_type_ = ScriptRunner::kAsync;
+    pending_script_->StartStreamingIfPossible(&element_->GetDocument(),
+                                              ScriptStreamer::kAsync);
     // TODO(hiroshige): Here |contextDocument| is used as "node document"
     // while Step 14 uses |elementDocument| as "node document". Fix this.
-    contextDocument->scriptRunner()->queueScriptForExecution(this,
-                                                             m_asyncExecType);
+    context_document->GetScriptRunner()->QueueScriptForExecution(
+        this, async_exec_type_);
     // Note that watchForLoad can immediately call pendingScriptFinished.
-    m_pendingScript->watchForLoad(this);
+    pending_script_->WatchForLoad(this);
     // The part "When the script is ready..." is implemented in
     // ScriptRunner::notifyScriptReady().
     // TODO(hiroshige): Annotate it.
@@ -494,15 +461,16 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
   // and the element doesn't have a src attribute.
 
   // Reset line numbering for nested writes.
-  TextPosition position = elementDocument.isInDocumentWrite()
+  TextPosition position = element_document.IsInDocumentWrite()
                               ? TextPosition()
-                              : scriptStartPosition;
-  KURL scriptURL = (!elementDocument.isInDocumentWrite() && m_parserInserted)
-                       ? elementDocument.url()
-                       : KURL();
+                              : script_start_position;
+  KURL script_url = (!element_document.IsInDocumentWrite() && parser_inserted_)
+                        ? element_document.Url()
+                        : KURL();
 
-  if (!executeScript(ScriptSourceCode(scriptContent(), scriptURL, position))) {
-    dispatchErrorEvent();
+  if (!ExecuteScript(ClassicScript::Create(
+          ScriptSourceCode(ScriptContent(), script_url, position)))) {
+    DispatchErrorEvent();
     return false;
   }
 
@@ -510,27 +478,33 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
 }
 
 // Steps 15--21 of https://html.spec.whatwg.org/#prepare-a-script
-bool ScriptLoader::fetchScript(const String& sourceUrl,
+bool ScriptLoader::FetchScript(const String& source_url,
                                const String& encoding,
-                               FetchRequest::DeferOption defer) {
-  DCHECK(m_element);
-
-  Document* elementDocument = &(m_element->document());
-  if (!m_element->isConnected() || m_element->document() != elementDocument)
+                               FetchParameters::DeferOption defer) {
+  Document* element_document = &(element_->GetDocument());
+  if (!element_->IsConnected() || element_->GetDocument() != element_document)
     return false;
 
-  DCHECK(!m_resource);
+  DCHECK(!resource_);
   // 21. "If the element has a src content attribute, run these substeps:"
-  if (!stripLeadingAndTrailingHTMLSpaces(sourceUrl).isEmpty()) {
+  if (!StripLeadingAndTrailingHTMLSpaces(source_url).IsEmpty()) {
     // 21.4. "Parse src relative to the element's node document."
-    FetchRequest request(
-        ResourceRequest(elementDocument->completeURL(sourceUrl)),
-        m_element->localName());
+    ResourceRequest resource_request(element_document->CompleteURL(source_url));
+
+    // [Intervention]
+    if (document_write_intervention_ ==
+        DocumentWriteIntervention::kFetchDocWrittenScriptDeferIdle) {
+      resource_request.SetHTTPHeaderField(
+          "Intervention",
+          "<https://www.chromestatus.com/feature/5718547946799104>");
+    }
+
+    FetchParameters params(resource_request, element_->InitiatorName());
 
     // 15. "Let CORS setting be the current state of the element's
     //      crossorigin content attribute."
-    CrossOriginAttributeValue crossOrigin = crossOriginAttributeValue(
-        m_element->fastGetAttribute(HTMLNames::crossoriginAttr));
+    CrossOriginAttributeValue cross_origin =
+        GetCrossOriginAttributeValue(element_->CrossOriginAttributeValue());
 
     // 16. "Let module script credentials mode be determined by switching
     //      on CORS setting:"
@@ -538,44 +512,36 @@ bool ScriptLoader::fetchScript(const String& sourceUrl,
 
     // 21.6, "classic": "Fetch a classic script given ... CORS setting
     //                   ... and encoding."
-    if (crossOrigin != CrossOriginAttributeNotSet)
-      request.setCrossOriginAccessControl(elementDocument->getSecurityOrigin(),
-                                          crossOrigin);
+    if (cross_origin != kCrossOriginAttributeNotSet) {
+      params.SetCrossOriginAccessControl(element_document->GetSecurityOrigin(),
+                                         cross_origin);
+    }
 
-    request.setCharset(encoding);
+    params.SetCharset(encoding);
 
     // 17. "If the script element has a nonce attribute,
     //      then let cryptographic nonce be that attribute's value.
     //      Otherwise, let cryptographic nonce be the empty string."
-    if (ContentSecurityPolicy::isNonceableElement(m_element.get()))
-      request.setContentSecurityPolicyNonce(client()->nonce());
+    if (element_->IsNonceableElement())
+      params.SetContentSecurityPolicyNonce(element_->nonce());
 
     // 19. "Let parser state be "parser-inserted"
     //      if the script element has been flagged as "parser-inserted",
     //      and "not parser-inserted" otherwise."
-    request.setParserDisposition(isParserInserted() ? ParserInserted
-                                                    : NotParserInserted);
+    params.SetParserDisposition(IsParserInserted() ? kParserInserted
+                                                   : kNotParserInserted);
 
-    request.setDefer(defer);
+    params.SetDefer(defer);
 
     // 18. "If the script element has an integrity attribute,
     //      then let integrity metadata be that attribute's value.
     //      Otherwise, let integrity metadata be the empty string."
-    String integrityAttr =
-        m_element->fastGetAttribute(HTMLNames::integrityAttr);
-    if (!integrityAttr.isEmpty()) {
-      IntegrityMetadataSet metadataSet;
-      SubresourceIntegrity::parseIntegrityAttribute(integrityAttr, metadataSet,
-                                                    elementDocument);
-      request.setIntegrityMetadata(metadataSet);
-    }
-
-    // [Intervention]
-    if (m_documentWriteIntervention ==
-        DocumentWriteIntervention::FetchDocWrittenScriptDeferIdle) {
-      request.mutableResourceRequest().setHTTPHeaderField(
-          "Intervention",
-          "<https://www.chromestatus.com/feature/5718547946799104>");
+    String integrity_attr = element_->IntegrityAttributeValue();
+    if (!integrity_attr.IsEmpty()) {
+      IntegrityMetadataSet metadata_set;
+      SubresourceIntegrity::ParseIntegrityAttribute(
+          integrity_attr, metadata_set, element_document);
+      params.SetIntegrityMetadata(metadata_set);
     }
 
     // 21.6. "Switch on the script's type:"
@@ -583,7 +549,7 @@ bool ScriptLoader::fetchScript(const String& sourceUrl,
     // - "classic":
     //   "Fetch a classic script given url, settings, cryptographic nonce,
     //    integrity metadata, parser state, CORS setting, and encoding."
-    m_resource = ScriptResource::fetch(request, elementDocument->fetcher());
+    resource_ = ScriptResource::Fetch(params, element_document->Fetcher());
 
     // - "module":
     //   "Fetch a module script graph given url, settings, "script",
@@ -601,78 +567,48 @@ bool ScriptLoader::fetchScript(const String& sourceUrl,
     // depending on the conditions in Step 23 of "prepare a script".
 
     // 21.3. "Set the element's from an external file flag."
-    m_isExternalScript = true;
+    is_external_script_ = true;
   }
 
-  if (!m_resource) {
+  if (!resource_) {
     // 21.2. "If src is the empty string, queue a task to
     //        fire an event named error at the element, and abort these steps."
     // 21.5. "If the previous step failed, queue a task to
     //        fire an event named error at the element, and abort these steps."
     // TODO(hiroshige): Make this asynchronous.
-    dispatchErrorEvent();
+    DispatchErrorEvent();
     return false;
   }
 
   // [Intervention]
-  if (m_createdDuringDocumentWrite &&
-      m_resource->resourceRequest().getCachePolicy() ==
-          WebCachePolicy::ReturnCacheDataDontLoad) {
-    m_documentWriteIntervention =
-        DocumentWriteIntervention::DoNotFetchDocWrittenScript;
+  if (created_during_document_write_ &&
+      resource_->GetResourceRequest().GetCachePolicy() ==
+          WebCachePolicy::kReturnCacheDataDontLoad) {
+    document_write_intervention_ =
+        DocumentWriteIntervention::kDoNotFetchDocWrittenScript;
   }
 
   return true;
 }
 
-bool isHTMLScriptLoader(Element* element) {
-  DCHECK(element);
-  return isHTMLScriptElement(*element);
+PendingScript* ScriptLoader::CreatePendingScript() {
+  CHECK(resource_);
+  return PendingScript::Create(element_, resource_);
 }
 
-bool isSVGScriptLoader(Element* element) {
-  DCHECK(element);
-  return isSVGScriptElement(*element);
-}
-
-void ScriptLoader::logScriptMIMEType(LocalFrame* frame,
-                                     ScriptResource* resource,
-                                     const String& mimeType) {
-  if (MIMETypeRegistry::isSupportedJavaScriptMIMEType(mimeType))
-    return;
-  bool isText = mimeType.startsWith("text/", TextCaseASCIIInsensitive);
-  if (isText && isLegacySupportedJavaScriptLanguage(mimeType.substring(5)))
-    return;
-  bool isSameOrigin =
-      m_element->document().getSecurityOrigin()->canRequest(resource->url());
-  bool isApplication =
-      !isText && mimeType.startsWith("application/", TextCaseASCIIInsensitive);
-
-  UseCounter::Feature feature =
-      isSameOrigin
-          ? (isText ? UseCounter::SameOriginTextScript
-                    : isApplication ? UseCounter::SameOriginApplicationScript
-                                    : UseCounter::SameOriginOtherScript)
-          : (isText ? UseCounter::CrossOriginTextScript
-                    : isApplication ? UseCounter::CrossOriginApplicationScript
-                                    : UseCounter::CrossOriginOtherScript);
-
-  UseCounter::count(frame, feature);
-}
-
-bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode) {
-  double scriptExecStartTime = monotonicallyIncreasingTime();
-  bool result = doExecuteScript(sourceCode);
+bool ScriptLoader::ExecuteScript(const Script* script) {
+  double script_exec_start_time = MonotonicallyIncreasingTime();
+  bool result = DoExecuteScript(script);
 
   // NOTE: we do not check m_willBeParserExecuted here, since
   // m_willBeParserExecuted is false for inline scripts, and we want to
   // include inline script execution time as part of parser blocked script
   // execution time.
-  if (m_asyncExecType == ScriptRunner::None)
-    DocumentParserTiming::from(m_element->document())
-        .recordParserBlockedOnScriptExecutionDuration(
-            monotonicallyIncreasingTime() - scriptExecStartTime,
-            wasCreatedDuringDocumentWrite());
+  if (async_exec_type_ == ScriptRunner::kNone)
+    DocumentParserTiming::From(element_->GetDocument())
+        .RecordParserBlockedOnScriptExecutionDuration(
+            MonotonicallyIncreasingTime() - script_exec_start_time,
+            WasCreatedDuringDocumentWrite());
   return result;
 }
 
@@ -682,100 +618,54 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode) {
 // i.e. load/error events are dispatched by the caller.
 // Steps 3--7 are implemented here in doExecuteScript().
 // TODO(hiroshige): Move event dispatching code to doExecuteScript().
-bool ScriptLoader::doExecuteScript(const ScriptSourceCode& sourceCode) {
-  DCHECK(m_alreadyStarted);
+bool ScriptLoader::DoExecuteScript(const Script* script) {
+  DCHECK(already_started_);
 
-  if (sourceCode.isEmpty())
+  if (script->IsEmpty())
     return true;
 
-  Document* elementDocument = &(m_element->document());
-  Document* contextDocument = elementDocument->contextDocument();
-  if (!contextDocument)
+  Document* element_document = &(element_->GetDocument());
+  Document* context_document = element_document->ContextDocument();
+  if (!context_document)
     return true;
 
-  LocalFrame* frame = contextDocument->frame();
+  LocalFrame* frame = context_document->GetFrame();
   if (!frame)
     return true;
 
-  const ContentSecurityPolicy* csp = elementDocument->contentSecurityPolicy();
-  bool shouldBypassMainWorldCSP =
-      (frame->script().shouldBypassMainWorldCSP()) ||
-      csp->allowScriptWithHash(sourceCode.source(),
-                               ContentSecurityPolicy::InlineType::Block);
+  if (!is_external_script_) {
+    const ContentSecurityPolicy* csp =
+        element_document->GetContentSecurityPolicy();
+    bool should_bypass_main_world_csp =
+        (frame->GetScriptController().ShouldBypassMainWorldCSP()) ||
+        csp->AllowScriptWithHash(script->InlineSourceTextForCSP(),
+                                 ContentSecurityPolicy::InlineType::kBlock);
 
-  AtomicString nonce =
-      ContentSecurityPolicy::isNonceableElement(m_element.get())
-          ? client()->nonce()
-          : nullAtom;
-  if (!m_isExternalScript &&
-      (!shouldBypassMainWorldCSP &&
-       !csp->allowInlineScript(m_element, elementDocument->url(), nonce,
-                               m_startLineNumber, sourceCode.source()))) {
-    return false;
-  }
-
-  if (m_isExternalScript) {
-    ScriptResource* resource = sourceCode.resource();
-    CHECK_EQ(resource, m_resource);
-    CHECK(resource);
-    if (!ScriptResource::mimeTypeAllowedByNosniff(resource->response())) {
-      contextDocument->addConsoleMessage(ConsoleMessage::create(
-          SecurityMessageSource, ErrorMessageLevel,
-          "Refused to execute script from '" + resource->url().elidedString() +
-              "' because its MIME type ('" + resource->httpContentType() +
-              "') is not executable, and "
-              "strict MIME type checking is "
-              "enabled."));
+    AtomicString nonce =
+        element_->IsNonceableElement() ? element_->nonce() : g_null_atom;
+    if (!should_bypass_main_world_csp &&
+        !element_->AllowInlineScriptForCSP(nonce, start_line_number_,
+                                           script->InlineSourceTextForCSP())) {
       return false;
     }
+  }
 
-    String mimeType = resource->httpContentType();
-    if (mimeType.startsWith("image/") || mimeType == "text/csv" ||
-        mimeType.startsWith("audio/") || mimeType.startsWith("video/")) {
-      contextDocument->addConsoleMessage(ConsoleMessage::create(
-          SecurityMessageSource, ErrorMessageLevel,
-          "Refused to execute script from '" + resource->url().elidedString() +
-              "' because its MIME type ('" + mimeType +
-              "') is not executable."));
-      if (mimeType.startsWith("image/"))
-        UseCounter::count(frame, UseCounter::BlockedSniffingImageToScript);
-      else if (mimeType.startsWith("audio/"))
-        UseCounter::count(frame, UseCounter::BlockedSniffingAudioToScript);
-      else if (mimeType.startsWith("video/"))
-        UseCounter::count(frame, UseCounter::BlockedSniffingVideoToScript);
-      else if (mimeType == "text/csv")
-        UseCounter::count(frame, UseCounter::BlockedSniffingCSVToScript);
+  if (is_external_script_) {
+    if (!script->CheckMIMETypeBeforeRunScript(
+            context_document, element_->GetDocument().GetSecurityOrigin()))
       return false;
-    }
-
-    logScriptMIMEType(frame, resource, mimeType);
   }
 
-  AccessControlStatus accessControlStatus = NotSharableCrossOrigin;
-  if (!m_isExternalScript) {
-    accessControlStatus = SharableCrossOrigin;
-  } else if (sourceCode.resource()) {
-    if (sourceCode.resource()->response().wasFetchedViaServiceWorker()) {
-      if (sourceCode.resource()->response().serviceWorkerResponseType() ==
-          WebServiceWorkerResponseTypeOpaque)
-        accessControlStatus = OpaqueResource;
-      else
-        accessControlStatus = SharableCrossOrigin;
-    } else if (sourceCode.resource()->passesAccessControlCheck(
-                   m_element->document().getSecurityOrigin())) {
-      accessControlStatus = SharableCrossOrigin;
-    }
-  }
-
-  const bool isImportedScript = contextDocument != elementDocument;
+  const bool is_imported_script = context_document != element_document;
 
   // 3. "If the script is from an external file,
   //     or the script's type is module",
   //     then increment the ignore-destructive-writes counter of the
   //     script element's node document. Let neutralized doc be that Document."
   // TODO(hiroshige): Implement "module" case.
-  IgnoreDestructiveWriteCountIncrementer ignoreDestructiveWriteCountIncrementer(
-      m_isExternalScript || isImportedScript ? contextDocument : 0);
+  IgnoreDestructiveWriteCountIncrementer
+      ignore_destructive_write_count_incrementer(
+          is_external_script_ || is_imported_script ? context_document : 0);
 
   // 4. "Let old script element be the value to which the script element's
   //     node document's currentScript object was most recently set."
@@ -786,22 +676,18 @@ bool ScriptLoader::doExecuteScript(const ScriptSourceCode& sourceCode) {
   //    1. "If the script element's root is not a shadow root,
   //        then set the script element's node document's currentScript
   //        attribute to the script element. Otherwise, set it to null."
-  if (isHTMLScriptLoader(m_element) || isSVGScriptLoader(m_element))
-    contextDocument->pushCurrentScript(m_element);
+  context_document->PushCurrentScript(element_.Get());
 
   //    2. "Run the classic script given by the script's script."
   // Note: This is where the script is compiled and actually executed.
-  frame->script().executeScriptInMainWorld(sourceCode, accessControlStatus);
+  script->RunScript(frame, element_->GetDocument().GetSecurityOrigin());
 
   //    - "module":
   // TODO(hiroshige): Implement this.
 
   // 6. "Set the script element's node document's currentScript attribute
   //     to old script element."
-  if (isHTMLScriptLoader(m_element) || isSVGScriptLoader(m_element)) {
-    DCHECK(contextDocument->currentScript() == m_element);
-    contextDocument->popCurrentScript();
-  }
+  context_document->PopCurrentScript(element_.Get());
 
   return true;
 
@@ -810,115 +696,95 @@ bool ScriptLoader::doExecuteScript(const ScriptSourceCode& sourceCode) {
   // Implemented as the scope out of IgnoreDestructiveWriteCountIncrementer.
 }
 
-void ScriptLoader::execute() {
-  DCHECK(!m_willBeParserExecuted);
-  DCHECK(m_asyncExecType != ScriptRunner::None);
-  DCHECK(m_pendingScript->resource());
-  bool errorOccurred = false;
-  ScriptSourceCode source = m_pendingScript->getSource(KURL(), errorOccurred);
-  detachPendingScript();
-  if (errorOccurred) {
-    dispatchErrorEvent();
-  } else if (!m_resource->wasCanceled()) {
-    if (executeScript(source))
-      dispatchLoadEvent();
+void ScriptLoader::Execute() {
+  DCHECK(!will_be_parser_executed_);
+  DCHECK(async_exec_type_ != ScriptRunner::kNone);
+  DCHECK(pending_script_->GetResource());
+  bool error_occurred = false;
+  Script* script = pending_script_->GetSource(KURL(), error_occurred);
+  DetachPendingScript();
+  if (error_occurred) {
+    DispatchErrorEvent();
+  } else if (!resource_->WasCanceled()) {
+    if (ExecuteScript(script))
+      DispatchLoadEvent();
     else
-      dispatchErrorEvent();
+      DispatchErrorEvent();
   }
-  m_resource = nullptr;
+  resource_ = nullptr;
 }
 
-void ScriptLoader::pendingScriptFinished(PendingScript* pendingScript) {
-  DCHECK(!m_willBeParserExecuted);
-  DCHECK_EQ(m_pendingScript, pendingScript);
-  DCHECK_EQ(pendingScript->resource(), m_resource);
+void ScriptLoader::PendingScriptFinished(PendingScript* pending_script) {
+  DCHECK(!will_be_parser_executed_);
+  DCHECK_EQ(pending_script_, pending_script);
+  DCHECK_EQ(pending_script->GetResource(), resource_);
 
   // We do not need this script in the memory cache. The primary goals of
   // sending this fetch request are to let the third party server know
   // about the document.write scripts intervention and populate the http
   // cache for subsequent uses.
-  if (m_documentWriteIntervention ==
-      DocumentWriteIntervention::FetchDocWrittenScriptDeferIdle) {
-    memoryCache()->remove(m_pendingScript->resource());
-    m_pendingScript->stopWatchingForLoad();
+  if (document_write_intervention_ ==
+      DocumentWriteIntervention::kFetchDocWrittenScriptDeferIdle) {
+    GetMemoryCache()->Remove(pending_script_->GetResource());
+    pending_script_->StopWatchingForLoad();
     return;
   }
 
-  DCHECK(m_asyncExecType != ScriptRunner::None);
+  DCHECK(async_exec_type_ != ScriptRunner::kNone);
 
-  Document* contextDocument = m_element->document().contextDocument();
-  if (!contextDocument) {
-    detachPendingScript();
+  Document* context_document = element_->GetDocument().ContextDocument();
+  if (!context_document) {
+    DetachPendingScript();
     return;
   }
 
-  if (errorOccurred()) {
-    contextDocument->scriptRunner()->notifyScriptLoadError(this,
-                                                           m_asyncExecType);
-    detachPendingScript();
-    dispatchErrorEvent();
+  if (ErrorOccurred()) {
+    context_document->GetScriptRunner()->NotifyScriptLoadError(
+        this, async_exec_type_);
+    DetachPendingScript();
+    DispatchErrorEvent();
     return;
   }
-  contextDocument->scriptRunner()->notifyScriptReady(this, m_asyncExecType);
-  m_pendingScript->stopWatchingForLoad();
+  context_document->GetScriptRunner()->NotifyScriptReady(this,
+                                                         async_exec_type_);
+  pending_script_->StopWatchingForLoad();
 }
 
-bool ScriptLoader::ignoresLoadRequest() const {
-  return m_alreadyStarted || m_isExternalScript || m_parserInserted ||
-         !element() || !element()->isConnected();
+bool ScriptLoader::IgnoresLoadRequest() const {
+  return already_started_ || is_external_script_ || parser_inserted_ ||
+         !element_->IsConnected();
 }
 
 // Step 13 of https://html.spec.whatwg.org/#prepare-a-script
-bool ScriptLoader::isScriptForEventSupported() const {
+bool ScriptLoader::IsScriptForEventSupported() const {
   // 1. "Let for be the value of the for attribute."
-  String eventAttribute = client()->eventAttributeValue();
+  String event_attribute = element_->EventAttributeValue();
   // 2. "Let event be the value of the event attribute."
-  String forAttribute = client()->forAttributeValue();
+  String for_attribute = element_->ForAttributeValue();
 
   // "If the script element has an event attribute and a for attribute, and
   //  the script's type is "classic", then run these substeps:"
   // TODO(hiroshige): Check the script's type.
-  if (eventAttribute.isNull() || forAttribute.isNull())
+  if (event_attribute.IsNull() || for_attribute.IsNull())
     return true;
 
   // 3. "Strip leading and trailing ASCII whitespace from event and for."
-  forAttribute = forAttribute.stripWhiteSpace();
+  for_attribute = for_attribute.StripWhiteSpace();
   // 4. "If for is not an ASCII case-insensitive match for the string
   //     "window",
   //     then abort these steps at this point. The script is not executed."
-  if (!equalIgnoringCase(forAttribute, "window"))
+  if (!DeprecatedEqualIgnoringCase(for_attribute, "window"))
     return false;
-  eventAttribute = eventAttribute.stripWhiteSpace();
+  event_attribute = event_attribute.StripWhiteSpace();
   // 5. "If event is not an ASCII case-insensitive match for either the
   //     string "onload" or the string "onload()",
   //     then abort these steps at this point. The script is not executed.
-  return equalIgnoringCase(eventAttribute, "onload") ||
-         equalIgnoringCase(eventAttribute, "onload()");
+  return DeprecatedEqualIgnoringCase(event_attribute, "onload") ||
+         DeprecatedEqualIgnoringCase(event_attribute, "onload()");
 }
 
-String ScriptLoader::scriptContent() const {
-  return m_element->textFromChildren();
-}
-
-ScriptLoaderClient* ScriptLoader::client() const {
-  if (isHTMLScriptLoader(m_element))
-    return toHTMLScriptElement(m_element);
-
-  if (isSVGScriptLoader(m_element))
-    return toSVGScriptElement(m_element);
-
-  NOTREACHED();
-  return 0;
-}
-
-ScriptLoader* toScriptLoaderIfPossible(Element* element) {
-  if (isHTMLScriptLoader(element))
-    return toHTMLScriptElement(element)->loader();
-
-  if (isSVGScriptLoader(element))
-    return toSVGScriptElement(element)->loader();
-
-  return 0;
+String ScriptLoader::ScriptContent() const {
+  return element_->TextFromChildren();
 }
 
 }  // namespace blink

@@ -42,9 +42,10 @@ class Crypto final : public GarbageCollected<Crypto>, public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static Crypto* create() { return new Crypto(); }
+  static Crypto* Create() { return new Crypto(); }
 
-  DOMArrayBufferView* getRandomValues(DOMArrayBufferView*, ExceptionState&);
+  NotShared<DOMArrayBufferView> getRandomValues(NotShared<DOMArrayBufferView>,
+                                                ExceptionState&);
 
   SubtleCrypto* subtle();
 
@@ -53,7 +54,7 @@ class Crypto final : public GarbageCollected<Crypto>, public ScriptWrappable {
  private:
   Crypto() {}
 
-  Member<SubtleCrypto> m_subtleCrypto;
+  Member<SubtleCrypto> subtle_crypto_;
 };
 
 }  // namespace blink

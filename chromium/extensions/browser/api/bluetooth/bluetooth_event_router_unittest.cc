@@ -8,14 +8,15 @@
 #include <string>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "content/public/test/test_browser_context.h"
-#include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_uuid.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_test.h"
 #include "extensions/common/api/bluetooth.h"
@@ -41,9 +42,12 @@ namespace bluetooth = api::bluetooth;
 class BluetoothEventRouterTest : public ExtensionsTest {
  public:
   BluetoothEventRouterTest()
-      : ui_thread_(content::BrowserThread::UI, &message_loop_),
-        mock_adapter_(new testing::StrictMock<device::MockBluetoothAdapter>()),
-        router_(new BluetoothEventRouter(browser_context())) {
+      : mock_adapter_(new testing::StrictMock<device::MockBluetoothAdapter>()) {
+  }
+
+  void SetUp() override {
+    ExtensionsTest::SetUp();
+    router_ = base::MakeUnique<BluetoothEventRouter>(browser_context());
     router_->SetAdapterForTest(mock_adapter_);
   }
 
@@ -55,27 +59,28 @@ class BluetoothEventRouterTest : public ExtensionsTest {
   }
 
  protected:
-  base::MessageLoopForUI message_loop_;
-  // Note: |ui_thread_| must be declared before |router_|.
-  content::TestBrowserThread ui_thread_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
   testing::StrictMock<device::MockBluetoothAdapter>* mock_adapter_;
   std::unique_ptr<BluetoothEventRouter> router_;
 };
 
 TEST_F(BluetoothEventRouterTest, BluetoothEventListener) {
-  router_->OnListenerAdded();
+  EventListenerInfo info("", "", GURL(), nullptr);
+  router_->OnListenerAdded(info);
   EXPECT_CALL(*mock_adapter_, RemoveObserver(testing::_)).Times(1);
-  router_->OnListenerRemoved();
+  router_->OnListenerRemoved(info);
 }
 
 TEST_F(BluetoothEventRouterTest, MultipleBluetoothEventListeners) {
-  router_->OnListenerAdded();
-  router_->OnListenerAdded();
-  router_->OnListenerAdded();
-  router_->OnListenerRemoved();
-  router_->OnListenerRemoved();
+  // TODO(rkc/stevenjb): Test multiple extensions and WebUI.
+  EventListenerInfo info("", "", GURL(), nullptr);
+  router_->OnListenerAdded(info);
+  router_->OnListenerAdded(info);
+  router_->OnListenerAdded(info);
+  router_->OnListenerRemoved(info);
+  router_->OnListenerRemoved(info);
   EXPECT_CALL(*mock_adapter_, RemoveObserver(testing::_)).Times(1);
-  router_->OnListenerRemoved();
+  router_->OnListenerRemoved(info);
 }
 
 TEST_F(BluetoothEventRouterTest, UnloadExtension) {

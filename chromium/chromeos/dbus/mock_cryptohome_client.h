@@ -31,7 +31,7 @@ class MockCryptohomeClient : public CryptohomeClient {
   MOCK_METHOD1(WaitForServiceToBeAvailable,
                void(const WaitForServiceToBeAvailableCallback& callback));
   MOCK_METHOD1(IsMounted, void(const BoolDBusMethodCallback& callback));
-  MOCK_METHOD1(Unmount, bool(bool* success));
+  MOCK_METHOD1(Unmount, void(const BoolDBusMethodCallback& callback));
   MOCK_METHOD3(AsyncCheckKey,
                void(const cryptohome::Identification& cryptohome_id,
                     const std::string& key,
@@ -222,6 +222,11 @@ class MockCryptohomeClient : public CryptohomeClient {
       FlushAndSignBootAttributes,
       void(const cryptohome::FlushAndSignBootAttributesRequest& request,
            const ProtobufMethodCallback& callback));
+  MOCK_METHOD2(MigrateToDircrypto,
+               void(const cryptohome::Identification& cryptohome_id,
+                    const VoidDBusMethodCallback& callback));
+  MOCK_METHOD1(SetDircryptoMigrationProgressHandler,
+               void(const DircryptoMigrationProgessHandler& handler));
   MOCK_METHOD2(
       RemoveFirmwareManagementParametersFromTpm,
       void(const cryptohome::RemoveFirmwareManagementParametersRequest& request,
@@ -230,6 +235,9 @@ class MockCryptohomeClient : public CryptohomeClient {
       SetFirmwareManagementParametersInTpm,
       void(const cryptohome::SetFirmwareManagementParametersRequest& request,
            const ProtobufMethodCallback& callback));
+  MOCK_METHOD2(NeedsDircryptoMigration,
+               void(const cryptohome::Identification& cryptohome_id,
+                    const BoolDBusMethodCallback& callback));
 };
 
 }  // namespace chromeos

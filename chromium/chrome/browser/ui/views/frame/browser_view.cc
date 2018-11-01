@@ -16,6 +16,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -80,6 +81,7 @@
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #include "chrome/browser/ui/views/new_back_shortcut_bubble.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
@@ -91,7 +93,6 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views/translate/translate_bubble_view.h"
 #include "chrome/browser/ui/views/update_recommended_message_box.h"
-#include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/command.h"
@@ -113,11 +114,11 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/translate/core/browser/language_state.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -151,11 +152,11 @@
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
 #endif  // !defined(OS_CHROMEOS)
 
 #if defined(USE_AURA)
-#include "chrome/browser/ui/views/theme_profile_key.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -1191,6 +1192,10 @@ bool BrowserView::IsToolbarVisible() const {
          toolbar_;
 }
 
+bool BrowserView::IsToolbarShowing() const {
+  return IsToolbarVisible();
+}
+
 void BrowserView::ShowUpdateChromeDialog() {
   UpdateRecommendedMessageBox::Show(GetNativeWindow());
 }
@@ -1286,12 +1291,12 @@ void BrowserView::UserChangedTheme() {
   frame_->FrameTypeChanged();
 }
 
-void BrowserView::ShowWebsiteSettings(
+void BrowserView::ShowPageInfo(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& virtual_url,
     const security_state::SecurityInfo& security_info) {
-  WebsiteSettingsPopupView::ShowPopup(
+  PageInfoBubbleView::ShowBubble(
       GetLocationBarView()->GetSecurityBubbleAnchorView(), gfx::Rect(), profile,
       web_contents, virtual_url, security_info);
 }
@@ -1308,20 +1313,18 @@ void BrowserView::ShowAppMenu() {
   toolbar_->app_menu_button()->Activate(nullptr);
 }
 
-bool BrowserView::PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
-                                         bool* is_keyboard_shortcut) {
-  *is_keyboard_shortcut = false;
-
-  if ((event.type() != blink::WebInputEvent::RawKeyDown) &&
-      (event.type() != blink::WebInputEvent::KeyUp)) {
-    return false;
+content::KeyboardEventProcessingResult BrowserView::PreHandleKeyboardEvent(
+    const NativeWebKeyboardEvent& event) {
+  if ((event.GetType() != blink::WebInputEvent::kRawKeyDown) &&
+      (event.GetType() != blink::WebInputEvent::kKeyUp)) {
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
   views::FocusManager* focus_manager = GetFocusManager();
   DCHECK(focus_manager);
 
   if (focus_manager->shortcut_handling_suspended())
-    return false;
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
 
   ui::Accelerator accelerator =
       ui::GetAcceleratorFromNativeWebKeyboardEvent(event);
@@ -1339,22 +1342,30 @@ bool BrowserView::PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
 
   if (browser_->is_app()) {
     // Let all keys fall through to a v1 app's web content, even accelerators.
-    // We don't have to flip |is_keyboard_shortcut| here. If we do that, the app
+    // We don't use NOT_HANDLED_IS_SHORTCUT here. If we do that, the app
     // might not be able to see a subsequent Char event. See OnHandleInputEvent
     // in content/renderer/render_widget.cc for details.
-    return false;
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
 #if defined(OS_CHROMEOS)
   if (ash_util::IsAcceleratorDeprecated(accelerator)) {
-    if (event.type() == blink::WebInputEvent::RawKeyDown)
-      *is_keyboard_shortcut = true;
-    return false;
+    return (event.GetType() == blink::WebInputEvent::kRawKeyDown)
+               ? content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT
+               : content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 #endif  // defined(OS_CHROMEOS)
 
   if (frame_->PreHandleKeyboardEvent(event))
-    return true;
+    return content::KeyboardEventProcessingResult::HANDLED;
+
+#if defined(OS_CHROMEOS)
+  if (event.os_event && event.os_event->IsKeyEvent() &&
+      ash_util::WillAshProcessAcceleratorForEvent(
+          *event.os_event->AsKeyEvent())) {
+    return content::KeyboardEventProcessingResult::HANDLED_DONT_UPDATE_EVENT;
+  }
+#endif
 
   chrome::BrowserCommandController* controller = browser_->command_controller();
 
@@ -1376,20 +1387,25 @@ bool BrowserView::PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
   // Executing the command may cause |this| object to be destroyed.
   if (controller->IsReservedCommandOrKey(id, event)) {
     UpdateAcceleratorMetrics(accelerator, id);
-    return chrome::ExecuteCommand(browser_.get(), id);
+    return chrome::ExecuteCommand(browser_.get(), id)
+               ? content::KeyboardEventProcessingResult::HANDLED
+               : content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
   if (id != -1) {
     // |accelerator| is a non-reserved browser shortcut (e.g. Ctrl+f).
-    if (event.type() == blink::WebInputEvent::RawKeyDown)
-      *is_keyboard_shortcut = true;
-  } else if (processed) {
-    // |accelerator| is a non-browser shortcut (e.g. F4-F10 on Ash). Report
-    // that we handled it.
-    return true;
+    return (event.GetType() == blink::WebInputEvent::kRawKeyDown)
+               ? content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT
+               : content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
-  return false;
+  if (processed) {
+    // |accelerator| is a non-browser shortcut (e.g. F4-F10 on Ash). Report
+    // that we handled it.
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 void BrowserView::HandleKeyboardEvent(const NativeWebKeyboardEvent& event) {
@@ -2065,13 +2081,6 @@ void BrowserView::InitViews() {
   GetWidget()->SetNativeWindowProperty(Profile::kProfileKey,
                                        browser_->profile());
 
-#if defined(USE_AURA)
-  // Stow a pointer to the browser's original profile onto the window handle so
-  // that windows will be styled with the appropriate NativeTheme.
-  SetThemeProfileForWindow(GetNativeWindow(),
-                           browser_->profile()->GetOriginalProfile());
-#endif
-
   LoadAccelerators();
 
   contents_web_view_ = new ContentsWebView(browser_->profile());
@@ -2336,21 +2345,17 @@ void BrowserView::ProcessFullscreen(bool fullscreen,
   //   * Hiding the window until it's in the final position
   //   * Ignoring all intervening Layout() calls, which resize the webpage and
   //     thus are slow and look ugly (enforced via |in_process_fullscreen_|).
-  LocationBarView* location_bar = GetLocationBarView();
-
-  if (!fullscreen) {
-    // Hide the fullscreen bubble as soon as possible, since the mode toggle can
-    // take enough time for the user to notice.
-    exclusive_access_bubble_.reset();
-  }
-
   if (fullscreen) {
     // Move focus out of the location bar if necessary.
     views::FocusManager* focus_manager = GetFocusManager();
     DCHECK(focus_manager);
     // Look for focus in the location bar itself or any child view.
-    if (location_bar->Contains(focus_manager->GetFocusedView()))
+    if (GetLocationBarView()->Contains(focus_manager->GetFocusedView()))
       focus_manager->ClearFocus();
+  } else {
+    // Hide the fullscreen bubble as soon as possible, since the mode toggle can
+    // take enough time for the user to notice.
+    exclusive_access_bubble_.reset();
   }
 
   // Toggle fullscreen mode.
@@ -2453,7 +2458,7 @@ void BrowserView::UpdateAcceleratorMetrics(const ui::Accelerator& accelerator,
                                            int command_id) {
   const ui::KeyboardCode key_code = accelerator.key_code();
   if (command_id == IDC_HELP_PAGE_VIA_KEYBOARD && key_code == ui::VKEY_F1)
-    content::RecordAction(UserMetricsAction("ShowHelpTabViaF1"));
+    base::RecordAction(UserMetricsAction("ShowHelpTabViaF1"));
 
   if (command_id == IDC_BOOKMARK_PAGE)
     UMA_HISTOGRAM_ENUMERATION("Bookmarks.EntryPoint",
@@ -2466,34 +2471,34 @@ void BrowserView::UpdateAcceleratorMetrics(const ui::Accelerator& accelerator,
   switch (command_id) {
     case IDC_BACK:
       if (key_code == ui::VKEY_BROWSER_BACK)
-        content::RecordAction(UserMetricsAction("Accel_Back_F1"));
+        base::RecordAction(UserMetricsAction("Accel_Back_F1"));
       else if (key_code == ui::VKEY_LEFT)
-        content::RecordAction(UserMetricsAction("Accel_Back_Left"));
+        base::RecordAction(UserMetricsAction("Accel_Back_Left"));
       break;
     case IDC_FORWARD:
       if (key_code == ui::VKEY_BROWSER_FORWARD)
-        content::RecordAction(UserMetricsAction("Accel_Forward_F2"));
+        base::RecordAction(UserMetricsAction("Accel_Forward_F2"));
       else if (key_code == ui::VKEY_RIGHT)
-        content::RecordAction(UserMetricsAction("Accel_Forward_Right"));
+        base::RecordAction(UserMetricsAction("Accel_Forward_Right"));
       break;
     case IDC_RELOAD:
     case IDC_RELOAD_BYPASSING_CACHE:
       if (key_code == ui::VKEY_R)
-        content::RecordAction(UserMetricsAction("Accel_Reload_R"));
+        base::RecordAction(UserMetricsAction("Accel_Reload_R"));
       else if (key_code == ui::VKEY_BROWSER_REFRESH)
-        content::RecordAction(UserMetricsAction("Accel_Reload_F3"));
+        base::RecordAction(UserMetricsAction("Accel_Reload_F3"));
       break;
     case IDC_FOCUS_LOCATION:
       if (key_code == ui::VKEY_D)
-        content::RecordAction(UserMetricsAction("Accel_FocusLocation_D"));
+        base::RecordAction(UserMetricsAction("Accel_FocusLocation_D"));
       else if (key_code == ui::VKEY_L)
-        content::RecordAction(UserMetricsAction("Accel_FocusLocation_L"));
+        base::RecordAction(UserMetricsAction("Accel_FocusLocation_L"));
       break;
     case IDC_FOCUS_SEARCH:
       if (key_code == ui::VKEY_E)
-        content::RecordAction(UserMetricsAction("Accel_FocusSearch_E"));
+        base::RecordAction(UserMetricsAction("Accel_FocusSearch_E"));
       else if (key_code == ui::VKEY_K)
-        content::RecordAction(UserMetricsAction("Accel_FocusSearch_K"));
+        base::RecordAction(UserMetricsAction("Accel_FocusSearch_K"));
       break;
     default:
       // Do nothing.
@@ -2517,7 +2522,8 @@ void BrowserView::ShowAvatarBubbleFromAvatarButton(
   profiles::BubbleViewModeFromAvatarBubbleMode(mode, &bubble_view_mode,
                                                &tutorial_mode);
   if (SigninViewController::ShouldShowModalSigninForMode(bubble_view_mode)) {
-    browser_->ShowModalSigninWindow(bubble_view_mode, access_point);
+    browser_->signin_view_controller()->ShowModalSignin(
+        bubble_view_mode, browser_.get(), access_point);
   } else {
     ProfileChooserView::ShowBubble(bubble_view_mode, tutorial_mode,
                                    manage_accounts_params, access_point,

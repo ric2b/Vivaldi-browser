@@ -38,7 +38,7 @@ namespace {
 
 void CreateNativeAudioMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
-  blink::WebMediaStreamSource source = track.source();
+  blink::WebMediaStreamSource source = track.Source();
   MediaStreamAudioSource* media_stream_source =
       MediaStreamAudioSource::From(source);
 
@@ -49,10 +49,10 @@ void CreateNativeAudioMediaStreamTrack(
   // TODO(miu): This needs to be moved to an appropriate location. A WebAudio
   // source should have been created before this method was called so that this
   // special case code isn't needed here.
-  if (!media_stream_source && source.requiresAudioConsumer()) {
+  if (!media_stream_source && source.RequiresAudioConsumer()) {
     DVLOG(1) << "Creating WebAudio media stream source.";
     media_stream_source = new WebAudioMediaStreamSource(&source);
-    source.setExtraData(media_stream_source);  // Takes ownership.
+    source.SetExtraData(media_stream_source);  // Takes ownership.
   }
 
   if (media_stream_source)
@@ -61,26 +61,63 @@ void CreateNativeAudioMediaStreamTrack(
     LOG(DFATAL) << "WebMediaStreamSource missing its MediaStreamAudioSource.";
 }
 
-void CreateNativeVideoMediaStreamTrack(
-    const blink::WebMediaStreamTrack& track) {
-  DCHECK(track.getTrackData() == NULL);
-  blink::WebMediaStreamSource source = track.source();
-  DCHECK_EQ(source.getType(), blink::WebMediaStreamSource::TypeVideo);
+void CreateNativeVideoMediaStreamTrack(blink::WebMediaStreamTrack track) {
+  DCHECK(track.GetTrackData() == NULL);
+  blink::WebMediaStreamSource source = track.Source();
+  DCHECK_EQ(source.GetType(), blink::WebMediaStreamSource::kTypeVideo);
   MediaStreamVideoSource* native_source =
       MediaStreamVideoSource::GetVideoSource(source);
   DCHECK(native_source);
-  blink::WebMediaStreamTrack writable_track(track);
-  // TODO(perkj): The constraints to use here should be passed from blink when
-  // a new track is created. For cloning, it should be the constraints of the
-  // cloned track and not the originating source.
-  // Also - source.constraints() returns an uninitialized constraint if the
-  // source is coming from a remote video track. See http://crbug/287805.
-  blink::WebMediaConstraints constraints = source.constraints();
-  if (constraints.isNull())
-    constraints.initialize();
-  writable_track.setTrackData(new MediaStreamVideoTrack(
-      native_source, constraints, MediaStreamVideoSource::ConstraintsCallback(),
-      track.isEnabled()));
+  if (IsOldVideoConstraints()) {
+    // TODO(perkj): The constraints to use here should be passed from blink when
+    // a new track is created. For cloning, it should be the constraints of the
+    // cloned track and not the originating source.
+    // Also - source.constraints() returns an uninitialized constraint if the
+    // source is coming from a remote video track. See http://crbug/287805.
+    blink::WebMediaConstraints constraints = source.Constraints();
+    if (constraints.IsNull())
+      constraints.Initialize();
+    track.SetTrackData(new MediaStreamVideoTrack(
+        native_source, constraints,
+        MediaStreamVideoSource::ConstraintsCallback(), track.IsEnabled()));
+  } else {
+    track.SetTrackData(new MediaStreamVideoTrack(
+        native_source, MediaStreamVideoSource::ConstraintsCallback(),
+        track.IsEnabled()));
+  }
+}
+
+void CloneNativeVideoMediaStreamTrack(
+    const blink::WebMediaStreamTrack& original,
+    blink::WebMediaStreamTrack clone) {
+  DCHECK(!clone.GetTrackData());
+  blink::WebMediaStreamSource source = clone.Source();
+  DCHECK_EQ(source.GetType(), blink::WebMediaStreamSource::kTypeVideo);
+  MediaStreamVideoSource* native_source =
+      MediaStreamVideoSource::GetVideoSource(source);
+  DCHECK(native_source);
+  if (IsOldVideoConstraints()) {
+    // TODO(perkj): The constraints to use here should be passed from blink when
+    // a new track is created. For cloning, it should be the constraints of the
+    // cloned track and not the originating source.
+    // Also - source.constraints() returns an uninitialized constraint if the
+    // source is coming from a remote video track. See http://crbug/287805.
+    blink::WebMediaConstraints constraints = source.Constraints();
+    if (constraints.IsNull())
+      constraints.Initialize();
+    clone.SetTrackData(new MediaStreamVideoTrack(
+        native_source, constraints,
+        MediaStreamVideoSource::ConstraintsCallback(), clone.IsEnabled()));
+  } else {
+    MediaStreamVideoTrack* original_track =
+        MediaStreamVideoTrack::GetVideoTrack(original);
+    DCHECK(original_track);
+    clone.SetTrackData(new MediaStreamVideoTrack(
+        native_source, original_track->adapter_settings(),
+        original_track->noise_reduction(), original_track->is_screencast(),
+        original_track->min_frame_rate(),
+        MediaStreamVideoSource::ConstraintsCallback(), clone.IsEnabled()));
+  }
 }
 
 }  // namespace
@@ -91,30 +128,47 @@ MediaStreamCenter::MediaStreamCenter(
 
 MediaStreamCenter::~MediaStreamCenter() {}
 
-void MediaStreamCenter::didCreateMediaStreamTrack(
+void MediaStreamCenter::DidCreateMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
   DVLOG(1) << "MediaStreamCenter::didCreateMediaStreamTrack";
-  DCHECK(!track.isNull() && !track.getTrackData());
-  DCHECK(!track.source().isNull());
+  DCHECK(!track.IsNull() && !track.GetTrackData());
+  DCHECK(!track.Source().IsNull());
 
-  switch (track.source().getType()) {
-    case blink::WebMediaStreamSource::TypeAudio:
+  switch (track.Source().GetType()) {
+    case blink::WebMediaStreamSource::kTypeAudio:
       CreateNativeAudioMediaStreamTrack(track);
       break;
-    case blink::WebMediaStreamSource::TypeVideo:
+    case blink::WebMediaStreamSource::kTypeVideo:
       CreateNativeVideoMediaStreamTrack(track);
       break;
   }
 }
 
-void MediaStreamCenter::didSetContentHint(
+void MediaStreamCenter::DidCloneMediaStreamTrack(
+    const blink::WebMediaStreamTrack& original,
+    const blink::WebMediaStreamTrack& clone) {
+  DCHECK(!clone.IsNull());
+  DCHECK(!clone.GetTrackData());
+  DCHECK(!clone.Source().IsNull());
+
+  switch (clone.Source().GetType()) {
+    case blink::WebMediaStreamSource::kTypeAudio:
+      CreateNativeAudioMediaStreamTrack(clone);
+      break;
+    case blink::WebMediaStreamSource::kTypeVideo:
+      CloneNativeVideoMediaStreamTrack(original, clone);
+      break;
+  }
+}
+
+void MediaStreamCenter::DidSetContentHint(
     const blink::WebMediaStreamTrack& track) {
   MediaStreamTrack* native_track = MediaStreamTrack::GetTrack(track);
   if (native_track)
-    native_track->SetContentHint(track.contentHint());
+    native_track->SetContentHint(track.ContentHint());
 }
 
-void MediaStreamCenter::didEnableMediaStreamTrack(
+void MediaStreamCenter::DidEnableMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
   MediaStreamTrack* native_track =
       MediaStreamTrack::GetTrack(track);
@@ -122,7 +176,7 @@ void MediaStreamCenter::didEnableMediaStreamTrack(
     native_track->SetEnabled(true);
 }
 
-void MediaStreamCenter::didDisableMediaStreamTrack(
+void MediaStreamCenter::DidDisableMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
   MediaStreamTrack* native_track =
       MediaStreamTrack::GetTrack(track);
@@ -130,7 +184,7 @@ void MediaStreamCenter::didDisableMediaStreamTrack(
     native_track->SetEnabled(false);
 }
 
-bool MediaStreamCenter::didStopMediaStreamTrack(
+bool MediaStreamCenter::DidStopMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
   DVLOG(1) << "MediaStreamCenter::didStopMediaStreamTrack";
   MediaStreamTrack* native_track = MediaStreamTrack::GetTrack(track);
@@ -139,18 +193,18 @@ bool MediaStreamCenter::didStopMediaStreamTrack(
 }
 
 blink::WebAudioSourceProvider*
-MediaStreamCenter::createWebAudioSourceFromMediaStreamTrack(
+MediaStreamCenter::CreateWebAudioSourceFromMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
   DVLOG(1) << "MediaStreamCenter::createWebAudioSourceFromMediaStreamTrack";
   MediaStreamTrack* media_stream_track =
-      static_cast<MediaStreamTrack*>(track.getTrackData());
+      static_cast<MediaStreamTrack*>(track.GetTrackData());
   if (!media_stream_track) {
     DLOG(ERROR) << "Native track missing for webaudio source.";
     return nullptr;
   }
 
-  blink::WebMediaStreamSource source = track.source();
-  DCHECK_EQ(source.getType(), blink::WebMediaStreamSource::TypeAudio);
+  blink::WebMediaStreamSource source = track.Source();
+  DCHECK_EQ(source.GetType(), blink::WebMediaStreamSource::kTypeAudio);
 
   // TODO(tommi): Rename WebRtcLocalAudioSourceProvider to
   // WebAudioMediaStreamSink since it's not specific to any particular source.
@@ -158,7 +212,7 @@ MediaStreamCenter::createWebAudioSourceFromMediaStreamTrack(
   return new WebRtcLocalAudioSourceProvider(track);
 }
 
-void MediaStreamCenter::didStopLocalMediaStream(
+void MediaStreamCenter::DidStopLocalMediaStream(
     const blink::WebMediaStream& stream) {
   DVLOG(1) << "MediaStreamCenter::didStopLocalMediaStream";
   MediaStream* native_stream = MediaStream::GetMediaStream(stream);
@@ -170,24 +224,24 @@ void MediaStreamCenter::didStopLocalMediaStream(
   // TODO(perkj): MediaStream::Stop is being deprecated. But for the moment we
   // need to support both MediaStream::Stop and MediaStreamTrack::Stop.
   blink::WebVector<blink::WebMediaStreamTrack> audio_tracks;
-  stream.audioTracks(audio_tracks);
+  stream.AudioTracks(audio_tracks);
   for (size_t i = 0; i < audio_tracks.size(); ++i)
-    didStopMediaStreamTrack(audio_tracks[i]);
+    DidStopMediaStreamTrack(audio_tracks[i]);
 
   blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
-  stream.videoTracks(video_tracks);
+  stream.VideoTracks(video_tracks);
   for (size_t i = 0; i < video_tracks.size(); ++i)
-    didStopMediaStreamTrack(video_tracks[i]);
+    DidStopMediaStreamTrack(video_tracks[i]);
 }
 
-void MediaStreamCenter::didCreateMediaStream(blink::WebMediaStream& stream) {
+void MediaStreamCenter::DidCreateMediaStream(blink::WebMediaStream& stream) {
   DVLOG(1) << "MediaStreamCenter::didCreateMediaStream";
   blink::WebMediaStream writable_stream(stream);
   MediaStream* native_stream(new MediaStream());
-  writable_stream.setExtraData(native_stream);
+  writable_stream.SetExtraData(native_stream);
 }
 
-bool MediaStreamCenter::didAddMediaStreamTrack(
+bool MediaStreamCenter::DidAddMediaStreamTrack(
     const blink::WebMediaStream& stream,
     const blink::WebMediaStreamTrack& track) {
   DVLOG(1) << "MediaStreamCenter::didAddMediaStreamTrack";
@@ -195,7 +249,7 @@ bool MediaStreamCenter::didAddMediaStreamTrack(
   return native_stream->AddTrack(track);
 }
 
-bool MediaStreamCenter::didRemoveMediaStreamTrack(
+bool MediaStreamCenter::DidRemoveMediaStreamTrack(
     const blink::WebMediaStream& stream,
     const blink::WebMediaStreamTrack& track) {
   DVLOG(1) << "MediaStreamCenter::didRemoveMediaStreamTrack";

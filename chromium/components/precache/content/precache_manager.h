@@ -29,7 +29,6 @@
 namespace base {
 class FilePath;
 class Time;
-class TimeDelta;
 }
 
 namespace content {
@@ -56,6 +55,7 @@ namespace precache {
 
 class PrecacheDatabase;
 class PrecacheUnfinishedWork;
+class PrecacheManifest;
 
 extern const char kPrecacheFieldTrialName[];
 
@@ -74,6 +74,13 @@ class PrecacheManager : public KeyedService,
                         public PrecacheFetcher::PrecacheDelegate,
                         public base::SupportsWeakPtr<PrecacheManager> {
  public:
+  class Delegate {
+   public:
+    // Called when a precache manifest has been successfully fetched and parsed.
+    virtual void OnManifestFetched(const std::string& host,
+                                   const PrecacheManifest& manifest) = 0;
+  };
+
   typedef base::Callback<void(bool)> PrecacheCompletionCallback;
 
   PrecacheManager(content::BrowserContext* browser_context,
@@ -81,6 +88,7 @@ class PrecacheManager : public KeyedService,
                   const history::HistoryService* history_service,
                   const data_reduction_proxy::DataReductionProxySettings*
                       data_reduction_proxy_settings,
+                  Delegate* delegate,
                   const base::FilePath& db_path,
                   std::unique_ptr<PrecacheDatabase> precache_database);
   ~PrecacheManager() override;
@@ -123,7 +131,6 @@ class PrecacheManager : public KeyedService,
   void UpdatePrecacheMetricsAndState(
       const GURL& url,
       const GURL& referrer,
-      const base::TimeDelta& latency,
       const base::Time& fetch_time,
       const net::HttpResponseInfo& info,
       int64_t size,
@@ -155,6 +162,8 @@ class PrecacheManager : public KeyedService,
 
   // From PrecacheFetcher::PrecacheDelegate.
   void OnDone() override;
+  void OnManifestFetched(const std::string& host,
+                         const PrecacheManifest& manifest) override;
 
   // Registers the precache synthetic field trial for users whom the precache
   // task was run recently. |last_precache_time| is the last time precache task
@@ -190,7 +199,6 @@ class PrecacheManager : public KeyedService,
   void RecordStatsForFetch(
       const GURL& url,
       const GURL& referrer,
-      const base::TimeDelta& latency,
       const base::Time& fetch_time,
       const net::HttpResponseInfo& info,
       int64_t size,
@@ -201,7 +209,6 @@ class PrecacheManager : public KeyedService,
   // by RecordStatsForFetch() by way of an asynchronous HistoryService callback.
   void RecordStatsForFetchInternal(const GURL& url,
                                    const std::string& referrer_host,
-                                   const base::TimeDelta& latency,
                                    const base::Time& fetch_time,
                                    const net::HttpResponseInfo& info,
                                    int64_t size,
@@ -222,6 +229,10 @@ class PrecacheManager : public KeyedService,
   // context. Used to determine if the proxy is enabled.
   const data_reduction_proxy::DataReductionProxySettings* const
       data_reduction_proxy_settings_;
+
+  // The Delegate corresponding to the browser context. Used to notify the
+  // browser about a new available manifest. May be null.
+  Delegate* delegate_;
 
   // The PrecacheFetcher used to precache resources. Should only be used on the
   // UI thread.

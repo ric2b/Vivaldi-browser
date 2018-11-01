@@ -4,8 +4,8 @@
 
 #include "chrome/browser/chromeos/ui/screen_capture_notification_ui_chromeos.h"
 
-#include "ash/common/system/tray/system_tray_notifier.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shell.h"
+#include "ash/system/tray/system_tray_notifier.h"
 
 namespace chromeos {
 
@@ -17,12 +17,12 @@ ScreenCaptureNotificationUIChromeOS::ScreenCaptureNotificationUIChromeOS(
 ScreenCaptureNotificationUIChromeOS::~ScreenCaptureNotificationUIChromeOS() {
   // MediaStreamCaptureIndicator will delete ScreenCaptureNotificationUI object
   // after it stops screen capture.
-  ash::WmShell::Get()->system_tray_notifier()->NotifyScreenCaptureStop();
+  ash::Shell::Get()->system_tray_notifier()->NotifyScreenCaptureStop();
 }
 
 gfx::NativeViewId ScreenCaptureNotificationUIChromeOS::OnStarted(
     const base::Closure& stop_callback) {
-  ash::WmShell::Get()->system_tray_notifier()->NotifyScreenCaptureStart(
+  ash::Shell::Get()->system_tray_notifier()->NotifyScreenCaptureStart(
       stop_callback, text_);
   return 0;
 }

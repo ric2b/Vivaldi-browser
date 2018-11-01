@@ -57,6 +57,24 @@ void ConstantCategoryRanker::AppendCategoryIfNecessary(Category category) {
   }
 }
 
+void ConstantCategoryRanker::InsertCategoryBeforeIfNecessary(
+    Category category_to_insert,
+    Category anchor) {
+  // TODO(vitaliii): Implement.
+  LOG(DFATAL) << "Not implemented, use ClickBasedCategoryRanker instead for "
+                 "inserting categories relative to other categories.";
+  AppendCategoryIfNecessary(category_to_insert);
+}
+
+void ConstantCategoryRanker::InsertCategoryAfterIfNecessary(
+    Category category_to_insert,
+    Category anchor) {
+  // TODO(vitaliii): Implement.
+  LOG(DFATAL) << "Not implemented, use ClickBasedCategoryRanker instead for "
+                 "inserting categories relative to other categories.";
+  AppendCategoryIfNecessary(category_to_insert);
+}
+
 void ConstantCategoryRanker::OnSuggestionOpened(Category category) {
   // Ignored. The order is constant.
 }
@@ -73,6 +91,7 @@ ConstantCategoryRanker::GetKnownCategoriesDefaultOrder() {
   switch (choice) {
     case CategoryOrderChoice::GENERAL:
       categories.push_back(KnownCategories::PHYSICAL_WEB_PAGES);
+      categories.push_back(KnownCategories::READING_LIST);
       categories.push_back(KnownCategories::DOWNLOADS);
       categories.push_back(KnownCategories::RECENT_TABS);
       categories.push_back(KnownCategories::FOREIGN_TABS);
@@ -81,6 +100,7 @@ ConstantCategoryRanker::GetKnownCategoriesDefaultOrder() {
       break;
     case CategoryOrderChoice::EMERGING_MARKETS_ORIENTED:
       categories.push_back(KnownCategories::ARTICLES);
+      categories.push_back(KnownCategories::READING_LIST);
       categories.push_back(KnownCategories::DOWNLOADS);
       categories.push_back(KnownCategories::BOOKMARKS);
 
@@ -91,7 +111,7 @@ ConstantCategoryRanker::GetKnownCategoriesDefaultOrder() {
   }
 
   static_assert(
-      static_cast<size_t>(KnownCategories::LOCAL_CATEGORIES_COUNT) == 5,
+      static_cast<size_t>(KnownCategories::LOCAL_CATEGORIES_COUNT) == 6,
       "All local KnownCategories must be present in all orders.");
 
   // Other remote categories will be ordered after these depending on when

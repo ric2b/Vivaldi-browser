@@ -37,7 +37,7 @@
 #include "ui/gfx/text_utils.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/chrome_application.h"
+#include "chrome/browser/android/preferences/preferences_launcher.h"
 #endif
 
 namespace autofill {
@@ -108,7 +108,7 @@ PasswordGenerationPopupControllerImpl::GetWeakPtr() {
 
 bool PasswordGenerationPopupControllerImpl::HandleKeyPressEvent(
     const content::NativeWebKeyboardEvent& event) {
-  switch (event.windowsKeyCode) {
+  switch (event.windows_key_code) {
     case ui::VKEY_UP:
     case ui::VKEY_DOWN:
       PasswordSelected(true);
@@ -225,7 +225,7 @@ void PasswordGenerationPopupControllerImpl::ViewDestroyed() {
 
 void PasswordGenerationPopupControllerImpl::OnSavedPasswordsLinkClicked() {
 #if defined(OS_ANDROID)
-  chrome::android::ChromeApplication::ShowPasswordSettings();
+  chrome::android::PreferencesLauncher::ShowPasswordSettings();
 #else
   chrome::NavigateParams params(
       chrome::FindBrowserWithWebContents(web_contents_),
@@ -276,13 +276,11 @@ PasswordGenerationPopupControllerImpl::GetSuggestions() {
 }
 
 #if !defined(OS_ANDROID)
-int PasswordGenerationPopupControllerImpl::GetElidedValueWidthForRow(
-    size_t row) {
+int PasswordGenerationPopupControllerImpl::GetElidedValueWidthForRow(int row) {
   return 0;
 }
 
-int PasswordGenerationPopupControllerImpl::GetElidedLabelWidthForRow(
-    size_t row) {
+int PasswordGenerationPopupControllerImpl::GetElidedLabelWidthForRow(int row) {
   return 0;
 }
 #endif

@@ -5,10 +5,8 @@
 
 namespace install_static {
 
-enum InstallConstantIndex {
-  VIVALDI_INDEX,
-  NUM_INSTALL_MODES,
-};
+// Hack to avoid enum type/namespace compile issues
+#define VIVALDI_INDEX CHROMIUM_INDEX
 
 }  // namespace install_static
 

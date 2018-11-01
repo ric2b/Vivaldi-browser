@@ -61,9 +61,9 @@ def _ArchivePrebuilts(commit_position):
 def _ArchiveServerLogs():
   """Uploads chromedriver server logs to google storage."""
   util.MarkBuildStepStart('archive chromedriver server logs')
-  for server_log in glob.glob(os.path.join(tempfile.gettempdir(),
-                                           'chromedriver_*',
-                                           'chromedriver_log_*')):
+  pathname_pattern = os.path.join(tempfile.gettempdir(), 'chromedriver_log_*')
+  print 'archiving logs from: %s' % pathname_pattern
+  for server_log in glob.glob(pathname_pattern):
     if os.path.isfile(server_log):
       base_name = os.path.basename(server_log)
       util.AddLink(base_name, '%s/%s' % (SERVER_LOGS_LINK, base_name))
@@ -377,20 +377,6 @@ def _MaybeUpdateLatestRelease(version):
     util.MarkBuildStepError()
 
 
-def _CleanTmpDir():
-  tmp_dir = tempfile.gettempdir()
-  print 'cleaning temp directory:', tmp_dir
-  for file_name in os.listdir(tmp_dir):
-    file_path = os.path.join(tmp_dir, file_name)
-    if file_name.startswith('chromedriver_'):
-      if os.path.isdir(file_path):
-        print 'deleting sub-directory', file_path
-        shutil.rmtree(file_path, True)
-      else:
-        print 'deleting file', file_path
-        os.remove(file_path)
-
-
 def _WaitForLatestSnapshot(commit_position):
   util.MarkBuildStepStart('wait_for_snapshot')
   for attempt in range(0, 200):
@@ -454,15 +440,6 @@ def main():
   platform = '%s%s' % (util.GetPlatformName(), bitness)
   if options.android_packages:
     platform = 'android'
-
-  _CleanTmpDir()
-
-  # Make sure any subprocesses (i.e. chromedriver) create temp files under
-  # $TMPDIR/chromedriver_*, so that they can be cleaned up by _CleanTempDir().
-  if util.IsWindows():
-    os.environ['TMP'] = os.environ['TEMP'] = util.MakeTempDir()
-  else:
-    os.environ['TMPDIR'] = util.MakeTempDir()
 
   if not options.revision:
     commit_position = None

@@ -20,6 +20,7 @@ NET_EXPORT der::Input TypeSerialNumberOid();
 NET_EXPORT der::Input TypeCountryNameOid();
 NET_EXPORT der::Input TypeLocalityNameOid();
 NET_EXPORT der::Input TypeStateOrProvinceNameOid();
+NET_EXPORT der::Input TypeStreetAddressOid();
 NET_EXPORT der::Input TypeOrganizationNameOid();
 NET_EXPORT der::Input TypeOrganizationUnitNameOid();
 NET_EXPORT der::Input TypeTitleOid();
@@ -27,6 +28,7 @@ NET_EXPORT der::Input TypeNameOid();
 NET_EXPORT der::Input TypeGivenNameOid();
 NET_EXPORT der::Input TypeInitialsOid();
 NET_EXPORT der::Input TypeGenerationQualifierOid();
+NET_EXPORT der::Input TypeDomainComponentOid();
 
 // X509NameAttribute contains a representation of a DER-encoded RFC 2253
 // "AttributeTypeAndValue".
@@ -42,9 +44,17 @@ struct NET_EXPORT X509NameAttribute {
       : type(in_type), value_tag(in_value_tag), value(in_value) {}
 
   // Attempts to convert the value represented by this struct into a
+  // UTF-8 string and store it in |out|, returning whether the conversion
+  // was successful.
+  bool ValueAsString(std::string* out) const WARN_UNUSED_RESULT;
+
+  // Attempts to convert the value represented by this struct into a
   // std::string and store it in |out|, returning whether the conversion was
   // successful. Due to some encodings being incompatible, the caller must
-  // verify the attribute |type|.
+  // verify the attribute |value_tag|.
+  //
+  // Note: Don't use this function unless you know what you're doing. Use
+  // ValueAsString instead.
   //
   // Note: The conversion doesn't verify that the value corresponds to the
   // ASN.1 definition of the value type.

@@ -49,8 +49,6 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
  private:
   // mojom::AutofillDriver:
-  void FirstUserGestureObserved() override {}
-
   void FormsSeen(const std::vector<FormData>& forms,
                  base::TimeTicks timestamp) override {}
 
@@ -139,15 +137,14 @@ void VerifyNoSubmitMessagesReceived(
 // Simulates receiving a message from the browser to fill a form.
 void SimulateOnFillForm(autofill::AutofillAgent* autofill_agent,
                         blink::WebFrame* main_frame) {
-  WebDocument document = main_frame->document();
-  WebElement element =
-      document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
+  WebDocument document = main_frame->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
 
   // This call is necessary to setup the autofill agent appropriate for the
   // user selection; simulates the menu actually popping up.
   static_cast<autofill::PageClickListener*>(autofill_agent)
-      ->FormControlElementClicked(element.to<WebInputElement>(), false);
+      ->FormControlElementClicked(element.To<WebInputElement>(), false);
 
   FormData data;
   data.name = base::ASCIIToUTF16("name");
@@ -206,8 +203,10 @@ class FormAutocompleteTest : public ChromeRenderViewTest {
 // messages with the form fields.
 TEST_F(FormAutocompleteTest, NormalFormSubmit) {
   // Load a form.
-  LoadHTML("<html><form id='myForm'><input name='fname' value='Rick'/>"
-           "<input name='lname' value='Deckard'/></form></html>");
+  LoadHTML(
+      "<html><form id='myForm' action='about:blank'>"
+      "<input name='fname' value='Rick'/>"
+      "<input name='lname' value='Deckard'/></form></html>");
 
   // Submit the form.
   ExecuteJavaScriptForTests("document.getElementById('myForm').submit();");
@@ -247,10 +246,10 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_NoLongerVisible) {
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
 
   // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->document();
-  WebElement element = document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
   // Simulate removing the form just before the ajax request completes.
@@ -259,7 +258,7 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_NoLongerVisible) {
       "element.parentNode.removeChild(element);");
 
   // Simulate an Ajax request completing.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   VerifyReceivedRendererMessages(fake_driver_, "Rick", "Deckard",
@@ -281,10 +280,10 @@ TEST_F(FormAutocompleteTest,
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
 
   // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->document();
-  WebElement element = document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
   // Simulate removing the form just before the ajax request completes.
@@ -293,7 +292,7 @@ TEST_F(FormAutocompleteTest,
       "element.parentNode.removeChild(element);");
 
   // Simulate an Ajax request completing.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   VerifyReceivedRendererMessages(fake_driver_, "Rick", "Deckard",
@@ -322,10 +321,10 @@ TEST_F(FormAutocompleteTest, MAYBE_NoLongerVisibleBothNoActions) {
       "<input name='lname' value='Doe'/><input type=submit></form></html>");
 
   // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->document();
-  WebElement element = document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
   // Simulate removing the form just before the ajax request completes.
@@ -334,7 +333,7 @@ TEST_F(FormAutocompleteTest, MAYBE_NoLongerVisibleBothNoActions) {
       "element.parentNode.removeChild(element);");
 
   // Simulate an Ajax request completing.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   VerifyReceivedRendererMessages(fake_driver_, "Rick", "Deckard",
@@ -351,11 +350,10 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_NoLongerVisible_NoAction) {
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
 
   // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->document();
-  WebElement element =
-      document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
   // Simulate removing the form just before the ajax request completes.
@@ -363,7 +361,7 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_NoLongerVisible_NoAction) {
                             "element.parentNode.removeChild(element);");
 
   // Simulate an Ajax request completing.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   VerifyReceivedRendererMessages(fake_driver_, "Rick", "Deckard",
@@ -380,15 +378,14 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_StillVisible) {
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
 
   // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->document();
-  WebElement element =
-      document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
   // Simulate an Ajax request completing.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   // No submission messages sent.
@@ -411,7 +408,7 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_NoFormInteractionInvisible) {
                             "element.parentNode.removeChild(element);");
 
   // Simulate an Ajax request completing without prior user interaction.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   // No submission messages sent.
@@ -436,7 +433,7 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_FilledFormIsInvisible) {
                             "element.parentNode.removeChild(element);");
 
   // Simulate an Ajax request completing.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   VerifyReceivedRendererMessages(fake_driver_, "John", "Smith",
@@ -459,7 +456,7 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_FilledFormStillVisible) {
   // Form still visible.
 
   // Simulate an Ajax request completing.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   // No submission messages sent.
@@ -478,10 +475,10 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_FormlessElements) {
       "<input type='number' name='number' value='34'/>");
 
   // Simulate user input.
-  WebDocument document = GetMainFrame()->document();
-  WebElement element = document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Kirby"));
 
   // Remove element from view.
@@ -490,7 +487,7 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_FormlessElements) {
       "element.style.display = 'none';");
 
   // Simulate AJAX request.
-  static_cast<blink::WebAutofillClient*>(autofill_agent_)->ajaxSucceeded();
+  static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
   ProcessPendingMessages();
 
   VerifyReceivedRendererMessages(fake_driver_, "Kirby", "Puckett",
@@ -535,17 +532,17 @@ TEST_F(FormAutocompleteTest,
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
 
   // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->document();
-  WebElement element = document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
   ASSERT_FALSE(fake_driver_.did_unfocus_form());
 
   // Change focus to a different node outside the form.
   WebElement different =
-      document.getElementById(WebString::fromUTF8("different"));
+      document.GetElementById(WebString::FromUTF8("different"));
   SetFocused(different);
 
   base::RunLoop run_loop;
@@ -567,20 +564,20 @@ TEST_F(FormAutocompleteTest, InteractingInDifferentForms_FocusNoLongerOnForm) {
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
 
   // Simulate user input in the first form so that the form is "remembered".
-  WebDocument document = GetMainFrame()->document();
-  WebElement element = document.getElementById(WebString::fromUTF8("fname"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement fname_element = element.to<WebInputElement>();
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
   ASSERT_FALSE(fake_driver_.did_unfocus_form());
 
   // Simulate user input in the second form so that a "no longer focused"
   // message is sent for the first form.
-  document = GetMainFrame()->document();
-  element = document.getElementById(WebString::fromUTF8("fname2"));
-  ASSERT_FALSE(element.isNull());
-  fname_element = element.to<WebInputElement>();
+  document = GetMainFrame()->GetDocument();
+  element = document.GetElementById(WebString::FromUTF8("fname2"));
+  ASSERT_FALSE(element.IsNull());
+  fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("John"));
 
   base::RunLoop run_loop;
@@ -593,10 +590,11 @@ TEST_F(FormAutocompleteTest, InteractingInDifferentForms_FocusNoLongerOnForm) {
 // WillSubmitForm and FormSubmitted messages.
 TEST_F(FormAutocompleteTest, AutoCompleteOffFormSubmit) {
   // Load a form.
-  LoadHTML("<html><form id='myForm' autocomplete='off'>"
-           "<input name='fname' value='Rick'/>"
-           "<input name='lname' value='Deckard'/>"
-           "</form></html>");
+  LoadHTML(
+      "<html><form id='myForm' autocomplete='off' action='about:blank'>"
+      "<input name='fname' value='Rick'/>"
+      "<input name='lname' value='Deckard'/>"
+      "</form></html>");
 
   // Submit the form.
   ExecuteJavaScriptForTests("document.getElementById('myForm').submit();");
@@ -609,10 +607,11 @@ TEST_F(FormAutocompleteTest, AutoCompleteOffFormSubmit) {
 // Tests that fields with autocomplete off are submitted.
 TEST_F(FormAutocompleteTest, AutoCompleteOffInputSubmit) {
   // Load a form.
-  LoadHTML("<html><form id='myForm'>"
-           "<input name='fname' value='Rick'/>"
-           "<input name='lname' value='Deckard' autocomplete='off'/>"
-           "</form></html>");
+  LoadHTML(
+      "<html><form id='myForm' action='about:blank'>"
+      "<input name='fname' value='Rick'/>"
+      "<input name='lname' value='Deckard' autocomplete='off'/>"
+      "</form></html>");
 
   // Submit the form.
   ExecuteJavaScriptForTests("document.getElementById('myForm').submit();");
@@ -626,21 +625,23 @@ TEST_F(FormAutocompleteTest, AutoCompleteOffInputSubmit) {
 // off generates WillSubmitForm and FormSubmitted messages.
 // Note: We previously did the opposite, for bug http://crbug.com/36520
 TEST_F(FormAutocompleteTest, DynamicAutoCompleteOffFormSubmit) {
-  LoadHTML("<html><form id='myForm'><input name='fname' value='Rick'/>"
-           "<input name='lname' value='Deckard'/></form></html>");
+  LoadHTML(
+      "<html><form id='myForm' action='about:blank'>"
+      "<input name='fname' value='Rick'/>"
+      "<input name='lname' value='Deckard'/></form></html>");
 
   WebElement element =
-      GetMainFrame()->document().getElementById(blink::WebString("myForm"));
-  ASSERT_FALSE(element.isNull());
-  blink::WebFormElement form = element.to<blink::WebFormElement>();
-  EXPECT_TRUE(form.autoComplete());
+      GetMainFrame()->GetDocument().GetElementById(blink::WebString("myForm"));
+  ASSERT_FALSE(element.IsNull());
+  blink::WebFormElement form = element.To<blink::WebFormElement>();
+  EXPECT_TRUE(form.AutoComplete());
 
   // Dynamically mark the form as autocomplete off.
   ExecuteJavaScriptForTests(
       "document.getElementById('myForm')."
       "setAttribute('autocomplete', 'off');");
   ProcessPendingMessages();
-  EXPECT_FALSE(form.autoComplete());
+  EXPECT_FALSE(form.AutoComplete());
 
   // Submit the form.
   ExecuteJavaScriptForTests("document.getElementById('myForm').submit();");

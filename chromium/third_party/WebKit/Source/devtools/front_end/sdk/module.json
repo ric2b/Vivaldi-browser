@@ -8,12 +8,6 @@
     "extensions": [
         {
             "type": "setting",
-            "settingName": "networkBlockedURLs",
-            "settingType": "array",
-            "defaultValue": []
-        },
-        {
-            "type": "setting",
             "settingName": "skipStackFramesPattern",
             "settingType": "regex",
             "defaultValue": ""
@@ -95,13 +89,31 @@
             "settingName": "customFormatters",
             "settingType": "boolean",
             "defaultValue": false
+        },
+        {
+            "type": "setting",
+            "category": "Network",
+            "title": "Enable request blocking",
+            "settingName": "requestBlockingEnabled",
+            "settingType": "boolean",
+            "storageType": "session",
+            "defaultValue": false,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Enable request blocking"
+                },
+                {
+                    "value": false,
+                    "title": "Disable request blocking"
+                }
+            ]
         }
     ],
     "scripts": [
         "Target.js",
         "TargetManager.js",
         "Connections.js",
-        "ConsoleModel.js",
         "ContentProviders.js",
         "CookieModel.js",
         "CookieParser.js",
@@ -119,9 +131,8 @@
         "CSSStyleSheetHeader.js",
         "DOMModel.js",
         "DebuggerModel.js",
-        "HAREntry.js",
         "LayerTreeBase.js",
-        "NetworkLog.js",
+        "LogModel.js",
         "ServiceWorkerManager.js",
         "TracingManager.js",
         "TracingModel.js",
@@ -134,6 +145,7 @@
         "ResourceTreeModel.js",
         "SecurityOriginManager.js",
         "SourceMap.js",
+        "SourceMapManager.js",
         "NetworkManager.js",
         "NetworkRequest.js",
         "PaintProfiler.js",

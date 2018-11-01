@@ -31,6 +31,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/file_util.h"
 #include "net/base/load_flags.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_status.h"
@@ -72,16 +73,17 @@ class ContentHashFetcherJob
   // Returns whether this job was successful (we have both verified contents
   // and computed hashes). Even if the job was a success, there might have been
   // files that were found to have contents not matching expectations; these
-  // are available by calling hash_mismatch_paths().
+  // are available by calling hash_mismatch_unix_paths().
   bool success() { return success_; }
 
   bool force() { return force_; }
 
   const std::string& extension_id() { return extension_id_; }
 
-  // Returns the set of paths that had a hash mismatch.
-  const std::set<base::FilePath>& hash_mismatch_paths() {
-    return hash_mismatch_paths_;
+  // Returns the set of paths (with unix style '/' separators) that had a hash
+  // mismatch.
+  const std::set<base::FilePath>& hash_mismatch_unix_paths() {
+    return hash_mismatch_unix_paths_;
   }
 
  private:
@@ -152,7 +154,7 @@ class ContentHashFetcherJob
   bool success_;
 
   // Paths that were found to have a mismatching hash.
-  std::set<base::FilePath> hash_mismatch_paths_;
+  std::set<base::FilePath> hash_mismatch_unix_paths_;
 
   // The block size to use for hashing.
   int block_size_;
@@ -222,7 +224,7 @@ bool ContentHashFetcherJob::LoadVerifiedContents(const base::FilePath& path) {
   if (!base::PathExists(path))
     return false;
   verified_contents_.reset(new VerifiedContents(key_.data, key_.size));
-  if (!verified_contents_->InitFrom(path, false)) {
+  if (!verified_contents_->InitFrom(path)) {
     verified_contents_.reset();
     if (!base::DeleteFile(path, false))
       LOG(WARNING) << "Failed to delete " << path.value();
@@ -240,8 +242,32 @@ void ContentHashFetcherJob::DoneCheckingForVerifiedContents(bool found) {
   } else {
     VLOG(1) << "Missing verified contents for " << extension_id_
             << ", fetching...";
-    url_fetcher_ =
-        net::URLFetcher::Create(fetch_url_, net::URLFetcher::GET, this);
+    net::NetworkTrafficAnnotationTag traffic_annotation =
+        net::DefineNetworkTrafficAnnotation("content_hash_verification_job", R"(
+          semantics {
+            sender: "Web Store Content Verification"
+            description:
+              "The request sent to retrieve the file required for content "
+              "verification for an extension from the Web Store."
+            trigger:
+              "An extension from the Web Store is missing the "
+              "verified_contents.json file required for extension content "
+              "verification."
+            data: "The extension id and extension version."
+            destination: GOOGLE_OWNED_SERVICE
+          }
+          policy {
+            cookies_allowed: false
+            setting:
+              "This feature cannot be directly disabled; it is enabled if any "
+              "extension from the webstore is installed in the browser."
+            policy_exception_justification:
+              "Not implemented, not required. If the user has extensions from "
+              "the Web Store, this feature is required to ensure the "
+              "extensions match what is distributed by the store."
+          })");
+    url_fetcher_ = net::URLFetcher::Create(fetch_url_, net::URLFetcher::GET,
+                                           this, traffic_annotation);
     url_fetcher_->SetRequestContext(request_context_);
     url_fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                                net::LOAD_DO_NOT_SAVE_COOKIES |
@@ -352,7 +378,7 @@ bool ContentHashFetcherJob::CreateHashes(const base::FilePath& hashes_file) {
     base::FilePath verified_contents_path =
         file_util::GetVerifiedContentsPath(extension_path_);
     verified_contents_.reset(new VerifiedContents(key_.data, key_.size));
-    if (!verified_contents_->InitFrom(verified_contents_path, false)) {
+    if (!verified_contents_->InitFrom(verified_contents_path)) {
       verified_contents_.reset();
       return false;
     }
@@ -380,11 +406,11 @@ bool ContentHashFetcherJob::CreateHashes(const base::FilePath& hashes_file) {
     if (IsCancelled())
       return false;
     const base::FilePath& full_path = *i;
-    base::FilePath relative_path;
-    extension_path_.AppendRelativePath(full_path, &relative_path);
-    relative_path = relative_path.NormalizePathSeparatorsTo('/');
+    base::FilePath relative_unix_path;
+    extension_path_.AppendRelativePath(full_path, &relative_unix_path);
+    relative_unix_path = relative_unix_path.NormalizePathSeparatorsTo('/');
 
-    if (!verified_contents_->HasTreeHashRoot(relative_path))
+    if (!verified_contents_->HasTreeHashRoot(relative_unix_path))
       continue;
 
     std::string contents;
@@ -399,13 +425,13 @@ bool ContentHashFetcherJob::CreateHashes(const base::FilePath& hashes_file) {
     ComputedHashes::ComputeHashesForContent(contents, block_size_, &hashes);
     std::string root =
         ComputeTreeHashRoot(hashes, block_size_ / crypto::kSHA256Length);
-    if (!verified_contents_->TreeHashRootEquals(relative_path, root)) {
-      VLOG(1) << "content mismatch for " << relative_path.AsUTF8Unsafe();
-      hash_mismatch_paths_.insert(relative_path);
+    if (!verified_contents_->TreeHashRootEquals(relative_unix_path, root)) {
+      VLOG(1) << "content mismatch for " << relative_unix_path.AsUTF8Unsafe();
+      hash_mismatch_unix_paths_.insert(relative_unix_path);
       continue;
     }
 
-    writer.AddHashes(relative_path, block_size_, hashes);
+    writer.AddHashes(relative_unix_path, block_size_, hashes);
   }
   bool result = writer.WriteToFile(hashes_file);
   UMA_HISTOGRAM_TIMES("ExtensionContentHashFetcher.CreateHashesTime",
@@ -489,10 +515,8 @@ void ContentHashFetcher::ExtensionUnloaded(const Extension* extension) {
 
 void ContentHashFetcher::JobFinished(ContentHashFetcherJob* job) {
   if (!job->IsCancelled()) {
-    fetch_callback_.Run(job->extension_id(),
-                        job->success(),
-                        job->force(),
-                        job->hash_mismatch_paths());
+    fetch_callback_.Run(job->extension_id(), job->success(), job->force(),
+                        job->hash_mismatch_unix_paths());
   }
 
   for (JobMap::iterator i = jobs_.begin(); i != jobs_.end(); ++i) {

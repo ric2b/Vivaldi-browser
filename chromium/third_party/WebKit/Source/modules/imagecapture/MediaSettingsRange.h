@@ -6,6 +6,7 @@
 #define MediaSettingsRange_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "media/capture/mojo/image_capture.mojom-blink.h"
 
 namespace blink {
 
@@ -14,28 +15,29 @@ class MediaSettingsRange final : public GarbageCollected<MediaSettingsRange>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MediaSettingsRange* create(double max,
-                                    double min,
-                                    double current,
-                                    double step) {
-    return new MediaSettingsRange(max, min, current, step);
+  static MediaSettingsRange* Create(double max, double min, double step) {
+    return new MediaSettingsRange(max, min, step);
+  }
+  static MediaSettingsRange* Create(media::mojom::blink::RangePtr range) {
+    return MediaSettingsRange::Create(*range);
+  }
+  static MediaSettingsRange* Create(const media::mojom::blink::Range& range) {
+    return MediaSettingsRange::Create(range.max, range.min, range.step);
   }
 
-  double max() const { return m_max; }
-  double min() const { return m_min; }
-  double current() const { return m_current; }
-  double step() const { return m_step; }
+  double max() const { return max_; }
+  double min() const { return min_; }
+  double step() const { return step_; }
 
   DEFINE_INLINE_TRACE() {}
 
  private:
-  MediaSettingsRange(double max, double min, double current, double step)
-      : m_max(max), m_min(min), m_current(current), m_step(step) {}
+  MediaSettingsRange(double max, double min, double step)
+      : max_(max), min_(min), step_(step) {}
 
-  double m_max;
-  double m_min;
-  double m_current;
-  double m_step;
+  double max_;
+  double min_;
+  double step_;
 };
 
 }  // namespace blink

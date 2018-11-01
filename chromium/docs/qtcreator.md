@@ -12,7 +12,8 @@ not require project configuration.
 
 ### Workflow
 
-1. `ctrl+k` Activate Locator, you can open file(not support sublime-like-search) or type `. ` go to symbol.
+1. `ctrl+k` Activate Locator, you can open file(not support sublime-like-search)
+   or type `. ` go to symbol.
 2. `ctrl+r` Build and Run, `F5` Debug.
 3. `F4` switch between header file and cpp file.
 4. `ctrl+shift+r` rename symbol under cursor.
@@ -30,8 +31,9 @@ block you while parsing.
 #### Code Style
 
 1. Help - About Plugins enable Beautifier.
-2. Tools - Options - Beautifier - Clang Format, select use predefined style: 
-chromium. You can also set a keyboard shortcut for it.
+2. Tools - Options - Beautifier - Clang Format, 
+   change Clang format command: `$depot_tools_dir/clang-format`, select use 
+   predefined style: file. You can also set a keyboard shortcut for it.
 3. Tools - Options - Code Style import this xml file
 
 ```
@@ -97,10 +99,6 @@ standalone GDB frontend. **
   open chrome's task manager to find the process number.
 
 ### Tips, tricks, and troubleshooting
-
-#### Make GDB start fast
-
-Add `gdb_index = true` to `gn args`.
 
 #### Debugger shows start then finish
 

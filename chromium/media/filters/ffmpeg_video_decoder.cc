@@ -21,6 +21,7 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
+#include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
@@ -102,8 +103,8 @@ static int GetVideoBufferImpl(struct AVCodecContext* s,
 }
 
 static void ReleaseVideoBufferImpl(void* opaque, uint8_t* data) {
-  scoped_refptr<VideoFrame> video_frame;
-  video_frame.swap(reinterpret_cast<VideoFrame**>(&opaque));
+  if (opaque)
+    static_cast<VideoFrame*>(opaque)->Release();
 }
 
 // static
@@ -112,8 +113,10 @@ bool FFmpegVideoDecoder::IsCodecSupported(VideoCodec codec) {
   return avcodec_find_decoder(VideoCodecToCodecID(codec)) != nullptr;
 }
 
-FFmpegVideoDecoder::FFmpegVideoDecoder()
-    : state_(kUninitialized), decode_nalus_(false) {
+FFmpegVideoDecoder::FFmpegVideoDecoder(scoped_refptr<MediaLog> media_log)
+    : media_log_(std::move(media_log)),
+      state_(kUninitialized),
+      decode_nalus_(false) {
   thread_checker_.DetachFromThread();
 }
 
@@ -206,8 +209,8 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
 
   // Now create an AVBufferRef for the data just allocated. It will own the
   // reference to the VideoFrame object.
-  void* opaque = NULL;
-  video_frame.swap(reinterpret_cast<VideoFrame**>(&opaque));
+  VideoFrame* opaque = video_frame.get();
+  opaque->AddRef();
   frame->buf[0] =
       av_buffer_create(frame->data[0],
                        VideoFrame::AllocationSize(format, coded_size),
@@ -358,7 +361,10 @@ bool FFmpegVideoDecoder::FFmpegDecode(
                                      &packet);
   // Log the problem if we can't decode a video frame and exit early.
   if (result < 0) {
-    LOG(ERROR) << "Error decoding video: " << buffer->AsHumanReadableString();
+    MEDIA_LOG(DEBUG, media_log_)
+        << GetDisplayName()
+        << ": avcodec_decode_video2(): " << AVErrorToString(result) << ", at "
+        << buffer->AsHumanReadableString();
     return false;
   }
 

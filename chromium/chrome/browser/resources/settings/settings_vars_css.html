@@ -13,11 +13,10 @@
 
     --settings-actionable: var(--cr-actionable);
 
-    --settings-background-color: rgb(241, 241, 241);
     --settings-box-row-padding: 20px;
     --settings-box-row-indent: calc(
         var(--settings-box-row-padding) + var(--settings-indent-width));
-    --settings-indent-width: 36px;
+    --settings-indent-width: 40px;
     --settings-card-max-width: 680px;
     --settings-disabled-opacity: .65;
     --settings-error-color: var(--paper-red-700);
@@ -56,9 +55,9 @@
       color: var(--paper-grey-600);
       font-weight: 400;
     };
+    --settings-separator-height: var(--cr-separator-height);
     --settings-separator-line: var(--cr-separator-line);
 
-    --settings-title-bar-background-color: var(--google-blue-700);
     --settings-title-bar-color: rgb(255, 255, 255);
     --settings-title-search-color: rgb(192, 199, 205);
     --settings-toggle-bar-size: {
@@ -82,7 +81,7 @@
 
     --checkbox-margin-start: 2px;
     --checkbox-size: 16px;
-    --checkbox-spacing: 18px;
+    --settings-control-spacing: var(--cr-control-spacing);
     --iron-icon-fill-color: var(--paper-grey-600);
     --iron-icon-height: var(--cr-icon-size);
     --iron-icon-width: var(--cr-icon-size);
@@ -103,18 +102,23 @@
       color: inherit;
       font-size: inherit;
       font-weight: inherit;
-      line-height: inherit;
+      line-height: 154%;
       vertical-align: baseline;
     };
     --paper-input-container-label: {
       font-size: inherit;
-      line-height: inherit;
-    }
+      line-height: 154%;
+    };
+    --paper-input-container-label-floating: {
+      /* Using "rem" to make it easier to equalize with other labels. */
+      font-size: 1rem;
+      line-height: 1.65rem;
+    };
     --paper-input-error: {
       font-size: 92.31%; /* Should be 12px when 100% is 13px. */
-      line-height: inherit;
+      line-height: 154%;
       overflow: visible; /* Half-visible error message is not useful at all. */
-    }
+    };
     --paper-input-max-width: 264px;
     --paper-radio-button-ink-size: 40px;
     --paper-radio-button-label-color: inherit;
@@ -135,7 +139,7 @@
 
     --settings-input-underline: {
       border-color: var(--paper-grey-300);
-    }
+    };
 
     --paper-input-container-underline: var(--settings-input-underline);
   }

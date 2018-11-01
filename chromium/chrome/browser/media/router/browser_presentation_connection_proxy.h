@@ -7,7 +7,8 @@
 
 #include "chrome/browser/media/router/media_route.h"
 #include "content/public/browser/presentation_service_delegate.h"
-#include "content/public/common/presentation_session.h"
+#include "content/public/common/presentation_connection_message.h"
+#include "content/public/common/presentation_info.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace media_router {
@@ -26,7 +27,7 @@ class MediaRouter;
 // Send message from render frame to media router:
 // PresentationConnection::sendString();
 //     -> PresentationDispatcher::DoSendMessage();
-//         -> PresentationConnectionProxy::SendSessionMessage();
+//         -> PresentationConnectionProxy::SendConnectionMessage();
 //             --> (mojo call to browser side PresentationConnection)
 //                 -> BrowserPresentationConnectionProxy::OnMessage();
 //                      -> MediaRouter::SendRouteMessage();
@@ -55,7 +56,7 @@ class BrowserPresentationConnectionProxy
   ~BrowserPresentationConnectionProxy() override;
 
   // blink::mojom::PresentationConnection implementation
-  void OnMessage(blink::mojom::ConnectionMessagePtr message,
+  void OnMessage(content::PresentationConnectionMessage message,
                  const OnMessageCallback& on_message_callback) override;
 
   // Underlying media route is always connected. Media route class does not

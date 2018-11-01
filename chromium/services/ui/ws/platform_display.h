@@ -12,12 +12,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "services/ui/display/viewport_metrics.h"
-#include "services/ui/public/interfaces/cursor.mojom.h"
+#include "services/ui/public/interfaces/cursor/cursor.mojom.h"
+#include "ui/events/event_source.h"
 #include "ui/gfx/native_widget_types.h"
-
-namespace gfx {
-class Rect;
-}
 
 namespace ui {
 
@@ -28,17 +25,16 @@ namespace ws {
 class FrameGenerator;
 class PlatformDisplayDelegate;
 class PlatformDisplayFactory;
-struct PlatformDisplayInitParams;
+class ServerWindow;
 
 // PlatformDisplay is used to connect the root ServerWindow to a display.
-class PlatformDisplay {
+class PlatformDisplay : public ui::EventSource {
  public:
-  virtual ~PlatformDisplay() {}
+  ~PlatformDisplay() override {}
 
   static std::unique_ptr<PlatformDisplay> Create(
-      const PlatformDisplayInitParams& init_params);
-
-  virtual int64_t GetId() const = 0;
+      ServerWindow* root_window,
+      const display::ViewportMetrics& metrics);
 
   virtual void Init(PlatformDisplayDelegate* delegate) = 0;
 
@@ -50,19 +46,14 @@ class PlatformDisplay {
 
   virtual void ReleaseCapture() = 0;
 
-  virtual void SetCursorById(mojom::Cursor cursor) = 0;
+  virtual void SetCursorById(mojom::CursorType cursor) = 0;
 
   virtual void UpdateTextInputState(const ui::TextInputState& state) = 0;
   virtual void SetImeVisibility(bool visible) = 0;
 
-  virtual gfx::Rect GetBounds() const = 0;
-
-  // Updates the viewport metrics for the display, returning true if any
-  // metrics have changed.
-  virtual bool UpdateViewportMetrics(
+  // Updates the viewport metrics for the display.
+  virtual void UpdateViewportMetrics(
       const display::ViewportMetrics& metrics) = 0;
-
-  virtual const display::ViewportMetrics& GetViewportMetrics() const = 0;
 
   // Returns the AcceleratedWidget associated with the Display. It can return
   // kNullAcceleratedWidget if the accelerated widget is not available yet.

@@ -16,7 +16,8 @@
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
-#include "components/ntp_tiles/ntp_tile_source.h"
+#include "components/ntp_tiles/tile_source.h"
+#include "components/ntp_tiles/tile_visual_type.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -33,7 +34,6 @@ class InstantTabTest;
 class OmniboxView;
 class Profile;
 class SearchIPCRouterTest;
-class SearchTabHelperDelegate;
 
 // Per-tab search "helper".  Acts as the owner and controller of the tab's
 // search UI model.
@@ -80,8 +80,6 @@ class SearchTabHelper : public content::WebContentsObserver,
 
   // Called when the tab corresponding to |this| instance is deactivated.
   void OnTabDeactivated();
-
-  void set_delegate(SearchTabHelperDelegate* delegate) { delegate_ = delegate; }
 
   SearchIPCRouter& ipc_router_for_testing() { return ipc_router_; }
 
@@ -142,12 +140,12 @@ class SearchTabHelper : public content::WebContentsObserver,
   void OnUndoMostVisitedDeletion(const GURL& url) override;
   void OnUndoAllMostVisitedDeletions() override;
   void OnLogEvent(NTPLoggingEventType event, base::TimeDelta time) override;
-  void OnLogMostVisitedImpression(
-      int position,
-      ntp_tiles::NTPTileSource tile_source) override;
-  void OnLogMostVisitedNavigation(
-      int position,
-      ntp_tiles::NTPTileSource tile_source) override;
+  void OnLogMostVisitedImpression(int position,
+                                  ntp_tiles::TileSource tile_source,
+                                  ntp_tiles::TileVisualType tile_type) override;
+  void OnLogMostVisitedNavigation(int position,
+                                  ntp_tiles::TileSource tile_source,
+                                  ntp_tiles::TileVisualType tile_type) override;
   void PasteIntoOmnibox(const base::string16& text) override;
   void OnChromeIdentityCheck(const base::string16& identity) override;
   void OnHistorySyncCheck() override;
@@ -170,14 +168,14 @@ class SearchTabHelper : public content::WebContentsObserver,
   // received.
   void DetermineIfPageSupportsInstant();
 
+  OmniboxView* GetOmniboxView();
+  const OmniboxView* GetOmniboxView() const;
+
   Profile* profile() const;
 
   // Returns whether input is in progress, i.e. if the omnibox has focus and the
   // active tab is in mode SEARCH_SUGGESTIONS.
   bool IsInputInProgress() const;
-
-  // Returns the OmniboxView for |web_contents_| or NULL if not available.
-  OmniboxView* GetOmniboxView() const;
 
   const bool is_search_enabled_;
 
@@ -189,11 +187,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   SearchIPCRouter ipc_router_;
 
   InstantService* instant_service_;
-
-  // Delegate for notifying our owner about the SearchTabHelper state. Not owned
-  // by us.
-  // NULL on iOS and Android because they don't use the Instant framework.
-  SearchTabHelperDelegate* delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchTabHelper);
 };

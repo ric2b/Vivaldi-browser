@@ -27,8 +27,10 @@
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/chromeos/arc/print/arc_print_service.h"
 #include "chrome/browser/chromeos/arc/process/arc_process_service.h"
+#include "chrome/browser/chromeos/arc/tracing/arc_tracing_bridge.h"
 #include "chrome/browser/chromeos/arc/tts/arc_tts_service.h"
 #include "chrome/browser/chromeos/arc/video/gpu_arc_video_service_host.h"
+#include "chrome/browser/chromeos/arc/voice_interaction/arc_voice_interaction_framework_service.h"
 #include "chrome/browser/chromeos/arc/wallpaper/arc_wallpaper_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
@@ -135,7 +137,14 @@ void ArcServiceLauncher::Initialize() {
   arc_service_manager_->AddService(
       base::MakeUnique<ArcStorageManager>(arc_bridge_service));
   arc_service_manager_->AddService(
+      base::MakeUnique<ArcTracingBridge>(arc_bridge_service));
+  arc_service_manager_->AddService(
       base::MakeUnique<ArcTtsService>(arc_bridge_service));
+  if (ArcVoiceInteractionFrameworkService::IsVoiceInteractionEnabled()) {
+    arc_service_manager_->AddService(
+        base::MakeUnique<ArcVoiceInteractionFrameworkService>(
+            arc_bridge_service));
+  }
   arc_service_manager_->AddService(
       base::MakeUnique<ArcWallpaperService>(arc_bridge_service));
   arc_service_manager_->AddService(

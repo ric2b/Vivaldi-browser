@@ -7,11 +7,12 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "ui/display/types/display_snapshot.h"
+#include "ui/gfx/native_pixmap.h"
+#include "ui/gl/gl_image_native_pixmap.h"
 #include "ui/gl/gl_surface_egl.h"
-#include "ui/ozone/gl/gl_image_ozone_native_pixmap.h"
 #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
-#include "ui/ozone/public/native_pixmap.h"
 
 namespace ui {
 
@@ -122,14 +123,16 @@ bool GbmSurface::CreatePixmaps() {
   if (!fbo_)
     return true;
   for (size_t i = 0; i < arraysize(textures_); i++) {
-    scoped_refptr<NativePixmap> pixmap = surface_factory()->CreateNativePixmap(
-        widget(), GetSize(), gfx::BufferFormat::BGRA_8888,
-        gfx::BufferUsage::SCANOUT);
+    scoped_refptr<gfx::NativePixmap> pixmap =
+        surface_factory()->CreateNativePixmap(
+            widget(), GetSize(), display::DisplaySnapshot::PrimaryFormat(),
+            gfx::BufferUsage::SCANOUT);
     if (!pixmap)
       return false;
-    scoped_refptr<GLImageOzoneNativePixmap> image =
-        new GLImageOzoneNativePixmap(GetSize(), GL_BGRA_EXT);
-    if (!image->Initialize(pixmap.get(), gfx::BufferFormat::BGRA_8888))
+    scoped_refptr<gl::GLImageNativePixmap> image =
+        new gl::GLImageNativePixmap(GetSize(), GL_RGB);
+    if (!image->Initialize(pixmap.get(),
+                           display::DisplaySnapshot::PrimaryFormat()))
       return false;
     images_[i] = image;
     // Bind image to texture.

@@ -25,6 +25,7 @@
 #include "net/http/http_network_transaction.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/log/net_log_with_source.h"
+#include "net/socket/client_socket_handle.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
@@ -48,8 +49,10 @@ namespace {
 
 // Parses a URL into the scheme, host, and path components required for a
 // SPDY request.
-void ParseUrl(base::StringPiece url, std::string* scheme, std::string* host,
-              std::string* path) {
+void ParseUrl(SpdyStringPiece url,
+              SpdyString* scheme,
+              SpdyString* host,
+              SpdyString* path) {
   GURL gurl(url);
   path->assign(gurl.PathForRequest());
   scheme->assign(gurl.scheme());
@@ -86,8 +89,8 @@ MockWrite* ChopWriteFrame(const SpdySerializedFrame& frame, int num_chunks) {
 void AppendToHeaderBlock(const char* const extra_headers[],
                          int extra_header_count,
                          SpdyHeaderBlock* headers) {
-  std::string this_header;
-  std::string this_value;
+  SpdyString this_header;
+  SpdyString this_value;
 
   if (!extra_header_count)
     return;
@@ -101,11 +104,11 @@ void AppendToHeaderBlock(const char* const extra_headers[],
     // Sanity check: Non-empty header.
     DCHECK_NE('\0', *extra_headers[i * 2]) << "Empty header value pair";
     this_header = extra_headers[i * 2];
-    std::string::size_type header_len = this_header.length();
+    SpdyString::size_type header_len = this_header.length();
     if (!header_len)
       continue;
     this_value = extra_headers[1 + (i * 2)];
-    std::string new_value;
+    SpdyString new_value;
     if (headers->find(this_header) != headers->end()) {
       // More than one entry in the header.
       // Don't add the header again, just the append to the value,
@@ -190,7 +193,7 @@ class PriorityGetter : public BufferedSpdyFramerVisitorInterface {
 
   void OnError(SpdyFramer::SpdyFramerError spdy_framer_error) override {}
   void OnStreamError(SpdyStreamId stream_id,
-                     const std::string& description) override {}
+                     const SpdyString& description) override {}
   void OnHeaders(SpdyStreamId stream_id,
                  bool has_priority,
                  int weight,
@@ -216,13 +219,13 @@ class PriorityGetter : public BufferedSpdyFramerVisitorInterface {
   void OnRstStream(SpdyStreamId stream_id, SpdyErrorCode error_code) override {}
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
                 SpdyErrorCode error_code,
-                base::StringPiece debug_data) override {}
+                SpdyStringPiece debug_data) override {}
   void OnWindowUpdate(SpdyStreamId stream_id, int delta_window_size) override {}
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
                      SpdyHeaderBlock headers) override {}
   void OnAltSvc(SpdyStreamId stream_id,
-                base::StringPiece origin,
+                SpdyStringPiece origin,
                 const SpdyAltSvcWireFormat::AlternativeServiceVector&
                     altsvc_vector) override {}
   bool OnUnknownFrame(SpdyStreamId stream_id, uint8_t frame_type) override {
@@ -288,8 +291,8 @@ bool MockECSignatureCreator::Sign(const uint8_t* data,
   std::vector<uint8_t> private_key;
   if (!key_->ExportPrivateKey(&private_key))
     return false;
-  std::string head = "fakesignature";
-  std::string tail = "/fakesignature";
+  SpdyString head = "fakesignature";
+  SpdyString tail = "/fakesignature";
 
   signature->clear();
   signature->insert(signature->end(), head.begin(), head.end());
@@ -484,8 +487,9 @@ SpdyURLRequestContext::~SpdyURLRequestContext() {
 }
 
 bool HasSpdySession(SpdySessionPool* pool, const SpdySessionKey& key) {
-  return static_cast<bool>(
-      pool->FindAvailableSession(key, GURL(), NetLogWithSource()));
+  return static_cast<bool>(pool->FindAvailableSession(
+      key, GURL(),
+      /* enable_ip_based_pooling = */ true, NetLogWithSource()));
 }
 
 namespace {
@@ -495,8 +499,10 @@ base::WeakPtr<SpdySession> CreateSpdySessionHelper(
     const SpdySessionKey& key,
     const NetLogWithSource& net_log,
     Error expected_status,
-    bool is_secure) {
-  EXPECT_FALSE(HasSpdySession(http_session->spdy_session_pool(), key));
+    bool is_secure,
+    bool enable_ip_based_pooling) {
+  EXPECT_FALSE(http_session->spdy_session_pool()->FindAvailableSession(
+      key, GURL(), enable_ip_based_pooling, NetLogWithSource()));
 
   scoped_refptr<TransportSocketParams> transport_params(
       new TransportSocketParams(
@@ -552,8 +558,9 @@ base::WeakPtr<SpdySession> CreateInsecureSpdySession(
     HttpNetworkSession* http_session,
     const SpdySessionKey& key,
     const NetLogWithSource& net_log) {
-  return CreateSpdySessionHelper(http_session, key, net_log,
-                                 OK, false /* is_secure */);
+  return CreateSpdySessionHelper(http_session, key, net_log, OK,
+                                 /* is_secure = */ false,
+                                 /* enable_ip_based_pooling = */ true);
 }
 
 base::WeakPtr<SpdySession> TryCreateSpdySessionExpectingFailure(
@@ -563,15 +570,26 @@ base::WeakPtr<SpdySession> TryCreateSpdySessionExpectingFailure(
     const NetLogWithSource& net_log) {
   DCHECK_LT(expected_error, ERR_IO_PENDING);
   return CreateSpdySessionHelper(http_session, key, net_log, expected_error,
-                                 true /* is_secure */);
+                                 /* is_secure = */ true,
+                                 /* enable_ip_based_pooling = */ true);
 }
 
 base::WeakPtr<SpdySession> CreateSecureSpdySession(
     HttpNetworkSession* http_session,
     const SpdySessionKey& key,
     const NetLogWithSource& net_log) {
-  return CreateSpdySessionHelper(http_session, key, net_log,
-                                 OK, true /* is_secure */);
+  return CreateSpdySessionHelper(http_session, key, net_log, OK,
+                                 /* is_secure = */ true,
+                                 /* enable_ip_based_pooling = */ true);
+}
+
+base::WeakPtr<SpdySession> CreateSecureSpdySessionWithIpBasedPoolingDisabled(
+    HttpNetworkSession* http_session,
+    const SpdySessionKey& key,
+    const NetLogWithSource& net_log) {
+  return CreateSpdySessionHelper(http_session, key, net_log, OK,
+                                 /* is_secure = */ true,
+                                 /* enable_ip_based_pooling = */ false);
 }
 
 namespace {
@@ -683,9 +701,9 @@ SpdyTestUtil::SpdyTestUtil()
 
 SpdyTestUtil::~SpdyTestUtil() {}
 
-void SpdyTestUtil::AddUrlToHeaderBlock(base::StringPiece url,
+void SpdyTestUtil::AddUrlToHeaderBlock(SpdyStringPiece url,
                                        SpdyHeaderBlock* headers) const {
-  std::string scheme, host, path;
+  SpdyString scheme, host, path;
   ParseUrl(url, &scheme, &host, &path);
   (*headers)[GetHostKey()] = host;
   (*headers)[GetSchemeKey()] = scheme;
@@ -693,45 +711,45 @@ void SpdyTestUtil::AddUrlToHeaderBlock(base::StringPiece url,
 }
 
 // static
-SpdyHeaderBlock SpdyTestUtil::ConstructGetHeaderBlock(base::StringPiece url) {
+SpdyHeaderBlock SpdyTestUtil::ConstructGetHeaderBlock(SpdyStringPiece url) {
   return ConstructHeaderBlock("GET", url, NULL);
 }
 
 // static
 SpdyHeaderBlock SpdyTestUtil::ConstructGetHeaderBlockForProxy(
-    base::StringPiece url) {
+    SpdyStringPiece url) {
   return ConstructGetHeaderBlock(url);
 }
 
 // static
-SpdyHeaderBlock SpdyTestUtil::ConstructHeadHeaderBlock(base::StringPiece url,
+SpdyHeaderBlock SpdyTestUtil::ConstructHeadHeaderBlock(SpdyStringPiece url,
                                                        int64_t content_length) {
   return ConstructHeaderBlock("HEAD", url, nullptr);
 }
 
 // static
-SpdyHeaderBlock SpdyTestUtil::ConstructPostHeaderBlock(base::StringPiece url,
+SpdyHeaderBlock SpdyTestUtil::ConstructPostHeaderBlock(SpdyStringPiece url,
                                                        int64_t content_length) {
   return ConstructHeaderBlock("POST", url, &content_length);
 }
 
 // static
-SpdyHeaderBlock SpdyTestUtil::ConstructPutHeaderBlock(base::StringPiece url,
+SpdyHeaderBlock SpdyTestUtil::ConstructPutHeaderBlock(SpdyStringPiece url,
                                                       int64_t content_length) {
   return ConstructHeaderBlock("PUT", url, &content_length);
 }
 
-std::string SpdyTestUtil::ConstructSpdyReplyString(
+SpdyString SpdyTestUtil::ConstructSpdyReplyString(
     const SpdyHeaderBlock& headers) const {
-  std::string reply_string;
+  SpdyString reply_string;
   for (SpdyHeaderBlock::const_iterator it = headers.begin();
        it != headers.end(); ++it) {
-    std::string key = it->first.as_string();
+    SpdyString key = it->first.as_string();
     // Remove leading colon from pseudo headers.
     if (key[0] == ':')
       key = key.substr(1);
-    for (const std::string& value :
-         base::SplitString(it->second, base::StringPiece("\0", 1),
+    for (const SpdyString& value :
+         base::SplitString(it->second, SpdyStringPiece("\0", 1),
                            base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
       reply_string += key + ": " + value + "\n";
     }
@@ -779,7 +797,7 @@ SpdySerializedFrame SpdyTestUtil::ConstructSpdyGoAway(
 SpdySerializedFrame SpdyTestUtil::ConstructSpdyGoAway(
     SpdyStreamId last_good_stream_id,
     SpdyErrorCode error_code,
-    const std::string& desc) {
+    const SpdyString& desc) {
   SpdyGoAwayIR go_ir(last_good_stream_id, error_code, desc);
   return SpdySerializedFrame(headerless_spdy_framer_.SerializeFrame(go_ir));
 }
@@ -1054,8 +1072,7 @@ SpdySerializedFrame SpdyTestUtil::ConstructSpdyPostReply(
 
 SpdySerializedFrame SpdyTestUtil::ConstructSpdyDataFrame(int stream_id,
                                                          bool fin) {
-  SpdyDataIR data_ir(stream_id,
-                     base::StringPiece(kUploadData, kUploadDataSize));
+  SpdyDataIR data_ir(stream_id, SpdyStringPiece(kUploadData, kUploadDataSize));
   data_ir.set_fin(fin);
   return SpdySerializedFrame(headerless_spdy_framer_.SerializeData(data_ir));
 }
@@ -1064,7 +1081,7 @@ SpdySerializedFrame SpdyTestUtil::ConstructSpdyDataFrame(int stream_id,
                                                          const char* data,
                                                          uint32_t len,
                                                          bool fin) {
-  SpdyDataIR data_ir(stream_id, base::StringPiece(data, len));
+  SpdyDataIR data_ir(stream_id, SpdyStringPiece(data, len));
   data_ir.set_fin(fin);
   return SpdySerializedFrame(headerless_spdy_framer_.SerializeData(data_ir));
 }
@@ -1074,7 +1091,7 @@ SpdySerializedFrame SpdyTestUtil::ConstructSpdyDataFrame(int stream_id,
                                                          uint32_t len,
                                                          bool fin,
                                                          int padding_length) {
-  SpdyDataIR data_ir(stream_id, base::StringPiece(data, len));
+  SpdyDataIR data_ir(stream_id, SpdyStringPiece(data, len));
   data_ir.set_fin(fin);
   data_ir.set_padding_len(padding_length);
   return SpdySerializedFrame(headerless_spdy_framer_.SerializeData(data_ir));
@@ -1130,10 +1147,10 @@ const char* SpdyTestUtil::GetPathKey() {
 }
 
 // static
-SpdyHeaderBlock SpdyTestUtil::ConstructHeaderBlock(base::StringPiece method,
-                                                   base::StringPiece url,
+SpdyHeaderBlock SpdyTestUtil::ConstructHeaderBlock(SpdyStringPiece method,
+                                                   SpdyStringPiece url,
                                                    int64_t* content_length) {
-  std::string scheme, host, path;
+  SpdyString scheme, host, path;
   ParseUrl(url, &scheme, &host, &path);
   SpdyHeaderBlock headers;
   headers[GetMethodKey()] = method.as_string();
@@ -1141,7 +1158,7 @@ SpdyHeaderBlock SpdyTestUtil::ConstructHeaderBlock(base::StringPiece method,
   headers[GetSchemeKey()] = scheme.c_str();
   headers[GetPathKey()] = path.c_str();
   if (content_length) {
-    std::string length_str = base::Int64ToString(*content_length);
+    SpdyString length_str = base::Int64ToString(*content_length);
     headers["content-length"] = length_str;
   }
   return headers;

@@ -27,14 +27,16 @@ NSString* GetPageScript(NSString* script_file_name) {
   NSString* content = [NSString stringWithContentsOfFile:path
                                                 encoding:NSUTF8StringEncoding
                                                    error:&error];
-  DCHECK(!error) << "Error fetching script: " << [error.description UTF8String];
+  DCHECK(!error) << "Error fetching script: "
+                 << base::SysNSStringToUTF8(error.description);
   DCHECK(content);
   return content;
 }
 
-NSString* GetEarlyPageScript() {
+NSString* GetEarlyPageScript(BrowserState* browser_state) {
   DCHECK(GetWebClient());
-  NSString* embedder_page_script = GetWebClient()->GetEarlyPageScript();
+  NSString* embedder_page_script =
+      GetWebClient()->GetEarlyPageScript(browser_state);
   DCHECK(embedder_page_script);
 
   // Make sure that script is injected only once. For example, content of

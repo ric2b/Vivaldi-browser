@@ -30,12 +30,13 @@
 #define DocumentMarkerController_h
 
 #include "core/CoreExport.h"
+#include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/markers/DocumentMarker.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/heap/Handle.h"
-#include "wtf/HashMap.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -49,106 +50,99 @@ class MarkerRemoverPredicate final {
   bool operator()(const DocumentMarker&, const Text&) const;
 
  private:
-  Vector<String> m_words;
+  Vector<String> words_;
 };
 
 class CORE_EXPORT DocumentMarkerController final
-    : public GarbageCollected<DocumentMarkerController> {
+    : public GarbageCollected<DocumentMarkerController>,
+      public SynchronousMutationObserver {
   WTF_MAKE_NONCOPYABLE(DocumentMarkerController);
+  USING_GARBAGE_COLLECTED_MIXIN(DocumentMarkerController);
 
  public:
-  explicit DocumentMarkerController(const Document&);
+  explicit DocumentMarkerController(Document&);
 
-  void clear();
-  void addMarker(const Position& start,
+  void Clear();
+  void AddMarker(const Position& start,
                  const Position& end,
                  DocumentMarker::MarkerType,
-                 const String& description = emptyString);
-  void addTextMatchMarker(const EphemeralRange&, bool activeMatch);
-  void addCompositionMarker(const Position& start,
+                 const String& description = g_empty_string);
+  void AddTextMatchMarker(const EphemeralRange&, DocumentMarker::MatchStatus);
+  void AddCompositionMarker(const Position& start,
                             const Position& end,
-                            Color underlineColor,
+                            Color underline_color,
                             bool thick,
-                            Color backgroundColor);
+                            Color background_color);
 
-  void copyMarkers(Node* srcNode,
-                   unsigned startOffset,
-                   int length,
-                   Node* dstNode,
-                   int delta);
+  void MoveMarkers(Node* src_node, int length, Node* dst_node);
 
-  void prepareForDestruction();
-  // When a marker partially overlaps with range, if
-  // removePartiallyOverlappingMarkers is true, we completely remove the marker.
-  // If the argument is false, we will adjust the span of the marker so that it
-  // retains the portion that is outside of the range.
-  enum RemovePartiallyOverlappingMarkerOrNot {
-    DoNotRemovePartiallyOverlappingMarker,
-    RemovePartiallyOverlappingMarker
-  };
-  void removeMarkers(const EphemeralRange&,
-                     DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers(),
-                     RemovePartiallyOverlappingMarkerOrNot =
-                         DoNotRemovePartiallyOverlappingMarker);
-  void removeMarkers(Node*,
-                     unsigned startOffset,
-                     int length,
-                     DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers(),
-                     RemovePartiallyOverlappingMarkerOrNot =
-                         DoNotRemovePartiallyOverlappingMarker);
-
-  void removeMarkers(
+  void PrepareForDestruction();
+  void RemoveMarkers(
+      const EphemeralRange&,
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  void removeMarkers(
+  void RemoveMarkers(
+      Node*,
+      unsigned start_offset,
+      int length,
+      DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
+  void RemoveMarkers(
+      DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
+  void RemoveMarkers(
       Node*,
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  void removeMarkers(const MarkerRemoverPredicate& shouldRemoveMarker);
-  void repaintMarkers(
+  void RemoveMarkers(const MarkerRemoverPredicate& should_remove_marker);
+  void RepaintMarkers(
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  void shiftMarkers(Node*, unsigned startOffset, int delta);
   // Returns true if markers within a range are found.
-  bool setMarkersActive(const EphemeralRange&, bool);
+  bool SetMarkersActive(const EphemeralRange&, bool);
   // Returns true if markers within a range defined by a node, |startOffset| and
   // |endOffset| are found.
-  bool setMarkersActive(Node*, unsigned startOffset, unsigned endOffset, bool);
-  bool hasMarkers(Node* node) const { return m_markers.contains(node); }
+  bool SetMarkersActive(Node*,
+                        unsigned start_offset,
+                        unsigned end_offset,
+                        bool);
+  bool HasMarkers(Node* node) const { return markers_.Contains(node); }
 
-  DocumentMarkerVector markersFor(
+  DocumentMarkerVector MarkersFor(
       Node*,
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  DocumentMarkerVector markersInRange(const EphemeralRange&,
+  DocumentMarkerVector MarkersInRange(const EphemeralRange&,
                                       DocumentMarker::MarkerTypes);
-  DocumentMarkerVector markers();
-  Vector<IntRect> renderedRectsForMarkers(DocumentMarker::MarkerType);
-  void updateMarkerRenderedRectIfNeeded(const Node&, RenderedDocumentMarker&);
-  void invalidateRectsForAllMarkers();
-  void invalidateRectsForMarkersInNode(const Node&);
+  DocumentMarkerVector Markers();
+  Vector<IntRect> RenderedRectsForMarkers(DocumentMarker::MarkerType);
+  void UpdateMarkerRenderedRectIfNeeded(const Node&, RenderedDocumentMarker&);
+  void InvalidateRectsForAllMarkers();
+  void InvalidateRectsForMarkersInNode(const Node&);
 
   DECLARE_TRACE();
 
 #ifndef NDEBUG
-  void showMarkers() const;
+  void ShowMarkers() const;
 #endif
 
+  // SynchronousMutationObserver
+  void DidUpdateCharacterData(CharacterData*,
+                              unsigned offset,
+                              unsigned old_length,
+                              unsigned new_length) final;
+
  private:
-  void addMarker(Node*, const DocumentMarker&);
+  void AddMarker(Node*, const DocumentMarker&);
 
   using MarkerList = HeapVector<Member<RenderedDocumentMarker>>;
   using MarkerLists =
-      HeapVector<Member<MarkerList>, DocumentMarker::MarkerTypeIndexesCount>;
+      HeapVector<Member<MarkerList>, DocumentMarker::kMarkerTypeIndexesCount>;
   using MarkerMap = HeapHashMap<WeakMember<const Node>, Member<MarkerLists>>;
-  void mergeOverlapping(MarkerList*, RenderedDocumentMarker*);
-  bool possiblyHasMarkers(DocumentMarker::MarkerTypes);
-  void removeMarkersFromList(MarkerMap::iterator, DocumentMarker::MarkerTypes);
-  void removeMarkers(TextIterator&,
-                     DocumentMarker::MarkerTypes,
-                     RemovePartiallyOverlappingMarkerOrNot);
+  void MergeOverlapping(MarkerList*, RenderedDocumentMarker*);
+  bool PossiblyHasMarkers(DocumentMarker::MarkerTypes);
+  void RemoveMarkersFromList(MarkerMap::iterator, DocumentMarker::MarkerTypes);
+  void RemoveMarkers(TextIterator&, DocumentMarker::MarkerTypes);
 
-  MarkerMap m_markers;
+  MarkerMap markers_;
   // Provide a quick way to determine whether a particular marker type is absent
   // without going through the map.
-  DocumentMarker::MarkerTypes m_possiblyExistingMarkerTypes;
-  const Member<const Document> m_document;
+  DocumentMarker::MarkerTypes possibly_existing_marker_types_;
+  const Member<const Document> document_;
 };
 
 }  // namespace blink

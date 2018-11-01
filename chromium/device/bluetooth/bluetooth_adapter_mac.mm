@@ -74,6 +74,16 @@ BluetoothUUID BluetoothAdapterMac::BluetoothUUIDWithCBUUID(CBUUID* uuid) {
   return device::BluetoothUUID(uuid_c_string);
 }
 
+// static
+std::string BluetoothAdapterMac::String(NSError* error) {
+  if (!error) {
+    return "no error";
+  }
+  return std::string("error domain: ") + base::SysNSStringToUTF8(error.domain) +
+         ", code: " + std::to_string(error.code) + ", description: " +
+         base::SysNSStringToUTF8(error.localizedDescription);
+}
+
 BluetoothAdapterMac::BluetoothAdapterMac()
     : BluetoothAdapter(),
       classic_powered_(false),
@@ -519,14 +529,16 @@ void BluetoothAdapterMac::LowEnergyDeviceUpdated(
   // otherwise update the existing device.
   const bool is_new_device = device_mac == nullptr;
   if (is_new_device) {
-    VLOG(1) << "LowEnergyDeviceUpdated new device";
     // A new device has been found.
     device_mac = new BluetoothLowEnergyDeviceMac(this, peripheral);
+    VLOG(1) << *device_mac << ": New Device.";
   } else if (DoesCollideWithKnownDevice(peripheral, device_mac)) {
     return;
   }
 
   DCHECK(device_mac);
+  VLOG(3) << *device_mac << ": Device updated with "
+          << base::SysNSStringToUTF8([advertisement_data description]);
 
   // Get Advertised UUIDs
   BluetoothDevice::UUIDList advertised_uuids;
@@ -576,7 +588,10 @@ void BluetoothAdapterMac::LowEnergyDeviceUpdated(
 }
 
 // TODO(krstnmnlsn): Implement. crbug.com/511025
-void BluetoothAdapterMac::LowEnergyCentralManagerUpdatedState() {}
+void BluetoothAdapterMac::LowEnergyCentralManagerUpdatedState() {
+  VLOG(1) << "Central manager state updated: "
+          << [low_energy_central_manager_ state];
+}
 
 void BluetoothAdapterMac::AddPairedDevices() {
   // Add any new paired devices.
@@ -594,6 +609,7 @@ BluetoothAdapterMac::RetrieveGattConnectedDevicesWithService(
     const BluetoothUUID* uuid) {
   NSArray* cbUUIDs = nil;
   if (!uuid) {
+    VLOG(1) << "Retrieving all connected devices.";
     // It is not possible to ask for all connected peripherals with
     // -[CBCentralManager retrieveConnectedPeripheralsWithServices:] by passing
     // nil. To try to get most of the peripherals, the search is done with
@@ -601,6 +617,8 @@ BluetoothAdapterMac::RetrieveGattConnectedDevicesWithService(
     CBUUID* genericAccessServiceUUID = [CBUUID UUIDWithString:@"1800"];
     cbUUIDs = @[ genericAccessServiceUUID ];
   } else {
+    VLOG(1) << "Retrieving connected devices with UUID: "
+            << uuid->canonical_value();
     NSString* uuidString =
         base::SysUTF8ToNSString(uuid->canonical_value().c_str());
     cbUUIDs = @[ [CBUUID UUIDWithString:uuidString] ];
@@ -626,18 +644,21 @@ BluetoothAdapterMac::RetrieveGattConnectedDevicesWithService(
       }
     }
     connected_devices.push_back(device_mac);
+    VLOG(1) << *device_mac << ": New connected device.";
   }
   return connected_devices;
 }
 
 void BluetoothAdapterMac::CreateGattConnection(
     BluetoothLowEnergyDeviceMac* device_mac) {
+  VLOG(1) << *device_mac << ": Create gatt connection.";
   [low_energy_central_manager_ connectPeripheral:device_mac->peripheral_
                                          options:nil];
 }
 
 void BluetoothAdapterMac::DisconnectGatt(
     BluetoothLowEnergyDeviceMac* device_mac) {
+  VLOG(1) << *device_mac << ": Disconnect gatt.";
   [low_energy_central_manager_
       cancelPeripheralConnection:device_mac->peripheral_];
 }
@@ -650,7 +671,7 @@ void BluetoothAdapterMac::DidConnectPeripheral(CBPeripheral* peripheral) {
     return;
   }
   device_mac->DidConnectGatt();
-  [device_mac->GetPeripheral() discoverServices:nil];
+  device_mac->DiscoverPrimaryServices();
 }
 
 void BluetoothAdapterMac::DidFailToConnectPeripheral(CBPeripheral* peripheral,
@@ -661,15 +682,14 @@ void BluetoothAdapterMac::DidFailToConnectPeripheral(CBPeripheral* peripheral,
     [low_energy_central_manager_ cancelPeripheralConnection:peripheral];
     return;
   }
-  VLOG(1) << "Failed to connect to peripheral";
   BluetoothDevice::ConnectErrorCode error_code =
       BluetoothDevice::ConnectErrorCode::ERROR_UNKNOWN;
   if (error) {
     error_code = BluetoothDeviceMac::GetConnectErrorCodeFromNSError(error);
-    VLOG(1) << "Bluetooth error, domain: " << error.domain.UTF8String
-            << ", error code: " << error.code
-            << ", converted into: " << error_code;
   }
+  VLOG(1) << *device_mac << ": Failed to connect to peripheral with error "
+          << BluetoothAdapterMac::String(error)
+          << ", error code: " << error_code;
   device_mac->DidFailToConnectGatt(error_code);
 }
 
@@ -680,11 +700,6 @@ void BluetoothAdapterMac::DidDisconnectPeripheral(CBPeripheral* peripheral,
   if (!device_mac) {
     [low_energy_central_manager_ cancelPeripheralConnection:peripheral];
     return;
-  }
-  VLOG(1) << "Disconnected from peripheral.";
-  if (error) {
-    VLOG(1) << "Bluetooth error, domain: " << error.domain.UTF8String
-            << ", error code: " << error.code;
   }
   device_mac->DidDisconnectPeripheral(error);
 }

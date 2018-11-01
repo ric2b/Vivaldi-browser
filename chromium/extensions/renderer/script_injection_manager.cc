@@ -20,6 +20,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/feature_switch.h"
 #include "extensions/renderer/extension_frame_helper.h"
 #include "extensions/renderer/extension_injection_host.h"
 #include "extensions/renderer/programmatic_script_injector.h"
@@ -189,15 +190,23 @@ void ScriptInjectionManager::RFOHelper::DidFinishDocumentLoad() {
       base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
                  weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kScriptIdleTimeoutInMs));
+
+  if (FeatureSwitch::yield_between_content_script_runs()->IsEnabled()) {
+    ExtensionFrameHelper::Get(render_frame())
+        ->ScheduleAtDocumentIdle(
+            base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
+                       weak_factory_.GetWeakPtr()));
+  }
 }
 
 void ScriptInjectionManager::RFOHelper::DidFinishLoad() {
   DCHECK(content::RenderThread::Get());
-  // Ensure that we don't block any UI progress by running scripts.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
-                 weak_factory_.GetWeakPtr()));
+  if (!FeatureSwitch::yield_between_content_script_runs()->IsEnabled()) {
+    // Ensure that we don't block any UI progress by running scripts.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
+                              weak_factory_.GetWeakPtr()));
+  }
 }
 
 void ScriptInjectionManager::RFOHelper::FrameDetached() {
@@ -231,7 +240,7 @@ void ScriptInjectionManager::RFOHelper::OnExecuteDeclarativeScript(
   // TODO(markdittmer): URL-checking isn't the best security measure.
   // Begin script injection workflow only if the current URL is identical to
   // the one that matched declarative conditions in the browser.
-  if (GURL(render_frame()->GetWebFrame()->document().url()) == url) {
+  if (GURL(render_frame()->GetWebFrame()->GetDocument().Url()) == url) {
     manager_->HandleExecuteDeclarativeScript(render_frame(),
                                              tab_id,
                                              extension_id,

@@ -107,8 +107,6 @@ TabSpecificContentSettings::TabSpecificContentSettings(WebContents* tab)
       pending_protocol_handler_setting_(CONTENT_SETTING_DEFAULT),
       load_plugins_link_enabled_(true),
       microphone_camera_state_(MICROPHONE_CAMERA_NOT_ACCESSED),
-      subresource_filter_enabled_(false),
-      subresource_filter_blockage_indicated_(false),
       observer_(this) {
   ClearContentSettingsExceptForNavigationRelatedSettings();
   ClearNavigationRelatedContentSettings();
@@ -252,17 +250,14 @@ bool TabSpecificContentSettings::IsContentBlocked(
       content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||
       content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA ||
       content_type == CONTENT_SETTINGS_TYPE_PPAPI_BROKER ||
-      content_type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
+      content_type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX ||
+      content_type == CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER) {
     const auto& it = content_settings_status_.find(content_type);
     if (it != content_settings_status_.end())
       return it->second.blocked;
   }
 
   return false;
-}
-
-bool TabSpecificContentSettings::IsSubresourceBlocked() const {
-  return subresource_filter_enabled_;
 }
 
 bool TabSpecificContentSettings::IsBlockageIndicated(
@@ -273,17 +268,9 @@ bool TabSpecificContentSettings::IsBlockageIndicated(
   return false;
 }
 
-bool TabSpecificContentSettings::IsSubresourceBlockageIndicated() const {
-  return subresource_filter_blockage_indicated_;
-}
-
 void TabSpecificContentSettings::SetBlockageHasBeenIndicated(
     ContentSettingsType content_type) {
   content_settings_status_[content_type].blockage_indicated_to_user = true;
-}
-
-void TabSpecificContentSettings::SetSubresourceBlockageIndicated() {
-  subresource_filter_blockage_indicated_ = true;
 }
 
 bool TabSpecificContentSettings::IsContentAllowed(
@@ -720,10 +707,6 @@ void TabSpecificContentSettings::SetPopupsBlocked(bool blocked) {
       content::NotificationService::NoDetails());
 }
 
-void TabSpecificContentSettings::SetSubresourceBlocked(bool enabled) {
-  subresource_filter_enabled_ = enabled;
-}
-
 void TabSpecificContentSettings::SetPepperBrokerAllowed(bool allowed) {
   if (allowed) {
     OnContentAllowed(CONTENT_SETTINGS_TYPE_PPAPI_BROKER);
@@ -800,8 +783,10 @@ bool TabSpecificContentSettings::OnMessageReceived(
 
 void TabSpecificContentSettings::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsSamePage())
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsSameDocument()) {
     return;
+  }
 
   const content::NavigationController& controller =
       web_contents()->GetController();
@@ -824,7 +809,7 @@ void TabSpecificContentSettings::DidFinishNavigation(
       content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() ||
       !navigation_handle->HasCommitted() ||
-      navigation_handle->IsSamePage()) {
+      navigation_handle->IsSameDocument()) {
     return;
   }
 

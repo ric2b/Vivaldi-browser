@@ -22,10 +22,12 @@
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
-#include "components/image_fetcher/image_decoder.h"
-#include "components/image_fetcher/image_fetcher.h"
-#include "components/image_fetcher/image_fetcher_delegate.h"
+#include "components/image_fetcher/core/image_decoder.h"
+#include "components/image_fetcher/core/image_fetcher.h"
+#include "components/image_fetcher/core/image_fetcher_delegate.h"
+#include "components/image_fetcher/core/request_metadata.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_info.h"
 #include "components/ntp_snippets/category_rankers/category_ranker.h"
@@ -49,6 +51,7 @@
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
@@ -57,6 +60,7 @@
 using image_fetcher::ImageFetcher;
 using image_fetcher::ImageFetcherDelegate;
 using testing::_;
+using testing::CreateFunctor;
 using testing::ElementsAre;
 using testing::Eq;
 using testing::InSequence;
@@ -66,6 +70,7 @@ using testing::Mock;
 using testing::MockFunction;
 using testing::NiceMock;
 using testing::Not;
+using testing::Return;
 using testing::SaveArg;
 using testing::SizeIs;
 using testing::StartsWith;
@@ -82,10 +87,6 @@ MATCHER_P(IdEq, value, "") {
 
 MATCHER_P(IdWithinCategoryEq, expected_id, "") {
   return arg.id().id_within_category() == expected_id;
-}
-
-MATCHER_P(IsCategory, id, "") {
-  return arg.id() == static_cast<int>(id);
 }
 
 MATCHER_P(HasCode, code, "") {
@@ -284,14 +285,19 @@ std::string GetIncompleteSuggestion() {
 
 using ServeImageCallback = base::Callback<void(
     const std::string&,
-    base::Callback<void(const std::string&, const gfx::Image&)>)>;
+    base::Callback<void(const std::string&,
+                        const gfx::Image&,
+                        const image_fetcher::RequestMetadata&)>)>;
 
 void ServeOneByOneImage(
     image_fetcher::ImageFetcherDelegate* notify,
     const std::string& id,
-    base::Callback<void(const std::string&, const gfx::Image&)> callback) {
+    base::Callback<void(const std::string&,
+                        const gfx::Image&,
+                        const image_fetcher::RequestMetadata&)> callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, id, gfx::test::CreateImage(1, 1)));
+      FROM_HERE, base::Bind(callback, id, gfx::test::CreateImage(1, 1),
+                            image_fetcher::RequestMetadata()));
   notify->OnImageDataFetched(id, "1-by-1-image-data");
 }
 
@@ -341,12 +347,14 @@ class MockImageFetcher : public ImageFetcher {
  public:
   MOCK_METHOD1(SetImageFetcherDelegate, void(ImageFetcherDelegate*));
   MOCK_METHOD1(SetDataUseServiceName, void(DataUseServiceName));
+  MOCK_METHOD1(SetImageDownloadLimit,
+               void(base::Optional<int64_t> max_download_bytes));
   MOCK_METHOD1(SetDesiredImageFrameSize, void(const gfx::Size&));
-  MOCK_METHOD3(
-      StartOrQueueNetworkRequest,
-      void(const std::string&,
-           const GURL&,
-           base::Callback<void(const std::string&, const gfx::Image&)>));
+  MOCK_METHOD3(StartOrQueueNetworkRequest,
+               void(const std::string&,
+                    const GURL&,
+                    const ImageFetcherCallback&));
+  MOCK_METHOD0(GetImageDecoder, image_fetcher::ImageDecoder*());
 };
 
 class FakeImageDecoder : public image_fetcher::ImageDecoder {
@@ -368,10 +376,13 @@ class FakeImageDecoder : public image_fetcher::ImageDecoder {
 
 class MockScheduler : public RemoteSuggestionsScheduler {
  public:
+  MOCK_METHOD1(SetProvider, void(RemoteSuggestionsProvider* provider));
   MOCK_METHOD0(OnProviderActivated, void());
   MOCK_METHOD0(OnProviderDeactivated, void());
   MOCK_METHOD0(OnSuggestionsCleared, void());
   MOCK_METHOD0(OnHistoryCleared, void());
+  MOCK_METHOD0(AcquireQuotaForInteractiveFetch, bool());
+  MOCK_METHOD1(OnInteractiveFetchFinished, void(Status fetch_status));
   MOCK_METHOD0(OnBrowserForegrounded, void());
   MOCK_METHOD0(OnBrowserColdStart, void());
   MOCK_METHOD0(OnNTPOpened, void());
@@ -384,7 +395,7 @@ class MockScheduler : public RemoteSuggestionsScheduler {
 class RemoteSuggestionsProviderImplTest : public ::testing::Test {
  public:
   RemoteSuggestionsProviderImplTest()
-      : params_manager_(ntp_snippets::kStudyName,
+      : params_manager_(ntp_snippets::kArticleSuggestionsFeature.name,
                         {{"content_suggestions_backend",
                           kTestContentSuggestionsServerEndpoint}},
                         {ntp_snippets::kArticleSuggestionsFeature.name}),
@@ -392,10 +403,11 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
             /*default_factory=*/&failing_url_fetcher_factory_),
         test_url_(kTestContentSuggestionsServerWithAPIKey),
         category_ranker_(base::MakeUnique<ConstantCategoryRanker>()),
-        user_classifier_(/*pref_service=*/nullptr),
+        user_classifier_(/*pref_service=*/nullptr,
+                         base::MakeUnique<base::DefaultClock>()),
         suggestions_fetcher_(nullptr),
         image_fetcher_(nullptr),
-        image_decoder_(nullptr),
+        scheduler_(base::MakeUnique<NiceMock<MockScheduler>>()),
         database_(nullptr) {
     RemoteSuggestionsProviderImpl::RegisterProfilePrefs(
         utils_.pref_service()->registry());
@@ -439,8 +451,8 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
 
     image_fetcher_ = image_fetcher.get();
     EXPECT_CALL(*image_fetcher, SetImageFetcherDelegate(_));
-    auto image_decoder = base::MakeUnique<FakeImageDecoder>();
-    image_decoder_ = image_decoder.get();
+    ON_CALL(*image_fetcher, GetImageDecoder())
+        .WillByDefault(Return(&image_decoder_));
     EXPECT_FALSE(observer_);
     observer_ = base::MakeUnique<FakeContentSuggestionsProviderObserver>();
     auto database = base::MakeUnique<RemoteSuggestionsDatabase>(
@@ -448,10 +460,17 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
     database_ = database.get();
     return base::MakeUnique<RemoteSuggestionsProviderImpl>(
         observer_.get(), utils_.pref_service(), "fr", category_ranker_.get(),
-        std::move(suggestions_fetcher), std::move(image_fetcher),
-        std::move(image_decoder), std::move(database),
+        scheduler_.get(), std::move(suggestions_fetcher),
+        std::move(image_fetcher), std::move(database),
         base::MakeUnique<RemoteSuggestionsStatusService>(
-            utils_.fake_signin_manager(), utils_.pref_service()));
+            utils_.fake_signin_manager(), utils_.pref_service(),
+            std::string()));
+  }
+
+  std::unique_ptr<RemoteSuggestionsProviderImpl>
+  MakeSuggestionsProviderWithoutInitializationWithStrictScheduler() {
+    scheduler_ = base::MakeUnique<StrictMock<MockScheduler>>();
+    return MakeSuggestionsProviderWithoutInitialization();
   }
 
   void WaitForSuggestionsProviderInitialization(
@@ -513,9 +532,10 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
   // TODO(tschumann): Make this a strict-mock. We want to avoid unneccesary
   // network requests.
   NiceMock<MockImageFetcher>* image_fetcher() { return image_fetcher_; }
-  FakeImageDecoder* image_decoder() { return image_decoder_; }
+  FakeImageDecoder* image_decoder() { return &image_decoder_; }
   PrefService* pref_service() { return utils_.pref_service(); }
   RemoteSuggestionsDatabase* database() { return database_; }
+  MockScheduler* scheduler() { return scheduler_.get(); }
 
   // Provide the json to be returned by the fake fetcher.
   void SetUpFetchResponse(const std::string& json) {
@@ -534,7 +554,7 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
                           const std::string& json) {
     SetUpFetchResponse(json);
     service->FetchSuggestions(/*interactive_request=*/true,
-                              /*callback=*/nullptr);
+                              RemoteSuggestionsProvider::FetchStatusCallback());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -544,8 +564,25 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
                               const std::set<std::string>& known_ids,
                               FetchDoneCallback callback) {
     SetUpFetchResponse(json);
+    EXPECT_CALL(*scheduler(), AcquireQuotaForInteractiveFetch())
+        .WillOnce(Return(true))
+        .RetiresOnSaturation();
     service->Fetch(category, known_ids, callback);
     base::RunLoop().RunUntilIdle();
+  }
+
+  void SetOrderNewRemoteCategoriesBasedOnArticlesCategoryParam(bool value) {
+    // params_manager supports only one
+    // |SetVariationParamsWithFeatureAssociations| at a time, so we clear
+    // previous settings first and then set everything we need.
+    params_manager_.ClearAllVariationParams();
+    params_manager_.SetVariationParamsWithFeatureAssociations(
+        kArticleSuggestionsFeature.name,
+        {{"order_new_remote_categories_based_on_articles_category",
+          value ? "true" : "false"},
+         {"content_suggestions_backend",
+          kTestContentSuggestionsServerEndpoint}},
+        {kArticleSuggestionsFeature.name});
   }
 
  private:
@@ -561,7 +598,8 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
   std::unique_ptr<FakeContentSuggestionsProviderObserver> observer_;
   RemoteSuggestionsFetcher* suggestions_fetcher_;
   NiceMock<MockImageFetcher>* image_fetcher_;
-  FakeImageDecoder* image_decoder_;
+  FakeImageDecoder image_decoder_;
+  std::unique_ptr<MockScheduler> scheduler_;
 
   base::ScopedTempDir database_dir_;
   RemoteSuggestionsDatabase* database_;
@@ -604,8 +642,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, CategoryTitle) {
   CategoryInfo info_before = service->GetCategoryInfo(articles_category());
   ASSERT_THAT(info_before.title(), Not(IsEmpty()));
   ASSERT_THAT(info_before.title(), Not(Eq(test_default_title)));
-  EXPECT_THAT(info_before.has_fetch_action(), Eq(true));
-  EXPECT_THAT(info_before.has_view_all_action(), Eq(false));
+  EXPECT_THAT(info_before.additional_action(),
+              Eq(ContentSuggestionsAdditionalAction::FETCH));
   EXPECT_THAT(info_before.show_if_empty(), Eq(true));
 
   std::string json_str_with_title(GetTestJson({GetSuggestion()}));
@@ -621,8 +659,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, CategoryTitle) {
   CategoryInfo info_with_title = service->GetCategoryInfo(articles_category());
   EXPECT_THAT(info_before.title(), Not(Eq(info_with_title.title())));
   EXPECT_THAT(test_default_title, Eq(info_with_title.title()));
-  EXPECT_THAT(info_before.has_fetch_action(), Eq(true));
-  EXPECT_THAT(info_before.has_view_all_action(), Eq(false));
+  EXPECT_THAT(info_before.additional_action(),
+              Eq(ContentSuggestionsAdditionalAction::FETCH));
   EXPECT_THAT(info_before.show_if_empty(), Eq(true));
 }
 
@@ -677,8 +715,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, MultipleCategories) {
 TEST_F(RemoteSuggestionsProviderImplTest, ArticleCategoryInfo) {
   auto service = MakeSuggestionsProvider();
   CategoryInfo article_info = service->GetCategoryInfo(articles_category());
-  EXPECT_THAT(article_info.has_fetch_action(), Eq(true));
-  EXPECT_THAT(article_info.has_view_all_action(), Eq(false));
+  EXPECT_THAT(article_info.additional_action(),
+              Eq(ContentSuggestionsAdditionalAction::FETCH));
   EXPECT_THAT(article_info.show_if_empty(), Eq(true));
 }
 
@@ -694,8 +732,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, ExperimentalCategoryInfo) {
   LoadFromJSONString(service.get(), json_str);
 
   CategoryInfo info = service->GetCategoryInfo(unknown_category());
-  EXPECT_THAT(info.has_fetch_action(), Eq(false));
-  EXPECT_THAT(info.has_view_all_action(), Eq(false));
+  EXPECT_THAT(info.additional_action(),
+              Eq(ContentSuggestionsAdditionalAction::NONE));
   EXPECT_THAT(info.show_if_empty(), Eq(false));
 }
 
@@ -720,6 +758,58 @@ TEST_F(RemoteSuggestionsProviderImplTest, AddRemoteCategoriesToCategoryRanker) {
     EXPECT_CALL(*raw_mock_ranker,
                 AppendCategoryIfNecessary(Category::FromRemoteCategory(12)));
   }
+  auto service = MakeSuggestionsProvider(/*set_empty_response=*/false);
+  LoadFromJSONString(service.get(), json_str);
+}
+
+TEST_F(RemoteSuggestionsProviderImplTest,
+       AddRemoteCategoriesToCategoryRankerRelativeToArticles) {
+  SetOrderNewRemoteCategoriesBasedOnArticlesCategoryParam(true);
+  auto mock_ranker = base::MakeUnique<MockCategoryRanker>();
+  MockCategoryRanker* raw_mock_ranker = mock_ranker.get();
+  SetCategoryRanker(std::move(mock_ranker));
+  std::string json_str =
+      MultiCategoryJsonBuilder()
+          .AddCategory({GetSuggestionN(0)}, /*remote_category_id=*/14)
+          .AddCategory({GetSuggestionN(1)}, /*remote_category_id=*/13)
+          .AddCategory({GetSuggestionN(2)}, /*remote_category_id=*/1)
+          .AddCategory({GetSuggestionN(3)}, /*remote_category_id=*/12)
+          .AddCategory({GetSuggestionN(4)}, /*remote_category_id=*/11)
+          .Build();
+  {
+    InSequence s;
+    EXPECT_CALL(*raw_mock_ranker,
+                InsertCategoryBeforeIfNecessary(
+                    Category::FromRemoteCategory(14), articles_category()));
+    EXPECT_CALL(*raw_mock_ranker,
+                InsertCategoryBeforeIfNecessary(
+                    Category::FromRemoteCategory(13), articles_category()));
+    EXPECT_CALL(*raw_mock_ranker,
+                InsertCategoryAfterIfNecessary(Category::FromRemoteCategory(11),
+                                               articles_category()));
+    EXPECT_CALL(*raw_mock_ranker,
+                InsertCategoryAfterIfNecessary(Category::FromRemoteCategory(12),
+                                               articles_category()));
+  }
+  auto service = MakeSuggestionsProvider(/*set_empty_response=*/false);
+  LoadFromJSONString(service.get(), json_str);
+}
+
+TEST_F(
+    RemoteSuggestionsProviderImplTest,
+    AddRemoteCategoriesToCategoryRankerRelativeToArticlesWithArticlesAbsent) {
+  SetOrderNewRemoteCategoriesBasedOnArticlesCategoryParam(true);
+  auto mock_ranker = base::MakeUnique<MockCategoryRanker>();
+  MockCategoryRanker* raw_mock_ranker = mock_ranker.get();
+  SetCategoryRanker(std::move(mock_ranker));
+  std::string json_str =
+      MultiCategoryJsonBuilder()
+          .AddCategory({GetSuggestionN(0)}, /*remote_category_id=*/11)
+          .Build();
+
+  EXPECT_CALL(*raw_mock_ranker, InsertCategoryBeforeIfNecessary(_, _)).Times(0);
+  EXPECT_CALL(*raw_mock_ranker,
+              AppendCategoryIfNecessary(Category::FromRemoteCategory(11)));
   auto service = MakeSuggestionsProvider(/*set_empty_response=*/false);
   LoadFromJSONString(service.get(), json_str);
 }
@@ -897,11 +987,12 @@ TEST_F(RemoteSuggestionsProviderImplTest, LoadsAdditionalSuggestions) {
   EXPECT_THAT(service->GetSuggestionsForTesting(articles_category()),
               ElementsAre(IdEq("http://first")));
 
-  auto expect_only_second_suggestion_received = base::Bind([](
-      Status status, std::vector<ContentSuggestion> suggestions) {
-    EXPECT_THAT(suggestions, SizeIs(1));
-    EXPECT_THAT(suggestions[0].id().id_within_category(), Eq("http://second"));
-  });
+  auto expect_only_second_suggestion_received =
+      base::Bind([](Status status, std::vector<ContentSuggestion> suggestions) {
+        EXPECT_THAT(suggestions, SizeIs(1));
+        EXPECT_THAT(suggestions[0].id().id_within_category(),
+                    Eq("http://second"));
+      });
   LoadMoreFromJSONString(service.get(), articles_category(),
                          GetTestJson({GetSuggestionWithUrl("http://second")}),
                          /*known_ids=*/std::set<std::string>(),
@@ -912,7 +1003,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, LoadsAdditionalSuggestions) {
       base::Bind(&ServeOneByOneImage, &service->GetImageFetcherForTesting());
   EXPECT_CALL(*image_fetcher(), StartOrQueueNetworkRequest(_, _, _))
       .Times(2)
-      .WillRepeatedly(WithArgs<0, 2>(Invoke(&cb, &ServeImageCallback::Run)));
+      .WillRepeatedly(WithArgs<0, 2>(Invoke(CreateFunctor(cb))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   gfx::Image image = FetchImage(service.get(), MakeArticleID("http://first"));
   EXPECT_FALSE(image.IsEmpty());
@@ -974,9 +1065,10 @@ TEST_F(RemoteSuggestionsProviderImplTest,
       service.get(), articles_category(),
       GetTestJson({GetSuggestionWithUrl("http://more-id-1"),
                    GetSuggestionWithUrl("http://more-id-2")}),
-      /*known_ids=*/{"http://id-1", "http://id-2", "http://id-3", "http://id-4",
-                     "http://id-5", "http://id-6", "http://id-7", "http://id-8",
-                     "http://id-9", "http://id-10"},
+      /*known_ids=*/
+      {"http://id-1", "http://id-2", "http://id-3", "http://id-4",
+       "http://id-5", "http://id-6", "http://id-7", "http://id-8",
+       "http://id-9", "http://id-10"},
       expect_receiving_two_new_suggestions);
 
   // Verify that the observer received the update as well. We should see the
@@ -1015,7 +1107,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
       base::Bind(&ServeOneByOneImage, &service->GetImageFetcherForTesting());
   EXPECT_CALL(*image_fetcher(), StartOrQueueNetworkRequest(_, _, _))
       .Times(2)
-      .WillRepeatedly(WithArgs<0, 2>(Invoke(&cb, &ServeImageCallback::Run)));
+      .WillRepeatedly(WithArgs<0, 2>(Invoke(CreateFunctor(cb))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   gfx::Image image = FetchImage(service.get(), MakeArticleID("http://id-1"));
   ASSERT_FALSE(image.IsEmpty());
@@ -1086,9 +1178,10 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                    GetSuggestionWithUrl("http://more-id-8"),
                    GetSuggestionWithUrl("http://more-id-9"),
                    GetSuggestionWithUrl("http://more-id-10")}),
-      /*known_ids=*/{"http://id-1", "http://id-2", "http://id-3", "http://id-4",
-                     "http://id-5", "http://id-6", "http://id-7", "http://id-8",
-                     "http://id-9", "http://id-10"},
+      /*known_ids=*/
+      {"http://id-1", "http://id-2", "http://id-3", "http://id-4",
+       "http://id-5", "http://id-6", "http://id-7", "http://id-8",
+       "http://id-9", "http://id-10"},
       expect_receiving_ten_new_suggestions);
   EXPECT_THAT(observer().SuggestionsForCategory(articles_category()),
               ElementsAre(IdWithinCategoryEq("http://more-id-1"),
@@ -1253,7 +1346,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, Dismiss) {
   ServeImageCallback cb =
       base::Bind(&ServeOneByOneImage, &service->GetImageFetcherForTesting());
   EXPECT_CALL(*image_fetcher(), StartOrQueueNetworkRequest(_, _, _))
-      .WillOnce(WithArgs<0, 2>(Invoke(&cb, &ServeImageCallback::Run)));
+      .WillOnce(WithArgs<0, 2>(Invoke(CreateFunctor(cb))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   gfx::Image image = FetchImage(service.get(), MakeArticleID(kSuggestionUrl));
   EXPECT_FALSE(image.IsEmpty());
@@ -1358,7 +1451,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, RemoveExpiredDismissedContent) {
   ServeImageCallback cb =
       base::Bind(&ServeOneByOneImage, &service->GetImageFetcherForTesting());
   EXPECT_CALL(*image_fetcher(), StartOrQueueNetworkRequest(_, _, _))
-      .WillOnce(WithArgs<0, 2>(Invoke(&cb, &ServeImageCallback::Run)));
+      .WillOnce(WithArgs<0, 2>(Invoke(CreateFunctor(cb))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   gfx::Image image = FetchImage(service.get(), MakeArticleID(kSuggestionUrl));
   EXPECT_FALSE(image.IsEmpty());
@@ -1532,7 +1625,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, ImageReturnedWithTheSameId) {
   {
     InSequence s;
     EXPECT_CALL(*image_fetcher(), StartOrQueueNetworkRequest(_, _, _))
-        .WillOnce(WithArgs<0, 2>(Invoke(&cb, &ServeImageCallback::Run)));
+        .WillOnce(WithArgs<0, 2>(Invoke(CreateFunctor(cb))));
     EXPECT_CALL(image_fetched, Call(_)).WillOnce(SaveArg<0>(&image));
   }
 
@@ -1639,7 +1732,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, ShouldClearOrphanedImagesOnRestart) {
       base::Bind(&ServeOneByOneImage, &service->GetImageFetcherForTesting());
 
   EXPECT_CALL(*image_fetcher(), StartOrQueueNetworkRequest(_, _, _))
-      .WillOnce(WithArgs<0, 2>(Invoke(&cb, &ServeImageCallback::Run)));
+      .WillOnce(WithArgs<0, 2>(Invoke(CreateFunctor(cb))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
 
   gfx::Image image = FetchImage(service.get(), MakeArticleID(kSuggestionUrl));
@@ -1701,7 +1794,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   // background fetch.
   simple_test_clock_ptr->Advance(TimeDelta::FromHours(1));
 
-  service->RefetchInTheBackground(/*callback=*/nullptr);
+  service->RefetchInTheBackground(
+      RemoteSuggestionsProvider::FetchStatusCallback());
   base::RunLoop().RunUntilIdle();
   // TODO(jkrcal): Move together with the pref storage into the scheduler.
   EXPECT_EQ(
@@ -1711,100 +1805,78 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   // scheduler refactoring is done (crbug.com/672434).
 }
 
-TEST_F(RemoteSuggestionsProviderImplTest, CallsSchedulerIfInited) {
-  // Initiate the service so that it is already READY.
-  auto service = MakeSuggestionsProvider();
-  StrictMock<MockScheduler> scheduler;
-  // The scheduler should be notified of activation of the provider.
-  EXPECT_CALL(scheduler, OnProviderActivated());
-  service->SetRemoteSuggestionsScheduler(&scheduler);
-}
-
-TEST_F(RemoteSuggestionsProviderImplTest, DoesNotCallSchedulerIfNotInited) {
-  auto service = MakeSuggestionsProviderWithoutInitialization();
-  StrictMock<MockScheduler> scheduler;
-  // The provider is not initialized yet, no callback should be called on
-  // registering.
-  service->SetRemoteSuggestionsScheduler(&scheduler);
-}
-
 TEST_F(RemoteSuggestionsProviderImplTest, CallsSchedulerWhenReady) {
-  auto service = MakeSuggestionsProviderWithoutInitialization();
-  StrictMock<MockScheduler> scheduler;
-  // The provider is not initialized yet, no callback should be called yet.
-  service->SetRemoteSuggestionsScheduler(&scheduler);
+  auto service =
+      MakeSuggestionsProviderWithoutInitializationWithStrictScheduler();
 
   // Should be called when becoming ready.
-  EXPECT_CALL(scheduler, OnProviderActivated());
+  EXPECT_CALL(*scheduler(), OnProviderActivated());
   WaitForSuggestionsProviderInitialization(service.get(),
                                            /*set_empty_response=*/true);
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest, CallsSchedulerOnError) {
-  auto service = MakeSuggestionsProviderWithoutInitialization();
-  StrictMock<MockScheduler> scheduler;
-  // The provider is not initialized yet, no callback should be called yet.
-  service->SetRemoteSuggestionsScheduler(&scheduler);
+  auto service =
+      MakeSuggestionsProviderWithoutInitializationWithStrictScheduler();
 
   // Should be called on error.
-  EXPECT_CALL(scheduler, OnProviderDeactivated());
+  EXPECT_CALL(*scheduler(), OnProviderDeactivated());
   service->EnterState(RemoteSuggestionsProviderImpl::State::ERROR_OCCURRED);
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest, CallsSchedulerWhenDisabled) {
-  auto service = MakeSuggestionsProviderWithoutInitialization();
-  StrictMock<MockScheduler> scheduler;
-  // The provider is not initialized yet, no callback should be called yet.
-  service->SetRemoteSuggestionsScheduler(&scheduler);
+  auto service =
+      MakeSuggestionsProviderWithoutInitializationWithStrictScheduler();
 
   // Should be called when becoming disabled. First deactivate and only after
   // that clear the suggestions so that they are not fetched again.
   {
     InSequence s;
-    EXPECT_CALL(scheduler, OnProviderDeactivated());
+    EXPECT_CALL(*scheduler(), OnProviderDeactivated());
     ASSERT_THAT(service->ready(), Eq(false));
-    EXPECT_CALL(scheduler, OnSuggestionsCleared());
+    EXPECT_CALL(*scheduler(), OnSuggestionsCleared());
   }
   service->EnterState(RemoteSuggestionsProviderImpl::State::DISABLED);
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest, CallsSchedulerWhenHistoryCleared) {
+  auto service =
+      MakeSuggestionsProviderWithoutInitializationWithStrictScheduler();
   // Initiate the service so that it is already READY.
-  auto service = MakeSuggestionsProvider();
-  StrictMock<MockScheduler> scheduler;
-  // The scheduler should be notified of activation of the provider.
-  EXPECT_CALL(scheduler, OnProviderActivated());
+  EXPECT_CALL(*scheduler(), OnProviderActivated());
+  WaitForSuggestionsProviderInitialization(service.get(),
+                                           /*set_empty_response=*/true);
+
   // The scheduler should be notified of clearing the history.
-  EXPECT_CALL(scheduler, OnHistoryCleared());
-  service->SetRemoteSuggestionsScheduler(&scheduler);
+  EXPECT_CALL(*scheduler(), OnHistoryCleared());
   service->ClearHistory(GetDefaultCreationTime(), GetDefaultExpirationTime(),
                         base::Callback<bool(const GURL& url)>());
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest, CallsSchedulerWhenSignedIn) {
+  auto service =
+      MakeSuggestionsProviderWithoutInitializationWithStrictScheduler();
   // Initiate the service so that it is already READY.
-  auto service = MakeSuggestionsProvider();
-  StrictMock<MockScheduler> scheduler;
-  // The scheduler should be notified of activation of the provider.
-  EXPECT_CALL(scheduler, OnProviderActivated());
-  // The scheduler should be notified of clearing the history.
-  EXPECT_CALL(scheduler, OnSuggestionsCleared());
+  EXPECT_CALL(*scheduler(), OnProviderActivated());
+  WaitForSuggestionsProviderInitialization(service.get(),
+                                           /*set_empty_response=*/true);
 
-  service->SetRemoteSuggestionsScheduler(&scheduler);
+  // The scheduler should be notified of clearing the history.
+  EXPECT_CALL(*scheduler(), OnSuggestionsCleared());
   service->OnStatusChanged(RemoteSuggestionsStatus::ENABLED_AND_SIGNED_IN,
                            RemoteSuggestionsStatus::ENABLED_AND_SIGNED_OUT);
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest, CallsSchedulerWhenSignedOut) {
+  auto service =
+      MakeSuggestionsProviderWithoutInitializationWithStrictScheduler();
   // Initiate the service so that it is already READY.
-  auto service = MakeSuggestionsProvider();
-  StrictMock<MockScheduler> scheduler;
-  // The scheduler should be notified of activation of the provider.
-  EXPECT_CALL(scheduler, OnProviderActivated());
-  // The scheduler should be notified of clearing the history.
-  EXPECT_CALL(scheduler, OnSuggestionsCleared());
+  EXPECT_CALL(*scheduler(), OnProviderActivated());
+  WaitForSuggestionsProviderInitialization(service.get(),
+                                           /*set_empty_response=*/true);
 
-  service->SetRemoteSuggestionsScheduler(&scheduler);
+  // The scheduler should be notified of clearing the history.
+  EXPECT_CALL(*scheduler(), OnSuggestionsCleared());
   service->OnStatusChanged(RemoteSuggestionsStatus::ENABLED_AND_SIGNED_OUT,
                            RemoteSuggestionsStatus::ENABLED_AND_SIGNED_IN);
 }

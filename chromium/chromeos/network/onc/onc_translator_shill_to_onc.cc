@@ -33,7 +33,7 @@ std::unique_ptr<base::Value> ConvertStringToValue(const std::string& str,
                                                   base::Value::Type type) {
   std::unique_ptr<base::Value> value;
   if (type == base::Value::Type::STRING) {
-    value.reset(new base::StringValue(str));
+    value.reset(new base::Value(str));
   } else {
     value = base::JSONReader::Read(str);
   }
@@ -583,7 +583,7 @@ void ShillToONCTranslator::TranslateNetworkWithState() {
         ReadDictionaryFromJson(proxy_config_str));
     if (proxy_config_value) {
       std::unique_ptr<base::DictionaryValue> proxy_settings =
-          ConvertProxyConfigToOncProxySettings(*proxy_config_value);
+          ConvertProxyConfigToOncProxySettings(std::move(proxy_config_value));
       if (proxy_settings) {
         onc_object_->SetWithoutPathExpansion(
             ::onc::network_config::kProxySettings, proxy_settings.release());
@@ -683,7 +683,7 @@ void ShillToONCTranslator::TranslateAndAddListOfObjects(
   for (base::ListValue::const_iterator it = list.begin(); it != list.end();
        ++it) {
     const base::DictionaryValue* shill_value = NULL;
-    if (!(*it)->GetAsDictionary(&shill_value))
+    if (!it->GetAsDictionary(&shill_value))
       continue;
     ShillToONCTranslator nested_translator(
         *shill_value, onc_source_,

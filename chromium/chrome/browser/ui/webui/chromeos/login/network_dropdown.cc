@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-#include "ash/common/system/chromeos/network/network_icon.h"
-#include "ash/common/system/chromeos/network/network_icon_animation.h"
+#include "ash/system/network/network_icon.h"
+#include "ash/system/network/network_icon_animation.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
@@ -200,8 +200,8 @@ void NetworkDropdown::SetNetworkIconAndText() {
   std::string icon_str;
   if (!icon_image.isNull())
     icon_str = webui::GetBitmapDataUrl(icon_bitmap);
-  base::StringValue title(text);
-  base::StringValue icon(icon_str);
+  base::Value title(text);
+  base::Value icon(icon_str);
   web_ui_->CallJavascriptFunctionUnsafe("cr.ui.DropDown.updateNetworkTitle",
                                         title, icon);
 }

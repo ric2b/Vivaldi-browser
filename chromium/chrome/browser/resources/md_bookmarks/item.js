@@ -5,23 +5,34 @@
 Polymer({
   is: 'bookmarks-item',
 
+  behaviors: [
+    bookmarks.StoreClient,
+  ],
+
   properties: {
-    /** @type {BookmarkTreeNode} */
-    item: {
+    itemId: {
+      type: String,
+      observer: 'onItemIdChanged_',
+    },
+
+    /** @private {BookmarkNode} */
+    item_: {
       type: Object,
       observer: 'onItemChanged_',
     },
 
-    isFolder_: Boolean,
-
-    isSelectedItem: {
+    /** @private */
+    isSelectedItem_: {
       type: Boolean,
       reflectToAttribute: true,
     },
+
+    /** @private */
+    isFolder_: Boolean,
   },
 
   observers: [
-    'updateFavicon_(item.url)',
+    'updateFavicon_(item_.url)',
   ],
 
   listeners: {
@@ -29,21 +40,56 @@ Polymer({
     'dblclick': 'onDblClick_',
   },
 
+  /** @override */
+  attached: function() {
+    this.watch('item_', function(store) {
+      return store.nodes[this.itemId];
+    }.bind(this));
+    this.watch('isSelectedItem_', function(store) {
+      return !!store.selection.items.has(this.itemId);
+    }.bind(this));
+
+    this.updateFromStore();
+  },
+
+  /** @return {BookmarksItemElement} */
+  getDropTarget: function() {
+    return this;
+  },
+
   /**
    * @param {Event} e
    * @private
    */
-  onMenuButtonOpenClick_: function(e) {
+  onMenuButtonClick_: function(e) {
     e.stopPropagation();
+    this.dispatch(bookmarks.actions.selectItem(
+        this.itemId, false, false, this.getState()));
     this.fire('open-item-menu', {
       target: e.target,
-      item: this.item,
+      item: this.item_,
     });
+  },
+
+  /**
+   * @param {Event} e
+   * @private
+   */
+  onMenuButtonDblClick_: function(e) {
+    e.stopPropagation();
+  },
+
+  /** @private */
+  onItemIdChanged_: function() {
+    // TODO(tsergeant): Add a histogram to measure whether this assertion fails
+    // for real users.
+    assert(this.getState().nodes[this.itemId]);
+    this.updateFromStore();
   },
 
   /** @private */
   onItemChanged_: function() {
-    this.isFolder_ = !(this.item.url);
+    this.isFolder_ = !this.item_.url;
   },
 
   /**
@@ -51,11 +97,9 @@ Polymer({
    * @private
    */
   onClick_: function(e) {
-    this.fire('select-item', {
-      item: this.item,
-      range: e.shiftKey,
-      add: e.ctrlKey,
-    });
+    this.dispatch(bookmarks.actions.selectItem(
+        this.itemId, e.ctrlKey, e.shiftKey, this.getState()));
+    e.stopPropagation();
   },
 
   /**
@@ -63,10 +107,10 @@ Polymer({
    * @private
    */
   onDblClick_: function(e) {
-    if (!this.item.url)
-      this.fire('selected-folder-changed', this.item.id);
+    if (!this.item_.url)
+      this.dispatch(bookmarks.actions.selectFolder(this.item_.id));
     else
-      chrome.tabs.create({url: this.item.url});
+      chrome.tabs.create({url: this.item_.url});
   },
 
   /**

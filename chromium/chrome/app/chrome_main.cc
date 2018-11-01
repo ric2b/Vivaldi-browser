@@ -115,12 +115,14 @@ int ChromeMain(int argc, const char** argv) {
   }
 #endif  // defined(OS_LINUX) || defined(OS_MACOSX)
 
-#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+#if defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
   version_info::Channel channel = chrome::GetChannel();
   if (channel == version_info::Channel::CANARY ||
       channel == version_info::Channel::UNKNOWN) {
-    if (command_line->HasSwitch(switches::kMash))
+    if (command_line->HasSwitch(switches::kMash) ||
+        command_line->HasSwitch(switches::kMus)) {
       return MashMain();
+    }
     WaitForMashDebuggerIfNecessary();
     if (service_manager::ServiceManagerIsRemote())
       params.env_mode = aura::Env::Mode::MUS;

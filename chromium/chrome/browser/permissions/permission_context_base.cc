@@ -60,6 +60,12 @@ const char kPermissionBlockedRepeatedDismissalsMessage[] =
     "https://www.chromestatus.com/features/6443143280984064 for more "
     "information.";
 
+const char kPermissionBlockedRepeatedIgnoresMessage[] =
+    "%s permission has been blocked as the user has ignored the permission "
+    "prompt several times. See "
+    "https://www.chromestatus.com/features/6443143280984064 for more "
+    "information.";
+
 const char kPermissionBlockedBlacklistMessage[] =
     "this origin is not allowed to request %s permission.";
 
@@ -125,22 +131,37 @@ void PermissionContextBase::RequestPermission(
   // Synchronously check the content setting to see if the user has already made
   // a decision, or if the origin is under embargo. If so, respect that
   // decision.
-  PermissionResult result =
-      GetPermissionStatus(requesting_origin, embedding_origin);
+  // TODO(raymes): Pass in the RenderFrameHost of the request here.
+  PermissionResult result = GetPermissionStatus(
+      nullptr /* render_frame_host */, requesting_origin, embedding_origin);
 
   if (result.content_setting == CONTENT_SETTING_ALLOW ||
       result.content_setting == CONTENT_SETTING_BLOCK) {
-    if (result.source == PermissionStatusSource::KILL_SWITCH) {
-      // Block the request and log to the developer console.
-      LogPermissionBlockedMessage(web_contents,
-                                  kPermissionBlockedKillSwitchMessage,
-                                  content_settings_type_);
-      callback.Run(CONTENT_SETTING_BLOCK);
-      return;
-    } else if (result.source == PermissionStatusSource::MULTIPLE_DISMISSALS) {
-      LogPermissionBlockedMessage(web_contents,
-                                  kPermissionBlockedRepeatedDismissalsMessage,
-                                  content_settings_type_);
+    switch (result.source) {
+      case PermissionStatusSource::KILL_SWITCH:
+        // Block the request and log to the developer console.
+        LogPermissionBlockedMessage(web_contents,
+                                    kPermissionBlockedKillSwitchMessage,
+                                    content_settings_type_);
+        callback.Run(CONTENT_SETTING_BLOCK);
+        return;
+      case PermissionStatusSource::MULTIPLE_DISMISSALS:
+        LogPermissionBlockedMessage(web_contents,
+                                    kPermissionBlockedRepeatedDismissalsMessage,
+                                    content_settings_type_);
+        break;
+      case PermissionStatusSource::MULTIPLE_IGNORES:
+        LogPermissionBlockedMessage(web_contents,
+                                    kPermissionBlockedRepeatedIgnoresMessage,
+                                    content_settings_type_);
+        break;
+      case PermissionStatusSource::SAFE_BROWSING_BLACKLIST:
+        LogPermissionBlockedMessage(web_contents,
+                                    kPermissionBlockedBlacklistMessage,
+                                    content_settings_type_);
+        break;
+      case PermissionStatusSource::UNSPECIFIED:
+        break;
     }
 
     // If we are under embargo, record the embargo reason for which we have
@@ -195,7 +216,14 @@ void PermissionContextBase::ContinueRequestPermission(
                    user_gesture, callback);
 }
 
+void PermissionContextBase::UserMadePermissionDecision(
+    const PermissionRequestID& id,
+    const GURL& requesting_origin,
+    const GURL& embedding_origin,
+    ContentSetting content_setting) {}
+
 PermissionResult PermissionContextBase::GetPermissionStatus(
+    content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
   // If the permission has been disabled through Finch, block all requests.
@@ -210,8 +238,8 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
                             PermissionStatusSource::UNSPECIFIED);
   }
 
-  ContentSetting content_setting =
-      GetPermissionStatusInternal(requesting_origin, embedding_origin);
+  ContentSetting content_setting = GetPermissionStatusInternal(
+      render_frame_host, requesting_origin, embedding_origin);
   if (content_setting == CONTENT_SETTING_ASK) {
     PermissionResult result =
         PermissionDecisionAutoBlocker::GetForProfile(profile_)
@@ -222,6 +250,13 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
   }
 
   return PermissionResult(content_setting, PermissionStatusSource::UNSPECIFIED);
+}
+
+PermissionResult PermissionContextBase::UpdatePermissionStatusWithDeviceStatus(
+    PermissionResult result,
+    const GURL& requesting_origin,
+    const GURL& embedding_origin) const {
+  return result;
 }
 
 void PermissionContextBase::ResetPermission(const GURL& requesting_origin,
@@ -264,6 +299,7 @@ bool PermissionContextBase::IsPermissionKillSwitchOn() const {
 }
 
 ContentSetting PermissionContextBase::GetPermissionStatusInternal(
+    content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
   return HostContentSettingsMapFactory::GetForProfile(profile_)
@@ -323,7 +359,8 @@ void PermissionContextBase::DecidePermission(
           id, requesting_origin,
           web_contents->GetLastCommittedURL().GetOrigin(), callback,
           false /* persist */,
-          GetPermissionStatus(requesting_origin, embedding_origin)
+          GetPermissionStatus(nullptr /* render_frame_host */,
+                              requesting_origin, embedding_origin)
               .content_setting);
     }
     return;
@@ -436,6 +473,8 @@ void PermissionContextBase::PermissionDecided(
     PermissionUmaUtil::RecordEmbargoStatus(embargo_status);
   }
 
+  UserMadePermissionDecision(id, requesting_origin, embedding_origin,
+                             content_setting);
   NotifyPermissionSet(id, requesting_origin, embedding_origin, callback,
                       persist, content_setting);
 }

@@ -16,7 +16,7 @@
 #include "base/win/scoped_co_mem.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/installer/util/browser_distribution.h"
+#include "chrome/install_static/install_util.h"
 #include "components/nacl/common/nacl_switches.h"
 
 #include "browser/win/vivaldi_standalone.h"
@@ -51,8 +51,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
 #endif
   if (!PathService::Get(base::DIR_LOCAL_APP_DATA, result))
     return false;
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  *result = result->Append(dist->GetInstallSubDir());
+  *result = result->Append(install_static::GetChromeInstallSubDirectory());
   *result = result->Append(chrome::kUserDataDirname);
   return true;
 }
@@ -60,8 +59,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
 bool GetDefaultRoamingUserDataDirectory(base::FilePath* result) {
   if (!PathService::Get(base::DIR_APP_DATA, result))
     return false;
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  *result = result->Append(dist->GetInstallSubDir());
+  *result = result->Append(install_static::GetChromeInstallSubDirectory());
   *result = result->Append(chrome::kUserDataDirname);
   return true;
 }
@@ -121,7 +119,8 @@ bool ProcessNeedsProfileDir(const std::string& process_type) {
   // service processes to be able to use the profile directory because if it
   // lies on a network share the sandbox will prevent us from accessing it.
 
-  if (process_type.empty() || process_type == switches::kServiceProcess)
+  if (process_type.empty() ||
+      process_type == switches::kCloudPrintServiceProcess)
     return true;
 
 #if !defined(DISABLE_NACL)

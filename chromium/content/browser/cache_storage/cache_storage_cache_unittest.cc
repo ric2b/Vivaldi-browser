@@ -22,14 +22,12 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
-#include "content/browser/fileapi/mock_url_request_delegate.h"
 #include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/common/cache_storage/cache_storage_types.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/referrer.h"
-#include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/test_completion_callback.h"
@@ -42,6 +40,7 @@
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -118,9 +117,12 @@ class DelayableBackend : public disk_cache::Backend {
   void OnExternalCacheHit(const std::string& key) override {
     return backend_->OnExternalCacheHit(key);
   }
-  size_t EstimateMemoryUsage() const override {
+
+  size_t DumpMemoryStats(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const std::string& parent_absolute_name) const override {
     NOTREACHED();
-    return 0;
+    return 0u;
   }
 
   // Call to continue a delayed doom.
@@ -442,9 +444,9 @@ class CacheStorageCacheTest : public testing::Test {
       std::unique_ptr<ServiceWorkerHeaderList> cors_exposed_header_names) {
     return ServiceWorkerResponse(
         base::MakeUnique<std::vector<GURL>>(1, GURL(url)), 200, "OK",
-        blink::WebServiceWorkerResponseTypeDefault, std::move(headers),
+        blink::kWebServiceWorkerResponseTypeDefault, std::move(headers),
         blob_uuid, blob_size, GURL() /* stream_url */,
-        blink::WebServiceWorkerResponseErrorUnknown, base::Time::Now(),
+        blink::kWebServiceWorkerResponseErrorUnknown, base::Time::Now(),
         false /* is_in_cache_storage */,
         std::string() /* cache_storage_cache_name */,
         std::move(cors_exposed_header_names));
@@ -1408,11 +1410,11 @@ TEST_P(CacheStorageCacheTestP, QuickStressBody) {
 }
 
 TEST_P(CacheStorageCacheTestP, PutResponseType) {
-  EXPECT_TRUE(TestResponseType(blink::WebServiceWorkerResponseTypeBasic));
-  EXPECT_TRUE(TestResponseType(blink::WebServiceWorkerResponseTypeCORS));
-  EXPECT_TRUE(TestResponseType(blink::WebServiceWorkerResponseTypeDefault));
-  EXPECT_TRUE(TestResponseType(blink::WebServiceWorkerResponseTypeError));
-  EXPECT_TRUE(TestResponseType(blink::WebServiceWorkerResponseTypeOpaque));
+  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeBasic));
+  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeCORS));
+  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeDefault));
+  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeError));
+  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeOpaque));
 }
 
 TEST_P(CacheStorageCacheTestP, WriteSideData) {
@@ -1517,9 +1519,9 @@ TEST_F(CacheStorageCacheTest, CaselessServiceWorkerResponseHeaders) {
   // headers so that it can quickly lookup vary headers.
   ServiceWorkerResponse response(
       base::MakeUnique<std::vector<GURL>>(), 200, "OK",
-      blink::WebServiceWorkerResponseTypeDefault,
+      blink::kWebServiceWorkerResponseTypeDefault,
       base::MakeUnique<ServiceWorkerHeaderMap>(), "", 0, GURL(),
-      blink::WebServiceWorkerResponseErrorUnknown, base::Time(),
+      blink::kWebServiceWorkerResponseErrorUnknown, base::Time(),
       false /* is_in_cache_storage */,
       std::string() /* cache_storage_cache_name */,
       base::MakeUnique<

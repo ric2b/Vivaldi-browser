@@ -1,12 +1,15 @@
 include_rules = [
+  "+cc/base/switches.h",
   "+cc/ipc/mojo_compositor_frame_sink.mojom.h",
   "+cc/output/compositor_frame_sink_client.h",
   "+cc/output/compositor_frame_sink.h",
   "+cc/scheduler/begin_frame_source.h",
+  "+cc/surfaces/local_surface_id.h",
   "+cc/surfaces/local_surface_id_allocator.h",
   "+cc/surfaces/surface_info.h",
   "+cc/surfaces/surface_manager.h",
   "+cc/surfaces/surface_reference_factory.h",
+  "+components/discardable_memory/client/client_discardable_shared_memory_manager.h",
   "+gpu/command_buffer/client/gpu_memory_buffer_manager.h",
   "+gpu/ipc/client/gpu_channel_host.h",
   "+mojo/public/cpp/system/buffer.h",
@@ -16,6 +19,6 @@ include_rules = [
   "+services/ui/public/cpp/gpu",
   "+services/ui/public/cpp/property_type_converters.h",
   "+services/ui/public/cpp/raster_thread_helper.h",
-  "+services/ui/public/cpp/window_compositor_frame_sink.h",
+  "+services/ui/public/cpp/client_compositor_frame_sink.h",
   "+ui/gl/gl_bindings.h",
 ]

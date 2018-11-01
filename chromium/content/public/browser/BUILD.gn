@@ -122,6 +122,7 @@ source_set("browser_sources") {
     "gpu_service_registry.h",
     "gpu_utils.cc",
     "gpu_utils.h",
+    "guest_host.h",
     "guest_mode.cc",
     "guest_mode.h",
     "histogram_fetcher.h",
@@ -134,11 +135,13 @@ source_set("browser_sources") {
     "invalidate_type.h",
     "javascript_dialog_manager.cc",
     "javascript_dialog_manager.h",
+    "keyboard_event_processing_result.h",
     "load_notification_details.h",
     "local_storage_usage_info.h",
     "media_capture_devices.h",
     "media_device_id.cc",
     "media_device_id.h",
+    "media_request_state.h",
     "media_session.h",
     "media_session_observer.cc",
     "media_session_observer.h",
@@ -147,6 +150,7 @@ source_set("browser_sources") {
     "memory_pressure_controller.cc",
     "memory_pressure_controller.h",
     "message_port_provider.h",
+    "mhtml_extra_parts.h",
     "native_web_keyboard_event.h",
     "navigation_controller.cc",
     "navigation_controller.h",
@@ -194,17 +198,17 @@ source_set("browser_sources") {
     "push_messaging_service.h",
     "quota_permission_context.h",
     "readback_types.h",
+    "reload_type.h",
     "render_frame_host.h",
     "render_process_host.h",
     "render_process_host_factory.h",
     "render_process_host_observer.h",
     "render_view_host.h",
     "render_widget_host.h",
+    "render_widget_host_iterator.h",
     "render_widget_host_view.h",
     "render_widget_host_view_mac_delegate.h",
-    "renderer_unresponsive_type.h",
     "resource_context.h",
-    "resource_dispatcher_host.cc",
     "resource_dispatcher_host.h",
     "resource_dispatcher_host_delegate.cc",
     "resource_dispatcher_host_delegate.h",
@@ -215,6 +219,7 @@ source_set("browser_sources") {
     "resource_request_info.h",
     "resource_throttle.cc",
     "resource_throttle.h",
+    "restore_type.h",
     "save_page_type.h",
     "screen_orientation_delegate.h",
     "security_style_explanation.h",
@@ -248,8 +253,8 @@ source_set("browser_sources") {
     "tracing_delegate.h",
     "url_data_source.cc",
     "url_data_source.h",
-    "user_metrics.h",
     "utility_process_host.h",
+    "utility_process_host_client.h",
     "utility_process_mojo_client.h",
     "vpn_service_proxy.h",
     "web_contents.cc",
@@ -288,6 +293,8 @@ source_set("browser_sources") {
   ]
 
   public_deps = [
+    "//content/public/common:common_sources",
+    "//ipc",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
@@ -302,7 +309,6 @@ source_set("browser_sources") {
   deps = [
     "//cc",
     "//content/browser",  # Must not be public_deps!
-    "//content/public/common:common_sources",
     "//device/geolocation",
     "//device/power_save_blocker",
     "//gpu",
@@ -329,5 +335,9 @@ source_set("browser_sources") {
   if (use_aura) {
     sources -= [ "context_factory.h" ]
     deps += [ "//ui/aura" ]
+  }
+
+  if (!is_android) {
+    sources += [ "devtools_frontend_host.h" ]
   }
 }

@@ -6,6 +6,7 @@
   -webkit-padding-start: 15px;
   bottom: 0;
   left: 0;
+  min-height: 34px;  /* Should be consistent with .header-bar-item's height. */
   padding-bottom: 6px;
   position: absolute;
   right: 0;
@@ -72,14 +73,16 @@ html[screen=oobe] .login-header-bar-animate-slow {
   font-size: 13px;
   height: auto;
   min-height: 34px;
+  padding: 0 16px;
   position: absolute;
   text-align: center;
-  width: 180px;
+  white-space: nowrap;
 }
 
 #more-settings-header-bar-item.active button.add-supervised-user-menu:focus {
   border: 2px solid var(--google-blue-500);
   border-radius: 2px;
+  padding: 0 15px;
 }
 
 html[dir=rtl] .header-bar-item {
@@ -148,8 +151,9 @@ html[dir=rtl] #login-header-bar #sign-out-user-button-text {
 }
 
 #login-header-bar #cancel-multiple-sign-in-button-text {
-  /* TODO(dzhioev): replace with appropriate image when possible. */
-  background-image: url(chrome://theme/IDR_PANEL_CLOSE);
+    background-image: -webkit-image-set(
+      url(images/1x/cancel.svg) 1x,
+      url(images/2x/cancel.svg) 2x );
 }
 
 #login-header-bar #sign-out-user-button-text {

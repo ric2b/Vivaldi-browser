@@ -15,9 +15,6 @@ Polymer({
   properties: {
     prefs: Object,
 
-    /** @type {settings.StartupUrlsPageBrowserProxy} */
-    browserProxy_: Object,
-
     /**
      * Pages to load upon browser startup.
      * @private {!Array<!StartupPageInfo>}
@@ -29,7 +26,19 @@ Polymer({
 
     /** @private {?StartupPageInfo} */
     startupUrlDialogModel_: Object,
+
+    /** @private {Object}*/
+    lastFocused_: Object,
   },
+
+  /** @private {?settings.StartupUrlsPageBrowserProxy} */
+  browserProxy_: null,
+
+  /**
+   * The element to return focus to, when the startup-url-dialog is closed.
+   * @private {?HTMLElement}
+   */
+  startupUrlDialogAnchor_: null,
 
   /** @override */
   attached: function() {
@@ -45,7 +54,8 @@ Polymer({
     this.browserProxy_.loadStartupPages();
 
     this.addEventListener(settings.EDIT_STARTUP_URL_EVENT, function(event) {
-      this.startupUrlDialogModel_ = event.detail;
+      this.startupUrlDialogModel_ = event.detail.model;
+      this.startupUrlDialogAnchor_ = event.detail.anchor;
       this.showStartupUrlDialog_ = true;
       event.stopPropagation();
     }.bind(this));
@@ -58,12 +68,18 @@ Polymer({
   onAddPageTap_: function(e) {
     e.preventDefault();
     this.showStartupUrlDialog_ = true;
+    this.startupUrlDialogAnchor_ = /** @type {!HTMLElement} */ (
+        this.$$('#addPage a[is=action-link]'));
   },
 
   /** @private */
   destroyUrlDialog_: function() {
     this.showStartupUrlDialog_ = false;
     this.startupUrlDialogModel_ = null;
+    if (this.startupUrlDialogAnchor_) {
+      this.startupUrlDialogAnchor_.focus();
+      this.startupUrlDialogAnchor_ = null;
+    }
   },
 
   /** @private */

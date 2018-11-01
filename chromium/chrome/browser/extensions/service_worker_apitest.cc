@@ -13,6 +13,8 @@
 #include "chrome/browser/gcm/fake_gcm_profile_service.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
+#include "chrome/browser/notifications/stub_notification_display_service.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
@@ -249,6 +251,9 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
     ServiceWorkerTest::SetUpCommandLine(command_line);
   }
   void SetUpOnMainThread() override {
+    NotificationDisplayServiceFactory::GetInstance()->SetTestingFactory(
+        profile(), &StubNotificationDisplayService::FactoryForTests);
+
     gcm::FakeGCMProfileService* gcm_service =
         static_cast<gcm::FakeGCMProfileService*>(
             gcm::GCMProfileServiceFactory::GetInstance()
@@ -655,7 +660,14 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, TabsCreate) {
 
 // Tests that worker ref count increments while extension API function is
 // active.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WorkerRefCount) {
+
+// Flaky on Linux and ChromeOS, https://crbug.com/702126
+#if defined(OS_LINUX)
+#define MAYBE_WorkerRefCount DISABLED_WorkerRefCount
+#else
+#define MAYBE_WorkerRefCount WorkerRefCount
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, MAYBE_WorkerRefCount) {
   // Extensions APIs from SW are only enabled on trunk.
   ScopedCurrentChannel current_channel_override(version_info::Channel::UNKNOWN);
   const Extension* extension = LoadExtensionWithFlags(

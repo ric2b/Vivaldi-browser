@@ -20,9 +20,9 @@
 #ifndef SVGTextLayoutEngineSpacing_h
 #define SVGTextLayoutEngineSpacing_h
 
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/text/Unicode.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/text/Unicode.h"
 
 namespace blink {
 
@@ -35,14 +35,14 @@ class SVGTextLayoutEngineSpacing {
   WTF_MAKE_NONCOPYABLE(SVGTextLayoutEngineSpacing);
 
  public:
-  SVGTextLayoutEngineSpacing(const Font&, float effectiveZoom);
+  SVGTextLayoutEngineSpacing(const Font&, float effective_zoom);
 
-  float calculateCSSSpacing(UChar currentCharacter);
+  float CalculateCSSSpacing(UChar current_character);
 
  private:
-  const Font& m_font;
-  UChar m_lastCharacter;
-  float m_effectiveZoom;
+  const Font& font_;
+  UChar last_character_;
+  float effective_zoom_;
 };
 
 }  // namespace blink

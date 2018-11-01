@@ -9,8 +9,8 @@
 
 namespace extensions {
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiExtensionInit> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiExtensionInit>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 VivaldiExtensionInit::VivaldiExtensionInit(content::BrowserContext* context) {
   ExtensionFunctionRegistry* registry =

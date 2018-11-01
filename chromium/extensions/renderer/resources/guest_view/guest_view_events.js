@@ -8,8 +8,15 @@ var EventBindings = require('event_bindings');
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var MessagingNatives = requireNative('messaging_natives');
 
+var EventBindings;
 var CreateEvent = function(name) {
+  if (bindingUtil) {
+    return bindingUtil.createCustomEvent(name, null,
+                                         true /* supportsFilters */);
+  }
   var eventOpts = {supportsListeners: true, supportsFilters: true};
+  if (!EventBindings)
+    EventBindings = require('event_bindings');
   return new EventBindings.Event(name, undefined, eventOpts);
 };
 
@@ -62,7 +69,7 @@ GuestViewEvents.EVENTS = {};
 // to be removed once this GuestViewEvents object is garbage collected.
 GuestViewEvents.prototype.addScopedListener = function(
     evt, listener, listenerOpts) {
-  this.listenersToBeRemoved.push({ 'evt': evt, 'listener': listener });
+  $Array.push(this.listenersToBeRemoved, { 'evt': evt, 'listener': listener });
   evt.addListener(listener, listenerOpts);
 };
 

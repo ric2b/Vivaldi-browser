@@ -19,8 +19,9 @@ class BluetoothCharacteristicProperties final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static BluetoothCharacteristicProperties* create(uint32_t properties);
+  static BluetoothCharacteristicProperties* Create(uint32_t properties);
 
+  // IDL exposed interface:
   bool broadcast() const;
   bool read() const;
   bool writeWithoutResponse() const;
@@ -37,17 +38,17 @@ class BluetoothCharacteristicProperties final
   explicit BluetoothCharacteristicProperties(uint32_t properties);
 
   enum Property {
-    None = 0,
-    Broadcast = 1 << 0,
-    Read = 1 << 1,
-    WriteWithoutResponse = 1 << 2,
-    Write = 1 << 3,
-    Notify = 1 << 4,
-    Indicate = 1 << 5,
-    AuthenticatedSignedWrites = 1 << 6,
-    ExtendedProperties = 1 << 7,  // Not used in class.
-    ReliableWrite = 1 << 8,
-    WritableAuxiliaries = 1 << 9,
+    kNone = 0,
+    kBroadcast = 1 << 0,
+    kRead = 1 << 1,
+    kWriteWithoutResponse = 1 << 2,
+    kWrite = 1 << 3,
+    kNotify = 1 << 4,
+    kIndicate = 1 << 5,
+    kAuthenticatedSignedWrites = 1 << 6,
+    kExtendedProperties = 1 << 7,  // Not used in class.
+    kReliableWrite = 1 << 8,
+    kWritableAuxiliaries = 1 << 9,
   };
 
   uint32_t properties;

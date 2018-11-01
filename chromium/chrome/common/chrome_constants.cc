@@ -144,13 +144,13 @@ const base::FilePath::CharType kExtensionActivityLogFilename[] =
     FPL("Extension Activity");
 const base::FilePath::CharType kExtensionsCookieFilename[] =
     FPL("Extension Cookies");
+const base::FilePath::CharType kFeatureEngagementTrackerStorageDirname[] =
+    FPL("Feature Engagement Tracker");
 const base::FilePath::CharType kFirstRunSentinel[] = FPL("First Run");
 const base::FilePath::CharType kGCMStoreDirname[] = FPL("GCM Store");
 const base::FilePath::CharType kLocalStateFilename[] = FPL("Local State");
 const base::FilePath::CharType kLocalStorePoolName[] = FPL("LocalStorePool");
 const base::FilePath::CharType kMediaCacheDirname[] = FPL("Media Cache");
-const base::FilePath::CharType kNetworkPersistentStateFilename[] =
-    FPL("Network Persistent State");
 const base::FilePath::CharType kOfflinePageArchivesDirname[] =
     FPL("Offline Pages/archives");
 const base::FilePath::CharType kOfflinePageMetadataDirname[] =
@@ -160,8 +160,6 @@ const base::FilePath::CharType kOfflinePageRequestQueueDirname[] =
 const base::FilePath::CharType kPreferencesFilename[] = FPL("Preferences");
 const base::FilePath::CharType kPreviewsOptOutDBFilename[] =
     FPL("previews_opt_out.db");
-const base::FilePath::CharType kProtectedPreferencesFilenameDeprecated[] =
-    FPL("Protected Preferences");
 const base::FilePath::CharType kReadmeFilename[] = FPL("README");
 const base::FilePath::CharType kSecurePreferencesFilename[] =
     FPL("Secure Preferences");

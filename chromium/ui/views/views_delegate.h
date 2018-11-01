@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_VIEWS_DELEGATE_H_
 #define UI_VIEWS_VIEWS_DELEGATE_H_
 
+#include <memory>
 #include <string>
 
 #if defined(OS_WIN)
@@ -51,6 +52,8 @@ class View;
 class Widget;
 
 #if defined(USE_AURA)
+class DesktopNativeWidgetAura;
+class DesktopWindowTreeHost;
 class TouchSelectionMenuRunnerViews;
 #endif
 
@@ -69,6 +72,14 @@ class VIEWS_EXPORT ViewsDelegate {
   using NativeWidgetFactory =
       base::Callback<NativeWidget*(const Widget::InitParams&,
                                    internal::NativeWidgetDelegate*)>;
+#if defined(USE_AURA)
+  using DesktopWindowTreeHostFactory =
+      base::Callback<std::unique_ptr<DesktopWindowTreeHost>(
+          const Widget::InitParams&,
+          internal::NativeWidgetDelegate*,
+          DesktopNativeWidgetAura*)>;
+#endif
+
 #if defined(OS_WIN)
   enum AppbarAutohideEdge {
     EDGE_TOP    = 1 << 0,
@@ -95,13 +106,22 @@ class VIEWS_EXPORT ViewsDelegate {
 
   // Call this method to set a factory callback that will be used to construct
   // NativeWidget implementations overriding the platform defaults.
-  void set_native_widget_factory(NativeWidgetFactory factory) {
+  void set_native_widget_factory(const NativeWidgetFactory& factory) {
     native_widget_factory_ = factory;
   }
-  const NativeWidgetFactory& native_widget_factory() {
+  const NativeWidgetFactory& native_widget_factory() const {
     return native_widget_factory_;
   }
 
+#if defined(USE_AURA)
+  void set_desktop_window_tree_host_factory(
+      const DesktopWindowTreeHostFactory& factory) {
+    desktop_window_tree_host_factory_ = factory;
+  }
+  const DesktopWindowTreeHostFactory& desktop_window_tree_host_factory() const {
+    return desktop_window_tree_host_factory_;
+  }
+#endif
   // Saves the position, size and "show" state for the window with the
   // specified name.
   virtual void SaveWindowPlacement(const Widget* widget,
@@ -196,46 +216,17 @@ class VIEWS_EXPORT ViewsDelegate {
   // Returns a blocking pool task runner given a TaskRunnerType.
   virtual scoped_refptr<base::TaskRunner> GetBlockingPoolTaskRunner();
 
-  // Returns the insets that should be applied around a DialogClientView. Note
-  // that the top inset is used for the distance between the buttons and the
-  // DialogClientView's content view.
-  virtual gfx::Insets GetDialogButtonInsets() const;
-
-  // Returns the distance between a dialog's edge and the close button in the
-  // upper trailing corner.
-  virtual int GetDialogCloseButtonMargin() const;
-
-  // Returns the spacing between a pair of related horizontal buttons, used for
-  // dialog layout.
-  virtual int GetDialogRelatedButtonHorizontalSpacing() const;
-
-  // Returns the spacing between a pair of related vertical controls, used for
-  // dialog layout.
-  virtual int GetDialogRelatedControlVerticalSpacing() const;
-
-  // Returns the insets that should be applied around a dialog's frame view.
-  virtual gfx::Insets GetDialogFrameViewInsets() const;
-
-  // Returns the margins that should be applied around a bubble dialog.
-  virtual gfx::Insets GetBubbleDialogMargins() const;
-
-  // Returns the default minimum width of a button.
-  virtual int GetButtonMinimumWidth() const;
-
-  // Returns the minimum width of a dialog button.
-  virtual int GetDialogButtonMinimumWidth() const;
-
-  // Returns the default padding to add on each side of a button's label.
-  virtual int GetButtonHorizontalPadding() const;
-
  protected:
   ViewsDelegate();
 
  private:
-  std::unique_ptr<ViewsTouchEditingControllerFactory> views_tsc_factory_;
+  std::unique_ptr<ViewsTouchEditingControllerFactory>
+      editing_controller_factory_;
 
 #if defined(USE_AURA)
   std::unique_ptr<TouchSelectionMenuRunnerViews> touch_selection_menu_runner_;
+
+  DesktopWindowTreeHostFactory desktop_window_tree_host_factory_;
 #endif
 
   NativeWidgetFactory native_widget_factory_;

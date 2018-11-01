@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/common/wm/window_state.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -235,6 +235,10 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
     waiter.Wait(false /* not locked */, false /* fullscreen */);
     EXPECT_FALSE(browser_window->IsFullscreen());
   }
+
+  // Browser window should be activated after screen locker is gone. Otherwise,
+  // the rest of the test would fail.
+  ASSERT_EQ(window_state, ash::wm::GetActiveWindowState());
 
   // 2) If the active browser window is in fullscreen and the fullscreen window
   // has all of the pixels, locking the screen should exit fullscreen. The

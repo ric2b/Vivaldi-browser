@@ -316,8 +316,8 @@ void MediaGalleriesEventRouter::Shutdown() {
 }
 
 static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<MediaGalleriesEventRouter> > g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+    BrowserContextKeyedAPIFactory<MediaGalleriesEventRouter>>::DestructorAtExit
+    g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<MediaGalleriesEventRouter>*
@@ -585,7 +585,7 @@ void MediaGalleriesAddUserSelectedFolderFunction::ReturnGalleriesAndId(
     }
   }
   std::unique_ptr<base::DictionaryValue> results(new base::DictionaryValue);
-  results->SetWithoutPathExpansion("mediaFileSystems", list.release());
+  results->SetWithoutPathExpansion("mediaFileSystems", std::move(list));
   results->SetIntegerWithoutPathExpansion("selectedFileSystemIndex", index);
   SetResult(std::move(results));
   SendResponse(true);
@@ -743,10 +743,8 @@ void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
       &(*attached_images)[blob_uuids->size()];
   std::unique_ptr<base::DictionaryValue> attached_image(
       new base::DictionaryValue);
-  attached_image->Set(kBlobUUIDKey, new base::StringValue(
-      current_blob->GetUUID()));
-  attached_image->Set(kTypeKey, new base::StringValue(
-      current_image->type));
+  attached_image->Set(kBlobUUIDKey, new base::Value(current_blob->GetUUID()));
+  attached_image->Set(kTypeKey, new base::Value(current_image->type));
   attached_image->Set(
       kSizeKey,
       new base::Value(base::checked_cast<int>(current_image->data.size())));

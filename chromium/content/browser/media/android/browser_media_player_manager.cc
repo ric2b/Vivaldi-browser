@@ -7,10 +7,10 @@
 #include <utility>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/media/android/media_resource_getter_impl.h"
-#include "content/browser/media/android/media_throttler.h"
 #include "content/browser/media/android/media_web_contents_observer_android.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -68,9 +68,13 @@ void BrowserMediaPlayerManager::RegisterMediaUrlInterceptor(
 // static
 BrowserMediaPlayerManager* BrowserMediaPlayerManager::Create(
     RenderFrameHost* rfh) {
-  if (g_factory)
-    return g_factory(rfh);
-  return new BrowserMediaPlayerManager(rfh);
+  // In chrome, |g_factory| should be set to create a RemoteMediaPlayerManager,
+  // since RegisterFactory() should be called from
+  // ChromeMainDelegateAndroid::BasicStartupComplete.
+  //
+  // In webview, no factory should be set, and returning a nullptr should be
+  // handled by the caller.
+  return g_factory != nullptr ? g_factory(rfh) : nullptr;
 }
 
 #if !defined(USE_AURA)
@@ -79,14 +83,15 @@ ContentViewCore* BrowserMediaPlayerManager::GetContentViewCore() const {
 }
 #endif
 
-MediaPlayerAndroid* BrowserMediaPlayerManager::CreateMediaPlayer(
+std::unique_ptr<MediaPlayerAndroid>
+BrowserMediaPlayerManager::CreateMediaPlayer(
     const MediaPlayerHostMsg_Initialize_Params& media_player_params,
     bool hide_url_log) {
   switch (media_player_params.type) {
     case MEDIA_PLAYER_TYPE_REMOTE_ONLY:
     case MEDIA_PLAYER_TYPE_URL: {
       const std::string user_agent = GetContentClient()->GetUserAgent();
-      MediaPlayerBridge* media_player_bridge = new MediaPlayerBridge(
+      auto media_player_bridge = base::MakeUnique<MediaPlayerBridge>(
           media_player_params.player_id, media_player_params.url,
           media_player_params.first_party_for_cookies, user_agent, hide_url_log,
           this,
@@ -95,7 +100,7 @@ MediaPlayerAndroid* BrowserMediaPlayerManager::CreateMediaPlayer(
           media_player_params.frame_url, media_player_params.allow_credentials);
 
       if (media_player_params.type == MEDIA_PLAYER_TYPE_REMOTE_ONLY)
-        return media_player_bridge;
+        return std::move(media_player_bridge);
 
       bool should_block = false;
       bool extract_metadata =
@@ -120,12 +125,12 @@ MediaPlayerAndroid* BrowserMediaPlayerManager::CreateMediaPlayer(
       } else if (!should_block) {
         media_player_bridge->Initialize();
       }
-      return media_player_bridge;
+      return std::move(media_player_bridge);
     }
   }
 
   NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 BrowserMediaPlayerManager::BrowserMediaPlayerManager(
@@ -141,12 +146,13 @@ BrowserMediaPlayerManager::~BrowserMediaPlayerManager() {
   // During the tear down process, OnDestroyPlayer() may or may not be called
   // (e.g. the WebContents may be destroyed before the render process). So
   // we cannot DCHECK(players_.empty()) here. Instead, all media players in
-  // |players_| will be destroyed here because |player_| is a ScopedVector.
+  // |players_| will be destroyed here because |player_| is a
+  // std::vector<std::unique_ptr<>>.
 
-  for (MediaPlayerAndroid* player : players_)
-    player->DeleteOnCorrectThread();
+  for (auto& player : players_)
+    player.release()->DeleteOnCorrectThread();
 
-  players_.weak_clear();
+  players_.clear();
 }
 
 void BrowserMediaPlayerManager::DidExitFullscreen(bool release_media_player) {
@@ -280,12 +286,11 @@ MediaPlayerAndroid* BrowserMediaPlayerManager::GetFullscreenPlayer() {
 }
 
 MediaPlayerAndroid* BrowserMediaPlayerManager::GetPlayer(int player_id) {
-  for (ScopedVector<MediaPlayerAndroid>::iterator it = players_.begin();
-      it != players_.end(); ++it) {
-    if ((*it)->player_id() == player_id)
-      return *it;
+  for (const auto& player : players_) {
+    if (player->player_id() == player_id)
+      return player.get();
   }
-  return NULL;
+  return nullptr;
 }
 
 bool BrowserMediaPlayerManager::RequestPlay(int player_id,
@@ -356,13 +361,13 @@ void BrowserMediaPlayerManager::OnInitialize(
 
   RenderProcessHostImpl* host = static_cast<RenderProcessHostImpl*>(
       web_contents()->GetRenderProcessHost());
-  MediaPlayerAndroid* player = CreateMediaPlayer(
-      media_player_params, host->GetBrowserContext()->IsOffTheRecord());
+  auto player = CreateMediaPlayer(media_player_params,
+                                  host->GetBrowserContext()->IsOffTheRecord());
 
   if (!player)
     return;
 
-  AddPlayer(player, media_player_params.delegate_id);
+  AddPlayer(std::move(player), media_player_params.delegate_id);
 }
 
 void BrowserMediaPlayerManager::OnStart(int player_id) {
@@ -370,13 +375,12 @@ void BrowserMediaPlayerManager::OnStart(int player_id) {
   if (!player)
     return;
 
-  if (RequestDecoderResources(player_id, false)) {
-    StartInternal(player_id);
-  } else if (WebContentsDelegate* delegate = web_contents_->GetDelegate()){
-    delegate->RequestMediaDecodePermission(
-        web_contents_,
-        base::Bind(&BrowserMediaPlayerManager::OnPlaybackPermissionGranted,
-                   weak_ptr_factory_.GetWeakPtr(), player_id));
+  RequestDecoderResources(player_id, false);
+
+  player->Start();
+  if (fullscreen_player_id_ == player_id && fullscreen_player_is_released_) {
+    video_view_->OpenVideo();
+    fullscreen_player_is_released_ = false;
   }
 }
 
@@ -435,19 +439,18 @@ bool BrowserMediaPlayerManager::IsPlayingRemotely(int player_id) {
 }
 
 void BrowserMediaPlayerManager::AddPlayer(
-    MediaPlayerAndroid* player, int delegate_id) {
+    std::unique_ptr<MediaPlayerAndroid> player,
+    int delegate_id) {
   DCHECK(!GetPlayer(player->player_id()));
-  players_.push_back(player);
-  player_id_to_delegate_id_map_[player->player_id()] =
-      delegate_id;
+  players_.push_back(std::move(player));
+  player_id_to_delegate_id_map_[players_.back()->player_id()] = delegate_id;
 }
 
 void BrowserMediaPlayerManager::DestroyPlayer(int player_id) {
-  for (ScopedVector<MediaPlayerAndroid>::iterator it = players_.begin();
-      it != players_.end(); ++it) {
+  for (auto it = players_.begin(); it != players_.end(); ++it) {
     if ((*it)->player_id() == player_id) {
-      (*it)->DeleteOnCorrectThread();
-      players_.weak_erase(it);
+      it->release()->DeleteOnCorrectThread();
+      players_.erase(it);
       break;
     }
   }
@@ -463,30 +466,26 @@ void BrowserMediaPlayerManager::ReleaseResources(int player_id) {
     fullscreen_player_is_released_ = true;
 }
 
-std::unique_ptr<media::MediaPlayerAndroid>
-BrowserMediaPlayerManager::SwapPlayer(int player_id,
-                                      media::MediaPlayerAndroid* player) {
-  media::MediaPlayerAndroid* previous_player = NULL;
-  for (ScopedVector<MediaPlayerAndroid>::iterator it = players_.begin();
-      it != players_.end(); ++it) {
+std::unique_ptr<MediaPlayerAndroid> BrowserMediaPlayerManager::SwapPlayer(
+    int player_id,
+    std::unique_ptr<MediaPlayerAndroid> player) {
+  std::unique_ptr<MediaPlayerAndroid> previous_player;
+  for (auto it = players_.begin(); it != players_.end(); ++it) {
     if ((*it)->player_id() == player_id) {
-      previous_player = *it;
+      previous_player = std::move(*it);
       MediaWebContentsObserverAndroid::FromWebContents(web_contents_)
           ->DisconnectMediaSession(render_frame_host_,
                                    player_id_to_delegate_id_map_[player_id]);
-      players_.weak_erase(it);
-      players_.push_back(player);
+      players_.erase(it);
+      players_.push_back(std::move(player));
       break;
     }
   }
-  return std::unique_ptr<media::MediaPlayerAndroid>(previous_player);
+  return previous_player;
 }
 
 bool BrowserMediaPlayerManager::RequestDecoderResources(
     int player_id, bool temporary) {
-  if (!MediaThrottler::GetInstance()->RequestDecoderResources())
-    return false;
-
   ActivePlayerMap::iterator it;
   // The player is already active, ignore it. A long running player should not
   // request temporary permissions.
@@ -525,7 +524,6 @@ void BrowserMediaPlayerManager::OnDecoderResourcesReleased(int player_id) {
     return;
 
   active_players_.erase(player_id);
-  MediaThrottler::GetInstance()->OnDecodeRequestFinished();
 }
 
 int BrowserMediaPlayerManager::RoutingID() {
@@ -543,26 +541,6 @@ void BrowserMediaPlayerManager::ReleaseFullscreenPlayer(
 
 void BrowserMediaPlayerManager::ReleasePlayer(MediaPlayerAndroid* player) {
   player->Release();
-}
-
-void BrowserMediaPlayerManager::OnPlaybackPermissionGranted(
-    int player_id, bool granted) {
-  if (!granted)
-    return;
-
-  MediaThrottler::GetInstance()->Reset();
-  StartInternal(player_id);
-}
-
-void BrowserMediaPlayerManager::StartInternal(int player_id) {
-  MediaPlayerAndroid* player = GetPlayer(player_id);
-  if (!player)
-    return;
-  player->Start();
-  if (fullscreen_player_id_ == player_id && fullscreen_player_is_released_) {
-    video_view_->OpenVideo();
-    fullscreen_player_is_released_ = false;
-  }
 }
 
 }  // namespace content

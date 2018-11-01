@@ -6,7 +6,7 @@
 #define BlockFlowPaintInvalidator_h
 
 #include "platform/graphics/PaintInvalidationReason.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -16,23 +16,23 @@ class BlockFlowPaintInvalidator {
   STACK_ALLOCATED();
 
  public:
-  BlockFlowPaintInvalidator(const LayoutBlockFlow& blockFlow)
-      : m_blockFlow(blockFlow) {}
+  BlockFlowPaintInvalidator(const LayoutBlockFlow& block_flow)
+      : block_flow_(block_flow) {}
 
-  void invalidatePaintForOverhangingFloats() {
-    invalidatePaintForOverhangingFloatsInternal(InvalidateDescendants);
+  void InvalidatePaintForOverhangingFloats() {
+    InvalidatePaintForOverhangingFloatsInternal(kInvalidateDescendants);
   }
 
-  void invalidateDisplayItemClients(PaintInvalidationReason);
+  void InvalidateDisplayItemClients(PaintInvalidationReason);
 
  private:
   enum InvalidateDescendantMode {
-    DontInvalidateDescendants,
-    InvalidateDescendants
+    kDontInvalidateDescendants,
+    kInvalidateDescendants
   };
-  void invalidatePaintForOverhangingFloatsInternal(InvalidateDescendantMode);
+  void InvalidatePaintForOverhangingFloatsInternal(InvalidateDescendantMode);
 
-  const LayoutBlockFlow& m_blockFlow;
+  const LayoutBlockFlow& block_flow_;
 };
 
 }  // namespace blink

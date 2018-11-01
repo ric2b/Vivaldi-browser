@@ -20,7 +20,7 @@
 #include "mojo/edk/system/handle_signals_state.h"
 #include "mojo/edk/system/ports/name.h"
 #include "mojo/edk/system/system_impl_export.h"
-#include "mojo/edk/system/watcher.h"
+#include "mojo/edk/system/watch.h"
 #include "mojo/public/c/system/buffer.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/message_pipe.h"
@@ -29,15 +29,13 @@
 namespace mojo {
 namespace edk {
 
-class Awakable;
 class Dispatcher;
 class MessageForTransit;
 
 using DispatcherVector = std::vector<scoped_refptr<Dispatcher>>;
 
 // A |Dispatcher| implements Mojo EDK calls that are associated with a
-// particular MojoHandle, with the exception of MojoWait and MojoWaitMany (
-// which are implemented directly in Core.).
+// particular MojoHandle.
 class MOJO_SYSTEM_IMPL_EXPORT Dispatcher
     : public base::RefCountedThreadSafe<Dispatcher> {
  public:
@@ -56,7 +54,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Dispatcher
     DATA_PIPE_PRODUCER,
     DATA_PIPE_CONSUMER,
     SHARED_BUFFER,
-    WAIT_SET,
+    WATCHER,
 
     // "Private" types (not exposed via the public interface):
     PLATFORM_HANDLE = -1,
@@ -67,13 +65,16 @@ class MOJO_SYSTEM_IMPL_EXPORT Dispatcher
   virtual Type GetType() const = 0;
   virtual MojoResult Close() = 0;
 
-  ///////////// Watch API ////////////////////
+  ///////////// Watcher API ////////////////////
 
-  virtual MojoResult Watch(MojoHandleSignals signals,
-                           const Watcher::WatchCallback& callback,
-                           uintptr_t context);
-
+  virtual MojoResult WatchDispatcher(scoped_refptr<Dispatcher> dispatcher,
+                                     MojoHandleSignals signals,
+                                     uintptr_t context);
   virtual MojoResult CancelWatch(uintptr_t context);
+  virtual MojoResult Arm(uint32_t* num_ready_contexts,
+                         uintptr_t* ready_contexts,
+                         MojoResult* ready_results,
+                         MojoHandleSignalsState* ready_signals_states);
 
   ///////////// Message pipe API /////////////
 
@@ -158,31 +159,17 @@ class MOJO_SYSTEM_IMPL_EXPORT Dispatcher
   // threads.
   virtual HandleSignalsState GetHandleSignalsState() const;
 
-  // Adds an awakable to this dispatcher, which will be woken up when this
-  // object changes state to satisfy |signals| with context |context|. It will
-  // also be woken up when it becomes impossible for the object to ever satisfy
-  // |signals| with a suitable error status.
-  //
-  // If |signals_state| is non-null, on *failure* |*signals_state| will be set
-  // to the current handle signals state (on success, it is left untouched).
-  //
-  // Returns:
-  //  - |MOJO_RESULT_OK| if the awakable was added;
-  //  - |MOJO_RESULT_ALREADY_EXISTS| if |signals| is already satisfied;
-  //  - |MOJO_RESULT_INVALID_ARGUMENT| if the dispatcher has been closed; and
-  //  - |MOJO_RESULT_FAILED_PRECONDITION| if it is not (or no longer) possible
-  //    that |signals| will ever be satisfied.
-  virtual MojoResult AddAwakable(Awakable* awakable,
-                                 MojoHandleSignals signals,
-                                 uintptr_t context,
-                                 HandleSignalsState* signals_state);
+  // Adds a WatcherDispatcher reference to this dispatcher, to be notified of
+  // all subsequent changes to handle state including signal changes or closure.
+  // The reference is associated with a |context| for disambiguation of
+  // removals.
+  virtual MojoResult AddWatcherRef(
+      const scoped_refptr<WatcherDispatcher>& watcher,
+      uintptr_t context);
 
-  // Removes an awakable from this dispatcher. (It is valid to call this
-  // multiple times for the same |awakable| on the same object, so long as
-  // |AddAwakable()| was called at most once.) If |signals_state| is non-null,
-  // |*signals_state| will be set to the current handle signals state.
-  virtual void RemoveAwakable(Awakable* awakable,
-                              HandleSignalsState* signals_state);
+  // Removes a WatcherDispatcher reference from this dispatcher.
+  virtual MojoResult RemoveWatcherRef(WatcherDispatcher* watcher,
+                                      uintptr_t context);
 
   // Informs the caller of the total serialized size (in bytes) and the total
   // number of platform handles and ports needed to transfer this dispatcher

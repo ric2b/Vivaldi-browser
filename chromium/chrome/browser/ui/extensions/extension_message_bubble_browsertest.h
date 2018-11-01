@@ -14,6 +14,8 @@ namespace extensions {
 class TestExtensionDir;
 }
 
+class ToolbarActionsBarBubbleViews;
+
 class ExtensionMessageBubbleBrowserTest
     : public BrowserActionsBarBrowserTest {
  protected:
@@ -24,6 +26,16 @@ class ExtensionMessageBubbleBrowserTest
 
   ExtensionMessageBubbleBrowserTest();
   ~ExtensionMessageBubbleBrowserTest() override;
+
+  // Returns the toolkit-views bubble that is currently attached to |browser|.
+  // Returns null if there is no bubble showing. Implemented in platform files.
+  static ToolbarActionsBarBubbleViews* GetViewsBubbleForBrowser(
+      Browser* browser);
+
+  // Returns the expected test anchor bounds on |browser| which may be a Cocoa
+  // browser or a Views browser. Implemented in platform files.
+  static gfx::Rect GetAnchorReferenceBoundsForBrowser(Browser* browser,
+                                                      AnchorPosition anchor);
 
   // BrowserActionsBarBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override;
@@ -39,7 +51,7 @@ class ExtensionMessageBubbleBrowserTest
   virtual void CheckBubbleNative(Browser* browser, AnchorPosition anchor) = 0;
 
   // Closes the bubble present in the given |browser|.
-  void CloseBubble(Browser* browser);
+  virtual void CloseBubble(Browser* browser);
   // Performs the platform-specific close.
   virtual void CloseBubbleNative(Browser* browser) = 0;
 
@@ -95,8 +107,9 @@ class ExtensionMessageBubbleBrowserTest
   void TestDevModeBubbleIsntShownTwice();
 
   // Tests that the bubble indicating an extension is controlling a user's
-  // new tab page is shown.
-  void TestControlledNewTabPageBubbleShown();
+  // new tab page is shown. When |click_learn_more| is true, the bubble is
+  // closed by clicking the Learn More link, otherwise CloseBubble() is used.
+  void TestControlledNewTabPageBubbleShown(bool click_learn_more);
 
   // Tests that the bubble indicating an extension is controlling a user's
   // home page is shown.

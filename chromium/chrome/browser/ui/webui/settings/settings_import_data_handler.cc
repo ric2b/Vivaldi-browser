@@ -94,8 +94,8 @@ void ImportDataHandler::StartImport(
     importer_host_->set_observer(NULL);
 
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("import-data-status-changed"),
-                         base::StringValue(kImportStatusInProgress));
+                         base::Value("import-data-status-changed"),
+                         base::Value(kImportStatusInProgress));
   import_did_succeed_ = false;
 
   importer_host_ = new ExternalProcessImporterHost();
@@ -118,15 +118,15 @@ void ImportDataHandler::ImportData(const base::ListValue* args) {
   PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
 
   uint16_t selected_items = importer::NONE;
-  if (prefs->GetBoolean(prefs::kImportAutofillFormData))
+  if (prefs->GetBoolean(prefs::kImportDialogAutofillFormData))
     selected_items |= importer::AUTOFILL_FORM_DATA;
-  if (prefs->GetBoolean(prefs::kImportBookmarks))
+  if (prefs->GetBoolean(prefs::kImportDialogBookmarks))
     selected_items |= importer::FAVORITES;
-  if (prefs->GetBoolean(prefs::kImportHistory))
+  if (prefs->GetBoolean(prefs::kImportDialogHistory))
     selected_items |= importer::HISTORY;
-  if (prefs->GetBoolean(prefs::kImportSavedPasswords))
+  if (prefs->GetBoolean(prefs::kImportDialogSavedPasswords))
     selected_items |= importer::PASSWORDS;
-  if (prefs->GetBoolean(prefs::kImportSearchEngine))
+  if (prefs->GetBoolean(prefs::kImportDialogSearchEngine))
     selected_items |= importer::SEARCH_ENGINES;
 
   const importer::SourceProfile& source_profile =
@@ -185,7 +185,7 @@ void ImportDataHandler::SendBrowserProfileData(const std::string& callback_id) {
     browser_profiles.Append(std::move(browser_profile));
   }
 
-  ResolveJavascriptCallback(base::StringValue(callback_id), browser_profiles);
+  ResolveJavascriptCallback(base::Value(callback_id), browser_profiles);
 }
 
 void ImportDataHandler::ImportStarted() {
@@ -212,10 +212,9 @@ void ImportDataHandler::ImportEnded() {
   importer_host_ = NULL;
 
   CallJavascriptFunction(
-      "cr.webUIListenerCallback",
-      base::StringValue("import-data-status-changed"),
-      base::StringValue(import_did_succeed_ ? kImportStatusSucceeded
-                                            : kImportStatusFailed));
+      "cr.webUIListenerCallback", base::Value("import-data-status-changed"),
+      base::Value(import_did_succeed_ ? kImportStatusSucceeded
+                                      : kImportStatusFailed));
 }
 
 void ImportDataHandler::FileSelected(const base::FilePath& path,

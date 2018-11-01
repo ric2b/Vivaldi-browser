@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/payments/editor_view_controller.h"
 
+#include <map>
 #include <memory>
 #include <utility>
 
@@ -15,7 +16,6 @@
 #include "chrome/browser/ui/views/payments/validating_combobox.h"
 #include "chrome/browser/ui/views/payments/validating_textfield.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/payments/content/payment_request.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/native_theme/native_theme.h"
@@ -46,15 +46,33 @@ constexpr int kNumCharactersInLongField = 20;
 
 }  // namespace
 
-EditorViewController::EditorViewController(PaymentRequest* request,
+EditorViewController::EditorViewController(PaymentRequestSpec* spec,
+                                           PaymentRequestState* state,
                                            PaymentRequestDialogView* dialog)
-    : PaymentRequestSheetController(request, dialog) {}
+    : PaymentRequestSheetController(spec, state, dialog) {}
 
 EditorViewController::~EditorViewController() {}
 
-std::unique_ptr<views::View> EditorViewController::CreateView() {
-  std::unique_ptr<views::View> content_view = base::MakeUnique<views::View>();
+void EditorViewController::DisplayErrorMessageForField(
+    const EditorField& field,
+    const base::string16& error_message) {
+  const auto& label_it = error_labels_.find(field);
+  DCHECK(label_it != error_labels_.end());
+  label_it->second->SetText(error_message);
+  label_it->second->SchedulePaint();
+  dialog()->Layout();
+}
 
+std::unique_ptr<views::Button> EditorViewController::CreatePrimaryButton() {
+  std::unique_ptr<views::Button> button(
+      views::MdTextButton::CreateSecondaryUiBlueButton(
+          this, l10n_util::GetStringUTF16(IDS_DONE)));
+  button->set_tag(static_cast<int>(EditorViewControllerTags::SAVE_BUTTON));
+  button->set_id(static_cast<int>(DialogViewID::EDITOR_SAVE_BUTTON));
+  return button;
+}
+
+void EditorViewController::FillContentView(views::View* content_view) {
   views::BoxLayout* layout =
       new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0);
   layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
@@ -68,13 +86,6 @@ std::unique_ptr<views::View> EditorViewController::CreateView() {
 
   // The heart of the editor dialog: all the input fields with their labels.
   content_view->AddChildView(CreateEditorView().release());
-
-  return CreatePaymentView(
-      CreateSheetHeaderView(
-          true, l10n_util::GetStringUTF16(
-                    IDS_PAYMENT_REQUEST_CREDIT_CARD_EDITOR_ADD_TITLE),
-          this),
-      std::move(content_view));
 }
 
 // Adds the "required fields" label in disabled text, to obtain this result.
@@ -101,23 +112,11 @@ std::unique_ptr<views::View> EditorViewController::CreateExtraFooterView() {
   return content_view;
 }
 
-void EditorViewController::DisplayErrorMessageForField(
-    const EditorField& field,
-    const base::string16& error_message) {
-  const auto& label_it = error_labels_.find(field);
-  DCHECK(label_it != error_labels_.end());
-  label_it->second->SetText(error_message);
-  label_it->second->SchedulePaint();
-  dialog()->Layout();
-}
-
-std::unique_ptr<views::Button> EditorViewController::CreatePrimaryButton() {
-  std::unique_ptr<views::Button> button(
-      views::MdTextButton::CreateSecondaryUiBlueButton(
-          this, l10n_util::GetStringUTF16(IDS_DONE)));
-  button->set_tag(static_cast<int>(EditorViewControllerTags::SAVE_BUTTON));
-  button->set_id(static_cast<int>(DialogViewID::EDITOR_SAVE_BUTTON));
-  return button;
+void EditorViewController::UpdateEditorView() {
+  UpdateContentView();
+  // TODO(crbug.com/704254): Find how to update the parent view bounds so that
+  // the vertical scrollbar size gets updated.
+  dialog()->EditorViewUpdated();
 }
 
 void EditorViewController::ButtonPressed(views::Button* sender,
@@ -144,8 +143,11 @@ void EditorViewController::OnPerformAction(views::Combobox* sender) {
 
 std::unique_ptr<views::View> EditorViewController::CreateEditorView() {
   std::unique_ptr<views::View> editor_view = base::MakeUnique<views::View>();
+  text_fields_.clear();
+  comboboxes_.clear();
 
-  views::GridLayout* editor_layout = new views::GridLayout(editor_view.get());
+  std::unique_ptr<views::GridLayout> editor_layout =
+      base::MakeUnique<views::GridLayout>(editor_view.get());
 
   // The editor grid layout is padded vertically from the top and bottom, and
   // horizontally inset like other content views. The top padding needs to be
@@ -155,7 +157,6 @@ std::unique_ptr<views::View> EditorViewController::CreateEditorView() {
       kEditorVerticalInset, payments::kPaymentRequestRowHorizontalInsets,
       kEditorVerticalInset, payments::kPaymentRequestRowHorizontalInsets);
 
-  editor_view->SetLayoutManager(editor_layout);
   views::ColumnSet* columns = editor_layout->AddColumnSet(0);
   columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0,
                      views::GridLayout::USE_PREF, 0, 0);
@@ -167,9 +168,13 @@ std::unique_ptr<views::View> EditorViewController::CreateEditorView() {
   columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0,
                      views::GridLayout::USE_PREF, 0, 0);
 
+  // The LayoutManager needs to be set before input fields are created, so we
+  // keep a handle to it before we release it to the view.
+  views::GridLayout* layout_handle = editor_layout.get();
+  editor_view->SetLayoutManager(editor_layout.release());
   std::vector<EditorField> fields = GetFieldDefinitions();
   for (const auto& field : fields) {
-    CreateInputField(editor_layout, field);
+    CreateInputField(layout_handle, field);
   }
 
   return editor_view;
@@ -199,6 +204,7 @@ void EditorViewController::CreateInputField(views::GridLayout* layout,
   if (field.control_type == EditorField::ControlType::TEXTFIELD) {
     ValidatingTextfield* text_field =
         new ValidatingTextfield(CreateValidationDelegate(field));
+    text_field->SetText(GetInitialValueForType(field.type));
     text_field->set_controller(this);
     // Using autofill field type as a view ID (for testing).
     text_field->set_id(static_cast<int>(field.type));
@@ -213,6 +219,7 @@ void EditorViewController::CreateInputField(views::GridLayout* layout,
   } else if (field.control_type == EditorField::ControlType::COMBOBOX) {
     ValidatingCombobox* combobox = new ValidatingCombobox(
         GetComboboxModelForType(field.type), CreateValidationDelegate(field));
+    combobox->SelectValue(GetInitialValueForType(field.type));
     // Using autofill field type as a view ID (for testing).
     combobox->set_id(static_cast<int>(field.type));
     combobox->set_listener(this);

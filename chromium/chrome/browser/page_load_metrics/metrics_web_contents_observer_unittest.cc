@@ -30,7 +30,7 @@ namespace page_load_metrics {
 namespace {
 
 const char kDefaultTestUrl[] = "https://google.com/";
-const char kDefaultTestUrlAnchor[] = "https://google.com/#samepage";
+const char kDefaultTestUrlAnchor[] = "https://google.com/#samedocument";
 const char kDefaultTestUrl2[] = "https://whatever.com/";
 const char kFilteredStartUrl[] = "https://whatever.com/ignore-on-start";
 const char kFilteredCommitUrl[] = "https://whatever.com/ignore-on-commit";
@@ -284,7 +284,7 @@ TEST_F(MetricsWebContentsObserverTest, NotInMainFrame) {
   CheckTotalErrorEvents();
 }
 
-TEST_F(MetricsWebContentsObserverTest, SamePageNoTrigger) {
+TEST_F(MetricsWebContentsObserverTest, SameDocumentNoTrigger) {
   PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
 
@@ -389,7 +389,7 @@ TEST_F(MetricsWebContentsObserverTest, BadIPC) {
   SimulateTimingUpdate(timing2);
   ASSERT_EQ(1, CountUpdatedTimingReported());
 
-  CheckErrorEvent(ERR_BAD_TIMING_IPC, 1);
+  CheckErrorEvent(ERR_BAD_TIMING_IPC_INVALID_TIMING_DESCENDENT, 1);
   CheckTotalErrorEvents();
 }
 

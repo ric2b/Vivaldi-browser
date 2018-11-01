@@ -249,7 +249,7 @@ class _ProjectContextGenerator(object):
   def _GenJniLibs(self, root_entry):
     libraries = []
     for entry in self._GetEntries(root_entry):
-      libraries += entry.BuildConfig().get('native', [])
+      libraries += entry.BuildConfig().get('native', {}).get('libraries', [])
     if libraries:
       return _CreateJniLibsDir(constants.GetOutDirectory(),
           self.EntryOutputDir(root_entry), libraries)
@@ -297,7 +297,8 @@ class _ProjectContextGenerator(object):
   def _Srcjars(self, entry):
     srcjars = _RebasePath(entry.Gradle().get('bundled_srcjars', []))
     if not self.use_gradle_process_resources:
-      srcjars += _RebasePath(entry.BuildConfig()['javac']['srcjars'])
+      srcjars += _RebasePath(entry.Javac()['srcjars'])
+      srcjars += _RebasePath(entry.Gradle().get('srcjars'))
     return srcjars
 
   def _GetEntries(self, entry):
@@ -632,8 +633,13 @@ def main():
   parser.add_argument('--target',
                       dest='targets',
                       action='append',
-                      help='GN target to generate project for. '
-                           'May be repeated.')
+                      help='GN target to generate project for. Replaces set of '
+                           'default targets. May be repeated.')
+  parser.add_argument('--extra-target',
+                      dest='extra_targets',
+                      action='append',
+                      help='GN target to generate project for, in addition to '
+                           'the default ones. May be repeated.')
   parser.add_argument('--project-dir',
                       help='Root of the output project.',
                       default=os.path.join('$CHROMIUM_OUTPUT_DIR', 'gradle'))
@@ -675,6 +681,8 @@ def main():
     targets = _QueryForAllGnTargets(output_dir)
   else:
     targets = args.targets or _DEFAULT_TARGETS
+    if args.extra_targets:
+      targets.extend(args.extra_targets)
     targets = [re.sub(r'_test_apk$', '_test_apk__apk', t) for t in targets]
     # TODO(wnwen): Utilize Gradle's test constructs for our junit tests?
     targets = [re.sub(r'_junit_tests$', '_junit_tests__java_binary', t)
@@ -737,7 +745,7 @@ def main():
     _ExtractZips(generator.project_dir, zip_tuples)
 
   logging.warning('Project created! (%d subprojects)', len(project_entries))
-  logging.warning('Generated projects work best with Android Studio 2.2')
+  logging.warning('Generated projects work with Android Studio 2.3')
   logging.warning('For more tips: https://chromium.googlesource.com/chromium'
                   '/src.git/+/master/docs/android_studio.md')
 

@@ -5,7 +5,6 @@
 #include "net/spdy/spdy_deframer_visitor.h"
 
 #include <stdlib.h>
-#include <string.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -21,8 +20,6 @@
 #include "net/spdy/spdy_test_utils.h"
 
 using ::base::MakeUnique;
-using ::base::StringPiece;
-using ::std::string;
 using ::testing::AssertionFailure;
 using ::testing::AssertionResult;
 using ::testing::AssertionSuccess;
@@ -138,10 +135,9 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   // alphabetical order for ease of navigation, and are not in same order
   // as in SpdyFramerVisitorInterface.
   void OnAltSvc(SpdyStreamId stream_id,
-                StringPiece origin,
+                SpdyStringPiece origin,
                 const SpdyAltSvcWireFormat::AlternativeServiceVector&
                     altsvc_vector) override;
-  void OnBlocked(SpdyStreamId stream_id) override;
   void OnContinuation(SpdyStreamId stream_id, bool end) override;
   SpdyHeadersHandlerInterface* OnHeaderFrameStart(
       SpdyStreamId stream_id) override;
@@ -184,7 +180,7 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   // Callbacks defined in SpdyHeadersHandlerInterface.
 
   void OnHeaderBlockStart() override;
-  void OnHeader(StringPiece key, StringPiece value) override;
+  void OnHeader(SpdyStringPiece key, SpdyStringPiece value) override;
   void OnHeaderBlockEnd(size_t header_bytes_parsed) override;
   void OnHeaderBlockEnd(size_t header_bytes_parsed,
                         size_t compressed_header_bytes_parsed) override;
@@ -214,7 +210,7 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   bool fin_ = false;
   bool got_hpack_end_ = false;
 
-  std::unique_ptr<string> data_;
+  std::unique_ptr<SpdyString> data_;
 
   // Total length of the data frame.
   size_t data_len_ = 0;
@@ -223,7 +219,7 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   // Length field).
   size_t padding_len_ = 0;
 
-  std::unique_ptr<string> goaway_description_;
+  std::unique_ptr<SpdyString> goaway_description_;
   std::unique_ptr<StringPairVector> headers_;
   std::unique_ptr<SettingVector> settings_;
   std::unique_ptr<TestHeadersHandler> headers_handler_;
@@ -413,34 +409,18 @@ bool SpdyTestDeframerImpl::AtFrameEnd() {
 
 void SpdyTestDeframerImpl::OnAltSvc(
     SpdyStreamId stream_id,
-    StringPiece origin,
+    SpdyStringPiece origin,
     const SpdyAltSvcWireFormat::AlternativeServiceVector& altsvc_vector) {
   DVLOG(1) << "OnAltSvc stream_id: " << stream_id;
   CHECK_EQ(frame_type_, UNSET) << "   frame_type_="
                                << Http2FrameTypeToString(frame_type_);
   CHECK_GT(stream_id, 0u);
   auto ptr = MakeUnique<SpdyAltSvcIR>(stream_id);
-  ptr->set_origin(origin.as_string());
+  ptr->set_origin(SpdyString(origin));
   for (auto& altsvc : altsvc_vector) {
     ptr->add_altsvc(altsvc);
   }
   listener_->OnAltSvc(std::move(ptr));
-}
-
-// Frame type BLOCKED was removed in draft 12 of HTTP/2. The intent appears to
-// have been to support debugging; it is not expected to be seen except if the
-// peer "thinks" that a bug exists in the flow control such that the peer can't
-// send because the receiver hasn't sent WINDOW_UPDATE frames. Since we might
-// be talking to multiple backends, it is quite plausible that one backend
-// is unable to take more input from the client (hence no WINDOW_UPDATE), yet
-// other backends can take more input.
-void SpdyTestDeframerImpl::OnBlocked(SpdyStreamId stream_id) {
-  LOG(FATAL) << "OnBlocked stream_id: " << stream_id;
-  CHECK_EQ(frame_type_, UNSET) << "   frame_type_="
-                               << Http2FrameTypeToString(frame_type_);
-  CHECK_GT(stream_id, 0u);
-  frame_type_ = UNSET;
-  stream_id_ = stream_id;
 }
 
 // A CONTINUATION frame contains a Header Block Fragment, and immediately
@@ -475,7 +455,7 @@ void SpdyTestDeframerImpl::OnDataFrameHeader(SpdyStreamId stream_id,
   stream_id_ = stream_id;
   fin_ = fin;
   data_len_ = length;
-  data_.reset(new string());
+  data_.reset(new SpdyString());
 }
 
 // The SpdyFramer will not process any more data at this point.
@@ -499,7 +479,7 @@ void SpdyTestDeframerImpl::OnGoAway(SpdyStreamId last_good_stream_id,
                                << Http2FrameTypeToString(frame_type_);
   frame_type_ = GOAWAY;
   goaway_ir_ = MakeUnique<SpdyGoAwayIR>(last_good_stream_id, error_code, "");
-  goaway_description_.reset(new string());
+  goaway_description_.reset(new SpdyString());
 }
 
 // If len==0 then we've reached the end of the GOAWAY frame.
@@ -755,13 +735,14 @@ void SpdyTestDeframerImpl::OnHeaderBlockStart() {
   got_hpack_end_ = false;
 }
 
-void SpdyTestDeframerImpl::OnHeader(StringPiece key, StringPiece value) {
+void SpdyTestDeframerImpl::OnHeader(SpdyStringPiece key,
+                                    SpdyStringPiece value) {
   CHECK(frame_type_ == HEADERS || frame_type_ == CONTINUATION ||
         frame_type_ == PUSH_PROMISE)
       << "   frame_type_=" << Http2FrameTypeToString(frame_type_);
   CHECK(!got_hpack_end_);
   CHECK(headers_);
-  headers_->emplace_back(key.as_string(), value.as_string());
+  headers_->emplace_back(SpdyString(key), SpdyString(value));
   CHECK(headers_handler_);
   headers_handler_->OnHeader(key, value);
 }

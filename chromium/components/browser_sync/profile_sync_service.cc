@@ -148,9 +148,6 @@ const net::BackoffEntry::Policy kRequestAccessTokenBackoffPolicy = {
     false,
 };
 
-const base::FilePath::CharType kLevelDBFolderName[] =
-    FILE_PATH_LITERAL("LevelDB");
-
 }  // namespace
 
 ProfileSyncService::InitParams::InitParams() = default;
@@ -171,7 +168,6 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
       network_time_update_callback_(
           std::move(init_params.network_time_update_callback)),
       url_request_context_(init_params.url_request_context),
-      blocking_task_runner_(std::move(init_params.blocking_task_runner)),
       is_first_time_sync_configure_(false),
       engine_initialized_(false),
       sync_disabled_by_admin_(false),
@@ -229,8 +225,8 @@ void ProfileSyncService::Initialize() {
       base::Bind(&ProfileSyncService::CanEngineStart, base::Unretained(this)),
       base::Bind(&ProfileSyncService::StartUpSlowEngineComponents,
                  weak_factory_.GetWeakPtr()));
-  std::unique_ptr<sync_sessions::LocalSessionEventRouter> router(
-      sync_client_->GetSyncSessionsClient()->GetLocalSessionEventRouter());
+  sync_sessions::LocalSessionEventRouter* router =
+      sync_client_->GetSyncSessionsClient()->GetLocalSessionEventRouter();
   local_device_ = sync_client_->GetSyncApiComponentFactory()
                       ->CreateLocalDeviceInfoProvider();
   sync_stopped_reporter_ = base::MakeUnique<syncer::SyncStoppedReporter>(
@@ -249,8 +245,11 @@ void ProfileSyncService::Initialize() {
     // TODO(skym): Stop creating leveldb files when signed out.
     // TODO(skym): Verify using AsUTF8Unsafe is okay here. Should work as long
     // as the Local State file is guaranteed to be UTF-8.
+    const syncer::ModelTypeStoreFactory& store_factory =
+        GetModelTypeStoreFactory(syncer::DEVICE_INFO, base_directory_,
+                                 sync_client_->GetBlockingPool());
     device_info_sync_bridge_ = base::MakeUnique<DeviceInfoSyncBridge>(
-        local_device_.get(), GetModelTypeStoreFactory(syncer::DEVICE_INFO),
+        local_device_.get(), store_factory,
         base::BindRepeating(
             &ModelTypeChangeProcessor::Create,
             base::BindRepeating(&syncer::ReportUnrecoverableError, channel_)));
@@ -558,7 +557,7 @@ void ProfileSyncService::StartUpSlowEngineComponents() {
 
   engine_.reset(sync_client_->GetSyncApiComponentFactory()->CreateSyncEngine(
       debug_identifier_, invalidator, sync_prefs_.AsWeakPtr(),
-      sync_data_folder_));
+      FormatSyncDataPath(base_directory_)));
 
   // Clear any old errors the first time sync starts.
   if (!IsFirstSetupComplete())
@@ -694,7 +693,7 @@ void ProfileSyncService::ShutdownImpl(syncer::ShutdownReason reason) {
       sync_thread_->task_runner()->PostTask(
           FROM_HERE,
           base::Bind(&syncer::syncable::Directory::DeleteDirectoryFiles,
-                     sync_data_folder_));
+                     FormatSyncDataPath(base_directory_)));
     }
     return;
   }
@@ -930,7 +929,7 @@ void ProfileSyncService::OnEngineInitialized(
 
   // Initialize local device info.
   local_device_->Initialize(cache_guid, signin_scoped_device_id,
-                            blocking_task_runner_);
+                            sync_client_->GetBlockingPool());
 
   if (protocol_event_observers_.might_have_observers()) {
     engine_->RequestBufferedProtocolEventsAndEnableForwarding();
@@ -1198,6 +1197,14 @@ void ProfileSyncService::OnClearServerDataDone() {
                             syncer::CLEAR_SERVER_DATA_MAX);
 }
 
+void ProfileSyncService::ClearServerDataForTest(const base::Closure& callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  // Sync has a restriction that the engine must be in configuration mode
+  // in order to run clear server data.
+  engine_->StartConfiguration();
+  engine_->ClearServerData(callback);
+}
+
 void ProfileSyncService::OnConfigureDone(
     const DataTypeManager::ConfigureResult& result) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -1385,6 +1392,7 @@ bool ProfileSyncService::IsFirstSetupInProgress() const {
 std::unique_ptr<syncer::SyncSetupInProgressHandle>
 ProfileSyncService::GetSetupInProgressHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
+
   if (++outstanding_setup_in_progress_handles_ == 1) {
     DCHECK(!startup_controller_->IsSetupInProgress());
     startup_controller_->SetSetupInProgress(true);
@@ -1517,7 +1525,7 @@ void ProfileSyncService::UpdateSelectedTypesHistogram(
         syncer::user_selectable_type::NOTES,
       };
 
-  static_assert(39 + 1 == syncer::MODEL_TYPE_COUNT,
+  static_assert(40 + 1 /*notes*/ == syncer::MODEL_TYPE_COUNT,
                 "If adding a user selectable type, update "
                 "UserSelectableSyncType in user_selectable_sync_type.h and "
                 "histograms.xml.");
@@ -1671,12 +1679,21 @@ void ProfileSyncService::SetPlatformSyncAllowedProvider(
   platform_sync_allowed_provider_ = platform_sync_allowed_provider;
 }
 
+// static
 syncer::ModelTypeStoreFactory ProfileSyncService::GetModelTypeStoreFactory(
-    ModelType type) {
-  return base::Bind(&ModelTypeStore::CreateStore, type,
-                    sync_data_folder_.Append(base::FilePath(kLevelDBFolderName))
-                        .AsUTF8Unsafe(),
-                    blocking_task_runner_);
+    ModelType type,
+    const base::FilePath& base_path,
+    base::SequencedWorkerPool* blocking_pool) {
+  // TODO(skym): Verify using AsUTF8Unsafe is okay here. Should work as long
+  // as the Local State file is guaranteed to be UTF-8.
+  std::string path = FormatSharedModelTypeStorePath(base_path).AsUTF8Unsafe();
+  base::SequencedWorkerPool::SequenceToken sequence_token =
+      blocking_pool->GetNamedSequenceToken(path);
+  scoped_refptr<base::SequencedTaskRunner> task_runner =
+      blocking_pool->GetSequencedTaskRunnerWithShutdownBehavior(
+          blocking_pool->GetNamedSequenceToken(path),
+          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+  return base::Bind(&ModelTypeStore::CreateStore, type, path, task_runner);
 }
 
 void ProfileSyncService::ConfigureDataTypeManager() {
@@ -1988,6 +2005,15 @@ void ProfileSyncService::OnGaiaAccountsInCookieUpdated(
     const std::vector<gaia::ListedAccount>& accounts,
     const std::vector<gaia::ListedAccount>& signed_out_accounts,
     const GoogleServiceAuthError& error) {
+  OnGaiaAccountsInCookieUpdatedWithCallback(accounts, signed_out_accounts,
+                                            error, base::Closure());
+}
+
+void ProfileSyncService::OnGaiaAccountsInCookieUpdatedWithCallback(
+    const std::vector<gaia::ListedAccount>& accounts,
+    const std::vector<gaia::ListedAccount>& signed_out_accounts,
+    const GoogleServiceAuthError& error,
+    const base::Closure& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!IsEngineInitialized())
     return;
@@ -2006,7 +2032,7 @@ void ProfileSyncService::OnGaiaAccountsInCookieUpdated(
 
   DVLOG(1) << "Cookie jar mismatch: " << cookie_jar_mismatch;
   DVLOG(1) << "Cookie jar empty: " << cookie_jar_empty;
-  engine_->OnCookieJarChanged(cookie_jar_mismatch, cookie_jar_empty);
+  engine_->OnCookieJarChanged(cookie_jar_mismatch, cookie_jar_empty, callback);
 }
 
 void ProfileSyncService::AddProtocolEventObserver(
@@ -2086,9 +2112,11 @@ class GetAllNodesRequestHelper
   virtual ~GetAllNodesRequestHelper();
 
   std::unique_ptr<base::ListValue> result_accumulator_;
-
   syncer::ModelTypeSet awaiting_types_;
   base::Callback<void(std::unique_ptr<base::ListValue>)> callback_;
+  base::ThreadChecker thread_checker_;
+
+  DISALLOW_COPY_AND_ASSIGN(GetAllNodesRequestHelper);
 };
 
 GetAllNodesRequestHelper::GetAllNodesRequestHelper(
@@ -2111,6 +2139,8 @@ GetAllNodesRequestHelper::~GetAllNodesRequestHelper() {
 void GetAllNodesRequestHelper::OnReceivedNodesForType(
     const syncer::ModelType type,
     std::unique_ptr<base::ListValue> node_list) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
   // Add these results to our list.
   std::unique_ptr<base::DictionaryValue> type_dict(new base::DictionaryValue());
   type_dict->SetString("type", ModelTypeToString(type));
@@ -2332,7 +2362,7 @@ void ProfileSyncService::FlushDirectory() const {
 
 base::FilePath ProfileSyncService::GetDirectoryPathForTest() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return sync_data_folder_;
+  return FormatSyncDataPath(base_directory_);
 }
 
 base::MessageLoop* ProfileSyncService::GetSyncLoopForTest() const {
@@ -2432,5 +2462,4 @@ void ProfileSyncService::OnSetupInProgressHandleDestroyed() {
 bool ProfileSyncService::DisableNotifications() const {
   return false;
 }
-
 }  // namespace browser_sync

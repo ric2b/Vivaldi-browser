@@ -4,6 +4,7 @@
 
 #include "net/quic/test_tools/quic_test_utils.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "net/quic/core/crypto/crypto_framer.h"
@@ -24,9 +25,6 @@
 #include "net/spdy/spdy_frame_builder.h"
 #include "third_party/boringssl/src/include/openssl/sha.h"
 
-using base::StringPiece;
-using std::max;
-using std::min;
 using std::string;
 using testing::_;
 using testing::Invoke;
@@ -98,7 +96,7 @@ QuicFlagSaver::~QuicFlagSaver() {
 #undef QUIC_FLAG
 }
 
-string Sha1Hash(StringPiece data) {
+string Sha1Hash(QuicStringPiece data) {
   char buffer[SHA_DIGEST_LENGTH];
   SHA1(reinterpret_cast<const uint8_t*>(data.data()), data.size(),
        reinterpret_cast<uint8_t*>(buffer));
@@ -107,7 +105,7 @@ string Sha1Hash(StringPiece data) {
 
 uint64_t SimpleRandom::RandUint64() {
   string hash =
-      Sha1Hash(StringPiece(reinterpret_cast<char*>(&seed_), sizeof(seed_)));
+      Sha1Hash(QuicStringPiece(reinterpret_cast<char*>(&seed_), sizeof(seed_)));
   DCHECK_EQ(static_cast<size_t>(SHA_DIGEST_LENGTH), hash.length());
   memcpy(&seed_, hash.data(), sizeof(seed_));
   return seed_;
@@ -220,10 +218,6 @@ bool NoOpFramerVisitor::OnWindowUpdateFrame(
 }
 
 bool NoOpFramerVisitor::OnBlockedFrame(const QuicBlockedFrame& frame) {
-  return true;
-}
-
-bool NoOpFramerVisitor::OnPathCloseFrame(const QuicPathCloseFrame& frame) {
   return true;
 }
 
@@ -510,8 +504,8 @@ string HexDumpWithMarks(const char* data,
   const int kSizeLimit = 1024;
   if (length > kSizeLimit || mark_length > kSizeLimit) {
     QUIC_LOG(ERROR) << "Only dumping first " << kSizeLimit << " bytes.";
-    length = min(length, kSizeLimit);
-    mark_length = min(mark_length, kSizeLimit);
+    length = std::min(length, kSizeLimit);
+    mark_length = std::min(mark_length, kSizeLimit);
   }
 
   string hex;
@@ -556,54 +550,45 @@ QuicVersion QuicVersionMin() {
 
 QuicEncryptedPacket* ConstructEncryptedPacket(QuicConnectionId connection_id,
                                               bool version_flag,
-                                              bool multipath_flag,
                                               bool reset_flag,
-                                              QuicPathId path_id,
                                               QuicPacketNumber packet_number,
                                               const string& data) {
-  return ConstructEncryptedPacket(connection_id, version_flag, multipath_flag,
-                                  reset_flag, path_id, packet_number, data,
-                                  PACKET_8BYTE_CONNECTION_ID,
-                                  PACKET_6BYTE_PACKET_NUMBER);
+  return ConstructEncryptedPacket(
+      connection_id, version_flag, reset_flag, packet_number, data,
+      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER);
 }
 
 QuicEncryptedPacket* ConstructEncryptedPacket(
     QuicConnectionId connection_id,
     bool version_flag,
-    bool multipath_flag,
     bool reset_flag,
-    QuicPathId path_id,
     QuicPacketNumber packet_number,
     const string& data,
     QuicConnectionIdLength connection_id_length,
     QuicPacketNumberLength packet_number_length) {
-  return ConstructEncryptedPacket(
-      connection_id, version_flag, multipath_flag, reset_flag, path_id,
-      packet_number, data, connection_id_length, packet_number_length, nullptr);
+  return ConstructEncryptedPacket(connection_id, version_flag, reset_flag,
+                                  packet_number, data, connection_id_length,
+                                  packet_number_length, nullptr);
 }
 
 QuicEncryptedPacket* ConstructEncryptedPacket(
     QuicConnectionId connection_id,
     bool version_flag,
-    bool multipath_flag,
     bool reset_flag,
-    QuicPathId path_id,
     QuicPacketNumber packet_number,
     const string& data,
     QuicConnectionIdLength connection_id_length,
     QuicPacketNumberLength packet_number_length,
     QuicVersionVector* versions) {
-  return ConstructEncryptedPacket(connection_id, version_flag, multipath_flag,
-                                  reset_flag, path_id, packet_number, data,
-                                  connection_id_length, packet_number_length,
-                                  versions, Perspective::IS_CLIENT);
+  return ConstructEncryptedPacket(connection_id, version_flag, reset_flag,
+                                  packet_number, data, connection_id_length,
+                                  packet_number_length, versions,
+                                  Perspective::IS_CLIENT);
 }
 QuicEncryptedPacket* ConstructEncryptedPacket(
     QuicConnectionId connection_id,
     bool version_flag,
-    bool multipath_flag,
     bool reset_flag,
-    QuicPathId path_id,
     QuicPacketNumber packet_number,
     const string& data,
     QuicConnectionIdLength connection_id_length,
@@ -614,12 +599,11 @@ QuicEncryptedPacket* ConstructEncryptedPacket(
   header.public_header.connection_id = connection_id;
   header.public_header.connection_id_length = connection_id_length;
   header.public_header.version_flag = version_flag;
-  header.public_header.multipath_flag = multipath_flag;
+  header.public_header.multipath_flag = false;
   header.public_header.reset_flag = reset_flag;
   header.public_header.packet_number_length = packet_number_length;
-  header.path_id = path_id;
   header.packet_number = packet_number;
-  QuicStreamFrame stream_frame(1, false, 0, StringPiece(data));
+  QuicStreamFrame stream_frame(1, false, 0, QuicStringPiece(data));
   QuicFrame frame(&stream_frame);
   QuicFrames frames;
   frames.push_back(frame);
@@ -650,7 +634,6 @@ QuicEncryptedPacket* ConstructMisFramedEncryptedPacket(
     QuicConnectionId connection_id,
     bool version_flag,
     bool reset_flag,
-    QuicPathId path_id,
     QuicPacketNumber packet_number,
     const string& data,
     QuicConnectionIdLength connection_id_length,
@@ -663,9 +646,8 @@ QuicEncryptedPacket* ConstructMisFramedEncryptedPacket(
   header.public_header.version_flag = version_flag;
   header.public_header.reset_flag = reset_flag;
   header.public_header.packet_number_length = packet_number_length;
-  header.path_id = path_id;
   header.packet_number = packet_number;
-  QuicStreamFrame stream_frame(1, false, 0, StringPiece(data));
+  QuicStreamFrame stream_frame(1, false, 0, QuicStringPiece(data));
   QuicFrame frame(&stream_frame);
   QuicFrames frames;
   frames.push_back(frame);
@@ -695,8 +677,8 @@ void CompareCharArraysWithHexError(const string& description,
                                    const char* expected,
                                    const int expected_len) {
   EXPECT_EQ(actual_len, expected_len);
-  const int min_len = min(actual_len, expected_len);
-  const int max_len = max(actual_len, expected_len);
+  const int min_len = std::min(actual_len, expected_len);
+  const int max_len = std::max(actual_len, expected_len);
   std::unique_ptr<bool[]> marks(new bool[max_len]);
   bool identical = (actual_len == expected_len);
   for (int i = 0; i < min_len; ++i) {

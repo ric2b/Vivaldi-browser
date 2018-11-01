@@ -6,11 +6,11 @@
 #define Hyphenation_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/Forward.h"
-#include "wtf/HashMap.h"
-#include "wtf/RefCounted.h"
-#include "wtf/text/AtomicStringHash.h"
-#include "wtf/text/StringHash.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/RefCounted.h"
+#include "platform/wtf/text/AtomicStringHash.h"
+#include "platform/wtf/text/StringHash.h"
 
 namespace blink {
 
@@ -20,17 +20,17 @@ class PLATFORM_EXPORT Hyphenation : public RefCounted<Hyphenation> {
  public:
   virtual ~Hyphenation() {}
 
-  virtual size_t lastHyphenLocation(const StringView&,
-                                    size_t beforeIndex) const = 0;
-  virtual Vector<size_t, 8> hyphenLocations(const StringView&) const;
+  virtual size_t LastHyphenLocation(const StringView&,
+                                    size_t before_index) const = 0;
+  virtual Vector<size_t, 8> HyphenLocations(const StringView&) const;
 
-  static const unsigned minimumPrefixLength = 2;
-  static const unsigned minimumSuffixLength = 2;
-  static int minimumPrefixWidth(const Font&);
+  static const unsigned kMinimumPrefixLength = 2;
+  static const unsigned kMinimumSuffixLength = 2;
+  static int MinimumPrefixWidth(const Font&);
 
  private:
   friend class LayoutLocale;
-  static PassRefPtr<Hyphenation> platformGetHyphenation(
+  static PassRefPtr<Hyphenation> PlatformGetHyphenation(
       const AtomicString& locale);
 };
 

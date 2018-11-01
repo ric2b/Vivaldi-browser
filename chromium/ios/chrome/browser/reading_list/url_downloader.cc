@@ -11,7 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
-#include "components/reading_list/ios/offline_url_utils.h"
+#include "components/reading_list/core/offline_url_utils.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/dom_distiller/distiller_viewer.h"
 #include "ios/chrome/browser/reading_list/reading_list_distiller_page.h"
@@ -173,7 +173,7 @@ void URLDownloader::DownloadURL(const GURL& url, bool offline_url_exists) {
   saved_size_ = 0;
   std::unique_ptr<reading_list::ReadingListDistillerPage>
       reading_list_distiller_page =
-          distiller_page_factory_->CreateReadingListDistillerPage(this);
+          distiller_page_factory_->CreateReadingListDistillerPage(url, this);
 
   distiller_.reset(new dom_distiller::DistillerViewer(
       distiller_factory_, std::move(reading_list_distiller_page), pref_service_,

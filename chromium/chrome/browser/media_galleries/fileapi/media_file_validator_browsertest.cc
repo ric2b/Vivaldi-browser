@@ -19,8 +19,6 @@
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
-#include "content/public/test/test_file_system_backend.h"
-#include "content/public/test/test_file_system_context.h"
 #include "content/public/test/test_utils.h"
 #include "storage/browser/fileapi/copy_or_move_file_validator.h"
 #include "storage/browser/fileapi/file_system_backend.h"
@@ -28,6 +26,8 @@
 #include "storage/browser/fileapi/file_system_operation_runner.h"
 #include "storage/browser/fileapi/file_system_url.h"
 #include "storage/browser/fileapi/isolated_context.h"
+#include "storage/browser/test/test_file_system_backend.h"
+#include "storage/browser/test/test_file_system_context.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -76,6 +76,17 @@ class MediaFileValidatorTest : public InProcessBrowserTest {
   MediaFileValidatorTest() : test_file_size_(0) {}
 
   ~MediaFileValidatorTest() override {}
+
+  void TearDownOnMainThread() override {
+    // Release our ref to |file_system_context_| before the test framework winds
+    // down, otherwise releasing it in the destructor posts a destruction task
+    // to the FILE thread after it has been shutdown (which base/task_scheduler
+    // guards against in the RedirectNonUINonIOBrowserThreads experiment per the
+    // FILE thread's tasks being marked as shutdown blocking for legacy
+    // reasons).
+    file_system_context_ = nullptr;
+    InProcessBrowserTest::TearDownOnMainThread();
+  }
 
   // Write |content| into |filename| in a test file system and try to move
   // it into a media file system.  The result is compared to |expected_result|.
@@ -253,7 +264,13 @@ class MediaFileValidatorTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(MediaFileValidatorTest);
 };
 
-IN_PROC_BROWSER_TEST_F(MediaFileValidatorTest, UnsupportedExtension) {
+// Flaky on linux_chromium_rel_ng. https://crbug.com/704614.
+#if defined(OS_LINUX)
+#define MAYBE_UnsupportedExtension DISABLED_UnsupportedExtension
+#else
+#define MAYBE_UnsupportedExtension UnsupportedExtension
+#endif
+IN_PROC_BROWSER_TEST_F(MediaFileValidatorTest, MAYBE_UnsupportedExtension) {
   MoveTest("a.txt", std::string(kValidImage, arraysize(kValidImage)), false);
 }
 

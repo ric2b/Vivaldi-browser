@@ -26,7 +26,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -40,7 +40,7 @@ class CORE_EXPORT SVGPathConsumer {
   SVGPathConsumer() {}
   virtual ~SVGPathConsumer() {}
 
-  virtual void emitSegment(const PathSegmentData&) = 0;
+  virtual void EmitSegment(const PathSegmentData&) = 0;
 };
 
 }  // namespace blink

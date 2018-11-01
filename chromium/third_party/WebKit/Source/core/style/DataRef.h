@@ -24,8 +24,8 @@
 #ifndef DataRef_h
 #define DataRef_h
 
-#include "wtf/Allocator.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -34,38 +34,38 @@ class DataRef {
   USING_FAST_MALLOC(DataRef);
 
  public:
-  const T* get() const { return m_data.get(); }
+  const T* Get() const { return data_.Get(); }
 
-  const T& operator*() const { return *get(); }
-  const T* operator->() const { return get(); }
+  const T& operator*() const { return *Get(); }
+  const T* operator->() const { return Get(); }
 
-  T* access() {
-    if (!m_data->hasOneRef())
-      m_data = m_data->copy();
-    return m_data.get();
+  T* Access() {
+    if (!data_->HasOneRef())
+      data_ = data_->Copy();
+    return data_.Get();
   }
 
-  void init() {
-    ASSERT(!m_data);
-    m_data = T::create();
+  void Init() {
+    DCHECK(!data_);
+    data_ = T::Create();
   }
 
   bool operator==(const DataRef<T>& o) const {
-    ASSERT(m_data);
-    ASSERT(o.m_data);
-    return m_data == o.m_data || *m_data == *o.m_data;
+    DCHECK(data_);
+    DCHECK(o.data_);
+    return data_ == o.data_ || *data_ == *o.data_;
   }
 
   bool operator!=(const DataRef<T>& o) const {
-    ASSERT(m_data);
-    ASSERT(o.m_data);
-    return m_data != o.m_data && *m_data != *o.m_data;
+    DCHECK(data_);
+    DCHECK(o.data_);
+    return data_ != o.data_ && *data_ != *o.data_;
   }
 
-  void operator=(std::nullptr_t) { m_data = nullptr; }
+  void operator=(std::nullptr_t) { data_ = nullptr; }
 
  private:
-  RefPtr<T> m_data;
+  RefPtr<T> data_;
 };
 
 }  // namespace blink

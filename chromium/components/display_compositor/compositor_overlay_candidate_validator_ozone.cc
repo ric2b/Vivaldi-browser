@@ -29,18 +29,6 @@ std::unique_ptr<cc::OverlayProcessor::Strategy> MakeOverlayStrategy(
 
 }  // namespace
 
-static gfx::BufferFormat GetBufferFormat(cc::ResourceFormat overlay_format) {
-  switch (overlay_format) {
-    // TODO(dshwang): overlay video still uses RGBA_8888.
-    case cc::RGBA_8888:
-    case cc::BGRA_8888:
-      return gfx::BufferFormat::BGRA_8888;
-    default:
-      NOTREACHED();
-      return gfx::BufferFormat::BGRA_8888;
-  }
-}
-
 // |overlay_candidates| is an object used to answer questions about possible
 // overlays configuarations.
 // |strategies_string| is a comma-separated string containing all the overaly
@@ -90,6 +78,10 @@ bool CompositorOverlayCandidateValidatorOzone::AllowCALayerOverlays() {
   return false;
 }
 
+bool CompositorOverlayCandidateValidatorOzone::AllowDCLayerOverlays() {
+  return false;
+}
+
 void CompositorOverlayCandidateValidatorOzone::CheckOverlaySupport(
     cc::OverlayCandidateList* surfaces) {
   // SW mirroring copies out of the framebuffer, so we can't remove any
@@ -107,7 +99,7 @@ void CompositorOverlayCandidateValidatorOzone::CheckOverlaySupport(
 
   for (size_t i = 0; i < surfaces->size(); i++) {
     ozone_surface_list.at(i).transform = surfaces->at(i).transform;
-    ozone_surface_list.at(i).format = GetBufferFormat(surfaces->at(i).format);
+    ozone_surface_list.at(i).format = surfaces->at(i).format;
     ozone_surface_list.at(i).display_rect = surfaces->at(i).display_rect;
     ozone_surface_list.at(i).crop_rect = surfaces->at(i).uv_rect;
     ozone_surface_list.at(i).quad_rect_in_target_space =

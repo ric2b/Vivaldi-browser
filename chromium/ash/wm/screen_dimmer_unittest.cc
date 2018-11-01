@@ -2,17 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/wm/screen_dimmer.h"
+#include "ash/wm/screen_dimmer.h"
 
 #include <memory>
 
-#include "ash/common/wm/window_dimmer.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
-#include "ash/common/wm_window_user_data.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/window_user_data.h"
+#include "ash/wm/window_dimmer.h"
+#include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/compositor/layer.h"
@@ -37,9 +36,8 @@ class ScreenDimmerTest : public AshTestBase {
 
   aura::Window* GetDimWindow() {
     WindowDimmer* window_dimmer =
-        dimmer_->window_dimmers_->Get(WmShell::Get()->GetPrimaryRootWindow());
-    return window_dimmer ? WmWindow::GetAuraWindow(window_dimmer->window())
-                         : nullptr;
+        dimmer_->window_dimmers_->Get(Shell::GetPrimaryRootWindow());
+    return window_dimmer ? window_dimmer->window() : nullptr;
   }
 
   ui::Layer* GetDimWindowLayer() {
@@ -132,7 +130,7 @@ class ScreenDimmerShellDestructionTest : public AshTestBase {
 
 // This test verifies ScreenDimmer can be destroyed after the shell. The
 // interesting part of this test is in TearDown(), which creates a ScreenDimmer
-// that is deleted after WmShell.
+// that is deleted after Shell.
 TEST_F(ScreenDimmerShellDestructionTest, DontCrashIfScreenDimmerOutlivesShell) {
 }
 

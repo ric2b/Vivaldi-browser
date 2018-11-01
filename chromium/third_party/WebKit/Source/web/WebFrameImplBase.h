@@ -6,14 +6,14 @@
 #define WebFrameImplBase_h
 
 #include "platform/heap/Handle.h"
+#include "platform/wtf/text/AtomicString.h"
 #include "web/WebExport.h"
-#include "wtf/text/AtomicString.h"
 
 namespace blink {
 
 class Frame;
-class FrameHost;
 class FrameOwner;
+class Page;
 
 // WebFrameImplBase exists to avoid the diamond inheritance problem:
 // - The public interfaces WebLocalFrame/WebRemoteFrame extend WebFrame.
@@ -33,13 +33,12 @@ class WEB_EXPORT WebFrameImplBase
  public:
   virtual ~WebFrameImplBase();
 
-  virtual void initializeCoreFrame(FrameHost*,
+  virtual void InitializeCoreFrame(Page&,
                                    FrameOwner*,
-                                   const AtomicString& name,
-                                   const AtomicString& uniqueName) = 0;
+                                   const AtomicString& name) = 0;
   // TODO(dcheng): Rename this to coreFrame()? This probably also shouldn't be
   // const...
-  virtual Frame* frame() const = 0;
+  virtual Frame* GetFrame() const = 0;
 
   DECLARE_VIRTUAL_TRACE();
 };

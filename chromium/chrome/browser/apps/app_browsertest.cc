@@ -1131,10 +1131,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, DISABLED_WebContentsHasFocus) {
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-// Disabled due to flakiness. See crbug.com/693305.
-// TODO(rbpotter): Investigate and re-enable this test.
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
-                       DISABLED_WindowDotPrintShouldBringUpPrintPreview) {
+                       WindowDotPrintShouldBringUpPrintPreview) {
   ScopedPreviewTestingDelegate preview_delegate;
   ASSERT_TRUE(RunPlatformAppTest("platform_apps/print_api")) << message_;
   preview_delegate.WaitUntilPreviewIsReady();
@@ -1362,12 +1360,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, AppsIgnoreDefaultZoom) {
   EXPECT_EQ(0, app_host_zoom_map->GetZoomLevel(web_contents));
 }
 
-// This test will flake until we fix the underlying issue:
-// https://crbug.com/620194.
-#define MAYBE_AppWindowIframe DISABLED_AppWindowIframe
 // Sends chrome.test.sendMessage from chrome.app.window.create's callback.
 // The app window also adds an <iframe> to the page during window.onload.
-IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, MAYBE_AppWindowIframe) {
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, AppWindowIframe) {
   LoadAndLaunchPlatformApp("app_window_send_message",
                            "APP_WINDOW_CREATE_CALLBACK");
 }

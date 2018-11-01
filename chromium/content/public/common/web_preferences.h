@@ -160,8 +160,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool should_clear_document_background;
   bool enable_scroll_animator;
   bool touch_event_feature_detection_enabled;
-  // TODO(mustaq): Nuke when the new API is ready
-  bool device_supports_touch;
   bool touch_adjustment_enabled;
   int pointer_events_max_touch_points;
   int available_pointer_types;
@@ -171,7 +169,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool sync_xhr_in_documents_enabled;
   bool color_correct_rendering_enabled = false;
   bool color_correct_rendering_default_mode_enabled = false;
-  bool true_color_rendering_enabled = false;
   bool should_respect_image_orientation;
   int number_of_cpu_cores;
   EditingBehavior editing_behavior;
@@ -269,13 +266,6 @@ struct CONTENT_EXPORT WebPreferences {
 
   // If enabled, disabled video track when the video is in the background.
   bool background_video_track_optimization_enabled;
-
-  // If background video track optimization is enabled, don't disable video
-  // track for videos with the average keyframe distance greater than this
-  // value.
-  // TODO(avayvod, asvitkine): Query the value directly when it is available in
-  // the renderer process. See https://crbug.com/681160.
-  base::TimeDelta max_keyframe_distance_to_disable_background_video;
 
   // When memory pressure based garbage collection is enabled for MSE, the
   // |enable_instant_source_buffer_gc| flag controls whether the GC is done

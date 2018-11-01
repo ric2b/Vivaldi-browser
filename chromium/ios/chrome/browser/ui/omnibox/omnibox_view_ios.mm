@@ -10,6 +10,7 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/ios/device_util.h"
+#include "base/ios/ios_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -26,9 +27,9 @@
 #include "ios/chrome/browser/ui/omnibox/omnibox_popup_view_ios.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #include "ios/chrome/browser/ui/omnibox/preload_provider.h"
-#include "ios/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
+#include "ios/shared/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
 #include "ios/web/public/referrer.h"
 #import "net/base/mac/url_conversions.h"
 #include "skia/ext/skia_utils_ios.h"
@@ -37,6 +38,10 @@
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using base::UserMetricsAction;
 
@@ -171,11 +176,12 @@ OmniboxViewIOS::OmniboxViewIOS(OmniboxTextFieldIOS* field,
           controller,
           base::MakeUnique<ChromeOmniboxClientIOS>(controller, browser_state)),
       browser_state_(browser_state),
-      field_([field retain]),
+      field_(field),
       controller_(controller),
       preloader_(preloader),
       ignore_popup_updates_(false),
       attributing_display_string_(nil) {
+  DCHECK(field_);
   popup_view_.reset(new OmniboxPopupViewIOS(this, model(), positioner));
   field_delegate_.reset(
       [[AutocompleteTextFieldDelegate alloc] initWithEditView:this]);
@@ -183,6 +189,7 @@ OmniboxViewIOS::OmniboxViewIOS(OmniboxTextFieldIOS* field,
   [field_ addTarget:field_delegate_
                 action:@selector(textFieldDidChange:)
       forControlEvents:UIControlEventEditingChanged];
+  use_strikethrough_workaround_ = base::ios::IsRunningOnOrLater(10, 3, 0);
 }
 
 OmniboxViewIOS::~OmniboxViewIOS() {
@@ -667,6 +674,15 @@ void OmniboxViewIOS::UpdateSchemeStyle(const gfx::Range& range) {
   DCHECK_NE(security_state::SECURE_WITH_POLICY_INSTALLED_CERT, security_level);
 
   if (security_level == security_state::DANGEROUS) {
+    if (use_strikethrough_workaround_) {
+      // Workaround: Add extra attribute to allow strikethough to apply on iOS
+      // 10.3+. See https://crbug.com/699702 for discussion.
+      [attributing_display_string_
+          addAttribute:NSBaselineOffsetAttributeName
+                 value:@0
+                 range:NSMakeRange(0, [attributing_display_string_ length])];
+    }
+
     // Add a strikethrough through the scheme.
     [attributing_display_string_
         addAttribute:NSStrikethroughStyleAttributeName
@@ -684,8 +700,8 @@ void OmniboxViewIOS::UpdateSchemeStyle(const gfx::Range& range) {
 
 NSAttributedString* OmniboxViewIOS::ApplyTextAttributes(
     const base::string16& text) {
-  NSMutableAttributedString* as = [[[NSMutableAttributedString alloc]
-      initWithString:base::SysUTF16ToNSString(text)] autorelease];
+  NSMutableAttributedString* as = [[NSMutableAttributedString alloc]
+      initWithString:base::SysUTF16ToNSString(text)];
   // Cache a pointer to the attributed string to allow the superclass'
   // virtual method invocations to add attributes.
   DCHECK(attributing_display_string_ == nil);

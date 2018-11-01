@@ -4,8 +4,7 @@
 
 #include "chrome/browser/ui/ash/launcher/extension_launcher_context_menu.h"
 
-#include "ash/common/shelf/shelf_item_delegate.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -44,7 +43,7 @@ void ExtensionLauncherContextMenu::Init() {
   extension_items_.reset(new extensions::ContextMenuMatcher(
       controller()->profile(), this, this,
       base::Bind(MenuItemHasLauncherContext)));
-  if (item().type == ash::TYPE_APP_SHORTCUT || item().type == ash::TYPE_APP) {
+  if (item().type == ash::TYPE_PINNED_APP || item().type == ash::TYPE_APP) {
     // V1 apps can be started from the menu - but V2 apps should not.
     if (!controller()->IsPlatformApp(item().id)) {
       AddItem(MENU_OPEN_NEW, base::string16());
@@ -57,7 +56,7 @@ void ExtensionLauncherContextMenu::Init() {
       AddItemWithStringId(MENU_CLOSE, IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
 
     if (!controller()->IsPlatformApp(item().id) &&
-        item().type == ash::TYPE_APP_SHORTCUT) {
+        item().type == ash::TYPE_PINNED_APP) {
       AddSeparator(ui::NORMAL_SEPARATOR);
       if (extensions::util::IsNewBookmarkAppsEnabled()) {
         // With bookmark apps enabled, hosted apps launch in a window by
@@ -84,8 +83,7 @@ void ExtensionLauncherContextMenu::Init() {
       AddItemWithStringId(MENU_NEW_INCOGNITO_WINDOW,
                           IDS_APP_LIST_NEW_INCOGNITO_WINDOW);
     }
-    if (!BrowserShortcutLauncherItemController(
-             controller(), ash::WmShell::Get()->shelf_model())
+    if (!BrowserShortcutLauncherItemController(ash::Shell::Get()->shelf_model())
              .IsListOfActiveBrowserEmpty()) {
       AddItem(MENU_CLOSE,
               l10n_util::GetStringUTF16(IDS_LAUNCHER_CONTEXT_MENU_CLOSE));
@@ -96,7 +94,7 @@ void ExtensionLauncherContextMenu::Init() {
     AddItemWithStringId(MENU_CLOSE, IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
   }
   AddSeparator(ui::NORMAL_SEPARATOR);
-  if (item().type == ash::TYPE_APP_SHORTCUT || item().type == ash::TYPE_APP) {
+  if (item().type == ash::TYPE_PINNED_APP || item().type == ash::TYPE_APP) {
     const extensions::MenuItem::ExtensionKey app_key(
         controller()->GetAppIDForShelfID(item().id));
     if (!app_key.empty()) {
@@ -214,8 +212,8 @@ void ExtensionLauncherContextMenu::ExecuteCommand(int command_id,
 }
 
 extensions::LaunchType ExtensionLauncherContextMenu::GetLaunchType() const {
-  const extensions::Extension* extension =
-      GetExtensionForAppID(item().app_id, controller()->profile());
+  const extensions::Extension* extension = GetExtensionForAppID(
+      item().app_launch_id.app_id(), controller()->profile());
 
   // An extension can be unloaded/updated/unavailable at any time.
   if (!extension)
@@ -226,5 +224,6 @@ extensions::LaunchType ExtensionLauncherContextMenu::GetLaunchType() const {
 }
 
 void ExtensionLauncherContextMenu::SetLaunchType(extensions::LaunchType type) {
-  extensions::SetLaunchType(controller()->profile(), item().app_id, type);
+  extensions::SetLaunchType(controller()->profile(),
+                            item().app_launch_id.app_id(), type);
 }

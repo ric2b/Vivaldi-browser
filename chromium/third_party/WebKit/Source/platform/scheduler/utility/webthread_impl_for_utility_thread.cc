@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "public/platform/scheduler/utility/webthread_impl_for_utility_thread.h"
+#include "platform/scheduler/utility/webthread_impl_for_utility_thread.h"
 
 #include "base/threading/thread_task_runner_handle.h"
 
@@ -15,12 +15,12 @@ WebThreadImplForUtilityThread::WebThreadImplForUtilityThread()
 
 WebThreadImplForUtilityThread::~WebThreadImplForUtilityThread() {}
 
-blink::WebScheduler* WebThreadImplForUtilityThread::scheduler() const {
+blink::WebScheduler* WebThreadImplForUtilityThread::Scheduler() const {
   NOTIMPLEMENTED();
   return nullptr;
 }
 
-blink::PlatformThreadId WebThreadImplForUtilityThread::threadId() const {
+blink::PlatformThreadId WebThreadImplForUtilityThread::ThreadId() const {
   return thread_id_;
 }
 
@@ -34,6 +34,8 @@ WebThreadImplForUtilityThread::GetIdleTaskRunner() const {
   NOTIMPLEMENTED();
   return nullptr;
 }
+
+void WebThreadImplForUtilityThread::Init() {}
 
 }  // namespace scheduler
 }  // namespace blink

@@ -729,6 +729,8 @@ void TreeView::LayoutEditor() {
                    -(empty_editor_size_.height() - font_list_.GetHeight()) / 2);
   // Give a little extra space for editing.
   row_bounds.set_width(row_bounds.width() + 50);
+  // Scroll as necessary to ensure that the editor is visible.
+  ScrollRectToVisible(row_bounds);
   editor_->SetBoundsRect(row_bounds);
   editor_->Layout();
 }
@@ -780,7 +782,7 @@ void TreeView::PaintRow(gfx::Canvas* canvas,
   int icon_index = model_->GetIconIndex(node->model_node());
   if (icon_index != -1)
     icon = icons_[icon_index];
-  else if (node == selected_node_)
+  else if (node == selected_node_ && PlatformStyle::kTreeViewUsesOpenIcon)
     icon = open_icon_;
   else
     icon = closed_icon_;

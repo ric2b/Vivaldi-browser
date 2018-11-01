@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_shader.h"
@@ -33,7 +34,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/url_constants.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
@@ -765,13 +765,13 @@ void Tab::AnimationEnded(const gfx::Animation* animation) {
 
 void Tab::ButtonPressed(views::Button* sender, const ui::Event& event) {
   if (!alert_indicator_button_ || !alert_indicator_button_->visible())
-    content::RecordAction(UserMetricsAction("CloseTab_NoAlertIndicator"));
+    base::RecordAction(UserMetricsAction("CloseTab_NoAlertIndicator"));
   else if (alert_indicator_button_->enabled())
-    content::RecordAction(UserMetricsAction("CloseTab_MuteToggleAvailable"));
+    base::RecordAction(UserMetricsAction("CloseTab_MuteToggleAvailable"));
   else if (data_.alert_state == TabAlertState::AUDIO_PLAYING)
-    content::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
+    base::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
   else
-    content::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
+    base::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
 
   const CloseTabSource source =
       (event.type() == ui::ET_MOUSE_RELEASED &&
@@ -962,11 +962,11 @@ bool Tab::OnMousePressed(const ui::MouseEvent& event) {
         }
       } else if (!IsSelected()) {
         controller_->SelectTab(this);
-        content::RecordAction(UserMetricsAction("SwitchTab_Click"));
+        base::RecordAction(UserMetricsAction("SwitchTab_Click"));
       }
     } else if (!IsSelected()) {
       controller_->SelectTab(this);
-      content::RecordAction(UserMetricsAction("SwitchTab_Click"));
+      base::RecordAction(UserMetricsAction("SwitchTab_Click"));
     }
     ui::MouseEvent cloned_event(event_in_parent, parent(),
                                 static_cast<View*>(this));
@@ -1015,7 +1015,7 @@ void Tab::OnMouseReleased(const ui::MouseEvent& event) {
 
     if (alert_indicator_button_ && alert_indicator_button_->visible() &&
         alert_indicator_button_->bounds().Contains(event.location())) {
-      content::RecordAction(UserMetricsAction("TabAlertIndicator_Clicked"));
+      base::RecordAction(UserMetricsAction("TabAlertIndicator_Clicked"));
     }
   }
 }
@@ -1277,33 +1277,33 @@ void Tab::PaintPinnedTabTitleChangedIndicatorAndIcon(
     const gfx::Rect& favicon_draw_bounds) {
   // The pinned tab title changed indicator consists of two parts:
   // . a clear (totally transparent) part over the bottom right (or left in rtl)
-  //   of the favicon. This is done by drawing the favicon to a canvas, then
+  //   of the favicon. This is done by drawing the favicon to a layer, then
   //   drawing the clear part on top of the favicon.
   // . a circle in the bottom right (or left in rtl) of the favicon.
   if (!favicon_.isNull()) {
-    const float kIndicatorCropRadius = 4.5;
-    gfx::Canvas icon_canvas(gfx::Size(gfx::kFaviconSize, gfx::kFaviconSize),
-                            canvas->image_scale(), false);
-    icon_canvas.DrawImageInt(favicon_, 0, 0);
-    cc::PaintFlags clear_flags;
-    clear_flags.setAntiAlias(true);
-    clear_flags.setBlendMode(SkBlendMode::kClear);
-    const int circle_x = base::i18n::IsRTL() ? 0 : gfx::kFaviconSize;
-    icon_canvas.DrawCircle(gfx::PointF(circle_x, gfx::kFaviconSize),
-                           kIndicatorCropRadius, clear_flags);
-    canvas->DrawImageInt(gfx::ImageSkia(icon_canvas.ExtractImageRep()), 0, 0,
-                         favicon_draw_bounds.width(),
+    canvas->SaveLayerAlpha(0xff);
+    canvas->DrawImageInt(favicon_, 0, 0, favicon_draw_bounds.width(),
                          favicon_draw_bounds.height(), favicon_draw_bounds.x(),
                          favicon_draw_bounds.y(), favicon_draw_bounds.width(),
                          favicon_draw_bounds.height(), false);
+    cc::PaintFlags clear_flags;
+    clear_flags.setAntiAlias(true);
+    clear_flags.setBlendMode(SkBlendMode::kClear);
+    const float kIndicatorCropRadius = 4.5f;
+    int circle_x =
+        favicon_draw_bounds.x() + (base::i18n::IsRTL() ? 0 : gfx::kFaviconSize);
+    int circle_y = favicon_draw_bounds.y() + gfx::kFaviconSize;
+    canvas->DrawCircle(gfx::Point(circle_x, circle_y), kIndicatorCropRadius,
+                       clear_flags);
+    canvas->Restore();
   }
 
   // Draws the actual pinned tab title changed indicator.
-  const int kIndicatorRadius = 3;
   cc::PaintFlags indicator_flags;
   indicator_flags.setColor(GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_ProminentButtonColor));
   indicator_flags.setAntiAlias(true);
+  const int kIndicatorRadius = 3;
   const int indicator_x = GetMirroredXWithWidthInView(
       favicon_bounds_.right() - kIndicatorRadius, kIndicatorRadius * 2);
   const int indicator_y = favicon_bounds_.bottom() - kIndicatorRadius;

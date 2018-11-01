@@ -48,6 +48,8 @@ using GetCookiesCallback = Network::Backend::GetCookiesCallback;
 using GetAllCookiesCallback = Network::Backend::GetAllCookiesCallback;
 using SetCookieCallback = Network::Backend::SetCookieCallback;
 using DeleteCookieCallback = Network::Backend::DeleteCookieCallback;
+using ClearBrowserCookiesCallback =
+    Network::Backend::ClearBrowserCookiesCallback;
 
 net::URLRequestContext* GetRequestContextOnIO(
     ResourceContext* resource_context,
@@ -183,6 +185,24 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
     friend class base::RefCountedThreadSafe<CookieRetriever>;
 };
 
+void ClearedCookiesOnIO(std::unique_ptr<ClearBrowserCookiesCallback> callback,
+                        int num_deleted) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::Bind(&ClearBrowserCookiesCallback::sendSuccess,
+                                     base::Passed(std::move(callback))));
+}
+
+void ClearCookiesOnIO(ResourceContext* resource_context,
+                      net::URLRequestContextGetter* context_getter,
+                      std::unique_ptr<ClearBrowserCookiesCallback> callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  net::URLRequestContext* request_context =
+      context_getter->GetURLRequestContext();
+  request_context->cookie_store()->DeleteAllAsync(
+      base::Bind(&ClearedCookiesOnIO, base::Passed(std::move(callback))));
+}
+
 void DeletedCookieOnIO(std::unique_ptr<DeleteCookieCallback> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(
@@ -290,9 +310,9 @@ String resourcePriority(net::RequestPriority priority) {
 
 String referrerPolicy(blink::WebReferrerPolicy referrer_policy) {
   switch (referrer_policy) {
-    case blink::WebReferrerPolicyAlways:
+    case blink::kWebReferrerPolicyAlways:
       return Network::Request::ReferrerPolicyEnum::UnsafeUrl;
-    case blink::WebReferrerPolicyDefault:
+    case blink::kWebReferrerPolicyDefault:
       if (base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kReducedReferrerGranularity)) {
         return Network::Request::ReferrerPolicyEnum::
@@ -300,15 +320,15 @@ String referrerPolicy(blink::WebReferrerPolicy referrer_policy) {
       } else {
         return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
       }
-    case blink::WebReferrerPolicyNoReferrerWhenDowngrade:
+    case blink::kWebReferrerPolicyNoReferrerWhenDowngrade:
       return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
-    case blink::WebReferrerPolicyNever:
+    case blink::kWebReferrerPolicyNever:
       return Network::Request::ReferrerPolicyEnum::NoReferrer;
-    case blink::WebReferrerPolicyOrigin:
+    case blink::kWebReferrerPolicyOrigin:
       return Network::Request::ReferrerPolicyEnum::Origin;
-    case blink::WebReferrerPolicyOriginWhenCrossOrigin:
+    case blink::kWebReferrerPolicyOriginWhenCrossOrigin:
       return Network::Request::ReferrerPolicyEnum::OriginWhenCrossOrigin;
-    case blink::WebReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin:
+    case blink::kWebReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin:
       return Network::Request::ReferrerPolicyEnum::
           NoReferrerWhenDowngradeOriginWhenCrossOrigin;
   }
@@ -438,10 +458,23 @@ Response NetworkHandler::ClearBrowserCache() {
   return Response::OK();
 }
 
-Response NetworkHandler::ClearBrowserCookies() {
-  if (host_)
-    GetContentClient()->browser()->ClearCookies(host_);
-  return Response::OK();
+void NetworkHandler::ClearBrowserCookies(
+    std::unique_ptr<ClearBrowserCookiesCallback> callback) {
+  if (!host_) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&ClearCookiesOnIO,
+                 base::Unretained(host_->GetSiteInstance()
+                                      ->GetBrowserContext()
+                                      ->GetResourceContext()),
+                 base::Unretained(host_->GetProcess()
+                                      ->GetStoragePartition()
+                                      ->GetURLRequestContext()),
+                 base::Passed(std::move(callback))));
 }
 
 void NetworkHandler::GetCookies(Maybe<Array<String>> protocol_urls,
@@ -663,9 +696,11 @@ void NetworkHandler::NavigationPreloadCompleted(
     return;
   if (completion_status.error_code != net::OK) {
     frontend_->LoadingFailed(
-        request_id, base::TimeTicks::Now().ToInternalValue() /
-                        static_cast<double>(base::Time::kMicrosecondsPerSecond),
-        Page::ResourceTypeEnum::Other, "Navigation Preload Error",
+        request_id,
+        base::TimeTicks::Now().ToInternalValue() /
+            static_cast<double>(base::Time::kMicrosecondsPerSecond),
+        Page::ResourceTypeEnum::Other,
+        net::ErrorToString(completion_status.error_code),
         completion_status.error_code == net::Error::ERR_ABORTED);
   }
   frontend_->LoadingFinished(

@@ -281,9 +281,9 @@ void ExpandStringsInOncObject(
 
 void ExpandStringsInNetworks(const StringSubstitution& substitution,
                              base::ListValue* network_configs) {
-  for (const auto& entry : *network_configs) {
+  for (auto& entry : *network_configs) {
     base::DictionaryValue* network = nullptr;
-    entry->GetAsDictionary(&network);
+    entry.GetAsDictionary(&network);
     DCHECK(network);
     ExpandStringsInOncObject(
         kNetworkConfigurationSignature, substitution, network);
@@ -353,7 +353,7 @@ class OncMaskValues : public Mapper {
       bool* found_unknown_field,
       bool* error) override {
     if (FieldIsCredential(object_signature, field_name)) {
-      return std::unique_ptr<base::Value>(new base::StringValue(mask_));
+      return std::unique_ptr<base::Value>(new base::Value(mask_));
     } else {
       return Mapper::MapField(field_name, object_signature, onc_value,
                               found_unknown_field, error);
@@ -407,7 +407,7 @@ CertPEMsByGUIDMap GetServerAndCACertsByGUID(
   CertPEMsByGUIDMap certs_by_guid;
   for (const auto& entry : certificates) {
     const base::DictionaryValue* cert = nullptr;
-    bool entry_is_dictionary = entry->GetAsDictionary(&cert);
+    bool entry_is_dictionary = entry.GetAsDictionary(&cert);
     DCHECK(entry_is_dictionary);
 
     std::string guid;
@@ -435,9 +435,9 @@ CertPEMsByGUIDMap GetServerAndCACertsByGUID(
 }
 
 void FillInHexSSIDFieldsInNetworks(base::ListValue* network_configs) {
-  for (const auto& entry : *network_configs) {
+  for (auto& entry : *network_configs) {
     base::DictionaryValue* network = nullptr;
-    entry->GetAsDictionary(&network);
+    entry.GetAsDictionary(&network);
     DCHECK(network);
     FillInHexSSIDFieldsInOncObject(kNetworkConfigurationSignature, network);
   }
@@ -603,7 +603,7 @@ bool ResolveCertRefList(const CertPEMsByGUIDMap& certs_by_guid,
   std::unique_ptr<base::ListValue> pem_list(new base::ListValue);
   for (const auto& entry : *guid_ref_list) {
     std::string guid_ref;
-    bool entry_is_string = entry->GetAsString(&guid_ref);
+    bool entry_is_string = entry.GetAsString(&guid_ref);
     DCHECK(entry_is_string);
 
     std::string pem_encoded;
@@ -730,7 +730,7 @@ bool ResolveServerCertRefsInNetworks(const CertPEMsByGUIDMap& certs_by_guid,
   for (base::ListValue::iterator it = network_configs->begin();
        it != network_configs->end(); ) {
     base::DictionaryValue* network = nullptr;
-    (*it)->GetAsDictionary(&network);
+    it->GetAsDictionary(&network);
     if (!ResolveServerCertRefsInNetwork(certs_by_guid, network)) {
       std::string guid;
       network->GetStringWithoutPathExpansion(network_config::kGUID, &guid);
@@ -790,8 +790,8 @@ bool IsRecommendedValue(const base::DictionaryValue* onc,
 
   const base::ListValue* recommended_keys = nullptr;
   return (onc->GetList(recommended_property_key, &recommended_keys) &&
-          recommended_keys->Find(base::StringValue(property_basename)) !=
-          recommended_keys->end());
+          recommended_keys->Find(base::Value(property_basename)) !=
+              recommended_keys->end());
 }
 
 namespace {
@@ -857,7 +857,7 @@ net::ProxyBypassRules ConvertOncExcludeDomainsToBypassRules(
   for (base::ListValue::const_iterator it = onc_exclude_domains.begin();
        it != onc_exclude_domains.end(); ++it) {
     std::string rule;
-    (*it)->GetAsString(&rule);
+    it->GetAsString(&rule);
     rules.AddRuleFromString(rule);
   }
   return rules;
@@ -924,16 +924,16 @@ std::unique_ptr<base::DictionaryValue> ConvertOncProxySettingsToProxyConfig(
   std::unique_ptr<base::DictionaryValue> proxy_dict;
 
   if (type == ::onc::proxy::kDirect) {
-    proxy_dict.reset(ProxyConfigDictionary::CreateDirect());
+    proxy_dict = ProxyConfigDictionary::CreateDirect();
   } else if (type == ::onc::proxy::kWPAD) {
-    proxy_dict.reset(ProxyConfigDictionary::CreateAutoDetect());
+    proxy_dict = ProxyConfigDictionary::CreateAutoDetect();
   } else if (type == ::onc::proxy::kPAC) {
     std::string pac_url;
     onc_proxy_settings.GetStringWithoutPathExpansion(::onc::proxy::kPAC,
                                                      &pac_url);
     GURL url(url_formatter::FixupURL(pac_url, std::string()));
-    proxy_dict.reset(ProxyConfigDictionary::CreatePacScript(
-        url.is_valid() ? url.spec() : std::string(), false));
+    proxy_dict = ProxyConfigDictionary::CreatePacScript(
+        url.is_valid() ? url.spec() : std::string(), false);
   } else if (type == ::onc::proxy::kManual) {
     const base::DictionaryValue* manual_dict = nullptr;
     onc_proxy_settings.GetDictionaryWithoutPathExpansion(::onc::proxy::kManual,
@@ -953,8 +953,8 @@ std::unique_ptr<base::DictionaryValue> ConvertOncProxySettingsToProxyConfig(
       bypass_rules.AssignFrom(
           ConvertOncExcludeDomainsToBypassRules(*exclude_domains));
     }
-    proxy_dict.reset(ProxyConfigDictionary::CreateFixedServers(
-        manual_spec, bypass_rules.ToString()));
+    proxy_dict = ProxyConfigDictionary::CreateFixedServers(
+        manual_spec, bypass_rules.ToString());
   } else {
     NOTREACHED();
   }
@@ -962,10 +962,10 @@ std::unique_ptr<base::DictionaryValue> ConvertOncProxySettingsToProxyConfig(
 }
 
 std::unique_ptr<base::DictionaryValue> ConvertProxyConfigToOncProxySettings(
-    const base::DictionaryValue& proxy_config_value) {
+    std::unique_ptr<base::DictionaryValue> proxy_config_value) {
   // Create a ProxyConfigDictionary from the DictionaryValue.
-  std::unique_ptr<ProxyConfigDictionary> proxy_config(
-      new ProxyConfigDictionary(&proxy_config_value));
+  auto proxy_config =
+      base::MakeUnique<ProxyConfigDictionary>(std::move(proxy_config_value));
 
   // Create the result DictionaryValue and populate it.
   std::unique_ptr<base::DictionaryValue> proxy_settings(
@@ -1043,7 +1043,7 @@ const base::DictionaryValue* GetNetworkConfigByGUID(
   for (base::ListValue::const_iterator it = network_configs.begin();
        it != network_configs.end(); ++it) {
     const base::DictionaryValue* network = NULL;
-    (*it)->GetAsDictionary(&network);
+    it->GetAsDictionary(&network);
     DCHECK(network);
 
     std::string current_guid;
@@ -1061,7 +1061,7 @@ const base::DictionaryValue* GetNetworkConfigForEthernetWithoutEAP(
   for (base::ListValue::const_iterator it = network_configs.begin();
        it != network_configs.end(); ++it) {
     const base::DictionaryValue* network = NULL;
-    (*it)->GetAsDictionary(&network);
+    it->GetAsDictionary(&network);
     DCHECK(network);
 
     std::string type;
@@ -1187,7 +1187,7 @@ void ImportNetworksForUser(const user_manager::User* user,
   for (base::ListValue::const_iterator it = expanded_networks->begin();
        it != expanded_networks->end(); ++it) {
     const base::DictionaryValue* network = NULL;
-    (*it)->GetAsDictionary(&network);
+    it->GetAsDictionary(&network);
     DCHECK(network);
 
     // Remove irrelevant fields.

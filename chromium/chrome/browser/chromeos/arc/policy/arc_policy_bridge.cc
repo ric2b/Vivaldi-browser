@@ -147,7 +147,7 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
       base::MakeUnique<base::ListValue>());
   for (const auto& entry : certificates) {
     const base::DictionaryValue* certificate = nullptr;
-    if (!entry->GetAsDictionary(&certificate)) {
+    if (!entry.GetAsDictionary(&certificate)) {
       DLOG(FATAL) << "Value of a certificate entry is not a dictionary "
                   << "value.";
       continue;
@@ -168,7 +168,7 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
     bool web_trust_flag = false;
     for (const auto& list_val : *trust_list) {
       std::string trust_type;
-      if (!list_val->GetAsString(&trust_type))
+      if (!list_val.GetAsString(&trust_type))
         NOTREACHED();
 
       if (trust_type == ::onc::certificate::kWeb) {
@@ -311,6 +311,12 @@ ArcPolicyBridge::~ArcPolicyBridge() {
   arc_bridge_service()->policy()->RemoveObserver(this);
 }
 
+// static
+void ArcPolicyBridge::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(prefs::kArcPolicyComplianceReported, false);
+}
+
 void ArcPolicyBridge::OverrideIsManagedForTesting(bool is_managed) {
   is_managed_ = is_managed;
 }
@@ -392,6 +398,8 @@ void ArcPolicyBridge::OnReportComplianceParseSuccess(
     std::unique_ptr<base::Value> parsed_json) {
   // Always returns "compliant".
   callback.Run(kPolicyCompliantJson);
+  GetProfile()->GetPrefs()->SetBoolean(prefs::kArcPolicyComplianceReported,
+                                       true);
 
   const base::DictionaryValue* dict = nullptr;
   if (parsed_json->GetAsDictionary(&dict))

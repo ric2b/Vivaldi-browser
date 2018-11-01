@@ -5,25 +5,137 @@
 module prefs.mojom;
 
 import "mojo/common/values.mojom";
+import "services/preferences/public/interfaces/preferences_configuration.mojom";
 
 const string kServiceName = "preferences";
+const string kForwarderServiceName = "preferences_forwarder";
 
-// Used for the creation of a PreferencesService and to ensure that the
-// PreferencesServiceClient is bound at creation time.
-interface PreferencesServiceFactory {
-  // Creates a PreferencesService bound to the provided |observer|.
-  Create(PreferencesServiceClient observer, PreferencesService& service);
+// The know pref store types.
+//
+// Should be kept in sync with PrefValueStore::PrefStoreType.
+enum PrefStoreType {
+  MANAGED,
+  SUPERVISED_USER,
+  EXTENSION,
+  COMMAND_LINE,
+  USER,
+  RECOMMENDED,
+  DEFAULT,
 };
 
-// Used to subscribe to preference changes within PreferenceManager. After
-// requesting to observe, the current values for all requested keys are sent.
-interface PreferencesServiceClient {
-  OnPreferencesChanged(mojo.common.mojom.DictionaryValue preferences);
+// Allows observing changes to prefs stored in a |PrefStore|.
+interface PrefStoreObserver {
+  // Preferences have been changed.
+  OnPrefsChanged(array<PrefUpdate> updates);
+
+  // The PrefStore has been initialized (asynchronously).
+  OnInitializationCompleted(bool succeeded);
 };
 
-// Manages actual read/write of preference data. Accepts observers who subscribe
-// to preferences, notifying them of changes.
-interface PreferencesService {
-  SetPreferences(mojo.common.mojom.DictionaryValue preferences);
-  Subscribe(array<string> preferences);
+// Captures the connections to a PrefStore by supplying the initial state of the
+// store and a handle to receive notifications on.
+struct PrefStoreConnection {
+  // Handle to receive updates on.
+  PrefStoreObserver& observer;
+
+  // Initial values of the PrefStore. These will not be communicated through
+  // OnPrefChanged.
+  mojo.common.mojom.DictionaryValue initial_prefs;
+
+  // Is the PrefStore initialized? If not it should not be used before
+  // OnInitializationCompleted has been called.
+  bool is_initialized;
+};
+
+struct PersistentPrefStoreConnection {
+  enum ReadError {
+    NONE = 0,
+    JSON_PARSE = 1,
+    JSON_TYPE = 2,
+    ACCESS_DENIED = 3,
+    FILE_OTHER = 4,
+    FILE_LOCKED = 5,
+    NO_FILE = 6,
+    JSON_REPEAT = 7,
+    // OTHER = 8,  // Deprecated.
+    FILE_NOT_SPECIFIED = 9,
+    ASYNCHRONOUS_TASK_INCOMPLETE = 10,
+  };
+
+  PrefStoreConnection? pref_store_connection;
+  PersistentPrefStore? pref_store;
+  ReadError read_error;
+  bool read_only;
+};
+
+// Manages actual read of preference data. Accepts observers who subscribe to
+// preferences, notifying them of changes.
+interface PrefStore {
+  // Add an observer of changes to prefs contained in |prefs_to_observe|. This
+  // current values of all prefs will not be communicated through a call to
+  // |observer| but instead be returned in |initial_prefs|.
+  AddObserver(array<string> prefs_to_observe) => (
+      PrefStoreConnection connection);
+};
+
+// Manages a registry of all pref stores. Registered pref stores can be
+// connected to through the |PrefStoreConnector| interface.
+interface PrefStoreRegistry {
+  // Register a pref store.
+  Register(PrefStoreType type, PrefStore pref_store);
+};
+
+// Allows connections to pref stores registered with |PrefStoreRegistry|.
+interface PrefStoreConnector {
+  // Connect to all registered pref stores, retrieving the current values of all
+  // prefs in each store and an |observer| interfaces through which updates can
+  // be received. The client asserts that it is already connected to the
+  // |already_connected_types| pref stores through some other means, so the
+  // Connect call will not connect to those.
+  [Sync]
+  Connect(PrefRegistry pref_registry,
+          array<PrefStoreType> already_connected_types) =>
+      (PersistentPrefStoreConnection connection,
+       map<PrefStoreType, PrefStoreConnection> connections);
+};
+
+// An update to a pref.
+struct PrefUpdate {
+  // The key of the pref being updated.
+  string key;
+  // The new value; a null |value| indicates a delete.
+  mojo.common.mojom.Value? value;
+  //|flags| is a bitmask of WritablePrefStore::PrefWriteFlags.
+  uint32 flags;
+};
+
+// An interface providing mutation access to a PersistentPrefStore.
+interface PersistentPrefStore {
+  // Sets the values for prefs.
+  SetValues(array<PrefUpdate> updates);
+
+  // These mirror the C++ PersistentPrefStore methods.
+  CommitPendingWrite();
+  SchedulePendingLossyWrites();
+  ClearMutableValues();
+};
+
+// A registry of all prefs registered by a single client.
+struct PrefRegistry {
+  map<string, PrefRegistration> registrations;
+};
+
+struct PrefRegistration {
+  mojo.common.mojom.Value default_value;
+
+  // A bitfield of flags. Flag values are defined in
+  // PrefRegistry::PrefRegistrationFlags and
+  // PrefRegistrySyncable::PrefRegistrationFlags.
+  uint32 flags;
+};
+
+interface PrefServiceControl {
+  // Initializes the pref service. This must be called before the service can
+  // be used.
+  Init(PersistentPrefStoreConfiguration configuration);
 };

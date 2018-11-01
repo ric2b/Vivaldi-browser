@@ -4,14 +4,14 @@
 
 #include "chrome/browser/ui/ash/launcher/extension_app_window_launcher_item_controller.h"
 
-#include "ash/common/wm/window_state.h"
+#include "ash/public/cpp/shelf_item_delegate.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
-#include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -25,10 +25,8 @@
 
 ExtensionAppWindowLauncherItemController::
     ExtensionAppWindowLauncherItemController(
-        const std::string& app_id,
-        const std::string& launch_id,
-        ChromeLauncherController* controller)
-    : AppWindowLauncherItemController(app_id, launch_id, controller) {}
+        const ash::AppLaunchId& app_launch_id)
+    : AppWindowLauncherItemController(app_launch_id) {}
 
 ExtensionAppWindowLauncherItemController::
     ~ExtensionAppWindowLauncherItemController() {}
@@ -39,11 +37,12 @@ void ExtensionAppWindowLauncherItemController::AddAppWindow(
   AddWindow(app_window->GetBaseWindow());
 }
 
-ash::ShelfAppMenuItemList
-ExtensionAppWindowLauncherItemController::GetAppMenuItems(int event_flags) {
-  ash::ShelfAppMenuItemList items;
+ash::MenuItemList ExtensionAppWindowLauncherItemController::GetAppMenuItems(
+    int event_flags) {
+  ash::MenuItemList items;
   extensions::AppWindowRegistry* app_window_registry =
-      extensions::AppWindowRegistry::Get(launcher_controller()->profile());
+      extensions::AppWindowRegistry::Get(
+          ChromeLauncherController::instance()->profile());
 
   uint32_t window_index = 0;
   for (const ui::BaseWindow* window : windows()) {
@@ -52,6 +51,10 @@ ExtensionAppWindowLauncherItemController::GetAppMenuItems(int event_flags) {
             window->GetNativeWindow());
     DCHECK(app_window);
 
+    ash::mojom::MenuItemPtr item(ash::mojom::MenuItem::New());
+    item->command_id = window_index;
+    item->label = app_window->GetTitle();
+
     // Use the app's web contents favicon, or the app window's icon.
     favicon::FaviconDriver* favicon_driver =
         favicon::ContentFaviconDriver::FromWebContents(
@@ -59,9 +62,9 @@ ExtensionAppWindowLauncherItemController::GetAppMenuItems(int event_flags) {
     gfx::Image icon = favicon_driver->GetFavicon();
     if (icon.IsEmpty())
       icon = app_window->app_icon();
-
-    items.push_back(base::MakeUnique<ash::ShelfApplicationMenuItem>(
-        window_index, app_window->GetTitle(), &icon));
+    if (!icon.IsEmpty())
+      item->image = *icon.ToSkBitmap();
+    items.push_back(std::move(item));
     ++window_index;
   }
   return items;
@@ -69,6 +72,6 @@ ExtensionAppWindowLauncherItemController::GetAppMenuItems(int event_flags) {
 
 void ExtensionAppWindowLauncherItemController::ExecuteCommand(
     uint32_t command_id,
-    int event_flags) {
-  launcher_controller()->ActivateShellApp(app_id(), command_id);
+    int32_t event_flags) {
+  ChromeLauncherController::instance()->ActivateShellApp(app_id(), command_id);
 }

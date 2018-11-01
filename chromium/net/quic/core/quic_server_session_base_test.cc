@@ -203,7 +203,7 @@ TEST_P(QuicServerSessionBaseTest, ServerPushDisabledByDefault) {
 TEST_P(QuicServerSessionBaseTest, CloseStreamDueToReset) {
   // Open a stream, then reset it.
   // Send two bytes of payload to open it.
-  QuicStreamFrame data1(kClientDataStreamId1, false, 0, StringPiece("HT"));
+  QuicStreamFrame data1(kClientDataStreamId1, false, 0, QuicStringPiece("HT"));
   session_->OnStreamFrame(data1);
   EXPECT_EQ(1u, session_->GetNumOpenIncomingStreams());
 
@@ -233,7 +233,7 @@ TEST_P(QuicServerSessionBaseTest, NeverOpenStreamDueToReset) {
   EXPECT_EQ(0u, session_->GetNumOpenIncomingStreams());
 
   // Send two bytes of payload.
-  QuicStreamFrame data1(kClientDataStreamId1, false, 0, StringPiece("HT"));
+  QuicStreamFrame data1(kClientDataStreamId1, false, 0, QuicStringPiece("HT"));
   visitor_->OnStreamFrame(data1);
 
   // The stream should never be opened, now that the reset is received.
@@ -244,9 +244,9 @@ TEST_P(QuicServerSessionBaseTest, NeverOpenStreamDueToReset) {
 TEST_P(QuicServerSessionBaseTest, AcceptClosedStream) {
   // Send (empty) compressed headers followed by two bytes of data.
   QuicStreamFrame frame1(kClientDataStreamId1, false, 0,
-                         StringPiece("\1\0\0\0\0\0\0\0HT"));
+                         QuicStringPiece("\1\0\0\0\0\0\0\0HT"));
   QuicStreamFrame frame2(kClientDataStreamId2, false, 0,
-                         StringPiece("\2\0\0\0\0\0\0\0HT"));
+                         QuicStringPiece("\2\0\0\0\0\0\0\0HT"));
   visitor_->OnStreamFrame(frame1);
   visitor_->OnStreamFrame(frame2);
   EXPECT_EQ(2u, session_->GetNumOpenIncomingStreams());
@@ -260,8 +260,8 @@ TEST_P(QuicServerSessionBaseTest, AcceptClosedStream) {
   // If we were tracking, we'd probably want to reject this because it's data
   // past the reset point of stream 3.  As it's a closed stream we just drop the
   // data on the floor, but accept the packet because it has data for stream 5.
-  QuicStreamFrame frame3(kClientDataStreamId1, false, 2, StringPiece("TP"));
-  QuicStreamFrame frame4(kClientDataStreamId2, false, 2, StringPiece("TP"));
+  QuicStreamFrame frame3(kClientDataStreamId1, false, 2, QuicStringPiece("TP"));
+  QuicStreamFrame frame4(kClientDataStreamId2, false, 2, QuicStringPiece("TP"));
   visitor_->OnStreamFrame(frame3);
   visitor_->OnStreamFrame(frame4);
   // The stream should never be opened, now that the reset is received.
@@ -409,8 +409,6 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
   // and we don't have any other data to write.
 
   // Client has sent kBWRE connection option to trigger bandwidth resumption.
-  // Disable this flag because if connection uses multipath sent packet manager,
-  // static_cast here does not work.
   QuicTagVector copt;
   copt.push_back(kBWRE);
   QuicConfigPeer::SetReceivedConnectionOptions(session_->config(), copt);
@@ -474,9 +472,9 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
 
   // Bandwidth estimate has now changed sufficiently, enough time has passed,
   // and enough packets have been sent.
-  SerializedPacket packet(
-      kDefaultPathId, 1 + kMinPacketsBetweenServerConfigUpdates,
-      PACKET_6BYTE_PACKET_NUMBER, nullptr, 1000, false, false);
+  SerializedPacket packet(1 + kMinPacketsBetweenServerConfigUpdates,
+                          PACKET_6BYTE_PACKET_NUMBER, nullptr, 1000, false,
+                          false);
   sent_packet_manager->OnPacketSent(&packet, 0, now, NOT_RETRANSMISSION,
                                     HAS_RETRANSMITTABLE_DATA);
 
@@ -613,8 +611,10 @@ TEST_P(StreamMemberLifetimeTest, Basic) {
   chlo.SetVector(kCOPT, QuicTagVector{kSREJ});
   std::vector<QuicVersion> packet_version_list = {version};
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
-      1, true, false, false, kDefaultPathId, 1,
-      chlo.GetSerialized().AsStringPiece().as_string(),
+      1, true, false, 1,
+      string(chlo.GetSerialized(Perspective::IS_CLIENT)
+                 .AsStringPiece()
+                 .as_string()),
       PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER,
       &packet_version_list));
 
@@ -625,7 +625,7 @@ TEST_P(StreamMemberLifetimeTest, Basic) {
 
   // Set the current packet
   QuicConnectionPeer::SetCurrentPacket(session_->connection(),
-                                       packet->AsStringPiece());
+                                       packet->AsStringPiece().as_string());
 
   // Yes, this is horrible.  But it's the easiest way to trigger the behavior we
   // need to exercise.

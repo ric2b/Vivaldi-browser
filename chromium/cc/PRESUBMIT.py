@@ -25,25 +25,17 @@ def CheckAsserts(input_api, output_api, white_list=CC_SOURCE_FILES, black_list=N
   source_file_filter = lambda x: input_api.FilterSourceFile(x, white_list, black_list)
 
   assert_files = []
-  notreached_files = []
 
   for f in input_api.AffectedSourceFiles(source_file_filter):
     contents = input_api.ReadFile(f, 'rb')
     # WebKit ASSERT() is not allowed.
     if re.search(r"\bASSERT\(", contents):
       assert_files.append(f.LocalPath())
-    # WebKit ASSERT_NOT_REACHED() is not allowed.
-    if re.search(r"ASSERT_NOT_REACHED\(", contents):
-      notreached_files.append(f.LocalPath())
 
   if assert_files:
     return [output_api.PresubmitError(
       'These files use ASSERT instead of using DCHECK:',
       items=assert_files)]
-  if notreached_files:
-    return [output_api.PresubmitError(
-      'These files use ASSERT_NOT_REACHED instead of using NOTREACHED:',
-      items=notreached_files)]
   return []
 
 def CheckStdAbs(input_api, output_api,
@@ -103,7 +95,7 @@ def CheckPassByValue(input_api,
 
   local_errors = []
 
-  # Well-defined simple classes containing only <= 4 ints, or <= 2 floats.
+  # Well-defined simple classes the same size as a primitive type.
   pass_by_value_types = ['base::Time',
                          'base::TimeTicks',
                          ]
@@ -131,7 +123,7 @@ def CheckTodos(input_api, output_api):
 
   if errors:
     return [output_api.PresubmitError(
-      'All TODO comments should be of the form TODO(name). ' +
+      'All TODO comments should be of the form TODO(name/bug). ' +
       'Use TODO instead of FIX' + 'ME',
       items=errors)]
   return []

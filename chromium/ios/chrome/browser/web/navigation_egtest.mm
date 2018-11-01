@@ -10,7 +10,6 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/earl_grey/disabled_test_macros.h"
 #import "ios/web/public/test/http_server.h"
 #include "ios/web/public/test/http_server_util.h"
 #include "ios/web/public/test/response_providers/data_response_provider.h"
@@ -101,20 +100,6 @@ void SetupBackAndForwardResponseProvider() {
       "id=\"ForwardHTMLButton\" onclick=\"window.history.forward()\" /></br>"
       "Forward page loaded</html>";
   web::test::SetUpSimpleHttpServer(responses);
-}
-
-// Matcher for the error page.
-// TODO(crbug.com/638674): Evaluate if this can move to shared code. See
-// ios/chrome/browser/ui/error_page_egtest.mm.
-id<GREYMatcher> ErrorPage() {
-  NSString* const kDNSError =
-      l10n_util::GetNSString(IDS_ERRORPAGES_HEADING_NOT_AVAILABLE);
-  NSString* const kInternetDisconnectedError =
-      l10n_util::GetNSString(IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED);
-  return grey_anyOf(chrome_test_util::StaticHtmlViewContainingText(kDNSError),
-                    chrome_test_util::StaticHtmlViewContainingText(
-                        kInternetDisconnectedError),
-                    nil);
 }
 
 // URLs for server redirect tests.
@@ -428,6 +413,12 @@ class RedirectResponseProvider : public web::DataResponseProvider {
 
 // Tests navigating forward via window.history.forward() to an error page.
 - (void)testHistoryForwardToErrorPage {
+// TODO(crbug.com/694662): This test relies on external URL because of the bug.
+// Re-enable this test on device once the bug is fixed.
+#if !TARGET_IPHONE_SIMULATOR
+  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
+#endif
+
   SetupBackAndForwardResponseProvider();
 
   // Go to page 1 with a button which calls window.history.forward().
@@ -438,8 +429,7 @@ class RedirectResponseProvider : public web::DataResponseProvider {
   // page not available error.
   const GURL badURL("http://www.badurljkljkljklfloofy.com");
   [ChromeEarlGrey loadURL:badURL];
-  [[EarlGrey selectElementWithMatcher:ErrorPage()]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForErrorPage];
 
   // Go back to page 1 by clicking back button.
   [[EarlGrey selectElementWithMatcher:BackButton()] performAction:grey_tap()];
@@ -450,8 +440,7 @@ class RedirectResponseProvider : public web::DataResponseProvider {
   // Go forward to page 2 by calling window.history.forward() and assert that
   // the error page is shown.
   TapWebViewElementWithId(kForwardHTMLButtonLabel);
-  [[EarlGrey selectElementWithMatcher:ErrorPage()]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForErrorPage];
 }
 
 #pragma mark window.location.hash operations

@@ -10,8 +10,8 @@
 #include "modules/push_messaging/PushMessageData.h"
 #include "modules/serviceworkers/ExtendableEvent.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/AtomicString.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/AtomicString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -21,12 +21,12 @@ class MODULES_EXPORT PushEvent final : public ExtendableEvent {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static PushEvent* create(const AtomicString& type,
+  static PushEvent* Create(const AtomicString& type,
                            PushMessageData* data,
                            WaitUntilObserver* observer) {
     return new PushEvent(type, data, observer);
   }
-  static PushEvent* create(const AtomicString& type,
+  static PushEvent* Create(const AtomicString& type,
                            const PushEventInit& initializer) {
     return new PushEvent(type, initializer);
   }
@@ -34,7 +34,7 @@ class MODULES_EXPORT PushEvent final : public ExtendableEvent {
   ~PushEvent() override;
 
   // ExtendableEvent interface.
-  const AtomicString& interfaceName() const override;
+  const AtomicString& InterfaceName() const override;
 
   PushMessageData* data();
 
@@ -44,7 +44,7 @@ class MODULES_EXPORT PushEvent final : public ExtendableEvent {
   PushEvent(const AtomicString& type, PushMessageData*, WaitUntilObserver*);
   PushEvent(const AtomicString& type, const PushEventInit&);
 
-  Member<PushMessageData> m_data;
+  Member<PushMessageData> data_;
 };
 
 }  // namespace blink

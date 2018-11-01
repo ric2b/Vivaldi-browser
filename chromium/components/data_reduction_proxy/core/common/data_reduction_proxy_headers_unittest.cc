@@ -18,6 +18,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/proxy/proxy_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace data_reduction_proxy {
 
@@ -76,6 +77,28 @@ TEST_F(DataReductionProxyHeadersTest, IsEmptyImagePreview) {
           "Another-Header: empty-image\n",
           false,
       },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Chrome-Proxy: q=low\n",
+          true,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Chrome-Proxy: foo=bar, Q=LOW\n",
+          true,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Chrome-Proxy-Content-Transform: q=low\n"
+          "Chrome-Proxy: empty-image\n",
+          false,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Chrome-Proxy-Content-Transform: foo\n"
+          "Chrome-Proxy: q=low\n",
+          true,
+      },
   };
   for (size_t i = 0; i < arraysize(tests); ++i) {
     std::string headers(tests[i].headers);
@@ -88,30 +111,30 @@ TEST_F(DataReductionProxyHeadersTest, IsEmptyImagePreview) {
 
 TEST_F(DataReductionProxyHeadersTest, IsEmptyImagePreviewValue) {
   const struct {
-    const char* header;
+    const char* chrome_proxy_content_transform_header;
+    const char* chrome_proxy_header;
     bool expected_result;
   } tests[] = {
-      {
-          "foo", false,
-      },
-      {
-          "", false,
-      },
-      {
-          "empty-image", true,
-      },
-      {
-          "empty-image;foo", true,
-      },
-      {
-          "Empty-Image", true,
-      },
-      {
-          "foo;empty-image", false,
-      },
+      {"", "", false},
+      {"foo", "", false},
+      {"", "bar", false},
+      {"foo", "bar", false},
+      {"empty-image", "", true},
+      {"empty-image;foo", "", true},
+      {"Empty-Image", "", true},
+      {"foo;empty-image", "", false},
+      {"empty-image", "foo", true},
+      {"foo;empty-image", "bar", false},
+      {"", "q=low", true},
+      {"foo", "q=low", true},
+      {"foo", "bar, baz, Q=LOW ", true},
+      {"empty-image", "q=low", true},
   };
-  for (size_t i = 0; i < arraysize(tests); ++i)
-    EXPECT_EQ(tests[i].expected_result, IsEmptyImagePreview(tests[i].header));
+  for (const auto& test : tests) {
+    EXPECT_EQ(test.expected_result,
+              IsEmptyImagePreview(test.chrome_proxy_content_transform_header,
+                                  test.chrome_proxy_header));
+  }
 }
 
 TEST_F(DataReductionProxyHeadersTest, IsLitePagePreview) {
@@ -497,9 +520,8 @@ TEST_F(DataReductionProxyHeadersTest, GetProxyBypassInfo) {
         new net::HttpResponseHeaders(headers));
 
     DataReductionProxyInfo data_reduction_proxy_info;
-    EXPECT_EQ(
-        tests[i].expected_result,
-        ParseHeadersForBypassInfo(parsed.get(), &data_reduction_proxy_info));
+    EXPECT_EQ(tests[i].expected_result,
+              ParseHeadersForBypassInfo(*parsed, &data_reduction_proxy_info));
     EXPECT_EQ(tests[i].expected_retry_delay,
               data_reduction_proxy_info.bypass_duration.InSeconds());
     EXPECT_EQ(tests[i].expected_bypass_all,
@@ -520,8 +542,7 @@ TEST_F(DataReductionProxyHeadersTest, ParseHeadersAndSetProxyInfo) {
       new net::HttpResponseHeaders(headers));
 
   DataReductionProxyInfo data_reduction_proxy_info;
-  EXPECT_TRUE(
-      ParseHeadersForBypassInfo(parsed.get(), &data_reduction_proxy_info));
+  EXPECT_TRUE(ParseHeadersForBypassInfo(*parsed, &data_reduction_proxy_info));
   EXPECT_LE(60, data_reduction_proxy_info.bypass_duration.InSeconds());
   EXPECT_GE(5 * 60, data_reduction_proxy_info.bypass_duration.InSeconds());
   EXPECT_FALSE(data_reduction_proxy_info.bypass_all);
@@ -612,11 +633,11 @@ TEST_F(DataReductionProxyHeadersTest, HasDataReductionProxyViaHeader) {
     bool has_chrome_proxy_via_header, has_intermediary;
     if (tests[i].ignore_intermediary) {
       has_chrome_proxy_via_header =
-          HasDataReductionProxyViaHeader(parsed.get(), NULL);
+          HasDataReductionProxyViaHeader(*parsed, NULL);
     }
     else {
       has_chrome_proxy_via_header =
-          HasDataReductionProxyViaHeader(parsed.get(), &has_intermediary);
+          HasDataReductionProxyViaHeader(*parsed, &has_intermediary);
     }
     EXPECT_EQ(tests[i].expected_result, has_chrome_proxy_via_header);
     if (has_chrome_proxy_via_header && !tests[i].ignore_intermediary) {
@@ -768,8 +789,87 @@ TEST_F(DataReductionProxyHeadersTest, GetDataReductionProxyBypassEventType) {
         tests[i].in_tamper_detection_experiment ? "TamperDetection_Enabled"
                                                 : "TamperDetection_Disabled");
 
-    EXPECT_EQ(tests[i].expected_result, GetDataReductionProxyBypassType(
-                                            parsed.get(), &chrome_proxy_info));
+    EXPECT_EQ(tests[i].expected_result,
+              GetDataReductionProxyBypassType(std::vector<GURL>(), *parsed,
+                                              &chrome_proxy_info));
+  }
+}
+
+TEST_F(DataReductionProxyHeadersTest,
+       GetDataReductionProxyBypassEventTypeURLRedirectCycle) {
+  const struct {
+    const char* headers;
+    std::vector<GURL> url_chain;
+    DataReductionProxyBypassType expected_result;
+  } tests[] = {
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>{GURL("http://google.com/1"),
+                            GURL("http://google.com/2"),
+                            GURL("http://google.com/1")},
+          BYPASS_EVENT_TYPE_URL_REDIRECT_CYCLE,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>{
+              GURL("http://google.com/1"), GURL("http://google.com/2"),
+              GURL("http://google.com/1"), GURL("http://google.com/2")},
+          BYPASS_EVENT_TYPE_URL_REDIRECT_CYCLE,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>{GURL("http://google.com/1")}, BYPASS_EVENT_TYPE_MAX,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>{GURL("http://google.com/1"),
+                            GURL("http://google.com/2")},
+          BYPASS_EVENT_TYPE_MAX,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>{GURL("http://google.com/1"),
+                            GURL("http://google.com/2"),
+                            GURL("http://google.com/3")},
+          BYPASS_EVENT_TYPE_MAX,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>{
+              GURL("http://google.com/1"), GURL("http://google.com/2"),
+              GURL("http://google.com/3"), GURL("http://google.com/1")},
+          BYPASS_EVENT_TYPE_URL_REDIRECT_CYCLE,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>{
+              GURL("http://google.com/1"), GURL("http://google.com/2"),
+              GURL("http://google.com/1"), GURL("http://google.com/3")},
+          BYPASS_EVENT_TYPE_MAX,
+      },
+      {
+          "HTTP/1.1 200 OK\n"
+          "Via: 1.1 Chrome-Compression-Proxy\n",
+          std::vector<GURL>(), BYPASS_EVENT_TYPE_MAX,
+      }};
+
+  for (const auto& test : tests) {
+    std::string headers(test.headers);
+    HeadersToRaw(&headers);
+    scoped_refptr<net::HttpResponseHeaders> parsed(
+        new net::HttpResponseHeaders(headers));
+    DataReductionProxyInfo chrome_proxy_info;
+
+    EXPECT_EQ(test.expected_result,
+              GetDataReductionProxyBypassType(test.url_chain, *parsed,
+                                              &chrome_proxy_info));
   }
 }
 

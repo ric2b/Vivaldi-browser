@@ -43,7 +43,6 @@ chromevox_modules = [
   "chromevox/background/tabs_api_handler.js",
   "chromevox/injected/active_indicator.js",
   "chromevox/injected/api_implementation.js",
-  "chromevox/injected/api_util.js",
   "chromevox/injected/console_tts.js",
   "chromevox/injected/event_suspender.js",
   "chromevox/injected/event_watcher.js",
@@ -146,7 +145,6 @@ chromevox_modules = [
   "cvox2/background/panel_command.js",
   "cvox2/background/panel_menu.js",
   "cvox2/background/panel_menu_item.js",
-  "cvox2/background/stubs.js",
   "cvox2/background/tabs_automation_handler.js",
   "cvox2/background/tree_walker.js",
   "cvox2/background/tutorial.js",
@@ -267,6 +265,7 @@ run_jsbundler("chromevox_copied_files") {
   dest_dir = chromevox_out_dir
   sources = [
     "chromevox/background/background.html",
+    "chromevox/background/checked.png",
     "chromevox/background/earcons/alert_modal.ogg",
     "chromevox/background/earcons/alert_nonmodal.ogg",
     "chromevox/background/earcons/button.ogg",
@@ -327,7 +326,9 @@ run_jsbundler("chromevox_copied_files") {
     "chromevox/background/mathmaps/symbols/math_symbols.json",
     "chromevox/background/mathmaps/symbols/math_whitespace.json",
     "chromevox/background/mathmaps/symbols/other_stars.json",
+    "chromevox/background/options.css",
     "chromevox/background/options.html",
+    "chromevox/background/unchecked.png",
     "chromevox/injected/api.js",
     "cvox2/background/background.html",
     "cvox2/background/earcons/control.wav",
@@ -349,9 +350,7 @@ run_jsbundler("chromevox_copied_files") {
     "images/options-hover-19.png",
     "images/triangle-6.png",
   ]
-  if (chromevox_compress_js) {
-    sources += [ "chromevox/injected/api_util.js" ]
-  } else {
+  if (!chromevox_compress_js) {
     sources += chromevox_modules
     sources += [
       "closure/closure_preinit.js",

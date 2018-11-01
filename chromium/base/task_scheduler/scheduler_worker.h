@@ -42,7 +42,7 @@ class BASE_EXPORT SchedulerWorker
  public:
   // Delegate interface for SchedulerWorker. The methods are always called from
   // the thread managed by the SchedulerWorker instance.
-  class Delegate {
+  class BASE_EXPORT Delegate {
    public:
     virtual ~Delegate() = default;
 
@@ -68,6 +68,11 @@ class BASE_EXPORT SchedulerWorker
     // worker's WakeUp() method is called.
     virtual TimeDelta GetSleepTimeout() = 0;
 
+    // Called by a thread to wait for work. Override this method if the thread
+    // in question needs special handling to go to sleep. |wake_up_event| is a
+    // manually resettable event and is signaled on SchedulerWorker::WakeUp()
+    virtual void WaitForWork(WaitableEvent* wake_up_event);
+
     // Called by a thread if it is allowed to detach if the last call to
     // GetWork() returned nullptr.
     //
@@ -85,6 +90,9 @@ class BASE_EXPORT SchedulerWorker
     // acquire a SchedulerLock because it is called within the scope of another
     // SchedulerLock.
     virtual void OnDetach() = 0;
+
+    // Called by a thread right before the main function exits.
+    virtual void OnMainExit() {}
   };
 
   enum class InitialState { ALIVE, DETACHED };

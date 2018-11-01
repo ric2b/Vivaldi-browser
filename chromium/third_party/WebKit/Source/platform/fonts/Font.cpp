@@ -31,9 +31,9 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontFallbackIterator.h"
 #include "platform/fonts/FontFallbackList.h"
-#include "platform/fonts/GlyphBuffer.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/shaping/CachingWordShaper.h"
+#include "platform/fonts/shaping/ShapeResultBloberizer.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintFlags.h"
@@ -42,534 +42,373 @@
 #include "platform/text/TextRun.h"
 #include "platform/text/TextRunIterator.h"
 #include "platform/transforms/AffineTransform.h"
+#include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/text/CharacterNames.h"
+#include "platform/wtf/text/Unicode.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
-#include "wtf/StdLibExtras.h"
-#include "wtf/text/CharacterNames.h"
-#include "wtf/text/Unicode.h"
 
 using namespace WTF;
 using namespace Unicode;
 
 namespace blink {
 
-Font::Font() : m_canShapeWordByWord(0), m_shapeWordByWordComputed(0) {}
+Font::Font() : can_shape_word_by_word_(0), shape_word_by_word_computed_(0) {}
 
 Font::Font(const FontDescription& fd)
-    : m_fontDescription(fd),
-      m_canShapeWordByWord(0),
-      m_shapeWordByWordComputed(0) {}
+    : font_description_(fd),
+      can_shape_word_by_word_(0),
+      shape_word_by_word_computed_(0) {}
 
 Font::Font(const Font& other)
-    : m_fontDescription(other.m_fontDescription),
-      m_fontFallbackList(other.m_fontFallbackList),
+    : font_description_(other.font_description_),
+      font_fallback_list_(other.font_fallback_list_),
       // TODO(yosin): We should have a comment the reason why don't we copy
       // |m_canShapeWordByWord| and |m_shapeWordByWordComputed| from |other|,
       // since |operator=()| copies them from |other|.
-      m_canShapeWordByWord(0),
-      m_shapeWordByWordComputed(0) {}
+      can_shape_word_by_word_(0),
+      shape_word_by_word_computed_(0) {}
 
 Font& Font::operator=(const Font& other) {
-  m_fontDescription = other.m_fontDescription;
-  m_fontFallbackList = other.m_fontFallbackList;
-  m_canShapeWordByWord = other.m_canShapeWordByWord;
-  m_shapeWordByWordComputed = other.m_shapeWordByWordComputed;
+  font_description_ = other.font_description_;
+  font_fallback_list_ = other.font_fallback_list_;
+  can_shape_word_by_word_ = other.can_shape_word_by_word_;
+  shape_word_by_word_computed_ = other.shape_word_by_word_computed_;
   return *this;
 }
 
 bool Font::operator==(const Font& other) const {
   FontSelector* first =
-      m_fontFallbackList ? m_fontFallbackList->getFontSelector() : 0;
-  FontSelector* second = other.m_fontFallbackList
-                             ? other.m_fontFallbackList->getFontSelector()
+      font_fallback_list_ ? font_fallback_list_->GetFontSelector() : 0;
+  FontSelector* second = other.font_fallback_list_
+                             ? other.font_fallback_list_->GetFontSelector()
                              : 0;
 
-  return first == second && m_fontDescription == other.m_fontDescription &&
-         (m_fontFallbackList ? m_fontFallbackList->fontSelectorVersion() : 0) ==
-             (other.m_fontFallbackList
-                  ? other.m_fontFallbackList->fontSelectorVersion()
-                  : 0) &&
-         (m_fontFallbackList ? m_fontFallbackList->generation() : 0) ==
-             (other.m_fontFallbackList ? other.m_fontFallbackList->generation()
-                                       : 0);
+  return first == second && font_description_ == other.font_description_ &&
+         (font_fallback_list_
+              ? font_fallback_list_->FontSelectorVersion()
+              : 0) == (other.font_fallback_list_
+                           ? other.font_fallback_list_->FontSelectorVersion()
+                           : 0) &&
+         (font_fallback_list_ ? font_fallback_list_->Generation() : 0) ==
+             (other.font_fallback_list_
+                  ? other.font_fallback_list_->Generation()
+                  : 0);
 }
 
-void Font::update(FontSelector* fontSelector) const {
+void Font::Update(FontSelector* font_selector) const {
   // FIXME: It is pretty crazy that we are willing to just poke into a RefPtr,
   // but it ends up being reasonably safe (because inherited fonts in the render
   // tree pick up the new style anyway. Other copies are transient, e.g., the
   // state in the GraphicsContext, and won't stick around long enough to get you
   // in trouble). Still, this is pretty disgusting, and could eventually be
   // rectified by using RefPtrs for Fonts themselves.
-  if (!m_fontFallbackList)
-    m_fontFallbackList = FontFallbackList::create();
-  m_fontFallbackList->invalidate(fontSelector);
-}
-
-float Font::buildGlyphBuffer(const TextRunPaintInfo& runInfo,
-                             GlyphBuffer& glyphBuffer,
-                             const GlyphData* emphasisData) const {
-  float width;
-  CachingWordShaper shaper(*this);
-  if (emphasisData) {
-    width = shaper.fillGlyphBufferForTextEmphasis(runInfo.run,
-                                                  emphasisData, &glyphBuffer,
-                                                  runInfo.from, runInfo.to);
-  } else {
-    width = shaper.fillGlyphBuffer(runInfo.run, &glyphBuffer,
-                                   runInfo.from, runInfo.to);
-  }
-  return width;
-}
-
-bool Font::drawText(PaintCanvas* canvas,
-                    const TextRunPaintInfo& runInfo,
-                    const FloatPoint& point,
-                    float deviceScaleFactor,
-                    const PaintFlags& flags) const {
-  // Don't draw anything while we are using custom fonts that are in the process
-  // of loading.
-  if (shouldSkipDrawing())
-    return false;
-
-  GlyphBuffer glyphBuffer;
-  buildGlyphBuffer(runInfo, glyphBuffer);
-
-  drawGlyphBuffer(canvas, flags, glyphBuffer, point, deviceScaleFactor);
-  return true;
-}
-
-bool Font::drawBidiText(PaintCanvas* canvas,
-                        const TextRunPaintInfo& runInfo,
-                        const FloatPoint& point,
-                        CustomFontNotReadyAction customFontNotReadyAction,
-                        float deviceScaleFactor,
-                        const PaintFlags& flags) const {
-  // Don't draw anything while we are using custom fonts that are in the process
-  // of loading, except if the 'force' argument is set to true (in which case it
-  // will use a fallback font).
-  if (shouldSkipDrawing() &&
-      customFontNotReadyAction == DoNotPaintIfFontNotReady)
-    return false;
-
-  // sub-run painting is not supported for Bidi text.
-  const TextRun& run = runInfo.run;
-  ASSERT((runInfo.from == 0) && (runInfo.to == run.length()));
-  BidiResolver<TextRunIterator, BidiCharacterRun> bidiResolver;
-  bidiResolver.setStatus(
-      BidiStatus(run.direction(), run.directionalOverride()));
-  bidiResolver.setPositionIgnoringNestedIsolates(TextRunIterator(&run, 0));
-
-  // FIXME: This ownership should be reversed. We should pass BidiRunList
-  // to BidiResolver in createBidiRunsForLine.
-  BidiRunList<BidiCharacterRun>& bidiRuns = bidiResolver.runs();
-  bidiResolver.createBidiRunsForLine(TextRunIterator(&run, run.length()));
-  if (!bidiRuns.runCount())
-    return true;
-
-  FloatPoint currPoint = point;
-  BidiCharacterRun* bidiRun = bidiRuns.firstRun();
-  while (bidiRun) {
-    TextRun subrun =
-        run.subRun(bidiRun->start(), bidiRun->stop() - bidiRun->start());
-    bool isRTL = bidiRun->level() % 2;
-    subrun.setDirection(isRTL ? TextDirection::kRtl : TextDirection::kLtr);
-    subrun.setDirectionalOverride(bidiRun->dirOverride(false));
-
-    TextRunPaintInfo subrunInfo(subrun);
-    subrunInfo.bounds = runInfo.bounds;
-
-    // TODO: investigate blob consolidation/caching (technically,
-    //       all subruns could be part of the same blob).
-    GlyphBuffer glyphBuffer;
-    float runWidth = buildGlyphBuffer(subrunInfo, glyphBuffer);
-    drawGlyphBuffer(canvas, flags, glyphBuffer, currPoint, deviceScaleFactor);
-
-    bidiRun = bidiRun->next();
-    currPoint.move(runWidth, 0);
-  }
-
-  bidiRuns.deleteRuns();
-  return true;
-}
-
-void Font::drawEmphasisMarks(PaintCanvas* canvas,
-                             const TextRunPaintInfo& runInfo,
-                             const AtomicString& mark,
-                             const FloatPoint& point,
-                             float deviceScaleFactor,
-                             const PaintFlags& flags) const {
-  if (shouldSkipDrawing())
-    return;
-
-  FontCachePurgePreventer purgePreventer;
-
-  GlyphData emphasisGlyphData;
-  if (!getEmphasisMarkGlyphData(mark, emphasisGlyphData))
-    return;
-
-  ASSERT(emphasisGlyphData.fontData);
-  if (!emphasisGlyphData.fontData)
-    return;
-
-  GlyphBuffer glyphBuffer;
-  buildGlyphBuffer(runInfo, glyphBuffer, &emphasisGlyphData);
-
-  if (glyphBuffer.isEmpty())
-    return;
-
-  drawGlyphBuffer(canvas, flags, glyphBuffer, point, deviceScaleFactor);
-}
-
-float Font::width(const TextRun& run,
-                  HashSet<const SimpleFontData*>* fallbackFonts,
-                  FloatRect* glyphBounds) const {
-  FontCachePurgePreventer purgePreventer;
-  CachingWordShaper shaper(*this);
-  return shaper.width(run, fallbackFonts, glyphBounds);
+  if (!font_fallback_list_)
+    font_fallback_list_ = FontFallbackList::Create();
+  font_fallback_list_->Invalidate(font_selector);
 }
 
 namespace {
 
-enum BlobRotation {
-  NoRotation,
-  CCWRotation,
-};
-
-class GlyphBufferBloberizer {
-  STACK_ALLOCATED()
- public:
-  GlyphBufferBloberizer(const GlyphBuffer& buffer,
-                        const Font* font,
-                        float deviceScaleFactor)
-      : m_buffer(buffer),
-        m_font(font),
-        m_deviceScaleFactor(deviceScaleFactor),
-        m_hasVerticalOffsets(buffer.hasVerticalOffsets()),
-        m_index(0),
-        m_endIndex(m_buffer.size()),
-        m_rotation(buffer.isEmpty() ? NoRotation : computeBlobRotation(
-                                                       buffer.fontDataAt(0))) {}
-
-  bool done() const { return m_index >= m_endIndex; }
-
-  std::pair<sk_sp<SkTextBlob>, BlobRotation> next() {
-    ASSERT(!done());
-    const BlobRotation currentRotation = m_rotation;
-
-    while (m_index < m_endIndex) {
-      const SimpleFontData* fontData = m_buffer.fontDataAt(m_index);
-      ASSERT(fontData);
-
-      const BlobRotation newRotation = computeBlobRotation(fontData);
-      if (newRotation != m_rotation) {
-        // We're switching to an orientation which requires a different rotation
-        //   => emit the pending blob (and start a new one with the new
-        //      rotation).
-        m_rotation = newRotation;
-        break;
-      }
-
-      const unsigned start = m_index++;
-      while (m_index < m_endIndex && m_buffer.fontDataAt(m_index) == fontData)
-        m_index++;
-
-      appendRun(start, m_index - start, fontData);
-    }
-
-    return std::make_pair(m_builder.make(), currentRotation);
-  }
-
- private:
-  static BlobRotation computeBlobRotation(const SimpleFontData* font) {
-    // For vertical upright text we need to compensate the inherited 90deg CW
-    // rotation (using a 90deg CCW rotation).
-    return (font->platformData().isVerticalAnyUpright() && font->verticalData())
-               ? CCWRotation
-               : NoRotation;
-  }
-
-  void appendRun(unsigned start,
-                 unsigned count,
-                 const SimpleFontData* fontData) {
-    SkPaint paint;
-    fontData->platformData().setupPaint(&paint, m_deviceScaleFactor, m_font);
-    paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-
-    const SkTextBlobBuilder::RunBuffer& buffer =
-        m_hasVerticalOffsets ? m_builder.allocRunPos(paint, count)
-                             : m_builder.allocRunPosH(paint, count, 0);
-
-    const uint16_t* glyphs = m_buffer.glyphs(start);
-    const float* offsets = m_buffer.offsets(start);
-    std::copy(glyphs, glyphs + count, buffer.glyphs);
-
-    if (m_rotation == NoRotation) {
-      std::copy(offsets, offsets + (m_hasVerticalOffsets ? 2 * count : count),
-                buffer.pos);
-    } else {
-      ASSERT(m_hasVerticalOffsets);
-
-      const float verticalBaselineXOffset =
-          fontData->getFontMetrics().floatAscent() -
-          fontData->getFontMetrics().floatAscent(IdeographicBaseline);
-
-      // TODO(fmalita): why don't we apply this adjustment when building the
-      // glyph buffer?
-      for (unsigned i = 0; i < 2 * count; i += 2) {
-        buffer.pos[i] = SkFloatToScalar(offsets[i] + verticalBaselineXOffset);
-        buffer.pos[i + 1] = SkFloatToScalar(offsets[i + 1]);
-      }
-    }
-  }
-
-  const GlyphBuffer& m_buffer;
-  const Font* m_font;
-  const float m_deviceScaleFactor;
-  const bool m_hasVerticalOffsets;
-
-  SkTextBlobBuilder m_builder;
-  unsigned m_index;
-  unsigned m_endIndex;
-  BlobRotation m_rotation;
-};
-
-}  // anonymous namespace
-
-void Font::drawGlyphBuffer(PaintCanvas* canvas,
-                           const PaintFlags& flags,
-                           const GlyphBuffer& glyphBuffer,
-                           const FloatPoint& point,
-                           float deviceScaleFactor) const {
-  GlyphBufferBloberizer bloberizer(glyphBuffer, this, deviceScaleFactor);
-
-  while (!bloberizer.done()) {
-    auto blob = bloberizer.next();
-    ASSERT(blob.first);
-
-    PaintCanvasAutoRestore autoRestore(canvas, false);
-    if (blob.second == CCWRotation) {
+void DrawBlobs(PaintCanvas* canvas,
+               const PaintFlags& flags,
+               const ShapeResultBloberizer::BlobBuffer& blobs,
+               const FloatPoint& point) {
+  for (const auto& blob_info : blobs) {
+    DCHECK(blob_info.blob);
+    PaintCanvasAutoRestore auto_restore(canvas, false);
+    if (blob_info.rotation ==
+        ShapeResultBloberizer::BlobRotation::kCCWRotation) {
       canvas->save();
 
       SkMatrix m;
-      m.setSinCos(-1, 0, point.x(), point.y());
+      m.setSinCos(-1, 0, point.X(), point.Y());
       canvas->concat(m);
     }
 
-    canvas->drawTextBlob(blob.first, point.x(), point.y(), flags);
+    canvas->drawTextBlob(blob_info.blob, point.X(), point.Y(), flags);
   }
 }
 
-static int getInterceptsFromBloberizer(const GlyphBuffer& glyphBuffer,
-                                       const Font* font,
-                                       const SkPaint& paint,
-                                       float deviceScaleFactor,
-                                       const std::tuple<float, float>& bounds,
-                                       SkScalar* interceptsBuffer) {
-  SkScalar boundsArray[2] = {std::get<0>(bounds), std::get<1>(bounds)};
-  GlyphBufferBloberizer bloberizer(glyphBuffer, font, deviceScaleFactor);
+}  // anonymous ns
 
-  int numIntervals = 0;
-  while (!bloberizer.done()) {
-    auto blob = bloberizer.next();
-    DCHECK(blob.first);
+bool Font::DrawText(PaintCanvas* canvas,
+                    const TextRunPaintInfo& run_info,
+                    const FloatPoint& point,
+                    float device_scale_factor,
+                    const PaintFlags& flags) const {
+  // Don't draw anything while we are using custom fonts that are in the process
+  // of loading.
+  if (ShouldSkipDrawing())
+    return false;
 
-    // GlyphBufferBloberizer splits for a new blob rotation, but does not split
+  ShapeResultBloberizer bloberizer(*this, device_scale_factor);
+  CachingWordShaper(*this).FillGlyphs(run_info, bloberizer);
+  DrawBlobs(canvas, flags, bloberizer.Blobs(), point);
+  return true;
+}
+
+bool Font::DrawBidiText(PaintCanvas* canvas,
+                        const TextRunPaintInfo& run_info,
+                        const FloatPoint& point,
+                        CustomFontNotReadyAction custom_font_not_ready_action,
+                        float device_scale_factor,
+                        const PaintFlags& flags) const {
+  // Don't draw anything while we are using custom fonts that are in the process
+  // of loading, except if the 'force' argument is set to true (in which case it
+  // will use a fallback font).
+  if (ShouldSkipDrawing() &&
+      custom_font_not_ready_action == kDoNotPaintIfFontNotReady)
+    return false;
+
+  // sub-run painting is not supported for Bidi text.
+  const TextRun& run = run_info.run;
+  DCHECK_EQ(run_info.from, 0u);
+  DCHECK_EQ(run_info.to, run.length());
+  BidiResolver<TextRunIterator, BidiCharacterRun> bidi_resolver;
+  bidi_resolver.SetStatus(
+      BidiStatus(run.Direction(), run.DirectionalOverride()));
+  bidi_resolver.SetPositionIgnoringNestedIsolates(TextRunIterator(&run, 0));
+
+  // FIXME: This ownership should be reversed. We should pass BidiRunList
+  // to BidiResolver in createBidiRunsForLine.
+  BidiRunList<BidiCharacterRun>& bidi_runs = bidi_resolver.Runs();
+  bidi_resolver.CreateBidiRunsForLine(TextRunIterator(&run, run.length()));
+  if (!bidi_runs.RunCount())
+    return true;
+
+  FloatPoint curr_point = point;
+  BidiCharacterRun* bidi_run = bidi_runs.FirstRun();
+  while (bidi_run) {
+    TextRun subrun =
+        run.SubRun(bidi_run->Start(), bidi_run->Stop() - bidi_run->Start());
+    bool is_rtl = bidi_run->Level() % 2;
+    subrun.SetDirection(is_rtl ? TextDirection::kRtl : TextDirection::kLtr);
+    subrun.SetDirectionalOverride(bidi_run->DirOverride(false));
+
+    TextRunPaintInfo subrun_info(subrun);
+    subrun_info.bounds = run_info.bounds;
+
+    ShapeResultBloberizer bloberizer(*this, device_scale_factor);
+    float run_width =
+        CachingWordShaper(*this).FillGlyphs(subrun_info, bloberizer);
+    DrawBlobs(canvas, flags, bloberizer.Blobs(), curr_point);
+
+    bidi_run = bidi_run->Next();
+    curr_point.Move(run_width, 0);
+  }
+
+  bidi_runs.DeleteRuns();
+  return true;
+}
+
+void Font::DrawEmphasisMarks(PaintCanvas* canvas,
+                             const TextRunPaintInfo& run_info,
+                             const AtomicString& mark,
+                             const FloatPoint& point,
+                             float device_scale_factor,
+                             const PaintFlags& flags) const {
+  if (ShouldSkipDrawing())
+    return;
+
+  FontCachePurgePreventer purge_preventer;
+
+  const auto emphasis_glyph_data = GetEmphasisMarkGlyphData(mark);
+  if (!emphasis_glyph_data.font_data)
+    return;
+
+  ShapeResultBloberizer bloberizer(*this, device_scale_factor);
+  CachingWordShaper(*this).FillTextEmphasisGlyphs(run_info, emphasis_glyph_data,
+                                                  bloberizer);
+  DrawBlobs(canvas, flags, bloberizer.Blobs(), point);
+}
+
+float Font::Width(const TextRun& run,
+                  HashSet<const SimpleFontData*>* fallback_fonts,
+                  FloatRect* glyph_bounds) const {
+  FontCachePurgePreventer purge_preventer;
+  CachingWordShaper shaper(*this);
+  return shaper.Width(run, fallback_fonts, glyph_bounds);
+}
+
+static int GetInterceptsFromBlobs(
+    const ShapeResultBloberizer::BlobBuffer& blobs,
+    const SkPaint& paint,
+    const std::tuple<float, float>& bounds,
+    SkScalar* intercepts_buffer) {
+  SkScalar bounds_array[2] = {std::get<0>(bounds), std::get<1>(bounds)};
+
+  int num_intervals = 0;
+  for (const auto& blob_info : blobs) {
+    DCHECK(blob_info.blob);
+
+    // ShapeResultBloberizer splits for a new blob rotation, but does not split
     // for a change in font. A TextBlob can contain runs with differing fonts
     // and the getTextBlobIntercepts method handles multiple fonts for us. For
     // upright in vertical blobs we currently have to bail, see crbug.com/655154
-    if (blob.second == BlobRotation::CCWRotation)
+    if (blob_info.rotation == ShapeResultBloberizer::BlobRotation::kCCWRotation)
       continue;
 
-    SkScalar* offsetInterceptsBuffer = nullptr;
-    if (interceptsBuffer)
-      offsetInterceptsBuffer = &interceptsBuffer[numIntervals];
-    numIntervals += paint.getTextBlobIntercepts(blob.first.get(), boundsArray,
-                                                offsetInterceptsBuffer);
+    SkScalar* offset_intercepts_buffer = nullptr;
+    if (intercepts_buffer)
+      offset_intercepts_buffer = &intercepts_buffer[num_intervals];
+    num_intervals += paint.getTextBlobIntercepts(
+        blob_info.blob.get(), bounds_array, offset_intercepts_buffer);
   }
-  return numIntervals;
+  return num_intervals;
 }
 
-void Font::getTextIntercepts(const TextRunPaintInfo& runInfo,
-                             float deviceScaleFactor,
+void Font::GetTextIntercepts(const TextRunPaintInfo& run_info,
+                             float device_scale_factor,
                              const PaintFlags& flags,
                              const std::tuple<float, float>& bounds,
                              Vector<TextIntercept>& intercepts) const {
-  if (shouldSkipDrawing())
+  if (ShouldSkipDrawing())
     return;
 
-  GlyphBuffer glyphBuffer(GlyphBuffer::Type::TextIntercepts);
-  buildGlyphBuffer(runInfo, glyphBuffer);
+  ShapeResultBloberizer bloberizer(
+      *this, device_scale_factor, ShapeResultBloberizer::Type::kTextIntercepts);
+  CachingWordShaper(*this).FillGlyphs(run_info, bloberizer);
+  const auto& blobs = bloberizer.Blobs();
 
   // Get the number of intervals, without copying the actual values by
   // specifying nullptr for the buffer, following the Skia allocation model for
   // retrieving text intercepts.
   SkPaint paint(ToSkPaint(flags));
-  int numIntervals = getInterceptsFromBloberizer(
-      glyphBuffer, this, paint, deviceScaleFactor, bounds, nullptr);
-  if (!numIntervals)
+  int num_intervals = GetInterceptsFromBlobs(blobs, paint, bounds, nullptr);
+  if (!num_intervals)
     return;
-  DCHECK_EQ(numIntervals % 2, 0);
-  intercepts.resize(numIntervals / 2);
+  DCHECK_EQ(num_intervals % 2, 0);
+  intercepts.Resize(num_intervals / 2);
 
-  getInterceptsFromBloberizer(glyphBuffer, this, paint, deviceScaleFactor,
-                              bounds,
-                              reinterpret_cast<SkScalar*>(intercepts.data()));
+  GetInterceptsFromBlobs(blobs, paint, bounds,
+                         reinterpret_cast<SkScalar*>(intercepts.Data()));
 }
 
-static inline FloatRect pixelSnappedSelectionRect(FloatRect rect) {
+static inline FloatRect PixelSnappedSelectionRect(FloatRect rect) {
   // Using roundf() rather than ceilf() for the right edge as a compromise to
   // ensure correct caret positioning.
-  float roundedX = roundf(rect.x());
-  return FloatRect(roundedX, rect.y(), roundf(rect.maxX() - roundedX),
-                   rect.height());
+  float rounded_x = roundf(rect.X());
+  return FloatRect(rounded_x, rect.Y(), roundf(rect.MaxX() - rounded_x),
+                   rect.Height());
 }
 
-FloatRect Font::selectionRectForText(const TextRun& run,
+FloatRect Font::SelectionRectForText(const TextRun& run,
                                      const FloatPoint& point,
                                      int height,
                                      int from,
                                      int to,
-                                     bool accountForGlyphBounds) const {
+                                     bool account_for_glyph_bounds) const {
   to = (to == -1 ? run.length() : to);
 
-  TextRunPaintInfo runInfo(run);
-  runInfo.from = from;
-  runInfo.to = to;
-
-  FontCachePurgePreventer purgePreventer;
+  FontCachePurgePreventer purge_preventer;
 
   CachingWordShaper shaper(*this);
-  CharacterRange range = shaper.getCharacterRange(run, from, to);
+  CharacterRange range = shaper.GetCharacterRange(run, from, to);
 
-  return pixelSnappedSelectionRect(
-      FloatRect(point.x() + range.start, point.y(), range.width(), height));
+  return PixelSnappedSelectionRect(
+      FloatRect(point.X() + range.start, point.Y(), range.Width(), height));
 }
 
-int Font::offsetForPosition(const TextRun& run,
-                            float xFloat,
-                            bool includePartialGlyphs) const {
-  FontCachePurgePreventer purgePreventer;
+int Font::OffsetForPosition(const TextRun& run,
+                            float x_float,
+                            bool include_partial_glyphs) const {
+  FontCachePurgePreventer purge_preventer;
   CachingWordShaper shaper(*this);
-  return shaper.offsetForPosition(run, xFloat, includePartialGlyphs);
+  return shaper.OffsetForPosition(run, x_float, include_partial_glyphs);
 }
 
-ShapeCache* Font::shapeCache() const {
-  return m_fontFallbackList->shapeCache(m_fontDescription);
+ShapeCache* Font::GetShapeCache() const {
+  return font_fallback_list_->GetShapeCache(font_description_);
 }
 
-bool Font::canShapeWordByWord() const {
-  if (!m_shapeWordByWordComputed) {
-    m_canShapeWordByWord = computeCanShapeWordByWord();
-    m_shapeWordByWordComputed = true;
+bool Font::CanShapeWordByWord() const {
+  if (!shape_word_by_word_computed_) {
+    can_shape_word_by_word_ = ComputeCanShapeWordByWord();
+    shape_word_by_word_computed_ = true;
   }
-  return m_canShapeWordByWord;
+  return can_shape_word_by_word_;
 };
 
-bool Font::computeCanShapeWordByWord() const {
-  if (!getFontDescription().getTypesettingFeatures())
+bool Font::ComputeCanShapeWordByWord() const {
+  if (!GetFontDescription().GetTypesettingFeatures())
     return true;
 
-  if (!primaryFont())
+  if (!PrimaryFont())
     return false;
 
-  const FontPlatformData& platformData = primaryFont()->platformData();
-  TypesettingFeatures features = getFontDescription().getTypesettingFeatures();
-  return !platformData.hasSpaceInLigaturesOrKerning(features);
+  const FontPlatformData& platform_data = PrimaryFont()->PlatformData();
+  TypesettingFeatures features = GetFontDescription().GetTypesettingFeatures();
+  return !platform_data.HasSpaceInLigaturesOrKerning(features);
 };
 
-void Font::willUseFontData(const String& text) const {
-  const FontFamily& family = getFontDescription().family();
-  if (m_fontFallbackList && m_fontFallbackList->getFontSelector() &&
-      !family.familyIsEmpty())
-    m_fontFallbackList->getFontSelector()->willUseFontData(
-        getFontDescription(), family.family(), text);
+void Font::WillUseFontData(const String& text) const {
+  const FontFamily& family = GetFontDescription().Family();
+  if (font_fallback_list_ && font_fallback_list_->GetFontSelector() &&
+      !family.FamilyIsEmpty())
+    font_fallback_list_->GetFontSelector()->WillUseFontData(
+        GetFontDescription(), family.Family(), text);
 }
 
-PassRefPtr<FontFallbackIterator> Font::createFontFallbackIterator(
-    FontFallbackPriority fallbackPriority) const {
-  return FontFallbackIterator::create(m_fontDescription, m_fontFallbackList,
-                                      fallbackPriority);
+PassRefPtr<FontFallbackIterator> Font::CreateFontFallbackIterator(
+    FontFallbackPriority fallback_priority) const {
+  return FontFallbackIterator::Create(font_description_, font_fallback_list_,
+                                      fallback_priority);
 }
 
-bool Font::getEmphasisMarkGlyphData(const AtomicString& mark,
-                                    GlyphData& glyphData) const {
-  if (mark.isEmpty())
-    return false;
+GlyphData Font::GetEmphasisMarkGlyphData(const AtomicString& mark) const {
+  if (mark.IsEmpty())
+    return GlyphData();
 
-  TextRun emphasisMarkRun(mark, mark.length());
-  TextRunPaintInfo emphasisPaintInfo(emphasisMarkRun);
-  GlyphBuffer glyphBuffer;
-  buildGlyphBuffer(emphasisPaintInfo, glyphBuffer);
-
-  if (glyphBuffer.isEmpty())
-    return false;
-
-  ASSERT(glyphBuffer.fontDataAt(0));
-  glyphData.fontData =
-      glyphBuffer.fontDataAt(0)->emphasisMarkFontData(m_fontDescription).get();
-  glyphData.glyph = glyphBuffer.glyphAt(0);
-
-  return true;
+  TextRun emphasis_mark_run(mark, mark.length());
+  return CachingWordShaper(*this).EmphasisMarkGlyphData(emphasis_mark_run);
 }
 
-int Font::emphasisMarkAscent(const AtomicString& mark) const {
-  FontCachePurgePreventer purgePreventer;
+int Font::EmphasisMarkAscent(const AtomicString& mark) const {
+  FontCachePurgePreventer purge_preventer;
 
-  GlyphData markGlyphData;
-  if (!getEmphasisMarkGlyphData(mark, markGlyphData))
+  const auto mark_glyph_data = GetEmphasisMarkGlyphData(mark);
+  const SimpleFontData* mark_font_data = mark_glyph_data.font_data;
+  if (!mark_font_data)
     return 0;
 
-  const SimpleFontData* markFontData = markGlyphData.fontData;
-  ASSERT(markFontData);
-  if (!markFontData)
-    return 0;
-
-  return markFontData->getFontMetrics().ascent();
+  return mark_font_data->GetFontMetrics().Ascent();
 }
 
-int Font::emphasisMarkDescent(const AtomicString& mark) const {
-  FontCachePurgePreventer purgePreventer;
+int Font::EmphasisMarkDescent(const AtomicString& mark) const {
+  FontCachePurgePreventer purge_preventer;
 
-  GlyphData markGlyphData;
-  if (!getEmphasisMarkGlyphData(mark, markGlyphData))
+  const auto mark_glyph_data = GetEmphasisMarkGlyphData(mark);
+  const SimpleFontData* mark_font_data = mark_glyph_data.font_data;
+  if (!mark_font_data)
     return 0;
 
-  const SimpleFontData* markFontData = markGlyphData.fontData;
-  ASSERT(markFontData);
-  if (!markFontData)
-    return 0;
-
-  return markFontData->getFontMetrics().descent();
+  return mark_font_data->GetFontMetrics().Descent();
 }
 
-int Font::emphasisMarkHeight(const AtomicString& mark) const {
-  FontCachePurgePreventer purgePreventer;
+int Font::EmphasisMarkHeight(const AtomicString& mark) const {
+  FontCachePurgePreventer purge_preventer;
 
-  GlyphData markGlyphData;
-  if (!getEmphasisMarkGlyphData(mark, markGlyphData))
+  const auto mark_glyph_data = GetEmphasisMarkGlyphData(mark);
+  const SimpleFontData* mark_font_data = mark_glyph_data.font_data;
+  if (!mark_font_data)
     return 0;
 
-  const SimpleFontData* markFontData = markGlyphData.fontData;
-  ASSERT(markFontData);
-  if (!markFontData)
-    return 0;
-
-  return markFontData->getFontMetrics().height();
+  return mark_font_data->GetFontMetrics().Height();
 }
 
-CharacterRange Font::getCharacterRange(const TextRun& run,
+CharacterRange Font::GetCharacterRange(const TextRun& run,
                                        unsigned from,
                                        unsigned to) const {
-  FontCachePurgePreventer purgePreventer;
+  FontCachePurgePreventer purge_preventer;
   CachingWordShaper shaper(*this);
-  return shaper.getCharacterRange(run, from, to);
+  return shaper.GetCharacterRange(run, from, to);
 }
 
-Vector<CharacterRange> Font::individualCharacterRanges(
+Vector<CharacterRange> Font::IndividualCharacterRanges(
     const TextRun& run) const {
-  FontCachePurgePreventer purgePreventer;
+  FontCachePurgePreventer purge_preventer;
   CachingWordShaper shaper(*this);
-  auto ranges = shaper.individualCharacterRanges(run);
+  auto ranges = shaper.IndividualCharacterRanges(run);
   // The shaper should return ranges.size == run.length but on some platforms
   // (OSX10.9.5) we are seeing cases in the upper end of the unicode range
   // where this is not true (see: crbug.com/620952). To catch these cases on
@@ -578,12 +417,12 @@ Vector<CharacterRange> Font::individualCharacterRanges(
   return ranges;
 }
 
-bool Font::loadingCustomFonts() const {
-  return m_fontFallbackList && m_fontFallbackList->loadingCustomFonts();
+bool Font::LoadingCustomFonts() const {
+  return font_fallback_list_ && font_fallback_list_->LoadingCustomFonts();
 }
 
-bool Font::isFallbackValid() const {
-  return !m_fontFallbackList || m_fontFallbackList->isValid();
+bool Font::IsFallbackValid() const {
+  return !font_fallback_list_ || font_fallback_list_->IsValid();
 }
 
 }  // namespace blink

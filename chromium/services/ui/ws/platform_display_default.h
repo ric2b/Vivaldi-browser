@@ -10,14 +10,16 @@
 #include "base/macros.h"
 #include "services/ui/display/viewport_metrics.h"
 #include "services/ui/ws/frame_generator.h"
-#include "services/ui/ws/frame_generator_delegate.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_delegate.h"
+#include "services/ui/ws/server_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
 namespace ui {
 
+class EventSink;
 class ImageCursors;
+class LocatedEvent;
 class PlatformWindow;
 
 namespace ws {
@@ -25,25 +27,27 @@ namespace ws {
 // PlatformDisplay implementation that connects to a PlatformWindow and
 // FrameGenerator for Chrome OS.
 class PlatformDisplayDefault : public PlatformDisplay,
-                               public ui::PlatformWindowDelegate,
-                               public FrameGeneratorDelegate {
+                               public ui::PlatformWindowDelegate {
  public:
-  explicit PlatformDisplayDefault(const PlatformDisplayInitParams& init_params);
+  // |image_cursors| may be null, for example on Android or in tests.
+  PlatformDisplayDefault(ServerWindow* root_window,
+                         const display::ViewportMetrics& metrics,
+                         std::unique_ptr<ImageCursors> image_cursors);
   ~PlatformDisplayDefault() override;
+
+  // EventSource::
+  EventSink* GetEventSink() override;
 
   // PlatformDisplay:
   void Init(PlatformDisplayDelegate* delegate) override;
-  int64_t GetId() const override;
   void SetViewportSize(const gfx::Size& size) override;
   void SetTitle(const base::string16& title) override;
   void SetCapture() override;
   void ReleaseCapture() override;
-  void SetCursorById(mojom::Cursor cursor) override;
+  void SetCursorById(mojom::CursorType cursor) override;
   void UpdateTextInputState(const ui::TextInputState& state) override;
   void SetImeVisibility(bool visible) override;
-  gfx::Rect GetBounds() const override;
-  bool UpdateViewportMetrics(const display::ViewportMetrics& metrics) override;
-  const display::ViewportMetrics& GetViewportMetrics() const override;
+  void UpdateViewportMetrics(const display::ViewportMetrics& metrics) override;
   gfx::AcceleratedWidget GetAcceleratedWidget() const override;
   FrameGenerator* GetFrameGenerator() override;
 
@@ -68,14 +72,9 @@ class PlatformDisplayDefault : public PlatformDisplay,
   void OnAcceleratedWidgetDestroyed() override;
   void OnActivationChanged(bool active) override;
 
-  // FrameGeneratorDelegate:
-  bool IsInHighContrastMode() override;
+  ServerWindow* root_window_;
 
-  const int64_t display_id_;
-
-#if !defined(OS_ANDROID)
   std::unique_ptr<ui::ImageCursors> image_cursors_;
-#endif
 
   PlatformDisplayDelegate* delegate_ = nullptr;
   std::unique_ptr<FrameGenerator> frame_generator_;
@@ -83,8 +82,6 @@ class PlatformDisplayDefault : public PlatformDisplay,
   display::ViewportMetrics metrics_;
   std::unique_ptr<ui::PlatformWindow> platform_window_;
   gfx::AcceleratedWidget widget_;
-  ServerWindow* root_window_;
-  float init_device_scale_factor_;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformDisplayDefault);
 };

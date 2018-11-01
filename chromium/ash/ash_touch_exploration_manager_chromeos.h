@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/common/system/accessibility_observer.h"
+#include "ash/system/accessibility_observer.h"
 #include "base/macros.h"
 #include "ui/chromeos/touch_accessibility_enabler.h"
 #include "ui/chromeos/touch_exploration_controller.h"
@@ -55,6 +55,8 @@ class ASH_EXPORT AshTouchExplorationManager
                                uint32_t changed_metrics) override;
 
   // TouchAccessibilityEnablerDelegate overrides:
+  void OnTwoFingerTouchStart() override;
+  void OnTwoFingerTouchStop() override;
   void PlaySpokenFeedbackToggleCountdown(int tick_count) override;
   void ToggleSpokenFeedback() override;
 
@@ -76,6 +78,7 @@ class ASH_EXPORT AshTouchExplorationManager
   std::unique_ptr<ui::TouchAccessibilityEnabler> touch_accessibility_enabler_;
   RootWindowController* root_window_controller_;
   chromeos::CrasAudioHandler* audio_handler_;
+  const bool enable_chromevox_arc_support_;
 
   DISALLOW_COPY_AND_ASSIGN(AshTouchExplorationManager);
 };

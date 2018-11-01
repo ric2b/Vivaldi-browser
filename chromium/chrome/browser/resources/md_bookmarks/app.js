@@ -5,21 +5,120 @@
 Polymer({
   is: 'bookmarks-app',
 
+  behaviors: [
+    bookmarks.StoreClient,
+  ],
+
   properties: {
-    selectedId: String,
+    /** @private */
+    searchTerm_: {
+      type: String,
+      observer: 'searchTermChanged_',
+    },
 
-    /** @type {BookmarkTreeNode} */
-    rootNode: Object,
+    /** @type {ClosedFolderState} */
+    closedFoldersState_: {
+      type: Object,
+      observer: 'closedFoldersStateChanged_',
+    },
 
-    searchTerm: String,
-
-    /** @type {Array<BookmarkTreeNode>} */
-    displayedList: Array,
+    /** @private */
+    sidebarWidth_: String,
   },
+
+  /** @private{?function(!Event)} */
+  boundUpdateSidebarWidth_: null,
+
+  /** @private {bookmarks.DNDManager} */
+  dndManager_: null,
 
   /** @override */
   attached: function() {
-    /** @type {BookmarksStore} */ (this.$$('bookmarks-store'))
-        .initializeStore();
+    this.watch('searchTerm_', function(store) {
+      return store.search.term;
+    });
+
+    this.watch('closedFoldersState_', function(store) {
+      return store.closedFolders;
+    });
+
+    chrome.bookmarks.getTree(function(results) {
+      var nodeList = bookmarks.util.normalizeNodes(results[0]);
+      var initialState = bookmarks.util.createEmptyState();
+      initialState.nodes = nodeList;
+      initialState.selectedFolder = nodeList[ROOT_NODE_ID].children[0];
+      var closedFoldersString =
+          window.localStorage[LOCAL_STORAGE_CLOSED_FOLDERS_KEY];
+      initialState.closedFolders = closedFoldersString ?
+          new Set(
+              /** @type Array<string> */ (JSON.parse(closedFoldersString))) :
+          new Set();
+
+      bookmarks.Store.getInstance().init(initialState);
+      bookmarks.ApiListener.init();
+
+    }.bind(this));
+
+    this.boundUpdateSidebarWidth_ = this.updateSidebarWidth_.bind(this);
+
+    this.initializeSplitter_();
+
+    this.dndManager_ = new bookmarks.DNDManager();
+    this.dndManager_.init();
+  },
+
+  detached: function() {
+    window.removeEventListener('resize', this.boundUpdateSidebarWidth_);
+    this.dndManager_.destroy();
+  },
+
+  /**
+   * Set up the splitter and set the initial width from localStorage.
+   * @private
+   */
+  initializeSplitter_: function() {
+    var splitter = this.$.splitter;
+    cr.ui.Splitter.decorate(splitter);
+    var splitterTarget = this.$.sidebar;
+
+    // The splitter persists the size of the left component in the local store.
+    if (LOCAL_STORAGE_TREE_WIDTH_KEY in window.localStorage) {
+      splitterTarget.style.width =
+          window.localStorage[LOCAL_STORAGE_TREE_WIDTH_KEY];
+    }
+    this.sidebarWidth_ = splitterTarget.getComputedStyleValue('width');
+
+    splitter.addEventListener('resize', function(e) {
+      window.localStorage[LOCAL_STORAGE_TREE_WIDTH_KEY] =
+          splitterTarget.style.width;
+      this.updateSidebarWidth_();
+    }.bind(this));
+
+    splitter.addEventListener('dragmove', this.boundUpdateSidebarWidth_);
+    window.addEventListener('resize', this.boundUpdateSidebarWidth_);
+  },
+
+  /** @private */
+  updateSidebarWidth_: function() {
+    this.sidebarWidth_ = this.$.sidebar.getComputedStyleValue('width');
+  },
+
+  /** @private */
+  searchTermChanged_: function() {
+    if (!this.searchTerm_)
+      return;
+
+    chrome.bookmarks.search(this.searchTerm_, function(results) {
+      var ids = results.map(function(node) {
+        return node.id;
+      });
+      this.dispatch(bookmarks.actions.setSearchResults(ids));
+    }.bind(this));
+  },
+
+  /** @private */
+  closedFoldersStateChanged_: function() {
+    window.localStorage[LOCAL_STORAGE_CLOSED_FOLDERS_KEY] =
+        JSON.stringify(Array.from(this.closedFoldersState_));
   },
 });

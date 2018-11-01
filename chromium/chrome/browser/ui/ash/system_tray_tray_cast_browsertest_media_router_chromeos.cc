@@ -4,10 +4,9 @@
 
 #include <vector>
 
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
+#include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/tray_cast_test_api.h"
 #include "base/macros.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
@@ -41,7 +40,7 @@ media_router::MediaRoute MakeRoute(const std::string& route_id,
 
 // Returns the cast tray instance.
 ash::TrayCast* GetTrayCast() {
-  ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
+  ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
 
   // Make sure we actually popup the tray, otherwise the TrayCast instance will
   // not be created.

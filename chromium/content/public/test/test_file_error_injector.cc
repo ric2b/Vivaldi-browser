@@ -30,22 +30,28 @@ namespace {
 // A class that performs file operations and injects errors.
 class DownloadFileWithError: public DownloadFileImpl {
  public:
-  DownloadFileWithError(std::unique_ptr<DownloadSaveInfo> save_info,
-                        const base::FilePath& default_download_directory,
-                        std::unique_ptr<ByteStreamReader> byte_stream,
-                        const net::NetLogWithSource& net_log,
-                        base::WeakPtr<DownloadDestinationObserver> observer,
-                        const TestFileErrorInjector::FileErrorInfo& error_info,
-                        const base::Closure& ctor_callback,
-                        const base::Closure& dtor_callback);
+  DownloadFileWithError(
+      std::unique_ptr<DownloadSaveInfo> save_info,
+      const base::FilePath& default_download_directory,
+      std::unique_ptr<ByteStreamReader> byte_stream,
+      const net::NetLogWithSource& net_log,
+      base::WeakPtr<DownloadDestinationObserver> observer,
+      const TestFileErrorInjector::FileErrorInfo& error_info,
+      const base::Closure& ctor_callback,
+      const base::Closure& dtor_callback);
 
   ~DownloadFileWithError() override;
 
-  void Initialize(const InitializeCallback& callback) override;
+  void Initialize(const InitializeCallback& initialize_callback,
+                  const CancelRequestCallback& cancel_request_callback,
+                  const DownloadItem::ReceivedSlices& received_slices,
+                  bool is_parallelizable) override;
 
   // DownloadFile interface.
-  DownloadInterruptReason AppendDataToFile(const char* data,
-                                           size_t data_len) override;
+  DownloadInterruptReason WriteDataToFile(int64_t offset,
+                                          const char* data,
+                                          size_t data_len) override;
+
   void RenameAndUniquify(const base::FilePath& full_path,
                          const RenameCompletionCallback& callback) override;
   void RenameAndAnnotate(const base::FilePath& full_path,
@@ -129,9 +135,12 @@ DownloadFileWithError::~DownloadFileWithError() {
 }
 
 void DownloadFileWithError::Initialize(
-    const InitializeCallback& callback) {
+    const InitializeCallback& initialize_callback,
+    const CancelRequestCallback& cancel_request_callback,
+    const DownloadItem::ReceivedSlices& received_slices,
+    bool is_parallelizable) {
   DownloadInterruptReason error_to_return = DOWNLOAD_INTERRUPT_REASON_NONE;
-  InitializeCallback callback_to_use = callback;
+  InitializeCallback callback_to_use = initialize_callback;
 
   // Replace callback if the error needs to be overwritten.
   if (OverwriteError(
@@ -140,25 +149,27 @@ void DownloadFileWithError::Initialize(
     if (DOWNLOAD_INTERRUPT_REASON_NONE != error_to_return) {
       // Don't execute a, probably successful, Initialize; just
       // return the error.
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE, base::Bind(
-              callback, error_to_return));
+      BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                              base::Bind(initialize_callback, error_to_return));
       return;
     }
 
     // Otherwise, just wrap the return.
-    callback_to_use = base::Bind(&InitializeErrorCallback, callback,
+    callback_to_use = base::Bind(&InitializeErrorCallback, initialize_callback,
                                  error_to_return);
   }
 
-  DownloadFileImpl::Initialize(callback_to_use);
+  DownloadFileImpl::Initialize(callback_to_use, cancel_request_callback,
+                               received_slices, is_parallelizable);
 }
 
-DownloadInterruptReason DownloadFileWithError::AppendDataToFile(
-    const char* data, size_t data_len) {
+DownloadInterruptReason DownloadFileWithError::WriteDataToFile(
+    int64_t offset,
+    const char* data,
+    size_t data_len) {
   return ShouldReturnError(
       TestFileErrorInjector::FILE_OPERATION_WRITE,
-      DownloadFileImpl::AppendDataToFile(data, data_len));
+      DownloadFileImpl::WriteDataToFile(offset, data, data_len));
 }
 
 void DownloadFileWithError::RenameAndUniquify(

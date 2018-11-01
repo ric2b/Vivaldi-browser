@@ -8,16 +8,15 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <unordered_set>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/threat_details_cache.h"
 #include "chrome/browser/safe_browsing/threat_details_history.h"
+#include "components/history/core/browser/history_service.h"
+#include "components/safe_browsing/base_ui_manager.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -31,7 +30,8 @@ using content::NavigationEntry;
 using content::RenderFrameHost;
 using content::WebContents;
 
-// Keep in sync with KMaxNodes in renderer/safe_browsing/threat_dom_details
+// Keep in sync with KMaxNodes in components/safe_browsing/renderer/
+// threat_dom_details.cc
 static const uint32_t kMaxDomNodes = 500;
 
 namespace safe_browsing {
@@ -39,20 +39,18 @@ namespace safe_browsing {
 // static
 ThreatDetailsFactory* ThreatDetails::factory_ = NULL;
 
-const base::Feature kFillDOMInThreatDetails{"FillDOMInThreatDetails",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
-
 namespace {
 
 typedef std::unordered_set<std::string> StringSet;
 // A set of HTTPS headers that are allowed to be collected. Contains both
 // request and response headers. All entries in this list should be lower-case
 // to support case-insensitive comparison.
-struct WhitelistedHttpsHeadersTraits :
-    base::DefaultLazyInstanceTraits<StringSet> {
+struct WhitelistedHttpsHeadersTraits
+    : base::internal::DestructorAtExitLazyInstanceTraits<StringSet> {
   static StringSet* New(void* instance) {
-    StringSet* headers = base::DefaultLazyInstanceTraits<StringSet>::New(
-        instance);
+    StringSet* headers =
+        base::internal::DestructorAtExitLazyInstanceTraits<StringSet>::New(
+            instance);
     headers->insert({"google-creative-id", "google-lineitem-id", "referer",
         "content-type", "content-length", "date", "server", "cache-control",
         "pragma", "expires"});
@@ -139,19 +137,22 @@ class ThreatDetailsFactoryImpl : public ThreatDetailsFactory {
   ThreatDetails* CreateThreatDetails(
       BaseUIManager* ui_manager,
       WebContents* web_contents,
-      const security_interstitials::UnsafeResource& unsafe_resource) override {
-    return new ThreatDetails(ui_manager, web_contents, unsafe_resource);
+      const security_interstitials::UnsafeResource& unsafe_resource,
+      net::URLRequestContextGetter* request_context_getter,
+      history::HistoryService* history_service) override {
+    return new ThreatDetails(ui_manager, web_contents, unsafe_resource,
+                             request_context_getter, history_service);
   }
 
  private:
-  friend struct base::DefaultLazyInstanceTraits<ThreatDetailsFactoryImpl>;
+  friend struct base::LazyInstanceTraitsBase<ThreatDetailsFactoryImpl>;
 
   ThreatDetailsFactoryImpl() {}
 
   DISALLOW_COPY_AND_ASSIGN(ThreatDetailsFactoryImpl);
 };
 
-static base::LazyInstance<ThreatDetailsFactoryImpl>
+static base::LazyInstance<ThreatDetailsFactoryImpl>::DestructorAtExit
     g_threat_details_factory_impl = LAZY_INSTANCE_INITIALIZER;
 
 // Create a ThreatDetails for the given tab.
@@ -159,29 +160,36 @@ static base::LazyInstance<ThreatDetailsFactoryImpl>
 ThreatDetails* ThreatDetails::NewThreatDetails(
     BaseUIManager* ui_manager,
     WebContents* web_contents,
-    const UnsafeResource& resource) {
+    const UnsafeResource& resource,
+    net::URLRequestContextGetter* request_context_getter,
+    history::HistoryService* history_service) {
   // Set up the factory if this has not been done already (tests do that
   // before this method is called).
   if (!factory_)
     factory_ = g_threat_details_factory_impl.Pointer();
-  return factory_->CreateThreatDetails(ui_manager, web_contents, resource);
+  return factory_->CreateThreatDetails(ui_manager, web_contents, resource,
+                                       request_context_getter, history_service);
 }
 
 // Create a ThreatDetails for the given tab. Runs in the UI thread.
-ThreatDetails::ThreatDetails(BaseUIManager* ui_manager,
-                             content::WebContents* web_contents,
-                             const UnsafeResource& resource)
+ThreatDetails::ThreatDetails(
+    BaseUIManager* ui_manager,
+    content::WebContents* web_contents,
+    const UnsafeResource& resource,
+    net::URLRequestContextGetter* request_context_getter,
+    history::HistoryService* history_service)
     : content::WebContentsObserver(web_contents),
-      profile_(Profile::FromBrowserContext(web_contents->GetBrowserContext())),
-      request_context_getter_(profile_->GetRequestContext()),
+      request_context_getter_(request_context_getter),
       ui_manager_(ui_manager),
       resource_(resource),
       cache_result_(false),
       did_proceed_(false),
       num_visits_(0),
       ambiguous_dom_(false),
-      cache_collector_(new ThreatDetailsCacheCollector),
-      redirects_collector_(new ThreatDetailsRedirectsCollector(profile_)) {
+      cache_collector_(new ThreatDetailsCacheCollector) {
+  redirects_collector_ = new ThreatDetailsRedirectsCollector(
+      history_service ? history_service->AsWeakPtr()
+                      : base::WeakPtr<history::HistoryService>());
   StartCollection();
 }
 
@@ -283,11 +291,8 @@ void ThreatDetails::AddDomElement(
     const int element_node_id,
     const std::string& tagname,
     const int parent_element_node_id,
+    const std::vector<AttributeNameValue>& attributes,
     const ClientSafeBrowsingReportRequest::Resource* resource) {
-  if (!base::FeatureList::IsEnabled(kFillDOMInThreatDetails)) {
-    return;
-  }
-
   // Create the element. It should not exist already since this function should
   // only be called once for each element.
   const std::string element_key =
@@ -299,13 +304,15 @@ void ThreatDetails::AddDomElement(
   if (!tag_name_upper.empty()) {
     cur_element->set_tag(tag_name_upper);
   }
+  for (const AttributeNameValue& attribute : attributes) {
+    HTMLElement::Attribute* attribute_pb = cur_element->add_attribute();
+    attribute_pb->set_name(attribute.first);
+    attribute_pb->set_value(attribute.second);
+  }
   bool is_frame = tag_name_upper == "IFRAME" || tag_name_upper == "FRAME";
 
   if (resource) {
     cur_element->set_resource_id(resource->id());
-    HTMLElement::Attribute* src_attribute = cur_element->add_attribute();
-    src_attribute->set_name("SRC");
-    src_attribute->set_value(resource->url());
 
     // For iframes, remember that this HTML Element represents an iframe with a
     // specific URL. Elements from a frame with this URL are children of this
@@ -503,7 +510,8 @@ void ThreatDetails::AddDOMDetails(
     // Check for a tag_name to avoid adding the summary node to the DOM.
     if (!node.tag_name.empty()) {
       AddDomElement(frame_tree_node_id, frame_url.spec(), node.node_id,
-                    node.tag_name, node.parent_node_id, resource);
+                    node.tag_name, node.parent_node_id, node.attributes,
+                    resource);
     }
   }
 }

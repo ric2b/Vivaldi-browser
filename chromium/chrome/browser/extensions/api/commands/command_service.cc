@@ -8,9 +8,11 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/api/commands/commands.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
@@ -85,7 +87,7 @@ std::string StripCurrentPlatform(const std::string& key) {
 void SetInitialBindingsHaveBeenAssigned(
     ExtensionPrefs* prefs, const std::string& extension_id) {
   prefs->UpdateExtensionPref(extension_id, kInitialBindingsHaveBeenAssigned,
-                             new base::Value(true));
+                             base::MakeUnique<base::Value>(true));
 }
 
 bool InitialBindingsHaveBeenAssigned(
@@ -114,9 +116,8 @@ void MergeSuggestedKeyPrefs(
     suggested_key_prefs = std::move(new_prefs);
   }
 
-  extension_prefs->UpdateExtensionPref(extension_id,
-                                       kCommands,
-                                       suggested_key_prefs.release());
+  extension_prefs->UpdateExtensionPref(extension_id, kCommands,
+                                       std::move(suggested_key_prefs));
 }
 
 }  // namespace
@@ -141,8 +142,9 @@ CommandService::CommandService(content::BrowserContext* context)
 CommandService::~CommandService() {
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<CommandService> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<CommandService>>::DestructorAtExit g_factory =
+    LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<CommandService>*
@@ -276,12 +278,12 @@ bool CommandService::AddKeybindingPref(
     RemoveKeybindingPrefs(extension_id, command_name);
 
   // Set the keybinding pref.
-  base::DictionaryValue* keybinding = new base::DictionaryValue();
+  auto keybinding = base::MakeUnique<base::DictionaryValue>();
   keybinding->SetString(kExtension, extension_id);
   keybinding->SetString(kCommandName, command_name);
   keybinding->SetBoolean(kGlobal, global);
 
-  bindings->Set(key, keybinding);
+  bindings->Set(key, std::move(keybinding));
 
   // Set the was_assigned pref for the suggested key.
   std::unique_ptr<base::DictionaryValue> command_keys(
@@ -289,7 +291,7 @@ bool CommandService::AddKeybindingPref(
   command_keys->SetBoolean(kSuggestedKeyWasAssigned, true);
   std::unique_ptr<base::DictionaryValue> suggested_key_prefs(
       new base::DictionaryValue);
-  suggested_key_prefs->Set(command_name, command_keys.release());
+  suggested_key_prefs->Set(command_name, std::move(command_keys));
   MergeSuggestedKeyPrefs(extension_id, ExtensionPrefs::Get(profile_),
                          std::move(suggested_key_prefs));
 
@@ -645,7 +647,7 @@ void CommandService::UpdateExtensionSuggestedCommandPrefs(
       command_keys->SetString(
           kSuggestedKey,
           Command::AcceleratorToString(command.accelerator()));
-      suggested_key_prefs->Set(command.command_name(), command_keys.release());
+      suggested_key_prefs->Set(command.command_name(), std::move(command_keys));
     }
   }
 
@@ -662,7 +664,7 @@ void CommandService::UpdateExtensionSuggestedCommandPrefs(
         kSuggestedKey,
         Command::AcceleratorToString(browser_action_command->accelerator()));
     suggested_key_prefs->Set(browser_action_command->command_name(),
-                             command_keys.release());
+                             std::move(command_keys));
   }
 
   const Command* page_action_command =
@@ -674,7 +676,7 @@ void CommandService::UpdateExtensionSuggestedCommandPrefs(
         kSuggestedKey,
         Command::AcceleratorToString(page_action_command->accelerator()));
     suggested_key_prefs->Set(page_action_command->command_name(),
-               command_keys.release());
+                             std::move(command_keys));
   }
 
   // Merge into current prefs, if present.
@@ -718,9 +720,8 @@ void CommandService::RemoveDefunctExtensionSuggestedCommandPrefs(
       }
     }
 
-    extension_prefs->UpdateExtensionPref(extension->id(),
-                                         kCommands,
-                                         suggested_key_prefs.release());
+    extension_prefs->UpdateExtensionPref(extension->id(), kCommands,
+                                         std::move(suggested_key_prefs));
   }
 }
 

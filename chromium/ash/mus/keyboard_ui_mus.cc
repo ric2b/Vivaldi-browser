@@ -4,7 +4,7 @@
 
 #include "ash/mus/keyboard_ui_mus.h"
 
-#include "ash/common/keyboard/keyboard_ui_observer.h"
+#include "ash/keyboard/keyboard_ui_observer.h"
 #include "base/memory/ptr_util.h"
 #include "services/service_manager/public/cpp/connector.h"
 
@@ -27,11 +27,6 @@ std::unique_ptr<KeyboardUI> KeyboardUIMus::Create(
 void KeyboardUIMus::Hide() {
   if (keyboard_)
     keyboard_->Hide();
-}
-
-void KeyboardUIMus::Show() {
-  if (keyboard_)
-    keyboard_->Show();
 }
 
 void KeyboardUIMus::ShowInDisplay(const int64_t display_id) {

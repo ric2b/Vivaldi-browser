@@ -10,6 +10,8 @@
 Polymer({
   is: 'settings-internet-known-networks-page',
 
+  behaviors: [CrPolicyNetworkBehavior],
+
   properties: {
     /**
      * The type of networks to list.
@@ -36,13 +38,16 @@ Polymer({
         return [];
       }
     },
+
+    /** @private */
+    showAddPreferred_: Boolean,
+
+    /** @private */
+    showRemovePreferred_: Boolean,
   },
 
   /** @private {string} */
   selectedGuid_: '',
-
-  /** @private {boolean} */
-  selectedIsPreferred_: false,
 
   /**
    * Listener function for chrome.networkingPrivate.onNetworksChanged event.
@@ -144,8 +149,21 @@ Polymer({
     this.selectedGuid_ =
         /** @type {!{model: !{item: !CrOnc.NetworkStateProperties}}} */ (event)
             .model.item.GUID;
-    this.selectedIsPreferred_ = button.hasAttribute('preferred');
-    /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).showAt(button);
+    // We need to make a round trip to Chrome in order to retrieve the managed
+    // properties for the network. The delay is not noticeable (~5ms) and is
+    // preferable to initiating a query for every known network at load time.
+    this.networkingPrivate.getManagedProperties(
+        this.selectedGuid_, function(properties) {
+          var preferred = button.hasAttribute('preferred');
+          if (this.isNetworkPolicyEnforced(properties.Priority)) {
+            this.showAddPreferred_ = false;
+            this.showRemovePreferred_ = false;
+          } else {
+            this.showAddPreferred_ = !preferred;
+            this.showRemovePreferred_ = preferred;
+          }
+          /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).showAt(button);
+        }.bind(this));
     event.stopPropagation();
   },
 
@@ -165,5 +183,19 @@ Polymer({
   onForgetTap_: function() {
     this.networkingPrivate.forgetNetwork(this.selectedGuid_);
     /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).close();
+  },
+
+  /**
+   * Fires a 'show-details' event with an item containing a |networkStateList_|
+   * entry in the event model.
+   * @param {Event} event
+   * @private
+   */
+  fireShowDetails_: function(event) {
+    var state =
+        /** @type {!{model: !{item: !CrOnc.NetworkStateProperties}}} */ (event)
+            .model.item;
+    this.fire('show-detail', state);
+    event.stopPropagation();
   },
 });

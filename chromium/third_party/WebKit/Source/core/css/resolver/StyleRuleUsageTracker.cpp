@@ -4,16 +4,36 @@
 
 #include "core/css/resolver/StyleRuleUsageTracker.h"
 
+#include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleRule.h"
 
 namespace blink {
 
-bool StyleRuleUsageTracker::contains(StyleRule* rule) const {
-  return m_ruleList.contains(rule);
+StyleRuleUsageTracker::RuleListByStyleSheet StyleRuleUsageTracker::TakeDelta() {
+  RuleListByStyleSheet result;
+  result.Swap(used_rules_delta_);
+  return result;
+}
+
+void StyleRuleUsageTracker::Track(const CSSStyleSheet* parent_sheet,
+                                  const StyleRule* rule) {
+  if (!parent_sheet)
+    return;
+  if (!used_rules_.insert(std::make_pair(parent_sheet, rule)).is_new_entry)
+    return;
+  auto it = used_rules_delta_.Find(parent_sheet);
+  if (it != used_rules_delta_.end()) {
+    it->value.push_back(rule);
+  } else {
+    used_rules_delta_
+        .insert(parent_sheet, HeapVector<Member<const StyleRule>>())
+        .stored_value->value.push_back(rule);
+  }
 }
 
 DEFINE_TRACE(StyleRuleUsageTracker) {
-  visitor->trace(m_ruleList);
+  visitor->Trace(used_rules_);
+  visitor->Trace(used_rules_delta_);
 }
 
 }  // namespace blink

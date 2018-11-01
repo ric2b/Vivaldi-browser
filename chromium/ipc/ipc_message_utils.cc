@@ -96,7 +96,7 @@ void GetValueSize(base::PickleSizer* sizer,
       sizer->AddDouble();
       break;
     case base::Value::Type::STRING: {
-      const base::StringValue* result;
+      const base::Value* result;
       value->GetAsString(&result);
       if (value->GetAsString(&result)) {
         DCHECK(result);
@@ -128,7 +128,7 @@ void GetValueSize(base::PickleSizer* sizer,
       sizer->AddInt();
       const base::ListValue* list = static_cast<const base::ListValue*>(value);
       for (const auto& entry : *list) {
-        GetValueSize(sizer, entry.get(), recursion + 1);
+        GetValueSize(sizer, &entry, recursion + 1);
       }
       break;
     }
@@ -198,7 +198,7 @@ void WriteValue(base::Pickle* m, const base::Value* value, int recursion) {
       const base::ListValue* list = static_cast<const base::ListValue*>(value);
       WriteParam(m, static_cast<int>(list->GetSize()));
       for (const auto& entry : *list) {
-        WriteValue(m, entry.get(), recursion + 1);
+        WriteValue(m, &entry, recursion + 1);
       }
       break;
     }
@@ -262,8 +262,8 @@ bool ReadValue(const base::Pickle* m,
 
   switch (static_cast<base::Value::Type>(type)) {
     case base::Value::Type::NONE:
-      *value = base::Value::CreateNullValue().release();
-    break;
+      *value = new base::Value();
+      break;
     case base::Value::Type::BOOLEAN: {
       bool val;
       if (!ReadParam(m, iter, &val))
@@ -289,7 +289,7 @@ bool ReadValue(const base::Pickle* m,
       std::string val;
       if (!ReadParam(m, iter, &val))
         return false;
-      *value = new base::StringValue(val);
+      *value = new base::Value(val);
       break;
     }
     case base::Value::Type::BINARY: {
@@ -297,8 +297,8 @@ bool ReadValue(const base::Pickle* m,
       int length;
       if (!iter->ReadData(&data, &length))
         return false;
-      std::unique_ptr<base::BinaryValue> val =
-          base::BinaryValue::CreateWithCopiedBuffer(data, length);
+      std::unique_ptr<base::Value> val =
+          base::Value::CreateWithCopiedBuffer(data, length);
       *value = val.release();
       break;
     }

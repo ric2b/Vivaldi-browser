@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-#include "ash/common/system/chromeos/devicetype_utils.h"
+#include "ash/system/devicetype_utils.h"
 #include "base/bind.h"
 #include "base/i18n/timezone.h"
 #include "base/json/json_reader.h"
@@ -140,6 +140,8 @@ std::ostream& operator<<(std::ostream& os, ArcSupportHost::Error error) {
       return os << "SERVER_COMMUNICATION_ERROR";
     case ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR:
       return os << "ANDROID_MANAGEMENT_REQUIRED_ERROR";
+    case ArcSupportHost::Error::NETWORK_UNAVAILABLE_ERROR:
+      return os << "NETWORK_UNAVAILABLE_ERROR";
   }
 
   // Some compiler reports an error even if all values of an enum-class are
@@ -288,6 +290,9 @@ void ArcSupportHost::ShowError(Error error, bool should_show_send_feedback) {
       break;
     case Error::ANDROID_MANAGEMENT_REQUIRED_ERROR:
       message_id = IDS_ARC_ANDROID_MANAGEMENT_REQUIRED_ERROR;
+      break;
+    case Error::NETWORK_UNAVAILABLE_ERROR:
+      message_id = IDS_ARC_NETWORK_UNAVAILABLE_ERROR;
       break;
   }
   message.SetString(kErrorMessage, l10n_util::GetStringUTF16(message_id));

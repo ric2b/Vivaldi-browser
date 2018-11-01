@@ -9,9 +9,9 @@
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/testing/wait_util.h"
-#import "ios/web/public/web_state/crw_web_view_scroll_view_proxy.h"
-#import "ios/web/web_state/crw_web_view_proxy_impl.h"
+#import "ios/web/public/web_state/ui/crw_web_view_scroll_view_proxy.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
+#import "ios/web/web_state/ui/crw_web_view_proxy_impl.h"
 #import "ios/web/web_state/web_state_impl.h"
 
 using web::NavigationManager;
@@ -52,6 +52,7 @@ std::unique_ptr<base::Value> ExecuteJavaScript(web::WebState* web_state,
   // Fixes the following compilation failure:
   //   ../web_view_matchers.mm:ll:cc: error: call to implicitly-deleted copy
   //       constructor of 'std::unique_ptr<base::Value>'
+  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
   std::unique_ptr<base::Value> stack_result = std::move(result);
   return stack_result;
 }
@@ -141,11 +142,15 @@ bool RunActionOnWebViewElementWithId(web::WebState* web_state,
                        element_id.c_str(), js_action];
   __block bool did_complete = false;
   __block bool element_found = false;
-  [web_controller executeUserJavaScript:script
-                      completionHandler:^(id result, NSError*) {
-                        did_complete = true;
-                        element_found = [result boolValue];
-                      }];
+
+  // |executeUserJavaScript:completionHandler:| is no-op for app-specific URLs,
+  // so simulate a user gesture by calling TouchTracking method.
+  [web_controller touched:YES];
+  [web_controller executeJavaScript:script
+                  completionHandler:^(id result, NSError*) {
+                    did_complete = true;
+                    element_found = [result boolValue];
+                  }];
 
   testing::WaitUntilConditionOrTimeout(testing::kWaitForJSCompletionTimeout, ^{
     return did_complete;

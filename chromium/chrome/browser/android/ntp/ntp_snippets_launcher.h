@@ -14,8 +14,7 @@
 // Android implementation of ntp_snippets::NTPSnippetsScheduler.
 // The NTPSnippetsLauncher singleton owns the Java SnippetsLauncher object, and
 // is used to schedule the fetching of snippets. Runs on the UI thread.
-class NTPSnippetsLauncher
-    : public ntp_snippets::PersistentScheduler {
+class NTPSnippetsLauncher : public ntp_snippets::PersistentScheduler {
  public:
   static NTPSnippetsLauncher* Get();
 
@@ -23,9 +22,10 @@ class NTPSnippetsLauncher
   bool Schedule(base::TimeDelta period_wifi,
                 base::TimeDelta period_fallback) override;
   bool Unschedule() override;
+  bool IsOnUnmeteredConnection() override;
 
  private:
-  friend struct base::DefaultLazyInstanceTraits<NTPSnippetsLauncher>;
+  friend struct base::LazyInstanceTraitsBase<NTPSnippetsLauncher>;
 
   // Constructor and destructor marked private to enforce singleton.
   NTPSnippetsLauncher();

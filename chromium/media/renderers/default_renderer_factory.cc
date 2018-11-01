@@ -143,7 +143,7 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
 #endif
 
 #if !defined(MEDIA_DISABLE_FFMPEG) && !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
-  video_decoders.push_back(new FFmpegVideoDecoder());
+  video_decoders.push_back(new FFmpegVideoDecoder(media_log_));
 #endif
 
   return video_decoders;
@@ -160,8 +160,15 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
 
   std::unique_ptr<AudioRenderer> audio_renderer(new AudioRendererImpl(
       media_task_runner, audio_renderer_sink,
-      CreateAudioDecoders(media_task_runner,
-          use_platform_media_pipeline), media_log_));
+      // Unretained is safe here, because the RendererFactory is guaranteed to
+      // outlive the RendererImpl. The RendererImpl is destroyed when WMPI
+      // destructor calls pipeline_controller_.Stop() -> PipelineImpl::Stop() ->
+      // RendererWrapper::Stop -> RendererWrapper::DestroyRenderer(). And the
+      // RendererFactory is owned by WMPI and gets called after WMPI destructor
+      // finishes.
+      base::Bind(&DefaultRendererFactory::CreateAudioDecoders,
+                 base::Unretained(this), media_task_runner, use_platform_media_pipeline),
+      media_log_));
 
   GpuVideoAcceleratorFactories* gpu_factories = nullptr;
   if (!get_gpu_factories_cb_.is_null())
@@ -169,8 +176,15 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
 
   std::unique_ptr<VideoRenderer> video_renderer(new VideoRendererImpl(
       media_task_runner, worker_task_runner, video_renderer_sink,
-      CreateVideoDecoders(media_task_runner, request_surface_cb, gpu_factories,
-                          use_platform_media_pipeline),
+      // Unretained is safe here, because the RendererFactory is guaranteed to
+      // outlive the RendererImpl. The RendererImpl is destroyed when WMPI
+      // destructor calls pipeline_controller_.Stop() -> PipelineImpl::Stop() ->
+      // RendererWrapper::Stop -> RendererWrapper::DestroyRenderer(). And the
+      // RendererFactory is owned by WMPI and gets called after WMPI destructor
+      // finishes.
+      base::Bind(&DefaultRendererFactory::CreateVideoDecoders,
+                 base::Unretained(this), media_task_runner, request_surface_cb,
+                 gpu_factories, use_platform_media_pipeline),
       true, gpu_factories, media_log_));
 
   return base::MakeUnique<RendererImpl>(

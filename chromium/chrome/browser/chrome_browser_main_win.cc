@@ -27,6 +27,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/version.h"
 #include "base/win/pe_image.h"
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
@@ -56,6 +57,7 @@
 #include "chrome/common/env_vars.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/install_static/install_details.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/install_util.h"
@@ -320,6 +322,14 @@ int ChromeBrowserMainPartsWin::PreCreateThreads() {
       crash_keys::kIsEnterpriseManaged,
       base::win::IsEnterpriseManaged() ? "yes" : "no");
 
+  // Set crash keys containing the registry values used to determine Chrome's
+  // update channel at process startup; see https://crbug.com/579504.
+  const auto& details = install_static::InstallDetails::Get();
+  base::debug::SetCrashKeyValue(crash_keys::kApValue,
+                                base::UTF16ToUTF8(details.update_ap()));
+  base::debug::SetCrashKeyValue(
+      crash_keys::kCohortName, base::UTF16ToUTF8(details.update_cohort_name()));
+
   int rv = ChromeBrowserMainParts::PreCreateThreads();
 
   // TODO(viettrungluu): why don't we run this earlier?
@@ -370,6 +380,10 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
       base::Bind(&VerifyInstallation));
 
   InitializeChromeElf();
+
+#if defined(GOOGLE_CHROME_BUILD)
+  did_run_updater_.reset(new DidRunUpdater);
+#endif
 
   if (base::FeatureList::IsEnabled(safe_browsing::kSettingsResetPrompt)) {
     content::BrowserThread::PostAfterStartupTask(
@@ -425,7 +439,6 @@ void ChromeBrowserMainPartsWin::PrepareRestartOnCrashEnviroment(
 // static
 void ChromeBrowserMainPartsWin::RegisterApplicationRestart(
     const base::CommandLine& parsed_command_line) {
-  DCHECK(base::win::GetVersion() >= base::win::VERSION_VISTA);
   base::ScopedNativeLibrary library(base::FilePath(L"kernel32.dll"));
   // Get the function pointer for RegisterApplicationRestart.
   RegisterApplicationRestartProc register_application_restart =
@@ -444,15 +457,17 @@ void ChromeBrowserMainPartsWin::RegisterApplicationRestart(
 
   // Restart Chrome if the computer is restarted as the result of an update.
   // This could be extended to handle crashes, hangs, and patches.
+  const auto& command_line_string = command_line.GetCommandLineString();
   HRESULT hr = register_application_restart(
-      command_line.GetCommandLineString().c_str(),
+      command_line_string.c_str(),
       RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_PATCH);
   if (FAILED(hr)) {
     if (hr == E_INVALIDARG) {
-      LOG(WARNING) << "Command line too long for RegisterApplicationRestart";
+      LOG(WARNING) << "Command line too long for RegisterApplicationRestart: "
+                   << command_line_string;
     } else {
-      NOTREACHED() << "RegisterApplicationRestart failed. hr: " << hr <<
-                      ", command_line: " << command_line.GetCommandLineString();
+      NOTREACHED() << "RegisterApplicationRestart failed. hr: " << hr
+                   << ", command_line: " << command_line_string;
     }
   }
 }
@@ -494,7 +509,7 @@ bool ChromeBrowserMainPartsWin::CheckMachineLevelInstall() {
     base::FilePath exe_path;
     PathService::Get(base::DIR_EXE, &exe_path);
     std::wstring exe = exe_path.value();
-    base::FilePath user_exe_path(installer::GetChromeInstallPath(false, dist));
+    base::FilePath user_exe_path(installer::GetChromeInstallPath(false));
     if (base::FilePath::CompareEqualIgnoreCase(exe, user_exe_path.value())) {
       base::CommandLine uninstall_cmd(
           InstallUtil::GetChromeUninstallCmd(false));

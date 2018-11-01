@@ -24,17 +24,19 @@ class MODULES_EXPORT DeviceOrientationInspectorAgent final
   DECLARE_VIRTUAL_TRACE();
 
   // Protocol methods.
-  Response setDeviceOrientationOverride(double, double, double) override;
-  Response clearDeviceOrientationOverride() override;
+  protocol::Response setDeviceOrientationOverride(double,
+                                                  double,
+                                                  double) override;
+  protocol::Response clearDeviceOrientationOverride() override;
 
-  Response disable() override;
-  void restore() override;
-  void didCommitLoadForLocalFrame(LocalFrame*) override;
+  protocol::Response disable() override;
+  void Restore() override;
+  void DidCommitLoadForLocalFrame(LocalFrame*) override;
 
  private:
-  DeviceOrientationController* controller();
+  DeviceOrientationController* Controller();
 
-  Member<InspectedFrames> m_inspectedFrames;
+  Member<InspectedFrames> inspected_frames_;
 };
 
 }  // namespace blink

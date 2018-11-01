@@ -5,7 +5,7 @@
 #ifndef InternalsMediaStream_h
 #define InternalsMediaStream_h
 
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -24,7 +24,7 @@ class InternalsMediaStream {
                                      Internals&,
                                      const MediaDeviceInfo*,
                                      const MediaTrackConstraints& capabilities,
-                                     const MediaStreamTrack* dataSource);
+                                     const MediaStreamTrack* data_source);
 };
 
 }  // namespace blink

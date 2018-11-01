@@ -46,13 +46,16 @@
 
 namespace aura {
 
-Window::Window(WindowDelegate* delegate) : Window(delegate, nullptr) {}
+Window::Window(WindowDelegate* delegate, ui::wm::WindowType type)
+    : Window(delegate, nullptr, type) {}
 
-Window::Window(WindowDelegate* delegate, std::unique_ptr<WindowPort> port)
+Window::Window(WindowDelegate* delegate,
+               std::unique_ptr<WindowPort> port,
+               ui::wm::WindowType type)
     : port_owner_(std::move(port)),
       port_(port_owner_.get()),
       host_(nullptr),
-      type_(ui::wm::WINDOW_TYPE_UNKNOWN),
+      type_(type),
       owned_by_parent_(true),
       delegate_(delegate),
       parent_(nullptr),
@@ -494,10 +497,6 @@ Window* Window::GetEventHandlerForPoint(const gfx::Point& local_point) {
   return GetWindowForPoint(local_point, true, true);
 }
 
-Window* Window::GetTopWindowContainingPoint(const gfx::Point& local_point) {
-  return GetWindowForPoint(local_point, false, false);
-}
-
 Window* Window::GetToplevelWindow() {
   // TODO: this may need to call to the WindowPort. For mus this may need to
   // return for any top level.
@@ -653,7 +652,7 @@ void Window::AfterPropertyChange(const void* key,
                                  int64_t old_value,
                                  std::unique_ptr<ui::PropertyData> data) {
   if (port_)
-    port_->OnPropertyChanged(key, std::move(data));
+    port_->OnPropertyChanged(key, old_value, std::move(data));
   for (WindowObserver& observer : observers_)
     observer.OnWindowPropertyChanged(this, key, old_value);
 }

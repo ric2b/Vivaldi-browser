@@ -6,6 +6,7 @@
 #define IIRFilterNode_h
 
 #include "core/dom/DOMTypedArray.h"
+#include "core/dom/NotShared.h"
 #include "modules/webaudio/AudioNode.h"
 #include "modules/webaudio/IIRProcessor.h"
 
@@ -19,12 +20,12 @@ class IIRFilterNode : public AudioNode {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static IIRFilterNode* create(BaseAudioContext&,
-                               const Vector<double> feedforward,
-                               const Vector<double> feedback,
+  static IIRFilterNode* Create(BaseAudioContext&,
+                               const Vector<double>& feedforward,
+                               const Vector<double>& feedback,
                                ExceptionState&);
 
-  static IIRFilterNode* create(BaseAudioContext*,
+  static IIRFilterNode* Create(BaseAudioContext*,
                                const IIRFilterOptions&,
                                ExceptionState&);
 
@@ -32,17 +33,17 @@ class IIRFilterNode : public AudioNode {
 
   // Get the magnitude and phase response of the filter at the given
   // set of frequencies (in Hz). The phase response is in radians.
-  void getFrequencyResponse(const DOMFloat32Array* frequencyHz,
-                            DOMFloat32Array* magResponse,
-                            DOMFloat32Array* phaseResponse,
+  void getFrequencyResponse(NotShared<const DOMFloat32Array> frequency_hz,
+                            NotShared<DOMFloat32Array> mag_response,
+                            NotShared<DOMFloat32Array> phase_response,
                             ExceptionState&);
 
  private:
   IIRFilterNode(BaseAudioContext&,
-                const Vector<double> denominator,
-                const Vector<double> numerator);
+                const Vector<double>& denominator,
+                const Vector<double>& numerator);
 
-  IIRProcessor* iirProcessor() const;
+  IIRProcessor* IirProcessor() const;
 };
 
 }  // namespace blink

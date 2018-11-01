@@ -11,17 +11,21 @@
   <template>
     <style include="settings-shared">
       #networkListDiv {
+        /* cr-network-list is padded to the right to allow space for a ripple */
+        -webkit-padding-end: calc(var(--settings-box-row-padding) -
+            var(--cr-icon-ripple-padding));
         -webkit-padding-start: var(--settings-box-row-padding);
         margin-top: var(--settings-page-vertical-margin);
         min-height: var(--settings-box-min-height);
      }
 
       #addButton {
-        -webkit-margin-end: var(--cr-icon-padding);
+        -webkit-margin-end: var(--settings-control-spacing);
       }
 
       #onoff[on] {
         color: var(--settings-toggle-color);
+        font-weight: 500;
       }
 
       .vpn-header {
@@ -49,7 +53,7 @@
             on-tap="onAddButtonTap_" tabindex$="[[tabindex]]">
         </paper-icon-button>
         <paper-toggle-button  id="deviceEnabledButton"
-            aria-label="[[getToggleA11yString_(deviceState)]]"
+            aria-label$="[[getToggleA11yString_(deviceState)]]"
             checked="[[deviceIsEnabled_(deviceState)]]"
             enabled="[[enableToggleIsEnabled_(deviceState)]]"
             on-tap="onDeviceEnabledTap_">
@@ -58,8 +62,7 @@
     </template>
 
     <template is="dom-if" if="[[knownNetworksIsVisible_(deviceState)]]">
-      <div actionable class="settings-box continuation"
-          on-tap="onKnownNetworksTap_">
+      <div actionable class="settings-box" on-tap="onKnownNetworksTap_">
         <div class="start">$i18n{knownNetworksButton}</div>
         <button class="subpage-arrow" is="paper-icon-button-light"
             aria-label="$i18n{knownNetworksButton}">
@@ -90,13 +93,13 @@
         </div>
 
         <!-- Third party VPNs. -->
-        <template is="dom-if" if="isEqual_('VPN', deviceState.Type)]]">
+        <template is="dom-if" if="[[isEqual_('VPN', deviceState.Type)]]">
           <template is="dom-repeat" items="[[thirdPartyVpnProviders]]">
             <div id="[[item.ProviderName]]"
                 class="vpn-header layout horizontal center">
               <div class="flex">[[item.ProviderName]]</div>
               <paper-icon-button icon="settings:add-circle"
-                  aria-label="[[getAddThirdPartyVpnA11yString_(item)]]"
+                  aria-label$="[[getAddThirdPartyVpnA11yString_(item)]]"
                   on-tap="onAddThirdPartyVpnTap_" tabindex$="[[tabindex]]">
               </paper-icon-button>
             </div>

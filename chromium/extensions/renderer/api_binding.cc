@@ -18,8 +18,10 @@
 #include "extensions/renderer/api_request_handler.h"
 #include "extensions/renderer/api_signature.h"
 #include "extensions/renderer/api_type_reference_map.h"
+#include "extensions/renderer/declarative_event.h"
 #include "extensions/renderer/v8_helpers.h"
 #include "gin/arguments.h"
+#include "gin/handle.h"
 #include "gin/per_context_data.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 
@@ -30,8 +32,14 @@ namespace {
 // Returns the name of the enum value for use in JavaScript; JS enum entries use
 // SCREAMING_STYLE.
 std::string GetJSEnumEntryName(const std::string& original) {
+  // The webstorePrivate API has an empty enum value for a result.
+  // TODO(devlin): Work with the webstore team to see if we can move them off
+  // this - they also already have a "success" result that they can use.
+  // See crbug.com/709120.
+  if (original.empty())
+    return original;
+
   std::string result;
-  DCHECK(!original.empty());
   // If the original starts with a digit, prefix it with an underscore.
   if (base::IsAsciiDigit(original[0]))
     result.push_back('_');
@@ -87,23 +95,45 @@ struct APIBinding::MethodData {
   APIBinding::HandlerCallback callback;
 };
 
+// TODO(devlin): Maybe separate EventData into two classes? Rules, actions, and
+// conditions should never be present on vanilla events.
 struct APIBinding::EventData {
   EventData(std::string exposed_name,
             std::string full_name,
-            APIEventHandler* event_handler)
+            bool supports_filters,
+            bool supports_rules,
+            std::vector<std::string> actions,
+            std::vector<std::string> conditions,
+            APIBinding* binding)
       : exposed_name(std::move(exposed_name)),
         full_name(std::move(full_name)),
-        event_handler(event_handler) {}
+        supports_filters(supports_filters),
+        supports_rules(supports_rules),
+        actions(std::move(actions)),
+        conditions(std::move(conditions)),
+        binding(binding) {}
 
   // The name of the event on the API object (e.g. onCreated).
   std::string exposed_name;
+
   // The fully-specified name of the event (e.g. tabs.onCreated).
   std::string full_name;
-  // The associated event handler. This raw pointer is safe because the
+
+  // Whether the event supports filters.
+  bool supports_filters;
+
+  // Whether the event supports rules.
+  bool supports_rules;
+
+  // The associated actions and conditions for declarative events.
+  std::vector<std::string> actions;
+  std::vector<std::string> conditions;
+
+  // The associated APIBinding. This raw pointer is safe because the
   // EventData is only accessed from the callbacks associated with the
   // APIBinding, and both the APIBinding and APIEventHandler are owned by the
   // same object (the APIBindingsSystem).
-  APIEventHandler* event_handler;
+  APIBinding* binding;
 };
 
 struct APIBinding::CustomPropertyData {
@@ -139,6 +169,7 @@ APIBinding::APIBinding(const std::string& api_name,
       binding_hooks_(std::move(binding_hooks)),
       type_refs_(type_refs),
       request_handler_(request_handler),
+      event_handler_(event_handler),
       weak_factory_(this) {
   // TODO(devlin): It might make sense to instantiate the object_template_
   // directly here, which would avoid the need to hold on to
@@ -149,7 +180,7 @@ APIBinding::APIBinding(const std::string& api_name,
   if (function_definitions) {
     for (const auto& func : *function_definitions) {
       const base::DictionaryValue* func_dict = nullptr;
-      CHECK(func->GetAsDictionary(&func_dict));
+      CHECK(func.GetAsDictionary(&func_dict));
       std::string name;
       CHECK(func_dict->GetString("name", &name));
 
@@ -166,7 +197,7 @@ APIBinding::APIBinding(const std::string& api_name,
   if (type_definitions) {
     for (const auto& type : *type_definitions) {
       const base::DictionaryValue* type_dict = nullptr;
-      CHECK(type->GetAsDictionary(&type_dict));
+      CHECK(type.GetAsDictionary(&type_dict));
       std::string id;
       CHECK(type_dict->GetString("id", &id));
       auto argument_spec = base::MakeUnique<ArgumentSpec>(*type_dict);
@@ -191,7 +222,7 @@ APIBinding::APIBinding(const std::string& api_name,
       if (type_dict->GetList("functions", &type_functions)) {
         for (const auto& func : *type_functions) {
           const base::DictionaryValue* func_dict = nullptr;
-          CHECK(func->GetAsDictionary(&func_dict));
+          CHECK(func.GetAsDictionary(&func_dict));
           std::string function_name;
           CHECK(func_dict->GetString("name", &function_name));
 
@@ -209,13 +240,43 @@ APIBinding::APIBinding(const std::string& api_name,
     events_.reserve(event_definitions->GetSize());
     for (const auto& event : *event_definitions) {
       const base::DictionaryValue* event_dict = nullptr;
-      CHECK(event->GetAsDictionary(&event_dict));
+      CHECK(event.GetAsDictionary(&event_dict));
       std::string name;
       CHECK(event_dict->GetString("name", &name));
       std::string full_name =
           base::StringPrintf("%s.%s", api_name_.c_str(), name.c_str());
+      const base::ListValue* filters = nullptr;
+      bool supports_filters =
+          event_dict->GetList("filters", &filters) && !filters->empty();
+
+      std::vector<std::string> rule_actions;
+      std::vector<std::string> rule_conditions;
+      const base::DictionaryValue* options = nullptr;
+      bool supports_rules = false;
+      if (event_dict->GetDictionary("options", &options) &&
+          options->GetBoolean("supportsRules", &supports_rules) &&
+          supports_rules) {
+        bool supports_listeners = false;
+        DCHECK(options->GetBoolean("supportsListeners", &supports_listeners));
+        DCHECK(!supports_listeners)
+            << "Events cannot support rules and listeners.";
+        auto get_values = [options](base::StringPiece name,
+                                    std::vector<std::string>* out_value) {
+          const base::ListValue* list = nullptr;
+          CHECK(options->GetList(name, &list));
+          for (const auto& entry : *list) {
+            DCHECK(entry.is_string());
+            out_value->push_back(entry.GetString());
+          }
+        };
+        get_values("actions", &rule_actions);
+        get_values("conditions", &rule_conditions);
+      }
+
       events_.push_back(base::MakeUnique<EventData>(
-          std::move(name), std::move(full_name), event_handler));
+          std::move(name), std::move(full_name), supports_filters,
+          supports_rules, std::move(rule_actions), std::move(rule_conditions),
+          this));
     }
   }
 }
@@ -250,8 +311,6 @@ v8::Local<v8::Object> APIBinding::CreateInstance(
       CHECK(success.FromJust());
     }
   }
-
-  binding_hooks_->InitializeInContext(context);
 
   return object;
 }
@@ -374,8 +433,22 @@ void APIBinding::GetEventObject(
   CHECK(info.Data()->IsExternal());
   auto* event_data =
       static_cast<EventData*>(info.Data().As<v8::External>()->Value());
-  info.GetReturnValue().Set(event_data->event_handler->CreateEventInstance(
-      event_data->full_name, context));
+  v8::Local<v8::Value> retval;
+  if (event_data->binding->binding_hooks_->CreateCustomEvent(
+          context, event_data->full_name, &retval)) {
+    // A custom event was created; our work is done.
+  } else if (event_data->supports_rules) {
+    gin::Handle<DeclarativeEvent> event = gin::CreateHandle(
+        isolate, new DeclarativeEvent(
+                     event_data->full_name, event_data->binding->type_refs_,
+                     event_data->binding->request_handler_, event_data->actions,
+                     event_data->conditions));
+    retval = event.ToV8();
+  } else {
+    retval = event_data->binding->event_handler_->CreateEventInstance(
+        event_data->full_name, event_data->supports_filters, context);
+  }
+  info.GetReturnValue().Set(retval);
 }
 
 void APIBinding::GetCustomPropertyObject(
@@ -418,6 +491,7 @@ void APIBinding::HandleCall(const std::string& name,
 
   bool invalid_invocation = false;
   v8::Local<v8::Function> custom_callback;
+  bool updated_args = false;
   {
     v8::TryCatch try_catch(isolate);
     APIBindingHooks::RequestResult hooks_result = binding_hooks_->RunHooks(
@@ -436,6 +510,8 @@ void APIBinding::HandleCall(const std::string& name,
         if (!hooks_result.return_value.IsEmpty())
           arguments->Return(hooks_result.return_value);
         return;  // Our work here is done.
+      case APIBindingHooks::RequestResult::ARGUMENTS_UPDATED:
+        updated_args = true;  // Intentional fall-through.
       case APIBindingHooks::RequestResult::NOT_HANDLED:
         break;  // Handle in the default manner.
     }
@@ -451,9 +527,29 @@ void APIBinding::HandleCall(const std::string& name,
   v8::Local<v8::Function> callback;
   {
     v8::TryCatch try_catch(isolate);
-    invalid_invocation = !signature->ParseArgumentsToJSON(
-        context, argument_list, *type_refs_,
-        &converted_arguments, &callback, &error);
+
+    // If custom hooks updated the arguments post-validation, we just trust the
+    // values the hooks provide and convert them directly. This is because some
+    // APIs have one set of values they use for validation, and a second they
+    // use in the implementation of the function (see, e.g.
+    // fileSystem.getDisplayPath).
+    // TODO(devlin): That's unfortunate. Not only does it require special casing
+    // here, but it also means we can't auto-generate the params for the
+    // function on the browser side.
+    if (updated_args) {
+      bool success = signature->ConvertArgumentsIgnoringSchema(
+          context, argument_list, &converted_arguments, &callback);
+      if (!success) {
+        // Converted arguments passed to us by our bindings should never fail.
+        NOTREACHED();
+        return;
+      }
+    } else {
+      invalid_invocation = !signature->ParseArgumentsToJSON(
+          context, argument_list, *type_refs_, &converted_arguments, &callback,
+          &error);
+    }
+
     if (try_catch.HasCaught()) {
       DCHECK(!converted_arguments);
       try_catch.ReThrow();
@@ -466,7 +562,8 @@ void APIBinding::HandleCall(const std::string& name,
   }
 
   request_handler_->StartRequest(context, name, std::move(converted_arguments),
-                                 callback, custom_callback);
+                                 callback, custom_callback,
+                                 binding::RequestThread::UI);
 }
 
 }  // namespace extensions

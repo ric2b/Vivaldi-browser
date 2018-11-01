@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/renderer/media/media_stream_video_renderer_sink.h"
+
+#include <memory>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/media_stream_video_renderer_sink.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "content/renderer/media/mock_media_stream_registry.h"
 #include "content/renderer/media/mock_media_stream_video_source.h"
@@ -36,16 +40,13 @@ class MediaStreamVideoRendererSinkTest : public testing::Test {
   MediaStreamVideoRendererSinkTest()
       : child_process_(new ChildProcess()),
         mock_source_(new MockMediaStreamVideoSource(false)) {
-    blink_source_.initialize(blink::WebString::fromASCII("dummy_source_id"),
-                             blink::WebMediaStreamSource::TypeVideo,
-                             blink::WebString::fromASCII("dummy_source_name"),
+    blink_source_.Initialize(blink::WebString::FromASCII("dummy_source_id"),
+                             blink::WebMediaStreamSource::kTypeVideo,
+                             blink::WebString::FromASCII("dummy_source_name"),
                              false /* remote */);
-    blink_source_.setExtraData(mock_source_);
-    blink::WebMediaConstraints constraints;
-    constraints.initialize();
+    blink_source_.SetExtraData(mock_source_);
     blink_track_ = MediaStreamVideoTrack::CreateVideoTrack(
-        mock_source_, constraints, MediaStreamSource::ConstraintsCallback(),
-        true);
+        mock_source_, MediaStreamSource::ConstraintsCallback(), true);
     mock_source_->StartMockedSource();
     base::RunLoop().RunUntilIdle();
 
@@ -64,9 +65,9 @@ class MediaStreamVideoRendererSinkTest : public testing::Test {
 
   void TearDown() override {
     media_stream_video_renderer_sink_ = nullptr;
-    blink_source_.reset();
-    blink_track_.reset();
-    blink::WebHeap::collectAllGarbageForTesting();
+    blink_source_.Reset();
+    blink_track_.Reset();
+    blink::WebHeap::CollectAllGarbageForTesting();
 
     // Let the message loop run to finish destroying the pool.
     base::RunLoop().RunUntilIdle();

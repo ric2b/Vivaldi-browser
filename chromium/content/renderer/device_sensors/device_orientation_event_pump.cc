@@ -23,10 +23,10 @@ DeviceOrientationEventPumpBase::~DeviceOrientationEventPumpBase() {}
 
 void DeviceOrientationEventPumpBase::FireEvent() {
   DCHECK(listener());
-  blink::WebDeviceOrientationData data;
+  device::OrientationData data;
   if (reader_->GetLatestData(&data) && ShouldFireEvent(data)) {
     memcpy(&data_, &data, sizeof(data));
-    listener()->didChangeDeviceOrientation(data);
+    listener()->DidChangeDeviceOrientation(data);
   }
 }
 
@@ -40,21 +40,21 @@ static bool IsSignificantlyDifferent(bool hasAngle1, double angle1,
 }
 
 bool DeviceOrientationEventPumpBase::ShouldFireEvent(
-    const blink::WebDeviceOrientationData& data) const {
-  if (!data.allAvailableSensorsAreActive)
+    const device::OrientationData& data) const {
+  if (!data.all_available_sensors_are_active)
     return false;
 
-  if (!data.hasAlpha && !data.hasBeta && !data.hasGamma) {
+  if (!data.has_alpha && !data.has_beta && !data.has_gamma) {
     // no data can be provided, this is an all-null event.
     return true;
   }
 
-  return IsSignificantlyDifferent(
-             data_.hasAlpha, data_.alpha, data.hasAlpha, data.alpha) ||
-         IsSignificantlyDifferent(
-             data_.hasBeta, data_.beta, data.hasBeta, data.beta) ||
-         IsSignificantlyDifferent(
-             data_.hasGamma, data_.gamma, data.hasGamma, data.gamma);
+  return IsSignificantlyDifferent(data_.has_alpha, data_.alpha, data.has_alpha,
+                                  data.alpha) ||
+         IsSignificantlyDifferent(data_.has_beta, data_.beta, data.has_beta,
+                                  data.beta) ||
+         IsSignificantlyDifferent(data_.has_gamma, data_.gamma, data.has_gamma,
+                                  data.gamma);
 }
 
 bool DeviceOrientationEventPumpBase::InitializeReader(
@@ -66,10 +66,10 @@ bool DeviceOrientationEventPumpBase::InitializeReader(
 }
 
 void DeviceOrientationEventPumpBase::SendFakeDataForTesting(void* fake_data) {
-  blink::WebDeviceOrientationData data =
-      *static_cast<blink::WebDeviceOrientationData*>(fake_data);
+  device::OrientationData data =
+      *static_cast<device::OrientationData*>(fake_data);
 
-  listener()->didChangeDeviceOrientation(data);
+  listener()->DidChangeDeviceOrientation(data);
 }
 
 }  // namespace content

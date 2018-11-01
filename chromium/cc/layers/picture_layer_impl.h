@@ -13,17 +13,17 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
-#include "cc/playback/image_id.h"
+#include "cc/paint/image_id.h"
 #include "cc/tiles/picture_layer_tiling.h"
 #include "cc/tiles/picture_layer_tiling_set.h"
 #include "cc/tiles/tiling_set_eviction_queue.h"
 
 namespace cc {
 
-struct AppendQuadsData;
+class AppendQuadsData;
 class MicroBenchmarkImpl;
 class Tile;
 
@@ -79,6 +79,8 @@ class CC_EXPORT PictureLayerImpl
                              gfx::Size* resource_size) const override;
 
   void SetNearestNeighbor(bool nearest_neighbor);
+
+  void SetUseTransformedRasterization(bool use);
 
   size_t GPUMemoryUsageInBytes() const override;
 
@@ -151,6 +153,7 @@ class CC_EXPORT PictureLayerImpl
   const Layer::LayerMaskType mask_type_;
 
   bool nearest_neighbor_;
+  bool use_transformed_rasterization_;
   bool is_directly_composited_image_;
 
   // Use this instead of |visible_layer_rect()| for tiling calculations. This

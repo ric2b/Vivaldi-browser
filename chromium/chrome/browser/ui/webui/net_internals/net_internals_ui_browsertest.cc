@@ -35,6 +35,7 @@
 #include "content/public/browser/web_ui_message_handler.h"
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_change_notifier.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mock_host_resolver.h"
@@ -117,6 +118,9 @@ class NetInternalsTest::MessageHandler : public content::WebUIMessageHandler {
   // must be an empty string.
   void AddCacheEntry(const base::ListValue* list_value);
 
+  // Simulates a network change.
+  void ChangeNetwork(const base::ListValue* list_value);
+
   // Opens the given URL in a new tab.
   void LoadPage(const base::ListValue* list_value);
 
@@ -164,6 +168,10 @@ void NetInternalsTest::MessageHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback("addCacheEntry",
       base::Bind(&NetInternalsTest::MessageHandler::AddCacheEntry,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "changeNetwork",
+      base::Bind(&NetInternalsTest::MessageHandler::ChangeNetwork,
+                 base::Unretained(this)));
   web_ui()->RegisterMessageCallback("loadPage",
       base::Bind(&NetInternalsTest::MessageHandler::LoadPage,
                   base::Unretained(this)));
@@ -200,7 +208,7 @@ void NetInternalsTest::MessageHandler::GetTestServerURL(
   std::string path;
   ASSERT_TRUE(list_value->GetString(0, &path));
   GURL url = net_internals_test_->embedded_test_server()->GetURL(path);
-  std::unique_ptr<base::Value> url_value(new base::StringValue(url.spec()));
+  std::unique_ptr<base::Value> url_value(new base::Value(url.spec()));
   RunJavascriptCallback(url_value.get());
 }
 
@@ -222,6 +230,11 @@ void NetInternalsTest::MessageHandler::AddCacheEntry(
                  base::RetainedRef(browser()->profile()->GetRequestContext()),
                  hostname, ip_literal, static_cast<int>(net_error),
                  static_cast<int>(expire_days_from_now)));
+}
+
+void NetInternalsTest::MessageHandler::ChangeNetwork(
+    const base::ListValue* list_value) {
+  net::NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
 }
 
 void NetInternalsTest::MessageHandler::LoadPage(
@@ -261,7 +274,7 @@ void NetInternalsTest::MessageHandler::CreateIncognitoBrowser(
   incognito_browser_ = net_internals_test_->CreateIncognitoBrowser();
 
   // Tell the test harness that creation is complete.
-  base::StringValue command_value("onIncognitoBrowserCreatedForTest");
+  base::Value command_value("onIncognitoBrowserCreatedForTest");
   web_ui()->CallJavascriptFunctionUnsafe("g_browser.receive", command_value);
 }
 
@@ -305,7 +318,7 @@ void NetInternalsTest::MessageHandler::GetNetLogFileContents(
   ASSERT_GT(log_contents.length(), 0u);
 
   std::unique_ptr<base::Value> log_contents_value(
-      new base::StringValue(log_contents));
+      new base::Value(log_contents));
   RunJavascriptCallback(log_contents_value.get());
 }
 

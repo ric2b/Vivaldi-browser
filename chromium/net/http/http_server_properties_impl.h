@@ -109,6 +109,7 @@ class NET_EXPORT HttpServerPropertiesImpl
   void SetSupportsQuic(bool used_quic, const IPAddress& address) override;
   void SetServerNetworkStats(const url::SchemeHostPort& server,
                              ServerNetworkStats stats) override;
+  void ClearServerNetworkStats(const url::SchemeHostPort& server) override;
   const ServerNetworkStats* GetServerNetworkStats(
       const url::SchemeHostPort& server) override;
   const ServerNetworkStatsMap& server_network_stats_map() const override;
@@ -138,8 +139,6 @@ class NET_EXPORT HttpServerPropertiesImpl
                           base::TimeTicks,
                           AlternativeServiceHash>
       BrokenAlternativeServices;
-  // Map to the number of times each alternative service has been marked broken.
-  typedef std::map<AlternativeService, int> RecentlyBrokenAlternativeServices;
 
   // Return the iterator for |server|, or for its canonical host, or end.
   AlternativeServiceMap::const_iterator GetAlternateProtocolIterator(

@@ -4,10 +4,13 @@ include_rules = [
   "+components/bookmarks/common/android/java/src/org/chromium/components/bookmarks",
   "+components/dom_distiller/content/browser/android/java/src/org/chromium/components/dom_distiller/content",
   "+components/dom_distiller/core/android/java/src/org/chromium/components/dom_distiller/core",
+  "+components/feature_engagement_tracker/public/android/java/src/org/chromium/components/feature_engagement_tracker",
   "+components/gcm_driver/android/java/src/org/chromium/components/gcm_driver",
   "+components/location/android/java",
   "+components/minidump_uploader",
   "+components/navigation_interception",
+  "+components/offline_items_collection/core/android/java",
+  "+components/payments/content/android/java/src/org/chromium/components/payments",
   "+components/precache/android/java",
   "+components/safe_json/android/java",
   "+components/sync/android/java/src/org/chromium/components/sync",
@@ -16,3 +19,10 @@ include_rules = [
   "+content/public/android/java",
   "+services/service_manager/public/java",
 ]
+
+specific_include_rules = {
+  # Special-case where monochrome composes chrome+webview
+  "MonochromeApplication\.java": [
+    "+android_webview/glue/java/src/com/android/webview/chromium/MonochromeLibraryPreloader.java",
+  ]
+}

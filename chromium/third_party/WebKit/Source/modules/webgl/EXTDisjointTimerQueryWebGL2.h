@@ -8,7 +8,7 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "modules/webgl/WebGLExtension.h"
 #include "modules/webgl/WebGLQuery.h"
-#include "wtf/HashMap.h"
+#include "platform/wtf/HashMap.h"
 
 namespace blink {
 
@@ -19,11 +19,11 @@ class EXTDisjointTimerQueryWebGL2 final : public WebGLExtension {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static EXTDisjointTimerQueryWebGL2* create(WebGLRenderingContextBase*);
-  static bool supported(WebGLRenderingContextBase*);
-  static const char* extensionName();
+  static EXTDisjointTimerQueryWebGL2* Create(WebGLRenderingContextBase*);
+  static bool Supported(WebGLRenderingContextBase*);
+  static const char* ExtensionName();
 
-  WebGLExtensionName name() const override;
+  WebGLExtensionName GetName() const override;
 
   void queryCounterEXT(WebGLQuery*, GLenum);
 

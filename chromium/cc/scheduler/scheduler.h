@@ -12,7 +12,7 @@
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/scheduler/begin_frame_tracker.h"
@@ -152,6 +152,8 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
     return begin_frame_source_;
   }
 
+  BeginFrameAck CurrentBeginFrameAckForActiveTree() const;
+
  protected:
   // Virtual for testing.
   virtual base::TimeTicks Now() const;
@@ -204,7 +206,7 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
   bool IsBeginMainFrameSentOrStarted() const;
   void BeginImplFrameWithDeadline(const BeginFrameArgs& args);
   void BeginImplFrameSynchronous(const BeginFrameArgs& args);
-  void BeginImplFrame(const BeginFrameArgs& args);
+  void BeginImplFrame(const BeginFrameArgs& args, base::TimeTicks now);
   void FinishImplFrame();
   enum BeginFrameResult { kBeginFrameSkipped, kBeginFrameFinished };
   void SendBeginFrameAck(const BeginFrameArgs& args, BeginFrameResult result);

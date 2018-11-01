@@ -8,13 +8,14 @@
 #include <set>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/simple_thread.h"
-#include "cc/base/cc_export.h"
 #include "cc/base/unique_notifier.h"
-#include "cc/playback/draw_image.h"
+#include "cc/cc_export.h"
+#include "cc/paint/draw_image.h"
 #include "cc/raster/tile_task.h"
 #include "cc/tiles/image_decode_cache.h"
 

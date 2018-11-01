@@ -74,9 +74,9 @@ void ChromeExtensionsDispatcherDelegate::InitOriginPermissions(
   // conservative.
   if (extensions::Manifest::IsComponentLocation(extension->location()) &&
       is_extension_active) {
-    blink::WebSecurityPolicy::addOriginAccessWhitelistEntry(
-        extension->url(), blink::WebString::fromUTF8(content::kChromeUIScheme),
-        blink::WebString::fromUTF8(chrome::kChromeUIThemeHost), false);
+    blink::WebSecurityPolicy::AddOriginAccessWhitelistEntry(
+        extension->url(), blink::WebString::FromUTF8(content::kChromeUIScheme),
+        blink::WebString::FromUTF8(chrome::kChromeUIThemeHost), false);
   }
 
   // TODO(jstritar): We should try to remove this special case. Also, these
@@ -85,17 +85,16 @@ void ChromeExtensionsDispatcherDelegate::InitOriginPermissions(
   if (is_extension_active &&
       extension->permissions_data()->HasAPIPermission(
           extensions::APIPermission::kManagement)) {
-    blink::WebSecurityPolicy::addOriginAccessWhitelistEntry(
-        extension->url(),
-        blink::WebString::fromUTF8(content::kChromeUIScheme),
-        blink::WebString::fromUTF8(chrome::kChromeUIExtensionIconHost),
-        false);
+    blink::WebSecurityPolicy::AddOriginAccessWhitelistEntry(
+        extension->url(), blink::WebString::FromUTF8(content::kChromeUIScheme),
+        blink::WebString::FromUTF8(chrome::kChromeUIExtensionIconHost), false);
   }
 }
 
 void ChromeExtensionsDispatcherDelegate::RegisterNativeHandlers(
     extensions::Dispatcher* dispatcher,
     extensions::ModuleSystem* module_system,
+    extensions::ExtensionBindingsSystem* bindings_system,
     extensions::ScriptContext* context) {
   module_system->RegisterNativeHandler(
       "app", std::unique_ptr<NativeHandler>(
@@ -135,13 +134,13 @@ void ChromeExtensionsDispatcherDelegate::RegisterNativeHandlers(
 #if BUILDFLAG(ENABLE_WEBRTC)
   module_system->RegisterNativeHandler(
       "cast_streaming_natives",
-      std::unique_ptr<NativeHandler>(
-          new extensions::CastStreamingNativeHandler(context)));
+      base::MakeUnique<extensions::CastStreamingNativeHandler>(
+          context, bindings_system));
 #endif
   module_system->RegisterNativeHandler(
       "automationInternal",
-      std::unique_ptr<NativeHandler>(
-          new extensions::AutomationInternalCustomBindings(context)));
+      base::MakeUnique<extensions::AutomationInternalCustomBindings>(
+          context, bindings_system));
 
   // The following are native handlers that are defined in //extensions, but
   // are only used for APIs defined in Chrome.

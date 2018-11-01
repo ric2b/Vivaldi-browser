@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/device_stylus_handler.h"
 
-#include "ash/common/system/chromeos/palette/palette_utils.h"
+#include "ash/system/palette/palette_utils.h"
 #include "base/bind.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -65,8 +65,8 @@ void StylusHandler::UpdateNoteTakingApps() {
   base::ListValue apps_list;
 
   NoteTakingHelper* helper = NoteTakingHelper::Get();
-  if (helper->android_enabled() && !helper->android_apps_received()) {
-    // If Android is enabled but not ready yet, let the JS know so it can
+  if (helper->play_store_enabled() && !helper->android_apps_received()) {
+    // If Play Store is enabled but not ready yet, let the JS know so it can
     // disable the menu and display an explanatory message.
     waiting_for_android = true;
   } else {
@@ -85,8 +85,8 @@ void StylusHandler::UpdateNoteTakingApps() {
 
   AllowJavascript();
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("onNoteTakingAppsUpdated"),
-                         apps_list, base::Value(waiting_for_android));
+                         base::Value("onNoteTakingAppsUpdated"), apps_list,
+                         base::Value(waiting_for_android));
 }
 
 void StylusHandler::RequestApps(const base::ListValue* unused_args) {
@@ -117,7 +117,7 @@ void StylusHandler::SendHasStylus() {
   DCHECK(ui::InputDeviceManager::GetInstance()->AreDeviceListsComplete());
   AllowJavascript();
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("has-stylus-changed"),
+                         base::Value("has-stylus-changed"),
                          base::Value(ash::palette_utils::HasStylusInput()));
 }
 

@@ -11,10 +11,10 @@
 #include "core/dom/DOMDataView.h"
 #include "modules/EventTargetModules.h"
 #include "modules/bluetooth/BluetoothRemoteGATTService.h"
+#include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/modules/bluetooth/web_bluetooth.mojom-blink.h"
-#include "wtf/text/WTFString.h"
-#include <memory>
 
 namespace blink {
 
@@ -34,8 +34,9 @@ class ScriptState;
 // CallbackPromiseAdapter class comments.
 class BluetoothRemoteGATTCharacteristic final
     : public EventTargetWithInlineData,
-      public ContextLifecycleObserver {
-  USING_PRE_FINALIZER(BluetoothRemoteGATTCharacteristic, dispose);
+      public ContextLifecycleObserver,
+      public mojom::blink::WebBluetoothCharacteristicClient {
+  USING_PRE_FINALIZER(BluetoothRemoteGATTCharacteristic, Dispose);
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(BluetoothRemoteGATTCharacteristic);
 
@@ -46,40 +47,38 @@ class BluetoothRemoteGATTCharacteristic final
       BluetoothRemoteGATTService*,
       BluetoothDevice*);
 
-  static BluetoothRemoteGATTCharacteristic* create(
+  static BluetoothRemoteGATTCharacteristic* Create(
       ExecutionContext*,
       mojom::blink::WebBluetoothRemoteGATTCharacteristicPtr,
       BluetoothRemoteGATTService*,
       BluetoothDevice*);
 
   // Save value.
-  void setValue(DOMDataView*);
+  void SetValue(DOMDataView*);
 
-  void dispatchCharacteristicValueChanged(const Vector<uint8_t>& value);
+  // mojom::blink::WebBluetoothCharacteristicClient:
+  void RemoteCharacteristicValueChanged(
+      const WTF::Vector<uint8_t>& value) override;
 
   // ContextLifecycleObserver interface.
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
   // USING_PRE_FINALIZER interface.
   // Called before the object gets garbage collected.
-  void dispose();
-
-  // Notify our embedder that we should stop any notifications.
-  // The function only notifies the embedder once.
-  void notifyCharacteristicObjectRemoved();
+  void Dispose();
 
   // EventTarget methods:
-  const AtomicString& interfaceName() const override;
-  ExecutionContext* getExecutionContext() const;
+  const AtomicString& InterfaceName() const override;
+  ExecutionContext* GetExecutionContext() const;
 
   // Interface required by garbage collection.
   DECLARE_VIRTUAL_TRACE();
 
   // IDL exposed interface:
-  BluetoothRemoteGATTService* service() { return m_service; }
-  String uuid() { return m_characteristic->uuid; }
-  BluetoothCharacteristicProperties* properties() { return m_properties; }
-  DOMDataView* value() const { return m_value; }
+  BluetoothRemoteGATTService* service() { return service_; }
+  String uuid() { return characteristic_->uuid; }
+  BluetoothCharacteristicProperties* properties() { return properties_; }
+  DOMDataView* value() const { return value_; }
   ScriptPromise getDescriptor(ScriptState*,
                               const StringOrUnsignedLong& descriptor,
                               ExceptionState&);
@@ -96,13 +95,13 @@ class BluetoothRemoteGATTCharacteristic final
 
  protected:
   // EventTarget overrides.
-  void addedEventListener(const AtomicString& eventType,
+  void AddedEventListener(const AtomicString& event_type,
                           RegisteredEventListener&) override;
 
  private:
   friend class BluetoothRemoteGATTDescriptor;
 
-  BluetoothRemoteGATTServer* getGatt() { return m_service->device()->gatt(); }
+  BluetoothRemoteGATTServer* GetGatt() { return service_->device()->gatt(); }
 
   void ReadValueCallback(ScriptPromiseResolver*,
                          mojom::blink::WebBluetoothResult,
@@ -113,27 +112,28 @@ class BluetoothRemoteGATTCharacteristic final
   void NotificationsCallback(ScriptPromiseResolver*,
                              mojom::blink::WebBluetoothResult);
 
-  ScriptPromise getDescriptorsImpl(ScriptState*,
+  ScriptPromise GetDescriptorsImpl(ScriptState*,
                                    mojom::blink::WebBluetoothGATTQueryQuantity,
-                                   const String& descriptorUUID = String());
+                                   const String& descriptor_uuid = String());
 
   void GetDescriptorsCallback(
-      const String& requestedDescriptorUUID,
-      const String& characteristicInstanceId,
+      const String& requested_descriptor_uuid,
+      const String& characteristic_instance_id,
       mojom::blink::WebBluetoothGATTQueryQuantity,
       ScriptPromiseResolver*,
       mojom::blink::WebBluetoothResult,
       Optional<Vector<mojom::blink::WebBluetoothRemoteGATTDescriptorPtr>>
           descriptors);
 
-  DOMException* createInvalidCharacteristicError();
+  DOMException* CreateInvalidCharacteristicError();
 
-  mojom::blink::WebBluetoothRemoteGATTCharacteristicPtr m_characteristic;
-  Member<BluetoothRemoteGATTService> m_service;
-  bool m_stopped;
-  Member<BluetoothCharacteristicProperties> m_properties;
-  Member<DOMDataView> m_value;
-  Member<BluetoothDevice> m_device;
+  mojom::blink::WebBluetoothRemoteGATTCharacteristicPtr characteristic_;
+  Member<BluetoothRemoteGATTService> service_;
+  Member<BluetoothCharacteristicProperties> properties_;
+  Member<DOMDataView> value_;
+  Member<BluetoothDevice> device_;
+  mojo::AssociatedBindingSet<mojom::blink::WebBluetoothCharacteristicClient>
+      client_bindings_;
 };
 
 }  // namespace blink

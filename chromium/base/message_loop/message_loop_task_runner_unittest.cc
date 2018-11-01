@@ -38,8 +38,8 @@ class MessageLoopTaskRunnerTest : public testing::Test {
 
     // Allow us to pause the |task_thread_|'s MessageLoop.
     task_thread_.task_runner()->PostTask(
-        FROM_HERE, Bind(&MessageLoopTaskRunnerTest::BlockTaskThreadHelper,
-                        Unretained(this)));
+        FROM_HERE, BindOnce(&MessageLoopTaskRunnerTest::BlockTaskThreadHelper,
+                            Unretained(this)));
   }
 
   void TearDown() override {
@@ -114,8 +114,8 @@ TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReply_Basic) {
       new LoopRecorder(&reply_run_on, &reply_deleted_on, &reply_delete_order);
 
   ASSERT_TRUE(task_thread_.task_runner()->PostTaskAndReply(
-      FROM_HERE, Bind(&RecordLoop, task_recorder),
-      Bind(&RecordLoopAndQuit, reply_recorder)));
+      FROM_HERE, BindOnce(&RecordLoop, task_recorder),
+      BindOnce(&RecordLoopAndQuit, reply_recorder)));
 
   // Die if base::Bind doesn't retain a reference to the recorders.
   task_recorder = NULL;
@@ -127,7 +127,7 @@ TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReply_Basic) {
   RunLoop().Run();
 
   EXPECT_EQ(task_thread_.message_loop(), task_run_on);
-  EXPECT_EQ(current_loop_.get(), task_deleted_on);
+  EXPECT_EQ(task_thread_.message_loop(), task_deleted_on);
   EXPECT_EQ(current_loop_.get(), reply_run_on);
   EXPECT_EQ(current_loop_.get(), reply_deleted_on);
   EXPECT_LT(task_delete_order, reply_delete_order);
@@ -152,9 +152,9 @@ TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReplyOnDeletedThreadDoesNotLeak) {
   UnblockTaskThread();
   task_thread_.Stop();
 
-  ASSERT_FALSE(
-      task_runner->PostTaskAndReply(FROM_HERE, Bind(&RecordLoop, task_recorder),
-                                    Bind(&RecordLoopAndQuit, reply_recorder)));
+  ASSERT_FALSE(task_runner->PostTaskAndReply(
+      FROM_HERE, BindOnce(&RecordLoop, task_recorder),
+      BindOnce(&RecordLoopAndQuit, reply_recorder)));
 
   // The relay should have properly deleted its resources leaving us as the only
   // reference.
@@ -182,8 +182,8 @@ TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReply_SameLoop) {
 
   // Enqueue the relay.
   ASSERT_TRUE(current_loop_->task_runner()->PostTaskAndReply(
-      FROM_HERE, Bind(&RecordLoop, task_recorder),
-      Bind(&RecordLoopAndQuit, reply_recorder)));
+      FROM_HERE, BindOnce(&RecordLoop, task_recorder),
+      BindOnce(&RecordLoopAndQuit, reply_recorder)));
 
   // Die if base::Bind doesn't retain a reference to the recorders.
   task_recorder = NULL;
@@ -200,7 +200,8 @@ TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReply_SameLoop) {
   EXPECT_LT(task_delete_order, reply_delete_order);
 }
 
-TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReply_DeadReplyLoopDoesNotDelete) {
+TEST_F(MessageLoopTaskRunnerTest,
+       PostTaskAndReply_DeadReplyTaskRunnerBehavior) {
   // Annotate the scope as having memory leaks to suppress heapchecker reports.
   ANNOTATE_SCOPED_MEMORY_LEAK;
   MessageLoop* task_run_on = NULL;
@@ -217,8 +218,8 @@ TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReply_DeadReplyLoopDoesNotDelete) {
 
   // Enqueue the relay.
   task_thread_.task_runner()->PostTaskAndReply(
-      FROM_HERE, Bind(&RecordLoop, task_recorder),
-      Bind(&RecordLoopAndQuit, reply_recorder));
+      FROM_HERE, BindOnce(&RecordLoop, task_recorder),
+      BindOnce(&RecordLoopAndQuit, reply_recorder));
 
   // Die if base::Bind doesn't retain a reference to the recorders.
   task_recorder = NULL;
@@ -237,11 +238,13 @@ TEST_F(MessageLoopTaskRunnerTest, PostTaskAndReply_DeadReplyLoopDoesNotDelete) {
   MessageLoop* task_loop = task_thread_.message_loop();
   task_thread_.Stop();
 
+  // Even if the reply task runner is already gone, the original task should
+  // already be deleted. However, the reply which hasn't executed yet should
+  // leak to avoid thread-safety issues.
   EXPECT_EQ(task_loop, task_run_on);
-  ASSERT_FALSE(task_deleted_on);
+  EXPECT_EQ(task_loop, task_deleted_on);
   EXPECT_FALSE(reply_run_on);
   ASSERT_FALSE(reply_deleted_on);
-  EXPECT_EQ(task_delete_order, reply_delete_order);
 
   // The PostTaskAndReplyRelay is leaked here.  Even if we had a reference to
   // it, we cannot just delete it because PostTaskAndReplyRelay's destructor
@@ -328,8 +331,8 @@ TEST_F(MessageLoopTaskRunnerThreadingTest, Delete) {
 
 TEST_F(MessageLoopTaskRunnerThreadingTest, PostTask) {
   EXPECT_TRUE(file_thread_->task_runner()->PostTask(
-      FROM_HERE, Bind(&MessageLoopTaskRunnerThreadingTest::BasicFunction,
-                      Unretained(this))));
+      FROM_HERE, BindOnce(&MessageLoopTaskRunnerThreadingTest::BasicFunction,
+                          Unretained(this))));
   RunLoop().Run();
 }
 
@@ -342,7 +345,7 @@ TEST_F(MessageLoopTaskRunnerThreadingTest, PostTaskAfterThreadExits) {
   test_thread->Stop();
 
   bool ret = task_runner->PostTask(
-      FROM_HERE, Bind(&MessageLoopTaskRunnerThreadingTest::AssertNotRun));
+      FROM_HERE, BindOnce(&MessageLoopTaskRunnerThreadingTest::AssertNotRun));
   EXPECT_FALSE(ret);
 }
 
@@ -355,7 +358,7 @@ TEST_F(MessageLoopTaskRunnerThreadingTest, PostTaskAfterThreadIsDeleted) {
     task_runner = test_thread->task_runner();
   }
   bool ret = task_runner->PostTask(
-      FROM_HERE, Bind(&MessageLoopTaskRunnerThreadingTest::AssertNotRun));
+      FROM_HERE, BindOnce(&MessageLoopTaskRunnerThreadingTest::AssertNotRun));
   EXPECT_FALSE(ret);
 }
 

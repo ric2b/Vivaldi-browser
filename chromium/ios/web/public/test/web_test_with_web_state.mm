@@ -7,6 +7,7 @@
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
@@ -29,18 +30,26 @@ WebTestWithWebState::~WebTestWithWebState() {}
 
 void WebTestWithWebState::SetUp() {
   WebTest::SetUp();
-  std::unique_ptr<WebStateImpl> web_state(new WebStateImpl(GetBrowserState()));
-  web_state->GetNavigationManagerImpl().InitializeSession(NO);
-  web_state->SetWebUsageEnabled(true);
-  web_state_.reset(web_state.release());
+  web::WebState::CreateParams params(GetBrowserState());
+  web_state_ = web::WebState::Create(params);
+  web_state_->SetWebUsageEnabled(true);
 
   // Force generation of child views; necessary for some tests.
-  [GetWebController(web_state_.get()) triggerPendingLoad];
+  [GetWebController(web_state()) triggerPendingLoad];
 }
 
 void WebTestWithWebState::TearDown() {
   DestroyWebState();
   WebTest::TearDown();
+}
+
+void WebTestWithWebState::AddPendingItem(const GURL& url,
+                                         ui::PageTransition transition) {
+  GetWebController(web_state())
+      .webStateImpl->GetNavigationManagerImpl()
+      .AddPendingItem(url, Referrer(), transition,
+                      web::NavigationInitiationType::USER_INITIATED,
+                      web::NavigationManager::UserAgentOverrideOption::INHERIT);
 }
 
 void WebTestWithWebState::LoadHtml(NSString* html, const GURL& url) {

@@ -12,6 +12,7 @@
 
 #include "base/base_paths.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -29,7 +30,6 @@
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/arc/arc_migration_guide_notification.h"
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -58,11 +58,13 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/chromeos/net/tether_notification_presenter.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/component_updater/ev_whitelist_component_installer.h"
 #include "chrome/browser/component_updater/sth_set_component_installer.h"
+#include "chrome/browser/cryptauth/chrome_cryptauth_service_factory.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/google/google_brand_chromeos.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -73,6 +75,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
+#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
@@ -84,12 +87,15 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/cert_loader.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/components/tether/initializer.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/stub_authenticator.h"
+#include "chromeos/network/network_connect.h"
+#include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -119,6 +125,7 @@
 #include "rlz/features/features.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/message_center/message_center.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_RLZ)
@@ -137,12 +144,6 @@ static const int kFlagsFetchingLoginTimeoutMs = 1000;
 // The maximum ammount of time that we are willing to delay a browser restart
 // for, waiting for a session restore to finish.
 static const int kMaxRestartDelaySeconds = 10;
-
-// ChromeVox tutorial URL (used in place of "getting started" url when
-// accessibility is enabled).
-const char kChromeVoxTutorialURLPattern[] =
-    "chrome-extension://mndnfokpggljbaajbnioimlmbfngpief/"
-    "cvox2/background/panel.html?tutorial";
 
 void InitLocaleAndInputMethodsForNewUser(
     UserSessionManager* session_manager,
@@ -1231,6 +1232,19 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
     InitializeCertificateTransparencyComponents(user);
 
     arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(profile);
+
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            chromeos::switches::kEnableTether)) {
+      auto notification_presenter =
+          base::MakeUnique<tether::TetherNotificationPresenter>(
+              message_center::MessageCenter::Get(), NetworkConnect::Get());
+      chromeos::tether::Initializer::Init(
+          ChromeCryptAuthServiceFactory::GetForBrowserContext(profile),
+          std::move(notification_presenter), profile->GetPrefs(),
+          ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
+          NetworkHandler::Get()->network_state_handler(),
+          NetworkConnect::Get());
+    }
   }
 
   UpdateEasyUnlockKeys(user_context_);
@@ -1286,15 +1300,6 @@ void UserSessionManager::InitializeStartUrls() const {
 
   bool can_show_getstarted_guide = user_manager->GetActiveUser()->GetType() ==
                                    user_manager::USER_TYPE_REGULAR;
-
-  // Skip the default first-run behavior for public accounts.
-  if (!user_manager->IsLoggedInAsPublicAccount()) {
-    if (AccessibilityManager::Get()->IsSpokenFeedbackEnabled()) {
-      const char* url = kChromeVoxTutorialURLPattern;
-      start_urls.push_back(url);
-      can_show_getstarted_guide = false;
-    }
-  }
 
   // Only show getting started guide for a new user.
   const bool should_show_getstarted_guide = user_manager->IsCurrentUserNew();
@@ -1790,20 +1795,37 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
 
   if (quick_unlock::QuickUnlockNotificationController::
           ShouldShowPinNotification(profile) &&
-      quick_unlock_notification_handler_.find(profile) ==
-          quick_unlock_notification_handler_.end()) {
-    auto* qu_feature_notification_controller =
+      pin_unlock_notification_handler_.find(profile) ==
+          pin_unlock_notification_handler_.end()) {
+    auto* pin_feature_notification_controller =
         quick_unlock::QuickUnlockNotificationController::CreateForPin(profile);
-    quick_unlock_notification_handler_.insert(
-        std::make_pair(profile, qu_feature_notification_controller));
+    pin_unlock_notification_handler_.insert(
+        std::make_pair(profile, pin_feature_notification_controller));
   }
+
+  if (quick_unlock::QuickUnlockNotificationController::
+          ShouldShowFingerprintNotification(profile) &&
+      fingerprint_unlock_notification_handler_.find(profile) ==
+          fingerprint_unlock_notification_handler_.end()) {
+    auto* fingerprint_feature_notification_controller =
+        quick_unlock::QuickUnlockNotificationController::CreateForFingerprint(
+            profile);
+    fingerprint_unlock_notification_handler_.insert(
+        std::make_pair(profile, fingerprint_feature_notification_controller));
+  }
+
+  base::OnceClosure login_host_finalized_callback = base::BindOnce(
+      [] { session_manager::SessionManager::Get()->SessionStarted(); });
 
   // Mark login host for deletion after browser starts.  This
   // guarantees that the message loop will be referenced by the
   // browser before it is dereferenced by the login host.
-  if (login_host)
-    login_host->Finalize();
-  session_manager::SessionManager::Get()->SessionStarted();
+  if (login_host) {
+    login_host->Finalize(std::move(login_host_finalized_callback));
+  } else {
+    base::ResetAndReturn(&login_host_finalized_callback).Run();
+  }
+
   chromeos::BootTimesRecorder::Get()->LoginDone(
       user_manager::UserManager::Get()->IsCurrentUserNew());
 
@@ -1911,6 +1933,11 @@ bool UserSessionManager::TokenHandlesEnabled() {
 }
 
 void UserSessionManager::Shutdown() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kEnableTether)) {
+    chromeos::tether::Initializer::Shutdown();
+  }
+
   token_handle_fetcher_.reset();
   token_handle_util_.reset();
   first_run::GoodiesDisplayer::Delete();

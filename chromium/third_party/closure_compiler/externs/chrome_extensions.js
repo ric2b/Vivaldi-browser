@@ -2080,23 +2080,31 @@ chrome.enterprise.Token.prototype.subtleCrypto;
 /**
  * @param {!ArrayBuffer} challenge A challenge as emitted by the Verified Access
  *     Web API.
- * @param {function(!ArrayBuffer): void=} callback Called back with the
- *     challenge response.
+ * @param {boolean|function(!ArrayBuffer): void} registerKeyOrCallback Either a
+ *     flag indicating whether to register the key, in which case the callback
+ *     is passed as the next arg, or the callback. If a flag is set, the current
+ *     Enterprise Machine Key is registered with the "system" token and
+ *     relinquishes the Enterprise Machine Key role. The key can then be
+ *     associated with a certificate and used like any other signing key. This
+ *     key is 2048-bit RSA. Subsequent calls to this function will then generate
+ *     a new Enterprise Machine Key.
+ * @param {function(!ArrayBuffer=): void=} callback The callback (called back
+ *     with the challenge response), if arg2 was the registerKey flag.
  * @return {undefined}
  */
 chrome.enterprise.platformKeys.challengeMachineKey =
-    function(challenge, callback) {};
+    function(challenge, registerKeyOrCallback, callback) {};
 
 
 /**
  * @param {!ArrayBuffer} challenge A challenge as emitted by the Verified Access
  *     Web API.
  * @param {boolean} registerKey If set, the current Enterprise User Key is
- *     registered with the "user"> token and relinquishes the Enterprise User
+ *     registered with the "user" token and relinquishes the Enterprise User
  *     Key role. The key can then be associated with a certificate and used like
  *     any other signing key. This key is 2048-bit RSA. Subsequent calls to this
  *     function will then generate a new Enterprise User Key.
- * @param {function(!ArrayBuffer): void=} callback Called back with the
+ * @param {function(!ArrayBuffer): void} callback Called back with the
  *     challenge response.
  * @return {undefined}
  */
@@ -2401,6 +2409,16 @@ chrome.runtime.requestUpdateCheck = function(callback) {};
 chrome.runtime.restart = function() {};
 
 
+/**
+ * @see https://developer.chrome.com/extensions/runtime#method-restartAfterDelay
+ * @param {number} seconds Time to wait in seconds before rebooting the device,
+ *     or -1 to cancel a scheduled reboot.
+ * @param {function():void=} opt_callback A callback to be invoked when a
+ *     restart request was successfully rescheduled.
+ * @return {undefined}
+ */
+chrome.runtime.restartAfterDelay = function(seconds, opt_callback) {};
+
 
 /**
  * @see http://developer.chrome.com/extensions/runtime.html#method-connectNative
@@ -2559,7 +2577,7 @@ chrome.runtime.MessageSenderEvent.prototype.hasListeners = function() {};
 
 /**
  * @const
- * @see https://developer.chrome.com/extensions/tabs.html
+ * @see https://developer.chrome.com/extensions/tabs
  */
 chrome.tabs = {};
 
@@ -2770,7 +2788,11 @@ chrome.tabs.move = function(tabId, moveProperties, opt_callback) {};
  * @typedef {?{
  *   active: (boolean|undefined),
  *   pinned: (boolean|undefined),
+ *   audible: (boolean|undefined),
+ *   muted: (boolean|undefined),
  *   highlighted: (boolean|undefined),
+ *   discarded: (boolean|undefined),
+ *   autoDiscardable: (boolean|undefined),
  *   currentWindow: (boolean|undefined),
  *   lastFocusedWindow: (boolean|undefined),
  *   status: (!chrome.tabs.TabStatus|string|undefined),
@@ -4513,6 +4535,13 @@ chrome.identity.onSignInChanged;
 
 
 /**
+ * @param {string=} opt_path
+ * @return {string}
+ */
+chrome.identity.getRedirectURL = function(opt_path) {};
+
+
+/**
  * @const
  * @see https://developer.chrome.com/extensions/input.ime.html
  */
@@ -6028,18 +6057,17 @@ chrome.webNavigation.onHistoryStateUpdated;
 
 /**
  * Most event listeners for WebRequest take extra arguments.
- * @see https://developer.chrome.com/extensions/webRequest.html.
+ * @see https://developer.chrome.com/extensions/webRequest
  * @constructor
  */
 function WebRequestEvent() {}
 
 
 /**
- * @param {function(!Object): (void|!BlockingResponse)} listener Listener
- *     function.
+ * @param {function(!Object): void} listener Listener function.
  * @param {!RequestFilter} filter A set of filters that restrict
  *     the events that will be sent to this listener.
- * @param {Array<string>=} opt_extraInfoSpec Array of extra information
+ * @param {!Array<string>=} opt_extraInfoSpec Array of extra information
  *     that should be passed to the listener function.
  * @return {undefined}
  */
@@ -6048,33 +6076,123 @@ WebRequestEvent.prototype.addListener =
 
 
 /**
- * @param {function(!Object): (void|!BlockingResponse)} listener Listener
- *     function.
+ * @param {function(!Object): void} listener Listener function.
  * @return {undefined}
  */
 WebRequestEvent.prototype.removeListener = function(listener) {};
 
 
 /**
- * @param {function(!Object): (void|!BlockingResponse)} listener Listener
- *     function.
+ * @param {function(!Object): void} listener Listener function.
  * @return {undefined}
  */
 WebRequestEvent.prototype.hasListener = function(listener) {};
 
 
 /**
- * @param {function(!Object): (void|!BlockingResponse)} listener Listener
- *     function.
+ * @param {function(!Object): void} listener Listener function.
  * @return {undefined}
  */
 WebRequestEvent.prototype.hasListeners = function(listener) {};
 
 
+/**
+ * Some event listeners can be optionally synchronous.
+ * @see https://developer.chrome.com/extensions/webRequest
+ * @constructor
+ */
+function WebRequestOptionallySynchronousEvent() {}
+
 
 /**
- * The onErrorOccurred event takes one less parameter than the others.
- * @see https://developer.chrome.com/extensions/webRequest.html.
+ * @param {function(!Object): (undefined|!BlockingResponse)} listener Listener
+ *     function.
+ * @param {!RequestFilter} filter A set of filters that restrict
+ *     the events that will be sent to this listener.
+ * @param {!Array<string>=} opt_extraInfoSpec Array of extra information
+ *     that should be passed to the listener function.
+ * @return {undefined}
+ */
+WebRequestOptionallySynchronousEvent.prototype.addListener = function(
+    listener, filter, opt_extraInfoSpec) {};
+
+
+/**
+ * @param {function(!Object): (undefined|!BlockingResponse)} listener Listener
+ *     function.
+ * @return {undefined}
+ */
+WebRequestOptionallySynchronousEvent.prototype.removeListener = function(
+    listener) {};
+
+
+/**
+ * @param {function(!Object): (undefined|!BlockingResponse)} listener Listener
+ *     function.
+ * @return {undefined}
+ */
+WebRequestOptionallySynchronousEvent.prototype.hasListener = function(
+    listener) {};
+
+
+/**
+ * @param {function(!Object): (undefined|!BlockingResponse)} listener Listener
+ *     function.
+ * @return {undefined}
+ */
+WebRequestOptionallySynchronousEvent.prototype.hasListeners = function(
+    listener) {};
+
+
+/**
+ * The onAuthRequired event listener can be optionally synchronous, and can also
+ * optionally take a callback.
+ * @see https://developer.chrome.com/extensions/webRequest
+ * @constructor
+ */
+function WebRequestOnAuthRequiredEvent() {}
+
+
+/**
+ * @param {function(!Object, function(!BlockingResponse)=):
+ *     (undefined|!BlockingResponse)} listener Listener function.
+ * @param {!RequestFilter} filter A set of filters that restrict
+ *     the events that will be sent to this listener.
+ * @param {!Array<string>=} opt_extraInfoSpec Array of extra information
+ *     that should be passed to the listener function.
+ * @return {undefined}
+ */
+WebRequestOnAuthRequiredEvent.prototype.addListener = function(
+    listener, filter, opt_extraInfoSpec) {};
+
+
+/**
+ * @param {function(!Object): (undefined|!BlockingResponse)} listener Listener
+ *     function.
+ * @return {undefined}
+ */
+WebRequestOnAuthRequiredEvent.prototype.removeListener = function(listener) {};
+
+
+/**
+ * @param {function(!Object): (undefined|!BlockingResponse)} listener Listener
+ *     function.
+ * @return {undefined}
+ */
+WebRequestOnAuthRequiredEvent.prototype.hasListener = function(listener) {};
+
+
+/**
+ * @param {function(!Object): (undefined|!BlockingResponse)} listener Listener
+ *     function.
+ * @return {undefined}
+ */
+WebRequestOnAuthRequiredEvent.prototype.hasListeners = function(listener) {};
+
+
+/**
+ * The onErrorOccurred event takes one fewer parameter than the others.
+ * @see https://developer.chrome.com/extensions/webRequest
  * @constructor
  */
 function WebRequestOnErrorOccurredEvent() {}
@@ -6113,7 +6231,7 @@ WebRequestOnErrorOccurredEvent.prototype.hasListeners = function(listener) {};
 
 /**
  * @const
- * @see https://developer.chrome.com/extensions/webRequest.html
+ * @see https://developer.chrome.com/extensions/webRequest
  */
 chrome.webRequest = {};
 
@@ -6125,7 +6243,7 @@ chrome.webRequest = {};
 chrome.webRequest.handlerBehaviorChanged = function(opt_callback) {};
 
 
-/** @type {!WebRequestEvent} */
+/** @type {!WebRequestOnAuthRequiredEvent} */
 chrome.webRequest.onAuthRequired;
 
 
@@ -6133,11 +6251,11 @@ chrome.webRequest.onAuthRequired;
 chrome.webRequest.onBeforeRedirect;
 
 
-/** @type {!WebRequestEvent} */
+/** @type {!WebRequestOptionallySynchronousEvent} */
 chrome.webRequest.onBeforeRequest;
 
 
-/** @type {!WebRequestEvent} */
+/** @type {!WebRequestOptionallySynchronousEvent} */
 chrome.webRequest.onBeforeSendHeaders;
 
 
@@ -6149,7 +6267,7 @@ chrome.webRequest.onCompleted;
 chrome.webRequest.onErrorOccurred;
 
 
-/** @type {!WebRequestEvent} */
+/** @type {!WebRequestOptionallySynchronousEvent} */
 chrome.webRequest.onHeadersReceived;
 
 
@@ -7034,82 +7152,49 @@ ChromeSetting.prototype.onChange;
 
 
 /**
- * @see https://developer.chrome.com/extensions/webRequest.html#type-RequestFilter
- * @constructor
+ * @see https://developer.chrome.com/extensions/webRequest#type-RequestFilter
+ * @typedef {?{
+ *   urls: !Array<string>,
+ *   types: (!Array<string>|undefined),
+ *   tabId: (number|undefined),
+ *   windowId: (number|undefined),
+ * }}
  */
-function RequestFilter() {}
-
-
-/** @type {!Array<string>} */
-RequestFilter.prototype.urls;
-
-
-/** @type {!Array<string>} */
-RequestFilter.prototype.types;
-
-
-/** @type {number} */
-RequestFilter.prototype.tabId;
-
-
-/** @type {number} */
-RequestFilter.prototype.windowId;
+var RequestFilter;
 
 
 
 /**
- * @see https://developer.chrome.com/extensions/webRequest.html#type-HttpHeaders
- * @constructor
+ * @see https://developer.chrome.com/extensions/webRequest#type-HttpHeaders
+ * @typedef {?{
+ *   name: string,
+ *   value: (string|undefined),
+ *   binaryValue: (!Array<number>|undefined),
+ * }}
  */
-function HttpHeader() {}
-
-
-/** @type {string} */
-HttpHeader.prototype.name;
-
-
-/** @type {string} */
-HttpHeader.prototype.value;
-
-
-/** @type {!Array<number>} */
-HttpHeader.prototype.binaryValue;
-
-
-/**
- * @see https://developer.chrome.com/extensions/webRequest.html#type-HttpHeaders
- * @typedef {Array<!HttpHeader>}
- * @private
- */
-var HttpHeaders_;
+var HttpHeader;
 
 
 
 /**
- * @see https://developer.chrome.com/extensions/webRequest.html#type-BlockingResponse
- * @constructor
+ * @see https://developer.chrome.com/extensions/webRequest#type-HttpHeaders
+ * @typedef {?Array<!HttpHeader>}
  */
-function BlockingResponse() {}
+chrome.webRequest.HttpHeaders;
 
 
-/** @type {boolean} */
-BlockingResponse.prototype.cancel;
 
-
-/** @type {string} */
-BlockingResponse.prototype.redirectUrl;
-
-
-/** @type {!HttpHeaders_} */
-BlockingResponse.prototype.requestHeaders;
-
-
-/** @type {!HttpHeaders_} */
-BlockingResponse.prototype.responseHeaders;
-
-
-/** @type {Object<string,string>} */
-BlockingResponse.prototype.authCredentials;
+/**
+ * @see https://developer.chrome.com/extensions/webRequest#type-BlockingResponse
+ * @typedef {?{
+ *   cancel: (boolean|undefined),
+ *   redirectUrl: (string|undefined),
+ *   requestHeaders: (!chrome.webRequest.HttpHeaders|undefined),
+ *   responseHeaders: (!chrome.webRequest.HttpHeaders|undefined),
+ *   authCredentials: (!{username: string, password: string}|undefined),
+ * }}
+ */
+var BlockingResponse;
 
 
 
@@ -9975,6 +10060,13 @@ chrome.bluetoothPrivate.setAdapterState = function(adapterState, callback) {};
  * @return {undefined}
  */
 chrome.bluetoothPrivate.setPairingResponse = function(options, callback) {};
+
+
+/**
+ * @param {string} deviceAddress
+ * @param {function():void=} callback
+ */
+chrome.bluetoothPrivate.disconnectAll = function(deviceAddress, callback) {};
 
 
 /**

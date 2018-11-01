@@ -17,7 +17,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "gin/v8_initializer.h"
 
 namespace content {
 namespace internal {
@@ -100,7 +99,6 @@ void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
   delete options.fds_to_remap;
 }
 
-// static
 base::TerminationStatus ChildProcessLauncherHelper::GetTerminationStatus(
     const ChildProcessLauncherHelper::Process& process,
     bool known_dead,
@@ -136,7 +134,6 @@ void ChildProcessLauncherHelper::ForceNormalProcessTerminationSync(
   }
 }
 
-// static
 void ChildProcessLauncherHelper::SetProcessBackgroundedOnLauncherThread(
       base::Process process, bool background) {
   DCHECK_CURRENTLY_ON(BrowserThread::PROCESS_LAUNCHER);
@@ -149,6 +146,11 @@ void ChildProcessLauncherHelper::SetRegisteredFilesForService(
     const std::string& service_name,
     catalog::RequiredFileMap required_files) {
   SetFilesToShareForServicePosix(service_name, std::move(required_files));
+}
+
+// static
+void ChildProcessLauncherHelper::ResetRegisteredFilesForTesting() {
+  ResetFilesToShareForTestingPosix();
 }
 
 // static

@@ -36,8 +36,8 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChrome;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChromePhone;
 import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeEventFilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
+import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.Stack;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackTab;
@@ -1805,7 +1805,13 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     @Feature({"Android-TabSwitcher"})
     @RetryOnFailure
     public void testIncognitoTabsNotRestoredAfterSwipe() throws Exception {
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
+        startMainActivityWithURL(mTestServer.getURL(TEST_PAGE_FILE_PATH));
+
         newIncognitoTabFromMenu();
+        // Tab states are not saved for empty NTP tabs, so navigate to any page to trigger a file
+        // to be saved.
+        loadUrl(mTestServer.getURL(TEST_PAGE_FILE_PATH));
 
         File tabStateDir = TabbedModeTabPersistencePolicy.getOrCreateTabbedModeStateDirectory();
         TabModel normalModel = getActivity().getTabModelSelector().getModel(false);
@@ -1839,7 +1845,8 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
                 || getName().equals("testSwitchToTabThatDoesNotHaveThumbnail")
                 || getName().equals("testCloseTabPortrait")
                 || getName().equals("testCloseTabLandscape")
-                || getName().equals("testTabsAreDestroyedOnModelDestruction")) {
+                || getName().equals("testTabsAreDestroyedOnModelDestruction")
+                || getName().equals("testIncognitoTabsNotRestoredAfterSwipe")) {
             return;
         }
         startMainActivityFromLauncher();

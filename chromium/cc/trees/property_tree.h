@@ -11,10 +11,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cc/base/cc_export.h"
+#include "base/containers/flat_map.h"
+#include "cc/base/filter_operations.h"
 #include "cc/base/synced_property.h"
+#include "cc/cc_export.h"
 #include "cc/layers/layer_sticky_position_constraint.h"
-#include "cc/output/filter_operations.h"
 #include "cc/trees/element_id.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
@@ -53,7 +54,7 @@ class CC_EXPORT PropertyTree {
   // they are exported by CC_EXPORT. They will be instantiated in every
   // compilation units that included this header, and compilation can fail
   // because T may be incomplete.
-  ~PropertyTree();
+  virtual ~PropertyTree();
   PropertyTree<T>& operator=(const PropertyTree<T>&);
 
   // Property tree node starts from index 0.
@@ -82,7 +83,9 @@ class CC_EXPORT PropertyTree {
   void clear();
   size_t size() const { return nodes_.size(); }
 
-  void set_needs_update(bool needs_update) { needs_update_ = needs_update; }
+  virtual void set_needs_update(bool needs_update) {
+    needs_update_ = needs_update;
+  }
   bool needs_update() const { return needs_update_; }
 
   std::vector<T>& nodes() { return nodes_; }
@@ -97,25 +100,50 @@ class CC_EXPORT PropertyTree {
 
   void AsValueInto(base::trace_event::TracedValue* value) const;
 
+  const T* FindNodeFromOwningLayerId(int id) const {
+    return Node(FindNodeIndexFromOwningLayerId(id));
+  }
+  T* UpdateNodeFromOwningLayerId(int id) {
+    int index = FindNodeIndexFromOwningLayerId(id);
+    if (index == kInvalidNodeId) {
+      DCHECK(property_trees()->is_main_thread);
+      property_trees()->needs_rebuild = true;
+    }
+
+    return Node(index);
+  }
+
+  int FindNodeIndexFromOwningLayerId(int id) const {
+    auto iter = owning_layer_id_to_node_index_.find(id);
+    if (iter == owning_layer_id_to_node_index_.end())
+      return kInvalidNodeId;
+    else
+      return iter->second;
+  }
+
+  void SetOwningLayerIdForNode(const T* node, int id) {
+    if (!node) {
+      owning_layer_id_to_node_index_[id] = kInvalidNodeId;
+      return;
+    }
+
+    DCHECK(node == Node(node->id));
+    owning_layer_id_to_node_index_[id] = node->id;
+  }
+
  private:
   std::vector<T> nodes_;
 
-  friend class TransformTree;
+  // Maps from layer id to the property tree node index. This container is
+  // typically very small and the memory overhead of unordered_map will
+  // dominate so use a flat_map. See http://crbug.com/709243
+  base::flat_map<int, int> owning_layer_id_to_node_index_;
+
   bool needs_update_;
   PropertyTrees* property_trees_;
 };
 
-struct StickyPositionNodeData {
-  int scroll_ancestor;
-  LayerStickyPositionConstraint constraints;
-
-  // This is the offset that blink has already applied to counteract the main
-  // thread scroll offset of the scroll ancestor. We need to account for this
-  // by computing the additional offset necessary to keep the element stuck.
-  gfx::Vector2dF main_thread_offset;
-
-  StickyPositionNodeData() : scroll_ancestor(-1) {}
-};
+struct StickyPositionNodeData;
 
 class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
  public:
@@ -126,7 +154,7 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   // compilation units that included this header, and compilation can fail
   // because TransformCachedNodeData may be incomplete.
   TransformTree(const TransformTree&) = delete;
-  ~TransformTree();
+  ~TransformTree() final;
   TransformTree& operator=(const TransformTree&);
 
   bool operator==(const TransformTree& other) const;
@@ -137,9 +165,9 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
 
   void clear();
 
-  void OnTransformAnimated(const gfx::Transform& transform,
-                           int id,
-                           LayerTreeImpl* layer_tree_impl);
+  TransformNode* FindNodeFromElementId(ElementId id);
+  bool OnTransformAnimated(ElementId element_id,
+                           const gfx::Transform& transform);
   // Computes the change of basis transform from node |source_id| to |dest_id|.
   // This is used by scroll children to compute transform from their scroll
   // parent space (source) to their parent space (destination) and it can atmost
@@ -160,7 +188,7 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
       TransformNode* node,
       TransformNode* parent_node);
 
-  void set_needs_update(bool needs_update);
+  void set_needs_update(bool needs_update) final;
 
   // A TransformNode's source_to_parent value is used to account for the fact
   // that fixed-position layers are positioned by Blink wrt to their layer tree
@@ -254,8 +282,7 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
 
   void UpdateLocalTransform(TransformNode* node);
   void UpdateScreenSpaceTransform(TransformNode* node,
-                                  TransformNode* parent_node,
-                                  TransformNode* target_node);
+                                  TransformNode* parent_node);
   void UpdateAnimationProperties(TransformNode* node,
                                  TransformNode* parent_node);
   void UndoSnapping(TransformNode* node);
@@ -278,6 +305,35 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   std::vector<StickyPositionNodeData> sticky_position_data_;
 };
 
+struct StickyPositionNodeData {
+  int scroll_ancestor;
+  LayerStickyPositionConstraint constraints;
+
+  // This is the offset that blink has already applied to counteract the main
+  // thread scroll offset of the scroll ancestor. We need to account for this
+  // by computing the additional offset necessary to keep the element stuck.
+  gfx::Vector2dF main_thread_offset;
+
+  // In order to properly compute the sticky offset, we need to know if we have
+  // any sticky ancestors both between ourselves and our containing block and
+  // between our containing block and the viewport. These ancestors are then
+  // used to correct the constraining rect locations.
+  int nearest_node_shifting_sticky_box;
+  int nearest_node_shifting_containing_block;
+
+  // For performance we cache our accumulated sticky offset to allow descendant
+  // sticky elements to offset their constraint rects. Because we can either
+  // affect the sticky box constraint rect or the containing block constraint
+  // rect, we need to accumulate both.
+  gfx::Vector2dF total_sticky_box_sticky_offset;
+  gfx::Vector2dF total_containing_block_sticky_offset;
+
+  StickyPositionNodeData()
+      : scroll_ancestor(TransformTree::kInvalidNodeId),
+        nearest_node_shifting_sticky_box(TransformTree::kInvalidNodeId),
+        nearest_node_shifting_containing_block(TransformTree::kInvalidNodeId) {}
+};
+
 class CC_EXPORT ClipTree final : public PropertyTree<ClipNode> {
  public:
   bool operator==(const ClipTree& other) const;
@@ -291,7 +347,7 @@ class CC_EXPORT ClipTree final : public PropertyTree<ClipNode> {
 class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
  public:
   EffectTree();
-  ~EffectTree();
+  ~EffectTree() final;
 
   EffectTree& operator=(const EffectTree& from);
   bool operator==(const EffectTree& other) const;
@@ -306,10 +362,9 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 
   void UpdateSurfaceContentsScale(EffectNode* node);
 
-  void OnOpacityAnimated(float opacity, int id, LayerTreeImpl* layer_tree_impl);
-  void OnFilterAnimated(const FilterOperations& filters,
-                        int id,
-                        LayerTreeImpl* layer_tree_impl);
+  EffectNode* FindNodeFromElementId(ElementId id);
+  bool OnOpacityAnimated(ElementId id, float opacity);
+  bool OnFilterAnimated(ElementId id, const FilterOperations& filters);
 
   void UpdateEffects(int id);
 
@@ -371,7 +426,7 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
  public:
   ScrollTree();
-  ~ScrollTree();
+  ~ScrollTree() final;
 
   ScrollTree& operator=(const ScrollTree& from);
   bool operator==(const ScrollTree& other) const;
@@ -548,6 +603,18 @@ struct DrawTransformData {
         transforms(gfx::Transform(), gfx::Transform()) {}
 };
 
+struct ConditionalClip {
+  bool is_clipped;
+  gfx::RectF clip_rect;
+};
+
+struct ClipRectData {
+  int target_id;
+  ConditionalClip clip;
+
+  ClipRectData() : target_id(-1) {}
+};
+
 struct PropertyTreesCachedData {
   int transform_tree_update_number;
   std::vector<AnimationScaleData> animation_scales;
@@ -565,14 +632,6 @@ class CC_EXPORT PropertyTrees final {
 
   bool operator==(const PropertyTrees& other) const;
   PropertyTrees& operator=(const PropertyTrees& from);
-
-  // These maps map from layer id to the index for each of the respective
-  // property node types.
-  std::unordered_map<int, int> layer_id_to_transform_node_index;
-  std::unordered_map<int, int> layer_id_to_effect_node_index;
-  std::unordered_map<int, int> layer_id_to_clip_node_index;
-  std::unordered_map<int, int> layer_id_to_scroll_node_index;
-  enum TreeType { TRANSFORM, EFFECT, CLIP, SCROLL };
 
   // These maps allow mapping directly from a compositor element id to the
   // respective property node. This will eventually allow simplifying logic in
@@ -594,6 +653,7 @@ class CC_EXPORT PropertyTrees final {
   ScrollTree scroll_tree;
   bool needs_rebuild;
   bool non_root_surfaces_enabled;
+  bool can_adjust_raster_scales;
   // Change tracking done on property trees needs to be preserved across commits
   // (when they are not rebuild). We cache a global bool which stores whether
   // we did any change tracking so that we can skip copying the change status
@@ -616,7 +676,6 @@ class CC_EXPORT PropertyTrees final {
   void SetInnerViewportScrollBoundsDelta(gfx::Vector2dF bounds_delta);
   void PushOpacityIfNeeded(PropertyTrees* target_tree);
   void RemoveIdFromIdToIndexMaps(int id);
-  bool IsInIdToIndexMap(TreeType tree_type, int id);
   void UpdateChangeTracking();
   void PushChangeTrackingTo(PropertyTrees* tree);
   void ResetAllChangeTracking();
@@ -653,6 +712,8 @@ class CC_EXPORT PropertyTrees final {
   gfx::Transform ToScreenSpaceTransformWithoutSurfaceContentsScale(
       int transform_id,
       int effect_id) const;
+
+  ClipRectData* FetchClipRectFromCache(int clip_id, int target_id);
 
  private:
   gfx::Vector2dF inner_viewport_container_bounds_delta_;

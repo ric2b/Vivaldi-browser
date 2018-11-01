@@ -22,24 +22,10 @@ bool IsEnableAccountConsistency();
 // Whether the chrome.identity API should be multi-account.
 bool IsExtensionsMultiAccount();
 
-// Enables using GAIA information to populate profile name and icon.
-bool IsGoogleProfileInfo();
-
-// Use new profile management system, including profile sign-out and new
-// choosers.
-bool IsNewProfileManagement();
-
-// Whether the new profile management preview has been enabled.
-bool IsNewProfileManagementPreviewEnabled();
-
 // Checks whether the new gaia password separated sign in flow is enabled.
 bool UsePasswordSeparatedSigninFlow();
 
-// Whether the material design user menu should be displayed.
-bool IsMaterialDesignUserMenu();
-
-// Called in tests to force enabling different modes.
-void EnableNewProfileManagementForTesting(base::CommandLine* command_line);
+// Called in tests to force enable account consistency.
 void EnableAccountConsistencyForTesting(base::CommandLine* command_line);
 
 }  // namespace switches

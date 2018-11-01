@@ -42,7 +42,7 @@ class LoggingCanvas : public InterceptingCanvasBase {
   LoggingCanvas(int width, int height);
 
   // Returns a snapshot of the current log data.
-  std::unique_ptr<JSONArray> log();
+  std::unique_ptr<JSONArray> Log();
 
   void onDrawPaint(const SkPaint&) override;
   void onDrawPoints(PointMode,
@@ -72,35 +72,29 @@ class LoggingCanvas : public InterceptingCanvasBase {
                        const SkRect& dst,
                        const SkPaint*,
                        SrcRectConstraint) override;
-  virtual void onDrawVertices(VertexMode vmode,
-                              int vertexCount,
-                              const SkPoint vertices[],
-                              const SkPoint texs[],
-                              const SkColor colors[],
-                              SkBlendMode bmode,
-                              const uint16_t indices[],
-                              int indexCount,
-                              const SkPaint&) override;
+  void onDrawVerticesObject(const SkVertices*,
+                            SkBlendMode bmode,
+                            const SkPaint&) override;
 
   void onDrawDRRect(const SkRRect& outer,
                     const SkRRect& inner,
                     const SkPaint&) override;
   void onDrawText(const void* text,
-                  size_t byteLength,
+                  size_t byte_length,
                   SkScalar x,
                   SkScalar y,
                   const SkPaint&) override;
   void onDrawPosText(const void* text,
-                     size_t byteLength,
+                     size_t byte_length,
                      const SkPoint pos[],
                      const SkPaint&) override;
   void onDrawPosTextH(const void* text,
-                      size_t byteLength,
+                      size_t byte_length,
                       const SkScalar xpos[],
-                      SkScalar constY,
+                      SkScalar const_y,
                       const SkPaint&) override;
   void onDrawTextOnPath(const void* text,
-                        size_t byteLength,
+                        size_t byte_length,
                         const SkPath&,
                         const SkMatrix*,
                         const SkPaint&) override;
@@ -122,12 +116,12 @@ class LoggingCanvas : public InterceptingCanvasBase {
  private:
   friend class AutoLogger;
 
-  std::unique_ptr<JSONArray> m_log;
+  std::unique_ptr<JSONArray> log_;
 };
 
 #ifndef NDEBUG
-String recordAsDebugString(const PaintRecord*);
-void showPaintRecord(const PaintRecord*);
+String RecordAsDebugString(const PaintRecord*);
+void ShowPaintRecord(const PaintRecord*);
 #endif
 
 }  // namespace blink

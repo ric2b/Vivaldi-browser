@@ -35,7 +35,9 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       'showBannerMessage',
       'showUserPodCustomIcon',
       'hideUserPodCustomIcon',
-      'disablePinKeyboardForUser',
+      'setUserPodFingerprintIcon',
+      'removeUserPodFingerprintIcon',
+      'setPinEnabledForUser',
       'setAuthType',
       'setTouchViewState',
       'setPublicSessionDisplayName',
@@ -264,36 +266,7 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       }
     },
 
-    /**
-     * Loads the PIN keyboard if any of the users can login with a PIN. Disables
-     * the PIN keyboard for users who are not allowed to use PIN unlock.
-     * @param {array} users Array of user instances.
-     */
-    initializePinKeyboardStateForUsers_: function(users) {
-      // It is possible that the PIN keyboard HTML has already been loaded. If
-      // that is the case, we want to show the user pods with the PIN keyboard
-      // immediately without running the PIN show/hide effect.
-      document.body.classList.add('disable-pin-animation');
-      setTimeout(function() {
-        document.body.classList.remove('disable-pin-animation');
-      });
-
-      for (var i = 0; i < users.length; ++i) {
-        var user = users[i];
-        if (user.showPin) {
-          showPinKeyboardAsync();
-        } else {
-          // Disable pin for users who cannot authenticate with PIN. For
-          // example, users who have not set up PIN or users who have not
-          // entered their account recently. Otherwise, the PIN keyboard will
-          // will appear for any user if there is at least one user who has PIN
-          // enabled.
-          this.disablePinKeyboardForUser(user.username);
-        }
-      }
-    },
-
-    /**
+   /**
      * Loads given users in pod row.
      * @param {array} users Array of user.
      * @param {boolean} showGuest Whether to show guest session button.
@@ -304,8 +277,6 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       // On Desktop, #login-header-bar has a shadow if there are 8+ profiles.
       if (Oobe.getInstance().displayType == DISPLAY_TYPE.DESKTOP_USER_MANAGER)
         $('login-header-bar').classList.toggle('shadow', users.length > 8);
-
-      this.initializePinKeyboardStateForUsers_(users);
     },
 
     /**
@@ -386,12 +357,12 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
      * Displays a banner containing |message|. If the banner is already present
      * this function updates the message in the banner. This function is used
      * by the chrome.screenlockPrivate.showMessage API.
-     * @param {string} message Text to be displayed
+     * @param {string} message Text to be displayed or empty to hide the banner.
      */
     showBannerMessage: function(message) {
       var banner = $('signin-banner');
       banner.textContent = message;
-      banner.classList.toggle('message-set', true);
+      banner.classList.toggle('message-set', !!message);
     },
 
     /**
@@ -419,6 +390,23 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
     },
 
     /**
+     * Set a fingerprint icon in the user pod of |username|.
+     * @param {string} username Username of the selected user
+     * @param {number} state Fingerprint unlock state
+     */
+    setUserPodFingerprintIcon: function(username, state) {
+      $('pod-row').setUserPodFingerprintIcon(username, state);
+    },
+
+    /**
+     * Removes the fingerprint icon in the user pod of |username|.
+     * @param {string} username Username of the selected user.
+     */
+    removeUserPodFingerprintIcon: function(username) {
+      $('pod-row').removeUserPodFingerprintIcon(username);
+    },
+
+    /**
      * Sets the authentication type used to authenticate the user.
      * @param {string} username Username of selected user
      * @param {number} authType Authentication type, must be a valid value in
@@ -438,11 +426,13 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
     },
 
     /**
-     * Removes the PIN keyboard so the user can no longer enter a PIN.
-     * @param {!user} user The user who can no longer enter a PIN.
+     * Enables or disables the pin keyboard for the given user. This may change
+     * pin keyboard visibility.
+     * @param {!string} user
+     * @param {boolean} enabled
      */
-    disablePinKeyboardForUser: function(user) {
-      $('pod-row').removePinKeyboard(user);
+    setPinEnabledForUser: function(user, enabled) {
+      $('pod-row').setPinEnabled(user, enabled);
     },
 
     /**

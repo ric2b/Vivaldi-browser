@@ -33,6 +33,7 @@ extern const char kCommandLineName[];
 extern const char kCompany[];
 #if defined(OS_WIN)
 extern const char kCompiler[];
+extern const char kUpdateCohortName[];
 #endif
 extern const char kCopyright[];
 #if defined(OS_CHROMEOS)
@@ -60,6 +61,8 @@ extern const char kOSType[];
 #endif
 #if defined(OS_ANDROID)
 extern const char kOSVersion[];
+extern const char kGmsName[];
+extern const char kGmsVersion[];
 #endif
 #if defined(OS_CHROMEOS)
 extern const char kPlatform[];

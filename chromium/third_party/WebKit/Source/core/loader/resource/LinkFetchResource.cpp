@@ -4,19 +4,19 @@
 
 #include "core/loader/resource/LinkFetchResource.h"
 
-#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
-Resource* LinkFetchResource::fetch(Resource::Type type,
-                                   FetchRequest& request,
+Resource* LinkFetchResource::Fetch(Resource::Type type,
+                                   FetchParameters& params,
                                    ResourceFetcher* fetcher) {
-  DCHECK_EQ(type, LinkPrefetch);
-  DCHECK_EQ(request.resourceRequest().frameType(),
-            WebURLRequest::FrameTypeNone);
-  fetcher->determineRequestContext(request.mutableResourceRequest(), type);
-  return fetcher->requestResource(request, LinkResourceFactory(type));
+  DCHECK_EQ(type, kLinkPrefetch);
+  DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
+            WebURLRequest::kFrameTypeNone);
+  params.SetRequestContext(fetcher->DetermineRequestContext(type));
+  return fetcher->RequestResource(params, LinkResourceFactory(type));
 }
 
 LinkFetchResource::LinkFetchResource(const ResourceRequest& request,

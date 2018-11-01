@@ -40,7 +40,6 @@ class TaskRunner;
 
 namespace blink {
 class WebDataConsumerHandle;
-class WebDataSource;
 struct WebServiceWorkerClientQueryOptions;
 class WebServiceWorkerContextProxy;
 class WebServiceWorkerProvider;
@@ -70,9 +69,6 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   using SyncCallback =
       base::Callback<void(ServiceWorkerStatusCode,
                           base::Time /* dispatch_event_time */)>;
-  using PaymentRequestEventCallback =
-      base::Callback<void(ServiceWorkerStatusCode,
-                          base::Time /* dispatch_event_time */)>;
   using FetchCallback =
       base::Callback<void(ServiceWorkerStatusCode,
                           base::Time /* dispatch_event_time */)>;
@@ -96,104 +92,120 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
                          const IPC::Message& message);
 
   // WebServiceWorkerContextClient overrides.
-  blink::WebURL scope() const override;
-  void getClient(
+  blink::WebURL Scope() const override;
+  void GetClient(
       const blink::WebString&,
       std::unique_ptr<blink::WebServiceWorkerClientCallbacks>) override;
-  void getClients(
+  void GetClients(
       const blink::WebServiceWorkerClientQueryOptions&,
       std::unique_ptr<blink::WebServiceWorkerClientsCallbacks>) override;
-  void openWindow(
+  void OpenWindow(
       const blink::WebURL&,
       std::unique_ptr<blink::WebServiceWorkerClientCallbacks>) override;
-  void setCachedMetadata(const blink::WebURL&,
+  void SetCachedMetadata(const blink::WebURL&,
                          const char* data,
                          size_t size) override;
-  void clearCachedMetadata(const blink::WebURL&) override;
-  void workerReadyForInspection() override;
+  void ClearCachedMetadata(const blink::WebURL&) override;
+  void WorkerReadyForInspection() override;
 
   // Called on the main thread.
-  void workerContextFailedToStart() override;
-  void workerScriptLoaded() override;
-  bool hasAssociatedRegistration() override;
+  void WorkerContextFailedToStart() override;
+  void WorkerScriptLoaded() override;
+  bool HasAssociatedRegistration() override;
 
-  void workerContextStarted(
+  void WorkerContextStarted(
       blink::WebServiceWorkerContextProxy* proxy) override;
-  void didEvaluateWorkerScript(bool success) override;
-  void didInitializeWorkerContext(v8::Local<v8::Context> context) override;
-  void willDestroyWorkerContext(v8::Local<v8::Context> context) override;
-  void workerContextDestroyed() override;
-  void countFeature(uint32_t feature) override;
-  void reportException(const blink::WebString& error_message,
+  void DidEvaluateWorkerScript(bool success) override;
+  void DidInitializeWorkerContext(v8::Local<v8::Context> context) override;
+  void WillDestroyWorkerContext(v8::Local<v8::Context> context) override;
+  void WorkerContextDestroyed() override;
+  void CountFeature(uint32_t feature) override;
+  void ReportException(const blink::WebString& error_message,
                        int line_number,
                        int column_number,
                        const blink::WebString& source_url) override;
-  void reportConsoleMessage(int source,
+  void ReportConsoleMessage(int source,
                             int level,
                             const blink::WebString& message,
                             int line_number,
                             const blink::WebString& source_url) override;
-  void sendDevToolsMessage(int session_id,
+  void SendDevToolsMessage(int session_id,
                            int call_id,
                            const blink::WebString& message,
                            const blink::WebString& state) override;
   blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
-  createDevToolsMessageLoop() override;
-  void didHandleActivateEvent(int request_id,
+  CreateDevToolsMessageLoop() override;
+  void DidHandleActivateEvent(int request_id,
                               blink::WebServiceWorkerEventResult,
                               double dispatch_event_time) override;
-  void didHandleExtendableMessageEvent(
+  void DidHandleBackgroundFetchAbortEvent(int request_id,
+                                          blink::WebServiceWorkerEventResult,
+                                          double dispatch_event_time) override;
+  void DidHandleBackgroundFetchClickEvent(int request_id,
+                                          blink::WebServiceWorkerEventResult,
+                                          double dispatch_event_time) override;
+  void DidHandleBackgroundFetchFailEvent(int request_id,
+                                         blink::WebServiceWorkerEventResult,
+                                         double dispatch_event_time) override;
+  void DidHandleBackgroundFetchedEvent(int request_id,
+                                       blink::WebServiceWorkerEventResult,
+                                       double dispatch_event_time) override;
+  void DidHandleExtendableMessageEvent(
       int request_id,
       blink::WebServiceWorkerEventResult result,
       double dispatch_event_time) override;
-  void didHandleInstallEvent(int request_id,
+  void DidHandleInstallEvent(int request_id,
                              blink::WebServiceWorkerEventResult result,
                              double event_dispatch_time) override;
-  void respondToFetchEvent(int fetch_event_id,
+  void RespondToFetchEvent(int fetch_event_id,
                            double event_dispatch_time) override;
-  void respondToFetchEvent(int fetch_event_id,
+  void RespondToFetchEvent(int fetch_event_id,
                            const blink::WebServiceWorkerResponse& response,
                            double event_dispatch_time) override;
-  void didHandleFetchEvent(int fetch_event_id,
+  void DidHandleFetchEvent(int fetch_event_id,
                            blink::WebServiceWorkerEventResult result,
                            double dispatch_event_time) override;
-  void didHandleNotificationClickEvent(
+  void DidHandleNotificationClickEvent(
       int request_id,
       blink::WebServiceWorkerEventResult result,
       double dispatch_event_time) override;
-  void didHandleNotificationCloseEvent(
+  void DidHandleNotificationCloseEvent(
       int request_id,
       blink::WebServiceWorkerEventResult result,
       double dispatch_event_time) override;
-  void didHandlePushEvent(int request_id,
+  void DidHandlePushEvent(int request_id,
                           blink::WebServiceWorkerEventResult result,
                           double dispatch_event_time) override;
-  void didHandleSyncEvent(int request_id,
+  void DidHandleSyncEvent(int request_id,
                           blink::WebServiceWorkerEventResult result,
                           double dispatch_event_time) override;
-  void didHandlePaymentRequestEvent(int request_id,
+  void RespondToPaymentRequestEvent(
+      int payment_request_id,
+      const blink::WebPaymentAppResponse& response,
+      double dispatch_event_time) override;
+  void DidHandlePaymentRequestEvent(int payment_request_id,
                                     blink::WebServiceWorkerEventResult result,
                                     double dispatch_event_time) override;
 
   // Called on the main thread.
-  blink::WebServiceWorkerNetworkProvider* createServiceWorkerNetworkProvider(
-      blink::WebDataSource* data_source) override;
-  blink::WebServiceWorkerProvider* createServiceWorkerProvider() override;
+  blink::WebServiceWorkerNetworkProvider* CreateServiceWorkerNetworkProvider()
+      override;
+  blink::WebServiceWorkerProvider* CreateServiceWorkerProvider() override;
 
-  void postMessageToClient(const blink::WebString& uuid,
+  void PostMessageToClient(const blink::WebString& uuid,
                            const blink::WebString& message,
                            blink::WebMessagePortChannelArray channels) override;
-  void focus(const blink::WebString& uuid,
+  void Focus(const blink::WebString& uuid,
              std::unique_ptr<blink::WebServiceWorkerClientCallbacks>) override;
-  void navigate(
+  void Navigate(
       const blink::WebString& uuid,
       const blink::WebURL&,
       std::unique_ptr<blink::WebServiceWorkerClientCallbacks>) override;
-  void skipWaiting(std::unique_ptr<blink::WebServiceWorkerSkipWaitingCallbacks>
+  void SkipWaiting(std::unique_ptr<blink::WebServiceWorkerSkipWaitingCallbacks>
                        callbacks) override;
-  void claim(std::unique_ptr<blink::WebServiceWorkerClientsClaimCallbacks>
+  void Claim(std::unique_ptr<blink::WebServiceWorkerClientsClaimCallbacks>
                  callbacks) override;
-  void registerForeignFetchScopes(
+  void RegisterForeignFetchScopes(
       const blink::WebVector<blink::WebURL>& sub_scopes,
       const blink::WebVector<blink::WebSecurityOrigin>& origins) override;
 
@@ -214,6 +226,21 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   // mojom::ServiceWorkerEventDispatcher
   void DispatchActivateEvent(
       const DispatchActivateEventCallback& callback) override;
+  void DispatchBackgroundFetchAbortEvent(
+      const std::string& tag,
+      const DispatchBackgroundFetchAbortEventCallback& callback) override;
+  void DispatchBackgroundFetchClickEvent(
+      const std::string& tag,
+      mojom::BackgroundFetchState state,
+      const DispatchBackgroundFetchClickEventCallback& callback) override;
+  void DispatchBackgroundFetchFailEvent(
+      const std::string& tag,
+      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const DispatchBackgroundFetchFailEventCallback& callback) override;
+  void DispatchBackgroundFetchedEvent(
+      const std::string& tag,
+      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const DispatchBackgroundFetchedEventCallback& callback) override;
   void DispatchExtendableMessageEvent(
       mojom::ExtendableMessageEventPtr event,
       const DispatchExtendableMessageEventCallback& callback) override;
@@ -238,8 +265,11 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       blink::mojom::BackgroundSyncEventLastChance last_chance,
       const DispatchSyncEventCallback& callback) override;
   void DispatchPaymentRequestEvent(
+      int payment_request_id,
       payments::mojom::PaymentAppRequestPtr app_request,
+      payments::mojom::PaymentAppResponseCallbackPtr response_callback,
       const DispatchPaymentRequestEventCallback& callback) override;
+  void Ping(const PingCallback& callback) override;
 
   void OnInstallEvent(int request_id);
   void OnNotificationClickEvent(
@@ -269,8 +299,6 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void OnClaimClientsError(int request_id,
                            blink::WebServiceWorkerError::ErrorType error_type,
                            const base::string16& message);
-  void OnPing();
-
   // Called to resolve the FetchEvent.preloadResponse promise.
   void OnNavigationPreloadResponse(
       int fetch_event_id,

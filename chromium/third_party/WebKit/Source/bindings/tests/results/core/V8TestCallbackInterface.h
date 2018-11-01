@@ -21,7 +21,7 @@ namespace blink {
 
 class V8TestCallbackInterface final : public TestCallbackInterface {
  public:
-  static V8TestCallbackInterface* create(v8::Local<v8::Function> callback, ScriptState* scriptState) {
+  static V8TestCallbackInterface* Create(v8::Local<v8::Function> callback, ScriptState* scriptState) {
     return new V8TestCallbackInterface(callback, scriptState);
   }
 
@@ -38,6 +38,7 @@ class V8TestCallbackInterface final : public TestCallbackInterface {
   void voidMethodTestInterfaceEmptyStringArg(TestInterfaceEmpty* testInterfaceEmptyArg, const String& stringArg) override;
   void callbackWithThisValueVoidMethodStringArg(ScriptValue thisValue, const String& stringArg) override;
   void customVoidMethodTestInterfaceEmptyArg(TestInterfaceEmpty* testInterfaceEmptyArg) override;
+
  private:
   CORE_EXPORT V8TestCallbackInterface(v8::Local<v8::Function>, ScriptState*);
 

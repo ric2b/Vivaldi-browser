@@ -18,6 +18,7 @@
 #include "net/base/load_timing_info.h"
 #include "net/base/net_export.h"
 #include "net/http/http_response_info.h"
+#include "net/http/http_server_properties.h"
 #include "net/log/net_log_with_source.h"
 #include "net/quic/chromium/quic_chromium_client_session.h"
 #include "net/quic/chromium/quic_chromium_client_stream.h"
@@ -40,8 +41,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream
       public QuicClientPushPromiseIndex::Delegate,
       public MultiplexedHttpStream {
  public:
-  explicit QuicHttpStream(
-      const base::WeakPtr<QuicChromiumClientSession>& session);
+  QuicHttpStream(const base::WeakPtr<QuicChromiumClientSession>& session,
+                 HttpServerProperties* http_server_properties);
 
   ~QuicHttpStream() override;
 
@@ -63,6 +64,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   int64_t GetTotalReceivedBytes() const override;
   int64_t GetTotalSentBytes() const override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  bool GetAlternativeService(
+      AlternativeService* alternative_service) const override;
   void PopulateNetErrorDetails(NetErrorDetails* details) override;
   void SetPriority(RequestPriority priority) override;
 
@@ -134,9 +137,25 @@ class NET_EXPORT_PRIVATE QuicHttpStream
 
   void ResetStream();
 
+  // If |has_response_status_| is false, sets |response_status| to the result
+  // of ComputeResponseStatus(). Returns |response_status_|.
+  int GetResponseStatus();
+  // Sets the result of |ComputeResponseStatus()| as the |response_status_|.
+  void SaveResponseStatus();
+  // Sets |response_status_| to |response_status| and sets
+  // |has_response_status_| to true.
+  void SetResponseStatus(int response_status);
+  // Computes the correct response status based on the status of the handshake,
+  // |session_error|, |connection_error| and |stream_error|.
+  int ComputeResponseStatus() const;
+
   State next_state_;
 
   base::WeakPtr<QuicChromiumClientSession> session_;
+  const QuicServerId server_id_;  // The ID of the QUIC server for this stream.
+
+  HttpServerProperties* http_server_properties_;  // Unowned.
+
   QuicVersion quic_version_;
   int session_error_;             // Error code from the connection shutdown.
   bool was_handshake_confirmed_;  // True if the crypto handshake succeeded.
@@ -159,6 +178,7 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   // |response_info_| is the HTTP response data object which is filled in
   // when a the response headers are read.  It is not owned by this stream.
   HttpResponseInfo* response_info_;
+  bool has_response_status_;  // true if response_status_ as been set.
   // Because response data is buffered, also buffer the response status if the
   // stream is explicitly closed via OnError or OnClose with an error.
   // Once all buffered data has been returned, this will be used as the final
@@ -198,7 +218,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream
 
   NetLogWithSource stream_net_log_;
 
-  QuicErrorCode quic_connection_error_;
+  QuicErrorCode quic_connection_error_;       // Cached connection error code.
+  QuicRstStreamErrorCode quic_stream_error_;  // Cached stream error code.
 
   // True when this stream receives a go away from server due to port migration.
   bool port_migration_detected_;

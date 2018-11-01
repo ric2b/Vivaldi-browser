@@ -7,7 +7,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
-#include "components/reading_list/ios/reading_list_model.h"
+#include "components/reading_list/core/reading_list_model.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/reading_list/offline_url_utils.h"
@@ -56,21 +56,6 @@ enum UMAContextMenuAction {
 @property(nonatomic, weak) id<UrlLoader> URLLoader;
 @property(nonatomic, strong) ReadingListViewController* containerViewController;
 @property(nonatomic, strong) AlertCoordinator* alertCoordinator;
-
-// Opens |URL| in a new tab |incognito| or not.
-- (void)openNewTabWithURL:(const GURL&)URL
-                                  incognito:(BOOL)incognito
-    fromReadingListCollectionViewController:
-        (ReadingListCollectionViewController*)
-            readingListCollectionViewController;
-
-// Opens the offline url |offlineURL| of the entry saved in the reading list
-// model with the |entryURL| url.
-- (void)openOfflineURL:(const GURL&)offlineURL
-                      correspondingEntryURL:(const GURL&)entryURL
-    fromReadingListCollectionViewController:
-        (ReadingListCollectionViewController*)
-            readingListCollectionViewController;
 
 @end
 
@@ -168,8 +153,8 @@ enum UMAContextMenuAction {
 
   _alertCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.containerViewController
-                           title:readingListItem.text
-                         message:readingListItem.detailText
+                           title:readingListItem.title
+                         message:readingListItem.subtitle
                             rect:CGRectMake(menuLocation.x, menuLocation.y, 0,
                                             0)
                             view:readingListCollectionViewController
@@ -180,9 +165,9 @@ enum UMAContextMenuAction {
   [_alertCoordinator
       addItemWithTitle:openInNewTabTitle
                 action:^{
-                  [weakSelf openNewTabWithURL:entryURL
-                                                    incognito:NO
-                      fromReadingListCollectionViewController:weakCollection];
+                  [weakSelf readingListCollectionViewController:weakCollection
+                                              openNewTabWithURL:entryURL
+                                                      incognito:NO];
                   UMA_HISTOGRAM_ENUMERATION("ReadingList.ContextMenu", NEW_TAB,
                                             ENUM_MAX);
 
@@ -194,9 +179,9 @@ enum UMAContextMenuAction {
   [_alertCoordinator
       addItemWithTitle:openInNewTabIncognitoTitle
                 action:^{
-                  [weakSelf openNewTabWithURL:entryURL
-                                                    incognito:YES
-                      fromReadingListCollectionViewController:weakCollection];
+                  [weakSelf readingListCollectionViewController:weakCollection
+                                              openNewTabWithURL:entryURL
+                                                      incognito:YES];
                   UMA_HISTOGRAM_ENUMERATION("ReadingList.ContextMenu",
                                             NEW_INCOGNITO_TAB, ENUM_MAX);
                 }
@@ -223,9 +208,9 @@ enum UMAContextMenuAction {
                   action:^{
                     UMA_HISTOGRAM_ENUMERATION("ReadingList.ContextMenu",
                                               VIEW_OFFLINE, ENUM_MAX);
-                    [weakSelf openOfflineURL:offlineURL
-                                          correspondingEntryURL:entryURL
-                        fromReadingListCollectionViewController:weakCollection];
+                    [weakSelf readingListCollectionViewController:weakCollection
+                                                   openOfflineURL:offlineURL
+                                            correspondingEntryURL:entryURL];
                   }
                    style:UIAlertActionStyleDefault];
   }
@@ -267,17 +252,14 @@ readingListCollectionViewController:
   [self stop];
 }
 
-#pragma mark - Private
-
-- (void)openOfflineURL:(const GURL&)offlineURL
-                      correspondingEntryURL:(const GURL&)entryURL
-    fromReadingListCollectionViewController:
-        (ReadingListCollectionViewController*)
-            readingListCollectionViewController {
-  [self openNewTabWithURL:offlineURL
-                                    incognito:NO
-      fromReadingListCollectionViewController:
-          readingListCollectionViewController];
+- (void)readingListCollectionViewController:
+            (ReadingListCollectionViewController*)
+                readingListCollectionViewController
+                             openOfflineURL:(const GURL&)offlineURL
+                      correspondingEntryURL:(const GURL&)entryURL {
+  [self readingListCollectionViewController:readingListCollectionViewController
+                          openNewTabWithURL:offlineURL
+                                  incognito:NO];
 
   UMA_HISTOGRAM_BOOLEAN("ReadingList.OfflineVersionDisplayed", true);
   const GURL updateURL = entryURL;
@@ -285,11 +267,11 @@ readingListCollectionViewController:
                                                                       true);
 }
 
-- (void)openNewTabWithURL:(const GURL&)URL
-                                  incognito:(BOOL)incognito
-    fromReadingListCollectionViewController:
-        (ReadingListCollectionViewController*)
-            readingListCollectionViewController {
+- (void)readingListCollectionViewController:
+            (ReadingListCollectionViewController*)
+                readingListCollectionViewController
+                          openNewTabWithURL:(const GURL&)URL
+                                  incognito:(BOOL)incognito {
   base::RecordAction(base::UserMetricsAction("MobileReadingListOpen"));
 
   [readingListCollectionViewController willBeDismissed];

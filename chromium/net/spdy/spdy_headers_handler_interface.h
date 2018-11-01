@@ -7,8 +7,8 @@
 
 #include <stddef.h>
 
-#include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 
 namespace net {
 
@@ -25,10 +25,10 @@ class NET_EXPORT_PRIVATE SpdyHeadersHandlerInterface {
 
   // A callback method which notifies on a header key value pair. Multiple
   // values for a given key will be emitted as multiple calls to OnHeader.
-  virtual void OnHeader(base::StringPiece key, base::StringPiece value) = 0;
+  virtual void OnHeader(SpdyStringPiece key, SpdyStringPiece value) = 0;
 
   // TODO(yasong): deprecate this method with
-  // --gfe2_reloadable_flag_log_compressed_size.
+  // --chromium_http2_flag_log_compressed_size.
   // A callback method which notifies when the parser finishes handling a
   // header block (i.e. the containing frame has the END_HEADERS flag set).
   // Also indicates the total number of bytes in this block.

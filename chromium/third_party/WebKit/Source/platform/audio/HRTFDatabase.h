@@ -29,13 +29,13 @@
 #ifndef HRTFDatabase_h
 #define HRTFDatabase_h
 
-#include "platform/audio/HRTFElevation.h"
-#include "wtf/Allocator.h"
-#include "wtf/Forward.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/Vector.h"
 #include <memory>
+#include "platform/audio/HRTFElevation.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -46,7 +46,7 @@ class PLATFORM_EXPORT HRTFDatabase {
   WTF_MAKE_NONCOPYABLE(HRTFDatabase);
 
  public:
-  static std::unique_ptr<HRTFDatabase> create(float sampleRate);
+  static std::unique_ptr<HRTFDatabase> Create(float sample_rate);
 
   // getKernelsFromAzimuthElevation() returns a left and right ear kernel, and
   // an interpolated left and right frame delay for the given azimuth and
@@ -56,44 +56,44 @@ class PLATFORM_EXPORT HRTFDatabase {
   //     0 -> HRTFElevation::NumberOfTotalAzimuths - 1
   //     (corresponding to angles of 0 -> 360).
   // Valid values for elevationAngle are MinElevation -> MaxElevation.
-  void getKernelsFromAzimuthElevation(double azimuthBlend,
-                                      unsigned azimuthIndex,
-                                      double elevationAngle,
-                                      HRTFKernel*& kernelL,
-                                      HRTFKernel*& kernelR,
-                                      double& frameDelayL,
-                                      double& frameDelayR);
+  void GetKernelsFromAzimuthElevation(double azimuth_blend,
+                                      unsigned azimuth_index,
+                                      double elevation_angle,
+                                      HRTFKernel*& kernel_l,
+                                      HRTFKernel*& kernel_r,
+                                      double& frame_delay_l,
+                                      double& frame_delay_r);
 
   // Returns the number of different azimuth angles.
-  static unsigned numberOfAzimuths() {
-    return HRTFElevation::NumberOfTotalAzimuths;
+  static unsigned NumberOfAzimuths() {
+    return HRTFElevation::kNumberOfTotalAzimuths;
   }
 
-  float sampleRate() const { return m_sampleRate; }
+  float SampleRate() const { return sample_rate_; }
 
   // Number of elevations loaded from resource.
-  static const unsigned NumberOfRawElevations;
+  static const unsigned kNumberOfRawElevations;
 
  private:
-  explicit HRTFDatabase(float sampleRate);
+  explicit HRTFDatabase(float sample_rate);
 
   // Minimum and maximum elevation angles (inclusive) for a HRTFDatabase.
-  static const int MinElevation;
-  static const int MaxElevation;
-  static const unsigned RawElevationAngleSpacing;
+  static const int kMinElevation;
+  static const int kMaxElevation;
+  static const unsigned kRawElevationAngleSpacing;
 
   // Interpolates by this factor to get the total number of elevations from
   // every elevation loaded from resource.
-  static const unsigned InterpolationFactor;
+  static const unsigned kInterpolationFactor;
 
   // Total number of elevations after interpolation.
-  static const unsigned NumberOfTotalElevations;
+  static const unsigned kNumberOfTotalElevations;
 
   // Returns the index for the correct HRTFElevation given the elevation angle.
-  static unsigned indexFromElevationAngle(double);
+  static unsigned IndexFromElevationAngle(double);
 
-  Vector<std::unique_ptr<HRTFElevation>> m_elevations;
-  float m_sampleRate;
+  Vector<std::unique_ptr<HRTFElevation>> elevations_;
+  float sample_rate_;
 };
 
 }  // namespace blink

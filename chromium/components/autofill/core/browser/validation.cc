@@ -13,7 +13,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
+#include "components/autofill/core/browser/autofill_regex_constants.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/autofill/core/browser/state_names.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_regexes.h"
@@ -94,8 +96,7 @@ bool IsValidCreditCardNumber(const base::string16& text) {
 
 bool IsValidCreditCardSecurityCode(const base::string16& code,
                                    const base::StringPiece card_type) {
-  size_t required_length = card_type == kAmericanExpressCard ? 4 : 3;
-  return code.length() == required_length &&
+  return code.length() == GetCvcLengthForCardType(card_type) &&
          base::ContainsOnlyChars(code, base::ASCIIToUTF16("0123456789"));
 }
 
@@ -135,6 +136,12 @@ bool IsValidEmailAddress(const base::string16& text) {
 bool IsValidState(const base::string16& text) {
   return !state_names::GetAbbreviationForName(text).empty() ||
          !state_names::GetNameForAbbreviation(text).empty();
+}
+
+bool IsValidPhoneNumber(const base::string16& text,
+                        const std::string& country_code) {
+  i18n::PhoneObject phone_number(text, country_code);
+  return phone_number.IsValidNumber();
 }
 
 bool IsValidZip(const base::string16& text) {
@@ -306,6 +313,17 @@ bool IsValidForType(const base::string16& value,
       break;
   }
   return false;
+}
+
+size_t GetCvcLengthForCardType(const base::StringPiece card_type) {
+  if (card_type == kAmericanExpressCard)
+    return AMEX_CVC_LENGTH;
+
+  return GENERAL_CVC_LENGTH;
+}
+
+bool IsUPIVirtualPaymentAddress(const base::string16& value) {
+  return MatchesPattern(value, base::ASCIIToUTF16(kUPIVirtualPaymentAddressRe));
 }
 
 }  // namespace autofill

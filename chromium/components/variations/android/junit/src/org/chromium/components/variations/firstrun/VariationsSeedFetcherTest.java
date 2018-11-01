@@ -24,6 +24,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
@@ -46,12 +47,13 @@ public class VariationsSeedFetcherTest {
 
     @Before
     public void setUp() throws IOException {
+        ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
         // Pretend we are not on the UI thread, since the class we are testing is supposed to run
         // only on a background thread.
         ThreadUtils.setUiThread(mock(Looper.class));
         mFetcher = spy(VariationsSeedFetcher.get());
         mConnection = mock(HttpURLConnection.class);
-        doReturn(mConnection).when(mFetcher).getServerConnection();
+        doReturn(mConnection).when(mFetcher).getServerConnection("");
         mPrefs = ContextUtils.getAppSharedPreferences();
         mPrefs.edit().clear().apply();
     }
@@ -78,7 +80,7 @@ public class VariationsSeedFetcherTest {
         when(mConnection.getHeaderField("IM")).thenReturn("gzip");
         when(mConnection.getInputStream()).thenReturn(new ByteArrayInputStream("1234".getBytes()));
 
-        mFetcher.fetchSeed();
+        mFetcher.fetchSeed("");
 
         assertThat(mPrefs.getString(VariationsSeedBridge.VARIATIONS_FIRST_RUN_SEED_SIGNATURE, ""),
                 equalTo("signature"));
@@ -99,7 +101,7 @@ public class VariationsSeedFetcherTest {
     public void testFetchSeed_noFetchNeeded() throws IOException {
         mPrefs.edit().putBoolean(VariationsSeedFetcher.VARIATIONS_INITIALIZED_PREF, true).apply();
 
-        mFetcher.fetchSeed();
+        mFetcher.fetchSeed("");
 
         verify(mConnection, never()).connect();
     }
@@ -111,7 +113,7 @@ public class VariationsSeedFetcherTest {
     public void testFetchSeed_badResponse() throws IOException {
         when(mConnection.getResponseCode()).thenReturn(HttpURLConnection.HTTP_NOT_FOUND);
 
-        mFetcher.fetchSeed();
+        mFetcher.fetchSeed("");
 
         assertTrue(mPrefs.getBoolean(VariationsSeedFetcher.VARIATIONS_INITIALIZED_PREF, false));
         assertFalse(VariationsSeedBridge.hasJavaPref(ContextUtils.getApplicationContext()));
@@ -124,7 +126,7 @@ public class VariationsSeedFetcherTest {
     public void testFetchSeed_IOException() throws IOException {
         doThrow(new IOException()).when(mConnection).connect();
 
-        mFetcher.fetchSeed();
+        mFetcher.fetchSeed("");
 
         assertTrue(mPrefs.getBoolean(VariationsSeedFetcher.VARIATIONS_INITIALIZED_PREF, false));
         assertFalse(VariationsSeedBridge.hasJavaPref(ContextUtils.getApplicationContext()));

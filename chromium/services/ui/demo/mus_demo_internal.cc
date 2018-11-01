@@ -37,9 +37,8 @@ void MusDemoInternal::OnStartImpl() {
 void MusDemoInternal::SetWindowManagerClient(
     aura::WindowManagerClient* client) {}
 
-bool MusDemoInternal::OnWmSetBounds(aura::Window* window, gfx::Rect* bounds) {
-  return true;
-}
+void MusDemoInternal::OnWmSetBounds(aura::Window* window,
+                                    const gfx::Rect& bounds) {}
 
 bool MusDemoInternal::OnWmSetProperty(
     aura::Window* window,
@@ -47,6 +46,8 @@ bool MusDemoInternal::OnWmSetProperty(
     std::unique_ptr<std::vector<uint8_t>>* new_data) {
   return true;
 }
+
+void MusDemoInternal::OnWmSetModalType(aura::Window* window, ModalType type) {}
 
 void MusDemoInternal::OnWmSetCanFocus(aura::Window* window, bool can_focus) {}
 
@@ -62,6 +63,15 @@ void MusDemoInternal::OnWmClientJankinessChanged(
     bool janky) {
   // Don't care
 }
+
+void MusDemoInternal::OnWmBuildDragImage(const gfx::Point& screen_location,
+                                         const SkBitmap& drag_image,
+                                         const gfx::Vector2d& drag_image_offset,
+                                         ui::mojom::PointerKind source) {}
+
+void MusDemoInternal::OnWmMoveDragImage(const gfx::Point& screen_location) {}
+
+void MusDemoInternal::OnWmDestroyDragImage() {}
 
 void MusDemoInternal::OnWmWillCreateDisplay(const display::Display& display) {
   AddPrimaryDisplay(display);
@@ -81,8 +91,10 @@ void MusDemoInternal::OnWmDisplayRemoved(
 
 void MusDemoInternal::OnWmDisplayModified(const display::Display& display) {}
 
-mojom::EventResult MusDemoInternal::OnAccelerator(uint32_t id,
-                                                  const Event& event) {
+mojom::EventResult MusDemoInternal::OnAccelerator(
+    uint32_t id,
+    const Event& event,
+    std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
   return mojom::EventResult::UNHANDLED;
 }
 

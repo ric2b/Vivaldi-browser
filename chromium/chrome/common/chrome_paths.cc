@@ -77,7 +77,7 @@ const base::FilePath::CharType kChromeOSComponentFlash[] = FILE_PATH_LITERAL(
     "/run/imageloader/PepperFlashPlayer/libpepflashplayer.so");
 #endif  // defined(OS_CHROMEOS)
 
-static base::LazyInstance<base::FilePath>
+static base::LazyInstance<base::FilePath>::DestructorAtExit
     g_invalid_specified_user_data_dir = LAZY_INSTANCE_INITIALIZER;
 
 // Gets the path for internal plugins.
@@ -539,7 +539,7 @@ bool PathProvider(int key, base::FilePath* result) {
 #if defined(OS_LINUX) || defined(OS_MACOSX)
     case chrome::DIR_NATIVE_MESSAGING:
 #if defined(OS_MACOSX)
-#if defined(GOOGLE_CHROME_BUILD)
+#if defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD)
       cur = base::FilePath(FILE_PATH_LITERAL(
            "/Library/Google/Chrome/NativeMessagingHosts"));
 #else
@@ -547,7 +547,7 @@ bool PathProvider(int key, base::FilePath* result) {
           "/Library/Application Support/Chromium/NativeMessagingHosts"));
 #endif
 #else  // defined(OS_MACOSX)
-#if defined(GOOGLE_CHROME_BUILD)
+#if defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD)
       cur = base::FilePath(FILE_PATH_LITERAL(
           "/etc/opt/chrome/native-messaging-hosts"));
 #else

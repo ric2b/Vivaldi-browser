@@ -1,0 +1,61 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/service_manager/public/service_manifest.gni")
+
+group("network") {
+  visibility = [ "//content/*" ]  # This is an internal content API.
+
+  if (is_component_build) {
+    public_deps = [
+      "//content",
+    ]
+  } else {
+    public_deps = [
+      ":network_sources",
+    ]
+  }
+}
+
+source_set("network_sources") {
+  # Depend on via ":network above.
+  visibility = [
+    ":network",
+    "//content",  # For the component build.
+    "//content/app:*",
+    "//content/utility:utility",
+  ]
+
+  sources = [
+    "net_adapters.cc",
+    "net_adapters.h",
+    "network_context.cc",
+    "network_context.h",
+    "network_service.cc",
+    "network_service.h",
+    "network_service_url_loader_factory_impl.cc",
+    "network_service_url_loader_factory_impl.h",
+    "url_loader_impl.cc",
+    "url_loader_impl.h",
+  ]
+
+  configs += [ "//content:content_implementation" ]
+
+  deps = [
+    "//base",
+    "//content:export",
+    "//content/common",
+    "//content/common:mojo_bindings",
+    "//content/public/common:common_sources",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "network"
+  source = "manifest.json"
+}

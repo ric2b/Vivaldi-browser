@@ -20,6 +20,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
+#include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
@@ -27,11 +28,12 @@
 #include "content/browser/loader/global_routing_id.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_impl.h"
-#include "content/common/accessibility_mode_enums.h"
+#include "content/common/accessibility_mode.h"
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
-#include "content/common/content_security_policy/content_security_policy.h"
+#include "content/common/content_security_policy/csp_context.h"
 #include "content/common/download/mhtml_save_status.h"
+#include "content/common/features.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/frame_replication_state.h"
@@ -41,6 +43,7 @@
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_response_headers.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
@@ -60,7 +63,7 @@ struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 struct FrameHostMsg_DidFailProvisionalLoadWithError_Params;
 struct FrameHostMsg_OpenURL_Params;
 struct FrameMsg_TextTrackSettings_Params;
-#if defined(USE_EXTERNAL_POPUP_MENU)
+#if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
 struct FrameHostMsg_ShowPopup_Params;
 #endif
 
@@ -100,7 +103,6 @@ class ResourceRequestBody;
 class StreamHandle;
 class TimeoutMonitor;
 class WebBluetoothServiceImpl;
-struct ContentSecurityPolicyHeader;
 struct ContextMenuParams;
 struct FileChooserParams;
 struct FrameOwnerProperties;
@@ -113,11 +115,13 @@ class CreateNewWindowParams;
 
 class CONTENT_EXPORT RenderFrameHostImpl
     : public RenderFrameHost,
+      public base::SupportsUserData,
       NON_EXPORTED_BASE(public mojom::FrameHost),
       public BrowserAccessibilityDelegate,
       public SiteInstanceImpl::Observer,
       public NON_EXPORTED_BASE(
-          service_manager::InterfaceFactory<media::mojom::InterfaceFactory>) {
+          service_manager::InterfaceFactory<media::mojom::InterfaceFactory>),
+      public CSPContext {
  public:
   using AXTreeSnapshotCallback =
       base::Callback<void(
@@ -183,6 +187,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
       int max_length) override;
   void AllowBindings(int binding_flags) override;
   int GetEnabledBindings() const override;
+  void BlockRequestsForFrame() override;
+  void ResumeBlockedRequestsForFrame() override;
+  void DisableBeforeUnloadHangMonitorForTesting() override;
+  bool IsBeforeUnloadHangMonitorDisabledForTesting() override;
+  bool IsFeatureEnabled(blink::WebFeaturePolicyFeature feature) override;
 
   // mojom::FrameHost
   void GetInterfaceProvider(
@@ -203,12 +212,18 @@ class CONTENT_EXPORT RenderFrameHostImpl
   gfx::Rect AccessibilityGetViewBounds() const override;
   gfx::Point AccessibilityOriginInScreen(
       const gfx::Rect& bounds) const override;
+  float AccessibilityGetDeviceScaleFactor() const override;
   void AccessibilityFatalError() override;
   gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget() override;
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
 
   // SiteInstanceImpl::Observer
   void RenderProcessGone(SiteInstanceImpl* site_instance) override;
+
+  // CSPContext
+  void ReportContentSecurityPolicyViolation(
+      const CSPViolationParams& violation_params) override;
+  bool SchemeShouldBypassCSP(const base::StringPiece& scheme) override;
 
   // Creates a RenderFrame in the renderer process.
   bool CreateRenderFrame(int proxy_routing_id,
@@ -248,6 +263,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
                          const mojom::CreateNewWindowParams& params,
                          SessionStorageNamespace* session_storage_namespace);
 
+  // Update this frame's last committed origin.
+  void SetLastCommittedOrigin(const url::Origin& origin);
+
   RenderViewHostImpl* render_view_host() { return render_view_host_; }
   RenderFrameHostDelegate* delegate() { return delegate_; }
   FrameTreeNode* frame_tree_node() { return frame_tree_node_; }
@@ -266,11 +284,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   const GURL& last_successful_url() { return last_successful_url_; }
   void set_last_successful_url(const GURL& url) {
     last_successful_url_ = url;
-  }
-
-  // Update this frame's last committed origin.
-  void set_last_committed_origin(const url::Origin& origin) {
-    last_committed_origin_ = origin;
   }
 
   // Returns the associated WebUI or null if none applies.
@@ -457,9 +470,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // closed by the user.
   void JavaScriptDialogClosed(IPC::Message* reply_msg,
                               bool success,
-                              const base::string16& user_input,
-                              bool is_before_unload_dialog,
-                              bool dialog_was_suppressed);
+                              const base::string16& user_input);
 
   // Get the accessibility mode from the delegate and Send a message to the
   // renderer process to change the accessibility mode.
@@ -516,7 +527,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
     no_create_browser_accessibility_manager_for_testing_ = flag;
   }
 
-#if defined(USE_EXTERNAL_POPUP_MENU)
+#if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
 #if defined(OS_MACOSX)
   // Select popup menu related methods (for external popup menus).
   void DidSelectPopupMenuItem(int selected_index);
@@ -531,6 +542,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // handled by this RenderFrame.
   void CommitNavigation(ResourceResponse* response,
                         std::unique_ptr<StreamHandle> body,
+                        mojo::ScopedDataPipeConsumerHandle handle,
                         const CommonNavigationParams& common_params,
                         const RequestNavigationParams& request_params,
                         bool is_view_source);
@@ -597,8 +609,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // no longer on the stack when we attempt to swap it out.
   void SuppressFurtherDialogs();
 
-  void SetHasReceivedUserGesture();
-
   void ClearFocusedElement();
 
   // Returns whether the given URL is allowed to commit in the current process.
@@ -616,6 +626,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   bool has_focused_editable_element() const {
     return has_focused_editable_element_;
   }
+
+  // Cancels any blocked request for the frame and its subframes.
+  void CancelBlockedRequestsForFrame();
+
+#if defined(OS_ANDROID)
+  base::android::ScopedJavaLocalRef<jobject> GetJavaRenderFrameHost();
+  service_manager::InterfaceProvider* GetJavaInterfaces() override;
+#endif
 
  protected:
   friend class RenderFrameHostFactory;
@@ -641,6 +659,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
                            CreateRenderViewAfterProcessKillAndClosedProxy);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest, DontSelectInvalidFiles);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
                            RestoreFileAccessForHistoryNavigation);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
@@ -711,9 +730,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnDidChangeName(const std::string& name, const std::string& unique_name);
   void OnDidSetFeaturePolicyHeader(
       const ParsedFeaturePolicyHeader& parsed_header);
-  void OnDidAddContentSecurityPolicy(
-      const ContentSecurityPolicyHeader& header,
-      const std::vector<ContentSecurityPolicy>& policy);
+
+  // A new set of CSP |policies| has been added to the document.
+  void OnDidAddContentSecurityPolicies(
+      const std::vector<ContentSecurityPolicy>& policies);
+
   void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
   void OnUpdateToUniqueOrigin(bool is_potentially_trustworthy_unique_origin);
   void OnDidChangeSandboxFlags(int32_t frame_routing_id,
@@ -725,6 +746,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnUpdateEncoding(const std::string& encoding);
   void OnBeginNavigation(const CommonNavigationParams& common_params,
                          const BeginNavigationParams& begin_params);
+  void OnAbortNavigation();
   void OnDispatchLoad();
   void OnAccessibilityEvents(
       const std::vector<AccessibilityHostMsg_EventParams>& params,
@@ -735,7 +757,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnAccessibilityFindInPageResult(
       const AccessibilityHostMsg_FindInPageResultParams& params);
   void OnAccessibilityChildFrameHitTestResult(const gfx::Point& point,
-                                              int hit_obj_id);
+                                              int hit_obj_id,
+                                              ui::AXEvent event_to_fire);
   void OnAccessibilitySnapshotResponse(
       int callback_id,
       const AXContentTreeUpdate& snapshot);
@@ -760,9 +783,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnDidChangeLoadProgressExtended(
       const FrameMsg_ExtendedLoadingProgress_Params& params);
 
-#if defined(USE_EXTERNAL_POPUP_MENU)
+#if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
   void OnShowPopup(const FrameHostMsg_ShowPopup_Params& params);
   void OnHidePopup();
+#endif
+#if defined(OS_ANDROID)
+  void OnNavigationHandledByEmbedder();
+  void ForwardGetInterfaceToRenderFrame(const std::string& interface_name,
+                                        mojo::ScopedMessagePipeHandle pipe);
 #endif
   void OnShowCreatedWindow(int pending_widget_routing_id,
                            WindowOpenDisposition disposition,
@@ -881,34 +909,39 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<NavigationHandleImpl> TakeNavigationHandleForCommit(
       const FrameHostMsg_DidCommitProvisionalLoad_Params& params);
 
+  // Called by |beforeunload_timeout_| when the beforeunload timeout fires.
+  void BeforeUnloadTimeout();
+
   // For now, RenderFrameHosts indirectly keep RenderViewHosts alive via a
   // refcount that calls Shutdown when it reaches zero.  This allows each
   // RenderFrameHostManager to just care about RenderFrameHosts, while ensuring
   // we have a RenderViewHost for each RenderFrameHost.
   // TODO(creis): RenderViewHost will eventually go away and be replaced with
   // some form of page context.
-  RenderViewHostImpl* render_view_host_;
+  RenderViewHostImpl* const render_view_host_;
 
-  RenderFrameHostDelegate* delegate_;
+  RenderFrameHostDelegate* const delegate_;
 
   // The SiteInstance associated with this RenderFrameHost. All content drawn
   // in this RenderFrameHost is part of this SiteInstance. Cannot change over
   // time.
-  scoped_refptr<SiteInstanceImpl> site_instance_;
+  const scoped_refptr<SiteInstanceImpl> site_instance_;
 
   // The renderer process this RenderFrameHost is associated with. It is
-  // equivalent to the result of site_instance_->GetProcess(), but that
-  // method has the side effect of creating the process if it doesn't exist.
-  // Cache a pointer to avoid unnecessary process creation.
-  RenderProcessHost* process_;
+  // initialized through a call to site_instance_->GetProcess() at creation
+  // time. RenderFrameHost::GetProcess() uses this cached pointer to avoid
+  // recreating the renderer process if it has crashed, since using
+  // SiteInstance::GetProcess() has the side effect of creating the process
+  // again if it is gone.
+  RenderProcessHost* const process_;
 
   // Reference to the whole frame tree that this RenderFrameHost belongs to.
   // Allows this RenderFrameHost to add and remove nodes in response to
   // messages from the renderer requesting DOM manipulation.
-  FrameTree* frame_tree_;
+  FrameTree* const frame_tree_;
 
   // The FrameTreeNode which this RenderFrameHostImpl is hosted in.
-  FrameTreeNode* frame_tree_node_;
+  FrameTreeNode* const frame_tree_node_;
 
   // The active parent RenderFrameHost for this frame, if it is a subframe.
   // Null for the main frame.  This is cached because the parent FrameTreeNode
@@ -984,6 +1017,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // require a beforeUnload/unload ACK.
   // PlzNavigate: all navigations require a beforeUnload ACK.
   bool unload_ack_is_for_navigation_;
+
+  // The timeout monitor that runs from when the beforeunload is started in
+  // DispatchBeforeUnload() until either the render process ACKs it with an IPC
+  // to OnBeforeUnloadACK(), or until the timeout triggers.
+  std::unique_ptr<TimeoutMonitor> beforeunload_timeout_;
 
   // Indicates whether this RenderFrameHost is in the process of loading a
   // document or not.
@@ -1128,6 +1166,18 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Tracks the feature policy which has been set on this frame.
   std::unique_ptr<FeaturePolicy> feature_policy_;
+
+#if defined(OS_ANDROID)
+  // An InterfaceProvider for Java-implemented interfaces that are scoped to
+  // this RenderFrameHost. This provides access to interfaces implemented in
+  // Java in the browser process to C++ code in the browser process.
+  std::unique_ptr<service_manager::InterfaceProvider> java_interfaces_;
+
+  // An InterfaceRegistry that forwards interface requests from Java to the
+  // RenderFrame. This provides access to interfaces implemented in the renderer
+  // to Java code in the browser process.
+  std::unique_ptr<service_manager::InterfaceRegistry> java_interface_registry_;
+#endif
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

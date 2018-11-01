@@ -35,22 +35,22 @@
 #include "bindings/core/v8/WindowProxyManager.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/frame/LocalFrame.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/loader/fetch/CrossOriginAccessControl.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/TextPosition.h"
 #include "v8/include/v8.h"
-#include "wtf/HashMap.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/Vector.h"
-#include "wtf/text/TextPosition.h"
 
 namespace blink {
 
 class DOMWrapperWorld;
 class Element;
-class FrameViewBase;
 class KURL;
+class LocalFrame;
+class PluginView;
 class ScriptSourceCode;
 class SecurityOrigin;
 
@@ -63,33 +63,37 @@ class CORE_EXPORT ScriptController final
 
  public:
   enum ExecuteScriptPolicy {
-    ExecuteScriptWhenScriptsDisabled,
-    DoNotExecuteScriptWhenScriptsDisabled
+    kExecuteScriptWhenScriptsDisabled,
+    kDoNotExecuteScriptWhenScriptsDisabled
   };
 
-  static ScriptController* create(LocalFrame* frame) {
-    return new ScriptController(frame);
+  static ScriptController* Create(
+      LocalFrame& frame,
+      LocalWindowProxyManager& window_proxy_manager) {
+    return new ScriptController(frame, window_proxy_manager);
   }
 
   DECLARE_TRACE();
 
   // This returns an initialized window proxy. (If the window proxy is not
   // yet initialized, it's implicitly initialized at the first access.)
-  LocalWindowProxy* windowProxy(DOMWrapperWorld&);
+  LocalWindowProxy* WindowProxy(DOMWrapperWorld& world) {
+    return window_proxy_manager_->WindowProxy(world);
+  }
 
   // Evaluate JavaScript in the main world.
-  void executeScriptInMainWorld(
+  void ExecuteScriptInMainWorld(
       const String&,
-      ExecuteScriptPolicy = DoNotExecuteScriptWhenScriptsDisabled);
-  void executeScriptInMainWorld(const ScriptSourceCode&,
-                                AccessControlStatus = NotSharableCrossOrigin);
-  v8::Local<v8::Value> executeScriptInMainWorldAndReturnValue(
+      ExecuteScriptPolicy = kDoNotExecuteScriptWhenScriptsDisabled);
+  void ExecuteScriptInMainWorld(const ScriptSourceCode&,
+                                AccessControlStatus = kNotSharableCrossOrigin);
+  v8::Local<v8::Value> ExecuteScriptInMainWorldAndReturnValue(
       const ScriptSourceCode&,
-      ExecuteScriptPolicy = DoNotExecuteScriptWhenScriptsDisabled);
-  v8::Local<v8::Value> executeScriptAndReturnValue(
+      ExecuteScriptPolicy = kDoNotExecuteScriptWhenScriptsDisabled);
+  v8::Local<v8::Value> ExecuteScriptAndReturnValue(
       v8::Local<v8::Context>,
       const ScriptSourceCode&,
-      AccessControlStatus = NotSharableCrossOrigin);
+      AccessControlStatus = kNotSharableCrossOrigin);
 
   // Executes JavaScript in an isolated world. The script gets its own global
   // scope, its own prototypes for intrinsic JavaScript objects (String, Array,
@@ -99,54 +103,54 @@ class CORE_EXPORT ScriptController final
   // Otherwise, a new world is created.
   //
   // FIXME: We don't want to support multiple scripts.
-  void executeScriptInIsolatedWorld(int worldID,
+  void ExecuteScriptInIsolatedWorld(int world_id,
                                     const HeapVector<ScriptSourceCode>& sources,
                                     Vector<v8::Local<v8::Value>>* results);
 
   // Returns true if argument is a JavaScript URL.
-  bool executeScriptIfJavaScriptURL(const KURL&, Element*);
+  bool ExecuteScriptIfJavaScriptURL(const KURL&, Element*);
 
   // Returns true if the current world is isolated, and has its own Content
   // Security Policy. In this case, the policy of the main world should be
   // ignored when evaluating resources injected into the DOM.
-  bool shouldBypassMainWorldCSP();
+  bool ShouldBypassMainWorldCSP();
 
-  PassRefPtr<SharedPersistent<v8::Object>> createPluginWrapper(FrameViewBase*);
+  PassRefPtr<SharedPersistent<v8::Object>> CreatePluginWrapper(PluginView&);
 
-  void enableEval();
-  void disableEval(const String& errorMessage);
+  void EnableEval();
+  void DisableEval(const String& error_message);
 
-  TextPosition eventHandlerPosition() const;
+  TextPosition EventHandlerPosition() const;
 
-  void clearWindowProxy();
-  void updateDocument();
+  void ClearWindowProxy();
+  void UpdateDocument();
 
-  void updateSecurityOrigin(SecurityOrigin*);
+  void UpdateSecurityOrigin(SecurityOrigin*);
 
-  void clearForClose();
+  void ClearForClose();
 
   // Registers a v8 extension to be available on webpages. Will only
   // affect v8 contexts initialized after this call. Takes ownership of
   // the v8::Extension object passed.
-  static void registerExtensionIfNeeded(v8::Extension*);
-  static V8Extensions& registeredExtensions();
-
-  v8::Isolate* isolate() const { return m_windowProxyManager->isolate(); }
-
-  LocalWindowProxyManager* getWindowProxyManager() const {
-    return m_windowProxyManager.get();
-  }
+  static void RegisterExtensionIfNeeded(v8::Extension*);
+  static V8Extensions& RegisteredExtensions();
 
  private:
-  explicit ScriptController(LocalFrame*);
+  ScriptController(LocalFrame& frame,
+                   LocalWindowProxyManager& window_proxy_manager)
+      : frame_(&frame), window_proxy_manager_(&window_proxy_manager) {}
 
-  LocalFrame* frame() const { return m_windowProxyManager->frame(); }
+  LocalFrame* GetFrame() const { return frame_; }
+  v8::Isolate* GetIsolate() const {
+    return window_proxy_manager_->GetIsolate();
+  }
 
-  v8::Local<v8::Value> evaluateScriptInMainWorld(const ScriptSourceCode&,
+  v8::Local<v8::Value> EvaluateScriptInMainWorld(const ScriptSourceCode&,
                                                  AccessControlStatus,
                                                  ExecuteScriptPolicy);
 
-  Member<LocalWindowProxyManager> m_windowProxyManager;
+  const Member<LocalFrame> frame_;
+  const Member<LocalWindowProxyManager> window_proxy_manager_;
 };
 
 }  // namespace blink

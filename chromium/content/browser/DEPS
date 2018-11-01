@@ -3,6 +3,7 @@ include_rules = [
   # See comment in content/DEPS for which components are allowed.
   "+components/discardable_memory/common",
   "+components/discardable_memory/service",
+  "+components/display_compositor",
   "+components/filesystem",
   "+components/leveldb",
   "+components/link_header_util",
@@ -13,10 +14,10 @@ include_rules = [
   "+components/scheduler/common",
   "+components/tracing",
   "+components/url_formatter",
+  "+components/viz",
 
   "+content/app/strings/grit",  # For generated headers
   "+content/public/browser",
-  "+device/battery",  # For battery status service.
   "+device/gamepad", # For gamepad API
   "+device/generic_sensor",  # For sensors service.
   "+device/geolocation",
@@ -24,9 +25,8 @@ include_rules = [
   "+device/power_save_blocker",
   "+device/screen_orientation/public/interfaces",
   "+device/sensors",
-  "+device/vibration",  # For Vibration API
   "+device/vr",  # For WebVR API
-  "+device/wake_lock",
+  "+device/wake_lock/public/interfaces",
   # This can only be used on POSIX, in particular it mustn't be used on Windows
   # in the browser DLL.
   "+gin/v8_initializer.h",
@@ -75,7 +75,6 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebMixedContentContextType.h",
   "+third_party/WebKit/public/platform/WebMouseEvent.h",
   "+third_party/WebKit/public/platform/WebMouseWheelEvent.h",
-  "+third_party/WebKit/public/platform/WebNavigationHintType.h",
   "+third_party/WebKit/public/platform/WebPageVisibilityState.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
@@ -88,6 +87,8 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/broadcastchannel/broadcast_channel.mojom.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
+  "+third_party/WebKit/public/platform/modules/installedapp/installed_app_provider.mojom.h",
+  "+third_party/WebKit/public/platform/modules/installedapp/related_application.mojom.h",
   "+third_party/WebKit/public/platform/modules/mediasession/media_session.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/notifications/notification.mojom.h",
@@ -113,6 +114,7 @@ include_rules = [
   "+third_party/WebKit/public/web/WebAXEnums.h",
   "+third_party/WebKit/public/web/WebCompositionUnderline.h",
   "+third_party/WebKit/public/web/WebConsoleMessage.h",
+  "+third_party/WebKit/public/web/WebContextMenuData.h",
   "+third_party/WebKit/public/web/WebDeviceEmulationParams.h",
   "+third_party/WebKit/public/web/WebDragStatus.h",
   "+third_party/WebKit/public/web/WebFindOptions.h",

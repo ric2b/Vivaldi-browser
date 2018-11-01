@@ -32,7 +32,7 @@
 #define RTCSessionDescriptionRequest_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 class WebRTCSessionDescription;
@@ -42,8 +42,8 @@ class RTCSessionDescriptionRequest
  public:
   virtual ~RTCSessionDescriptionRequest() {}
 
-  virtual void requestSucceeded(const WebRTCSessionDescription&) = 0;
-  virtual void requestFailed(const String& error) = 0;
+  virtual void RequestSucceeded(const WebRTCSessionDescription&) = 0;
+  virtual void RequestFailed(const String& error) = 0;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 

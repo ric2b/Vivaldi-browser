@@ -51,7 +51,7 @@
 <translation id="176587472219019965">&amp;Nieuw venster</translation>
 <translation id="1769104665586091481">Link openen in &amp;nieuw venster</translation>
 <translation id="1789575671122666129">Pop-ups</translation>
-<translation id="1815083418640426271">Plakken als platte tekst</translation>
+<translation id="1815083418640426271">Plakken als platte &amp;tekst</translation>
 <translation id="1828901632669367785">Afdrukken met systeemdialoogvenster...</translation>
 <translation id="1838288018605456492">Klik om in te stellen</translation>
 <translation id="1846308012215045257">Control-klik om <ph name="PLUGIN_NAME" /> uit te voeren</translation>
@@ -77,11 +77,11 @@
 <translation id="215753907730220065">Volledig scherm sluiten</translation>
 <translation id="2177950615300672361">Privétab: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Gebruik een cijfer om aan te geven hoeveel exemplaren er moeten worden afgedrukt (1-999).</translation>
-<translation id="2181927652428971824">Afdrukken naar Vivaldi Documenten en andere cloudbestemmingen. <ph name="BEGIN_LINK" />Inloggen<ph name="END_LINK" /> om af te drukken naar Google Cloudprinter.</translation>
+<translation id="2181927652428971824">Afdrukken naar Google Documenten en andere cloudbestemmingen. <ph name="BEGIN_LINK" />Inloggen<ph name="END_LINK" /> om af te drukken naar Google Cloudprinter.</translation>
 <translation id="2187317261103489799">Detecteren (standaard)</translation>
 <translation id="219008588003277019">Native Client-module: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Knop verbergen</translation>
-<translation id="2218515861914035131">Plakken als tekst zonder opmaak</translation>
+<translation id="2218515861914035131">Plakken als platte &amp;tekst</translation>
 <translation id="2249605167705922988">bijv. 1-5, 8, 11-13</translation>
 <translation id="2263497240924215535">(Uitgeschakeld)</translation>
 <translation id="2280486287150724112">Marge rechts</translation>
@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Typ een sneltoets</translation>
 <translation id="2509495747794740764">De waarde voor de schaal moet een getal tussen de 10 en 200 zijn.</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> installeren</translation>
+<translation id="253557089021624350">Aantal keepalive-activiteiten</translation>
 <translation id="2550212893339833758">Wisselgeheugen</translation>
 <translation id="2580924999637585241">Totaal: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -364,6 +365,7 @@
 <translation id="6273677812470008672">Kwaliteit</translation>
 <translation id="6295855836753816081">Opslaan...</translation>
 <translation id="6308937455967653460">Link &amp;opslaan als...</translation>
+<translation id="6326855256003666642">Aantal keepalive-activiteiten</translation>
 <translation id="6348109281845364640">Kan de printer niet instellen</translation>
 <translation id="6370021412472292592">Manifest kan niet geladen worden.</translation>
 <translation id="6398765197997659313">Volledig scherm sluiten</translation>
@@ -552,5 +554,5 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="93766956588638423">Extensie repareren</translation>
 <translation id="98515147261107953">Liggend</translation>
 <translation id="994289308992179865">&amp;Herhalen</translation>
-<translation id="998747458861718449">I&amp;nspecteren</translation>
+<translation id="998747458861718449">&amp;Inspecteren</translation>
 </translationbundle>

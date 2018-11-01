@@ -13,6 +13,7 @@
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/profiles/gaia_info_update_service.h"
 #include "chrome/browser/profiles/gaia_info_update_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -28,7 +29,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -65,9 +65,6 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kBrowserGuestModeEnabled, true);
   registry->RegisterBooleanPref(prefs::kBrowserAddPersonEnabled, true);
   registry->RegisterBooleanPref(prefs::kForceBrowserSignin, false);
-
-  registry->RegisterBooleanPref(
-      prefs::kProfileAvatarRightClickTutorialDismissed, false);
 }
 
 base::string16 GetAvatarNameForProfile(const base::FilePath& profile_path) {
@@ -179,8 +176,6 @@ bool IsProfileLocked(const base::FilePath& profile_path) {
 }
 
 void UpdateIsProfileLockEnabledIfNeeded(Profile* profile) {
-  DCHECK(switches::IsNewProfileManagement());
-
   if (!profile->GetPrefs()->GetString(prefs::kGoogleServicesHostedDomain).
       empty())
     return;
@@ -189,12 +184,6 @@ void UpdateIsProfileLockEnabledIfNeeded(Profile* profile) {
 }
 
 void UpdateGaiaProfileInfoIfNeeded(Profile* profile) {
-  // If the --google-profile-info flag isn't used, then the
-  // GAIAInfoUpdateService isn't initialized, and we can't download the profile
-  // info.
-  if (!switches::IsGoogleProfileInfo())
-    return;
-
   DCHECK(profile);
 
   GAIAInfoUpdateService* service =
@@ -248,7 +237,8 @@ void RemoveBrowsingDataForProfile(const base::FilePath& profile_path) {
 
   BrowsingDataRemoverFactory::GetForBrowserContext(profile)->Remove(
       base::Time(), base::Time::Max(),
-      BrowsingDataRemover::REMOVE_WIPE_PROFILE, BrowsingDataHelper::ALL);
+      ChromeBrowsingDataRemoverDelegate::WIPE_PROFILE,
+      ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES);
 }
 
 void SetLastUsedProfile(const std::string& profile_dir) {

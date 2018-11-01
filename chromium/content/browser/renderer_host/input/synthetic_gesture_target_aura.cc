@@ -6,12 +6,15 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <vector>
+
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/events/event_processor.h"
+#include "ui/events/event_sink.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 
@@ -32,31 +35,30 @@ void SyntheticGestureTargetAura::DispatchWebTouchEventToPlatform(
     const WebTouchEvent& web_touch,
     const ui::LatencyInfo& latency_info) {
   TouchEventWithLatencyInfo touch_with_latency(web_touch, latency_info);
-  for (size_t i = 0; i < touch_with_latency.event.touchesLength; i++) {
-    touch_with_latency.event.touches[i].radiusX *= device_scale_factor_;
-    touch_with_latency.event.touches[i].radiusY *= device_scale_factor_;
+  for (size_t i = 0; i < touch_with_latency.event.touches_length; i++) {
+    touch_with_latency.event.touches[i].radius_x *= device_scale_factor_;
+    touch_with_latency.event.touches[i].radius_y *= device_scale_factor_;
   }
-  ScopedVector<ui::TouchEvent> events;
+  std::vector<std::unique_ptr<ui::TouchEvent>> events;
   bool conversion_success = MakeUITouchEventsFromWebTouchEvents(
       touch_with_latency, &events, LOCAL_COORDINATES);
   DCHECK(conversion_success);
 
   aura::Window* window = GetWindow();
   aura::WindowTreeHost* host = window->GetHost();
-  for (ScopedVector<ui::TouchEvent>::iterator iter = events.begin(),
-      end = events.end(); iter != end; ++iter) {
-    (*iter)->ConvertLocationToTarget(window, host->window());
+  for (const auto& event : events) {
+    event->ConvertLocationToTarget(window, host->window());
 
     // Apply the screen scale factor to the event location after it has been
     // transformed to the target.
     gfx::PointF device_location =
-        gfx::ScalePoint((*iter)->location_f(), device_scale_factor_);
+        gfx::ScalePoint(event->location_f(), device_scale_factor_);
     gfx::PointF device_root_location =
-        gfx::ScalePoint((*iter)->root_location_f(), device_scale_factor_);
-    (*iter)->set_location_f(device_location);
-    (*iter)->set_root_location_f(device_root_location);
+        gfx::ScalePoint(event->root_location_f(), device_scale_factor_);
+    event->set_location_f(device_location);
+    event->set_root_location_f(device_root_location);
     ui::EventDispatchDetails details =
-        host->event_processor()->OnEventFromSource(*iter);
+        host->event_sink()->OnEventFromSource(event.get());
     if (details.dispatcher_destroyed)
       break;
   }
@@ -66,17 +68,17 @@ void SyntheticGestureTargetAura::DispatchWebMouseWheelEventToPlatform(
       const blink::WebMouseWheelEvent& web_wheel,
       const ui::LatencyInfo&) {
   ui::MouseWheelEvent wheel_event(
-      gfx::Vector2d(web_wheel.deltaX, web_wheel.deltaY), gfx::Point(),
+      gfx::Vector2d(web_wheel.delta_x, web_wheel.delta_y), gfx::Point(),
       gfx::Point(), ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
-  gfx::PointF location(web_wheel.x * device_scale_factor_,
-                       web_wheel.y * device_scale_factor_);
+  gfx::PointF location(web_wheel.PositionInWidget().x * device_scale_factor_,
+                       web_wheel.PositionInWidget().y * device_scale_factor_);
   wheel_event.set_location_f(location);
   wheel_event.set_root_location_f(location);
 
   aura::Window* window = GetWindow();
   wheel_event.ConvertLocationToTarget(window, window->GetRootWindow());
   ui::EventDispatchDetails details =
-      window->GetHost()->event_processor()->OnEventFromSource(&wheel_event);
+      window->GetHost()->event_sink()->OnEventFromSource(&wheel_event);
   if (details.dispatcher_destroyed)
     return;
 }
@@ -86,22 +88,22 @@ namespace {
 ui::EventType
 WebMouseEventTypeToEventType(blink::WebInputEvent::Type web_type) {
   switch (web_type) {
-    case blink::WebInputEvent::MouseDown:
+    case blink::WebInputEvent::kMouseDown:
       return ui::ET_MOUSE_PRESSED;
 
-    case blink::WebInputEvent::MouseUp:
+    case blink::WebInputEvent::kMouseUp:
       return ui::ET_MOUSE_RELEASED;
 
-    case blink::WebInputEvent::MouseMove:
+    case blink::WebInputEvent::kMouseMove:
       return ui::ET_MOUSE_MOVED;
 
-    case blink::WebInputEvent::MouseEnter:
+    case blink::WebInputEvent::kMouseEnter:
       return ui::ET_MOUSE_ENTERED;
 
-    case blink::WebInputEvent::MouseLeave:
+    case blink::WebInputEvent::kMouseLeave:
       return ui::ET_MOUSE_EXITED;
 
-    case blink::WebInputEvent::ContextMenu:
+    case blink::WebInputEvent::kContextMenu:
       NOTREACHED() << "WebInputEvent::ContextMenu not supported by"
           "SyntheticGestureTargetAura";
 
@@ -115,24 +117,28 @@ WebMouseEventTypeToEventType(blink::WebInputEvent::Type web_type) {
 int WebEventModifiersToEventFlags(int modifiers) {
   int flags = 0;
 
-  if (modifiers & blink::WebInputEvent::LeftButtonDown)
+  if (modifiers & blink::WebInputEvent::kLeftButtonDown)
     flags |= ui::EF_LEFT_MOUSE_BUTTON;
-  if (modifiers & blink::WebInputEvent::MiddleButtonDown)
+  if (modifiers & blink::WebInputEvent::kMiddleButtonDown)
     flags |= ui::EF_MIDDLE_MOUSE_BUTTON;
-  if (modifiers & blink::WebInputEvent::RightButtonDown)
+  if (modifiers & blink::WebInputEvent::kRightButtonDown)
     flags |= ui::EF_RIGHT_MOUSE_BUTTON;
+  if (modifiers & blink::WebInputEvent::kBackButtonDown)
+    flags |= ui::EF_BACK_MOUSE_BUTTON;
+  if (modifiers & blink::WebInputEvent::kForwardButtonDown)
+    flags |= ui::EF_FORWARD_MOUSE_BUTTON;
 
   return flags;
 }
 
 ui::EventPointerType WebMousePointerTypeToEventPointerType(
     blink::WebPointerProperties::PointerType type) {
-    if (type == blink::WebPointerProperties::PointerType::Mouse)
-      return ui::EventPointerType::POINTER_TYPE_MOUSE;
-    if (type == blink::WebPointerProperties::PointerType::Pen)
-      return ui::EventPointerType::POINTER_TYPE_PEN;
-    NOTREACHED() << "Unexpected mouse event pointer type";
-    return ui::EventPointerType::POINTER_TYPE_UNKNOWN;
+  if (type == blink::WebPointerProperties::PointerType::kMouse)
+    return ui::EventPointerType::POINTER_TYPE_MOUSE;
+  if (type == blink::WebPointerProperties::PointerType::kPen)
+    return ui::EventPointerType::POINTER_TYPE_PEN;
+  NOTREACHED() << "Unexpected mouse event pointer type";
+  return ui::EventPointerType::POINTER_TYPE_UNKNOWN;
 }
 
 }  // namespace
@@ -141,23 +147,23 @@ void SyntheticGestureTargetAura::DispatchWebMouseEventToPlatform(
     const blink::WebMouseEvent& web_mouse_event,
     const ui::LatencyInfo& latency_info) {
   ui::EventType event_type =
-      WebMouseEventTypeToEventType(web_mouse_event.type());
-  int flags = WebEventModifiersToEventFlags(web_mouse_event.modifiers());
+      WebMouseEventTypeToEventType(web_mouse_event.GetType());
+  int flags = WebEventModifiersToEventFlags(web_mouse_event.GetModifiers());
+  ui::PointerDetails pointer_details(
+      WebMousePointerTypeToEventPointerType(web_mouse_event.pointer_type));
   ui::MouseEvent mouse_event(event_type, gfx::Point(), gfx::Point(),
-                             ui::EventTimeForNow(), flags, flags);
-  gfx::PointF location(web_mouse_event.x * device_scale_factor_,
-                       web_mouse_event.y * device_scale_factor_);
+                             ui::EventTimeForNow(), flags, flags,
+                             pointer_details);
+  gfx::PointF location(
+      web_mouse_event.PositionInWidget().x * device_scale_factor_,
+      web_mouse_event.PositionInWidget().y * device_scale_factor_);
   mouse_event.set_location_f(location);
   mouse_event.set_root_location_f(location);
-  ui::PointerDetails pointer_details = mouse_event.pointer_details();
-  pointer_details.pointer_type =
-      WebMousePointerTypeToEventPointerType(web_mouse_event.pointerType);
-  mouse_event.set_pointer_details(pointer_details);
 
   aura::Window* window = GetWindow();
   mouse_event.ConvertLocationToTarget(window, window->GetRootWindow());
   ui::EventDispatchDetails details =
-      window->GetHost()->event_processor()->OnEventFromSource(&mouse_event);
+      window->GetHost()->event_sink()->OnEventFromSource(&mouse_event);
   if (details.dispatcher_destroyed)
     return;
 }

@@ -6,8 +6,8 @@
 #define ClipRecorder_h
 
 #include "platform/graphics/paint/DisplayItem.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -21,13 +21,13 @@ class PLATFORM_EXPORT ClipRecorder {
   ClipRecorder(GraphicsContext&,
                const DisplayItemClient&,
                DisplayItem::Type,
-               const IntRect& clipRect);
+               const IntRect& clip_rect);
   ~ClipRecorder();
 
  private:
-  const DisplayItemClient& m_client;
-  GraphicsContext& m_context;
-  DisplayItem::Type m_type;
+  const DisplayItemClient& client_;
+  GraphicsContext& context_;
+  DisplayItem::Type type_;
 };
 
 }  // namespace blink

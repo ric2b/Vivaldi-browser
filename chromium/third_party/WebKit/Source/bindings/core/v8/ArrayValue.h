@@ -27,9 +27,9 @@
 #define ArrayValue_h
 
 #include "core/CoreExport.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Assertions.h"
 #include "v8/include/v8.h"
-#include "wtf/Allocator.h"
-#include "wtf/Assertions.h"
 
 namespace blink {
 
@@ -39,22 +39,22 @@ class CORE_EXPORT ArrayValue final {
   STACK_ALLOCATED();
 
  public:
-  ArrayValue() : m_isolate(nullptr) {}
+  ArrayValue() : isolate_(nullptr) {}
   ArrayValue(const v8::Local<v8::Array>& array, v8::Isolate* isolate)
-      : m_array(array), m_isolate(isolate) {
-    DCHECK(m_isolate);
+      : array_(array), isolate_(isolate) {
+    DCHECK(isolate_);
   }
 
   ArrayValue& operator=(const ArrayValue&);
 
-  bool isUndefinedOrNull() const;
+  bool IsUndefinedOrNull() const;
 
   bool length(size_t&) const;
-  bool get(size_t index, Dictionary&) const;
+  bool Get(size_t index, Dictionary&) const;
 
  private:
-  v8::Local<v8::Array> m_array;
-  v8::Isolate* m_isolate;
+  v8::Local<v8::Array> array_;
+  v8::Isolate* isolate_;
 };
 
 }  // namespace blink

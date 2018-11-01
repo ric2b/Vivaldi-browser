@@ -4,6 +4,9 @@
 
 #include "content/public/test/navigation_simulator.h"
 
+#include "base/bind.h"
+#include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/common/frame_messages.h"
@@ -110,7 +113,9 @@ void NavigationSimulator::Start() {
     BeginNavigationParams begin_params(
         std::string(), net::LOAD_NORMAL, true /* has_user_gesture */,
         false /* skip_service_worker */, REQUEST_CONTEXT_TYPE_HYPERLINK,
-        blink::WebMixedContentContextType::Blockable, url::Origin());
+        blink::WebMixedContentContextType::kBlockable,
+        false,  // is_form_submission
+        url::Origin());
     CommonNavigationParams common_params;
     common_params.url = navigation_url_;
     common_params.referrer = referrer_;
@@ -123,7 +128,10 @@ void NavigationSimulator::Start() {
         render_frame_host_->GetRoutingID(), common_params, begin_params));
     NavigationRequest* request =
         render_frame_host_->frame_tree_node()->navigation_request();
-    DCHECK(request);
+
+    // The request failed synchronously.
+    if (!request)
+      return;
     DCHECK_EQ(handle_, request->navigation_handle());
   } else {
     render_frame_host_->OnMessageReceived(
@@ -136,19 +144,21 @@ void NavigationSimulator::Start() {
         "GET", scoped_refptr<content::ResourceRequestBodyImpl>(), referrer_,
         true /* user_gesture */, transition_, false /* is_external_protocol */,
         REQUEST_CONTEXT_TYPE_LOCATION,
-        blink::WebMixedContentContextType::NotMixedContent,
+        blink::WebMixedContentContextType::kNotMixedContent,
         base::Callback<void(NavigationThrottle::ThrottleCheckResult)>());
   }
 
   CHECK(handle_);
-
-  // Make sure all NavigationThrottles have run.
-  // TODO(clamy): provide a non auto-advance mode if needed.
-  while (handle_->state_for_testing() == NavigationHandleImpl::DEFERRING_START)
-    handle_->Resume();
+  WaitForThrottleChecksComplete();
 
   CHECK_EQ(1, num_did_start_navigation_called_);
-  CHECK_EQ(1, num_will_start_request_called_);
+  if (GetLastThrottleCheckResult() == NavigationThrottle::PROCEED) {
+    CHECK_EQ(1, num_will_start_request_called_);
+  } else {
+    // TODO(clamy): Add error handling code based on the
+    // NavigationThrottleCheckResult here and in other methods.
+    state_ = FAILED;
+  }
 }
 
 void NavigationSimulator::Redirect(const GURL& new_url) {
@@ -168,6 +178,7 @@ void NavigationSimulator::Redirect(const GURL& new_url) {
   int previous_did_redirect_navigation_called =
       num_did_redirect_navigation_called_;
 
+  PrepareCompleteCallbackOnHandle();
   if (IsBrowserSideNavigationEnabled()) {
     NavigationRequest* request =
         render_frame_host_->frame_tree_node()->navigation_request();
@@ -194,17 +205,16 @@ void NavigationSimulator::Redirect(const GURL& new_url) {
         base::Callback<void(NavigationThrottle::ThrottleCheckResult)>());
   }
 
-  // Make sure all NavigationThrottles have run.
-  // TODO(clamy): provide a non auto-advance mode if needed.
-  while (handle_->state_for_testing() ==
-         NavigationHandleImpl::DEFERRING_REDIRECT) {
-    handle_->Resume();
-  }
+  WaitForThrottleChecksComplete();
 
-  CHECK_EQ(previous_num_will_redirect_request_called + 1,
-           num_will_redirect_request_called_);
-  CHECK_EQ(previous_did_redirect_navigation_called + 1,
-           num_did_redirect_navigation_called_);
+  if (GetLastThrottleCheckResult() == NavigationThrottle::PROCEED) {
+    CHECK_EQ(previous_num_will_redirect_request_called + 1,
+             num_will_redirect_request_called_);
+    CHECK_EQ(previous_did_redirect_navigation_called + 1,
+             num_did_redirect_navigation_called_);
+  } else {
+    state_ = FAILED;
+  }
 }
 
 void NavigationSimulator::Commit() {
@@ -218,14 +228,21 @@ void NavigationSimulator::Commit() {
   if (state_ == INITIALIZATION)
     Start();
 
+  PrepareCompleteCallbackOnHandle();
   if (IsBrowserSideNavigationEnabled() &&
       render_frame_host_->frame_tree_node()->navigation_request()) {
     render_frame_host_->PrepareForCommit();
+    // Synchronous failure can cause the navigation to finish here.
+    if (!handle_) {
+      state_ = FAILED;
+      return;
+    }
   }
 
   // Call NavigationHandle::WillProcessResponse if needed.
-  if (handle_->state_for_testing() <
-      NavigationHandleImpl::WILL_PROCESS_RESPONSE) {
+  // Note that the handle's state can be CANCELING if a throttle cancelled it
+  // synchronously in PrepareForCommit.
+  if (handle_->state_for_testing() < NavigationHandleImpl::CANCELING) {
     handle_->WillProcessResponse(
         render_frame_host_, scoped_refptr<net::HttpResponseHeaders>(),
         net::HttpResponseInfo::ConnectionInfo(), SSLStatus(), GlobalRequestID(),
@@ -234,11 +251,11 @@ void NavigationSimulator::Commit() {
         base::Callback<void(NavigationThrottle::ThrottleCheckResult)>());
   }
 
-  // Make sure all NavigationThrottles have run.
-  // TODO(clamy): provide a non auto-advance mode if needed.
-  while (handle_->state_for_testing() ==
-         NavigationHandleImpl::DEFERRING_RESPONSE) {
-    handle_->Resume();
+  WaitForThrottleChecksComplete();
+
+  if (GetLastThrottleCheckResult() != NavigationThrottle::PROCEED) {
+    state_ = FAILED;
+    return;
   }
 
   CHECK_EQ(1, num_will_process_response_called_);
@@ -284,7 +301,7 @@ void NavigationSimulator::Commit() {
   params.socket_address.set_port(80);
   params.history_list_was_cleared = false;
   params.original_request_url = navigation_url_;
-  params.was_within_same_page = false;
+  params.was_within_same_document = false;
   params.page_state =
       PageState::CreateForTesting(navigation_url_, false, nullptr, nullptr);
 
@@ -337,8 +354,8 @@ void NavigationSimulator::Fail(int error_code) {
   }
 
   if (IsBrowserSideNavigationEnabled()) {
-    CHECK_EQ(1, num_ready_to_commit_called_);
     if (should_result_in_error_page) {
+      CHECK_EQ(1, num_ready_to_commit_called_);
       // Update the RenderFrameHost now that we know which RenderFrameHost will
       // commit the error page.
       render_frame_host_ =
@@ -375,7 +392,7 @@ void NavigationSimulator::CommitErrorPage() {
   params.did_create_new_entry = true;
   params.url = navigation_url_;
   params.transition = transition_;
-  params.was_within_same_page = false;
+  params.was_within_same_document = false;
   params.url_is_unreachable = true;
   params.page_state =
       PageState::CreateForTesting(navigation_url_, false, nullptr, nullptr);
@@ -393,7 +410,7 @@ void NavigationSimulator::CommitErrorPage() {
   CHECK_EQ(1, num_did_finish_navigation_called_);
 }
 
-void NavigationSimulator::CommitSamePage() {
+void NavigationSimulator::CommitSameDocument() {
   CHECK_EQ(INITIALIZATION, state_)
       << "NavigationSimulator::CommitErrorPage should be the only "
          "navigation event function called on the NavigationSimulator";
@@ -416,7 +433,7 @@ void NavigationSimulator::CommitSamePage() {
   params.socket_address.set_port(80);
   params.history_list_was_cleared = false;
   params.original_request_url = navigation_url_;
-  params.was_within_same_page = true;
+  params.was_within_same_document = true;
   params.page_state =
       PageState::CreateForTesting(navigation_url_, false, nullptr, nullptr);
 
@@ -444,6 +461,11 @@ void NavigationSimulator::SetReferrer(const Referrer& referrer) {
   CHECK_LE(state_, STARTED) << "The referrer cannot be set after the "
                                "navigation has committed or has failed";
   referrer_ = referrer;
+}
+
+NavigationThrottle::ThrottleCheckResult
+NavigationSimulator::GetLastThrottleCheckResult() {
+  return last_throttle_check_result_.value();
 }
 
 void NavigationSimulator::DidStartNavigation(
@@ -475,6 +497,8 @@ void NavigationSimulator::DidStartNavigation(
                      weak_factory_.GetWeakPtr()),
           base::Bind(&NavigationSimulator::OnWillProcessResponse,
                      weak_factory_.GetWeakPtr())));
+
+  PrepareCompleteCallbackOnHandle();
 }
 
 void NavigationSimulator::DidRedirectNavigation(
@@ -491,8 +515,10 @@ void NavigationSimulator::ReadyToCommitNavigation(
 
 void NavigationSimulator::DidFinishNavigation(
     NavigationHandle* navigation_handle) {
-  if (navigation_handle == handle_)
+  if (navigation_handle == handle_) {
     num_did_finish_navigation_called_++;
+    handle_ = nullptr;
+  }
 }
 
 void NavigationSimulator::OnWillStartRequest() {
@@ -505,6 +531,38 @@ void NavigationSimulator::OnWillRedirectRequest() {
 
 void NavigationSimulator::OnWillProcessResponse() {
   num_will_process_response_called_++;
+}
+
+void NavigationSimulator::WaitForThrottleChecksComplete() {
+  // If last_throttle_check_result_ is set, then throttle checks completed
+  // synchronously.
+  if (last_throttle_check_result_)
+    return;
+
+  base::RunLoop run_loop;
+  throttle_checks_wait_closure_ = run_loop.QuitClosure();
+  run_loop.Run();
+  throttle_checks_wait_closure_.Reset();
+}
+
+void NavigationSimulator::OnThrottleChecksComplete(
+    NavigationThrottle::ThrottleCheckResult result) {
+  DCHECK(!last_throttle_check_result_);
+  last_throttle_check_result_ = result;
+  if (throttle_checks_wait_closure_)
+    throttle_checks_wait_closure_.Run();
+}
+
+void NavigationSimulator::PrepareCompleteCallbackOnHandle() {
+  last_throttle_check_result_.reset();
+  handle_->set_complete_callback_for_testing(
+      base::Bind(&NavigationSimulator::OnThrottleChecksComplete,
+                 weak_factory_.GetWeakPtr()));
+}
+
+RenderFrameHost* NavigationSimulator::GetFinalRenderFrameHost() {
+  CHECK_EQ(state_, FINISHED);
+  return render_frame_host_;
 }
 
 }  // namespace content

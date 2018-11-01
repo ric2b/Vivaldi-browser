@@ -6,12 +6,14 @@
 #define CONTENT_BROWSER_MEMORY_MEMORY_COORDINATOR_IMPL_H_
 
 #include "base/callback.h"
+#include "base/cancelable_callback.h"
 #include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_coordinator_proxy.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/singleton.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/non_thread_safe.h"
+#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/common/memory_coordinator.mojom.h"
@@ -24,16 +26,23 @@ namespace content {
 
 // NOTE: Memory coordinator is under development and not fully working.
 
+class MemoryConditionObserver;
 class MemoryCoordinatorHandleImpl;
 class MemoryCoordinatorImplTest;
 class MemoryMonitor;
-class MemoryStateUpdater;
 class RenderProcessHost;
 struct MemoryCoordinatorSingletonTraits;
 
+// MemoryCondition is an internal state of memory coordinator which is used for
+// various things; calculating memory state for processes, requesting processes
+// to purge memory, and scheduling tab discarding.
+enum class MemoryCondition : int {
+  NORMAL = 0,
+  WARNING = 1,
+  CRITICAL = 2,
+};
+
 // MemoryCoordinatorImpl is an implementation of MemoryCoordinator.
-// The current implementation uses MemoryStateUpdater to update the global
-// memory state. See comments in MemoryStateUpdater for details.
 class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
                                              public MemoryCoordinator,
                                              public NotificationObserver,
@@ -53,6 +62,12 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   // coordinator will start dispatching state changes.
   void Start();
 
+  // Called when the browser is foregrounded.
+  void OnForegrounded();
+
+  // Called when the browser is backgrounded.
+  void OnBackgrounded();
+
   // Creates a handle to the provided child process.
   void CreateHandle(int render_process_id,
                     mojom::MemoryCoordinatorHandleRequest request);
@@ -71,18 +86,10 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   void RecordMemoryPressure(
       base::MemoryPressureMonitor::MemoryPressureLevel level);
 
-  // Returns the global memory state.
-  virtual MemoryState GetGlobalMemoryState() const;
-
-  // Returns the browser's current memory state. Note that the current state
-  // could be different from the global memory state as the browser won't be
-  // suspended.
+  // base::MemoryCoordinator implementations:
   MemoryState GetCurrentMemoryState() const override;
 
-  // Sets the global memory state for testing.
-  void SetCurrentMemoryStateForTesting(MemoryState memory_state) override;
-
-  // MemoryCoordinator implementation:
+  // content::MemoryCoordinator implementation:
   MemoryState GetStateForProcess(base::ProcessHandle handle) override;
 
   // NotificationObserver implementation:
@@ -90,16 +97,19 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
                const NotificationSource& source,
                const NotificationDetails& details) override;
 
-  // Overrides the global state to |new_state|. State update tasks won't be
-  // scheduled until |duration| is passed. This means that the global state
-  // remains the same until |duration| is passed or another call of this method.
-  void ForceSetGlobalState(base::MemoryState new_state,
-                           base::TimeDelta duration);
+  // Returns the current memory condition.
+  MemoryCondition GetMemoryCondition() const { return memory_condition_; }
 
-  // Changes the global state and notifies state changes to clients (lives in
-  // the browser) and child processes (renderers) if needed. Returns true when
-  // the state is actually changed.
-  bool ChangeStateIfNeeded(MemoryState prev_state, MemoryState next_state);
+  // Overrides the current memory condition to |condition|. Memory condition
+  // update tasks won't be scheduled until |duration| is passed. This means that
+  // the memory condition remains the same until |duration| is passed or
+  // another call of this method.
+  void ForceSetMemoryCondition(MemoryCondition condition,
+                               base::TimeDelta duration);
+
+  // Changes current memory condition if needed. This may trigger some actions
+  // like purging memory and memory state changes.
+  void UpdateConditionIfNeeded(MemoryCondition condition);
 
   // Asks the delegate to discard a tab.
   void DiscardTab();
@@ -121,6 +131,9 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   void AddChildForTesting(int dummy_render_process_id,
                           mojom::ChildMemoryCoordinatorPtr child);
 
+  // Sets a TickClock for testing.
+  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
+
   // Callback invoked by mojo when the child connection goes down. Exposed
   // for testing.
   void OnConnectionError(int render_process_id);
@@ -137,6 +150,7 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
 
     MemoryState memory_state;
     bool is_visible = false;
+    base::TimeTicks can_purge_after;
     std::unique_ptr<MemoryCoordinatorHandleImpl> handle;
   };
 
@@ -144,6 +158,8 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   using ChildInfoMap = std::map<int, ChildInfo>;
 
   ChildInfoMap& children() { return children_; }
+
+  base::SingleThreadTaskRunner* task_runner() { return task_runner_.get(); }
 
  private:
 #if !defined(OS_MACOSX)
@@ -153,10 +169,14 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorWithServiceWorkerTest,
                            CannotSuspendRendererWithServiceWorker);
 #endif
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, CalculateNextState);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, UpdateState);
+  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, OnChildVisibilityChanged);
+  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, CalculateNextCondition);
+  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, UpdateCondition);
   FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, SetMemoryStateForTesting);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, ForceSetGlobalState);
+  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, ForceSetMemoryCondition);
+  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, DiscardTabUnderCritical);
+  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, OnWarningCondition);
+  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, OnCriticalCondition);
 
   friend struct MemoryCoordinatorSingletonTraits;
   friend class MemoryCoordinatorHandleImpl;
@@ -164,30 +184,73 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   // Called when ChildMemoryCoordinator calls AddChild().
   void OnChildAdded(int render_process_id);
 
+  // Called when visibility of a child process is changed.
+  void OnChildVisibilityChanged(int render_process_id, bool is_visible);
+
   // Called by SetChildMemoryState() to determine a child memory state based on
   // the current status of the child process.
-  MemoryState OverrideGlobalState(MemoryState memroy_state,
-                                  const ChildInfo& child);
+  MemoryState OverrideState(MemoryState memroy_state, const ChildInfo& child);
 
   // Helper function of CreateHandle and AddChildForTesting.
   void CreateChildInfoMapEntry(
       int render_process_id,
       std::unique_ptr<MemoryCoordinatorHandleImpl> handle);
 
+  // Updates the browser's memory state and notifies it to in-process clients.
+  void UpdateBrowserStateAndNotifyStateToClients(MemoryState state);
+
   // Notifies a state change to in-process clients.
-  void NotifyStateToClients();
+  void NotifyStateToClients(MemoryState state);
 
   // Notifies a state change to child processes.
-  void NotifyStateToChildren();
+  void NotifyStateToChildren(MemoryState state);
 
+  // Called periodically while the memory condition is WARNING.
+  void OnWarningCondition();
+
+  // Called periodically while the memory condition is CRITICAL.
+  void OnCriticalCondition();
+
+  enum class PurgeTarget {
+    BACKGROUNDED,
+    ALL,
+  };
+
+  // Tries to find a candidate child process for purging memory and asks the
+  // child to purge memory.
+  bool TryToPurgeMemoryFromChildren(PurgeTarget target);
+
+  // Tries to purge memory from the browser process.
+  bool TryToPurgeMemoryFromBrowser();
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   std::unique_ptr<MemoryCoordinatorDelegate> delegate_;
   std::unique_ptr<MemoryMonitor> memory_monitor_;
-  std::unique_ptr<MemoryStateUpdater> state_updater_;
+  std::unique_ptr<MemoryConditionObserver> condition_observer_;
+  std::unique_ptr<base::TickClock> tick_clock_;
   NotificationRegistrar notification_registrar_;
-  // The global memory state.
-  MemoryState current_state_ = MemoryState::NORMAL;
-  // The time tick of last global state change.
+
+  // The current memory condition.
+  MemoryCondition memory_condition_ = MemoryCondition::NORMAL;
+
+  // The memory state of the browser process.
+  MemoryState browser_memory_state_ = MemoryState::NORMAL;
+
+  // The time tick of last state change of the browser process.
   base::TimeTicks last_state_change_;
+
+  // Memory state for a process will remain unchanged until this period of time
+  // passes.
+  base::TimeDelta minimum_state_transition_period_;
+
+  // Used to delay setting browser's memory state. Cancelable to avoid executing
+  // multiple tasks in the same time frame.
+  base::CancelableClosure delayed_browser_memory_state_setter_;
+
+  // If this isn't null, purging memory from the browser process is suppressed
+  // until this ticks is passed.
+  base::TimeTicks can_purge_after_;
+
   // Tracks child processes. An entry is added when a renderer connects to
   // MemoryCoordinator and removed automatically when an underlying binding is
   // disconnected.

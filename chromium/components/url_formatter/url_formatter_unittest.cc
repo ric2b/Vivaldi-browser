@@ -125,7 +125,8 @@ const IDNTestCase idn_cases[] = {
   // ASCII-Latin + Japn (Kana + Han)
   // ASCII-Latin + Kore (Hangul + Han)
   // ASCII-Latin + Han + Bopomofo
-  // ASCII-Latin + any allowed script other than Cyrillic, Greek and Cherokee
+  // ASCII-Latin + any allowed script other than Cyrillic, Greek, Cherokee
+  // and Unified Canadian Syllabary
   // "payp<alpha>l.com"
   {"www.xn--paypl-g9d.com", L"payp\x03b1l.com", false},
   // google.gr with Greek omicron and epsilon
@@ -179,6 +180,16 @@ const IDNTestCase idn_cases[] = {
   {"xn--t2bes3ds6749n.com", L"\x0930\x094b\x0932\x0947\x76e7\x0938.com", false},
   // Devanagari + Bengali
   {"xn--11b0x.in", L"\x0915\x0995.in", false},
+  // Canadian Syllabary + Latin
+  {"xn--ab-lym.com", L"ab\x14BF.com", false},
+  {"xn--ab1-p6q.com", L"ab1\x14BF.com", false},
+  {"xn--1ab-m6qd.com", L"\x14BF" L"1ab.com", false},
+  {"xn--ab-jymc.com", L"\x14BF" L"ab.com", false},
+  // Tifinagh + Latin
+  {"xn--liy-go4a.com", L"li\u24dfy.com", false},
+  {"xn--rol-ho4a.com", L"rol\u24df.com", false},
+  {"xn--ily-eo4a.com", L"\u24dfily.com", false},
+  {"xn--1ly-eo4a.com", L"\u24df1ly.com", false},
 
   // Invisibility check
   // Thai tone mark malek(U+0E48) repeated
@@ -187,6 +198,8 @@ const IDNTestCase idn_cases[] = {
   {"xn--a-xbba.com", L"a\x0301\x0301.com", false},
   // 'a' with acuted accent + another acute accent
   {"xn--1ca20i.com", L"\x00e1\x0301.com", false},
+  // Combining mark at the beginning
+  {"xn--abc-fdc.jp", L"\x0300" L"abc.jp", false},
 
   // Mixed script confusable
   // google with Armenian Small Letter Oh(U+0585)
@@ -199,16 +212,50 @@ const IDNTestCase idn_cases[] = {
   // Hiragana HE(U+3078) mixed with Katakana
   {"xn--49jxi3as0d0fpc.com",
     L"\x30e2\x30d2\x30fc\x30c8\x3078\x30d6\x30f3.com", false},
+
+  // U+30FC should be preceded by a Hiragana/Katakana.
+  // Katakana + U+30FC + Han
+  {"xn--lck0ip02qw5ya.jp", L"\x30ab\x30fc\x91ce\x7403.jp", true},
+  // Hiragana + U+30FC + Han
+  {"xn--u8j5tr47nw5ya.jp", L"\x304b\x30fc\x91ce\x7403.jp", true},
   // U+30FC + Han
   {"xn--weka801xo02a.com", L"\x30fc\x52d5\x753b\x30fc.com", false},
   // Han + U+30FC + Han
   {"xn--wekz60nb2ay85atj0b.jp", L"\x65e5\x672c\x30fc\x91ce\x7403.jp", false},
+  // U+30FC at the beginning
+  {"xn--wek060nb2a.jp", L"\x30fc\x65e5\x672c", false},
   // Latin + U+30FC + Latin
   {"xn--abcdef-r64e.jp", L"abc\x30fc" L"def.jp", false},
+
+  // U+30FB (・) is not allowed next to Latin, but allowed otherwise.
+  // U+30FB + Han
+  {"xn--vekt920a.jp", L"\x30fb\x91ce.jp", true},
+  // Han + U+30FB + Han
+  {"xn--vek160nb2ay85atj0b.jp", L"\x65e5\x672c\x30fb\x91ce\x7403.jp", true},
   // Latin + U+30FB + Latin
   {"xn--abcdef-k64e.jp", L"abc\x30fb" L"def.jp", false},
   // U+30FB + Latin
   {"xn--abc-os4b.jp", L"\x30fb" L"abc.jp", false},
+
+  // U+30FD (ヽ) is allowed only after Katakana.
+  // Katakana + U+30FD
+  {"xn--lck2i.jp", L"\x30ab\x30fd.jp", true},
+  // Hiragana + U+30FD
+  {"xn--u8j7t.jp", L"\x304b\x30fd.jp", false},
+  // Han + U+30FD
+  {"xn--xek368f.jp", L"\x4e00\x30fd.jp", false},
+  {"xn--aa-mju.jp", L"a\x30fd.jp", false},
+  {"xn--a1-bo4a.jp", L"a1\x30fd.jp", false},
+
+  // U+30FE (ヾ) is allowed only after Katakana.
+  // Katakana + U+30FE
+  {"xn--lck4i.jp", L"\x30ab\x30fe.jp", true},
+  // Hiragana + U+30FE
+  {"xn--u8j9t.jp", L"\x304b\x30fe.jp", false},
+  // Han + U+30FE
+  {"xn--yek168f.jp", L"\x4e00\x30fe.jp", false},
+  {"xn--a-oju.jp", L"a\x30fe.jp", false},
+  {"xn--a1-eo4a.jp", L"a1\x30fe.jp", false},
 
   // Cyrillic labels made of Latin-look-alike Cyrillic letters.
   // ѕсоре.com with ѕсоре in Cyrillic
@@ -319,6 +366,13 @@ const IDNTestCase idn_cases[] = {
   {"xn--ab-yod.com", L"a\x05f4" L"b.com", false},
   // Hebrew Gershayim with Arabic is disallowed.
   {"xn--5eb7h.eg", L"\x0628\x05f4.eg", false},
+#if defined(OS_MACOSX)
+  // These characters are blocked due to a font issue on Mac.
+  // Tibetan transliteration characters.
+  {"xn--com-luma.test.pl", L"\u0f8c.test.pl", false},
+  // Arabic letter KASHMIRI YEH
+  {"xn--fgb.com", L"\u0620.com", false},
+#endif
 
   // Hyphens (http://unicode.org/cldr/utility/confusables.jsp?a=-)
   // Hyphen-Minus (the only hyphen allowed)

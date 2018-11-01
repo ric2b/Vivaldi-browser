@@ -9,9 +9,6 @@ aggregate_vector_icons("toolbar_vector_icons") {
   icon_directory = "vector_icons"
 
   icons = [
-    # TODO(estade): this is the same as ui/gfx/vector_icons/business.icon. Use
-    # that one instead once it's been updated from VectorIconId to VectorIcon.
-    "business.icon",
     "http.1x.icon",
     "http.icon",
     "https_invalid.1x.icon",
@@ -35,23 +32,29 @@ static_library("toolbar") {
     "toolbar_model_impl.h",
   ]
 
-  deps = [
+  public_deps = [
     "//base",
+    "//components/security_state/core",
+    "//url",
+  ]
+
+  deps = [
     "//components/google/core/browser",
     "//components/prefs",
     "//components/resources",
-    "//components/security_state/core",
     "//components/strings",
     "//components/url_formatter",
     "//net",
     "//ui/base",
     "//ui/gfx",
-    "//url",
   ]
 
   if (!is_android && !is_ios) {
     sources += get_target_outputs(":toolbar_vector_icons")
-    deps += [ ":toolbar_vector_icons" ]
+    deps += [
+      ":toolbar_vector_icons",
+      "//ui/vector_icons",
+    ]
   }
 }
 

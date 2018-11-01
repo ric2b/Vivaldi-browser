@@ -4,6 +4,9 @@
 
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/test_timeouts.h"
+#include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -12,9 +15,19 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
+#include "components/security_state/core/security_state.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/focused_node_details.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/notification_details.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/notification_service.h"
+#include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -27,9 +40,18 @@
 #include "extensions/common/constants.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/base/test/ui_controls.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "url/gurl.h"
+
+namespace autofill {
+class AutofillPopupDelegate;
+struct Suggestion;
+}
 
 class SitePerProcessInteractiveBrowserTest : public InProcessBrowserTest {
  public:
@@ -53,7 +75,7 @@ class SitePerProcessInteractiveBrowserTest : public InProcessBrowserTest {
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetActiveWebContents();
     const display::Display display =
-        display::Screen::GetScreen()->GetDisplayNearestWindow(
+        display::Screen::GetScreen()->GetDisplayNearestView(
             web_contents->GetRenderWidgetHostView()->GetNativeView());
     return display.bounds().size();
   }
@@ -278,6 +300,179 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   EXPECT_EQ("\"child1-focused-input1\"", press_tab_and_wait_for_message(true));
   EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(true));
   EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+}
+
+// TODO(https://crbug.com/702330): Enable this test.
+// Ensures that renderers know to advance focus to sibling frames and parent
+// frames in the presence of mouse click initiated focus changes.
+IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
+                       DISABLED_TabAndMouseFocusNavigation) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::RenderFrameHost* main_frame = web_contents->GetMainFrame();
+  content::RenderFrameHost* child1 = ChildFrameAt(main_frame, 0);
+  ASSERT_NE(nullptr, child1);
+  content::RenderFrameHost* child2 = ChildFrameAt(main_frame, 1);
+  ASSERT_NE(nullptr, child2);
+
+  // Assign a name to each frame.  This will be sent along in test messages
+  // from focus events.
+  EXPECT_TRUE(ExecuteScript(main_frame, "window.name = 'root';"));
+  EXPECT_TRUE(ExecuteScript(child1, "window.name = 'child1';"));
+  EXPECT_TRUE(ExecuteScript(child2, "window.name = 'child2';"));
+
+  // This script will insert two <input> fields in the document, one at the
+  // beginning and one at the end.  For root frame, this means that we will
+  // have an <input>, then two <iframe> elements, then another <input>.
+  // The script will send back the coordinates to click for each <input>, in the
+  // document's space. Additionally, the outer frame will return  the top left
+  // point of each <iframe> to transform the coordinates of the inner <input>
+  // elements. For example, main frame: 497,18;497,185:381,59;499,59 and each
+  // iframe: 55,18;55,67
+  std::string script =
+      "function onFocus(e) {"
+      "  console.log(window.name+'-focused-'+ e.target.id);"
+      "  domAutomationController.setAutomationId(0);"
+      "  domAutomationController.send(window.name + '-focused-' + e.target.id);"
+      "}"
+      ""
+      "function getElementCoords(element) {"
+      "  var rect = element.getBoundingClientRect();"
+      "  return Math.floor(rect.left + 0.5 * rect.width) +','+"
+      "         Math.floor(rect.top + 0.5 * rect.height);"
+      "}"
+      "function getIframeCoords(element) {"
+      "  var rect = element.getBoundingClientRect();"
+      "  return Math.floor(rect.left) +','+"
+      "         Math.floor(rect.top);"
+      "}"
+      ""
+      "document.styleSheets[0].insertRule('input {width:100%;margin:0;}', 1);"
+      "document.styleSheets[0].insertRule('h2 {margin:0;}', 1);"
+      "var input1 = document.createElement('input');"
+      "input1.id = 'input1';"
+      "input1.addEventListener('focus', onFocus, false);"
+      "var input2 = document.createElement('input');"
+      "input2.id = 'input2';"
+      "input2.addEventListener('focus', onFocus, false);"
+      "document.body.insertBefore(input1, document.body.firstChild);"
+      "document.body.appendChild(input2);"
+      ""
+      "var frames = document.querySelectorAll('iframe');"
+      "frames = Array.prototype.map.call(frames, getIframeCoords).join(';');"
+      "var inputCoords = [input1, input2].map(getElementCoords).join(';');"
+      "if (frames) {"
+      "  inputCoords = inputCoords + ':' + frames;"
+      "}"
+      "domAutomationController.send(inputCoords);";
+
+  auto parse_points = [](const std::string& input, const gfx::Point& offset) {
+    base::StringPairs pieces;
+    base::SplitStringIntoKeyValuePairs(input, ',', ';', &pieces);
+    std::vector<gfx::Point> points;
+    for (const auto& piece : pieces) {
+      int x, y;
+      EXPECT_TRUE(base::StringToInt(piece.first, &x));
+      EXPECT_TRUE(base::StringToInt(piece.second, &y));
+      points.push_back(gfx::Point(x + offset.x(), y + offset.y()));
+    }
+    return points;
+  };
+  auto parse_points_and_offsets = [parse_points](const std::string& input) {
+    auto pieces = base::SplitString(input, ":", base::TRIM_WHITESPACE,
+                                    base::SPLIT_WANT_NONEMPTY);
+    gfx::Point empty_offset;
+    return make_pair(parse_points(pieces[0], empty_offset),
+                     parse_points(pieces[1], empty_offset));
+  };
+
+  // Add two input fields to each of the three frames and retrieve click
+  // coordinates.
+  std::string result;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(main_frame, script, &result));
+  auto parsed = parse_points_and_offsets(result);
+  auto main_frame_input_coords = parsed.first;
+  auto iframe1_offset = parsed.second[0];
+  auto iframe2_offset = parsed.second[1];
+
+  EXPECT_TRUE(ExecuteScriptAndExtractString(child1, script, &result));
+  auto child1_input_coords = parse_points(result, iframe1_offset);
+  EXPECT_TRUE(ExecuteScriptAndExtractString(child2, script, &result));
+  auto child2_input_coords = parse_points(result, iframe2_offset);
+
+  // Helper to simulate a tab press and wait for a focus message.
+  auto press_tab_and_wait_for_message = [web_contents](bool reverse) {
+    content::DOMMessageQueue msg_queue;
+    std::string reply;
+    SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                     ui::VKEY_TAB, false, reverse /* shift */, false, false);
+    EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
+    return reply;
+  };
+
+  auto click_element_and_wait_for_message =
+      [web_contents](const gfx::Point& point) {
+        content::DOMMessageQueue msg_queue;
+
+        auto content_bounds = web_contents->GetContainerBounds();
+        ui_controls::SendMouseMove(point.x() + content_bounds.x(),
+                                   point.y() + content_bounds.y());
+        ui_controls::SendMouseClick(ui_controls::LEFT);
+
+        std::string reply;
+        EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
+        return reply;
+      };
+
+  // Tab from child1 back to root.
+  EXPECT_EQ("\"root-focused-input1\"",
+            click_element_and_wait_for_message(main_frame_input_coords[0]));
+  EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"child1-focused-input1\"",
+            click_element_and_wait_for_message(child1_input_coords[0]));
+  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(true));
+  EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+
+  // Tab from child2 forward to root.
+  EXPECT_EQ("\"root-focused-input2\"",
+            click_element_and_wait_for_message(main_frame_input_coords[1]));
+  EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"child2-focused-input2\"",
+            click_element_and_wait_for_message(child2_input_coords[1]));
+  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"root-focused-input2\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+
+  // Tab forward from child1 to child2.
+  EXPECT_EQ("\"child2-focused-input1\"",
+            click_element_and_wait_for_message(child2_input_coords[0]));
+  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"child1-focused-input2\"",
+            click_element_and_wait_for_message(child1_input_coords[1]));
+  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"child2-focused-input1\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+
+  // Tab backward from child2 to child1.
+  EXPECT_EQ("\"child1-focused-input2\"",
+            click_element_and_wait_for_message(child1_input_coords[1]));
+  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"child2-focused-input1\"",
+            click_element_and_wait_for_message(child2_input_coords[0]));
+  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+  EXPECT_EQ("\"child1-focused-input2\"", press_tab_and_wait_for_message(true));
+  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+
+  // Ensure there are no pending focus events after tabbing.
+  EXPECT_EQ("\"root-focused-input1\"",
+            click_element_and_wait_for_message(main_frame_input_coords[0]))
+      << "Unexpected extra focus events.";
 }
 
 namespace {
@@ -905,17 +1100,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractivePDFTest,
   auto send_right_mouse_event = [](content::RenderWidgetHost* host, int x,
                                    int y, blink::WebInputEvent::Type type) {
     blink::WebMouseEvent event;
-    event.x = x;
-    event.y = y;
-    event.button = blink::WebMouseEvent::Button::Right;
-    event.setType(type);
+    event.SetPositionInWidget(x, y);
+    event.button = blink::WebMouseEvent::Button::kRight;
+    event.SetType(type);
     host->ForwardMouseEvent(event);
   };
 
   send_right_mouse_event(child_view->GetRenderWidgetHost(), 10, 20,
-                         blink::WebInputEvent::MouseDown);
+                         blink::WebInputEvent::kMouseDown);
   send_right_mouse_event(child_view->GetRenderWidgetHost(), 10, 20,
-                         blink::WebInputEvent::MouseUp);
+                         blink::WebInputEvent::kMouseUp);
   menu_waiter.WaitForMenuOpenAndClose();
 
   gfx::Point point_in_root_window =
@@ -923,4 +1117,225 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractivePDFTest,
 
   EXPECT_EQ(point_in_root_window.x(), menu_waiter.params().x);
   EXPECT_EQ(point_in_root_window.y(), menu_waiter.params().y);
+}
+
+class SitePerProcessAutofillTest : public SitePerProcessInteractiveBrowserTest {
+ public:
+  SitePerProcessAutofillTest() : SitePerProcessInteractiveBrowserTest() {}
+  ~SitePerProcessAutofillTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    SitePerProcessInteractiveBrowserTest::SetUpCommandLine(command_line);
+    // We need to set the feature state before the render process is created,
+    // in order for it to inherit the feature state from the browser process.
+    // SetUp() runs too early, and SetUpOnMainThread() runs too late.
+    scoped_feature_list_.InitAndEnableFeature(
+        security_state::kHttpFormWarningFeature);
+  }
+
+ protected:
+  class TestAutofillClient : public autofill::TestAutofillClient {
+   public:
+    TestAutofillClient() : popup_shown_(false) {}
+    ~TestAutofillClient() override {}
+
+    void WaitForNextPopup() {
+      if (popup_shown_)
+        return;
+      loop_runner_ = new content::MessageLoopRunner();
+      loop_runner_->Run();
+    }
+
+    void ShowAutofillPopup(
+        const gfx::RectF& element_bounds,
+        base::i18n::TextDirection text_direction,
+        const std::vector<autofill::Suggestion>& suggestions,
+        base::WeakPtr<autofill::AutofillPopupDelegate> delegate) override {
+      element_bounds_ = element_bounds;
+      popup_shown_ = true;
+      if (loop_runner_)
+        loop_runner_->Quit();
+    }
+
+    const gfx::RectF& last_element_bounds() const { return element_bounds_; }
+
+   private:
+    gfx::RectF element_bounds_;
+    bool popup_shown_;
+    scoped_refptr<content::MessageLoopRunner> loop_runner_;
+
+    DISALLOW_COPY_AND_ASSIGN(TestAutofillClient);
+  };
+
+  const int kIframeTopDisplacement = 150;
+  const int kIframeLeftDisplacement = 200;
+
+  void SetupMainTab() {
+    // Add a fresh new WebContents for which we add our own version of the
+    // ChromePasswordManagerClient that uses a custom TestAutofillClient.
+    content::WebContents* new_contents = content::WebContents::Create(
+        content::WebContents::CreateParams(browser()
+                                               ->tab_strip_model()
+                                               ->GetActiveWebContents()
+                                               ->GetBrowserContext()));
+    ASSERT_TRUE(new_contents);
+    ASSERT_FALSE(ChromePasswordManagerClient::FromWebContents(new_contents));
+
+    // Create ChromePasswordManagerClient and verify it exists for the new
+    // WebContents.
+    ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
+        new_contents, &test_autofill_client_);
+    ASSERT_TRUE(ChromePasswordManagerClient::FromWebContents(new_contents));
+
+    browser()->tab_strip_model()->AppendWebContents(new_contents, true);
+  }
+
+  TestAutofillClient& autofill_client() { return test_autofill_client_; }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  TestAutofillClient test_autofill_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(SitePerProcessAutofillTest);
+};
+
+// Observes the notifications for changes in focused node/element in the page.
+class FocusedEditableNodeChangedObserver : content::NotificationObserver {
+ public:
+  FocusedEditableNodeChangedObserver() : observed_(false) {
+    registrar_.Add(this, content::NOTIFICATION_FOCUS_CHANGED_IN_PAGE,
+                   content::NotificationService::AllSources());
+  }
+  ~FocusedEditableNodeChangedObserver() override {}
+
+  void WaitForFocusChangeInPage() {
+    if (observed_)
+      return;
+    loop_runner_ = new content::MessageLoopRunner();
+    loop_runner_->Run();
+  }
+
+  // content::NotificationObserver override.
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    auto focused_node_details =
+        content::Details<content::FocusedNodeDetails>(details);
+    if (!focused_node_details->is_editable_node)
+      return;
+    focused_node_bounds_in_screen_ =
+        focused_node_details->node_bounds_in_screen.origin();
+    observed_ = true;
+    if (loop_runner_)
+      loop_runner_->Quit();
+  }
+
+  const gfx::Point& focused_node_bounds_in_screen() const {
+    return focused_node_bounds_in_screen_;
+  }
+
+ private:
+  content::NotificationRegistrar registrar_;
+  bool observed_;
+  gfx::Point focused_node_bounds_in_screen_;
+  scoped_refptr<content::MessageLoopRunner> loop_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(FocusedEditableNodeChangedObserver);
+};
+
+// Waits until transforming |sample_point| from |render_frame_host| coordinates
+// to its root frame's view's coordinates matches |transformed_point| within a
+// reasonable error margin less than or equal to |bound|. This method is used to
+// verify CSS changes on OOPIFs have been applied properly and the corresponding
+// compositor frame is updated as well. This way we can rest assured that the
+// future transformed and reported bounds for the elements inside
+// |render_frame_host| are correct.
+void WaitForFramePositionUpdated(content::RenderFrameHost* render_frame_host,
+                                 const gfx::Point& sample_point,
+                                 const gfx::Point& transformed_point,
+                                 float bound) {
+  while ((transformed_point -
+          render_frame_host->GetView()->TransformPointToRootCoordSpace(
+              sample_point))
+             .Length() > bound) {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+}
+// This test verifies that displacements (margin, etc) in the position of an
+// OOPIF is considered when showing an AutofillClient warning pop-up for
+// unsecure web sites.
+IN_PROC_BROWSER_TEST_F(SitePerProcessAutofillTest,
+                       PasswordAutofillPopupPositionInsideOOPIF) {
+  SetupMainTab();
+  ASSERT_TRUE(
+      base::FeatureList::IsEnabled(security_state::kHttpFormWarningFeature));
+
+  GURL main_url(embedded_test_server()->GetURL("a.com", "/iframe.html"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  content::WebContents* active_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Add some displacement for <iframe>.
+  ASSERT_TRUE(content::ExecuteScript(
+      active_web_contents,
+      base::StringPrintf("var iframe = document.querySelector('iframe');"
+                         "iframe.style.position = 'fixed';"
+                         "iframe.style.border = 'none';"
+                         "iframe.style.top = '%dpx';"
+                         "iframe.style.left = '%dpx';",
+                         kIframeTopDisplacement, kIframeLeftDisplacement)));
+
+  // Navigate the <iframe> to a simple page.
+  GURL frame_url = embedded_test_server()->GetURL("b.com", "/title1.html");
+  EXPECT_TRUE(NavigateIframeToURL(active_web_contents, "test", frame_url));
+  content::RenderFrameHost* child_frame = content::FrameMatchingPredicate(
+      active_web_contents, base::Bind(&content::FrameIsChildOfMainFrame));
+
+  WaitForFramePositionUpdated(
+      child_frame, gfx::Point(),
+      gfx::Point(kIframeLeftDisplacement, kIframeTopDisplacement), 1.4143f);
+
+  // We will need to listen to focus changes to find out about the container
+  // bounds of any focused <input> elements on the page.
+  FocusedEditableNodeChangedObserver focus_observer;
+
+  // Focus the child frame, add an <input> with type "password", and focus it.
+  ASSERT_TRUE(ExecuteScript(child_frame,
+                            "window.focus();"
+                            "var input = document.createElement('input');"
+                            "input.type = 'password';"
+                            "document.body.appendChild(input);"
+                            "input.focus();"));
+  focus_observer.WaitForFocusChangeInPage();
+
+  // The user gesture (input) should lead to a security warning.
+  content::SimulateKeyPress(active_web_contents, ui::DomKey::FromCharacter('A'),
+                            ui::DomCode::US_A, ui::VKEY_A, false, false, false,
+                            false);
+  autofill_client().WaitForNextPopup();
+
+  gfx::Point bounds_origin(
+      static_cast<int>(autofill_client().last_element_bounds().origin().x()),
+      static_cast<int>(autofill_client().last_element_bounds().origin().y()));
+
+  // Convert the bounds to screen coordinates (to then compare against the ones
+  // reported by focus change observer).
+  bounds_origin += active_web_contents->GetRenderWidgetHostView()
+                       ->GetViewBounds()
+                       .OffsetFromOrigin();
+
+  gfx::Vector2d error =
+      bounds_origin - focus_observer.focused_node_bounds_in_screen();
+
+  // Ideally, the length of the error vector should be 0.0f. But due to
+  // potential rounding errors, we assume a larger limit (which is slightly
+  // larger than square root of 2).
+  EXPECT_LT(error.Length(), 1.4143f)
+      << "Origin of bounds from focused node changed event is '"
+      << focus_observer.focused_node_bounds_in_screen().ToString()
+      << "' but AutofillClient is reporting '" << bounds_origin.ToString()
+      << "'";
 }

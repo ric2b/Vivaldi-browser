@@ -5,8 +5,8 @@
 
 <if expr="chromeos">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
 <link rel="import" href="manage_a11y_page.html">
+<link rel="import" href="../controls/settings_toggle_button.html">
 <link rel="import" href="../settings_page/settings_animated_pages.html">
 <link rel="import" href="../settings_page/settings_subpage.html">
 </if>
@@ -16,31 +16,26 @@
     <style include="settings-shared"></style>
 <if expr="chromeos">
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
-        section="a11y">
+        section="a11y" focus-config="[[focusConfig_]]">
       <neon-animatable route-path="default">
-        <div class="settings-box first">
-          <div id="optionsInMenuLabel" class="start">
-            $i18n{optionsInMenuLabel}
-          </div>
-          <paper-toggle-button id="optionsInMenuToggle"
-              checked="{{prefs.settings.a11y.enable_menu.value}}"
-              aria-labelledby="optionsInMenuLabel">
-          </paper-toggle-button>
+        <div class="settings-box">
+          <settings-toggle-button id="optionsInMenuToggle" class="start"
+              label="$i18n{optionsInMenuLabel}"
+              pref="{{prefs.settings.a11y.enable_menu}}">
+          </settings-toggle-button>
         </div>
-        <template is="dom-if" if="[[!isGuest_]]">
-          <div id="subpage-trigger" class="settings-box two-line"
-              on-tap="onManageAccessibilityFeaturesTap_" actionable>
-            <div class="start">
-              $i18n{manageAccessibilityFeatures}
-              <div class="secondary" id="themesSecondary">
-                $i18n{moreFeaturesLinkDescription}
-              </div>
+        <div id="subpage-trigger" class="settings-box two-line"
+            on-tap="onManageAccessibilityFeaturesTap_" actionable>
+          <div class="start">
+            $i18n{manageAccessibilityFeatures}
+            <div class="secondary" id="themesSecondary">
+              $i18n{moreFeaturesLinkDescription}
             </div>
-            <button class="subpage-arrow" is="paper-icon-button-light"
-                aria-label="$i18n{manageAccessibilityFeatures}"
-                aria-describedby="themesSecondary"></button>
           </div>
-        </template>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              aria-label="$i18n{manageAccessibilityFeatures}"
+              aria-describedby="themesSecondary"></button>
+        </div>
       </neon-animatable>
 
       <template is="dom-if" route-path="/manageAccessibility">

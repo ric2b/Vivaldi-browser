@@ -37,6 +37,10 @@ class InstanceIDImpl : public InstanceID {
                 const std::string& scope,
                 const std::map<std::string, std::string>& options,
                 const GetTokenCallback& callback) override;
+  void ValidateToken(const std::string& authorized_entity,
+                     const std::string& scope,
+                     const std::string& token,
+                     const ValidateTokenCallback& callback) override;
   void DeleteTokenImpl(const std::string& authorized_entity,
                        const std::string& scope,
                        const DeleteTokenCallback& callback) override;
@@ -62,12 +66,19 @@ class InstanceIDImpl : public InstanceID {
       const std::string& scope,
       const std::map<std::string, std::string>& options,
       const GetTokenCallback& callback);
+  void DoValidateToken(const std::string& authorized_entity,
+                       const std::string& scope,
+                       const std::string& token,
+                       const ValidateTokenCallback& callback);
   void DoDeleteToken(const std::string& authorized_entity,
                      const std::string& scope,
                      const DeleteTokenCallback& callback);
   void DoDeleteID(const DeleteIDCallback& callback);
 
   gcm::InstanceIDHandler* Handler();
+
+  // Asynchronously runs task once delayed_task_controller_ is ready.
+  void RunWhenReady(base::Closure task);
 
   gcm::GCMDelayedTaskController delayed_task_controller_;
 

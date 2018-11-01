@@ -11,7 +11,7 @@ Animation.AnimationModel = class extends SDK.SDKModel {
    */
   constructor(target) {
     super(target);
-    this._runtimeModel = target.runtimeModel;
+    this._runtimeModel = /** @type {!SDK.RuntimeModel} */ (target.model(SDK.RuntimeModel));
     this._agent = target.animationAgent();
     target.registerAnimationDispatcher(new Animation.AnimationDispatcher(this));
     /** @type {!Map.<string, !Animation.AnimationModel.Animation>} */
@@ -21,8 +21,7 @@ Animation.AnimationModel = class extends SDK.SDKModel {
     /** @type {!Array.<string>} */
     this._pendingAnimations = [];
     this._playbackRate = 1;
-    var resourceTreeModel =
-        /** @type {!SDK.ResourceTreeModel} */ (SDK.ResourceTreeModel.fromTarget(target));
+    var resourceTreeModel = /** @type {!SDK.ResourceTreeModel} */ (target.model(SDK.ResourceTreeModel));
     resourceTreeModel.addEventListener(SDK.ResourceTreeModel.Events.MainFrameNavigated, this._reset, this);
     var screenCaptureModel = target.model(SDK.ScreenCaptureModel);
     if (screenCaptureModel)
@@ -182,7 +181,7 @@ Animation.AnimationModel = class extends SDK.SDKModel {
   }
 };
 
-SDK.SDKModel.register(Animation.AnimationModel, SDK.Target.Capability.DOM);
+SDK.SDKModel.register(Animation.AnimationModel, SDK.Target.Capability.DOM, false);
 
 /** @enum {symbol} */
 Animation.AnimationModel.Events = {
@@ -348,9 +347,7 @@ Animation.AnimationModel.Animation = class {
     else
       return;
 
-    var cssModel = node.target().model(SDK.CSSModel);
-    if (!cssModel)
-      return;
+    var cssModel = node.domModel().cssModel();
     cssModel.setEffectivePropertyValueForNode(node.id, animationPrefix + 'duration', duration + 'ms');
     cssModel.setEffectivePropertyValueForNode(node.id, animationPrefix + 'delay', delay + 'ms');
   }

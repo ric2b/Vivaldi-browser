@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -256,7 +257,7 @@ class ArcSettingsServiceTest : public InProcessBrowserTest {
         chromeos::DBusThreadManager::Get()
             ->GetShillServiceClient()
             ->GetTestInterface();
-    base::StringValue value(shill::kStateIdle);
+    base::Value value(shill::kStateIdle);
     service_test->SetServiceProperty(service_path, shill::kStateProperty,
                                      value);
     RunUntilIdle();
@@ -274,14 +275,14 @@ class ArcSettingsServiceTest : public InProcessBrowserTest {
                              shill::kStateOnline, true /* add_to_visible */);
 
     service_test->SetServiceProperty(service_path, shill::kProfileProperty,
-                                     base::StringValue(kUserProfilePath));
+                                     base::Value(kUserProfilePath));
     RunUntilIdle();
   }
 
   void SetProxyConfigForNetworkService(
       const std::string& service_path,
       const base::DictionaryValue* proxy_config) {
-    ProxyConfigDictionary proxy_config_dict(proxy_config);
+    ProxyConfigDictionary proxy_config_dict(proxy_config->CreateDeepCopy());
     const chromeos::NetworkState* network = chromeos::NetworkHandler::Get()
                                                 ->network_state_handler()
                                                 ->GetNetworkState(service_path);
@@ -312,7 +313,7 @@ class ArcSettingsServiceTest : public InProcessBrowserTest {
                              true /* add_to_visible */);
     service_test->SetServiceProperty(kDefaultServicePath,
                                      shill::kProfileProperty,
-                                     base::StringValue(kUserProfilePath));
+                                     base::Value(kUserProfilePath));
   }
 
   policy::MockConfigurationPolicyProvider provider_;
@@ -456,7 +457,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, ProxyModePolicyTest) {
   policy.Set(
       policy::key::kProxyMode, policy::POLICY_LEVEL_MANDATORY,
       policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-      base::MakeUnique<base::StringValue>(ProxyPrefs::kAutoDetectProxyModeName),
+      base::MakeUnique<base::Value>(ProxyPrefs::kAutoDetectProxyModeName),
       nullptr);
   UpdatePolicy(policy);
 
@@ -477,7 +478,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, ONCProxyPolicyTest) {
   policy.Set(policy::key::kOpenNetworkConfiguration,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
              policy::POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::StringValue>(kONCPolicy), nullptr);
+             base::MakeUnique<base::Value>(kONCPolicy), nullptr);
   UpdatePolicy(policy);
 
   std::unique_ptr<base::DictionaryValue> expected_proxy_config(
@@ -496,20 +497,20 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, TwoSourcesTest) {
 
   policy::PolicyMap policy;
   // Proxy policy.
-  policy.Set(policy::key::kProxyMode, policy::POLICY_LEVEL_MANDATORY,
-             policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::StringValue>(
-                 ProxyPrefs::kFixedServersProxyModeName),
-             nullptr);
+  policy.Set(
+      policy::key::kProxyMode, policy::POLICY_LEVEL_MANDATORY,
+      policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+      base::MakeUnique<base::Value>(ProxyPrefs::kFixedServersProxyModeName),
+      nullptr);
   policy.Set(policy::key::kProxyServer, policy::POLICY_LEVEL_MANDATORY,
              policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::StringValue>("proxy:8888"), nullptr);
+             base::MakeUnique<base::Value>("proxy:8888"), nullptr);
   UpdatePolicy(policy);
 
   std::unique_ptr<base::DictionaryValue> proxy_config(
       base::MakeUnique<base::DictionaryValue>());
   proxy_config->SetString("mode", ProxyPrefs::kAutoDetectProxyModeName);
-  ProxyConfigDictionary proxy_config_dict(proxy_config.get());
+  ProxyConfigDictionary proxy_config_dict(std::move(proxy_config));
   const chromeos::NetworkState* network = chromeos::NetworkHandler::Get()
                                               ->network_state_handler()
                                               ->DefaultNetwork();
@@ -641,11 +642,11 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, TwoONCProxyPolicyTest) {
   policy.Set(policy::key::kOpenNetworkConfiguration,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
              policy::POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::StringValue>(kUserONCPolicy), nullptr);
+             base::MakeUnique<base::Value>(kUserONCPolicy), nullptr);
   policy.Set(policy::key::kDeviceOpenNetworkConfiguration,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_MACHINE,
              policy::POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::StringValue>(kDeviceONCPolicy), nullptr);
+             base::MakeUnique<base::Value>(kDeviceONCPolicy), nullptr);
   UpdatePolicy(policy);
 
   std::unique_ptr<base::DictionaryValue> expected_proxy_config(

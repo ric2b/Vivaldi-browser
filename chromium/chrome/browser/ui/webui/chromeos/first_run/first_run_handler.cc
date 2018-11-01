@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/chromeos/first_run/first_run_handler.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "content/public/browser/web_ui.h"
 
@@ -43,21 +44,20 @@ void FirstRunHandler::RemoveBackgroundHoles() {
 void FirstRunHandler::ShowStepPositioned(const std::string& name,
                                          const StepPosition& position) {
   web_ui()->CallJavascriptFunctionUnsafe(
-      "cr.FirstRun.showStep", base::StringValue(name), *position.AsValue());
+      "cr.FirstRun.showStep", base::Value(name), *position.AsValue());
 }
 
 void FirstRunHandler::ShowStepPointingTo(const std::string& name,
                                          int x,
                                          int y,
                                          int offset) {
-  std::unique_ptr<base::Value> null = base::Value::CreateNullValue();
+  auto null = base::MakeUnique<base::Value>();
   base::ListValue point_with_offset;
   point_with_offset.AppendInteger(x);
   point_with_offset.AppendInteger(y);
   point_with_offset.AppendInteger(offset);
-  web_ui()->CallJavascriptFunctionUnsafe("cr.FirstRun.showStep",
-                                         base::StringValue(name), *null,
-                                         point_with_offset);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "cr.FirstRun.showStep", base::Value(name), *null, point_with_offset);
 }
 
 void FirstRunHandler::HideCurrentStep() {

@@ -243,7 +243,7 @@ SDK.ServiceWorkerManager = class extends SDK.SDKModel {
   }
 };
 
-SDK.SDKModel.register(SDK.ServiceWorkerManager, SDK.Target.Capability.Target | SDK.Target.Capability.Browser);
+SDK.SDKModel.register(SDK.ServiceWorkerManager, SDK.Target.Capability.Target | SDK.Target.Capability.Browser, true);
 
 /** @enum {symbol} */
 SDK.ServiceWorkerManager.Events = {
@@ -589,7 +589,9 @@ SDK.ServiceWorkerContextNamer = class {
       if (!serviceWorkerTargetId)
         continue;
       var version = this._versionByTargetId.get(serviceWorkerTargetId) || null;
-      for (var context of target.runtimeModel.executionContexts())
+      var runtimeModel = target.model(SDK.RuntimeModel);
+      var executionContexts = runtimeModel ? runtimeModel.executionContexts() : [];
+      for (var context of executionContexts)
         this._updateContextLabel(context, version);
     }
   }

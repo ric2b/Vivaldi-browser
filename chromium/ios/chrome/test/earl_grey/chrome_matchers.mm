@@ -16,12 +16,14 @@
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/static_content/static_html_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/testing/wait_util.h"
 #import "ios/web/public/block_types.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/test/ios/ui_image_test_utils.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -29,64 +31,17 @@
 
 namespace {
 
-// Script that returns document.body as a string.
-NSString* const kGetDocumentBodyJavaScript =
-    @"document.body ? document.body.textContent : null";
-
-// Synchronously returns the result of executed JavaScript.
-id ExecuteScriptInStaticController(
-    StaticHtmlViewController* html_view_controller,
-    NSString* script) {
-  __block id result = nil;
-  __block bool did_finish = false;
-  web::JavaScriptResultBlock completion_handler =
-      ^(id script_result, NSError* error) {
-        result = [script_result copy];
-        did_finish = true;
-      };
-  [html_view_controller executeJavaScript:script
-                        completionHandler:completion_handler];
-
-  GREYAssert(
-      testing::WaitUntilConditionOrTimeout(testing::kWaitForJSCompletionTimeout,
-                                           ^{
-                                             return did_finish;
-                                           }),
-      @"JavaScript did not complete");
-
-  return result;
-}
-
-// TODO(crbug.com/684142): This matcher uses too many implementation details,
-// it would be good to replace it.
-id<GREYMatcher> WebViewWithNavDelegateOfClass(Class cls) {
-  MatchesBlock matches = ^BOOL(UIView* view) {
-    return [view isKindOfClass:[WKWebView class]] &&
-           [base::mac::ObjCCast<WKWebView>(view).navigationDelegate
-               isKindOfClass:cls];
-  };
-
-  DescribeToBlock describe = ^(id<GREYDescription> description) {
-    [description appendText:@"web view with "];
-    [description appendText:NSStringFromClass(cls)];
-    [description appendText:@"navigation delegate"];
-  };
-
-  return [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                              descriptionBlock:describe];
-}
-
-id<GREYMatcher> CollectionViewSwitchIsOn(BOOL isOn) {
+id<GREYMatcher> CollectionViewSwitchIsOn(BOOL is_on) {
   MatchesBlock matches = ^BOOL(id element) {
-    CollectionViewSwitchCell* switchCell =
+    CollectionViewSwitchCell* switch_cell =
         base::mac::ObjCCastStrict<CollectionViewSwitchCell>(element);
-    UISwitch* switchView = switchCell.switchView;
-    return (switchView.on && isOn) || (!switchView.on && !isOn);
+    UISwitch* switch_view = switch_cell.switchView;
+    return (switch_view.on && is_on) || (!switch_view.on && !is_on);
   };
   DescribeToBlock describe = ^void(id<GREYDescription> description) {
     NSString* name =
         [NSString stringWithFormat:@"collectionViewSwitchInState(%@)",
-                                   isOn ? @"ON" : @"OFF"];
+                                   is_on ? @"ON" : @"OFF"];
     [description appendText:name];
   };
   return [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
@@ -107,6 +62,24 @@ id<GREYMatcher> ButtonWithAccessibilityLabelId(int message_id) {
       l10n_util::GetNSStringWithFixup(message_id));
 }
 
+id<GREYMatcher> ButtonWithImage(int image_id) {
+  UIImage* expected_image = NativeImage(image_id);
+  MatchesBlock matches = ^BOOL(UIButton* button) {
+    return ui::test::uiimage_utils::UIImagesAreEqual(expected_image,
+                                                     [button currentImage]);
+  };
+  NSString* description_string =
+      [NSString stringWithFormat:@"Images matching %i", image_id];
+  DescribeToBlock describe = ^(id<GREYDescription> description) {
+    [description appendText:description_string];
+  };
+  id<GREYMatcher> image_matcher =
+      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                           descriptionBlock:describe];
+  return grey_allOf(grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    image_matcher, nil);
+}
+
 id<GREYMatcher> StaticTextWithAccessibilityLabel(NSString* label) {
   return grey_allOf(grey_accessibilityLabel(label),
                     grey_accessibilityTrait(UIAccessibilityTraitStaticText),
@@ -124,43 +97,6 @@ id<GREYMatcher> WebViewContainingText(std::string text) {
 
 id<GREYMatcher> WebViewNotContainingText(std::string text) {
   return web::WebViewNotContainingText(std::move(text), GetCurrentWebState());
-}
-
-id<GREYMatcher> StaticHtmlViewContainingText(NSString* text) {
-  // The WKWebView in a static HTML view isn't part of a webState, but it
-  // does have the StaticHtmlViewController as its navigation delegate.
-  MatchesBlock matches = ^BOOL(WKWebView* webView) {
-    StaticHtmlViewController* html_view_controller =
-        base::mac::ObjCCast<StaticHtmlViewController>(
-            webView.navigationDelegate);
-
-    __block BOOL did_succeed = NO;
-    NSDate* deadline =
-        [NSDate dateWithTimeIntervalSinceNow:testing::kWaitForUIElementTimeout];
-    while (([[NSDate date] compare:deadline] != NSOrderedDescending) &&
-           !did_succeed) {
-      id result = ExecuteScriptInStaticController(html_view_controller,
-                                                  kGetDocumentBodyJavaScript);
-      if ([result isKindOfClass:[NSString class]]) {
-        NSString* body = base::mac::ObjCCast<NSString>(result);
-        did_succeed = [body containsString:text];
-      }
-      base::test::ios::SpinRunLoopWithMaxDelay(
-          base::TimeDelta::FromSecondsD(testing::kSpinDelaySeconds));
-    }
-    return did_succeed;
-  };
-
-  DescribeToBlock describe = ^(id<GREYDescription> description) {
-    [description appendText:@"static HTML web view containing "];
-    [description appendText:text];
-  };
-
-  return grey_allOf(
-      WebViewWithNavDelegateOfClass([StaticHtmlViewController class]),
-      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                           descriptionBlock:describe],
-      nil);
 }
 
 id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id) {
@@ -221,10 +157,18 @@ id<GREYMatcher> ShowTabsButton() {
 }
 
 id<GREYMatcher> CollectionViewSwitchCell(NSString* accessibilityIdentifier,
-                                         BOOL isOn) {
+                                         BOOL is_on) {
   return grey_allOf(grey_accessibilityID(accessibilityIdentifier),
-                    CollectionViewSwitchIsOn(isOn), grey_sufficientlyVisible(),
+                    CollectionViewSwitchIsOn(is_on), grey_sufficientlyVisible(),
                     nil);
+}
+
+id<GREYMatcher> OpenLinkInNewTabButton() {
+  return ButtonWithAccessibilityLabelId(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB);
+}
+
+id<GREYMatcher> NavigationBarDoneButton() {
+  return ButtonWithAccessibilityLabelId(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
 }
 
 }  // namespace chrome_test_util

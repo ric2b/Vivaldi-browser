@@ -4,12 +4,12 @@
 
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 
+#include <utility>
 #include "cc/layers/layer.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/wtf/Assertions.h"
 #include "public/platform/WebLayer.h"
-#include "wtf/Assertions.h"
-#include <utility>
 
 namespace blink {
 
@@ -20,55 +20,55 @@ ForeignLayerDisplayItem::ForeignLayerDisplayItem(
     const FloatPoint& location,
     const IntSize& bounds)
     : DisplayItem(client, type, sizeof(*this)),
-      m_layer(std::move(layer)),
-      m_location(location),
-      m_bounds(bounds) {
-  ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-  ASSERT(isForeignLayerType(type));
-  ASSERT(m_layer);
+      layer_(std::move(layer)),
+      location_(location),
+      bounds_(bounds) {
+  DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+  DCHECK(IsForeignLayerType(type));
+  DCHECK(layer_);
 }
 
 ForeignLayerDisplayItem::~ForeignLayerDisplayItem() {}
 
-void ForeignLayerDisplayItem::replay(GraphicsContext&) const {
-  ASSERT_NOT_REACHED();
+void ForeignLayerDisplayItem::Replay(GraphicsContext&) const {
+  NOTREACHED();
 }
 
-void ForeignLayerDisplayItem::appendToWebDisplayItemList(
+void ForeignLayerDisplayItem::AppendToWebDisplayItemList(
     const IntRect&,
     WebDisplayItemList*) const {
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
 }
 
-bool ForeignLayerDisplayItem::drawsContent() const {
+bool ForeignLayerDisplayItem::DrawsContent() const {
   return true;
 }
 
-bool ForeignLayerDisplayItem::equals(const DisplayItem& other) const {
-  return DisplayItem::equals(other) &&
-         m_layer == static_cast<const ForeignLayerDisplayItem&>(other).m_layer;
+bool ForeignLayerDisplayItem::Equals(const DisplayItem& other) const {
+  return DisplayItem::Equals(other) &&
+         layer_ == static_cast<const ForeignLayerDisplayItem&>(other).layer_;
 }
 
 #ifndef NDEBUG
-void ForeignLayerDisplayItem::dumpPropertiesAsDebugString(
-    StringBuilder& stringBuilder) const {
-  DisplayItem::dumpPropertiesAsDebugString(stringBuilder);
-  stringBuilder.append(String::format(", layer: %d", m_layer->id()));
+void ForeignLayerDisplayItem::DumpPropertiesAsDebugString(
+    StringBuilder& string_builder) const {
+  DisplayItem::DumpPropertiesAsDebugString(string_builder);
+  string_builder.Append(String::Format(", layer: %d", layer_->id()));
 }
 #endif  // NDEBUG
 
-void recordForeignLayer(GraphicsContext& context,
+void RecordForeignLayer(GraphicsContext& context,
                         const DisplayItemClient& client,
                         DisplayItem::Type type,
-                        WebLayer* webLayer,
+                        WebLayer* web_layer,
                         const FloatPoint& location,
                         const IntSize& bounds) {
-  PaintController& paintController = context.getPaintController();
-  if (paintController.displayItemConstructionIsDisabled())
+  PaintController& paint_controller = context.GetPaintController();
+  if (paint_controller.DisplayItemConstructionIsDisabled())
     return;
 
-  paintController.createAndAppend<ForeignLayerDisplayItem>(
-      client, type, webLayer->ccLayer(), location, bounds);
+  paint_controller.CreateAndAppend<ForeignLayerDisplayItem>(
+      client, type, web_layer->CcLayer(), location, bounds);
 }
 
 }  // namespace blink

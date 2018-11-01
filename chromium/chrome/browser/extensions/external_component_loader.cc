@@ -43,9 +43,11 @@ ExternalComponentLoader::~ExternalComponentLoader() {}
 
 void ExternalComponentLoader::StartLoading() {
   prefs_.reset(new base::DictionaryValue());
-  if (!vivaldi::IsVivaldiRunning()) {
+#if defined(GOOGLE_CHROME_BUILD)
   AddExternalExtension(extension_misc::kInAppPaymentsSupportAppId);
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
+  if (!vivaldi::IsVivaldiRunning()) {
   if (HotwordServiceFactory::IsHotwordAllowed(profile_))
     AddExternalExtension(extension_misc::kHotwordSharedModuleId);
   }

@@ -6,6 +6,30 @@
       Jika ditetapkan kepada Palsu, kemas kini kepada komponen akan dilumpuhkan. Walau bagaimanapun, sesetengah komponen dikecualikan daripada dasar ini: kemas kini kepada mana-mana komponen yang tidak mengandungi kod boleh laksana atau tidak mengubah gelagat penyemak imbas dengan ketara atau yang penting untuk keselamatannya tidak akan dilumpuhkan.
 
 Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan imbas selamat. </translation>
+<translation id="1010564225363223332">Mengkonfigurasi senarai pencetak.
+
+      Dasar ini membolehkan pentadbir menyediakan konfigurasi pencetak untuk
+      pengguna mereka.
+
+      <ph name="PRINTER_DISPLAY_NAME" /> dan <ph name="PRINTER_DESCRIPTION" /> ialah rentetan berbentuk bebas yang
+      boleh disesuaikan untuk memudahkan pemilihan pencetak. <ph name="PRINTER_MANUFACTURER" /> dan <ph name="PRINTER_MODEL" /> berfungsi untuk memudahkan pengenalan pencetak oleh
+      pengguna akhir. Maklumat ini mewakili pengeluar dan model pencetak. <ph name="PRINTER_URI" /> ialah alamat yang boleh dicapai
+      daripada komputer pelanggan termasuk <ph name="URI_SCHEME" />,
+      <ph name="URI_PORT" /> dan <ph name="URI_QUEUE" />.  <ph name="PRINTER_UUID" /> diberi sebagai pilihan.  Jika diberikan, maklumat ini digunakan untuk
+      membantu dalam menyahgandaduaan pencetak <ph name="ZEROCONF_DISCOVERY" />.
+
+      <ph name="PRINTER_EFFECTIVE_MODEL" /> mesti sepadan dengan satu daripada
+      rentetan yang mewakili pencetak yang disokong <ph name="PRODUCT_NAME" />. Rentetan akan digunakan untuk mengenal pasti dan
+      memasang PPD yang sesuai untuk pencetak. Maklumat lanjut boleh 
+      didapati di https://support.google.com/chrome?p=noncloudprint.
+
+      Penyediaan pencetak selesai apabila pencetak digunakan untuk kali pertama.  PPD tidak
+      dimuat turun sehingga pencetak digunakan.  Selepas itu, PPD yang kerap
+      digunakan akan dicache.
+
+      Dasar ini tidak memberi kesan terhadap sama ada pengguna boleh mengkonfigurasi pencetak pada
+      peranti berasingan.  Dasar ini bertujuan sebagai konfigurasi
+      tambahan pencetak mengikut pengguna individu.</translation>
 <translation id="101438888985615157">Putar skrin 180 darjah</translation>
 <translation id="1017967144265860778">Pengurusan kuasa pada skrin log masuk</translation>
 <translation id="1019101089073227242">Tetapkan direktori data pengguna</translation>
@@ -58,25 +82,6 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 <translation id="1152117524387175066">Laporkan keadaan perubahan pembangun peranti semasa but.
 
       Jika dasar tidak ditetapkan atau ditetapkan kepada tidak benar, keadaan suis pembangun tidak akan dilaporkan.</translation>
-<translation id="1156080716265314451">Mengkonfigurasikan senarai pencetak.
-
-      Dasar ini membolehkan pentadbir menyediakan konfigurasi pencetak untuk
-      pengguna mereka.
-
-      <ph name="PRINTER_DISPLAY_NAME" /> dan <ph name="PRINTER_DESCRIPTION" /> ialah rentetan bentuk bebas yang
-      boleh disesuaikan untuk memudahkann pemilihan pencetak. <ph name="PRINTER_MANUFACTURER" /> dan <ph name="PRINTER_MODEL" /> harus sepadan dengan satu daripada <ph name="PRODUCT_NAME" /> pencetak yang
-      disokong.  <ph name="PRINTER_URI" /> haruslah alamat yang boleh dicapai
-      daripada komputer pelanggan termasuk <ph name="URI_SCHEME" />,
-      <ph name="URI_PORT" /> dan <ph name="URI_QUEUE" />.  <ph name="PRINTER_UUID" /> adalah pilihan.  Jika disediakan, pencetak ini digunakan untuk
-      membantu menyahgandaduaan pencetak <ph name="ZEROCONF_DISCOVERY" />.
-
-      Persediaan pencetak selesai pada penggunaan pertama pencetak.  PPD tidak boleh
-      dimuat turun sehinggalah pencetak digunakan.  Selepas waktu itu,
-      PPD yang kerap digunakan akan dicache.
-
-      Dasar ini tiada kesan terhadap sama ada pengguna boleh mengkonfigurasikan pencetak pada
-      peranti individu atau tidak.  Dasar ini bertujuan menjadi pelengkap kepada
-      pengkonfigurasian pencetak oleh pengguna individu.</translation>
 <translation id="1160939557934457296">Lumpuhkan tindakan dari halaman amaran Penyemakan Imbas Selamat</translation>
 <translation id="1198465924256827162">Kekerapan muat naik status peranti dihantar, dalam milisaat.
 
@@ -183,7 +188,6 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 <translation id="1583248206450240930">Gunakan <ph name="PRODUCT_FRAME_NAME" /> secara lalai</translation>
 <translation id="1608755754295374538">URL yang akan diberikan akses kepada peranti tangkapan audio tanpa gesaan</translation>
 <translation id="1617235075406854669">Dayakan pemadaman sejarah penyemak imbas dan muat turun</translation>
-<translation id="1617384279878333801">Dayakan tambah orang dalam pengurus profil</translation>
 <translation id="163200210584085447">Corak dalam senarai ini akan dipadankan dengan keselamatan
       asal URL yang meminta.  Jika padanan ditemui, akses kepada peranti
       tangkapan video akan diberi pada halaman log masuk SAML.  Jika padanan tidak
@@ -817,7 +821,6 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 
           Jika dasar ini dibiarkan tanpa ditetapkan, pengguna boleh memilih sendiri tetapan proksi mereka.</translation>
 <translation id="3205825995289802549">Maksimumkan tetingkap penyemak imbas pertama pada kendalian pertama</translation>
-<translation id="3206731874112238027">Lumpuhkan Pratonton Cetak (ditamatkan)</translation>
 <translation id="3213821784736959823">Mengawal sama ada pelanggan DNS terbina dalam digunakan dalam <ph name="PRODUCT_NAME" />.
 
       Jika dasar ini ditetapkan kepada benar, pelanggan DNS terbina dalam akan digunakan, jika tersedia.
@@ -860,6 +863,15 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 
       Jika tetapan ini dilumpuhkan, pengguna tidak dapat mendayakan proksi, dan mesin tidak akan dibenarkan untuk berkongsi pencetaknya dengan <ph name="CLOUD_PRINT_NAME" />.</translation>
 <translation id="3297010562646015826">Membolehkan tindakan menamatkan proses dalam Pengurus Tugas</translation>
+<translation id="3307746730474515290">Mengawal jenis apl/sambungan yang dibenarkan untuk dipasang dan mengehadkan akses waktu jalan.
+
+          Tetapan ini menyenarai putih jenis sambungan/apl yang boleh dipasang pada <ph name="PRODUCT_NAME" /> dan hos yang sambungan/apl ini dibenarkan berinteraksi. Nilainya merupakan senarai rentetan, yang setiap satunya haruslah satu daripada berikut: "extension", "theme", "user_script", "hosted_app", "legacy_packaged_app", "platform_app". Lihat dokumentasi sambungan <ph name="PRODUCT_NAME" /> untuk mendapatkan maklumat lanjut tentang jenis ini.
+
+          Ambil perhatian bahawa dasar ini turut mempengaruhi sambungan dan apl yang dipasang paksa melalui ExtensionInstallForcelist.
+
+          Jika tetapan ini dikonfigurasi, jenis sambungan/apl yang tidak terdapat dalam senarai tidak akan dipasang.
+
+          Jika tetapan ini dibiarkan tanpa dikonfigurasi, tiada pengehadan dikenakan terhadap jenis sambungan/apl yang diterima.</translation>
 <translation id="3322771899429619102">Membenarkan anda menetapkan senarai pola url yang menentukan tapak yang dibenarkan untuk menggunakan penghasilan kunci. Pengecualian akan dibatalkan jika pola url berada dalam 'KeygenBlockedForUrls'.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, nilai lalai global akan digunakan untuk semua tapak, sama ada daripada dasar 'DefaultKeygenSetting' jika ditetapkan atau konfigurasi peribadi pengguna jika tidak ditetapkan.</translation>
@@ -940,6 +952,7 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 <translation id="3660562134618097814">Pindahkan kuki IdP SAML semasa log masuk</translation>
 <translation id="3709266154059827597">Konfigurasi senarai hitam pemasangan sambungan</translation>
 <translation id="3711895659073496551">Gantung</translation>
+<translation id="3736879847913515635">Dayakan tambah orang dalam pengurus pengguna</translation>
 <translation id="3750220015372671395">Sekat penghasilan kunci pada tapak ini</translation>
 <translation id="3756011779061588474">Sekat mod pembangun</translation>
 <translation id="3758089716224084329">Membenarkan anda menetapkan pelayan proksi yang digunakan oleh <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada menukar tetapan proksi.
@@ -955,15 +968,6 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
           Jika dasar ini dibiarkan tanpa ditetapkan, pengguna boleh memilih sendiri tetapan proksi mereka.</translation>
 <translation id="3758249152301468420">Lumpuhkan Alatan Pembangun</translation>
 <translation id="3765260570442823273">Tempoh mesej amaran log keluar melahu</translation>
-<translation id="3768412594120638208">Mengawal jenis apl/sambungan yang dibenarkan untuk dipasang.
-
-          Tetapan ini menyenaraiputihkan jenis sambungan/apl dibenarkan yang boleh dipasang dalam <ph name="PRODUCT_NAME" />. Nilainya merupakan senarai rentetan, yang setiap satunya harus salah satu yang berikut: "extension", "theme", "user_script", "hosted_app", "legacy_packaged_app", "platform_app". Lihat dokumentasi sambungan <ph name="PRODUCT_NAME" /> untuk mendapatkan maklumat lanjut tentang jenis-jenis ini.
-
-          Ambil perhatian bahawa dasar ini juga mempengaruhi sambungan dan apl yang dipasang secara paksa melalui ExtensionInstallForcelist.
-
-          Jika tetapan ini dikonfigurasikan, jenis sambungan/apl yang tidak terdapat dalam senarai tersebut tidak akan dipasang.
-
-          Jika tetapan ini dibiarkan tanpa dikonfigurasikan, tiada pengehadan dikenakan terhadap jenis sambungan/apl yang boleh diterima.</translation>
 <translation id="3780152581321609624">Termasuk port tidak standard dalam Kerberos SPN</translation>
 <translation id="3780319008680229708">Jika dasar ini ditetapkan kepada benar, ikon bar alat Cast akan sentiasa ditunjukkan di bar alat atau menu limpahan dan pengguna tidak akan dapat mengalih keluar ikon ini.
 
@@ -1070,9 +1074,6 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 
           Jika tidak ditetapkan atau ditetapkan kepada Palsu, maka pengguna akan dapat memindahkan fail ke Google Drive.</translation>
 <translation id="3915395663995367577">URL untuk fail .pac proksi</translation>
-<translation id="3926940573869375969">Mengkonfigurasi reka letak papan kekunci yang dibenarkan pada skrin log masuk <ph name="PRODUCT_OS_NAME" />.
-
-      Jika dasar ini ditetapkan kepada senarai pengecam kaedah masukan, kaedah masukan yang diberikan akan tersedia pada skrin log masuk. Kaedah masukan pertama yang diberikan akan dipilih dahulu. Walaupun pod pengguna difokus pada skrin log masuk, kaedah masukan terbaharu pengguna yang paling kurang digunakan akan tersedia sebagai tambahan pada kaedah masukan yang diberikan oleh dasar ini.  Jika dasar ini tidak ditetapkan, kaedah masukan pada skrin log masuk akan diperoleh daripada tempat peristiwa skrin log masuk dipaparkan.  Nilai daripada pengecam kaedah masukan yang tidak sah akan diabaikan.</translation>
 <translation id="3939893074578116847">Hantar bingkisan rangkaian ke pelayan pengurusan untuk memantau status dalam talian, untuk membenarkan
       pelayan mengesan jika peranti berada di luar talian.
 
@@ -1391,6 +1392,9 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 <translation id="4928632305180102854">Mengawal sama ada <ph name="PRODUCT_OS_NAME" /> membenarkan akaun pengguna baharu dicipta. Jika dasar ini ditetapkan sebagai palsu, pengguna yang tidak mempunyai akaun tidak akan boleh log masuk.
 
       Jika dasar ini ditetapkan sebagai benar atau tidak dikonfigurasi, akaun pengguna baharu akan dibenarkan dicipta dengan syarat <ph name="DEVICEUSERWHITELISTPROTO_POLICY_NAME" /> tidak menghalang pengguna daripada log masuk.</translation>
+<translation id="4962262530309732070">Jika dasar ini ditetapkan kepada benar atau tidak dikonfigurasi, <ph name="PRODUCT_NAME" /> akan membenarkan ciri Tambah Orang daripada pengurus pengguna.
+
+      Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_NAME" /> tidak akan membenarkan profil baharu dibuat daripada pengurus pengguna.</translation>
 <translation id="4971529314808359013">Membolehkan anda menentukan senarai pola url yang menentukan tapak yang <ph name="PRODUCT_NAME" /> harus memilih sijil pelanggan secara automatik untuknya, jika tapak tersebut meminta sijil.
 
           Nilai tersebut mestilah tatasusunan pelbagai kamus JSON yang berentetan. Setiap kamus mestilah berbentuk { "pattern": "$URL_PATTERN", "filter" : $FILTER }, dengan $URL_PATTERN ialah pola tetapan kandungan. $FILTER menyekat yang daripadanya sijil pelanggan akan dipilih secara automatik oleh penyemak imbas. Tanpa bergantung kepada penapis, hanya sijil akan dipilih apabila sepadan dengan permintaan sijil pelayan. Jika $FILTER berbentuk { "ISSUER": { "CN": "$ISSUER_CN" } }, selain itu hanya sijil pelanggan dipilih yang dikeluarkan oleh sijil dengan CommonName $ISSUER_CN. Jika $FILTER ialah kamus kosong {}, pemilihan sijil pelanggan tidak dihadkan sebagai tambahan.
@@ -1418,6 +1422,7 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
       Jika ia tidak ditetapkan, pengguna mungkin ditanya sama ada hendak mengimport atau import boleh berlaku secara automatik.</translation>
 <translation id="5056708224511062314">Penggadang skrin dilumpuhkan</translation>
 <translation id="5067143124345820993">Log masuk senarai putih pengguna</translation>
+<translation id="5085647276663819155">Lumpuhkan Pratonton Cetakan</translation>
 <translation id="5105313908130842249">Kelewatan kunci skrin apabila dijalankan dengan kuasa bateri</translation>
 <translation id="5111573778467334951">Menentukan tindakan yang perlu diambil apabila kelewatan melahu dicapai semasa dijalankan menggunakan kuasa bateri.
 
@@ -1432,6 +1437,10 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
 <translation id="5148753489738115745">Membolehkan anda menentukan parameter tambahan yang digunakan apabila  <ph name="PRODUCT_FRAME_NAME" /> melancarkan <ph name="PRODUCT_NAME" />.
 
           Jika dasar ini tidak ditetapkan, baris perintah lalai akan digunakan.</translation>
+<translation id="5159469559091666409">Kekerapan bingkisan rangkaian pemantauan dihantar dalam milisaat.
+
+      Jika dasar ini tidak ditetapkan, selang masa lalai ialah 3 minit.. Selang masa      minimum ialah 30 saat dan selang masa maksimum ialah 24 jam - nilai
+      di luar daripada julat ini akan dikekalkan kepada julat ini.</translation>
 <translation id="5182055907976889880">Konfigurasi Google Drive dalam <ph name="PRODUCT_OS_NAME" />.</translation>
 <translation id="5183383917553127163">Membenarkan anda untuk menentukan sambungan yang tidak tertakluk dengan senarai hitam. Nilai senarai hitam bagi * bermakna semua sambungan disenaraihitamkan dan pengguna hanya boleh memasang sambungan yang disenaraikan dalam senarai putih. Secara lalai, semua sambungan adalah disenaraiputihkan, tetapi jika semua sambungan disenaraihitamkan oleh dasar, senarai putih boleh digunakan untuk membatalkan dasar tersebut.</translation>
 <translation id="5192837635164433517">Membolehkan penggunaan halaman ralat ganti yang terbina dalam <ph name="PRODUCT_NAME" /> (seperti 'halaman tidak dijumpai') dan menghalang pengguna daripada mengubah tetapan ini.
@@ -1503,6 +1512,9 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
           Jika tetapan ini didayakan, maka peranti masukan dan keluaran fizikal hos akan dilumpuhkan semasa sambungan jauh sedang dijalankan.
 
           Jika tetapan ini dilumpuhkan atau tidak ditetapkan, maka kedua-dua pengguna setempat dan jauh boleh berinteraksi dengan hos apabila hos dikongsi.</translation>
+<translation id="5405289061476885481">Mengkonfigurasi reka letak papan kekunci yang dibenarkan pada skrin log masuk <ph name="PRODUCT_OS_NAME" />.
+
+      Jika dasar ini ditetapkan untuk menyenaraikan pengecam kaedah masukan, kaedah masukan tertentu akan tersedia pada skrin log masuk. Kaedah masukan tertentu yang pertama akan dipilih dahulu. Walaupun pod pengguna difokuskan pada skrin log masuk, kaedah masukan pengguna yang terakhir akan tersedia sebagai tambahan kepada kaedah masukan yang diberikan oleh dasar ini. Jika dasar ini tidak ditetapkan, kaedah masukan pada skrin log masuk akan dihasilkan daripada penempatan tempat skrin log masuk dipaparkan. Nilai yang bukan daripada pengecam kaedah masukan yang sah akan diabaikan.</translation>
 <translation id="5423001109873148185">Jika didayakan, dasar ini memaksa enjin carian diimport daripada penyemak imbas lalai semasa. Jika didayakan, dasar ini juga menjejaskan dialog import.
 
       Jika dilumpuhkan, enjin carian lalai tidak akan diimport.
@@ -1556,11 +1568,6 @@ Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan i
       Apabila dasar ini dibiarkan tanpa ditetapkan, <ph name="PRODUCT_OS_NAME" /> akan menggunakan nilai lalai 3 jam.
 
       Ambil perhatian bahawa jika platform menyokong pemberitahuan dasar, lengahan muat semula akan ditetapkan kepada 24 jam (mengabaikan semua nilai lalai dan nilai dasar ini) kerana pemberitahuan dasar dijangka akan memaksa muat semula secara automatik apabila dasar berubah, melakukan muat semula yang tidak diperlukan dengan lebih kerap.</translation>
-<translation id="5535957389335373033">Kekerapan pemantauan bingkisan rangkaian dihantar, dalam milisaat.
-
-      Jika dasar ini tidak ditetapkan, kekerapan lalai ialah 3 minit. Kekerapan minimum
-      ialah 30 saat dan kekerapan maksimum ialah 24 jam - nilai
-      di luar julat ini akan diapit menurut julat ini.</translation>
 <translation id="5535973522252703021">Senarai putih pelayan penugasan Kerberos</translation>
 <translation id="5559079916187891399">Dasar ini tidak berkesan terhadap apl Android.</translation>
 <translation id="5560039246134246593">Tambahkan parameter kepada pengambilan benih Variasi dalam <ph name="PRODUCT_NAME" />.
@@ -2040,9 +2047,6 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 <translation id="6786967369487349613">Tetapkan direktori profil perayauan</translation>
 <translation id="6810445994095397827">Sekat JavaScript pada tapak ini</translation>
 <translation id="681446116407619279">Skim pengesahan yang disokong</translation>
-<translation id="6828905844648501476">Jika dasar ini ditetapkan kepada benar atau tidak dikonfigurasi, <ph name="PRODUCT_NAME" /> akan membolehkan Tambah Orang daripada pengurus pengguna.
-
-      Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_NAME" /> tidak akan membenarkan penghasilan profil baharu daripada pengurus profil.</translation>
 <translation id="685769593149966548">Kuatkuasakan Mod Sekatan Ketat untuk YouTube</translation>
 <translation id="687046793986382807">Dasar ini telah ditamatkan bermula <ph name="PRODUCT_NAME" /> versi 35.
 

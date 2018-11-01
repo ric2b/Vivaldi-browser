@@ -28,7 +28,7 @@ class HostScanDevicePrioritizer {
   // Note: The PrefService* passed here must be created using the same registry
   // passed to RegisterPrefs().
   HostScanDevicePrioritizer(PrefService* pref_service);
-  ~HostScanDevicePrioritizer();
+  virtual ~HostScanDevicePrioritizer();
 
   // Registers the prefs used by this class to |registry|. Must be called before
   // this class is utilized.
@@ -37,16 +37,16 @@ class HostScanDevicePrioritizer {
   // Records a TetherAvailabilityResponse. This function should be called each
   // time that a response is received from a potential host, even if a
   // connection is not started.
-  void RecordSuccessfulTetherAvailabilityResponse(
+  virtual void RecordSuccessfulTetherAvailabilityResponse(
       const cryptauth::RemoteDevice& remote_device);
 
   // Records a ConnectTetheringResponse. This function should be called each
   // time that a response is received from a host.
-  void RecordSuccessfulConnectTetheringResponse(
+  virtual void RecordSuccessfulConnectTetheringResponse(
       const cryptauth::RemoteDevice& remote_device);
 
   // Prioritizes |remote_devices| using the rules described above.
-  void SortByHostScanOrder(
+  virtual void SortByHostScanOrder(
       std::vector<cryptauth::RemoteDevice>* remote_devices) const;
 
  private:

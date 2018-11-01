@@ -29,7 +29,6 @@ class KeywordHintDecoration;
 class LocationBarDecoration;
 class LocationIconDecoration;
 class ManagePasswordsDecoration;
-class PageActionDecoration;
 class Profile;
 class SaveCreditCardDecoration;
 class SelectedKeywordDecoration;
@@ -69,11 +68,8 @@ class LocationBarViewMac : public LocationBar,
   void UpdateContentSettingsIcons() override;
   void UpdateManagePasswordsIconAndBubble() override;
   void UpdateSaveCreditCardIcon() override;
-  void UpdatePageActions() override;
   void UpdateBookmarkStarVisibility() override;
   void UpdateLocationBarVisibility(bool visible, bool animate) override;
-  bool ShowPageActionPopup(const extensions::Extension* extension,
-                           bool grant_active_tab) override;
   void SaveStateToContents(content::WebContents* contents) override;
   void Revert() override;
   const OmniboxView* GetOmniboxView() const override;
@@ -81,11 +77,6 @@ class LocationBarViewMac : public LocationBar,
   LocationBarTesting* GetLocationBarForTesting() override;
 
   // Overridden from LocationBarTesting:
-  int PageActionCount() override;
-  int PageActionVisibleCount() override;
-  ExtensionAction* GetPageAction(size_t index) override;
-  ExtensionAction* GetVisiblePageAction(size_t index) override;
-  void TestPageActionPressed(size_t index) override;
   bool GetBookmarkStarVisibility() override;
   bool TestContentSettingImagePressed(size_t index) override;
 
@@ -130,15 +121,6 @@ class LocationBarViewMac : public LocationBar,
 
   // Re-draws |decoration| if it's already being displayed.
   void RedrawDecoration(LocationBarDecoration* decoration);
-
-  // Retrieve the frame for the given |page_action|.
-  NSRect GetPageActionFrame(ExtensionAction* page_action);
-
-  // Return |page_action|'s info-bubble point in window coordinates.
-  // This function should always be called with a visible page action.
-  // If |page_action| is not a page action or not visible, NOTREACHED()
-  // is called and this function returns |NSZeroPoint|.
-  NSPoint GetPageActionBubblePoint(ExtensionAction* page_action);
 
   // Updates the controller, and, if |contents| is non-null, restores saved
   // state that the tab holds.
@@ -225,22 +207,7 @@ class LocationBarViewMac : public LocationBar,
   // Posts |notification| to the default notification center.
   void PostNotification(NSString* notification);
 
-  // Return the decoration for |page_action|.
-  PageActionDecoration* GetPageActionDecoration(ExtensionAction* page_action);
-
-  // Clear the page-action decorations.
-  void DeletePageActionDecorations();
-
   void OnEditBookmarksEnabledChanged();
-
-  // Re-generate the page-action decorations from the profile's
-  // extension service.
-  void RefreshPageActionDecorations();
-
-  // Whether the page actions represented by |page_action_decorations_| differ
-  // in ordering or value from |page_actions|.
-  bool PageActionsDiffer(
-      const std::vector<ExtensionAction*>& page_actions) const;
 
   // Updates visibility of the content settings icons based on the current
   // tab contents state.
@@ -301,9 +268,6 @@ class LocationBarViewMac : public LocationBar,
   // A zoom icon at the end of the omnibox, which shows at non-standard zoom
   // levels.
   std::unique_ptr<ZoomDecoration> zoom_decoration_;
-
-  // Decorations for the installed Page Actions.
-  std::vector<std::unique_ptr<PageActionDecoration>> page_action_decorations_;
 
   // The content blocked decorations.
   std::vector<std::unique_ptr<ContentSettingDecoration>>

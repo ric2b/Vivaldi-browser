@@ -25,6 +25,7 @@ class GoogleURLTracker;
 
 namespace base {
 class DictionaryValue;
+class TimeDelta;
 class Value;
 }
 
@@ -44,7 +45,9 @@ class DoodleFetcherImpl : public DoodleFetcher, public net::URLFetcherDelegate {
   DoodleFetcherImpl(
       scoped_refptr<net::URLRequestContextGetter> download_context,
       GoogleURLTracker* google_url_tracker,
-      const ParseJSONCallback& json_parsing_callback);
+      const ParseJSONCallback& json_parsing_callback,
+      bool gray_background,
+      const base::Optional<std::string>& override_url);
   ~DoodleFetcherImpl() override;
 
   // Fetches a doodle asynchronously. The |callback| is called with a
@@ -62,18 +65,14 @@ class DoodleFetcherImpl : public DoodleFetcher, public net::URLFetcherDelegate {
   // ParseJSONCallback Failure callback
   void OnJsonParseFailed(const std::string& error_message);
 
-  base::Optional<DoodleConfig> ParseDoodle(
-      const base::DictionaryValue& ddljson) const;
-  bool ParseImage(const base::DictionaryValue& image_dict,
-                  const std::string& image_name,
-                  DoodleImage* image) const;
-  void ParseBaseInformation(const base::DictionaryValue& ddljson,
-                            DoodleConfig* config) const;
-  GURL ParseRelativeUrl(const base::DictionaryValue& dict_value,
-                        const std::string& key) const;
+  base::Optional<DoodleConfig> ParseDoodleConfigAndTimeToLive(
+      const base::DictionaryValue& ddljson,
+      base::TimeDelta* time_to_live) const;
 
   void RespondToAllCallbacks(DoodleState state,
+                             base::TimeDelta time_to_live,
                              const base::Optional<DoodleConfig>& config);
+
   GURL GetGoogleBaseUrl() const;
 
   // Returns whether a fetch is still in progress. A fetch begins when a
@@ -82,8 +81,10 @@ class DoodleFetcherImpl : public DoodleFetcher, public net::URLFetcherDelegate {
 
   // Parameters set from constructor.
   scoped_refptr<net::URLRequestContextGetter> const download_context_;
-  ParseJSONCallback json_parsing_callback_;
   GoogleURLTracker* google_url_tracker_;
+  ParseJSONCallback json_parsing_callback_;
+  const bool gray_background_;
+  const base::Optional<std::string> override_url_;
 
   std::vector<FinishedCallback> callbacks_;
   std::unique_ptr<net::URLFetcher> fetcher_;

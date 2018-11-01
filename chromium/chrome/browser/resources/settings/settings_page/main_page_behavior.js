@@ -11,6 +11,16 @@
 var MainPageBehaviorImpl = {
   properties: {
     /**
+     * Help CSS to alter style during the horizontal swipe animation.
+     * Note that this is unrelated to the |currentAnimation_| (which refers to
+     * the vertical exapand animation).
+     */
+    isSubpageAnimating: {
+      reflectToAttribute: true,
+      type: Boolean,
+    },
+
+    /**
      * Whether a search operation is in progress or previous search results are
      * being displayed.
      * @private {boolean}
@@ -25,12 +35,24 @@ var MainPageBehaviorImpl = {
   /** @type {?HTMLElement} The scrolling container. */
   scroller: null,
 
+  listeners: {
+    'neon-animation-finish': 'onNeonAnimationFinish_'
+  },
+
   /** @override */
   attached: function() {
-    if (this.domHost && this.domHost.parentNode.tagName == 'PAPER-HEADER-PANEL')
-      this.scroller = this.domHost.parentNode.scroller;
-    else
-      this.scroller = document.body; // Used in unit tests.
+    this.scroller = this.domHost ? this.domHost.parentNode : document.body;
+  },
+
+  /**
+   * Remove the is-animating attribute once the animation is complete.
+   * This may catch animations finishing more often than needed, which is not
+   * known to cause any issues (e.g. when animating from a shallower page to a
+   * deeper page; or when transitioning to the main page).
+   * @private
+   */
+  onNeonAnimationFinish_: function() {
+    this.isSubpageAnimating = false;
   },
 
   /**
@@ -42,20 +64,33 @@ var MainPageBehaviorImpl = {
         !!oldRoute && !!oldRoute.parent && !!oldRoute.section &&
         oldRoute.parent.section != oldRoute.section;
 
-    // Always scroll to the top if navigating from a section to the root route
-    // or when navigating to the About page.
-    if (this.scroller &&
-        ((oldRouteWasSection && newRoute == settings.Route.BASIC) ||
-         newRoute == settings.Route.ABOUT)) {
-      this.scroller.scrollTop = 0;
-      return;
+    if (this.scroller) {
+      // When navigating from a section to the root route, we just need to
+      // scroll to the top, and can early exit afterwards.
+      if (oldRouteWasSection && newRoute == settings.Route.BASIC) {
+        this.scroller.scrollTop = 0;
+        return;
+      }
+
+      // When navigating to the About page, we need to scroll to the top, and
+      // still do the rest of section management.
+      if (newRoute == settings.Route.ABOUT)
+        this.scroller.scrollTop = 0;
     }
 
     // Scroll to the section except for back/forward. Also scroll for any
     // in-page back/forward navigations (from a section or the root page).
-    var scrollToSection =
-        !settings.lastRouteChangeWasPopstate() || oldRouteWasSection ||
-        oldRoute == settings.Route.BASIC;
+    // Also always scroll when coming from either the About or root page.
+    var scrollToSection = !settings.lastRouteChangeWasPopstate() ||
+        oldRouteWasSection || oldRoute == settings.Route.BASIC ||
+        oldRoute == settings.Route.ABOUT;
+
+    // TODO(dschuyler): This doesn't set the flag in the case of going to or
+    // from the main page. It seems sensible to set the flag in those cases,
+    // unfortunately bug 708465 happens. Figure out why that is and then set
+    // this flag more broadly.
+    if (oldRoute && oldRoute.isSubpage() && newRoute.isSubpage())
+      this.isSubpageAnimating = true;
 
     // For previously uncreated pages (including on first load), allow the page
     // to render before scrolling to or expanding the section.
@@ -116,6 +151,14 @@ var MainPageBehaviorImpl = {
         promise = this.expandSection_(currentSection);
       else if (scrollToSection)
         currentSection.scrollIntoView();
+    } else if (
+        this.tagName == 'SETTINGS-BASIC-PAGE' &&
+        settings.Route.ADVANCED.contains(currentRoute) &&
+        // Need to exclude routes that correspond to 'non-sectioned' children of
+        // ADVANCED, otherwise tryTransitionToSection_ will recurse endlessly.
+        !currentRoute.isNavigableDialog) {
+      assert(currentRoute.section);
+      promise = this.$$('#advancedPageTemplate').get();
     }
 
     // When this animation ends, another may be necessary. Call this function
@@ -256,10 +299,12 @@ var MainPageBehaviorImpl = {
             this.getSection(settings.getCurrentRoute().section);
 
         // Scroll to the new section or the original position.
-        if (newSection && !settings.lastRouteChangeWasPopstate())
+        if (newSection && !settings.lastRouteChangeWasPopstate() &&
+            !settings.getCurrentRoute().isSubpage()) {
           newSection.scrollIntoView();
-        else
+        } else {
           this.scroller.scrollTop = this.origScrollTop_;
+        }
 
         this.currentAnimation_ = section.animateCollapse(
             /** @type {!HTMLElement} */(this.scroller));

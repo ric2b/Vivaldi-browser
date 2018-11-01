@@ -4,6 +4,7 @@
 
 #include "content/common/content_security_policy/csp_context.h"
 #include "content/common/content_security_policy_header.h"
+#include "content/common/navigation_params.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -11,28 +12,47 @@ namespace content {
 namespace {
 class CSPContextTest : public CSPContext {
  public:
+  CSPContextTest() : CSPContext() {}
+
   const std::string& LastConsoleMessage() { return console_message_; }
 
+  void AddSchemeToBypassCSP(const std::string& scheme) {
+    scheme_to_bypass_.push_back(scheme);
+  }
+
+  bool SchemeShouldBypassCSP(const base::StringPiece& scheme) override {
+    return std::find(scheme_to_bypass_.begin(), scheme_to_bypass_.end(),
+                     scheme) != scheme_to_bypass_.end();
+  }
+
  private:
-  void LogToConsole(const std::string& message) override {
-    console_message_ = message;
+  void ReportContentSecurityPolicyViolation(
+      const CSPViolationParams& violation_params) override {
+    console_message_ = violation_params.console_message;
   }
   std::string console_message_;
+  std::vector<std::string> scheme_to_bypass_;
+
+  DISALLOW_COPY_AND_ASSIGN(CSPContextTest);
 };
+
+ContentSecurityPolicyHeader EmptyCspHeader() {
+  return ContentSecurityPolicyHeader(
+      std::string(), blink::kWebContentSecurityPolicyTypeEnforce,
+      blink::kWebContentSecurityPolicySourceHTTP);
+}
 
 }  // namespace
 
 TEST(ContentSecurityPolicy, NoDirective) {
   CSPContextTest context;
   std::vector<std::string> report_end_points;  // empty
-  ContentSecurityPolicy policy(blink::WebContentSecurityPolicyTypeEnforce,
-                               blink::WebContentSecurityPolicySourceHTTP,
-                               std::vector<CSPDirective>(), report_end_points,
-                               "" /* header */);
+  ContentSecurityPolicy policy(EmptyCspHeader(), std::vector<CSPDirective>(),
+                               report_end_points);
 
   EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FormAction,
                                            GURL("http://www.example.com"),
-                                           &context));
+                                           false, &context, SourceLocation()));
   EXPECT_EQ("", context.LastConsoleMessage());
 }
 
@@ -45,13 +65,12 @@ TEST(ContentSecurityPolicy, ReportViolation) {
   CSPSourceList source_list(false, false, {source});
   CSPDirective directive(CSPDirective::FormAction, source_list);
   std::vector<std::string> report_end_points;  // empty
-  ContentSecurityPolicy policy(blink::WebContentSecurityPolicyTypeEnforce,
-                               blink::WebContentSecurityPolicySourceHTTP,
-                               {directive}, report_end_points, "" /* header */);
+  ContentSecurityPolicy policy(EmptyCspHeader(), {directive},
+                               report_end_points);
 
   EXPECT_FALSE(ContentSecurityPolicy::Allow(policy, CSPDirective::FormAction,
                                             GURL("http://www.not-example.com"),
-                                            &context));
+                                            false, &context, SourceLocation()));
 
   const char console_message[] =
       "Refused to send form data to 'http://www.not-example.com/' because it "
@@ -71,12 +90,12 @@ TEST(ContentSecurityPolicy, DirectiveFallback) {
   {
     CSPContextTest context;
     ContentSecurityPolicy policy(
-        blink::WebContentSecurityPolicyTypeEnforce,
-        blink::WebContentSecurityPolicySourceHTTP,
+        EmptyCspHeader(),
         {CSPDirective(CSPDirective::DefaultSrc, source_list_a)},
-        report_end_points, "" /* header */);
+        report_end_points);
     EXPECT_FALSE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
-                                              GURL("http://b.com"), &context));
+                                              GURL("http://b.com"), false,
+                                              &context, SourceLocation()));
     const char console_message[] =
         "Refused to frame 'http://b.com/' because it violates "
         "the following Content Security Policy directive: \"default-src "
@@ -84,17 +103,17 @@ TEST(ContentSecurityPolicy, DirectiveFallback) {
         "set, so 'default-src' is used as a fallback.\n";
     EXPECT_EQ(console_message, context.LastConsoleMessage());
     EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
-                                             GURL("http://a.com"), &context));
+                                             GURL("http://a.com"), false,
+                                             &context, SourceLocation()));
   }
   {
     CSPContextTest context;
     ContentSecurityPolicy policy(
-        blink::WebContentSecurityPolicyTypeEnforce,
-        blink::WebContentSecurityPolicySourceHTTP,
-        {CSPDirective(CSPDirective::ChildSrc, source_list_a)},
-        report_end_points, "" /* header */);
+        EmptyCspHeader(), {CSPDirective(CSPDirective::ChildSrc, source_list_a)},
+        report_end_points);
     EXPECT_FALSE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
-                                              GURL("http://b.com"), &context));
+                                              GURL("http://b.com"), false,
+                                              &context, SourceLocation()));
     const char console_message[] =
         "Refused to frame 'http://b.com/' because it violates "
         "the following Content Security Policy directive: \"child-src "
@@ -102,27 +121,117 @@ TEST(ContentSecurityPolicy, DirectiveFallback) {
         "set, so 'child-src' is used as a fallback.\n";
     EXPECT_EQ(console_message, context.LastConsoleMessage());
     EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
-                                             GURL("http://a.com"), &context));
+                                             GURL("http://a.com"), false,
+                                             &context, SourceLocation()));
   }
   {
     CSPContextTest context;
     CSPSourceList source_list(false, false, {source_a, source_b});
     ContentSecurityPolicy policy(
-        blink::WebContentSecurityPolicyTypeEnforce,
-        blink::WebContentSecurityPolicySourceHTTP,
+        EmptyCspHeader(),
         {CSPDirective(CSPDirective::FrameSrc, {source_list_a}),
          CSPDirective(CSPDirective::ChildSrc, {source_list_b})},
-        report_end_points, "" /* header */);
+        report_end_points);
     EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
-                                             GURL("http://a.com"), &context));
+                                             GURL("http://a.com"), false,
+                                             &context, SourceLocation()));
     EXPECT_FALSE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
-                                              GURL("http://b.com"), &context));
+                                              GURL("http://b.com"), false,
+                                              &context, SourceLocation()));
     const char console_message[] =
         "Refused to frame 'http://b.com/' because it violates "
         "the following Content Security Policy directive: \"frame-src "
         "http://a.com\".\n";
     EXPECT_EQ(console_message, context.LastConsoleMessage());
   }
+}
+
+TEST(ContentSecurityPolicy, RequestsAllowedWhenBypassingCSP) {
+  CSPContextTest context;
+  std::vector<std::string> report_end_points;  // empty
+  CSPSource source("https", "example.com", false, url::PORT_UNSPECIFIED, false,
+                   "");
+  CSPSourceList source_list(false, false, {source});
+  ContentSecurityPolicy policy(
+      EmptyCspHeader(), {CSPDirective(CSPDirective::DefaultSrc, source_list)},
+      report_end_points);
+
+  EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
+                                           GURL("https://example.com/"), false,
+                                           &context, SourceLocation()));
+  EXPECT_FALSE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
+                                            GURL("https://not-example.com/"),
+                                            false, &context, SourceLocation()));
+
+  // Register 'https' as bypassing CSP, which should now bypass is entirely.
+  context.AddSchemeToBypassCSP("https");
+
+  EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
+                                           GURL("https://example.com/"), false,
+                                           &context, SourceLocation()));
+  EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
+                                           GURL("https://not-example.com/"),
+                                           false, &context, SourceLocation()));
+}
+
+TEST(ContentSecurityPolicy, FilesystemAllowedWhenBypassingCSP) {
+  CSPContextTest context;
+  std::vector<std::string> report_end_points;  // empty
+  CSPSource source("https", "example.com", false, url::PORT_UNSPECIFIED, false,
+                   "");
+  CSPSourceList source_list(false, false, {source});
+  ContentSecurityPolicy policy(
+      EmptyCspHeader(), {CSPDirective(CSPDirective::DefaultSrc, source_list)},
+      report_end_points);
+
+  EXPECT_FALSE(ContentSecurityPolicy::Allow(
+      policy, CSPDirective::FrameSrc,
+      GURL("filesystem:https://example.com/file.txt"), false, &context,
+      SourceLocation()));
+  EXPECT_FALSE(ContentSecurityPolicy::Allow(
+      policy, CSPDirective::FrameSrc,
+      GURL("filesystem:https://not-example.com/file.txt"), false, &context,
+      SourceLocation()));
+
+  // Register 'https' as bypassing CSP, which should now bypass is entirely.
+  context.AddSchemeToBypassCSP("https");
+
+  EXPECT_TRUE(ContentSecurityPolicy::Allow(
+      policy, CSPDirective::FrameSrc,
+      GURL("filesystem:https://example.com/file.txt"), false, &context,
+      SourceLocation()));
+  EXPECT_TRUE(ContentSecurityPolicy::Allow(
+      policy, CSPDirective::FrameSrc,
+      GURL("filesystem:https://not-example.com/file.txt"), false, &context,
+      SourceLocation()));
+}
+
+TEST(ContentSecurityPolicy, BlobAllowedWhenBypassingCSP) {
+  CSPContextTest context;
+  std::vector<std::string> report_end_points;  // empty
+  CSPSource source("https", "example.com", false, url::PORT_UNSPECIFIED, false,
+                   "");
+  CSPSourceList source_list(false, false, {source});
+  ContentSecurityPolicy policy(
+      EmptyCspHeader(), {CSPDirective(CSPDirective::DefaultSrc, source_list)},
+      report_end_points);
+
+  EXPECT_FALSE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
+                                            GURL("blob:https://example.com/"),
+                                            false, &context, SourceLocation()));
+  EXPECT_FALSE(ContentSecurityPolicy::Allow(
+      policy, CSPDirective::FrameSrc, GURL("blob:https://not-example.com/"),
+      false, &context, SourceLocation()));
+
+  // Register 'https' as bypassing CSP, which should now bypass is entirely.
+  context.AddSchemeToBypassCSP("https");
+
+  EXPECT_TRUE(ContentSecurityPolicy::Allow(policy, CSPDirective::FrameSrc,
+                                           GURL("blob:https://example.com/"),
+                                           false, &context, SourceLocation()));
+  EXPECT_TRUE(ContentSecurityPolicy::Allow(
+      policy, CSPDirective::FrameSrc, GURL("blob:https://not-example.com/"),
+      false, &context, SourceLocation()));
 }
 
 }  // namespace content

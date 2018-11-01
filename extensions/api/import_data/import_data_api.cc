@@ -50,7 +50,6 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 
-#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 
 #include "content/public/browser/render_view_host.h"
@@ -60,6 +59,7 @@
 #include "extensions/schema/import_data.h"
 
 #include "components/strings/grit/components_strings.h"
+#include "ui/vivaldi_ui_utils.h"
 
 class Browser;
 
@@ -104,14 +104,6 @@ bool ProfileSingletonFactory::getProfileRequested() {
 }
 
 namespace {
-
-Browser* GetBrowserFromWebContents(WebContents* web_contents) {
-  DCHECK(web_contents);
-  gfx::NativeWindow window =
-      platform_util::GetTopLevel(web_contents->GetNativeView());
-  DCHECK(window);
-  return chrome::FindBrowserWithWindow(window);
-}
 
 // These are really flags, but never sent as flags.
 static struct ImportItemToStringMapping {
@@ -251,8 +243,8 @@ void ImportDataAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI> >::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<ImportDataAPI>*
@@ -648,8 +640,8 @@ ImportDataSavePageFunction::ImportDataSavePageFunction() {}
 ImportDataSavePageFunction::~ImportDataSavePageFunction() {}
 
 bool ImportDataSavePageFunction::RunAsync() {
-  Browser* browser =
-      GetBrowserFromWebContents(dispatcher()->GetAssociatedWebContents());
+  Browser* browser = ::vivaldi::ui_tools::GetBrowserFromWebContents(
+      dispatcher()->GetAssociatedWebContents());
 
   WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
   current_tab->OnSavePage();
@@ -662,8 +654,8 @@ ImportDataOpenPageFunction::ImportDataOpenPageFunction() {}
 ImportDataOpenPageFunction::~ImportDataOpenPageFunction() {}
 
 bool ImportDataOpenPageFunction::RunAsync() {
-  Browser* browser =
-      GetBrowserFromWebContents(dispatcher()->GetAssociatedWebContents());
+  Browser* browser = ::vivaldi::ui_tools::GetBrowserFromWebContents(
+      dispatcher()->GetAssociatedWebContents());
   browser->OpenFile();
   SendResponse(true);
   return true;
@@ -794,8 +786,8 @@ bool ImportDataGetBlockThirdPartyCookiesFunction::RunAsync() {
 ImportDataOpenTaskManagerFunction::~ImportDataOpenTaskManagerFunction() {}
 
 bool ImportDataOpenTaskManagerFunction::RunAsync() {
-  Browser* browser =
-      GetBrowserFromWebContents(dispatcher()->GetAssociatedWebContents());
+  Browser* browser = ::vivaldi::ui_tools::GetBrowserFromWebContents(
+      dispatcher()->GetAssociatedWebContents());
 
   chrome::OpenTaskManager(browser);
 
@@ -804,21 +796,6 @@ bool ImportDataOpenTaskManagerFunction::RunAsync() {
 }
 
 ImportDataOpenTaskManagerFunction::ImportDataOpenTaskManagerFunction() {}
-
-ImportDataShowDevToolsFunction::ImportDataShowDevToolsFunction() {}
-
-ImportDataShowDevToolsFunction::~ImportDataShowDevToolsFunction() {}
-
-bool ImportDataShowDevToolsFunction::RunAsync() {
-  Browser* browser =
-      GetBrowserFromWebContents(dispatcher()->GetAssociatedWebContents());
-  WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
-  if (current_tab && current_tab->GetMainFrame()) {
-    DevToolsWindow::InspectElement(current_tab->GetMainFrame(), 0, 0);
-  }
-  SendResponse(true);
-  return true;
-}
 
 ImportDataGetStartupActionFunction::ImportDataGetStartupActionFunction() {}
 

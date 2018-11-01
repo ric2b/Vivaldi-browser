@@ -23,7 +23,6 @@ class ThreeDAPIInfoBarDelegate;
 
 #if defined(OS_ANDROID)
 class MediaStreamInfoBarDelegateAndroid;
-class MediaThrottleInfoBarDelegate;
 
 namespace offline_pages {
 class OfflinePageInfoBarDelegate;
@@ -119,7 +118,7 @@ class InfoBarDelegate {
     GOOGLE_API_KEYS_INFOBAR_DELEGATE = 45,
     OBSOLETE_SYSTEM_INFOBAR_DELEGATE = 46,
     SESSION_CRASHED_INFOBAR_DELEGATE = 47,
-    WEBSITE_SETTINGS_INFOBAR_DELEGATE = 48,
+    PAGE_INFO_INFOBAR_DELEGATE = 48,
     AUTOFILL_CC_INFOBAR_DELEGATE = 49,
     TRANSLATE_INFOBAR_DELEGATE = 50,
     IOS_CHROME_SAVE_PASSWORD_INFOBAR_DELEGATE = 51,
@@ -229,7 +228,6 @@ class InfoBarDelegate {
 #if defined(OS_ANDROID)
   virtual MediaStreamInfoBarDelegateAndroid*
   AsMediaStreamInfoBarDelegateAndroid();
-  virtual MediaThrottleInfoBarDelegate* AsMediaThrottleInfoBarDelegate();
   virtual offline_pages::OfflinePageInfoBarDelegate*
   AsOfflinePageInfoBarDelegate();
 #endif

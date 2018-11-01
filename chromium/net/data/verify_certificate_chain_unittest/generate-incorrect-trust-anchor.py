@@ -25,11 +25,14 @@ bogus_root = common.create_self_signed_root_certificate('BogusRoot')
 chain = [target, intermediate]
 trusted = common.TrustAnchor(bogus_root, constrained=False)
 time = common.DEFAULT_TIME
+key_purpose = common.DEFAULT_KEY_PURPOSE
 verify_result = False
-errors = """[Context] Processing Certificate
-  index: 0
-      [Error] Signature verification failed
-      [Error] VerifySignedData failed
+errors = """----- Certificate i=1 (CN=Intermediate) -----
+ERROR: Signature verification failed
+ERROR: VerifySignedData failed
+ERROR: subject does not match issuer
+
 """
 
-common.write_test_file(__doc__, chain, trusted, time, verify_result, errors)
+common.write_test_file(__doc__, chain, trusted, time, key_purpose,
+                       verify_result, errors)

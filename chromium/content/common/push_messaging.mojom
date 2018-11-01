@@ -68,12 +68,19 @@ enum PushRegistrationStatus {
   // already exists.
   SENDER_ID_MISMATCH = 13,
 
+  // Registration failed because storage was corrupt. It will be retried
+  // automatically after unsubscribing to fix the corruption.
+  STORAGE_CORRUPT = 14,
+
+  // Registration failed because the renderer was shut down.
+  RENDERER_SHUTDOWN = 15,
+
   // NOTE: Do not renumber these as that would confuse interpretation of
   // previously logged data. When making changes, also update the enum list
   // in tools/metrics/histograms/histograms.xml to keep it in sync, and
   // update LAST below.
 
-  LAST = SENDER_ID_MISMATCH
+  LAST = RENDERER_SHUTDOWN
 };
 
 enum PushErrorType {
@@ -106,15 +113,21 @@ enum PushGetRegistrationStatus {
   // incognito, but we tell JS registration not found to not reveal incognito.
   INCOGNITO_REGISTRATION_NOT_FOUND = 4,
 
-  // Registration failed because the public key could not be retrieved.
-  PUBLIC_KEY_UNAVAILABLE = 5,
+  // Getting the registration failed because public key could not be retrieved.
+  // PUBLIC_KEY_UNAVAILABLE = 5,
+
+  // Getting the registration failed because storage was corrupt.
+  STORAGE_CORRUPT = 6,
+
+  // Getting the registration failed because the renderer was shut down.
+  RENDERER_SHUTDOWN = 7,
 
   // NOTE: Do not renumber these as that would confuse interpretation of
   // previously logged data. When making changes, also update the enum list
   // in tools/metrics/histograms/histograms.xml to keep it in sync, and
   // update LAST below.
 
-  LAST = PUBLIC_KEY_UNAVAILABLE
+  LAST = RENDERER_SHUTDOWN
 };
 
 enum PushPermissionStatus {

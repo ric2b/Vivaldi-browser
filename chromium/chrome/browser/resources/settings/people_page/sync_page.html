@@ -32,6 +32,12 @@
         margin-top: 20px;
       }
 
+      #existingPassphrase {
+        /* This particular list frame is not indented. */
+        -webkit-padding-start: var(--settings-box-row-padding);
+        border-bottom: var(--settings-separator-line);
+      }
+
       #existingPassphraseContainer,
       #passphraseRecoverHint {
         align-items: center;
@@ -52,16 +58,47 @@
         border-top: var(--settings-separator-line);
       }
     </style>
-    <div id="[[pages.SPINNER]]" class="settings-box first"
-        hidden$="[[!isStatus_(pages.SPINNER, pageStatus_)]]">
+    <div id="[[pages_.SPINNER]]" class="settings-box first"
+        hidden$="[[!isStatus_(pages_.SPINNER, pageStatus_)]]">
       $i18n{syncLoading}
     </div>
-    <div id="[[pages.TIMEOUT]]" class="settings-box first"
-        hidden$="[[!isStatus_(pages.TIMEOUT, pageStatus_)]]">
+    <div id="[[pages_.TIMEOUT]]" class="settings-box first"
+        hidden$="[[!isStatus_(pages_.TIMEOUT, pageStatus_)]]">
       $i18n{syncTimeout}
     </div>
-    <div id="[[pages.CONFIGURE]]"
-        hidden$="[[!isStatus_(pages.CONFIGURE, pageStatus_)]]">
+    <div id="[[pages_.CONFIGURE]]"
+        hidden$="[[!isStatus_(pages_.CONFIGURE, pageStatus_)]]">
+      <template is="dom-if" if="[[syncPrefs.passphraseRequired]]">
+        <div id="existingPassphrase" class="list-frame">
+          <div class="list-item">
+            <span>
+              [[enterPassphrasePrompt_(syncPrefs.passphraseTypeIsCustom)]]
+              <a href="$i18nRaw{syncErrorHelpUrl}" target="_blank">
+                $i18n{learnMore}
+              </a>
+            </span>
+          </div>
+          <div id="existingPassphraseContainer" class="list-item">
+            <paper-input id="existingPassphraseInput" type="password"
+                value="{{existingPassphrase_}}"
+                placeholder="$i18n{passphrasePlaceholder}"
+                error-message="$i18n{incorrectPassphraseError}">
+              <iron-a11y-keys id="keys" keys="enter"
+                  on-keys-pressed="onSubmitExistingPassphraseTap_">
+              </iron-a11y-keys>
+            </paper-input>
+            <paper-button id="submitExistingPassphrase"
+                on-tap="onSubmitExistingPassphraseTap_" class="action-button"
+                disabled="[[!existingPassphrase_]]">
+              $i18n{submitPassphraseButton}
+            </paper-button>
+          </div>
+          <div id="passphraseRecoverHint" class="list-item">
+            <span>$i18nRaw{passphraseRecover}</span>
+          </div>
+        </div>
+      </template>
+
       <div class="settings-box first">
         <div id="syncEverythingCheckboxLabel" class="start">
           $i18n{syncEverythingCheckboxLabel}
@@ -213,26 +250,35 @@
       </div>
 
       <div class="settings-box two-line" actionable
-          on-tap="onManageSyncedDataTap_">
+          on-tap="onActivityControlsTap_">
         <div class="start">
-          $i18n{manageSyncedDataTitle}
-          <div class="secondary" id="manageSyncedDataSecondary">
-            $i18n{manageSyncedDataDescription}
+          $i18n{personalizeGoogleServicesTitle}
+          <div class="secondary" id="activityControlsSecondary">
+            $i18n{personalizeGoogleServicesText}
           </div>
         </div>
         <button class="icon-external" is="paper-icon-button-light"
-            aria-label="$i18n{manageSyncedDataTitle}"
-            aria-describedby="manageSyncedDataSecondary"></button>
+            aria-label="$i18n{personalizeGoogleServicesTitle}"
+            aria-describedby="activityControlsSecondary"></button>
       </div>
 
-      <div class="settings-box two-line single-column">
+      <div class="settings-box" actionable on-tap="onManageSyncedDataTap_">
+        <div class="start">
+          $i18n{manageSyncedDataTitle}
+        </div>
+        <button class="icon-external" is="paper-icon-button-light"
+            aria-label="$i18n{manageSyncedDataTitle}"></button>
+      </div>
+
+      <div id="encryptionDescription" hidden="[[syncPrefs.passphraseRequired]]"
+          class="settings-box two-line single-column">
         <div>$i18n{encryptionOptionsTitle}</div>
         <div class="secondary">$i18n{syncDataEncryptedText}</div>
       </div>
 
       <div id="encryptionRadioGroupContainer" class="list-frame"
           hidden="[[syncPrefs.passphraseRequired]]">
-        <paper-radio-group
+        <paper-radio-group disabled$="[[syncPrefs.encryptAllData]]"
             selected="[[selectedEncryptionRadio_(
                 syncPrefs.passphraseTypeIsCustom)]]"
             on-paper-radio-group-changed="onEncryptionRadioSelectionChanged_">
@@ -283,37 +329,6 @@
                                                          confirmation_)]]">
               $i18n{save}
             </paper-button>
-          </div>
-        </div>
-      </template>
-
-      <template is="dom-if" if="[[syncPrefs.passphraseRequired]]">
-        <div class="list-frame">
-          <div class="list-item">
-            <span>
-              [[enterPassphrasePrompt_(syncPrefs.passphraseTypeIsCustom)]]
-              <a href="$i18nRaw{syncErrorHelpUrl}" target="_blank">
-                $i18n{learnMore}
-              </a>
-            </span>
-          </div>
-          <div id="existingPassphraseContainer" class="list-item">
-            <paper-input id="existingPassphraseInput" type="password"
-                value="{{existingPassphrase_}}"
-                placeholder="$i18n{passphrasePlaceholder}"
-                error-message="$i18n{incorrectPassphraseError}">
-              <iron-a11y-keys id="keys" keys="enter"
-                  on-keys-pressed="onSubmitExistingPassphraseTap_">
-              </iron-a11y-keys>
-            </paper-input>
-            <paper-button id="submitExistingPassphrase"
-                on-tap="onSubmitExistingPassphraseTap_" class="action-button"
-                disabled="[[!existingPassphrase_]]">
-              $i18n{submitPassphraseButton}
-            </paper-button>
-          </div>
-          <div id="passphraseRecoverHint" class="list-item">
-            <span>$i18nRaw{passphraseRecover}</span>
           </div>
         </div>
       </template>

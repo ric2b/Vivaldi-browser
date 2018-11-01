@@ -32,6 +32,7 @@
 #include "base/threading/thread.h"
 #include "base/win/scoped_comptr.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "media/base/video_color_space.h"
 #include "media/filters/h264_parser.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/media_gpu_export.h"
@@ -73,7 +74,7 @@ class H264ConfigChangeDetector {
   bool DetectConfig(const uint8_t* stream, unsigned int size);
   bool config_changed() const { return config_changed_; }
 
-  gfx::ColorSpace current_color_space() const;
+  VideoColorSpace current_color_space() const;
 
  private:
   // These fields are used to track the SPS/PPS in the H.264 bitstream and
@@ -135,7 +136,8 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   GLenum GetSurfaceInternalFormat() const override;
 
   static VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles(
-      const gpu::GpuPreferences& gpu_preferences);
+      const gpu::GpuPreferences& gpu_preferences,
+      const gpu::GpuDriverBugWorkarounds& workarounds);
 
   // Preload dlls required for decoding.
   static void PreSandboxInitialization();
@@ -241,7 +243,8 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // Notifies the client about the availability of a picture.
   void NotifyPictureReady(int picture_buffer_id,
                           int input_buffer_id,
-                          const gfx::ColorSpace& color_space);
+                          const gfx::ColorSpace& color_space,
+                          bool allow_overlay);
 
   // Sends pending input buffer processed acks to the client if we don't have
   // output samples waiting to be processed.
@@ -534,9 +537,6 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // True if we should use DXGI keyed mutexes to synchronize between the two
   // contexts.
   bool use_keyed_mutex_;
-
-  // Color spaced used when initializing the dx11 format converter.
-  gfx::ColorSpace dx11_converter_color_space_;
 
   // Outputs from the dx11 format converter will be in this color space.
   gfx::ColorSpace dx11_converter_output_color_space_;

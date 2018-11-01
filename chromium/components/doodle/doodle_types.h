@@ -5,8 +5,15 @@
 #ifndef COMPONENTS_DOODLE_DOODLE_TYPES_H_
 #define COMPONENTS_DOODLE_DOODLE_TYPES_H_
 
-#include "base/time/time.h"
+#include <memory>
+#include <string>
+
+#include "base/optional.h"
 #include "url/gurl.h"
+
+namespace base {
+class DictionaryValue;
+}
 
 namespace doodle {
 
@@ -27,11 +34,16 @@ enum class DoodleType {
   SLIDESHOW,
 };
 
-// Information about a Doodle image. If the image is invalid, the |url| will be
-// empty and invalid. By default the dimensions are 0.
+// Information about a Doodle image. By default the dimensions are 0.
 struct DoodleImage {
-  DoodleImage();
+  DoodleImage(const GURL& url);
   ~DoodleImage();
+
+  static base::Optional<DoodleImage> FromDictionary(
+      const base::DictionaryValue& dict,
+      const base::Optional<GURL>& base_url);
+
+  std::unique_ptr<base::DictionaryValue> ToDictionary() const;
 
   bool operator==(const DoodleImage& other) const;
   bool operator!=(const DoodleImage& other) const;
@@ -48,28 +60,28 @@ struct DoodleImage {
 // All information about a current doodle that can be fetched from the remote
 // end. By default, all URLs are empty and therefore invalid.
 struct DoodleConfig {
-  DoodleConfig();
+  DoodleConfig(DoodleType doodle_type, const DoodleImage& large_image);
   DoodleConfig(const DoodleConfig& config);  // = default;
   ~DoodleConfig();
 
-  // Checks whether this config is "equivalent" to the other. This compares all
-  // fields for equality, except for |expiry_date|.
-  bool IsEquivalent(const DoodleConfig& other) const;
+  static base::Optional<DoodleConfig> FromDictionary(
+      const base::DictionaryValue& dict,
+      const base::Optional<GURL>& base_url);
+
+  std::unique_ptr<base::DictionaryValue> ToDictionary() const;
+
+  bool operator==(const DoodleConfig& other) const;
+  bool operator!=(const DoodleConfig& other) const;
 
   DoodleType doodle_type;
   std::string alt_text;
   std::string interactive_html;
 
-  GURL search_url;
   GURL target_url;
-  GURL fullpage_interactive_url;
 
   DoodleImage large_image;
-  DoodleImage large_cta_image;
-  DoodleImage transparent_large_image;
-
-  // TODO(treib,fhorschig): Don't expose this? Clients don't care about it.
-  base::TimeDelta time_to_live;
+  base::Optional<DoodleImage> large_cta_image;
+  base::Optional<DoodleImage> transparent_large_image;
 
   // Copying and assignment allowed.
 };

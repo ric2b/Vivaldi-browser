@@ -89,29 +89,32 @@ enum ShelfAction {
   SHELF_ACTION_APP_LIST_SHOWN,
 };
 
-typedef int ShelfID;
-const int kInvalidShelfID = 0;
+// Shelf IDs are sequential values assigned to shelf items by ShelfModel for
+// runtime use; they are not persisted across restarts of the ash environment.
+using ShelfID = uint32_t;
+const ShelfID kInvalidShelfID = 0u;
 
 // The type of a shelf item.
 enum ShelfItemType {
   // Represents a running app panel.
   TYPE_APP_PANEL,
 
-  // Represents a pinned shortcut to an app.
-  TYPE_APP_SHORTCUT,
+  // Represents a pinned shortcut to an app, the app may be running or not.
+  TYPE_PINNED_APP,
 
   // Toggles visiblity of the app list.
   TYPE_APP_LIST,
 
-  // The browser shortcut button.
+  // The browser shortcut button, the browser may be running or not.
   TYPE_BROWSER_SHORTCUT,
 
-  // Represents an app: Extension "V1" (legacy packaged and hosted) apps,
-  //                    Extension "V2" (platform) apps,
-  //                    ARC (App Runtime for Chrome - Android Play Store) apps.
+  // Represents an unpinned running app window. Supports these app types:
+  // - Extension "V1" (legacy packaged and hosted) apps,
+  // - Extension "V2" (platform) apps,
+  // - ARC (App Runtime for Chrome - Android Play Store) apps.
   TYPE_APP,
 
-  // Represents a dialog.
+  // Represents an open dialog.
   TYPE_DIALOG,
 
   // Default value.

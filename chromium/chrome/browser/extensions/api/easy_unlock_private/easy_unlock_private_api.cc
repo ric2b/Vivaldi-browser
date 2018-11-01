@@ -53,7 +53,7 @@
 #include "ui/gfx/range/range.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/common/system/chromeos/devicetype_utils.h"
+#include "ash/system/devicetype_utils.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager_factory.h"
 #include "components/user_manager/user.h"
@@ -68,8 +68,8 @@ namespace easy_unlock_private = api::easy_unlock_private;
 
 namespace {
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<EasyUnlockPrivateAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<EasyUnlockPrivateAPI>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // Utility method for getting the API's crypto delegate.
 EasyUnlockPrivateCryptoDelegate* GetCryptoDelegate(
@@ -1049,16 +1049,11 @@ EasyUnlockPrivateSetAutoPairingResultFunction::Run() {
 }
 
 EasyUnlockPrivateFindSetupConnectionFunction::
-    EasyUnlockPrivateFindSetupConnectionFunction()
-    : bluetooth_throttler_(new cryptauth::BluetoothThrottlerImpl(
-          base::MakeUnique<base::DefaultTickClock>())) {}
+    EasyUnlockPrivateFindSetupConnectionFunction() {}
 
 EasyUnlockPrivateFindSetupConnectionFunction::
     ~EasyUnlockPrivateFindSetupConnectionFunction() {
-  // |connection_finder_| has a raw pointer to |bluetooth_throttler_|, so it
-  // should be destroyed first.
   connection_finder_.reset();
-  bluetooth_throttler_.reset();
 }
 
 void EasyUnlockPrivateFindSetupConnectionFunction::
@@ -1092,7 +1087,7 @@ bool EasyUnlockPrivateFindSetupConnectionFunction::RunAsync() {
       new proximity_auth::BluetoothLowEnergyConnectionFinder(
           cryptauth::RemoteDevice(), params->setup_service_uuid,
           proximity_auth::BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE,
-          nullptr, bluetooth_throttler_.get(), 3));
+          nullptr, cryptauth::BluetoothThrottlerImpl::GetInstance(), 3));
 
   connection_finder_->Find(base::Bind(
       &EasyUnlockPrivateFindSetupConnectionFunction::OnConnectionFound, this));

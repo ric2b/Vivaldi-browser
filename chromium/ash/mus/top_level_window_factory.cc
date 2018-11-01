@@ -4,10 +4,6 @@
 
 #include "ash/mus/top_level_window_factory.h"
 
-#include "ash/common/wm/container_finder.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/mus/disconnected_app_handler.h"
 #include "ash/mus/frame/detached_title_area_renderer.h"
 #include "ash/mus/non_client_frame_controller.h"
@@ -16,6 +12,10 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
+#include "ash/shell.h"
+#include "ash/wm/container_finder.h"
+#include "ash/wm/window_state.h"
+#include "ash/wm_window.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
@@ -73,7 +73,7 @@ RootWindowController* GetRootWindowControllerForNewTopLevelWindow(
     }
   }
   return RootWindowController::ForWindow(
-      WmShell::Get()->GetRootWindowForNewWindows()->aura_window());
+      Shell::GetWmRootWindowForNewWindows()->aura_window());
 }
 
 // Returns the bounds for the new window.
@@ -131,9 +131,8 @@ aura::Window* CreateAndParentTopLevelWindowInRoot(
   aura::Window* context = nullptr;
   aura::Window* container_window = nullptr;
   if (GetInitialContainerId(*properties, &container_id)) {
-    container_window = root_window_controller->GetWindow()
-                           ->GetChildByShellWindowId(container_id)
-                           ->aura_window();
+    container_window =
+        root_window_controller->GetRootWindow()->GetChildById(container_id);
   } else {
     context = root_window_controller->GetRootWindow();
   }
@@ -160,9 +159,8 @@ aura::Window* CreateAndParentTopLevelWindowInRoot(
     // Pick a parent so display information is obtained. Will pick the real one
     // once transient parent found.
     aura::Window* unparented_control_container =
-        root_window_controller->GetWindow()
-            ->GetChildByShellWindowId(kShellWindowId_UnparentedControlContainer)
-            ->aura_window();
+        root_window_controller->GetRootWindow()->GetChildById(
+            kShellWindowId_UnparentedControlContainer);
     // DetachedTitleAreaRendererForClient is owned by the client.
     DetachedTitleAreaRendererForClient* renderer =
         new DetachedTitleAreaRendererForClient(unparented_control_container,
@@ -172,7 +170,8 @@ aura::Window* CreateAndParentTopLevelWindowInRoot(
 
   aura::Window* window = new aura::Window(nullptr);
   aura::SetWindowType(window, window_type);
-  window->SetProperty(aura::client::kTopLevelWindowInWM, true);
+  window->SetProperty(aura::client::kEmbedType,
+                      aura::client::WindowEmbedType::TOP_LEVEL_IN_WM);
   ApplyProperties(window, property_converter, *properties);
   window->Init(ui::LAYER_TEXTURED);
   window->SetBounds(bounds);
@@ -188,8 +187,7 @@ aura::Window* CreateAndParentTopLevelWindowInRoot(
                   .bounds()
                   .OffsetFromOrigin();
     gfx::Rect bounds_in_screen(origin, bounds.size());
-    ash::wm::GetDefaultParent(WmWindow::Get(context), WmWindow::Get(window),
-                              bounds_in_screen)
+    ash::wm::GetDefaultParent(WmWindow::Get(window), bounds_in_screen)
         ->aura_window()
         ->AddChild(window);
   }

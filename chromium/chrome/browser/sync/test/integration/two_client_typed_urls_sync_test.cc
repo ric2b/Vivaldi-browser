@@ -26,6 +26,7 @@ using typed_urls_helper::AddUrlToHistoryWithTransition;
 using typed_urls_helper::AreVisitsEqual;
 using typed_urls_helper::AreVisitsUnique;
 using typed_urls_helper::CheckURLRowVectorsAreEqual;
+using typed_urls_helper::CheckSyncDirectoryHasURL;
 using typed_urls_helper::DeleteUrlFromHistory;
 using typed_urls_helper::GetTypedUrlsFromClient;
 using typed_urls_helper::GetUrlFromClient;
@@ -76,7 +77,6 @@ class TwoClientTypedUrlsSyncTest : public SyncTest {
   DISALLOW_COPY_AND_ASSIGN(TwoClientTypedUrlsSyncTest);
 };
 
-// TCM: 3728323
 IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, E2E_ENABLED(Add)) {
   // Use a randomized URL to prevent test collisions.
   const base::string16 kHistoryUrl = ASCIIToUTF16(base::StringPrintf(
@@ -120,15 +120,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, AddExpired) {
   // Second client should still have no URLs since this one is expired.
   urls = GetTypedUrlsFromClient(1);
   ASSERT_EQ(0U, urls.size());
+
+  // Sync should not receive expired visits.
+  EXPECT_FALSE(CheckSyncDirectoryHasURL(0, new_url));
 }
 
-// Flake on mac: http://crbug/115526
-#if defined(OS_MACOSX)
-#define MAYBE_AddExpiredThenUpdate DISABLED_AddExpiredThenUpdate
-#else
-#define MAYBE_AddExpiredThenUpdate AddExpiredThenUpdate
-#endif
-IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, MAYBE_AddExpiredThenUpdate) {
+IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, AddExpiredThenUpdate) {
   const base::string16 kHistoryUrl(
       ASCIIToUTF16("http://www.add-one-history.google.com/"));
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -153,6 +150,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, MAYBE_AddExpiredThenUpdate) {
   urls = GetTypedUrlsFromClient(1);
   ASSERT_EQ(0U, urls.size());
 
+  // Sync should not receive expired visits.
+  EXPECT_FALSE(CheckSyncDirectoryHasURL(0, new_url));
+
   // Now drive an update on the first client.
   AddUrlToHistory(0, new_url);
 
@@ -162,9 +162,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, MAYBE_AddExpiredThenUpdate) {
   // Second client should have the URL now.
   urls = GetTypedUrlsFromClient(1);
   ASSERT_EQ(1U, urls.size());
+
+  // Sync should receive the new visit.
+  EXPECT_TRUE(CheckSyncDirectoryHasURL(0, new_url));
+  EXPECT_TRUE(CheckSyncDirectoryHasURL(1, new_url));
 }
 
-// TCM: 3705291
 IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, E2E_ENABLED(AddThenDelete)) {
   // Use a randomized URL to prevent test collisions.
   const base::string16 kHistoryUrl = ASCIIToUTF16(base::StringPrintf(
@@ -191,7 +194,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest, E2E_ENABLED(AddThenDelete)) {
   ASSERT_EQ(initial_count, GetTypedUrlsFromClient(1).size());
 }
 
-// TCM: 3643277
 IN_PROC_BROWSER_TEST_F(TwoClientTypedUrlsSyncTest,
                        E2E_ENABLED(DisableEnableSync)) {
   const base::string16 kUrl1(ASCIIToUTF16("http://history1.google.com/"));

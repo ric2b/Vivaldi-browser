@@ -43,14 +43,14 @@ class PpapiBlinkPlatformImpl::SandboxSupport : public WebSandboxSupport {
   virtual ~SandboxSupport() {}
 
 #if defined(OS_MACOSX)
-  bool loadFont(NSFont* srcFont, CGFontRef* out, uint32_t* fontID) override;
+  bool LoadFont(NSFont* srcFont, CGFontRef* out, uint32_t* fontID) override;
 #elif defined(OS_POSIX)
   SandboxSupport();
-  void getFallbackFontForCharacter(
+  void GetFallbackFontForCharacter(
       WebUChar32 character,
       const char* preferred_locale,
       blink::WebFallbackFont* fallbackFont) override;
-  void getWebFontRenderStyleForStrike(const char* family,
+  void GetWebFontRenderStyleForStrike(const char* family,
                                       int sizeAndStyle,
                                       blink::WebFontRenderStyle* out) override;
 
@@ -66,7 +66,7 @@ class PpapiBlinkPlatformImpl::SandboxSupport : public WebSandboxSupport {
 
 #if defined(OS_MACOSX)
 
-bool PpapiBlinkPlatformImpl::SandboxSupport::loadFont(NSFont* src_font,
+bool PpapiBlinkPlatformImpl::SandboxSupport::LoadFont(NSFont* src_font,
                                                       CGFontRef* out,
                                                       uint32_t* font_id) {
   // TODO(brettw) this should do the something similar to what
@@ -82,7 +82,7 @@ PpapiBlinkPlatformImpl::SandboxSupport::SandboxSupport()
     : creation_thread_(base::PlatformThread::CurrentId()) {
 }
 
-void PpapiBlinkPlatformImpl::SandboxSupport::getFallbackFontForCharacter(
+void PpapiBlinkPlatformImpl::SandboxSupport::GetFallbackFontForCharacter(
     WebUChar32 character,
     const char* preferred_locale,
     blink::WebFallbackFont* fallbackFont) {
@@ -94,18 +94,20 @@ void PpapiBlinkPlatformImpl::SandboxSupport::getFallbackFontForCharacter(
   if (iter != unicode_font_families_.end()) {
     fallbackFont->name = iter->second.name;
     fallbackFont->filename = iter->second.filename;
-    fallbackFont->fontconfigInterfaceId = iter->second.fontconfigInterfaceId;
-    fallbackFont->ttcIndex = iter->second.ttcIndex;
-    fallbackFont->isBold = iter->second.isBold;
-    fallbackFont->isItalic = iter->second.isItalic;
+    fallbackFont->fontconfig_interface_id =
+        iter->second.fontconfig_interface_id;
+    fallbackFont->ttc_index = iter->second.ttc_index;
+    fallbackFont->is_bold = iter->second.is_bold;
+    fallbackFont->is_italic = iter->second.is_italic;
     return;
   }
 
-  GetFallbackFontForCharacter(character, preferred_locale, fallbackFont);
+  content::GetFallbackFontForCharacter(character, preferred_locale,
+                                       fallbackFont);
   unicode_font_families_.insert(std::make_pair(character, *fallbackFont));
 }
 
-void PpapiBlinkPlatformImpl::SandboxSupport::getWebFontRenderStyleForStrike(
+void PpapiBlinkPlatformImpl::SandboxSupport::GetWebFontRenderStyleForStrike(
     const char* family,
     int sizeAndStyle,
     blink::WebFontRenderStyle* out) {
@@ -134,21 +136,21 @@ void PpapiBlinkPlatformImpl::Shutdown() {
 #endif
 }
 
-blink::WebThread* PpapiBlinkPlatformImpl::currentThread() {
-  return BlinkPlatformImpl::currentThread();
+blink::WebThread* PpapiBlinkPlatformImpl::CurrentThread() {
+  return BlinkPlatformImpl::CurrentThread();
 }
 
-blink::WebClipboard* PpapiBlinkPlatformImpl::clipboard() {
+blink::WebClipboard* PpapiBlinkPlatformImpl::Clipboard() {
   NOTREACHED();
   return NULL;
 }
 
-blink::WebFileUtilities* PpapiBlinkPlatformImpl::fileUtilities() {
+blink::WebFileUtilities* PpapiBlinkPlatformImpl::GetFileUtilities() {
   NOTREACHED();
   return NULL;
 }
 
-blink::WebSandboxSupport* PpapiBlinkPlatformImpl::sandboxSupport() {
+blink::WebSandboxSupport* PpapiBlinkPlatformImpl::GetSandboxSupport() {
 #if !defined(OS_ANDROID) && !defined(OS_WIN)
   return sandbox_support_.get();
 #else
@@ -160,24 +162,24 @@ bool PpapiBlinkPlatformImpl::sandboxEnabled() {
   return true;  // Assume PPAPI is always sandboxed.
 }
 
-unsigned long long PpapiBlinkPlatformImpl::visitedLinkHash(
+unsigned long long PpapiBlinkPlatformImpl::VisitedLinkHash(
     const char* canonical_url,
     size_t length) {
   NOTREACHED();
   return 0;
 }
 
-bool PpapiBlinkPlatformImpl::isLinkVisited(unsigned long long link_hash) {
+bool PpapiBlinkPlatformImpl::IsLinkVisited(unsigned long long link_hash) {
   NOTREACHED();
   return false;
 }
 
-void PpapiBlinkPlatformImpl::createMessageChannel(
-    blink::WebMessagePortChannel** channel1,
-    blink::WebMessagePortChannel** channel2) {
+void PpapiBlinkPlatformImpl::CreateMessageChannel(
+    std::unique_ptr<blink::WebMessagePortChannel>* channel1,
+    std::unique_ptr<blink::WebMessagePortChannel>* channel2) {
   NOTREACHED();
-  *channel1 = NULL;
-  *channel2 = NULL;
+  *channel1 = nullptr;
+  *channel2 = nullptr;
 }
 
 void PpapiBlinkPlatformImpl::setCookies(
@@ -194,34 +196,34 @@ blink::WebString PpapiBlinkPlatformImpl::cookies(
   return blink::WebString();
 }
 
-blink::WebString PpapiBlinkPlatformImpl::defaultLocale() {
-  return blink::WebString::fromUTF8("en");
+blink::WebString PpapiBlinkPlatformImpl::DefaultLocale() {
+  return blink::WebString::FromUTF8("en");
 }
 
-blink::WebThemeEngine* PpapiBlinkPlatformImpl::themeEngine() {
+blink::WebThemeEngine* PpapiBlinkPlatformImpl::ThemeEngine() {
   NOTREACHED();
   return NULL;
 }
 
-blink::WebURLLoader* PpapiBlinkPlatformImpl::createURLLoader() {
+blink::WebURLLoader* PpapiBlinkPlatformImpl::CreateURLLoader() {
   NOTREACHED();
   return NULL;
 }
 
-void PpapiBlinkPlatformImpl::getPluginList(
+void PpapiBlinkPlatformImpl::GetPluginList(
     bool refresh,
     const blink::WebSecurityOrigin& mainFrameOrigin,
     blink::WebPluginListBuilder* builder) {
   NOTREACHED();
 }
 
-blink::WebData PpapiBlinkPlatformImpl::loadResource(const char* name) {
+blink::WebData PpapiBlinkPlatformImpl::LoadResource(const char* name) {
   NOTREACHED();
   return blink::WebData();
 }
 
 blink::WebStorageNamespace*
-PpapiBlinkPlatformImpl::createLocalStorageNamespace() {
+PpapiBlinkPlatformImpl::CreateLocalStorageNamespace() {
   NOTREACHED();
   return 0;
 }
@@ -236,7 +238,7 @@ void PpapiBlinkPlatformImpl::dispatchStorageEvent(
   NOTREACHED();
 }
 
-int PpapiBlinkPlatformImpl::databaseDeleteFile(
+int PpapiBlinkPlatformImpl::DatabaseDeleteFile(
     const blink::WebString& vfs_file_name,
     bool sync_dir) {
   NOTREACHED();

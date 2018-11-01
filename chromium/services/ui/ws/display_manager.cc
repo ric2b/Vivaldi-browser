@@ -8,11 +8,12 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
+#include "services/ui/display/viewport_metrics.h"
 #include "services/ui/ws/cursor_location_manager.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/event_dispatcher.h"
-#include "services/ui/ws/platform_display_init_params.h"
+#include "services/ui/ws/frame_generator.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/user_display_manager.h"
 #include "services/ui/ws/user_display_manager_delegate.h"
@@ -21,6 +22,11 @@
 #include "services/ui/ws/window_manager_window_tree_factory.h"
 #include "services/ui/ws/window_server_delegate.h"
 #include "services/ui/ws/window_tree.h"
+#include "ui/events/event_rewriter.h"
+
+#if defined(OS_CHROMEOS)
+#include "ui/chromeos/events/event_rewriter_chromeos.h"
+#endif
 
 namespace ui {
 namespace ws {
@@ -33,6 +39,13 @@ DisplayManager::DisplayManager(WindowServer* window_server,
     : window_server_(window_server),
       user_id_tracker_(user_id_tracker),
       next_root_id_(0) {
+#if defined(OS_CHROMEOS)
+  // TODO: http://crbug.com/701468 fix function key preferences and sticky keys.
+  ui::EventRewriterChromeOS::Delegate* delegate = nullptr;
+  ui::EventRewriter* sticky_keys_controller = nullptr;
+  event_rewriter_ = base::MakeUnique<ui::EventRewriterChromeOS>(
+      delegate, sticky_keys_controller);
+#endif
   user_id_tracker_->AddObserver(this);
 }
 
@@ -98,9 +111,9 @@ std::set<const Display*> DisplayManager::displays() const {
   return ret_value;
 }
 
-void DisplayManager::OnDisplayUpdate(Display* display) {
+void DisplayManager::OnDisplayUpdate(const display::Display& display) {
   for (const auto& pair : user_display_managers_)
-    pair.second->OnDisplayUpdate(display->ToDisplay());
+    pair.second->OnDisplayUpdate(display);
 }
 
 Display* DisplayManager::GetDisplayContaining(const ServerWindow* window) {
@@ -161,7 +174,16 @@ void DisplayManager::OnDisplayAcceleratedWidgetAvailable(Display* display) {
   const bool is_first_display = displays_.empty();
   displays_.insert(display);
   pending_displays_.erase(display);
+  if (event_rewriter_)
+    display->platform_display()->AddEventRewriter(event_rewriter_.get());
   window_server_->OnDisplayReady(display, is_first_display);
+}
+
+void DisplayManager::SetHighContrastMode(bool enabled) {
+  for (Display* display : displays_) {
+    display->platform_display()->GetFrameGenerator()->SetHighContrastMode(
+        enabled);
+  }
 }
 
 void DisplayManager::OnActiveUserIdChanged(const UserId& previously_active_id,
@@ -181,50 +203,50 @@ void DisplayManager::OnActiveUserIdChanged(const UserId& previously_active_id,
     current_window_manager_state->Activate(mouse_location_on_screen);
 }
 
-void DisplayManager::OnDisplayAdded(int64_t id,
+void DisplayManager::OnDisplayAdded(const display::Display& display,
                                     const display::ViewportMetrics& metrics) {
-  TRACE_EVENT1("mus-ws", "OnDisplayAdded", "id", id);
-  PlatformDisplayInitParams params;
-  params.display_id = id;
-  params.metrics = metrics;
+  DVLOG(3) << "OnDisplayAdded: " << display.ToString();
 
-  ws::Display* display = new ws::Display(window_server_);
-  display->Init(params, nullptr);
+  ws::Display* ws_display = new ws::Display(window_server_);
+  ws_display->SetDisplay(display);
+  ws_display->Init(metrics, nullptr);
 }
 
-void DisplayManager::OnDisplayRemoved(int64_t id) {
-  TRACE_EVENT1("mus-ws", "OnDisplayRemoved", "id", id);
-  Display* display = GetDisplayById(id);
+void DisplayManager::OnDisplayRemoved(int64_t display_id) {
+  DVLOG(3) << "OnDisplayRemoved: " << display_id;
+  Display* display = GetDisplayById(display_id);
   if (display)
     DestroyDisplay(display);
 }
 
 void DisplayManager::OnDisplayModified(
-    int64_t id,
+    const display::Display& display,
     const display::ViewportMetrics& metrics) {
-  TRACE_EVENT1("mus-ws", "OnDisplayModified", "id", id);
+  DVLOG(3) << "OnDisplayModified: " << display.ToString();
 
-  Display* display = GetDisplayById(id);
-  DCHECK(display);
+  Display* ws_display = GetDisplayById(display.id());
+  DCHECK(ws_display);
 
-  // Update the platform display and check if anything has actually changed.
-  if (!display->platform_display()->UpdateViewportMetrics(metrics))
-    return;
+  // Update the cached display information.
+  ws_display->SetDisplay(display);
 
-  // Send IPCs to WM clients first with new display information.
+  // Send IPC to WMs with new display information.
   std::vector<WindowManagerWindowTreeFactory*> factories =
       window_server_->window_manager_window_tree_factory_set()->GetFactories();
   for (WindowManagerWindowTreeFactory* factory : factories) {
     if (factory->window_tree())
-      factory->window_tree()->OnWmDisplayModified(display->ToDisplay());
+      factory->window_tree()->OnWmDisplayModified(display);
   }
 
-  // Change the root ServerWindow size after sending IPC to WM.
-  display->OnViewportMetricsChanged(metrics);
+  // Update the PlatformWindow and ServerWindow size. This must happen after
+  // OnWmDisplayModified() so the WM has updated the display size.
+  ws_display->OnViewportMetricsChanged(metrics);
+
   OnDisplayUpdate(display);
 }
 
 void DisplayManager::OnPrimaryDisplayChanged(int64_t primary_display_id) {
+  DVLOG(3) << "OnPrimaryDisplayChanged: " << primary_display_id;
   // TODO(kylechar): Send IPCs to WM clients first.
 
   // Send IPCs to any DisplayManagerObservers.

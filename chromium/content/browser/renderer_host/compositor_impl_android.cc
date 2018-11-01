@@ -48,11 +48,12 @@
 #include "cc/trees/layer_tree_settings.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator_android.h"
 #include "components/display_compositor/gl_helper.h"
+#include "components/display_compositor/host_shared_bitmap_manager.h"
+#include "content/browser/compositor/frame_sink_manager_host.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/common/host_shared_bitmap_manager.h"
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/android/compositor_client.h"
 #include "content/public/common/content_switches.h"
@@ -61,6 +62,7 @@
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/gpu_surface_tracker.h"
+#include "gpu/vulkan/features.h"
 #include "gpu/vulkan/vulkan_surface.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
@@ -96,20 +98,20 @@ struct CompositorDependencies {
   CompositorDependencies() : frame_sink_id_allocator(kDefaultClientId) {}
 
   SingleThreadTaskGraphRunner task_graph_runner;
-  cc::SurfaceManager surface_manager;
+  FrameSinkManagerHost frame_sink_manager_host;
   cc::FrameSinkIdAllocator frame_sink_id_allocator;
 
-#if defined(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN)
   scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider;
 #endif
 };
 
-base::LazyInstance<CompositorDependencies> g_compositor_dependencies =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<CompositorDependencies>::DestructorAtExit
+    g_compositor_dependencies = LAZY_INSTANCE_INITIALIZER;
 
 const unsigned int kMaxDisplaySwapBuffers = 1U;
 
-#if defined(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN)
 scoped_refptr<cc::VulkanContextProvider> GetSharedVulkanContextProvider() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableVulkan)) {
@@ -175,6 +177,12 @@ gpu::gles2::ContextCreationAttribHelper GetCompositorContextAttributes(
     // specified
     // (IOW check that a <= 0 && rgb > 0 && rgb <= 565) then alpha should be
     // -1.
+    // TODO(liberato): This condition is memorized in ComositorView.java, to
+    // avoid using two surfaces temporarily during alpha <-> no alpha
+    // transitions.  If these mismatch, then we risk a power regression if the
+    // SurfaceView is not marked as eOpaque (FORMAT_OPAQUE), and we have an
+    // EGL surface with an alpha channel.  SurfaceFlinger needs at least one of
+    // those hints to optimize out alpha blending.
     attributes.alpha_size = 0;
     attributes.red_size = 5;
     attributes.green_size = 6;
@@ -182,6 +190,28 @@ gpu::gles2::ContextCreationAttribHelper GetCompositorContextAttributes(
   }
 
   return attributes;
+}
+
+void CreateContextProviderAfterGpuChannelEstablished(
+    gpu::SurfaceHandle handle,
+    gpu::gles2::ContextCreationAttribHelper attributes,
+    gpu::SharedMemoryLimits shared_memory_limits,
+    Compositor::ContextProviderCallback callback,
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
+  if (!gpu_channel_host)
+    callback.Run(nullptr);
+
+  constexpr bool automatic_flushes = false;
+  constexpr bool support_locking = false;
+  scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
+      new ui::ContextProviderCommandBuffer(
+          std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
+          gpu::GpuStreamPriority::NORMAL, handle,
+          GURL(std::string("chrome://gpu/Compositor::CreateContextProvider")),
+          automatic_flushes, support_locking, shared_memory_limits, attributes,
+          nullptr /* shared_context */,
+          ui::command_buffer_metrics::CONTEXT_TYPE_UNKNOWN);
+  callback.Run(std::move(context_provider));
 }
 
 class AndroidOutputSurface : public cc::OutputSurface {
@@ -201,7 +231,7 @@ class AndroidOutputSurface : public cc::OutputSurface {
   ~AndroidOutputSurface() override = default;
 
   void SwapBuffers(cc::OutputSurfaceFrame frame) override {
-    GetCommandBufferProxy()->SetLatencyInfo(frame.latency_info);
+    GetCommandBufferProxy()->AddLatencyInfo(frame.latency_info);
     if (frame.sub_buffer_rect) {
       DCHECK(frame.sub_buffer_rect->IsEmpty());
       context_provider_->ContextSupport()->CommitOverlayPlanes();
@@ -270,7 +300,7 @@ class AndroidOutputSurface : public cc::OutputSurface {
       const std::vector<ui::LatencyInfo>& latency_info,
       gfx::SwapResult result,
       const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
-    RenderWidgetHostImpl::CompositorFrameDrawn(latency_info);
+    RenderWidgetHostImpl::OnGpuSwapBuffersCompleted(latency_info);
     client_->DidReceiveSwapBuffersAck();
     swap_buffers_callback_.Run();
   }
@@ -282,7 +312,7 @@ class AndroidOutputSurface : public cc::OutputSurface {
   base::WeakPtrFactory<AndroidOutputSurface> weak_ptr_factory_;
 };
 
-#if defined(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN)
 class VulkanOutputSurface : public cc::OutputSurface {
  public:
   explicit VulkanOutputSurface(
@@ -355,8 +385,25 @@ void Compositor::Initialize() {
 }
 
 // static
+void Compositor::CreateContextProvider(
+    gpu::SurfaceHandle handle,
+    gpu::gles2::ContextCreationAttribHelper attributes,
+    gpu::SharedMemoryLimits shared_memory_limits,
+    ContextProviderCallback callback) {
+  BrowserGpuChannelHostFactory::instance()->EstablishGpuChannel(
+      base::Bind(&CreateContextProviderAfterGpuChannelEstablished, handle,
+                 attributes, shared_memory_limits, callback));
+}
+
+// static
 cc::SurfaceManager* CompositorImpl::GetSurfaceManager() {
-  return &g_compositor_dependencies.Get().surface_manager;
+  return g_compositor_dependencies.Get()
+      .frame_sink_manager_host.surface_manager();
+}
+
+// static
+FrameSinkManagerHost* CompositorImpl::GetFrameSinkManagerHost() {
+  return &g_compositor_dependencies.Get().frame_sink_manager_host;
 }
 
 // static
@@ -402,6 +449,10 @@ CompositorImpl::~CompositorImpl() {
   // Clean-up any surface references.
   SetSurface(NULL);
   GetSurfaceManager()->InvalidateFrameSinkId(frame_sink_id_);
+}
+
+bool CompositorImpl::IsForSubframe() {
+  return false;
 }
 
 ui::UIResourceProvider& CompositorImpl::GetUIResourceProvider() {
@@ -594,7 +645,7 @@ void CompositorImpl::HandlePendingCompositorFrameSinkRequest() {
   if (!host_->IsVisible())
     return;
 
-#if defined(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN)
   CreateVulkanOutputSurface()
   if (display_)
     return;
@@ -625,7 +676,7 @@ void CompositorImpl::OnGpuChannelTimeout() {
   LOG(FATAL) << "Timed out waiting for GPU channel.";
 }
 
-#if defined(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN)
 void CompositorImpl::CreateVulkanOutputSurface() {
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableVulkan))
@@ -636,6 +687,7 @@ void CompositorImpl::CreateVulkanOutputSurface() {
   if (!vulkan_context_provider)
     return;
 
+  // TODO(crbug.com/582558): Need to match GL and implement DidSwapBuffers.
   auto vulkan_surface = base::MakeUnique<VulkanOutputSurface>(
       vulkan_context_provider, base::ThreadTaskRunnerHandle::Get());
   if (!vulkan_surface->Initialize(window_))
@@ -718,7 +770,7 @@ void CompositorImpl::InitializeDisplay(
       task_runner, display_output_surface->capabilities().max_frames_pending));
 
   display_.reset(new cc::Display(
-      HostSharedBitmapManager::current(),
+      display_compositor::HostSharedBitmapManager::current(),
       BrowserGpuMemoryBufferManager::current(),
       host_->GetSettings().renderer_settings, frame_sink_id_,
       root_window_->GetBeginFrameSource(), std::move(display_output_surface),
@@ -733,7 +785,7 @@ void CompositorImpl::InitializeDisplay(
           : base::MakeUnique<cc::DirectCompositorFrameSink>(
                 frame_sink_id_, manager, display_.get(), context_provider,
                 nullptr, BrowserGpuMemoryBufferManager::current(),
-                HostSharedBitmapManager::current());
+                display_compositor::HostSharedBitmapManager::current());
 
   display_->SetVisible(true);
   display_->Resize(size_);

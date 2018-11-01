@@ -17,6 +17,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/public/browser/mhtml_extra_parts.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
@@ -53,7 +54,7 @@ class FindTrackingDelegate : public WebContentsDelegate {
     web_contents->SetDelegate(this);
 
     blink::WebFindOptions options;
-    options.matchCase = false;
+    options.match_case = false;
 
     web_contents->Find(global_request_id++, base::UTF8ToUTF16(search_),
                        options);
@@ -455,7 +456,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreMainFrame) {
   // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
   MHTMLGenerationParams params(path);
   params.cache_control_policy =
-      blink::WebFrameSerializerCacheControlPolicy::FailForNoStoreMainFrame;
+      blink::WebFrameSerializerCacheControlPolicy::kFailForNoStoreMainFrame;
 
   GenerateMHTML(params, url);
   // We expect that there was an error (file size -1 indicates an error.)
@@ -486,7 +487,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
   // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
   MHTMLGenerationParams params(path);
   params.cache_control_policy =
-      blink::WebFrameSerializerCacheControlPolicy::FailForNoStoreMainFrame;
+      blink::WebFrameSerializerCacheControlPolicy::kFailForNoStoreMainFrame;
 
   GenerateMHTML(params, url);
   // We expect that there was no error (file size -1 indicates an error.)
@@ -513,7 +514,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreSubFrame) {
   // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
   MHTMLGenerationParams params(path);
   params.cache_control_policy = blink::WebFrameSerializerCacheControlPolicy::
-      SkipAnyFrameOrResourceMarkedNoStore;
+      kSkipAnyFrameOrResourceMarkedNoStore;
 
   GenerateMHTML(params, url);
   // We expect that there was no error (file size -1 indicates an error.)
@@ -576,7 +577,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
   path = path.Append(FILE_PATH_LITERAL("test.mht"));
   MHTMLGenerationParams params(path);
   params.cache_control_policy = blink::WebFrameSerializerCacheControlPolicy::
-      SkipAnyFrameOrResourceMarkedNoStore;
+      kSkipAnyFrameOrResourceMarkedNoStore;
 
   // No special cache control options so we should see both frames.
   std::vector<std::string> expectations = {
@@ -670,6 +671,46 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, RemovePopupOverlay) {
   // Make sure the overlay is removed.
   EXPECT_THAT(mhtml, Not(HasSubstr("class=3D\"overlay")));
   EXPECT_THAT(mhtml, Not(HasSubstr("class=3D\"modal")));
+}
+
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLWithExtraData) {
+  const char kFakeSignalData1[] = "FakeSignalData1";
+  const char kFakeSignalData2[] = "OtherMockDataForSignals";
+  const char kFakeContentType[] = "text/plain";
+  const char kFakeContentLocation[] =
+      "cid:signal-data-62691-645341c4-62b3-478e-a8c5-e0dfccc3ca02@mhtml.blink";
+  base::FilePath path(temp_dir_.GetPath());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+  GURL url(embedded_test_server()->GetURL("/page_with_image.html"));
+  MHTMLGenerationParams params(path);
+
+  // Place the extra data we need into the web contents user data.
+  std::string content_type(kFakeContentType);
+  std::string content_location(kFakeContentLocation);
+
+  // Get the MHTMLExtraParts
+  MHTMLExtraParts* extra_parts =
+      MHTMLExtraParts::FromWebContents(shell()->web_contents());
+
+  // Add two extra data parts to the MHTML.
+  extra_parts->AddExtraMHTMLPart(content_type, content_location,
+                                 kFakeSignalData1);
+  extra_parts->AddExtraMHTMLPart(content_type, content_location,
+                                 kFakeSignalData2);
+  EXPECT_EQ(extra_parts->size(), 2);
+  GenerateMHTML(params, url);
+
+  EXPECT_TRUE(has_mhtml_callback_run());
+
+  std::string mhtml;
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  }
+
+  // Make sure that both extra data parts made it into the mhtml.
+  EXPECT_THAT(mhtml, HasSubstr(kFakeSignalData1));
+  EXPECT_THAT(mhtml, HasSubstr(kFakeSignalData2));
 }
 
 }  // namespace content

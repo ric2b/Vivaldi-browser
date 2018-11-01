@@ -25,16 +25,26 @@ cr.define('settings', function() {
   ManageProfileBrowserProxy.prototype = {
     /**
      * Gets the available profile icons to choose from.
-     * @return {!Promise<!Array<string>>}
+     * @return {!Promise<!Array<!AvatarIcon>>}
      */
     getAvailableIcons: function() {},
 
     /**
-     * Sets the profile's icon and name. There is no response.
-     * @param {!string} iconUrl The new profile URL.
-     * @param {!string} name The new profile name.
+     * Sets the profile's icon to the GAIA avatar.
      */
-    setProfileIconAndName: function(iconUrl, name) {},
+    setProfileIconToGaiaAvatar: function() {},
+
+    /**
+     * Sets the profile's icon to one of the default avatars.
+     * @param {string} iconUrl The new profile URL.
+     */
+    setProfileIconToDefaultAvatar: function(iconUrl) {},
+
+    /**
+     * Sets the profile's name.
+     * @param {string} name The new profile name.
+     */
+    setProfileName: function(name) {},
 
     /**
      * Returns whether the current profile has a shortcut.
@@ -69,8 +79,18 @@ cr.define('settings', function() {
     },
 
     /** @override */
-    setProfileIconAndName: function(iconUrl, name) {
-      chrome.send('setProfileIconAndName', [iconUrl, name]);
+    setProfileIconToGaiaAvatar: function() {
+      chrome.send('setProfileIconToGaiaAvatar');
+    },
+
+    /** @override */
+    setProfileIconToDefaultAvatar: function(iconUrl) {
+      chrome.send('setProfileIconToDefaultAvatar', [iconUrl]);
+    },
+
+    /** @override */
+    setProfileName: function(name) {
+      chrome.send('setProfileName', [name]);
     },
 
     /** @override */

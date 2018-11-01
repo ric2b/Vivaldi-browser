@@ -16,6 +16,7 @@
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
+#include "cc/test/begin_frame_args_test.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkString.h"
@@ -38,6 +39,11 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
   // TraitsTestService:
   void EchoBeginFrameArgs(const BeginFrameArgs& b,
                           const EchoBeginFrameArgsCallback& callback) override {
+    callback.Run(b);
+  }
+
+  void EchoBeginFrameAck(const BeginFrameAck& b,
+                         const EchoBeginFrameAckCallback& callback) override {
     callback.Run(b);
   }
 
@@ -169,7 +175,11 @@ TEST_F(StructTraitsTest, BeginFrameArgs) {
   const base::TimeDelta interval = base::TimeDelta::FromMilliseconds(1337);
   const BeginFrameArgs::BeginFrameArgsType type = BeginFrameArgs::NORMAL;
   const bool on_critical_path = true;
+  const uint32_t source_id = 5;
+  const uint64_t sequence_number = 10;
   BeginFrameArgs input;
+  input.source_id = source_id;
+  input.sequence_number = sequence_number;
   input.frame_time = frame_time;
   input.deadline = deadline;
   input.interval = interval;
@@ -178,11 +188,34 @@ TEST_F(StructTraitsTest, BeginFrameArgs) {
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   BeginFrameArgs output;
   proxy->EchoBeginFrameArgs(input, &output);
+  EXPECT_EQ(source_id, output.source_id);
+  EXPECT_EQ(sequence_number, output.sequence_number);
   EXPECT_EQ(frame_time, output.frame_time);
   EXPECT_EQ(deadline, output.deadline);
   EXPECT_EQ(interval, output.interval);
   EXPECT_EQ(type, output.type);
   EXPECT_EQ(on_critical_path, output.on_critical_path);
+}
+
+TEST_F(StructTraitsTest, BeginFrameAck) {
+  const uint32_t source_id = 5;
+  const uint64_t sequence_number = 10;
+  const uint64_t latest_confirmed_sequence_number = 8;
+  const bool has_damage = true;
+  BeginFrameAck input;
+  input.source_id = source_id;
+  input.sequence_number = sequence_number;
+  input.latest_confirmed_sequence_number = latest_confirmed_sequence_number;
+  input.has_damage = has_damage;
+  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  BeginFrameAck output;
+  proxy->EchoBeginFrameAck(input, &output);
+  EXPECT_EQ(source_id, output.source_id);
+  EXPECT_EQ(sequence_number, output.sequence_number);
+  EXPECT_EQ(latest_confirmed_sequence_number,
+            output.latest_confirmed_sequence_number);
+  // |has_damage| is not transmitted.
+  EXPECT_FALSE(output.has_damage);
 }
 
 // Note that this is a fairly trivial test of CompositorFrame serialization as
@@ -227,11 +260,13 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   // TransferableResource constants.
   const uint32_t tr_id = 1337;
   const ResourceFormat tr_format = ALPHA_8;
+  const gfx::BufferFormat tr_buffer_format = gfx::BufferFormat::R_8;
   const uint32_t tr_filter = 1234;
   const gfx::Size tr_size(1234, 5678);
   TransferableResource resource;
   resource.id = tr_id;
   resource.format = tr_format;
+  resource.buffer_format = tr_buffer_format;
   resource.filter = tr_filter;
   resource.size = tr_size;
 
@@ -241,6 +276,7 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   const float page_scale_factor = 1337.5f;
   const gfx::SizeF scrollable_viewport_size(1337.7f, 1234.5f);
   const uint32_t content_source_id = 3;
+  const BeginFrameAck begin_frame_ack(5, 10, 8, false);
 
   CompositorFrame input;
   input.metadata.device_scale_factor = device_scale_factor;
@@ -250,6 +286,7 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   input.render_pass_list.push_back(std::move(render_pass));
   input.resource_list.push_back(resource);
   input.metadata.content_source_id = content_source_id;
+  input.metadata.begin_frame_ack = begin_frame_ack;
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   CompositorFrame output;
@@ -260,11 +297,13 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   EXPECT_EQ(page_scale_factor, output.metadata.page_scale_factor);
   EXPECT_EQ(scrollable_viewport_size, output.metadata.scrollable_viewport_size);
   EXPECT_EQ(content_source_id, output.metadata.content_source_id);
+  EXPECT_EQ(begin_frame_ack, output.metadata.begin_frame_ack);
 
   ASSERT_EQ(1u, output.resource_list.size());
   TransferableResource out_resource = output.resource_list[0];
   EXPECT_EQ(tr_id, out_resource.id);
   EXPECT_EQ(tr_format, out_resource.format);
+  EXPECT_EQ(tr_buffer_format, out_resource.buffer_format);
   EXPECT_EQ(tr_filter, out_resource.filter);
   EXPECT_EQ(tr_size, out_resource.size);
 
@@ -335,6 +374,11 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   SurfaceId id(FrameSinkId(1234, 4321),
                LocalSurfaceId(5678, base::UnguessableToken::Create()));
   referenced_surfaces.push_back(id);
+  std::vector<SurfaceId> embedded_surfaces;
+  SurfaceId id2(FrameSinkId(4321, 1234),
+                LocalSurfaceId(8765, base::UnguessableToken::Create()));
+  embedded_surfaces.push_back(id2);
+  uint32_t frame_token = 0xdeadbeef;
 
   CompositorFrameMetadata input;
   input.device_scale_factor = device_scale_factor;
@@ -357,6 +401,8 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   input.selection = selection;
   input.latency_info = latency_infos;
   input.referenced_surfaces = referenced_surfaces;
+  input.embedded_surfaces = embedded_surfaces;
+  input.frame_token = frame_token;
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   CompositorFrameMetadata output;
@@ -388,6 +434,10 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   EXPECT_EQ(referenced_surfaces.size(), output.referenced_surfaces.size());
   for (uint32_t i = 0; i < referenced_surfaces.size(); ++i)
     EXPECT_EQ(referenced_surfaces[i], output.referenced_surfaces[i]);
+  EXPECT_EQ(embedded_surfaces.size(), output.embedded_surfaces.size());
+  for (uint32_t i = 0; i < embedded_surfaces.size(); ++i)
+    EXPECT_EQ(embedded_surfaces[i], output.embedded_surfaces[i]);
+  EXPECT_EQ(frame_token, output.frame_token);
 }
 
 TEST_F(StructTraitsTest, CopyOutputRequest_BitmapRequest) {

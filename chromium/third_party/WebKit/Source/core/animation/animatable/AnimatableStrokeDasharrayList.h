@@ -37,36 +37,28 @@
 
 namespace blink {
 
-class CORE_EXPORT AnimatableStrokeDasharrayList final
-    : public AnimatableRepeatable {
+class AnimatableStrokeDasharrayList final : public AnimatableRepeatable {
  public:
   ~AnimatableStrokeDasharrayList() override {}
 
-  static PassRefPtr<AnimatableStrokeDasharrayList> create(
+  static PassRefPtr<AnimatableStrokeDasharrayList> Create(
       PassRefPtr<SVGDashArray> lengths,
       float zoom) {
-    return adoptRef(
+    return AdoptRef(
         new AnimatableStrokeDasharrayList(std::move(lengths), zoom));
   }
 
-  PassRefPtr<SVGDashArray> toSVGDashArray(float zoom) const;
-
- protected:
-  PassRefPtr<AnimatableValue> interpolateTo(const AnimatableValue*,
-                                            double fraction) const override;
-  bool usesDefaultInterpolationWith(const AnimatableValue*) const override;
-
  private:
-  AnimatableStrokeDasharrayList(PassRefPtr<SVGDashArray>, float zoom);
-  // This will consume the vector passed into it.
-  AnimatableStrokeDasharrayList(Vector<RefPtr<AnimatableValue>>& values)
-      : AnimatableRepeatable(values) {}
+  AnimatableStrokeDasharrayList(PassRefPtr<SVGDashArray> lengths, float zoom) {
+    for (const Length& dash_length : lengths->GetVector())
+      values_.push_back(AnimatableLength::Create(dash_length, zoom));
+  }
 
-  AnimatableType type() const override { return TypeStrokeDasharrayList; }
+  AnimatableType GetType() const override { return kTypeStrokeDasharrayList; }
 };
 
 DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableStrokeDasharrayList,
-                                   isStrokeDasharrayList());
+                                   IsStrokeDasharrayList());
 
 }  // namespace blink
 

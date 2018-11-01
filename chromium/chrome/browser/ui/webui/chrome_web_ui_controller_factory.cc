@@ -116,9 +116,6 @@
 #include "chrome/browser/ui/webui/popular_sites_internals_ui.h"
 #include "chrome/browser/ui/webui/snippets_internals_ui.h"
 #include "chrome/browser/ui/webui/webapks_ui.h"
-#if defined(ENABLE_WEBVR)
-#include "chrome/browser/ui/webui/vr_shell/vr_shell_ui_ui.h"
-#endif
 #else
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/signin/easy_unlock_service_factory.h"
@@ -176,9 +173,14 @@
 #endif
 
 #if defined(OS_WIN)
+#include "chrome/browser/ui/webui/cleanup_tool/cleanup_tool_ui.h"
 #include "chrome/browser/ui/webui/conflicts_ui.h"
 #include "chrome/browser/ui/webui/set_as_default_browser_ui_win.h"
 #include "chrome/browser/ui/webui/welcome_win10_ui.h"
+#endif
+
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+#include "chrome/browser/ui/webui/sandbox_internals_ui.h"
 #endif
 
 #if (defined(USE_NSS_CERTS) || defined(USE_OPENSSL_CERTS)) && defined(USE_AURA)
@@ -291,8 +293,7 @@ bool IsAboutUI(const GURL& url) {
           || url.host_piece() == chrome::kChromeUITermsHost
 #endif
 #if defined(OS_LINUX) || defined(OS_OPENBSD)
-          || url.host_piece() == chrome::kChromeUILinuxProxyConfigHost ||
-          url.host_piece() == chrome::kChromeUISandboxHost
+          || url.host_piece() == chrome::kChromeUILinuxProxyConfigHost
 #endif
 #if defined(OS_CHROMEOS)
           || url.host_piece() == chrome::kChromeUIOSCreditsHost
@@ -463,6 +464,9 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<UberUI>;
 #endif  // !defined(OS_ANDROID)
 #if defined(OS_WIN)
+  if (base::FeatureList::IsEnabled(features::kCleanupToolUI) &&
+      url.host_piece() == chrome::kChromeUICleanupToolHost)
+    return &NewWebUI<CleanupToolUI>;
   if (url.host_piece() == chrome::kChromeUIConflictsHost)
     return &NewWebUI<ConflictsUI>;
   if (url.host_piece() == chrome::kChromeUIMetroFlowHost)
@@ -522,10 +526,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<SnippetsInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIWebApksHost)
     return &NewWebUI<WebApksUI>;
-#if defined(ENABLE_WEBVR)
-  if (url.host_piece() == chrome::kChromeUIVrShellUIHost)
-    return &NewWebUI<VrShellUIUI>;
-#endif
 #else
   if (url.SchemeIs(content::kChromeDevToolsScheme)) {
     if (!DevToolsUIBindings::IsValidFrontendURL(url))
@@ -544,7 +544,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host_piece() == chrome::kChromeUIMdUserManagerHost)
     return &NewWebUI<MDUserManagerUI>;
   if (url.host_piece() == chrome::kChromeUISigninErrorHost &&
-      !profile->IsOffTheRecord())
+      (!profile->IsOffTheRecord() ||
+       profile->GetOriginalProfile()->IsSystemProfile()))
     return &NewWebUI<SigninErrorUI>;
   if (url.host_piece() == chrome::kChromeUISyncConfirmationHost &&
       !profile->IsOffTheRecord())
@@ -628,6 +629,11 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<CastUI>;
   }
 #endif
+#endif
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+  if (url.host_piece() == chrome::kChromeUISandboxHost) {
+    return &NewWebUI<SandboxInternalsUI>;
+  }
 #endif
   if (IsAboutUI(url))
     return &NewWebUI<AboutUI>;

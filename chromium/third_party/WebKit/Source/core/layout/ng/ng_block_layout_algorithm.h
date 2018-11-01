@@ -6,24 +6,27 @@
 #define NGBlockLayoutAlgorithm_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/geometry/ng_margin_strut.h"
+#include "core/layout/ng/ng_block_break_token.h"
 #include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
-#include "core/layout/ng/ng_fragment_builder.h"
 #include "core/layout/ng/ng_layout_algorithm.h"
-#include "core/layout/ng/ng_units.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
-class ComputedStyle;
-class NGBlockBreakToken;
 class NGConstraintSpace;
-class NGInlineNode;
 class NGLayoutResult;
+
+// Updates the fragment's BFC offset if it's not already set.
+void MaybeUpdateFragmentBfcOffset(const NGConstraintSpace&,
+                                  const NGLogicalOffset&,
+                                  NGFragmentBuilder* builder);
 
 // A class for general block layout (e.g. a <div> with no special style).
 // Lays out the children in sequence.
-class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
+class CORE_EXPORT NGBlockLayoutAlgorithm
+    : public NGLayoutAlgorithm<NGBlockNode, NGBlockBreakToken> {
  public:
   // Default constructor.
   // @param node The input node to perform layout upon.
@@ -34,21 +37,19 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
                          NGConstraintSpace* space,
                          NGBlockBreakToken* break_token = nullptr);
 
-  Optional<MinAndMaxContentSizes> ComputeMinAndMaxContentSizes() const override;
-  RefPtr<NGLayoutResult> Layout() override;
+  Optional<MinMaxContentSize> ComputeMinMaxContentSize() const override;
+  virtual RefPtr<NGLayoutResult> Layout() override;
 
  private:
-  NGBoxStrut CalculateMargins(NGBlockNode* child,
+  NGBoxStrut CalculateMargins(NGLayoutInputNode* child,
                               const NGConstraintSpace& space);
 
   // Creates a new constraint space for the current child.
   RefPtr<NGConstraintSpace> CreateConstraintSpaceForChild(NGLayoutInputNode*);
+  void PrepareChildLayout(NGLayoutInputNode*);
   void FinishChildLayout(NGLayoutInputNode*,
                          NGConstraintSpace*,
                          RefPtr<NGLayoutResult>);
-
-  // Layout inline children.
-  void LayoutInlineChildren(NGInlineNode*, NGConstraintSpace*);
 
   // Final adjustments before fragment creation. We need to prevent the
   // fragment from crossing fragmentainer boundaries, and rather create a break
@@ -62,30 +63,6 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
   NGLogicalOffset CalculateLogicalOffset(
       const WTF::Optional<NGLogicalOffset>& known_fragment_offset);
 
-  // Updates the fragment's BFC offset if it's not already set.
-  void UpdateFragmentBfcOffset(const NGLogicalOffset& offset);
-
-  NGLogicalOffset GetChildSpaceOffset() const {
-    return NGLogicalOffset(border_and_padding_.inline_start, content_size_);
-  }
-
-  const NGConstraintSpace& ConstraintSpace() const {
-    DCHECK(constraint_space_);
-    return *constraint_space_;
-  }
-
-  const ComputedStyle& Style() const { return node_->Style(); }
-
-  // Mutable Getters.
-  NGConstraintSpace* MutableConstraintSpace() { return constraint_space_; }
-
-  Persistent<NGBlockNode> node_;
-  NGConstraintSpace* constraint_space_;
-
-  // The break token from which we are currently resuming layout.
-  NGBlockBreakToken* break_token_;
-
-  NGFragmentBuilder builder_;
   NGConstraintSpaceBuilder space_builder_;
 
   NGBoxStrut border_and_padding_;

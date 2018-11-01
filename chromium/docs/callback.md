@@ -67,8 +67,11 @@ void Baz(OnceCallback<void(int)> cb) {
 
 // |Qux| takes the ownership of |cb| and transfers ownership to PostTask(),
 // which also takes the ownership of |cb|.
+// NOTE: TaskRunner is not actually migrated to OnceClosure yet. Once TaskRunner
+// supports OnceClosure, a OnceCallback can be posted as follows:
 void Qux(OnceCallback<void(int)> cb) {
-  PostTask(FROM_HERE, std::move(cb));
+  PostTask(FROM_HERE,
+           base::BindOnce(std::move(cb), 42));  // not yet implemented!
 }
 ```
 
@@ -146,6 +149,17 @@ when run). However, this precludes using Passed (see below).
 void DoSomething(const RepeatingCallback<double(double)>& callback) {
   double myresult = callback.Run(3.14159);
   myresult += callback.Run(2.71828);
+}
+```
+
+If running a callback could result in its own destruction (e.g., if the callback
+recipient deletes the object the callback is a member of), the callback should
+be moved before it can be safely invoked. The `base::ResetAndReturn` method
+provides this functionality.
+
+```cpp
+void Foo::RunCallback() {
+  base::ResetAndReturn(&foo_deleter_callback_).Run();
 }
 ```
 

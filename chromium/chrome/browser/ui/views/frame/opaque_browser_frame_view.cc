@@ -107,9 +107,9 @@ OpaqueBrowserFrameView::OpaqueBrowserFrameView(BrowserFrame* frame,
     window_icon_->Update();
   }
 
-  window_title_ = new views::Label(
-      browser_view->GetWindowTitle(),
-      gfx::FontList(BrowserFrame::GetTitleFontList()));
+  window_title_ = new views::Label(browser_view->GetWindowTitle(),
+                                   views::Label::CustomFont{gfx::FontList(
+                                       BrowserFrame::GetTitleFontList())});
   window_title_->SetVisible(browser_view->ShouldShowWindowTitle());
   window_title_->SetEnabledColor(SK_ColorWHITE);
   window_title_->SetSubpixelRenderingEnabled(false);
@@ -510,7 +510,8 @@ bool OpaqueBrowserFrameView::ShouldShowWindowTitleBar() const {
 
 int OpaqueBrowserFrameView::GetTopAreaHeight() const {
   const gfx::ImageSkia frame_image = GetFrameImage();
-  int top_area_height = frame_image.height();  // Returns 0 if isNull().
+  int top_area_height =
+      std::max(frame_image.height(), layout_->NonClientTopHeight(false));
   if (browser_view()->IsTabStripVisible()) {
     top_area_height =
         std::max(top_area_height,

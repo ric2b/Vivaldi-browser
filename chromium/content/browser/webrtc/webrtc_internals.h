@@ -123,7 +123,7 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   ~WebRTCInternals() override;
 
  private:
-  friend struct base::DefaultLazyInstanceTraits<WebRTCInternals>;
+  friend struct base::LazyInstanceTraitsBase<WebRTCInternals>;
   FRIEND_TEST_ALL_PREFIXES(WebRtcAudioDebugRecordingsBrowserTest,
                            CallWithAudioDebugRecordings);
   FRIEND_TEST_ALL_PREFIXES(WebRtcAudioDebugRecordingsBrowserTest,
@@ -174,6 +174,10 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   // a page uses a lot of peerconnection instances with many event
   // notifications.
   void ProcessPendingUpdates();
+
+  base::DictionaryValue* FindRecord(base::ProcessId pid,
+                                    int lid,
+                                    size_t* index = nullptr);
 
   base::ObserverList<WebRTCInternalsUIObserver> observers_;
 

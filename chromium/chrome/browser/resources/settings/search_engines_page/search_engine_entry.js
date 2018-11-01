@@ -9,7 +9,7 @@
 Polymer({
   is: 'settings-search-engine-entry',
 
-  behaviors: [FocusableIronListItemBehavior],
+  behaviors: [FocusRowBehavior],
 
   properties: {
     /** @type {!SearchEngine} */
@@ -106,6 +106,7 @@ Polymer({
       // previous dialog's contents are cleared.
       dialog.addEventListener('close', function() {
         this.showEditSearchEngineDialog_ = false;
+        this.$$('paper-icon-button').focus();
       }.bind(this));
     }.bind(this));
   },

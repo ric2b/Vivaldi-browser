@@ -73,6 +73,7 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
     this._onNetworkEntrySelected = this._onEntrySelected.bind(this, this._networkDataProvider);
     this._mainFlameChart.addEventListener(PerfUI.FlameChart.Events.EntrySelected, this._onMainEntrySelected, this);
     this._networkFlameChart.addEventListener(PerfUI.FlameChart.Events.EntrySelected, this._onNetworkEntrySelected, this);
+    this._mainFlameChart.addEventListener(PerfUI.FlameChart.Events.EntryHighlighted, this._onEntryHighlighted, this);
     this._nextExtensionIndex = 0;
 
     this._boundRefresh = this._refresh.bind(this);
@@ -115,20 +116,19 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
     this._model = model;
     if (this._model)
       this._model.addEventListener(extensionDataAdded, this._appendExtensionData, this);
+    this._mainDataProvider.setModel(this._model);
+    this._networkDataProvider.setModel(this._model);
+    this._countersView.setModel(this._model);
+    this._detailsView.setModel(this._model);
+
+    this._nextExtensionIndex = 0;
+    this._appendExtensionData();
+
     this._updateSearchHighlight(false, true);
     this._refresh();
   }
 
   _refresh() {
-    this._mainDataProvider.setModel(this._model);
-    this._networkDataProvider.setModel(this._model);
-    this._countersView.setModel(this._model);
-    if (this._detailsView)
-      this._detailsView.setModel(this._model);
-
-    this._nextExtensionIndex = 0;
-    this._appendExtensionData();
-
     if (this._networkDataProvider.isEmpty()) {
       this._mainFlameChart.enableRuler(true);
       this._networkSplitWidget.hideSidebar();
@@ -148,6 +148,25 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
     while (this._nextExtensionIndex < extensions.length)
       this._mainDataProvider.appendExtensionEvents(extensions[this._nextExtensionIndex++]);
     this._mainFlameChart.scheduleUpdate();
+  }
+
+  /**
+   * @param {!Common.Event} commonEvent
+   */
+  _onEntryHighlighted(commonEvent) {
+    SDK.DOMModel.hideDOMNodeHighlight();
+    var entryIndex = /** @type {number} */ (commonEvent.data);
+    var event = this._mainDataProvider.eventByIndex(entryIndex);
+    if (!event)
+      return;
+    var target = this._model && this._model.timelineModel().targetByEvent(event);
+    if (!target)
+      return;
+    var timelineData = TimelineModel.TimelineData.forEvent(event);
+    var backendNodeId = timelineData.backendNodeId;
+    if (!backendNodeId)
+      return;
+    new SDK.DeferredDOMNode(target, backendNodeId).highlight();
   }
 
   /**
@@ -248,6 +267,10 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
    */
   _onEntrySelected(dataProvider, event) {
     var entryIndex = /** @type{number} */ (event.data);
+    if (Runtime.experiments.isEnabled('timelineEventInitiators') && dataProvider === this._mainDataProvider) {
+      if (this._mainDataProvider.buildFlowForInitiator(entryIndex))
+        this._mainFlameChart.scheduleUpdate();
+    }
     this._delegate.select(dataProvider.createSelection(entryIndex));
   }
 

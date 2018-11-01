@@ -14,14 +14,14 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/base/filter_operation.h"
+#include "cc/base/filter_operations.h"
 #include "cc/layers/nine_patch_layer.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/output/copy_output_request.h"
-#include "cc/output/filter_operation.h"
-#include "cc/output/filter_operations.h"
 #include "cc/resources/transferable_resource.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "ui/compositor/compositor_switches.h"
@@ -158,16 +158,6 @@ Layer::~Layer() {
 std::unique_ptr<Layer> Layer::Clone() const {
   auto clone = base::MakeUnique<Layer>(type_);
 
-  clone->SetTransform(GetTargetTransform());
-  clone->SetBounds(bounds_);
-  clone->SetSubpixelPositionOffset(subpixel_position_offset_);
-  clone->SetMasksToBounds(GetMasksToBounds());
-  clone->SetOpacity(GetTargetOpacity());
-  clone->SetVisible(GetTargetVisibility());
-  clone->SetFillsBoundsOpaquely(fills_bounds_opaquely_);
-  clone->SetFillsBoundsCompletely(fills_bounds_completely_);
-  clone->set_name(name_);
-
   // Background filters.
   clone->SetBackgroundBlur(background_blur_radius_);
   clone->SetBackgroundZoom(zoom_, zoom_inset_);
@@ -187,6 +177,17 @@ std::unique_ptr<Layer> Layer::Clone() const {
   } else if (type_ == LAYER_SOLID_COLOR) {
     clone->SetColor(GetTargetColor());
   }
+
+  clone->SetTransform(GetTargetTransform());
+  clone->SetBounds(bounds_);
+  clone->SetSubpixelPositionOffset(subpixel_position_offset_);
+  clone->SetMasksToBounds(GetMasksToBounds());
+  clone->SetOpacity(GetTargetOpacity());
+  clone->SetVisible(GetTargetVisibility());
+  clone->SetFillsBoundsOpaquely(fills_bounds_opaquely_);
+  clone->SetFillsBoundsCompletely(fills_bounds_completely_);
+  clone->set_name(name_);
+
   return clone;
 }
 
@@ -674,6 +675,23 @@ void Layer::SetShowPrimarySurface(
     mirror->dest()->SetShowPrimarySurface(surface_info, ref_factory);
 }
 
+void Layer::SetFallbackSurface(const cc::SurfaceInfo& surface_info) {
+  DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
+  DCHECK(surface_layer_);
+
+  // TODO(fsamuel): We should compute the gutter in the display compositor.
+  surface_layer_->SetFallbackSurfaceInfo(surface_info);
+
+  for (const auto& mirror : mirrors_)
+    mirror->dest()->SetFallbackSurface(surface_info);
+}
+
+const cc::SurfaceInfo* Layer::GetFallbackSurfaceInfo() const {
+  if (surface_layer_)
+    return &surface_layer_->fallback_surface_info();
+  return nullptr;
+}
+
 void Layer::SetShowSolidColorContent() {
   DCHECK_EQ(type_, LAYER_SOLID_COLOR);
 
@@ -1083,7 +1101,7 @@ LayerAnimatorCollection* Layer::GetLayerAnimatorCollection() {
 
 int Layer::GetFrameNumber() const {
   const Compositor* compositor = GetCompositor();
-  return compositor ? compositor->committed_frame_number() : 0;
+  return compositor ? compositor->activated_frame_count() : 0;
 }
 
 float Layer::GetRefreshRate() const {

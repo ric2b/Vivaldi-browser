@@ -5,17 +5,17 @@
 #ifndef CacheStorage_h
 #define CacheStorage_h
 
+#include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/cachestorage/Cache.h"
 #include "modules/cachestorage/CacheQueryOptions.h"
 #include "modules/fetch/GlobalFetch.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/Noncopyable.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
-#include "wtf/Forward.h"
-#include "wtf/HashMap.h"
-#include "wtf/Noncopyable.h"
-#include <memory>
 
 namespace blink {
 
@@ -28,15 +28,15 @@ class CacheStorage final : public GarbageCollectedFinalized<CacheStorage>,
   WTF_MAKE_NONCOPYABLE(CacheStorage);
 
  public:
-  static CacheStorage* create(GlobalFetch::ScopedFetcher*,
+  static CacheStorage* Create(GlobalFetch::ScopedFetcher*,
                               WebServiceWorkerCacheStorage*);
   ~CacheStorage();
-  void dispose();
+  void Dispose();
 
-  ScriptPromise open(ScriptState*, const String& cacheName, ExceptionState&);
-  ScriptPromise has(ScriptState*, const String& cacheName, ExceptionState&);
+  ScriptPromise open(ScriptState*, const String& cache_name, ExceptionState&);
+  ScriptPromise has(ScriptState*, const String& cache_name, ExceptionState&);
   ScriptPromise deleteFunction(ScriptState*,
-                               const String& cacheName,
+                               const String& cache_name,
                                ExceptionState&);
   ScriptPromise keys(ScriptState*, ExceptionState&);
   ScriptPromise match(ScriptState*,
@@ -58,12 +58,12 @@ class CacheStorage final : public GarbageCollectedFinalized<CacheStorage>,
 
   CacheStorage(GlobalFetch::ScopedFetcher*,
                std::unique_ptr<WebServiceWorkerCacheStorage>);
-  ScriptPromise matchImpl(ScriptState*,
+  ScriptPromise MatchImpl(ScriptState*,
                           const Request*,
                           const CacheQueryOptions&);
 
-  Member<GlobalFetch::ScopedFetcher> m_scopedFetcher;
-  std::unique_ptr<WebServiceWorkerCacheStorage> m_webCacheStorage;
+  Member<GlobalFetch::ScopedFetcher> scoped_fetcher_;
+  std::unique_ptr<WebServiceWorkerCacheStorage> web_cache_storage_;
 };
 
 }  // namespace blink

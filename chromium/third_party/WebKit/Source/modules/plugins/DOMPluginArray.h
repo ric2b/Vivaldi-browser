@@ -25,7 +25,7 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "modules/plugins/DOMPlugin.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -39,13 +39,13 @@ class DOMPluginArray final : public GarbageCollected<DOMPluginArray>,
   USING_GARBAGE_COLLECTED_MIXIN(DOMPluginArray);
 
  public:
-  static DOMPluginArray* create(LocalFrame* frame) {
+  static DOMPluginArray* Create(LocalFrame* frame) {
     return new DOMPluginArray(frame);
   }
 
   unsigned length() const;
   DOMPlugin* item(unsigned index);
-  DOMPlugin* namedItem(const AtomicString& propertyName);
+  DOMPlugin* namedItem(const AtomicString& property_name);
 
   void refresh(bool reload);
 
@@ -53,7 +53,7 @@ class DOMPluginArray final : public GarbageCollected<DOMPluginArray>,
 
  private:
   explicit DOMPluginArray(LocalFrame*);
-  PluginData* pluginData() const;
+  PluginData* GetPluginData() const;
 };
 
 }  // namespace blink

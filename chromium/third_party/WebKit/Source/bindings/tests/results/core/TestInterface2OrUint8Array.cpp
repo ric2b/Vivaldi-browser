@@ -11,7 +11,7 @@
 // clang-format off
 #include "TestInterface2OrUint8Array.h"
 
-#include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/V8TestInterface2.h"
 
 namespace blink {
@@ -35,18 +35,18 @@ TestInterface2OrUint8Array TestInterface2OrUint8Array::fromTestInterface2(TestIn
   return container;
 }
 
-DOMUint8Array* TestInterface2OrUint8Array::getAsUint8Array() const {
+NotShared<DOMUint8Array> TestInterface2OrUint8Array::getAsUint8Array() const {
   DCHECK(isUint8Array());
   return m_uint8Array;
 }
 
-void TestInterface2OrUint8Array::setUint8Array(DOMUint8Array* value) {
+void TestInterface2OrUint8Array::setUint8Array(NotShared<DOMUint8Array> value) {
   DCHECK(isNull());
-  m_uint8Array = value;
+  m_uint8Array = Member<DOMUint8Array>(value.View());
   m_type = SpecificTypeUint8Array;
 }
 
-TestInterface2OrUint8Array TestInterface2OrUint8Array::fromUint8Array(DOMUint8Array* value) {
+TestInterface2OrUint8Array TestInterface2OrUint8Array::fromUint8Array(NotShared<DOMUint8Array> value) {
   TestInterface2OrUint8Array container;
   container.setUint8Array(value);
   return container;
@@ -57,15 +57,15 @@ TestInterface2OrUint8Array::~TestInterface2OrUint8Array() = default;
 TestInterface2OrUint8Array& TestInterface2OrUint8Array::operator=(const TestInterface2OrUint8Array&) = default;
 
 DEFINE_TRACE(TestInterface2OrUint8Array) {
-  visitor->trace(m_testInterface2);
-  visitor->trace(m_uint8Array);
+  visitor->Trace(m_testInterface2);
+  visitor->Trace(m_uint8Array);
 }
 
 void V8TestInterface2OrUint8Array::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, TestInterface2OrUint8Array& impl, UnionTypeConversionMode conversionMode, ExceptionState& exceptionState) {
   if (v8Value.IsEmpty())
     return;
 
-  if (conversionMode == UnionTypeConversionMode::Nullable && isUndefinedOrNull(v8Value))
+  if (conversionMode == UnionTypeConversionMode::kNullable && IsUndefinedOrNull(v8Value))
     return;
 
   if (V8TestInterface2::hasInstance(v8Value, isolate)) {
@@ -75,12 +75,14 @@ void V8TestInterface2OrUint8Array::toImpl(v8::Isolate* isolate, v8::Local<v8::Va
   }
 
   if (v8Value->IsUint8Array()) {
-    DOMUint8Array* cppValue = V8Uint8Array::toImpl(v8::Local<v8::Object>::Cast(v8Value));
+    NotShared<DOMUint8Array> cppValue = ToNotShared<NotShared<DOMUint8Array>>(isolate, v8Value, exceptionState);
+    if (exceptionState.HadException())
+      return;
     impl.setUint8Array(cppValue);
     return;
   }
 
-  exceptionState.throwTypeError("The provided value is not of type '(TestInterface2 or Uint8Array)'");
+  exceptionState.ThrowTypeError("The provided value is not of type '(TestInterface2 or Uint8Array)'");
 }
 
 v8::Local<v8::Value> ToV8(const TestInterface2OrUint8Array& impl, v8::Local<v8::Object> creationContext, v8::Isolate* isolate) {
@@ -97,9 +99,9 @@ v8::Local<v8::Value> ToV8(const TestInterface2OrUint8Array& impl, v8::Local<v8::
   return v8::Local<v8::Value>();
 }
 
-TestInterface2OrUint8Array NativeValueTraits<TestInterface2OrUint8Array>::nativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
+TestInterface2OrUint8Array NativeValueTraits<TestInterface2OrUint8Array>::NativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
   TestInterface2OrUint8Array impl;
-  V8TestInterface2OrUint8Array::toImpl(isolate, value, impl, UnionTypeConversionMode::NotNullable, exceptionState);
+  V8TestInterface2OrUint8Array::toImpl(isolate, value, impl, UnionTypeConversionMode::kNotNullable, exceptionState);
   return impl;
 }
 

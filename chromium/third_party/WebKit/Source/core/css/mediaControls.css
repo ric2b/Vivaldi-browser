@@ -123,7 +123,8 @@ video::-webkit-media-controls-overlay-enclosure {
     flex: 1 1;
     min-height: 0;
     width: 100%;
-    /* prevent disambiguation zooms with the panel */
+    /* Prevent disambiguation zooms with the panel. If this changes, it must
+     * also be changed in core/html/shadow/MediaControls.cpp. */
     margin-bottom: 10px;
     text-indent: 0;
     box-sizing: border-box;
@@ -142,6 +143,94 @@ video::-webkit-media-controls-overlay-play-button {
     width: 100%;
     height: 100%;
     padding: 0;
+}
+
+/* TODO(xjz): Move media remoting elements to a separate css file. */
+video::-internal-media-remoting-interstitial {
+    width: inherit;
+    height: inherit;
+    position: relative;
+    direction: ltr;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    font-size: 16px;
+    background-color: black;
+    opacity: 0;
+    transition: opacity .3s ease-in-out;
+}
+
+video::-internal-media-remoting-background-image {
+    display: flex;
+    position: absolute;
+    margin: 0;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-width: 0px;
+    background-color: transparent;
+    padding: 0;
+    filter: grayscale(100%) blur(5px);
+}
+
+video::-internal-media-remoting-cast-icon {
+    -webkit-appearance: -internal-media-remoting-cast-icon;
+    display: flex;
+    position: absolute;
+    margin: 0px;
+    border-width: 0px;
+    background-color: transparent;
+    height: 18px;
+    width: 22px;
+    padding: 0px;
+    left: calc(50% - 11px);
+    top: calc(50% - 40px);
+}
+
+video::-internal-media-remoting-cast-text-message {
+    display: inline;
+    position: absolute;
+    top: calc(50% - 10px);
+    border: none;
+    color: rgba(255,255,255,.54);
+    width: 100%;
+    text-wrap: none;
+    text-align: center;
+    background-color: transparent;
+    font-size: 81.25%;
+    font-family: Roboto-Regular, Sans-serif, Segoe, Serif, Helvetica;
+    padding: 0px;
+    margin: 0px;
+}
+
+video::-internal-media-remoting-disable-button {
+    display: flex;
+    position: absolute;
+    top: calc(50% + 60px);
+    left: calc(50% - 74px);
+    height: 28px;
+    border: 1pt solid rgba(255,255,255,.54);
+    border-radius: 2pt;
+    background-color: transparent;
+    color: rgba(255,255,255,.54);
+    margin: 0px;
+    padding: 5.5px 16px 0px 16px;
+    text-wrap: none;
+    font-size: 75%;
+    font-weight: 500;
+    font-family: Roboto-Medium, Sans-serif, Segoe, Serif, Helvetica;
+    box-sizing: border-box;
+    transition: border,color .5s ease-out;
+    z-index: 1;  /* Set this z-index to make the hover effect work. */
+}
+
+video::-internal-media-remoting-disable-button:hover {
+    border: 1pt solid rgba(255,255,255,.70);
+    color: rgba(255,255,255,.70);
+    cursor: pointer;
 }
 
 video::-internal-media-controls-overlay-cast-button {
@@ -345,18 +434,6 @@ video::-webkit-media-controls-toggle-closed-captions-button {
     margin-right: 0px;
     background-color: initial;
     color: inherit;
-}
-
-audio::-webkit-media-controls-fullscreen-volume-slider, video::-webkit-media-controls-fullscreen-volume-slider {
-    display: none;
-}
-
-audio::-webkit-media-controls-fullscreen-volume-min-button, video::-webkit-media-controls-fullscreen-volume-min-button {
-    display: none;
-}
-
-audio::-webkit-media-controls-fullscreen-volume-max-button, video::-webkit-media-controls-fullscreen-volume-max-button {
-    display: none;
 }
 
 video::-internal-media-controls-text-track-list, video::-internal-media-controls-overflow-menu-list, audio::-internal-media-controls-overflow-menu-list {

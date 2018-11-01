@@ -14,6 +14,7 @@
 #include "chrome/browser/browsing_data/browsing_data_counter_utils.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/channel_info.h"
@@ -122,40 +123,40 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
 
   PrefService* prefs = profile_->GetPrefs();
 
-  int site_data_mask = BrowsingDataRemover::REMOVE_SITE_DATA;
+  int site_data_mask = ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA;
   // Don't try to clear LSO data if it's not supported.
   if (!prefs->GetBoolean(prefs::kClearPluginLSODataEnabled))
-    site_data_mask &= ~BrowsingDataRemover::REMOVE_PLUGIN_DATA;
+    site_data_mask &= ~ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PLUGIN_DATA;
 
   int remove_mask = 0;
   if (prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory)) {
     if (prefs->GetBoolean(browsing_data::prefs::kDeleteBrowsingHistory))
-      remove_mask |= BrowsingDataRemover::REMOVE_HISTORY;
+      remove_mask |= ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY;
     if (prefs->GetBoolean(browsing_data::prefs::kDeleteDownloadHistory))
-      remove_mask |= BrowsingDataRemover::REMOVE_DOWNLOADS;
+      remove_mask |= BrowsingDataRemover::DATA_TYPE_DOWNLOADS;
   }
 
   if (prefs->GetBoolean(browsing_data::prefs::kDeleteCache))
-    remove_mask |= BrowsingDataRemover::REMOVE_CACHE;
+    remove_mask |= BrowsingDataRemover::DATA_TYPE_CACHE;
 
   int origin_mask = 0;
   if (prefs->GetBoolean(browsing_data::prefs::kDeleteCookies)) {
     remove_mask |= site_data_mask;
-    origin_mask |= BrowsingDataHelper::UNPROTECTED_WEB;
+    origin_mask |= BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB;
   }
 
   if (prefs->GetBoolean(browsing_data::prefs::kDeletePasswords))
-    remove_mask |= BrowsingDataRemover::REMOVE_PASSWORDS;
+    remove_mask |= ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS;
 
   if (prefs->GetBoolean(browsing_data::prefs::kDeleteFormData))
-    remove_mask |= BrowsingDataRemover::REMOVE_FORM_DATA;
+    remove_mask |= ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA;
 
   if (prefs->GetBoolean(browsing_data::prefs::kDeleteMediaLicenses))
-    remove_mask |= BrowsingDataRemover::REMOVE_MEDIA_LICENSES;
+    remove_mask |= BrowsingDataRemover::DATA_TYPE_MEDIA_LICENSES;
 
   if (prefs->GetBoolean(browsing_data::prefs::kDeleteHostedAppsData)) {
     remove_mask |= site_data_mask;
-    origin_mask |= BrowsingDataHelper::PROTECTED_WEB;
+    origin_mask |= BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
   }
 
   // Record the deletion of cookies and cache.
@@ -241,7 +242,7 @@ void ClearBrowsingDataHandler::OnClearingTaskFinished(
   UMA_HISTOGRAM_BOOLEAN(
       "History.ClearBrowsingData.ShownHistoryNoticeAfterClearing", show_notice);
 
-  ResolveJavascriptCallback(base::StringValue(webui_callback_id),
+  ResolveJavascriptCallback(base::Value(webui_callback_id),
                             base::Value(show_notice));
   task_observer_.reset();
 }
@@ -261,9 +262,7 @@ void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
   for (const auto& counter : counters_)
     counter->Restart();
 
-  ResolveJavascriptCallback(
-      *callback_id,
-      *base::Value::CreateNullValue() /* Promise<void> */);
+  ResolveJavascriptCallback(*callback_id, base::Value() /* Promise<void> */);
 }
 
 void ClearBrowsingDataHandler::OnStateChanged(syncer::SyncService* sync) {
@@ -272,7 +271,7 @@ void ClearBrowsingDataHandler::OnStateChanged(syncer::SyncService* sync) {
 
 void ClearBrowsingDataHandler::UpdateSyncState() {
   CallJavascriptFunction(
-      "cr.webUIListenerCallback", base::StringValue("update-footer"),
+      "cr.webUIListenerCallback", base::Value("update-footer"),
       base::Value(sync_service_ && sync_service_->IsSyncActive()),
       base::Value(show_history_footer_));
 }
@@ -317,6 +316,7 @@ void ClearBrowsingDataHandler::UpdateHistoryDeletionDialog(bool show) {
 void ClearBrowsingDataHandler::AddCounter(
     std::unique_ptr<browsing_data::BrowsingDataCounter> counter) {
   counter->Init(profile_->GetPrefs(),
+                browsing_data::ClearBrowsingDataTab::ADVANCED,
                 base::Bind(&ClearBrowsingDataHandler::UpdateCounterText,
                            base::Unretained(this)));
   counters_.push_back(std::move(counter));
@@ -325,10 +325,9 @@ void ClearBrowsingDataHandler::AddCounter(
 void ClearBrowsingDataHandler::UpdateCounterText(
     std::unique_ptr<browsing_data::BrowsingDataCounter::Result> result) {
   CallJavascriptFunction(
-      "cr.webUIListenerCallback",
-      base::StringValue("update-counter-text"),
-      base::StringValue(result->source()->GetPrefName()),
-      base::StringValue(GetChromeCounterTextFromResult(result.get())));
+      "cr.webUIListenerCallback", base::Value("update-counter-text"),
+      base::Value(result->source()->GetPrefName()),
+      base::Value(GetChromeCounterTextFromResult(result.get())));
 }
 
 }  // namespace settings

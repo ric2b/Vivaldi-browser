@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/platform_thread.h"
@@ -753,7 +754,7 @@ Status WebViewImpl::IsNotPendingNavigation(const std::string& frame_id,
   if (status.IsError())
     return status;
   // An alert may block the pending navigation.
-  if (is_pending && dialog_manager_->IsDialogOpen())
+  if (dialog_manager_->IsDialogOpen())
     return Status(kUnexpectedAlertOpen);
 
   *is_not_pending = !is_pending;
@@ -834,7 +835,7 @@ Status EvaluateScriptAndGetValue(DevToolsClient* client,
     return Status(kUnknownError, "Runtime.evaluate missing string 'type'");
 
   if (type == "undefined") {
-    *result = base::Value::CreateNullValue();
+    *result = base::MakeUnique<base::Value>();
   } else {
     base::Value* value;
     if (!temp_result->Get("value", &value))

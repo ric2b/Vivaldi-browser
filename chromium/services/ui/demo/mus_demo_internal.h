@@ -32,23 +32,32 @@ class MusDemoInternal : public MusDemo, public aura::WindowManagerDelegate {
 
   // aura::WindowManagerDelegate:
   void SetWindowManagerClient(aura::WindowManagerClient* client) final;
-  bool OnWmSetBounds(aura::Window* window, gfx::Rect* bounds) final;
+  void OnWmSetBounds(aura::Window* window, const gfx::Rect& bounds) final;
   bool OnWmSetProperty(aura::Window* window,
                        const std::string& name,
                        std::unique_ptr<std::vector<uint8_t>>* new_data) final;
+  void OnWmSetModalType(aura::Window* window, ModalType type) final;
   void OnWmSetCanFocus(aura::Window* window, bool can_focus) final;
   aura::Window* OnWmCreateTopLevelWindow(
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) final;
   void OnWmClientJankinessChanged(const std::set<aura::Window*>& client_windows,
                                   bool janky) final;
+  void OnWmBuildDragImage(const gfx::Point& screen_location,
+                          const SkBitmap& drag_image,
+                          const gfx::Vector2d& drag_image_offset,
+                          ui::mojom::PointerKind source) final;
+  void OnWmMoveDragImage(const gfx::Point& screen_location) final;
+  void OnWmDestroyDragImage() final;
   void OnWmWillCreateDisplay(const display::Display& display) final;
   void OnWmNewDisplay(std::unique_ptr<aura::WindowTreeHostMus> window_tree_host,
                       const display::Display& display) final;
   void OnWmDisplayRemoved(aura::WindowTreeHostMus* window_tree_host) final;
   void OnWmDisplayModified(const display::Display& display) final;
-  ui::mojom::EventResult OnAccelerator(uint32_t id,
-                                       const ui::Event& event) final;
+  ui::mojom::EventResult OnAccelerator(
+      uint32_t id,
+      const ui::Event& event,
+      std::unordered_map<std::string, std::vector<uint8_t>>* properties) final;
   void OnWmPerformMoveLoop(aura::Window* window,
                            ui::mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,

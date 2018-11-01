@@ -6,6 +6,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/metrics/proto/ukm/entry.pb.h"
@@ -28,12 +30,20 @@ class MockNetworkQualityProvider
  public:
   MOCK_CONST_METHOD0(GetEffectiveConnectionType,
                      net::EffectiveConnectionType());
+  MOCK_CONST_METHOD0(GetHttpRTT, base::Optional<base::TimeDelta>());
+  MOCK_CONST_METHOD0(GetTransportRTT, base::Optional<base::TimeDelta>());
   MOCK_METHOD1(
       AddEffectiveConnectionTypeObserver,
       void(net::NetworkQualityEstimator::EffectiveConnectionTypeObserver*));
   MOCK_METHOD1(
       RemoveEffectiveConnectionTypeObserver,
       void(net::NetworkQualityEstimator::EffectiveConnectionTypeObserver*));
+  MOCK_METHOD1(
+      AddRTTAndThroughputEstimatesObserver,
+      void(net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver*));
+  MOCK_METHOD1(
+      RemoveRTTAndThroughputEstimatesObserver,
+      void(net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver*));
 };
 
 }  // namespace
@@ -53,6 +63,14 @@ class UkmPageLoadMetricsObserverTest
         .Times(AnyNumber())
         .WillRepeatedly(Return(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN));
 
+    EXPECT_CALL(mock_network_quality_provider_, GetHttpRTT())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(base::Optional<base::TimeDelta>()));
+
+    EXPECT_CALL(mock_network_quality_provider_, GetTransportRTT())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(base::Optional<base::TimeDelta>()));
+
     TestingBrowserProcess::GetGlobal()->SetUkmService(
         ukm_service_test_harness_.test_ukm_service());
   }
@@ -69,9 +87,8 @@ class UkmPageLoadMetricsObserverTest
     return mock_network_quality_provider_;
   }
 
-  const ukm::UkmSource* GetUkmSource(size_t source_index) {
-    return ukm_service_test_harness_.test_ukm_service()->GetSource(
-        source_index);
+  const ukm::UkmSource* GetUkmSourceForUrl(const char* url) {
+    return ukm_service_test_harness_.test_ukm_service()->GetSourceForUrl(url);
   }
 
   const ukm::UkmEntry* GetUkmEntry(size_t entry_index) {
@@ -175,7 +192,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, Basic) {
   DeleteContents();
 
   EXPECT_EQ(1ul, ukm_source_count());
-  const ukm::UkmSource* source = GetUkmSource(0);
+  const ukm::UkmSource* source = GetUkmSourceForUrl(kTestUrl1);
   EXPECT_EQ(GURL(kTestUrl1), source->url());
 
   EXPECT_GE(ukm_entry_count(), 1ul);
@@ -212,7 +229,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, FailedProvisionalLoad) {
   DeleteContents();
 
   EXPECT_EQ(1ul, ukm_source_count());
-  const ukm::UkmSource* source = GetUkmSource(0);
+  const ukm::UkmSource* source = GetUkmSourceForUrl(kTestUrl1);
   EXPECT_EQ(GURL(kTestUrl1), source->url());
 
   EXPECT_GE(ukm_entry_count(), 1ul);
@@ -251,7 +268,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, FirstMeaningfulPaint) {
   DeleteContents();
 
   EXPECT_EQ(1ul, ukm_source_count());
-  const ukm::UkmSource* source = GetUkmSource(0);
+  const ukm::UkmSource* source = GetUkmSourceForUrl(kTestUrl1);
   EXPECT_EQ(GURL(kTestUrl1), source->url());
 
   EXPECT_GE(ukm_entry_count(), 1ul);
@@ -287,8 +304,8 @@ TEST_F(UkmPageLoadMetricsObserverTest, MultiplePageLoads) {
   DeleteContents();
 
   EXPECT_EQ(2ul, ukm_source_count());
-  const ukm::UkmSource* source1 = GetUkmSource(0);
-  const ukm::UkmSource* source2 = GetUkmSource(1);
+  const ukm::UkmSource* source1 = GetUkmSourceForUrl(kTestUrl1);
+  const ukm::UkmSource* source2 = GetUkmSourceForUrl(kTestUrl2);
   EXPECT_EQ(GURL(kTestUrl1), source1->url());
   EXPECT_EQ(GURL(kTestUrl2), source2->url());
   EXPECT_NE(source1->id(), source2->id());
@@ -322,9 +339,13 @@ TEST_F(UkmPageLoadMetricsObserverTest, MultiplePageLoads) {
       HasMetric(internal::kUkmForegroundDurationName, entry2_proto.metrics()));
 }
 
-TEST_F(UkmPageLoadMetricsObserverTest, EffectiveConnectionType) {
+TEST_F(UkmPageLoadMetricsObserverTest, NetworkQualityEstimates) {
   EXPECT_CALL(mock_network_quality_provider(), GetEffectiveConnectionType())
       .WillRepeatedly(Return(net::EFFECTIVE_CONNECTION_TYPE_3G));
+  EXPECT_CALL(mock_network_quality_provider(), GetHttpRTT())
+      .WillRepeatedly(Return(base::TimeDelta::FromMilliseconds(100)));
+  EXPECT_CALL(mock_network_quality_provider(), GetTransportRTT())
+      .WillRepeatedly(Return(base::TimeDelta::FromMilliseconds(200)));
 
   NavigateAndCommit(GURL(kTestUrl1));
 
@@ -332,7 +353,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, EffectiveConnectionType) {
   DeleteContents();
 
   EXPECT_EQ(1ul, ukm_source_count());
-  const ukm::UkmSource* source = GetUkmSource(0);
+  const ukm::UkmSource* source = GetUkmSourceForUrl(kTestUrl1);
   EXPECT_EQ(GURL(kTestUrl1), source->url());
 
   EXPECT_GE(ukm_entry_count(), 1ul);
@@ -343,6 +364,8 @@ TEST_F(UkmPageLoadMetricsObserverTest, EffectiveConnectionType) {
   EXPECT_FALSE(entry_proto.metrics().empty());
   ExpectMetric(internal::kUkmEffectiveConnectionType,
                net::EFFECTIVE_CONNECTION_TYPE_3G, entry_proto.metrics());
+  ExpectMetric(internal::kUkmHttpRttEstimate, 100, entry_proto.metrics());
+  ExpectMetric(internal::kUkmTransportRttEstimate, 200, entry_proto.metrics());
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest, PageTransitionReload) {
@@ -354,7 +377,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, PageTransitionReload) {
   DeleteContents();
 
   EXPECT_EQ(1ul, ukm_source_count());
-  const ukm::UkmSource* source = GetUkmSource(0);
+  const ukm::UkmSource* source = GetUkmSourceForUrl(kTestUrl1);
   EXPECT_EQ(GURL(kTestUrl1), source->url());
 
   EXPECT_GE(ukm_entry_count(), 1ul);

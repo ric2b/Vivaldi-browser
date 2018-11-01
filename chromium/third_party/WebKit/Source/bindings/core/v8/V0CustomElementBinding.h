@@ -34,8 +34,8 @@
 #include <memory>
 
 #include "bindings/core/v8/ScopedPersistent.h"
+#include "platform/wtf/Allocator.h"
 #include "v8/include/v8.h"
-#include "wtf/Allocator.h"
 
 namespace blink {
 
@@ -43,14 +43,14 @@ class V0CustomElementBinding {
   USING_FAST_MALLOC(V0CustomElementBinding);
 
  public:
-  static std::unique_ptr<V0CustomElementBinding> create(
+  static std::unique_ptr<V0CustomElementBinding> Create(
       v8::Isolate*,
       v8::Local<v8::Object> prototype);
   ~V0CustomElementBinding();
 
  private:
   V0CustomElementBinding(v8::Isolate*, v8::Local<v8::Object> prototype);
-  ScopedPersistent<v8::Object> m_prototype;
+  ScopedPersistent<v8::Object> prototype_;
 };
 
 }  // namespace blink

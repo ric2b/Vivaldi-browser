@@ -12,18 +12,19 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/default_clock.h"
-#include "chrome/browser/ntp_snippets/fake_download_item.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/mock_content_suggestions_provider_observer.h"
 #include "components/ntp_snippets/offline_pages/offline_pages_test_utils.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/prefs/testing_pref_service.h"
+#include "content/public/test/fake_download_item.h"
 #include "content/public/test/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::DownloadItem;
+using content::FakeDownloadItem;
 using content::MockDownloadManager;
 using ntp_snippets::Category;
 using ntp_snippets::CategoryStatus;
@@ -34,7 +35,6 @@ using ntp_snippets::test::CaptureDismissedSuggestions;
 using ntp_snippets::test::FakeOfflinePageModel;
 using offline_pages::ClientId;
 using offline_pages::OfflinePageItem;
-using test::FakeDownloadItem;
 using testing::_;
 using testing::AllOf;
 using testing::AnyNumber;
@@ -75,9 +75,6 @@ std::ostream& operator<<(std::ostream& os, const CategoryStatus& value) {
       break;
     case CategoryStatus::CATEGORY_EXPLICITLY_DISABLED:
       os << "CATEGORY_EXPLICITLY_DISABLED";
-      break;
-    case CategoryStatus::SIGNED_OUT:
-      os << "SIGNED_OUT";
       break;
     case CategoryStatus::LOADING_ERROR:
       os << "LOADING_ERROR";
@@ -120,8 +117,7 @@ MATCHER_P3(HasDownloadSuggestionExtra,
   if (extra.is_download_asset != is_download_asset) {
     return false;
   }
-  *result_listener << "expected target_file_path: "
-                   << target_file_path
+  *result_listener << "expected target_file_path: " << target_file_path
                    << "\nactual target_file_path: "
                    << extra.target_file_path.value();
   if (extra.target_file_path.value() !=
@@ -129,8 +125,7 @@ MATCHER_P3(HasDownloadSuggestionExtra,
     return false;
   }
   *result_listener << "expected mime_type: " << mime_type
-                   << "\nactual mime_type: "
-                   << extra.mime_type;
+                   << "\nactual mime_type: " << extra.mime_type;
   return extra.mime_type == mime_type;
 }
 
@@ -153,6 +148,7 @@ std::unique_ptr<FakeDownloadItem> CreateDummyAssetDownload(int id) {
   std::unique_ptr<FakeDownloadItem> item = base::MakeUnique<FakeDownloadItem>();
   item->SetId(id);
   std::string id_string = base::IntToString(id);
+  item->SetGuid("XYZ-100032-EFZBDF-13323-PXZ" + id_string);
   item->SetTargetFilePath(
       base::FilePath::FromUTF8Unsafe("folder/file" + id_string + ".mhtml"));
   item->SetURL(GURL("http://download.com/redirected" + id_string));
@@ -1113,4 +1109,41 @@ TEST_F(DownloadSuggestionsProviderTest,
   test_clock->SetNow(now);
   CreateProvider(/*show_assets=*/false, /*show_offline_pages=*/true,
                  std::move(test_clock));
+}
+
+TEST_F(DownloadSuggestionsProviderTest,
+       ShouldShowRecentlyVisitedAssetDownloads) {
+  IgnoreOnCategoryStatusChangedToAvailable();
+  IgnoreOnSuggestionInvalidated();
+
+  const base::Time not_outdated =
+      now - base::TimeDelta::FromHours(kDefaultMaxDownloadAgeHours) +
+      base::TimeDelta::FromSeconds(1);
+  const base::Time outdated =
+      now - base::TimeDelta::FromHours(kDefaultMaxDownloadAgeHours) -
+      base::TimeDelta::FromSeconds(1);
+
+  *(downloads_manager()->mutable_items()) = CreateDummyAssetDownloads({0, 1});
+
+  downloads_manager()->mutable_items()->at(0)->SetURL(
+      GURL("http://download.com/0"));
+  downloads_manager()->mutable_items()->at(0)->SetStartTime(outdated);
+  downloads_manager()->mutable_items()->at(0)->SetLastAccessTime(not_outdated);
+
+  downloads_manager()->mutable_items()->at(1)->SetURL(
+      GURL("http://download.com/1"));
+  downloads_manager()->mutable_items()->at(1)->SetStartTime(outdated);
+  downloads_manager()->mutable_items()->at(1)->SetLastAccessTime(
+      downloads_manager()->mutable_items()->at(1)->GetStartTime());
+
+  // Even though asset download 0 was downloaded long time ago, it should be
+  // reported because it has been visited recently.
+  EXPECT_CALL(
+      *observer(),
+      OnNewSuggestions(_, downloads_category(),
+                       UnorderedElementsAre(HasUrl("http://download.com/0"))));
+  auto test_clock = base::MakeUnique<base::SimpleTestClock>();
+  test_clock->SetNow(now);
+  CreateLoadedProvider(/*show_assets=*/true, /*show_offline_pages=*/false,
+                       std::move(test_clock));
 }

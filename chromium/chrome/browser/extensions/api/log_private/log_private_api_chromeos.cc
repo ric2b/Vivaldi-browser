@@ -15,6 +15,7 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -206,8 +207,9 @@ void LogPrivateAPI::RegisterTempFile(const std::string& owner_extension_id,
                  base::Unretained(this), owner_extension_id, file_path));
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<LogPrivateAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<LogPrivateAPI>>::DestructorAtExit g_factory =
+    LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<LogPrivateAPI>*
@@ -542,9 +544,9 @@ void LogPrivateDumpLogsFunction::OnStoreLogsCompleted(
   entry->SetString("baseName", file_entry.registered_name);
   entry->SetString("id", file_entry.id);
   entry->SetBoolean("isDirectory", false);
-  base::ListValue* entry_list = new base::ListValue();
+  auto entry_list = base::MakeUnique<base::ListValue>();
   entry_list->Append(std::move(entry));
-  response->Set("entries", entry_list);
+  response->Set("entries", std::move(entry_list));
   response->SetBoolean("multiple", false);
   SetResult(std::move(response));
   SendResponse(succeeded);

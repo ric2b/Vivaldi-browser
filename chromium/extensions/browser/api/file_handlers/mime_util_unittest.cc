@@ -13,10 +13,10 @@
 #include "base/run_loop.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "content/public/test/test_file_system_context.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/extensions_test.h"
+#include "storage/browser/test/test_file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace extensions {
@@ -55,13 +55,15 @@ class FileHandlersMimeUtilTest : public ExtensionsTest {
   ~FileHandlersMimeUtilTest() override {}
 
   void SetUp() override {
+    ExtensionsTest::SetUp();
     file_system_context_ = content::CreateFileSystemContextForTesting(
         NULL, browser_context()->GetPath());
 
     EXPECT_TRUE(base::CreateTemporaryFile(&html_mime_file_path_));
     const std::string kSampleContent = "<html><body></body></html>";
-    EXPECT_TRUE(base::WriteFile(html_mime_file_path_, kSampleContent.c_str(),
-                                kSampleContent.size()));
+    EXPECT_EQ(static_cast<int>(kSampleContent.size()),
+              base::WriteFile(html_mime_file_path_, kSampleContent.c_str(),
+                              kSampleContent.size()));
   }
 
   content::TestBrowserThreadBundle thread_bundle_;

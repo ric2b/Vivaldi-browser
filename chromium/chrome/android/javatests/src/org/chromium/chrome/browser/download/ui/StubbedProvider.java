@@ -88,6 +88,9 @@ public class StubbedProvider implements BackendProvider {
         public boolean isDownloadOpenableInBrowser(boolean isOffTheRecord, String mimeType) {
             return false;
         }
+
+        @Override
+        public void updateLastAccessTime(String downloadGuid, boolean isOffTheRecord) {}
     }
 
     /** Stubs out the OfflinePageDownloadBridge. */
@@ -180,7 +183,7 @@ public class StubbedProvider implements BackendProvider {
         mHandler = new Handler(Looper.getMainLooper());
         mDownloadDelegate = new StubbedDownloadDelegate();
         mOfflineDelegate = new StubbedOfflinePageDelegate();
-        mSelectionDelegate = new SelectionDelegate<>();
+        mSelectionDelegate = new DownloadItemSelectionDelegate();
         mStubbedThumbnailProvider = new StubbedThumbnailProvider();
     }
 

@@ -27,11 +27,10 @@ void ServiceTestClient::OnStart() {
                        context()->identity().user_id());
 }
 
-bool ServiceTestClient::OnConnect(const ServiceInfo& remote_info,
-                                  InterfaceRegistry* registry) {
-  return false;
-}
-
+void ServiceTestClient::OnBindInterface(
+    const ServiceInfo& source_info,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {}
 
 ServiceTest::ServiceTest() {}
 
@@ -89,8 +88,8 @@ void ServiceTest::SetUp() {
 
 void ServiceTest::TearDown() {
   background_service_manager_.reset();
-  message_loop_.reset();
   context_.reset();
+  message_loop_.reset();
 }
 
 }  // namespace test

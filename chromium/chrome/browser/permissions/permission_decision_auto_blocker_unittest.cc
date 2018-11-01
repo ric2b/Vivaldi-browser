@@ -89,6 +89,7 @@ class PermissionDecisionAutoBlockerUnitTest
     ChromeRenderViewHostTestHarness::SetUp();
     autoblocker_ = PermissionDecisionAutoBlocker::GetForProfile(profile());
     feature_list_.InitWithFeatures({features::kBlockPromptsIfDismissedOften,
+                                    features::kBlockPromptsIfIgnoredOften,
                                     features::kPermissionsBlacklist},
                                    {});
     last_embargoed_status_ = false;
@@ -159,6 +160,123 @@ class PermissionDecisionAutoBlockerUnitTest
   bool callback_was_run_;
 };
 
+// Check removing the the embargo for a single permission on a site works, and
+// that it doesn't interfere with other embargoed permissions or the same
+// permission embargoed on other sites.
+TEST_F(PermissionDecisionAutoBlockerUnitTest, RemoveEmbargoByUrl) {
+  GURL url1("https://www.google.com");
+  GURL url2("https://www.example.com");
+
+  // Record dismissals for location and notifications in |url1|.
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_TRUE(autoblocker()->RecordDismissAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
+  EXPECT_TRUE(autoblocker()->RecordDismissAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
+  // Record dismissals for location in |url2|.
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_TRUE(autoblocker()->RecordDismissAndEmbargo(
+      url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+
+  // Verify all dismissals recorded above resulted in embargo.
+  PermissionResult result =
+      autoblocker()->GetEmbargoResult(url1, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+  result = autoblocker()->GetEmbargoResult(url1,
+                                           CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+  result =
+      autoblocker()->GetEmbargoResult(url2, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+
+  // Remove the embargo on notifications. Verify it is no longer under embargo,
+  // but location still is.
+  autoblocker()->RemoveEmbargoByUrl(url1, CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
+  result =
+      autoblocker()->GetEmbargoResult(url1, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+  result = autoblocker()->GetEmbargoResult(url1,
+                                           CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
+  // If not under embargo, GetEmbargoResult() returns a setting of ASK.
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+  // Verify |url2|'s embargo is still intact as well.
+  result =
+      autoblocker()->GetEmbargoResult(url2, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+}
+
+// Test that removing embargo from blacklisted permissions also works.
+TEST_F(PermissionDecisionAutoBlockerUnitTest,
+       RemoveEmbargoByUrlForBlacklistedPermission) {
+  GURL url("https://www.example.com");
+
+  // Place under embargo and verify.
+  PlaceUnderBlacklistEmbargo(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  PermissionResult result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::SAFE_BROWSING_BLACKLIST, result.source);
+
+  // Remove embargo and verify.
+  autoblocker()->RemoveEmbargoByUrl(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+}
+
+// Test it still only takes one more dismissal to re-trigger embargo after
+// removing the embargo status for a site.
+TEST_F(PermissionDecisionAutoBlockerUnitTest,
+       DismissAfterRemovingEmbargoByURL) {
+  GURL url("https://www.example.com");
+
+  // Record dismissals for location.
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_TRUE(autoblocker()->RecordDismissAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+
+  // Verify location is under embargo.
+  PermissionResult result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+
+  // Remove embargo and verify this is true.
+  autoblocker()->RemoveEmbargoByUrl(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+
+  // Record another dismissal and verify location is under embargo again.
+  autoblocker()->RecordDismissAndEmbargo(url,
+                                         CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+}
+
 TEST_F(PermissionDecisionAutoBlockerUnitTest, RemoveCountsByUrl) {
   GURL url1("https://www.google.com");
   GURL url2("https://www.example.com");
@@ -190,14 +308,20 @@ TEST_F(PermissionDecisionAutoBlockerUnitTest, RemoveCountsByUrl) {
                    url1, CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
 
   // Record some ignores.
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
   EXPECT_EQ(
-      1, autoblocker()->RecordIgnore(url1, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
-  EXPECT_EQ(1, autoblocker()->RecordIgnore(
+      1, autoblocker()->GetIgnoreCount(url1, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_DURABLE_STORAGE));
+  EXPECT_EQ(1, autoblocker()->GetIgnoreCount(
                    url1, CONTENT_SETTINGS_TYPE_DURABLE_STORAGE));
-  EXPECT_EQ(
-      1, autoblocker()->RecordIgnore(url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
-  EXPECT_EQ(
-      2, autoblocker()->RecordIgnore(url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_EQ(2, autoblocker()->GetIgnoreCount(
+                   url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
 
   autoblocker()->RemoveCountsByUrl(base::Bind(&FilterGoogle));
 
@@ -232,14 +356,22 @@ TEST_F(PermissionDecisionAutoBlockerUnitTest, RemoveCountsByUrl) {
   EXPECT_EQ(2, autoblocker()->GetDismissCount(
                    url2, CONTENT_SETTINGS_TYPE_GEOLOCATION));
 
-  EXPECT_EQ(
-      1, autoblocker()->RecordIgnore(url1, CONTENT_SETTINGS_TYPE_GEOLOCATION));
-  EXPECT_EQ(1, autoblocker()->RecordIgnore(
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_EQ(1, autoblocker()->GetIgnoreCount(
+                   url1, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
+  EXPECT_EQ(1, autoblocker()->GetIgnoreCount(
                    url1, CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
-  EXPECT_EQ(1, autoblocker()->RecordIgnore(
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url1, CONTENT_SETTINGS_TYPE_DURABLE_STORAGE));
+  EXPECT_EQ(1, autoblocker()->GetIgnoreCount(
                    url1, CONTENT_SETTINGS_TYPE_DURABLE_STORAGE));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url2, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
   EXPECT_EQ(
-      1, autoblocker()->RecordIgnore(url2, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+      1, autoblocker()->GetIgnoreCount(url2, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
 
   // Remove everything and expect that it's all gone.
   autoblocker()->RemoveCountsByUrl(base::Bind(&FilterAll));
@@ -287,7 +419,7 @@ TEST_F(PermissionDecisionAutoBlockerUnitTest, TestUpdateEmbargoBlacklist) {
 }
 
 // Test that an origin that is blacklisted for a permission will not be placed
-// under embargoed for another.
+// under embargo for another permission.
 TEST_F(PermissionDecisionAutoBlockerUnitTest, TestRequestNotBlacklisted) {
   GURL url("https://www.google.com");
   clock()->SetNow(base::Time::Now());
@@ -308,6 +440,77 @@ TEST_F(PermissionDecisionAutoBlockerUnitTest, TestRequestNotBlacklisted) {
       static_cast<int>(SafeBrowsingResponse::NOT_BLACKLISTED), 1);
   histograms.ExpectTotalCount(
       "Permissions.AutoBlocker.SafeBrowsingResponseTime", 1);
+}
+
+// Check that we do not apply embargo to the plugins content type, as prompts
+// should be triggered only when necessary by Html5ByDefault.
+TEST_F(PermissionDecisionAutoBlockerUnitTest,
+       PluginsNotEmbargoedByMultipleDismissesOrIgnores) {
+  GURL url("https://www.google.com");
+
+  // Check dismisses first.
+  autoblocker()->RecordDismissAndEmbargo(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+  autoblocker()->RecordDismissAndEmbargo(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+  PermissionResult result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+  EXPECT_EQ(2,
+            autoblocker()->GetDismissCount(url, CONTENT_SETTINGS_TYPE_PLUGINS));
+
+  // The third dismiss would normally embargo, but this shouldn't happen for
+  // plugins.
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_PLUGINS));
+  result = autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+  EXPECT_EQ(3,
+            autoblocker()->GetDismissCount(url, CONTENT_SETTINGS_TYPE_PLUGINS));
+
+  // Extra one for sanity checking.
+  EXPECT_FALSE(autoblocker()->RecordDismissAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_PLUGINS));
+  result = autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+  EXPECT_EQ(4,
+            autoblocker()->GetDismissCount(url, CONTENT_SETTINGS_TYPE_PLUGINS));
+
+  // Check ignores.
+  autoblocker()->RecordIgnoreAndEmbargo(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+  autoblocker()->RecordIgnoreAndEmbargo(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+  autoblocker()->RecordIgnoreAndEmbargo(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+  result = autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+  EXPECT_EQ(3,
+            autoblocker()->GetIgnoreCount(url, CONTENT_SETTINGS_TYPE_PLUGINS));
+
+  // The fourth ignore would normally embargo, but this shouldn't happen for
+  // plugins.
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_PLUGINS));
+  result = autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+  EXPECT_EQ(4,
+            autoblocker()->GetIgnoreCount(url, CONTENT_SETTINGS_TYPE_PLUGINS));
+
+  // Extra one for sanity checking.
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_PLUGINS));
+  result = autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_PLUGINS);
+
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+  EXPECT_EQ(5,
+            autoblocker()->GetIgnoreCount(url, CONTENT_SETTINGS_TYPE_PLUGINS));
 }
 
 // Check that GetEmbargoResult returns the correct value when the embargo is set
@@ -438,8 +641,77 @@ TEST_F(PermissionDecisionAutoBlockerUnitTest, TestDismissEmbargoBackoff) {
       "Permissions.AutoBlocker.SafeBrowsingResponseTime", 0);
 }
 
+// Tests the alternating pattern of the block on multiple ignores behaviour.
+TEST_F(PermissionDecisionAutoBlockerUnitTest, TestIgnoreEmbargoBackoff) {
+  GURL url("https://www.google.com");
+  clock()->SetNow(base::Time::Now());
+  base::HistogramTester histograms;
+
+  // Record some ignores.
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+
+  // A request with < 4 prior ignores should not be automatically blocked.
+  PermissionResult result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX);
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+
+  // After the 4th ignore subsequent permission requests should be autoblocked.
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+  EXPECT_TRUE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_IGNORES, result.source);
+
+  histograms.ExpectTotalCount("Permissions.AutoBlocker.SafeBrowsingResponse",
+                              0);
+  histograms.ExpectTotalCount(
+      "Permissions.AutoBlocker.SafeBrowsingResponseTime", 0);
+  // Accelerate time forward, check that the embargo status is lifted and the
+  // request won't be automatically blocked.
+  clock()->Advance(base::TimeDelta::FromDays(8));
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX);
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+
+  // Record another dismiss, subsequent requests should be autoblocked again.
+  EXPECT_TRUE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_IGNORES, result.source);
+
+  // Accelerate time again, check embargo is lifted and another permission
+  // request is let through.
+  clock()->Advance(base::TimeDelta::FromDays(8));
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX);
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+
+  // Record another dismiss, subsequent requests should be autoblocked again.
+  EXPECT_TRUE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX));
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_MIDI_SYSEX);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_IGNORES, result.source);
+  histograms.ExpectTotalCount("Permissions.AutoBlocker.SafeBrowsingResponse",
+                              0);
+  histograms.ExpectTotalCount(
+      "Permissions.AutoBlocker.SafeBrowsingResponseTime", 0);
+}
+
 // Test the logic for a combination of blacklisting and dismissal embargo.
-TEST_F(PermissionDecisionAutoBlockerUnitTest, TestExpiredBlacklistEmbargo) {
+TEST_F(PermissionDecisionAutoBlockerUnitTest, TestExpiringOverlappingEmbargo) {
   GURL url("https://www.google.com");
   clock()->SetNow(base::Time::Now());
 
@@ -466,6 +738,23 @@ TEST_F(PermissionDecisionAutoBlockerUnitTest, TestExpiredBlacklistEmbargo) {
       autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
   EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
   EXPECT_EQ(PermissionStatusSource::MULTIPLE_DISMISSALS, result.source);
+
+  // Record an ignore embargo.
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_FALSE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+  EXPECT_TRUE(autoblocker()->RecordIgnoreAndEmbargo(
+      url, CONTENT_SETTINGS_TYPE_GEOLOCATION));
+
+  // Ensure the ignore embargo is still set.
+  clock()->Advance(base::TimeDelta::FromDays(5));
+  result =
+      autoblocker()->GetEmbargoResult(url, CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::MULTIPLE_IGNORES, result.source);
 }
 
 TEST_F(PermissionDecisionAutoBlockerUnitTest, TestSafeBrowsingTimeout) {

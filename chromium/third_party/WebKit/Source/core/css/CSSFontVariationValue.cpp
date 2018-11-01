@@ -4,25 +4,25 @@
 
 #include "core/css/CSSFontVariationValue.h"
 
-#include "wtf/text/StringBuilder.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
 CSSFontVariationValue::CSSFontVariationValue(const AtomicString& tag,
                                              float value)
-    : CSSValue(FontVariationClass), m_tag(tag), m_value(value) {}
+    : CSSValue(kFontVariationClass), tag_(tag), value_(value) {}
 
-String CSSFontVariationValue::customCSSText() const {
+String CSSFontVariationValue::CustomCSSText() const {
   StringBuilder builder;
-  builder.append('\'');
-  builder.append(m_tag);
-  builder.append("' ");
-  builder.appendNumber(m_value);
-  return builder.toString();
+  builder.Append('\'');
+  builder.Append(tag_);
+  builder.Append("' ");
+  builder.AppendNumber(value_);
+  return builder.ToString();
 }
 
-bool CSSFontVariationValue::equals(const CSSFontVariationValue& other) const {
-  return m_tag == other.m_tag && m_value == other.m_value;
+bool CSSFontVariationValue::Equals(const CSSFontVariationValue& other) const {
+  return tag_ == other.tag_ && value_ == other.value_;
 }
 
 }  // namespace blink

@@ -13,8 +13,8 @@
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/display/display.h"
+#include "ui/display/display_finder.h"
 #include "ui/display/manager/display_manager.h"
-#include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -49,7 +49,7 @@ class UnifiedMouseWarpControllerTest : public test::AshTestBase {
         *point_in_mirroring_host = *point_in_unified_host;
         // Convert from mirroring host to unified host.
         AshWindowTreeHost* ash_host =
-            Shell::GetInstance()
+            Shell::Get()
                 ->window_tree_host_manager()
                 ->mirror_window_controller()
                 ->GetAshWindowTreeHostForDisplayId(info.id());
@@ -62,9 +62,7 @@ class UnifiedMouseWarpControllerTest : public test::AshTestBase {
 
   bool TestIfMouseWarpsAt(const gfx::Point& point_in_native) {
     static_cast<UnifiedMouseWarpController*>(
-        Shell::GetInstance()
-            ->mouse_cursor_filter()
-            ->mouse_warp_controller_for_test())
+        Shell::Get()->mouse_cursor_filter()->mouse_warp_controller_for_test())
         ->update_location_for_test();
     int64_t orig_mirroring_display_id;
     gfx::Point point_in_unified_host;
@@ -88,17 +86,16 @@ class UnifiedMouseWarpControllerTest : public test::AshTestBase {
     // Convert screen to the host.
     root->GetHost()->ConvertDIPToPixels(&new_location_in_unified_host);
 
-    int new_index = display::FindDisplayIndexContainingPoint(
+    auto iter = display::FindDisplayContainingPoint(
         display_manager()->software_mirroring_display_list(),
         new_location_in_unified_host);
-    if (new_index < 0)
+    if (iter == display_manager()->software_mirroring_display_list().end())
       return false;
-    return orig_mirroring_display_id !=
-           display_manager()->software_mirroring_display_list()[new_index].id();
+    return orig_mirroring_display_id != iter->id();
   }
 
   MouseCursorEventFilter* event_filter() {
-    return Shell::GetInstance()->mouse_cursor_filter();
+    return Shell::Get()->mouse_cursor_filter();
   }
 
   UnifiedMouseWarpController* mouse_warp_controller() {

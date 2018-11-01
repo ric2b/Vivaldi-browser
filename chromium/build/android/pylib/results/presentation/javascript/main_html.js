@@ -46,12 +46,34 @@ function showTestsOfOneSuiteOnly(suite_name) {
       });
   showTestTable(true);
   showSuiteTable(false);
+  window.scrollTo(0, 0);
+}
+
+function showTestsOfOneSuiteOnlyWithNewState(suite_name) {
+  showTestsOfOneSuiteOnly(suite_name);
+  history.pushState({suite: suite_name}, suite_name, '');
 }
 
 function showSuiteTableOnly() {
   setTitle('Suites Summary')
   showTestTable(false);
   showSuiteTable(true);
+  window.scrollTo(0, 0);
+}
+
+function showSuiteTableOnlyWithReplaceState() {
+  showSuiteTableOnly();
+  history.replaceState({}, 'suite_table', '');
+}
+
+function setBrowserBackButtonLogic() {
+  window.onpopstate = function(event) {
+    if (!event.state || !event.state.suite) {
+      showSuiteTableOnly();
+    } else {
+      showTestsOfOneSuiteOnly(event.state.suite);
+    }
+  };
 }
 
 function setTitle(title) {
@@ -166,20 +188,10 @@ function sortByColumn(head) {
   }
 }
 
-function loadPage() {
-  var args = getArguments();
-  if ('suite' in args) {
-    // The user wants to visit detailed 'subpage' of that suite.
-    showTestsOfOneSuiteOnly(args['suite']);
-  } else {
-    // The user wants to visit the summary of all suites.
-    showSuiteTableOnly();
-  }
-}
-
 function reportIssues() {
   var url = 'https://bugs.chromium.org/p/chromium/issues/entry?' +
-            'labels=Pri-2,Type-Bug&summary=Result Details Feedback:&' +
+            'labels=Pri-2,Type-Bug,Restrict-View-Google&' +
+            'summary=Result Details Feedback:&' +
             'comment=Please check out: ' + window.location;
   var newWindow = window.open(url, '_blank');
   newWindow.focus();

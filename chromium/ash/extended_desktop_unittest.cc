@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/wm/root_window_finder.h"
-#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
+#include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm/root_window_finder.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/client/capture_client.h"
@@ -36,9 +36,9 @@ namespace {
 
 void SetSecondaryDisplayLayout(display::DisplayPlacement::Position position) {
   std::unique_ptr<display::DisplayLayout> layout =
-      Shell::GetInstance()->display_manager()->GetCurrentDisplayLayout().Copy();
+      Shell::Get()->display_manager()->GetCurrentDisplayLayout().Copy();
   layout->placement_list[0].position = position;
-  Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
+  Shell::Get()->display_manager()->SetLayoutForCurrentDisplays(
       std::move(layout));
 }
 
@@ -224,7 +224,7 @@ TEST_F(ExtendedDesktopTest, SystemModal) {
   views::Widget* widget_on_1st = CreateTestWidget(gfx::Rect(10, 10, 100, 100));
   EXPECT_TRUE(wm::IsActiveWindow(widget_on_1st->GetNativeView()));
   EXPECT_EQ(root_windows[0], widget_on_1st->GetNativeView()->GetRootWindow());
-  EXPECT_EQ(root_windows[0], Shell::GetTargetRootWindow());
+  EXPECT_EQ(root_windows[0], Shell::GetRootWindowForNewWindows());
 
   // Open system modal. Make sure it's on 2nd root window and active.
   views::Widget* modal_widget = views::Widget::CreateWindowWithContextAndBounds(
@@ -233,7 +233,7 @@ TEST_F(ExtendedDesktopTest, SystemModal) {
   modal_widget->Show();
   EXPECT_TRUE(wm::IsActiveWindow(modal_widget->GetNativeView()));
   EXPECT_EQ(root_windows[1], modal_widget->GetNativeView()->GetRootWindow());
-  EXPECT_EQ(root_windows[1], Shell::GetTargetRootWindow());
+  EXPECT_EQ(root_windows[1], Shell::GetRootWindowForNewWindows());
 
   ui::test::EventGenerator& event_generator(GetEventGenerator());
 
@@ -241,14 +241,14 @@ TEST_F(ExtendedDesktopTest, SystemModal) {
   event_generator.MoveMouseToCenterOf(widget_on_1st->GetNativeView());
   event_generator.ClickLeftButton();
   EXPECT_TRUE(wm::IsActiveWindow(modal_widget->GetNativeView()));
-  EXPECT_EQ(root_windows[1], Shell::GetTargetRootWindow());
+  EXPECT_EQ(root_windows[1], Shell::GetRootWindowForNewWindows());
 
   // Close system modal and so clicking a widget should work now.
   modal_widget->Close();
   event_generator.MoveMouseToCenterOf(widget_on_1st->GetNativeView());
   event_generator.ClickLeftButton();
   EXPECT_TRUE(wm::IsActiveWindow(widget_on_1st->GetNativeView()));
-  EXPECT_EQ(root_windows[0], Shell::GetTargetRootWindow());
+  EXPECT_EQ(root_windows[0], Shell::GetRootWindowForNewWindows());
 }
 
 TEST_F(ExtendedDesktopTest, TestCursor) {
@@ -258,7 +258,7 @@ TEST_F(ExtendedDesktopTest, TestCursor) {
   aura::WindowTreeHost* host1 = root_windows[1]->GetHost();
   EXPECT_EQ(ui::kCursorPointer, host0->last_cursor().native_type());
   EXPECT_EQ(ui::kCursorNull, host1->last_cursor().native_type());
-  Shell::GetInstance()->cursor_manager()->SetCursor(ui::kCursorCopy);
+  Shell::Get()->cursor_manager()->SetCursor(ui::kCursorCopy);
   EXPECT_EQ(ui::kCursorCopy, host0->last_cursor().native_type());
   EXPECT_EQ(ui::kCursorCopy, host1->last_cursor().native_type());
 }
@@ -697,7 +697,7 @@ TEST_F(ExtendedDesktopTest, ConvertPoint) {
 
 TEST_F(ExtendedDesktopTest, OpenSystemTray) {
   UpdateDisplay("500x600,600x400");
-  SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
+  SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
   ASSERT_FALSE(tray->HasSystemBubble());
 
   ui::test::EventGenerator& event_generator(GetEventGenerator());
@@ -833,7 +833,7 @@ TEST_F(ExtendedDesktopTest, KeyEventsOnLockScreen) {
 
 TEST_F(ExtendedDesktopTest, PassiveGrab) {
   EventLocationRecordingEventHandler event_handler;
-  ash::Shell::GetInstance()->AddPreTargetHandler(&event_handler);
+  ash::Shell::Get()->AddPreTargetHandler(&event_handler);
 
   UpdateDisplay("300x300,200x200");
 
@@ -856,7 +856,7 @@ TEST_F(ExtendedDesktopTest, PassiveGrab) {
   generator.MoveMouseTo(400, 150);
   EXPECT_EQ("100,150 100,150", event_handler.GetLocationsAndReset());
 
-  ash::Shell::GetInstance()->RemovePreTargetHandler(&event_handler);
+  ash::Shell::Get()->RemovePreTargetHandler(&event_handler);
 }
 
 }  // namespace ash

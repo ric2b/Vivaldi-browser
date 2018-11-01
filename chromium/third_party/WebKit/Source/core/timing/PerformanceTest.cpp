@@ -5,7 +5,10 @@
 #include "core/timing/Performance.h"
 
 #include "core/frame/PerformanceMonitor.h"
+#include "core/loader/DocumentLoadTiming.h"
+#include "core/loader/DocumentLoader.h"
 #include "core/testing/DummyPageHolder.h"
+#include "core/timing/DOMWindowPerformance.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -13,87 +16,147 @@ namespace blink {
 class PerformanceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    m_pageHolder = DummyPageHolder::create(IntSize(800, 600));
-    m_pageHolder->document().setURL(KURL(KURL(), "https://example.com"));
-    m_performance = Performance::create(&m_pageHolder->frame());
+    page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
+    page_holder_->GetDocument().SetURL(KURL(KURL(), "https://example.com"));
+    performance_ = Performance::Create(&page_holder_->GetFrame());
 
     // Create another dummy page holder and pretend this is the iframe.
-    m_anotherPageHolder = DummyPageHolder::create(IntSize(400, 300));
-    m_anotherPageHolder->document().setURL(
+    another_page_holder_ = DummyPageHolder::Create(IntSize(400, 300));
+    another_page_holder_->GetDocument().SetURL(
         KURL(KURL(), "https://iframed.com/bar"));
   }
 
-  bool observingLongTasks() {
-    return PerformanceMonitor::instrumentingMonitor(
-        m_performance->getExecutionContext());
+  bool ObservingLongTasks() {
+    return PerformanceMonitor::InstrumentingMonitor(
+        performance_->GetExecutionContext());
   }
 
-  void addLongTaskObserver() {
+  void AddLongTaskObserver() {
     // simulate with filter options.
-    m_performance->m_observerFilterOptions |= PerformanceEntry::LongTask;
+    performance_->observer_filter_options_ |= PerformanceEntry::kLongTask;
   }
 
-  void removeLongTaskObserver() {
+  void RemoveLongTaskObserver() {
     // simulate with filter options.
-    m_performance->m_observerFilterOptions = PerformanceEntry::Invalid;
+    performance_->observer_filter_options_ = PerformanceEntry::kInvalid;
   }
 
-  LocalFrame* frame() const { return m_pageHolder->document().frame(); }
-
-  Document* document() const { return &m_pageHolder->document(); }
-
-  LocalFrame* anotherFrame() const {
-    return m_anotherPageHolder->document().frame();
+  void SimulateDidProcessLongTask() {
+    auto* monitor = GetFrame()->GetPerformanceMonitor();
+    monitor->WillExecuteScript(GetDocument());
+    monitor->DidExecuteScript();
+    monitor->DidProcessTask(nullptr, 0, 1);
   }
 
-  Document* anotherDocument() const { return &m_anotherPageHolder->document(); }
+  LocalFrame* GetFrame() const { return &page_holder_->GetFrame(); }
 
-  String sanitizedAttribution(ExecutionContext* context,
-                              bool hasMultipleContexts,
-                              LocalFrame* observerFrame) {
-    return Performance::sanitizedAttribution(context, hasMultipleContexts,
-                                             observerFrame)
+  Document* GetDocument() const { return &page_holder_->GetDocument(); }
+
+  LocalFrame* AnotherFrame() const { return &another_page_holder_->GetFrame(); }
+
+  Document* AnotherDocument() const {
+    return &another_page_holder_->GetDocument();
+  }
+
+  String SanitizedAttribution(ExecutionContext* context,
+                              bool has_multiple_contexts,
+                              LocalFrame* observer_frame) {
+    return Performance::SanitizedAttribution(context, has_multiple_contexts,
+                                             observer_frame)
         .first;
   }
 
-  Persistent<Performance> m_performance;
-  std::unique_ptr<DummyPageHolder> m_pageHolder;
-  std::unique_ptr<DummyPageHolder> m_anotherPageHolder;
+  Persistent<Performance> performance_;
+  std::unique_ptr<DummyPageHolder> page_holder_;
+  std::unique_ptr<DummyPageHolder> another_page_holder_;
 };
 
 TEST_F(PerformanceTest, LongTaskObserverInstrumentation) {
-  m_performance->updateLongTaskInstrumentation();
-  EXPECT_FALSE(observingLongTasks());
+  performance_->UpdateLongTaskInstrumentation();
+  EXPECT_FALSE(ObservingLongTasks());
 
   // Adding LongTask observer (with filer option) enables instrumentation.
-  addLongTaskObserver();
-  m_performance->updateLongTaskInstrumentation();
-  EXPECT_TRUE(observingLongTasks());
+  AddLongTaskObserver();
+  performance_->UpdateLongTaskInstrumentation();
+  EXPECT_TRUE(ObservingLongTasks());
 
   // Removing LongTask observer disables instrumentation.
-  removeLongTaskObserver();
-  m_performance->updateLongTaskInstrumentation();
-  EXPECT_FALSE(observingLongTasks());
+  RemoveLongTaskObserver();
+  performance_->UpdateLongTaskInstrumentation();
+  EXPECT_FALSE(ObservingLongTasks());
 }
 
 TEST_F(PerformanceTest, SanitizedLongTaskName) {
   // Unable to attribute, when no execution contents are available.
-  EXPECT_EQ("unknown", sanitizedAttribution(nullptr, false, frame()));
+  EXPECT_EQ("unknown", SanitizedAttribution(nullptr, false, GetFrame()));
 
   // Attribute for same context (and same origin).
-  EXPECT_EQ("self", sanitizedAttribution(document(), false, frame()));
+  EXPECT_EQ("self", SanitizedAttribution(GetDocument(), false, GetFrame()));
 
   // Unable to attribute, when multiple script execution contents are involved.
   EXPECT_EQ("multiple-contexts",
-            sanitizedAttribution(document(), true, frame()));
+            SanitizedAttribution(GetDocument(), true, GetFrame()));
 }
 
 TEST_F(PerformanceTest, SanitizedLongTaskName_CrossOrigin) {
   // Unable to attribute, when no execution contents are available.
-  EXPECT_EQ("unknown", sanitizedAttribution(nullptr, false, frame()));
+  EXPECT_EQ("unknown", SanitizedAttribution(nullptr, false, GetFrame()));
 
   // Attribute for same context (and same origin).
   EXPECT_EQ("cross-origin-unreachable",
-            sanitizedAttribution(anotherDocument(), false, frame()));
+            SanitizedAttribution(AnotherDocument(), false, GetFrame()));
+}
+
+// https://crbug.com/706798: Checks that after navigation that have replaced the
+// window object, calls to not garbage collected yet Performance belonging to
+// the old window do not cause a crash.
+TEST_F(PerformanceTest, NavigateAway) {
+  AddLongTaskObserver();
+  performance_->UpdateLongTaskInstrumentation();
+  EXPECT_TRUE(ObservingLongTasks());
+
+  // Simulate navigation commit.
+  DocumentInit init(KURL(), GetFrame());
+  GetDocument()->Shutdown();
+  GetFrame()->SetDOMWindow(LocalDOMWindow::Create(*GetFrame()));
+  GetFrame()->DomWindow()->InstallNewDocument(AtomicString(), init);
+
+  // m_performance is still alive, and should not crash when notified.
+  SimulateDidProcessLongTask();
+}
+
+// Checks that Performance object and its fields (like PerformanceTiming)
+// function correctly after transition to another document in the same window.
+// This happens when a page opens a new window and it navigates to a same-origin
+// document.
+TEST(PerformanceLifetimeTest, SurviveContextSwitch) {
+  std::unique_ptr<DummyPageHolder> page_holder =
+      DummyPageHolder::Create(IntSize(800, 600));
+
+  Performance* perf =
+      DOMWindowPerformance::performance(*page_holder->GetFrame().DomWindow());
+  PerformanceTiming* timing = perf->timing();
+
+  auto* document_loader = page_holder->GetFrame().Loader().GetDocumentLoader();
+  ASSERT_TRUE(document_loader);
+  document_loader->GetTiming().SetNavigationStart(
+      MonotonicallyIncreasingTime());
+
+  EXPECT_EQ(&page_holder->GetFrame(), perf->GetFrame());
+  EXPECT_EQ(&page_holder->GetFrame(), timing->GetFrame());
+  auto navigation_start = timing->navigationStart();
+  EXPECT_NE(0U, navigation_start);
+
+  // Simulate changing the document while keeping the window.
+  page_holder->GetDocument().Shutdown();
+  page_holder->GetFrame().DomWindow()->InstallNewDocument(
+      AtomicString(), DocumentInit(KURL(), &page_holder->GetFrame()));
+
+  EXPECT_EQ(perf, DOMWindowPerformance::performance(
+                      *page_holder->GetFrame().DomWindow()));
+  EXPECT_EQ(timing, perf->timing());
+  EXPECT_EQ(&page_holder->GetFrame(), perf->GetFrame());
+  EXPECT_EQ(&page_holder->GetFrame(), timing->GetFrame());
+  EXPECT_EQ(navigation_start, timing->navigationStart());
 }
 }

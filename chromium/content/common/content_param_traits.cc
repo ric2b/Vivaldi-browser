@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/strings/string_number_conversions.h"
+#include "content/common/accessibility_mode.h"
 #include "content/common/message_port.h"
 #include "ipc/ipc_mojo_param_traits.h"
 #include "net/base/ip_endpoint.h"
@@ -44,7 +45,7 @@ bool ParamTraits<WebInputEventPointer>::Read(const base::Pickle* m,
     return false;
   }
   const size_t expected_size_for_type =
-      ui::WebInputEventTraits::GetSize(event->type());
+      ui::WebInputEventTraits::GetSize(event->GetType());
   if (data_length != static_cast<int>(expected_size_for_type)) {
     NOTREACHED();
     return false;
@@ -58,9 +59,9 @@ void ParamTraits<WebInputEventPointer>::Log(const param_type& p,
   l->append("(");
   LogParam(p->size(), l);
   l->append(", ");
-  LogParam(p->type(), l);
+  LogParam(p->GetType(), l);
   l->append(", ");
-  LogParam(p->timeStampSeconds(), l);
+  LogParam(p->TimeStampSeconds(), l);
   l->append(")");
 }
 
@@ -89,6 +90,28 @@ void ParamTraits<content::MessagePort>::Log(const param_type& p,
                                             std::string* l) {
 }
 
+void ParamTraits<content::AccessibilityMode>::GetSize(base::PickleSizer* s,
+                                                      const param_type& p) {
+  IPC::GetParamSize(s, p.mode());
+}
+
+void ParamTraits<content::AccessibilityMode>::Write(base::Pickle* m,
+                                                    const param_type& p) {
+  IPC::WriteParam(m, p.mode());
+}
+
+bool ParamTraits<content::AccessibilityMode>::Read(const base::Pickle* m,
+                                                   base::PickleIterator* iter,
+                                                   param_type* r) {
+  uint32_t value;
+  if (!IPC::ReadParam(m, iter, &value))
+    return false;
+  *r = content::AccessibilityMode(value);
+  return true;
+}
+
+void ParamTraits<content::AccessibilityMode>::Log(const param_type& p,
+                                                  std::string* l) {}
 }  // namespace IPC
 
 // Generate param traits size methods.

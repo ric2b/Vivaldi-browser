@@ -1,5 +1,14 @@
 include_rules = [
+  "+components/printing/browser",
+  "+components/printing/common",
   "+components/security_state",
+  "+printing",
   "+storage/browser/quota",
   "+ui/aura",
+  "+sandbox/win/src",
 ]
+specific_include_rules = {
+  "headless_clipboard.h": [
+    "+third_party/skia/include",
+  ]
+}

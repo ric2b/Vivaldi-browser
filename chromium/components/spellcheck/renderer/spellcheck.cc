@@ -26,6 +26,8 @@
 #include "components/spellcheck/renderer/spellcheck_language.h"
 #include "components/spellcheck/renderer/spellcheck_provider.h"
 #include "components/spellcheck/spellcheck_build_features.h"
+#include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_frame_visitor.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/render_view_visitor.h"
@@ -46,18 +48,18 @@ namespace {
 const int kNoOffset = 0;
 const int kNoTag = 0;
 
-class UpdateSpellcheckEnabled : public content::RenderViewVisitor {
+class UpdateSpellcheckEnabled : public content::RenderFrameVisitor {
  public:
   explicit UpdateSpellcheckEnabled(bool enabled) : enabled_(enabled) {}
-  bool Visit(content::RenderView* render_view) override;
+  bool Visit(content::RenderFrame* render_frame) override;
 
  private:
   bool enabled_;  // New spellcheck-enabled state.
   DISALLOW_COPY_AND_ASSIGN(UpdateSpellcheckEnabled);
 };
 
-bool UpdateSpellcheckEnabled::Visit(content::RenderView* render_view) {
-  SpellCheckProvider* provider = SpellCheckProvider::Get(render_view);
+bool UpdateSpellcheckEnabled::Visit(content::RenderFrame* render_frame) {
+  SpellCheckProvider* provider = SpellCheckProvider::Get(render_frame);
   DCHECK(provider);
   provider->EnableSpellcheck(enabled_);
   return true;
@@ -78,12 +80,12 @@ DocumentMarkersRemover::DocumentMarkersRemover(
     const std::set<std::string>& words)
     : words_(words.size()) {
   std::transform(words.begin(), words.end(), words_.begin(),
-                 [](const std::string& w) { return WebString::fromUTF8(w); });
+                 [](const std::string& w) { return WebString::FromUTF8(w); });
 }
 
 bool DocumentMarkersRemover::Visit(content::RenderView* render_view) {
   if (render_view && render_view->GetWebView())
-    render_view->GetWebView()->removeSpellingMarkersUnderWords(words_);
+    render_view->GetWebView()->RemoveSpellingMarkersUnderWords(words_);
   return true;
 }
 
@@ -224,7 +226,7 @@ void SpellCheck::OnCustomDictionaryChanged(
 void SpellCheck::OnEnableSpellCheck(bool enable) {
   spellcheck_enabled_ = enable;
   UpdateSpellcheckEnabled updater(enable);
-  content::RenderView::ForEach(&updater);
+  content::RenderFrame::ForEach(&updater);
 }
 
 // TODO(groby): Make sure we always have a spelling engine, even before
@@ -359,19 +361,19 @@ bool SpellCheck::SpellCheckParagraph(
                        &misspelling_start,
                        &misspelling_length,
                        NULL)) {
-      results->assign(textcheck_results);
+      results->Assign(textcheck_results);
       return true;
     }
 
     if (!custom_dictionary_.SpellCheckWord(
             text, misspelling_start, misspelling_length)) {
       textcheck_results.push_back(
-          WebTextCheckingResult(blink::WebTextDecorationTypeSpelling,
+          WebTextCheckingResult(blink::kWebTextDecorationTypeSpelling,
                                 misspelling_start, misspelling_length));
     }
     position_in_text = misspelling_start + misspelling_length;
   }
-  results->assign(textcheck_results);
+  results->Assign(textcheck_results);
   return false;
 #else
   // This function is only invoked for spell checker functionality that runs
@@ -388,7 +390,7 @@ void SpellCheck::RequestTextChecking(
     blink::WebTextCheckingCompletion* completion) {
   // Clean up the previous request before starting a new request.
   if (pending_request_param_.get())
-    pending_request_param_->completion()->didCancelCheckingText();
+    pending_request_param_->completion()->DidCancelCheckingText();
 
   pending_request_param_.reset(new SpellcheckRequest(
       text, completion));
@@ -433,11 +435,11 @@ void SpellCheck::PerformSpellCheck(SpellcheckRequest* param) {
                    [](std::unique_ptr<SpellcheckLanguage>& language) {
                      return !language->IsEnabled();
                    }) != languages_.end()) {
-    param->completion()->didCancelCheckingText();
+    param->completion()->DidCancelCheckingText();
   } else {
     WebVector<blink::WebTextCheckingResult> results;
     SpellCheckParagraph(param->text(), &results);
-    param->completion()->didFinishCheckingText(results);
+    param->completion()->DidFinishCheckingText(results);
   }
 }
 #endif
@@ -494,10 +496,10 @@ void SpellCheck::CreateTextCheckingResults(
     results.push_back(WebTextCheckingResult(
         static_cast<WebTextDecorationType>(decoration),
         line_offset + spellcheck_result.location, spellcheck_result.length,
-        blink::WebString::fromUTF16(replacement)));
+        blink::WebString::FromUTF16(replacement)));
   }
 
-  textcheck_results->assign(results);
+  textcheck_results->Assign(results);
 }
 
 bool SpellCheck::IsSpellcheckEnabled() {

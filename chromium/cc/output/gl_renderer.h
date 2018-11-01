@@ -10,7 +10,7 @@
 
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/output/color_lut_cache.h"
 #include "cc/output/context_cache_controller.h"
 #include "cc/output/direct_renderer.h"
@@ -21,8 +21,8 @@
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/quad_f.h"
+#include "ui/latency/latency_info.h"
 
 namespace gpu {
 namespace gles2 {
@@ -54,6 +54,8 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
              TextureMailboxDeleter* texture_mailbox_deleter,
              int highp_threshold_min);
   ~GLRenderer() override;
+
+  bool use_swap_with_bounds() const { return use_swap_with_bounds_; }
 
   void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) override;
   void SwapBuffersComplete() override;
@@ -100,6 +102,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   void EnsureScissorTestDisabled() override;
   void CopyCurrentRenderPassToBitmap(
       std::unique_ptr<CopyOutputRequest> request) override;
+  void SetEnableDCLayers(bool enable) override;
   void FinishDrawingQuadList() override;
 
   // Returns true if quad requires antialiasing and false otherwise.
@@ -244,6 +247,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   void RestoreGLState();
 
   void ScheduleCALayers();
+  void ScheduleDCLayers();
   void ScheduleOverlays();
 
   // Copies the contents of the render pass draw quad, including filter effects,
@@ -311,6 +315,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   TextureMailboxDeleter* texture_mailbox_deleter_;
 
   gfx::Rect swap_buffer_rect_;
+  std::vector<gfx::Rect> swap_content_bounds_;
   gfx::Rect scissor_rect_;
   bool is_scissor_enabled_ = false;
   bool stencil_shadow_ = false;

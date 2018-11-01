@@ -6,12 +6,13 @@
 #define NGPhysicalFragment_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/geometry/ng_physical_offset.h"
+#include "core/layout/ng/geometry/ng_physical_size.h"
 #include "core/layout/ng/ng_break_token.h"
-#include "core/layout/ng/ng_units.h"
 #include "platform/LayoutUnit.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefPtr.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -31,17 +32,24 @@ class LayoutObject;
 // coordinate system.
 class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
  public:
-  enum NGFragmentType { kFragmentBox = 0, kFragmentText = 1 };
+  enum NGFragmentType {
+    kFragmentBox = 0,
+    kFragmentText = 1,
+    kFragmentLineBox = 2
+    // When adding new values, make sure the bit size of |type_| is large
+    // enough to store.
+  };
 
   NGFragmentType Type() const { return static_cast<NGFragmentType>(type_); }
   bool IsBox() const { return Type() == NGFragmentType::kFragmentBox; }
   bool IsText() const { return Type() == NGFragmentType::kFragmentText; }
+  bool IsLineBox() const { return Type() == NGFragmentType::kFragmentLineBox; }
 
   // Override RefCounted's deref() to ensure operator delete is called on the
   // appropriate subclass type.
-  void deref() const {
-    if (derefBase())
-      destroy();
+  void Deref() const {
+    if (DerefBase())
+      Destroy();
   }
 
   // The accessors in this class shouldn't be used by layout code directly,
@@ -53,11 +61,7 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
   LayoutUnit Width() const { return size_.width; }
   LayoutUnit Height() const { return size_.height; }
 
-  // Returns the total size, including the contents outside of the border-box.
-  LayoutUnit WidthOverflow() const { return overflow_.width; }
-  LayoutUnit HeightOverflow() const { return overflow_.height; }
-
-  // Returns the offset relative to the parent fragement's content-box.
+  // Returns the offset relative to the parent fragment's content-box.
   LayoutUnit LeftOffset() const {
     DCHECK(is_placed_);
     return offset_.left;
@@ -73,14 +77,14 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
     return offset_;
   }
 
-  // Should only be used by the parent fragement's layout.
+  // Should only be used by the parent fragment's layout.
   void SetOffset(NGPhysicalOffset offset) {
     DCHECK(!is_placed_);
     offset_ = offset;
     is_placed_ = true;
   }
 
-  NGBreakToken* BreakToken() const { return break_token_.get(); }
+  NGBreakToken* BreakToken() const { return break_token_.Get(); }
 
   const ComputedStyle& Style() const;
 
@@ -90,24 +94,24 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
 
   bool IsPlaced() const { return is_placed_; }
 
+  String ToString() const;
+
  protected:
   NGPhysicalFragment(LayoutObject* layout_object,
                      NGPhysicalSize size,
-                     NGPhysicalSize overflow,
                      NGFragmentType type,
                      RefPtr<NGBreakToken> break_token = nullptr);
 
   LayoutObject* layout_object_;
   NGPhysicalSize size_;
-  NGPhysicalSize overflow_;
   NGPhysicalOffset offset_;
   RefPtr<NGBreakToken> break_token_;
 
-  unsigned type_ : 1;
+  unsigned type_ : 2;
   unsigned is_placed_ : 1;
 
  private:
-  void destroy() const;
+  void Destroy() const;
 };
 
 }  // namespace blink

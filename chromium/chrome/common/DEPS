@@ -23,10 +23,12 @@ include_rules = [
   "+components/password_manager/core/common",
   "+components/policy/core/common",
   "+components/printing/common",
+  "+components/safe_browsing/csd.pb.h",
   "+components/signin/core/common",
   "+components/translate/core/common",
   "+components/url_formatter",
   "+components/version_info",
+  "+device/vr/features.h",
   "+extensions/common",
   "+extensions/features",
   "+gin/public",  # For profiling.cc
@@ -40,7 +42,7 @@ include_rules = [
   "+third_party/boringssl/src/include",
 
   # FIXME - refactor code and remove these dependencies
-  "+chrome/installer",
+  "+chrome/installer/util",
 ]
 specific_include_rules = {
   "service_process_util.*": [

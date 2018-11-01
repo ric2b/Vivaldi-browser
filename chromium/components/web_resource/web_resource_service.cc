@@ -42,9 +42,12 @@ WebResourceService::WebResourceService(
     int cache_update_delay_ms,
     net::URLRequestContextGetter* request_context,
     const char* disable_network_switch,
-    const ParseJSONCallback& parse_json_callback)
+    const ParseJSONCallback& parse_json_callback,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation)
     : prefs_(prefs),
-      resource_request_allowed_notifier_(prefs, disable_network_switch),
+      resource_request_allowed_notifier_(
+          new ResourceRequestAllowedNotifier(prefs, disable_network_switch)),
+      fetch_scheduled_(false),
       in_fetch_(false),
       web_resource_server_(web_resource_server),
       application_locale_(application_locale),
@@ -53,14 +56,15 @@ WebResourceService::WebResourceService(
       cache_update_delay_ms_(cache_update_delay_ms),
       request_context_(request_context),
       parse_json_callback_(parse_json_callback),
+      traffic_annotation_(traffic_annotation),
       weak_ptr_factory_(this) {
-  resource_request_allowed_notifier_.Init(this);
+  resource_request_allowed_notifier_->Init(this);
   DCHECK(prefs);
 }
 
 void WebResourceService::StartAfterDelay() {
   // If resource requests are not allowed, we'll get a callback when they are.
-  if (resource_request_allowed_notifier_.ResourceRequestsAllowed())
+  if (resource_request_allowed_notifier_->ResourceRequestsAllowed())
     OnResourceRequestsAllowed();
 }
 
@@ -100,15 +104,35 @@ void WebResourceService::OnURLFetchComplete(const net::URLFetcher* source) {
 // Delay initial load of resource data into cache so as not to interfere
 // with startup time.
 void WebResourceService::ScheduleFetch(int64_t delay_ms) {
+  if (fetch_scheduled_)
+    return;
+  fetch_scheduled_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&WebResourceService::StartFetch,
                             weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(delay_ms));
 }
 
+void WebResourceService::SetResourceRequestAllowedNotifier(
+    std::unique_ptr<ResourceRequestAllowedNotifier> notifier) {
+  resource_request_allowed_notifier_ = std::move(notifier);
+  resource_request_allowed_notifier_->Init(this);
+}
+
+bool WebResourceService::GetFetchScheduled() const {
+  return fetch_scheduled_;
+}
+
 // Initializes the fetching of data from the resource server.  Data
 // load calls OnURLFetchComplete.
 void WebResourceService::StartFetch() {
+  // Set to false so that next fetch can be scheduled after this fetch or
+  // if we recieve notification that resource is allowed.
+  fetch_scheduled_ = false;
+  // Check whether fetching is allowed.
+  if (!resource_request_allowed_notifier_->ResourceRequestsAllowed())
+    return;
+
   // First, put our next cache load on the MessageLoop.
   ScheduleFetch(cache_update_delay_ms_);
 
@@ -128,8 +152,8 @@ void WebResourceService::StartFetch() {
                                                  application_locale_);
 
   DVLOG(1) << "WebResourceService StartFetch " << web_resource_server;
-  url_fetcher_ =
-      net::URLFetcher::Create(web_resource_server, net::URLFetcher::GET, this);
+  url_fetcher_ = net::URLFetcher::Create(
+      web_resource_server, net::URLFetcher::GET, this, traffic_annotation_);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       url_fetcher_.get(),
       data_use_measurement::DataUseUserData::WEB_RESOURCE_SERVICE);

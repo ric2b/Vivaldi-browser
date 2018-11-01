@@ -89,7 +89,10 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/sync/test/integration/sync_arc_package_helper.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_util.h"
 #endif
 
 using browser_sync::ProfileSyncService;
@@ -212,7 +215,6 @@ SyncTest::SyncTest(TestType test_type)
       server_type_(SERVER_TYPE_UNDECIDED),
       num_clients_(-1),
       use_verifier_(true),
-      notifications_enabled_(true),
       create_gaia_account_at_runtime_(false) {
   sync_datatype_helper::AssociateWithTest(this);
   switch (test_type_) {
@@ -298,6 +300,7 @@ void SyncTest::SetUpCommandLine(base::CommandLine* cl) {
 
 #if defined(OS_CHROMEOS)
   cl->AppendSwitch(chromeos::switches::kIgnoreUserProfileMappingForTests);
+  arc::SetArcAvailableCommandLineForTesting(cl);
 #endif
 }
 
@@ -407,7 +410,8 @@ Profile* SyncTest::MakeTestProfile(base::FilePath profile_path, int index) {
     base::FilePath pref_path(profile_path.Append(chrome::kPreferencesFilename));
     const char* contents = preexisting_preferences_file_contents_.c_str();
     size_t contents_length = preexisting_preferences_file_contents_.size();
-    if (!base::WriteFile(pref_path, contents, contents_length)) {
+    if (base::WriteFile(pref_path, contents, contents_length) !=
+        static_cast<int>(contents_length)) {
       LOG(FATAL) << "Preexisting Preferences file could not be written.";
     }
   }
@@ -419,11 +423,14 @@ Profile* SyncTest::MakeTestProfile(base::FilePath profile_path, int index) {
 }
 
 Profile* SyncTest::GetProfile(int index) {
-  if (profiles_.empty())
-    LOG(FATAL) << "SetupClients() has not yet been called.";
-  if (index < 0 || index >= static_cast<int>(profiles_.size()))
-    LOG(FATAL) << "GetProfile(): Index is out of bounds.";
-  return profiles_[index];
+  EXPECT_FALSE(profiles_.empty()) << "SetupClients() has not yet been called.";
+  EXPECT_FALSE(index < 0 || index >= static_cast<int>(profiles_.size()))
+      << "GetProfile(): Index is out of bounds.";
+
+  Profile* profile = profiles_[index];
+  EXPECT_NE(nullptr, profile) << "No profile found at index: " << index;
+
+  return profile;
 }
 
 std::vector<Profile*> SyncTest::GetAllProfiles() {
@@ -438,11 +445,22 @@ std::vector<Profile*> SyncTest::GetAllProfiles() {
 }
 
 Browser* SyncTest::GetBrowser(int index) {
-  if (browsers_.empty())
-    LOG(FATAL) << "SetupClients() has not yet been called.";
-  if (index < 0 || index >= static_cast<int>(browsers_.size()))
-    LOG(FATAL) << "GetBrowser(): Index is out of bounds.";
+  EXPECT_FALSE(browsers_.empty()) << "SetupClients() has not yet been called.";
+  EXPECT_FALSE(index < 0 || index >= static_cast<int>(browsers_.size()))
+      << "GetBrowser(): Index is out of bounds.";
+
+  Browser* browser = browsers_[index];
+  EXPECT_NE(browser, nullptr);
+
   return browsers_[index];
+}
+
+Browser* SyncTest::AddBrowser(int profile_index) {
+  Profile* profile = GetProfile(profile_index);
+  browsers_.push_back(new Browser(Browser::CreateParams(profile, true)));
+  profiles_.push_back(profile);
+
+  return browsers_[browsers_.size() - 1];
 }
 
 ProfileSyncServiceHarness* SyncTest::GetClient(int index) {
@@ -450,7 +468,14 @@ ProfileSyncServiceHarness* SyncTest::GetClient(int index) {
     LOG(FATAL) << "SetupClients() has not yet been called.";
   if (index < 0 || index >= static_cast<int>(clients_.size()))
     LOG(FATAL) << "GetClient(): Index is out of bounds.";
-  return clients_[index];
+  return clients_[index].get();
+}
+
+std::vector<ProfileSyncServiceHarness*> SyncTest::GetSyncClients() {
+  std::vector<ProfileSyncServiceHarness*> clients(clients_.size());
+  for (size_t i = 0; i < clients_.size(); ++i)
+    clients[i] = clients_[i].get();
+  return clients;
 }
 
 ProfileSyncService* SyncTest::GetSyncService(int index) {
@@ -487,7 +512,6 @@ bool SyncTest::SetupClients() {
   profiles_.resize(num_clients_);
   profile_delegates_.resize(num_clients_ + 1);  // + 1 for the verifier.
   tmp_profile_paths_.resize(num_clients_);
-  browsers_.resize(num_clients_);
   clients_.resize(num_clients_);
   invalidation_forwarders_.resize(num_clients_);
   sync_refreshers_.resize(num_clients_);
@@ -499,6 +523,16 @@ bool SyncTest::SetupClients() {
     if (!CreateGaiaAccount(username_, password_))
       LOG(FATAL) << "Could not create Gaia account.";
   }
+
+#if defined(OS_CHROMEOS)
+  const auto* cl = base::CommandLine::ForCurrentProcess();
+  // ARC_PACKAGE do not support supervised users, switches::kSupervisedUserId
+  // need to be set in SetUpCommandLine() when a test will use supervise users.
+  if (!cl->HasSwitch(switches::kSupervisedUserId)) {
+    // Sets Arc flags, need to be called before create test profiles.
+    ArcAppListPrefsFactory::SetFactoryForSyncTest();
+  }
+#endif
 
   for (int i = 0; i < num_clients_; ++i) {
     CreateProfile(i);
@@ -518,6 +552,16 @@ bool SyncTest::SetupClients() {
         user_data_dir.Append(FILE_PATH_LITERAL("Verifier")), num_clients_);
     WaitForDataModels(verifier());
   }
+
+#if defined(OS_CHROMEOS)
+  if (ArcAppListPrefsFactory::IsFactorySetForSyncTest()) {
+    // Init SyncArcPackageHelper to ensure that the arc services are initialized
+    // for each Profile, only can be called after test profiles are created.
+    if (!sync_arc_helper())
+      return false;
+  }
+#endif
+
   // Error cases are all handled by LOG(FATAL) messages. So there is not really
   // a case that returns false.  In case we failed to create a verifier profile,
   // any call to the verifier() would fail.
@@ -528,11 +572,7 @@ void SyncTest::InitializeProfile(int index, Profile* profile) {
   DCHECK(profile);
   profiles_[index] = profile;
 
-  // CheckInitialState() assumes that no windows are open at startup.
-  browsers_[index] =
-      new Browser(Browser::CreateParams(GetProfile(index), true));
-
-  EXPECT_NE(nullptr, GetBrowser(index)) << "Could not create Browser " << index;
+  AddBrowser(index);
 
   // Make sure the ProfileSyncService has been created before creating the
   // ProfileSyncServiceHarness - some tests expect the ProfileSyncService to
@@ -552,6 +592,7 @@ void SyncTest::InitializeProfile(int index, Profile* profile) {
           ? ProfileSyncServiceHarness::SigninType::UI_SIGNIN
           : ProfileSyncServiceHarness::SigninType::FAKE_SIGNIN;
 
+  DCHECK(!clients_[index]);
   clients_[index] =
       ProfileSyncServiceHarness::Create(GetProfile(index),
                                         username_,
@@ -596,9 +637,10 @@ void SyncTest::InitializeInvalidations(int index) {
                                 GetInvalidationService());
     p2p_invalidation_service->UpdateCredentials(username_, password_);
     // Start listening for and emitting notifications of commits.
+    DCHECK(!invalidation_forwarders_[index]);
     invalidation_forwarders_[index] =
-        new P2PInvalidationForwarder(clients_[index]->service(),
-                                     p2p_invalidation_service);
+        base::MakeUnique<P2PInvalidationForwarder>(clients_[index]->service(),
+                                                   p2p_invalidation_service);
   }
 }
 
@@ -611,9 +653,21 @@ bool SyncTest::SetupSync() {
     }
   }
 
+  int clientIndex = 0;
+  // If we're using external servers, clear server data so the account starts
+  // with a clean slate.
+  if (UsingExternalServers()) {
+    if (!SetupAndClearClient(clientIndex++)) {
+      LOG(FATAL) << "Setting up and clearing data for client "
+                 << clientIndex - 1 << " failed";
+      return false;
+    }
+  }
+
   // Sync each of the profiles.
-  for (int i = 0; i < num_clients_; ++i) {
-    if (!GetClient(i)->SetupSync()) {
+  for (; clientIndex < num_clients_; clientIndex++) {
+    DVLOG(1) << "Setting up " << clientIndex << " client";
+    if (!GetClient(clientIndex)->SetupSync()) {
       LOG(FATAL) << "SetupSync() failed.";
       return false;
     }
@@ -642,8 +696,9 @@ bool SyncTest::SetupSync() {
   // client set up.
   if (UsingExternalServers()) {
     for (int i = 0; i < num_clients_; ++i) {
-      sync_refreshers_[i] =
-          new P2PSyncRefresher(GetProfile(i), clients_[i]->service());
+      DCHECK(!sync_refreshers_[i]);
+      sync_refreshers_[i] = base::MakeUnique<P2PSyncRefresher>(
+          GetProfile(i), clients_[i]->service());
     }
 
     // OneClickSigninSyncStarter observer is created with a real user sign in.
@@ -657,6 +712,23 @@ bool SyncTest::SetupSync() {
     }
   }
 
+  return true;
+}
+
+bool SyncTest::SetupAndClearClient(size_t index) {
+  // Setup the first client so the sync engine is initialized, which is
+  // required to clear server data.
+  DVLOG(1) << "Setting up first client for clear.";
+  if (!GetClient(index)->SetupSyncForClearingServerData()) {
+    LOG(FATAL) << "SetupSync() failed.";
+    return false;
+  }
+
+  DVLOG(1) << "Done setting up first client for clear.";
+  if (!ClearServerData(GetClient(index++))) {
+    LOG(FATAL) << "ClearServerData failed.";
+    return false;
+  }
   return true;
 }
 
@@ -1022,7 +1094,7 @@ bool SyncTest::AwaitEncryptionComplete(int index) {
 }
 
 bool SyncTest::AwaitQuiescence() {
-  return ProfileSyncServiceHarness::AwaitQuiescence(clients());
+  return ProfileSyncServiceHarness::AwaitQuiescence(GetSyncClients());
 }
 
 bool SyncTest::UsingExternalServers() {
@@ -1048,7 +1120,6 @@ void SyncTest::DisableNotificationsImpl() {
 
 void SyncTest::DisableNotifications() {
   DisableNotificationsImpl();
-  notifications_enabled_ = false;
 }
 
 void SyncTest::EnableNotificationsImpl() {
@@ -1063,7 +1134,6 @@ void SyncTest::EnableNotificationsImpl() {
 
 void SyncTest::EnableNotifications() {
   EnableNotificationsImpl();
-  notifications_enabled_ = true;
 }
 
 void SyncTest::TriggerNotification(syncer::ModelTypeSet changed_types) {
@@ -1135,7 +1205,26 @@ void SyncTest::TriggerSyncForModelTypes(int index,
   GetSyncService(index)->TriggerRefresh(model_types);
 }
 
+arc::SyncArcPackageHelper* SyncTest::sync_arc_helper() {
+#if defined(OS_CHROMEOS)
+  return arc::SyncArcPackageHelper::GetInstance();
+#else
+  return nullptr;
+#endif
+}
+
 void SyncTest::SetPreexistingPreferencesFileContents(
     const std::string& contents) {
   preexisting_preferences_file_contents_ = contents;
+}
+
+bool SyncTest::ClearServerData(ProfileSyncServiceHarness* harness) {
+  // At this point our birthday is good.
+  base::RunLoop run_loop;
+  harness->service()->ClearServerDataForTest(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Our birthday is invalidated on the server here so restart sync to get
+  // the new birthday from the server.
+  return harness->RestartSyncService();
 }

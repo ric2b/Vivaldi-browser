@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "extensions/renderer/api_binding_types.h"
 #include "extensions/renderer/api_bindings_system.h"
 #include "extensions/renderer/event_emitter.h"
 #include "extensions/renderer/extension_bindings_system.h"
@@ -30,11 +31,14 @@ class NativeExtensionBindingsSystem : public ExtensionBindingsSystem {
  public:
   using SendRequestIPCMethod =
       base::Callback<void(ScriptContext*,
-                          const ExtensionHostMsg_Request_Params&)>;
+                          const ExtensionHostMsg_Request_Params&,
+                          binding::RequestThread)>;
   using SendEventListenerIPCMethod =
       base::Callback<void(binding::EventListenersChanged,
                           ScriptContext*,
-                          const std::string& event_name)>;
+                          const std::string& event_name,
+                          const base::DictionaryValue* filter,
+                          bool was_manual)>;
 
   NativeExtensionBindingsSystem(
       const SendRequestIPCMethod& send_request_ipc,
@@ -65,6 +69,8 @@ class NativeExtensionBindingsSystem : public ExtensionBindingsSystem {
   // to |send_event_listener_ipc_|.
   void OnEventListenerChanged(const std::string& event_name,
                               binding::EventListenersChanged change,
+                              const base::DictionaryValue* filter,
+                              bool was_manual,
                               v8::Local<v8::Context> context);
 
   // Getter callback for an extension API, since APIs are constructed lazily.
@@ -80,6 +86,13 @@ class NativeExtensionBindingsSystem : public ExtensionBindingsSystem {
 
   // Callback to get an API binding for an internal API.
   static void GetInternalAPI(const v8::FunctionCallbackInfo<v8::Value>& info);
+
+  // Helper method to get a APIBindingJSUtil object for the current context,
+  // and populate |binding_util_out|. We use an out parameter instead of
+  // returning it in order to let us use weak ptrs, which can't be used on a
+  // method with a return value.
+  void GetJSBindingUtil(v8::Local<v8::Context> context,
+                        v8::Local<v8::Value>* binding_util_out);
 
   // Handler to send request IPCs. Abstracted out for testing purposes.
   SendRequestIPCMethod send_request_ipc_;

@@ -15,6 +15,7 @@
 #include "media/base/media_client.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
+#include "media/base/video_color_space.h"
 #include "media/media_features.h"
 
 #include "media/ffmpeg/ffmpeg_common.h"
@@ -88,15 +89,22 @@ const std::map<std::string, MimeUtil::Codec>& GetStringToCodecMap() {
 static bool ParseVp9CodecID(const std::string& mime_type_lower_case,
                             const std::string& codec_id,
                             VideoCodecProfile* out_profile,
-                            uint8_t* out_level) {
+                            uint8_t* out_level,
+                            VideoColorSpace* out_color_space) {
   if (mime_type_lower_case == "video/mp4") {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kEnableVp9InMp4)) {
-      return ParseNewStyleVp9CodecID(codec_id, out_profile, out_level);
+      // Only new style is allowed for mp4.
+      return ParseNewStyleVp9CodecID(codec_id, out_profile, out_level,
+                                     out_color_space);
     }
   } else if (mime_type_lower_case == "video/webm") {
-    // Only legacy codec strings are supported in WebM.
-    // TODO(kqyang): Should we support new codec string in WebM?
+    if (HasNewVp9CodecStringSupport() &&
+        ParseNewStyleVp9CodecID(codec_id, out_profile, out_level,
+                                out_color_space)) {
+      return true;
+    }
+
     return ParseLegacyVp9CodecID(codec_id, out_profile, out_level);
   }
   return false;
@@ -130,6 +138,31 @@ MimeUtil::MimeUtil() : allow_proprietary_codecs_(false) {
 }
 
 MimeUtil::~MimeUtil() {}
+
+AudioCodec MimeUtilToAudioCodec(MimeUtil::Codec codec) {
+  switch (codec) {
+    case MimeUtil::PCM:
+      return kCodecPCM;
+    case MimeUtil::MP3:
+      return kCodecMP3;
+    case MimeUtil::AC3:
+      return kCodecAC3;
+    case MimeUtil::EAC3:
+      return kCodecEAC3;
+    case MimeUtil::MPEG2_AAC:
+    case MimeUtil::MPEG4_AAC:
+      return kCodecAAC;
+    case MimeUtil::VORBIS:
+      return kCodecVorbis;
+    case MimeUtil::OPUS:
+      return kCodecOpus;
+    case MimeUtil::FLAC:
+      return kCodecFLAC;
+    default:
+      break;
+  }
+  return kUnknownAudioCodec;
+}
 
 VideoCodec MimeUtilToVideoCodec(MimeUtil::Codec codec) {
   switch (codec) {
@@ -168,15 +201,20 @@ SupportsType MimeUtil::AreSupportedCodecs(
     Codec codec = INVALID_CODEC;
     VideoCodecProfile video_profile = VIDEO_CODEC_PROFILE_UNKNOWN;
     uint8_t video_level = 0;
+    VideoColorSpace color_space;
     if (!ParseCodecString(mime_type_lower_case, codecs[i], &codec,
-                          &ambiguous_codec_string, &video_profile,
-                          &video_level)) {
+                          &ambiguous_codec_string, &video_profile, &video_level,
+                          &color_space)) {
+      DVLOG(2) << __func__ << " Failed to parse codec string:" << codecs[i];
       return IsNotSupported;
     }
 
     // Bail if codec not in supported list for given container.
-    if (supported_codecs.find(codec) == supported_codecs.end())
+    if (supported_codecs.find(codec) == supported_codecs.end()) {
+      DVLOG(2) << __func__ << " Codec " << codecs[i]
+               << " not supported in container " << mime_type_lower_case;
       return IsNotSupported;
+    }
 
     // Make conservative guesses to resolve ambiguity before checking platform
     // support. H264 and VP9 are the only allowed ambiguous video codec. DO NOT
@@ -194,10 +232,14 @@ SupportsType MimeUtil::AreSupportedCodecs(
     }
 
     // Check platform support.
-    SupportsType result = IsCodecSupported(
-        mime_type_lower_case, codec, video_profile, video_level, is_encrypted);
-    if (result == IsNotSupported)
+    SupportsType result =
+        IsCodecSupported(mime_type_lower_case, codec, video_profile,
+                         video_level, color_space, is_encrypted);
+    if (result == IsNotSupported) {
+      DVLOG(2) << __func__ << " Codec " << codecs[i]
+               << " not supported by platform";
       return IsNotSupported;
+    }
 
     // If any codec is "MayBeSupported", return Maybe for the combined result.
     // Downgrade to MayBeSupported if we had to guess the meaning of one of the
@@ -566,7 +608,8 @@ bool MimeUtil::ParseCodecString(const std::string& mime_type_lower_case,
                                 Codec* codec,
                                 bool* ambiguous_codec_string,
                                 VideoCodecProfile* out_profile,
-                                uint8_t* out_level) const {
+                                uint8_t* out_level,
+                                VideoColorSpace* out_color_space) const {
   DCHECK_EQ(base::ToLowerASCII(mime_type_lower_case), mime_type_lower_case);
   DCHECK(codec);
   DCHECK(out_profile);
@@ -576,6 +619,11 @@ bool MimeUtil::ParseCodecString(const std::string& mime_type_lower_case,
   *ambiguous_codec_string = false;
   *out_profile = VIDEO_CODEC_PROFILE_UNKNOWN;
   *out_level = 0;
+
+  // Most codec strings do not yet specify color. We choose 709 as default color
+  // space elsewhere, so defaulting to 709 here as well. See here for context:
+  // https://crrev.com/1221903003/
+  *out_color_space = VideoColorSpace::REC709();
 
   std::map<std::string, Codec>::const_iterator itr =
       GetStringToCodecMap().find(codec_id);
@@ -603,7 +651,8 @@ bool MimeUtil::ParseCodecString(const std::string& mime_type_lower_case,
   // either VP9, H.264 or HEVC/H.265 codec ID because currently those are the
   // only ones that are not added to the |kStringToCodecMap| and require
   // parsing.
-  if (ParseVp9CodecID(mime_type_lower_case, codec_id, out_profile, out_level)) {
+  if (ParseVp9CodecID(mime_type_lower_case, codec_id, out_profile, out_level,
+                      out_color_space)) {
     *codec = MimeUtil::VP9;
     return true;
   }
@@ -641,9 +690,9 @@ SupportsType MimeUtil::IsSimpleCodecSupported(
   // be specified. There is no "default" video codec for a given container.
   DCHECK_EQ(MimeUtilToVideoCodec(codec), kUnknownVideoCodec);
 
-  SupportsType result =
-      IsCodecSupported(mime_type_lower_case, codec, VIDEO_CODEC_PROFILE_UNKNOWN,
-                       0 /* video_level */, is_encrypted);
+  SupportsType result = IsCodecSupported(
+      mime_type_lower_case, codec, VIDEO_CODEC_PROFILE_UNKNOWN,
+      0 /* video_level */, VideoColorSpace::REC709(), is_encrypted);
 
   // Platform support should never be ambiguous for simple codecs (no range of
   // profiles to consider).
@@ -655,6 +704,7 @@ SupportsType MimeUtil::IsCodecSupported(const std::string& mime_type_lower_case,
                                         Codec codec,
                                         VideoCodecProfile video_profile,
                                         uint8_t video_level,
+                                        const VideoColorSpace& color_space,
                                         bool is_encrypted) const {
   DCHECK_EQ(base::ToLowerASCII(mime_type_lower_case), mime_type_lower_case);
   DCHECK_NE(codec, INVALID_CODEC);
@@ -702,15 +752,39 @@ SupportsType MimeUtil::IsCodecSupported(const std::string& mime_type_lower_case,
     ambiguous_platform_support = true;
   }
 
-  if (GetMediaClient() && video_codec != kUnknownVideoCodec &&
-      !GetMediaClient()->IsSupportedVideoConfig(video_codec, video_profile,
-                                                video_level)) {
-    return IsNotSupported;
+  AudioCodec audio_codec = MimeUtilToAudioCodec(codec);
+  if (audio_codec != kUnknownAudioCodec) {
+    AudioConfig audio_config = {audio_codec};
+
+    // If MediaClient is provided use it to check for decoder support.
+    MediaClient* media_client = GetMediaClient();
+    if (media_client && !media_client->IsSupportedAudioConfig(audio_config))
+      return IsNotSupported;
+
+    // When no MediaClient is provided, assume default decoders are available
+    // as described by media::IsSupportedAudioConfig().
+    if (!media_client && !IsSupportedAudioConfig(audio_config))
+      return IsNotSupported;
+  }
+
+  if (video_codec != kUnknownVideoCodec) {
+    VideoConfig video_config = {video_codec, video_profile, video_level,
+                                color_space};
+
+    // If MediaClient is provided use it to check for decoder support.
+    MediaClient* media_client = GetMediaClient();
+    if (media_client && !media_client->IsSupportedVideoConfig(video_config))
+      return IsNotSupported;
+
+    // When no MediaClient is provided, assume default decoders are available
+    // as described by media::IsSupportedVideoConfig().
+    if (!media_client && !IsSupportedVideoConfig(video_config))
+      return IsNotSupported;
   }
 
 #if defined(OS_ANDROID)
   // TODO(chcunningham): Delete this. Android platform support should be
-  // handled by (android specific) MediaClient.
+  // handled by (android specific) media::IsSupportedVideoConfig() above.
   if (!IsCodecSupportedOnAndroid(codec, mime_type_lower_case, is_encrypted,
                                  platform_info_)) {
     return IsNotSupported;

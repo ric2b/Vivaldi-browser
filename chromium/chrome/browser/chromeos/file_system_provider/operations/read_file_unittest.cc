@@ -11,8 +11,8 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/test_util.h"
 #include "chrome/common/extensions/api/file_system_provider.h"
@@ -60,13 +60,13 @@ class CallbackLogger {
   virtual ~CallbackLogger() {}
 
   void OnReadFile(int chunk_length, bool has_more, base::File::Error result) {
-    events_.push_back(new Event(chunk_length, has_more, result));
+    events_.push_back(base::MakeUnique<Event>(chunk_length, has_more, result));
   }
 
-  ScopedVector<Event>& events() { return events_; }
+  std::vector<std::unique_ptr<Event>>& events() { return events_; }
 
  private:
-  ScopedVector<Event> events_;
+  std::vector<std::unique_ptr<Event>> events_;
 
   DISALLOW_COPY_AND_ASSIGN(CallbackLogger);
 };
@@ -111,7 +111,7 @@ TEST_F(FileSystemProviderOperationsReadFileTest, Execute) {
   EXPECT_TRUE(read_file.Execute(kRequestId));
 
   ASSERT_EQ(1u, dispatcher.events().size());
-  extensions::Event* event = dispatcher.events()[0];
+  extensions::Event* event = dispatcher.events()[0].get();
   EXPECT_EQ(
       extensions::api::file_system_provider::OnReadFileRequested::kEventName,
       event->event_name);
@@ -175,12 +175,12 @@ TEST_F(FileSystemProviderOperationsReadFileTest, OnSuccess) {
   const int execution_time = 0;
 
   base::ListValue value_as_list;
-  value_as_list.Set(0, new base::StringValue(kFileSystemId));
-  value_as_list.Set(1, new base::Value(kRequestId));
+  value_as_list.Set(0, base::MakeUnique<base::Value>(kFileSystemId));
+  value_as_list.Set(1, base::MakeUnique<base::Value>(kRequestId));
   value_as_list.Set(
-      2, base::BinaryValue::CreateWithCopiedBuffer(data.c_str(), data.size()));
-  value_as_list.Set(3, new base::Value(has_more));
-  value_as_list.Set(4, new base::Value(execution_time));
+      2, base::Value::CreateWithCopiedBuffer(data.c_str(), data.size()));
+  value_as_list.Set(3, base::MakeUnique<base::Value>(has_more));
+  value_as_list.Set(4, base::MakeUnique<base::Value>(execution_time));
 
   std::unique_ptr<Params> params(Params::Create(value_as_list));
   ASSERT_TRUE(params.get());
@@ -191,7 +191,7 @@ TEST_F(FileSystemProviderOperationsReadFileTest, OnSuccess) {
   read_file.OnSuccess(kRequestId, std::move(request_value), has_more);
 
   ASSERT_EQ(1u, callback_logger.events().size());
-  CallbackLogger::Event* event = callback_logger.events()[0];
+  CallbackLogger::Event* event = callback_logger.events()[0].get();
   EXPECT_EQ(kLength, event->chunk_length());
   EXPECT_FALSE(event->has_more());
   EXPECT_EQ(data, std::string(io_buffer_->data(), kLength));
@@ -221,7 +221,7 @@ TEST_F(FileSystemProviderOperationsReadFileTest, OnError) {
                     base::File::FILE_ERROR_TOO_MANY_OPENED);
 
   ASSERT_EQ(1u, callback_logger.events().size());
-  CallbackLogger::Event* event = callback_logger.events()[0];
+  CallbackLogger::Event* event = callback_logger.events()[0].get();
   EXPECT_EQ(base::File::FILE_ERROR_TOO_MANY_OPENED, event->result());
 }
 

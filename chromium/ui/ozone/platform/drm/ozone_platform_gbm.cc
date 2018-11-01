@@ -17,8 +17,8 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/base/ui_features.h"
 #include "ui/events/ozone/device/device_manager.h"
@@ -108,7 +108,7 @@ class OzonePlatformGbm
   std::unique_ptr<SystemInputInjector> CreateSystemInputInjector() override {
     return event_factory_ozone_->CreateSystemInputInjector();
   }
-  void AddInterfaces(service_manager::InterfaceRegistry* registry) override {
+  void AddInterfaces(service_manager::BinderRegistry* registry) override {
     registry->AddInterface<ozone::mojom::DeviceCursor>(this);
   }
   // service_manager::InterfaceFactory<ozone::mojom::DeviceCursor>:
@@ -138,10 +138,6 @@ class OzonePlatformGbm
   std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
       override {
     return base::MakeUnique<DrmNativeDisplayDelegate>(display_manager_.get());
-  }
-  void InitializeUI() override {
-    InitParams default_params;
-    InitializeUI(default_params);
   }
   void InitializeUI(const InitParams& args) override {
     // Ozone drm can operate in three modes configured at runtime:
@@ -206,10 +202,6 @@ class OzonePlatformGbm
       mus_thread_proxy_->ProvideManagers(display_manager_.get(),
                                          overlay_manager_.get());
     }
-  }
-  void InitializeGPU() override {
-    InitParams default_params;
-    InitializeGPU(default_params);
   }
   void InitializeGPU(const InitParams& args) override {
     // TODO(rjkroege): services/ui should initialize this with a connector.

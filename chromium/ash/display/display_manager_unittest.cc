@@ -5,11 +5,7 @@
 #include "ui/display/manager/display_manager.h"
 
 #include "ash/accelerators/accelerator_commands_aura.h"
-#include "ash/common/ash_switches.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "ash/ash_switches.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_util.h"
 #include "ash/display/mirror_window_controller.h"
@@ -22,8 +18,11 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/mirror_window_test_api.h"
 #include "ash/test/screen_orientation_controller_test_api.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -976,8 +975,7 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplaysWithDetachedDisplays) {
 
 TEST_F(DisplayManagerTest, NoMirrorInThreeDisplays) {
   UpdateDisplay("640x480,320x200,400x300");
-  ash::Shell::GetInstance()->display_configuration_controller()->SetMirrorMode(
-      true, true);
+  ash::Shell::Get()->display_configuration_controller()->SetMirrorMode(true);
   EXPECT_FALSE(display_manager()->IsInMirrorMode());
   EXPECT_EQ(3u, display_manager()->GetNumDisplays());
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_MIRRORING_NOT_SUPPORTED),
@@ -1063,7 +1061,7 @@ TEST_F(DisplayManagerTest, OverscanInsetsTest) {
             updated_display_info2.GetOverscanInsetsInPixel().ToString());
 
   // Make sure switching primary display applies the overscan offset only once.
-  ash::Shell::GetInstance()->window_tree_host_manager()->SetPrimaryDisplayId(
+  ash::Shell::Get()->window_tree_host_manager()->SetPrimaryDisplayId(
       display_manager()->GetSecondaryDisplay().id());
   EXPECT_EQ("-500,0 500x500",
             display_manager()->GetSecondaryDisplay().bounds().ToString());
@@ -1453,7 +1451,7 @@ TEST_F(DisplayManagerTest, NativeDisplaysChangedAfterPrimaryChange) {
             GetDisplayForId(internal_display_id).bounds().ToString());
   EXPECT_EQ("500,0 100x100", GetDisplayForId(10).bounds().ToString());
 
-  ash::Shell::GetInstance()->window_tree_host_manager()->SetPrimaryDisplayId(
+  ash::Shell::Get()->window_tree_host_manager()->SetPrimaryDisplayId(
       secondary_display_info.id());
   EXPECT_EQ("-500,0 500x500",
             GetDisplayForId(internal_display_id).bounds().ToString());
@@ -2237,7 +2235,7 @@ TEST_F(DisplayManagerTest, SingleDisplayToSoftwareMirroring) {
   EXPECT_TRUE(display_manager()->IsInMirrorMode());
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   WindowTreeHostManager* window_tree_host_manager =
-      ash::Shell::GetInstance()->window_tree_host_manager();
+      ash::Shell::Get()->window_tree_host_manager();
   EXPECT_TRUE(
       window_tree_host_manager->mirror_window_controller()->GetWindow());
 
@@ -2265,7 +2263,7 @@ TEST_F(DisplayManagerTest, SoftwareMirroringWithCompositingCursor) {
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   EXPECT_FALSE(root_windows[0]->Contains(test_api.GetCursorWindow()));
 
-  Shell::GetInstance()->SetCursorCompositingEnabled(true);
+  Shell::Get()->SetCursorCompositingEnabled(true);
 
   EXPECT_TRUE(root_windows[0]->Contains(test_api.GetCursorWindow()));
 
@@ -2278,7 +2276,7 @@ TEST_F(DisplayManagerTest, SoftwareMirroringWithCompositingCursor) {
   root_windows = Shell::GetAllRootWindows();
   EXPECT_TRUE(root_windows[0]->Contains(test_api.GetCursorWindow()));
 
-  Shell::GetInstance()->SetCursorCompositingEnabled(false);
+  Shell::Get()->SetCursorCompositingEnabled(false);
 }
 
 TEST_F(DisplayManagerTest, MirroredLayout) {
@@ -2395,8 +2393,7 @@ TEST_F(DisplayManagerTest, NotifyPrimaryChangeUndock) {
 TEST_F(DisplayManagerTest, UpdateDisplayWithHostOrigin) {
   UpdateDisplay("100x200,300x400");
   ASSERT_EQ(2, display::Screen::GetScreen()->GetNumDisplays());
-  aura::Window::Windows root_windows =
-      Shell::GetInstance()->GetAllRootWindows();
+  aura::Window::Windows root_windows = Shell::Get()->GetAllRootWindows();
   ASSERT_EQ(2U, root_windows.size());
   aura::WindowTreeHost* host0 = root_windows[0]->GetHost();
   aura::WindowTreeHost* host1 = root_windows[1]->GetHost();
@@ -2677,32 +2674,6 @@ TEST_F(DisplayManagerTest, NoRotateUnifiedDesktop) {
 
   UpdateDisplay("400x500");
   EXPECT_EQ("400x500", screen->GetPrimaryDisplay().size().ToString());
-}
-
-// Makes sure the transition from unified to single won't crash
-// with docked windows.
-TEST_F(DisplayManagerTest, UnifiedWithDockWindows) {
-  // Enable window docking for this test.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ash::switches::kAshEnableDockedWindows);
-
-  display_manager()->SetUnifiedDesktopEnabled(true);
-
-  // Don't check root window destruction in unified mode.
-  Shell::GetPrimaryRootWindow()->RemoveObserver(this);
-
-  UpdateDisplay("400x500,300x200");
-
-  std::unique_ptr<aura::Window> docked(
-      CreateTestWindowInShellWithBounds(gfx::Rect(10, 10, 50, 50)));
-  docked->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_DOCKED);
-  ASSERT_TRUE(wm::GetWindowState(docked.get())->IsDocked());
-  // 48 pixels reserved for launcher shelf height.
-  EXPECT_EQ(gfx::Rect(0, 0, 250, 452).ToString(), docked->bounds().ToString());
-  UpdateDisplay("300x300");
-  // Make sure the window is still docked.
-  EXPECT_TRUE(wm::GetWindowState(docked.get())->IsDocked());
-  EXPECT_EQ(gfx::Rect(0, 0, 250, 252).ToString(), docked->bounds().ToString());
 }
 
 TEST_F(DisplayManagerTest, DockMode) {
@@ -3008,7 +2979,7 @@ class TestObserver : public ScreenOrientationController::Observer {
 }  // namespace
 
 TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   display::DisplayManager* display_manager = shell->display_manager();
   display::test::DisplayManagerTestApi(display_manager)
       .SetFirstDisplayAsInternalDisplay();
@@ -3024,7 +2995,7 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
     WmWindow* wm_window_a = WmWindow::Get(window_a);
     wm_window_a->SetAppType(static_cast<int>(AppType::CHROME_APP));
     orientation_controller->LockOrientationForWindow(
-        wm_window_a, blink::WebScreenOrientationLockAny,
+        wm_window_a, blink::kWebScreenOrientationLockAny,
         ScreenOrientationController::LockCompletionBehavior::None);
   }
   aura::Window* window_p = CreateTestWindowInShellWithId(0);
@@ -3032,7 +3003,7 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
     WmWindow* wm_window_p = WmWindow::Get(window_p);
     wm_window_p->SetAppType(static_cast<int>(AppType::CHROME_APP));
     orientation_controller->LockOrientationForWindow(
-        wm_window_p, blink::WebScreenOrientationLockPortrait,
+        wm_window_p, blink::kWebScreenOrientationLockPortrait,
         ScreenOrientationController::LockCompletionBehavior::None);
   }
   aura::Window* window_l = CreateTestWindowInShellWithId(0);
@@ -3040,7 +3011,7 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
     WmWindow* wm_window_l = WmWindow::Get(window_l);
     wm_window_l->SetAppType(static_cast<int>(AppType::CHROME_APP));
     orientation_controller->LockOrientationForWindow(
-        wm_window_l, blink::WebScreenOrientationLockLandscape,
+        wm_window_l, blink::kWebScreenOrientationLockLandscape,
         ScreenOrientationController::LockCompletionBehavior::None);
   }
 
@@ -3058,13 +3029,13 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
 
   EXPECT_EQ(0, test_observer.countAndReset());
   // Just enabling will not save the lock.
-  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
   EXPECT_EQ(1, test_observer.countAndReset());
 
   EXPECT_EQ(display::Display::ROTATE_0, screen->GetPrimaryDisplay().rotation());
   EXPECT_FALSE(display_manager->registered_internal_display_rotation_lock());
-  EXPECT_EQ(blink::WebScreenOrientationLockLandscapePrimary,
+  EXPECT_EQ(blink::kWebScreenOrientationLockLandscapePrimary,
             test_api.GetCurrentOrientation());
 
   // Enable lock at 0.
@@ -3082,7 +3053,7 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
   EXPECT_EQ(display::Display::ROTATE_0,
             display_manager->registered_internal_display_rotation());
   EXPECT_EQ(0, test_observer.countAndReset());
-  EXPECT_EQ(blink::WebScreenOrientationLockPortraitPrimary,
+  EXPECT_EQ(blink::kWebScreenOrientationLockPortraitPrimary,
             test_api.GetCurrentOrientation());
 
   // Any will rotate to the locked rotation.
@@ -3101,14 +3072,14 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
   EXPECT_EQ(0, test_observer.countAndReset());
 
   // Exit tablet mode reset to clamshell's rotation, which is 90.
-  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       false);
   EXPECT_EQ(1, test_observer.countAndReset());
   EXPECT_EQ(display::Display::ROTATE_90,
             screen->GetPrimaryDisplay().rotation());
   // Activate Any.
   wm::ActivateWindow(window_a);
-  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
   EXPECT_EQ(1, test_observer.countAndReset());
   // Entering with active ANY will lock again to landscape.
@@ -3140,7 +3111,7 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
 }
 
 TEST_F(DisplayManagerOrientationTest, UserRotationLockReverse) {
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   display::DisplayManager* display_manager = shell->display_manager();
   display::test::DisplayManagerTestApi test_api(display_manager);
   test_api.SetFirstDisplayAsInternalDisplay();
@@ -3154,11 +3125,11 @@ TEST_F(DisplayManagerOrientationTest, UserRotationLockReverse) {
   display::Screen* screen = display::Screen::GetScreen();
 
   // Just enabling will not save the lock.
-  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
 
   orientation_controller->LockOrientationForWindow(
-      wm_window, blink::WebScreenOrientationLockPortrait,
+      wm_window, blink::kWebScreenOrientationLockPortrait,
       ScreenOrientationController::LockCompletionBehavior::None);
   EXPECT_EQ(display::Display::ROTATE_90,
             screen->GetPrimaryDisplay().rotation());
@@ -3185,7 +3156,7 @@ TEST_F(DisplayManagerOrientationTest, UserRotationLockReverse) {
 }
 
 TEST_F(DisplayManagerOrientationTest, LockToSpecificOrientation) {
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   display::DisplayManager* display_manager = shell->display_manager();
   display::test::DisplayManagerTestApi(display_manager)
       .SetFirstDisplayAsInternalDisplay();
@@ -3198,16 +3169,16 @@ TEST_F(DisplayManagerOrientationTest, LockToSpecificOrientation) {
     WmWindow* wm_window_a = WmWindow::Get(window_a);
     wm_window_a->SetAppType(static_cast<int>(AppType::CHROME_APP));
     orientation_controller->LockOrientationForWindow(
-        wm_window_a, blink::WebScreenOrientationLockAny,
+        wm_window_a, blink::kWebScreenOrientationLockAny,
         ScreenOrientationController::LockCompletionBehavior::None);
   }
   wm::ActivateWindow(window_a);
-  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
 
   orientation_controller->OnAccelerometerUpdated(portrait_primary);
 
-  EXPECT_EQ(blink::WebScreenOrientationLockPortraitPrimary,
+  EXPECT_EQ(blink::kWebScreenOrientationLockPortraitPrimary,
             test_api.GetCurrentOrientation());
 
   orientation_controller->OnAccelerometerUpdated(portrait_secondary);
@@ -3217,30 +3188,30 @@ TEST_F(DisplayManagerOrientationTest, LockToSpecificOrientation) {
     WmWindow* wm_window_ps = WmWindow::Get(window_ps);
     wm_window_ps->SetAppType(static_cast<int>(AppType::CHROME_APP));
     orientation_controller->LockOrientationForWindow(
-        wm_window_ps, blink::WebScreenOrientationLockPortrait,
+        wm_window_ps, blink::kWebScreenOrientationLockPortrait,
         ScreenOrientationController::LockCompletionBehavior::DisableSensor);
     wm::ActivateWindow(window_ps);
   }
 
-  EXPECT_EQ(blink::WebScreenOrientationLockPortraitSecondary,
+  EXPECT_EQ(blink::kWebScreenOrientationLockPortraitSecondary,
             test_api.GetCurrentOrientation());
 
   // The orientation should stay portrait secondary.
   orientation_controller->OnAccelerometerUpdated(portrait_primary);
-  EXPECT_EQ(blink::WebScreenOrientationLockPortraitSecondary,
+  EXPECT_EQ(blink::kWebScreenOrientationLockPortraitSecondary,
             test_api.GetCurrentOrientation());
 
   wm::ActivateWindow(window_a);
   orientation_controller->OnAccelerometerUpdated(portrait_primary);
 
   // Swtching to |window_a| enables rotation.
-  EXPECT_EQ(blink::WebScreenOrientationLockPortraitPrimary,
+  EXPECT_EQ(blink::kWebScreenOrientationLockPortraitPrimary,
             test_api.GetCurrentOrientation());
 
   // The orientation has alraedy been locked to secondary once, so
   // it should swtich back to the portrait secondary.
   wm::ActivateWindow(window_ps);
-  EXPECT_EQ(blink::WebScreenOrientationLockPortraitSecondary,
+  EXPECT_EQ(blink::kWebScreenOrientationLockPortraitSecondary,
             test_api.GetCurrentOrientation());
 }
 

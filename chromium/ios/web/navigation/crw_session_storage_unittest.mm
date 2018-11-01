@@ -48,9 +48,9 @@ BOOL SessionStoragesAreEqual(CRWSessionStorage* session1,
   NSArray* items1 = session1.itemStorages;
   NSArray* items2 = session2.itemStorages;
   return ItemStorageListsAreEqual(items1, items2) &&
-         session1.openedByDOM == session2.openedByDOM &&
-         session1.currentNavigationIndex == session2.currentNavigationIndex &&
-         session1.previousNavigationIndex == session2.previousNavigationIndex &&
+         session1.hasOpener == session2.hasOpener &&
+         session1.lastCommittedItemIndex == session2.lastCommittedItemIndex &&
+         session1.previousItemIndex == session2.previousItemIndex &&
          UserDataAreEqual(session1.userData, session2.userData);
 }
 }  // namespace
@@ -60,9 +60,9 @@ class CRWNSessionStorageTest : public PlatformTest {
   CRWNSessionStorageTest()
       : session_storage_([[CRWSessionStorage alloc] init]) {
     // Set up |session_storage_|.
-    [session_storage_ setOpenedByDOM:YES];
-    [session_storage_ setCurrentNavigationIndex:4];
-    [session_storage_ setPreviousNavigationIndex:3];
+    [session_storage_ setHasOpener:YES];
+    [session_storage_ setLastCommittedItemIndex:4];
+    [session_storage_ setPreviousItemIndex:3];
     // Create an item storage.
     base::scoped_nsobject<CRWNavigationItemStorage> item_storage(
         [[CRWNavigationItemStorage alloc] init]);

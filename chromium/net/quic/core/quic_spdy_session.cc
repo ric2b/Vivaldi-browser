@@ -15,7 +15,6 @@
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_str_cat.h"
 
-using base::StringPiece;
 using std::string;
 
 namespace net {
@@ -125,7 +124,8 @@ class QuicSpdySession::SpdyFramerVisitor
     if (session_->OnStreamFrameData(stream_id, data, len)) {
       return;
     }
-    CloseConnection("SPDY DATA frame received.");
+    CloseConnection("SPDY DATA frame received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   void OnStreamEnd(SpdyStreamId stream_id) override {
@@ -134,13 +134,23 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override {
-    CloseConnection("SPDY frame padding received.");
+    CloseConnection("SPDY frame padding received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   void OnError(SpdyFramer* framer) override {
-    CloseConnection(QuicStrCat(
-        "SPDY framing error: ",
-        SpdyFramer::SpdyFramerErrorToString(framer->spdy_framer_error())));
+    QuicErrorCode code = QUIC_INVALID_HEADERS_STREAM_DATA;
+    SpdyFramer::SpdyFramerError error = framer->spdy_framer_error();
+    switch (error) {
+      case SpdyFramer::SpdyFramerError::SPDY_DECOMPRESS_FAILURE:
+        code = QUIC_HEADERS_STREAM_DATA_DECOMPRESS_FAILURE;
+        break;
+      default:
+        break;
+    }
+    CloseConnection(QuicStrCat("SPDY framing error: ",
+                               SpdyFramer::SpdyFramerErrorToString(error)),
+                    code);
   }
 
   void OnDataFrameHeader(SpdyStreamId stream_id,
@@ -149,16 +159,19 @@ class QuicSpdySession::SpdyFramerVisitor
     if (session_->OnDataFrameHeader(stream_id, length, fin)) {
       return;
     }
-    CloseConnection("SPDY DATA frame received.");
+    CloseConnection("SPDY DATA frame received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   void OnRstStream(SpdyStreamId stream_id, SpdyErrorCode error_code) override {
-    CloseConnection("SPDY RST_STREAM frame received.");
+    CloseConnection("SPDY RST_STREAM frame received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   void OnSetting(SpdySettingsIds id, uint32_t value) override {
     if (!FLAGS_quic_reloadable_flag_quic_respect_http2_settings_frame) {
-      CloseConnection("SPDY SETTINGS frame received.");
+      CloseConnection("SPDY SETTINGS frame received.",
+                      QUIC_INVALID_HEADERS_STREAM_DATA);
       return;
     }
     switch (id) {
@@ -171,14 +184,16 @@ class QuicSpdySession::SpdyFramerVisitor
           // See rfc7540, Section 6.5.2.
           if (value > 1) {
             CloseConnection(
-                QuicStrCat("Invalid value for SETTINGS_ENABLE_PUSH: ", value));
+                QuicStrCat("Invalid value for SETTINGS_ENABLE_PUSH: ", value),
+                QUIC_INVALID_HEADERS_STREAM_DATA);
             return;
           }
           session_->UpdateEnableServerPush(value > 0);
           break;
         } else {
           CloseConnection(
-              QuicStrCat("Unsupported field of HTTP/2 SETTINGS frame: ", id));
+              QuicStrCat("Unsupported field of HTTP/2 SETTINGS frame: ", id),
+              QUIC_INVALID_HEADERS_STREAM_DATA);
         }
         break;
       // TODO(fayang): Need to support SETTINGS_MAX_HEADER_LIST_SIZE when
@@ -189,29 +204,34 @@ class QuicSpdySession::SpdyFramerVisitor
         }
       default:
         CloseConnection(
-            QuicStrCat("Unsupported field of HTTP/2 SETTINGS frame: ", id));
+            QuicStrCat("Unsupported field of HTTP/2 SETTINGS frame: ", id),
+            QUIC_INVALID_HEADERS_STREAM_DATA);
     }
   }
 
   void OnSettingsAck() override {
     if (!FLAGS_quic_reloadable_flag_quic_respect_http2_settings_frame) {
-      CloseConnection("SPDY SETTINGS frame received.");
+      CloseConnection("SPDY SETTINGS frame received.",
+                      QUIC_INVALID_HEADERS_STREAM_DATA);
     }
   }
 
   void OnSettingsEnd() override {
     if (!FLAGS_quic_reloadable_flag_quic_respect_http2_settings_frame) {
-      CloseConnection("SPDY SETTINGS frame received.");
+      CloseConnection("SPDY SETTINGS frame received.",
+                      QUIC_INVALID_HEADERS_STREAM_DATA);
     }
   }
 
   void OnPing(SpdyPingId unique_id, bool is_ack) override {
-    CloseConnection("SPDY PING frame received.");
+    CloseConnection("SPDY PING frame received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
                 SpdyErrorCode error_code) override {
-    CloseConnection("SPDY GOAWAY frame received.");
+    CloseConnection("SPDY GOAWAY frame received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   void OnHeaders(SpdyStreamId stream_id,
@@ -233,14 +253,16 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
   void OnWindowUpdate(SpdyStreamId stream_id, int delta_window_size) override {
-    CloseConnection("SPDY WINDOW_UPDATE frame received.");
+    CloseConnection("SPDY WINDOW_UPDATE frame received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
                      bool end) override {
     if (!session_->supports_push_promise()) {
-      CloseConnection("PUSH_PROMISE not supported.");
+      CloseConnection("PUSH_PROMISE not supported.",
+                      QUIC_INVALID_HEADERS_STREAM_DATA);
       return;
     }
     if (!session_->IsConnected()) {
@@ -255,11 +277,13 @@ class QuicSpdySession::SpdyFramerVisitor
                   SpdyStreamId parent_id,
                   int weight,
                   bool exclusive) override {
-    CloseConnection("SPDY PRIORITY frame received.");
+    CloseConnection("SPDY PRIORITY frame received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
   }
 
   bool OnUnknownFrame(SpdyStreamId stream_id, uint8_t frame_type) override {
-    CloseConnection("Unknown frame type received.");
+    CloseConnection("Unknown frame type received.",
+                    QUIC_INVALID_HEADERS_STREAM_DATA);
     return false;
   }
 
@@ -291,10 +315,9 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
  private:
-  void CloseConnection(const string& details) {
+  void CloseConnection(const string& details, QuicErrorCode code) {
     if (session_->IsConnected()) {
-      session_->CloseConnectionWithDetails(QUIC_INVALID_HEADERS_STREAM_DATA,
-                                           details);
+      session_->CloseConnectionWithDetails(code, details);
     }
   }
 
@@ -410,8 +433,9 @@ size_t QuicSpdySession::WriteHeadersImpl(
     headers_frame.set_weight(Spdy3PriorityToHttp2Weight(priority));
   }
   SpdySerializedFrame frame(spdy_framer_.SerializeFrame(headers_frame));
-  headers_stream_->WriteOrBufferData(StringPiece(frame.data(), frame.size()),
-                                     false, std::move(ack_notifier_delegate));
+  headers_stream_->WriteOrBufferData(
+      QuicStringPiece(frame.data(), frame.size()), false,
+      std::move(ack_notifier_delegate));
   return frame.size();
 }
 
@@ -430,14 +454,14 @@ size_t QuicSpdySession::WritePushPromise(QuicStreamId original_stream_id,
   push_promise.set_fin(false);
 
   SpdySerializedFrame frame(spdy_framer_.SerializeFrame(push_promise));
-  headers_stream_->WriteOrBufferData(StringPiece(frame.data(), frame.size()),
-                                     false, nullptr);
+  headers_stream_->WriteOrBufferData(
+      QuicStringPiece(frame.data(), frame.size()), false, nullptr);
   return frame.size();
 }
 
 void QuicSpdySession::WriteDataFrame(
     QuicStreamId id,
-    StringPiece data,
+    QuicStringPiece data,
     bool fin,
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   // Note that certain SpdyDataIR constructors perform a deep copy of |data|
@@ -453,8 +477,9 @@ void QuicSpdySession::WriteDataFrame(
   }
   // Use buffered writes so that coherence of framing is preserved
   // between streams.
-  headers_stream_->WriteOrBufferData(StringPiece(frame.data(), frame.size()),
-                                     false, std::move(force_hol_ack_listener));
+  headers_stream_->WriteOrBufferData(
+      QuicStringPiece(frame.data(), frame.size()), false,
+      std::move(force_hol_ack_listener));
 }
 
 QuicConsumedData QuicSpdySession::WritevStreamData(
@@ -470,7 +495,7 @@ QuicConsumedData QuicSpdySession::WritevStreamData(
   size_t total_length = iov.total_length;
 
   if (total_length == 0 && fin) {
-    WriteDataFrame(id, StringPiece(), true, std::move(ack_listener));
+    WriteDataFrame(id, QuicStringPiece(), true, std::move(ack_listener));
     result.fin_consumed = true;
     return result;
   }
@@ -497,7 +522,7 @@ QuicConsumedData QuicSpdySession::WritevStreamData(
       bool last_iov = i == iov.iov_count - 1;
       bool last_fragment_within_iov = src_iov_offset >= src_iov->iov_len;
       bool frame_fin = (last_iov && last_fragment_within_iov) ? fin : false;
-      WriteDataFrame(id, StringPiece(data, len), frame_fin, ack_listener);
+      WriteDataFrame(id, QuicStringPiece(data, len), frame_fin, ack_listener);
       result.bytes_consumed += len;
       if (frame_fin) {
         result.fin_consumed = true;
@@ -518,8 +543,8 @@ size_t QuicSpdySession::SendMaxHeaderListSize(size_t value) {
   settings_frame.AddSetting(SETTINGS_MAX_HEADER_LIST_SIZE, value);
 
   SpdySerializedFrame frame(spdy_framer_.SerializeFrame(settings_frame));
-  headers_stream_->WriteOrBufferData(StringPiece(frame.data(), frame.size()),
-                                     false, nullptr);
+  headers_stream_->WriteOrBufferData(
+      QuicStringPiece(frame.data(), frame.size()), false, nullptr);
   return frame.size();
 }
 
@@ -600,7 +625,8 @@ void QuicSpdySession::OnStreamFrameData(QuicStreamId stream_id,
   }
   const QuicStreamOffset offset =
       stream->flow_controller()->highest_received_byte_offset();
-  const QuicStreamFrame frame(stream_id, fin, offset, StringPiece(data, len));
+  const QuicStreamFrame frame(stream_id, fin, offset,
+                              QuicStringPiece(data, len));
   QUIC_DVLOG(1) << "De-encapsulating DATA frame for stream " << stream_id
                 << " offset " << offset << " len " << len << " fin " << fin;
   OnStreamFrame(frame);

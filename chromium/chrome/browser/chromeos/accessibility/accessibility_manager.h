@@ -7,8 +7,8 @@
 
 #include <set>
 
-#include "ash/common/accessibility_types.h"
-#include "ash/common/shell_observer.h"
+#include "ash/accessibility_types.h"
+#include "ash/shell_observer.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/macros.h"
@@ -44,10 +44,15 @@ enum AccessibilityNotificationType {
   ACCESSIBILITY_MANAGER_SHUTDOWN,
   ACCESSIBILITY_TOGGLE_HIGH_CONTRAST_MODE,
   ACCESSIBILITY_TOGGLE_LARGE_CURSOR,
+  ACCESSIBILITY_TOGGLE_STICKY_KEYS,
   ACCESSIBILITY_TOGGLE_SCREEN_MAGNIFIER,
   ACCESSIBILITY_TOGGLE_SPOKEN_FEEDBACK,
   ACCESSIBILITY_TOGGLE_VIRTUAL_KEYBOARD,
   ACCESSIBILITY_TOGGLE_MONO_AUDIO,
+  ACCESSIBILITY_TOGGLE_CARET_HIGHLIGHT,
+  ACCESSIBILITY_TOGGLE_CURSOR_HIGHLIGHT,
+  ACCESSIBILITY_TOGGLE_FOCUS_HIGHLIGHT,
+  ACCESSIBILITY_TOGGLE_TAP_DRAGGING,
   ACCESSIBILITY_BRAILLE_DISPLAY_CONNECTION_STATE_CHANGED
 };
 
@@ -135,7 +140,7 @@ class AccessibilityManager
   // Enables or disables the large cursor.
   void EnableLargeCursor(bool enabled);
   // Returns true if the large cursor is enabled, or false if not.
-  bool IsLargeCursorEnabled();
+  bool IsLargeCursorEnabled() const;
 
   // Enables or disable Sticky Keys.
   void EnableStickyKeys(bool enabled);
@@ -144,7 +149,7 @@ class AccessibilityManager
   bool IsIncognitoAllowed();
 
   // Returns true if the Sticky Keys is enabled, or false if not.
-  bool IsStickyKeysEnabled();
+  bool IsStickyKeysEnabled() const;
 
   // Enables or disables spoken feedback. Enabling spoken feedback installs the
   // ChromeVox component extension.
@@ -152,7 +157,7 @@ class AccessibilityManager
                             ash::AccessibilityNotificationVisibility notify);
 
   // Returns true if spoken feedback is enabled, or false if not.
-  bool IsSpokenFeedbackEnabled();
+  bool IsSpokenFeedbackEnabled() const;
 
   // Toggles whether Chrome OS spoken feedback is on or off.
   void ToggleSpokenFeedback(ash::AccessibilityNotificationVisibility notify);
@@ -161,13 +166,13 @@ class AccessibilityManager
   void EnableHighContrast(bool enabled);
 
   // Returns true if High Contrast is enabled, or false if not.
-  bool IsHighContrastEnabled();
+  bool IsHighContrastEnabled() const;
 
   // Enables or disables autoclick.
   void EnableAutoclick(bool enabled);
 
   // Returns true if autoclick is enabled.
-  bool IsAutoclickEnabled();
+  bool IsAutoclickEnabled() const;
 
   // Set the delay for autoclicking after stopping the cursor in milliseconds.
   void SetAutoclickDelay(int delay_ms);
@@ -178,12 +183,12 @@ class AccessibilityManager
   // Enables or disables the virtual keyboard.
   void EnableVirtualKeyboard(bool enabled);
   // Returns true if the virtual keyboard is enabled, otherwise false.
-  bool IsVirtualKeyboardEnabled();
+  bool IsVirtualKeyboardEnabled() const;
 
   // Enables or disables mono audio output.
   void EnableMonoAudio(bool enabled);
   // Returns true if mono audio output is enabled, otherwise false.
-  bool IsMonoAudioEnabled();
+  bool IsMonoAudioEnabled() const;
 
   // Invoked to enable or disable caret highlighting.
   void SetCaretHighlightEnabled(bool enabled);
@@ -202,6 +207,12 @@ class AccessibilityManager
 
   // Returns if focus highlighting is enabled.
   bool IsFocusHighlightEnabled() const;
+
+  // Enables or disables tap dragging.
+  void EnableTapDragging(bool enabled);
+
+  // Returns true if the tap dragging is enabled, or false if not.
+  bool IsTapDraggingEnabled() const;
 
   // Invoked to enable or disable select-to-speak.
   void SetSelectToSpeakEnabled(bool enabled);
@@ -248,6 +259,14 @@ class AccessibilityManager
 
   // Notify accessibility when locale changes occur.
   void OnLocaleChanged();
+
+  // Called when we first detect two fingers are held down, which can be
+  // used to toggle spoken feedback on some touch-only devices.
+  void OnTwoFingerTouchStart();
+
+  // Called when the user is no longer holding down two fingers (including
+  // releasing one, holding down three, or moving them).
+  void OnTwoFingerTouchStop();
 
   // Whether or not to enable toggling spoken feedback via holding down
   // two fingers on the screen.
@@ -313,6 +332,7 @@ class AccessibilityManager
   void UpdateCaretHighlightFromPref();
   void UpdateCursorHighlightFromPref();
   void UpdateFocusHighlightFromPref();
+  void UpdateTapDraggingFromPref();
   void UpdateSelectToSpeakFromPref();
   void UpdateSwitchAccessFromPref();
   void UpdateAccessibilityHighlightingFromPrefs();
@@ -365,6 +385,7 @@ class AccessibilityManager
       session_state_observer_;
 
   PrefHandler large_cursor_pref_handler_;
+  PrefHandler sticky_keys_pref_handler_;
   PrefHandler spoken_feedback_pref_handler_;
   PrefHandler high_contrast_pref_handler_;
   PrefHandler autoclick_pref_handler_;
@@ -374,6 +395,7 @@ class AccessibilityManager
   PrefHandler caret_highlight_pref_handler_;
   PrefHandler cursor_highlight_pref_handler_;
   PrefHandler focus_highlight_pref_handler_;
+  PrefHandler tap_dragging_pref_handler_;
   PrefHandler select_to_speak_pref_handler_;
   PrefHandler switch_access_pref_handler_;
 
@@ -389,6 +411,7 @@ class AccessibilityManager
   bool caret_highlight_enabled_;
   bool cursor_highlight_enabled_;
   bool focus_highlight_enabled_;
+  bool tap_dragging_enabled_;
   bool select_to_speak_enabled_;
   bool switch_access_enabled_;
 

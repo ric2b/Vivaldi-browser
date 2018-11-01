@@ -83,11 +83,12 @@ namespace {
 typedef base::hash_set<AXPlatformNodeWin*> AXPlatformNodeWinSet;
 // Set of all AXPlatformNodeWin objects that were the target of an
 // alert event.
-base::LazyInstance<AXPlatformNodeWinSet> g_alert_targets =
+base::LazyInstance<AXPlatformNodeWinSet>::DestructorAtExit g_alert_targets =
     LAZY_INSTANCE_INITIALIZER;
 
-base::LazyInstance<base::ObserverList<IAccessible2UsageObserver>>
-    g_iaccessible2_usage_observer_list = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ObserverList<IAccessible2UsageObserver>>::
+    DestructorAtExit g_iaccessible2_usage_observer_list =
+        LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -252,17 +253,19 @@ STDMETHODIMP AXPlatformNodeWin::accHitTest(
 
 HRESULT AXPlatformNodeWin::accDoDefaultAction(VARIANT var_id) {
   COM_OBJECT_VALIDATE_VAR_ID(var_id);
-  delegate_->DoDefaultAction();
-  return S_OK;
+  AXActionData data;
+  data.action = ui::AX_ACTION_DO_DEFAULT;
+  if (delegate_->AccessibilityPerformAction(data))
+    return S_OK;
+  return E_FAIL;
 }
 
 STDMETHODIMP AXPlatformNodeWin::accLocation(
     LONG* x_left, LONG* y_top, LONG* width, LONG* height, VARIANT var_id) {
   COM_OBJECT_VALIDATE_VAR_ID_4_ARGS(var_id, x_left, y_top, width, height);
-  gfx::Rect bounds = gfx::ToEnclosingRect(GetData().location);
-  bounds += delegate_->GetGlobalCoordinateOffset();
+  gfx::Rect bounds = delegate_->GetScreenBoundsRect();
   *x_left = bounds.x();
-  *y_top  = bounds.y();
+  *y_top = bounds.y();
   *width  = bounds.width();
   *height = bounds.height();
 
@@ -276,6 +279,12 @@ STDMETHODIMP AXPlatformNodeWin::accNavigate(
     LONG nav_dir, VARIANT start, VARIANT* end) {
   COM_OBJECT_VALIDATE_VAR_ID_1_ARG(start, end);
   IAccessible* result = nullptr;
+
+  if ((nav_dir == NAVDIR_LASTCHILD || nav_dir == NAVDIR_FIRSTCHILD) &&
+      start.lVal != CHILDID_SELF) {
+    // MSAA states that navigating to first/last child can only be from self.
+    return E_INVALIDARG;
+  }
 
   switch (nav_dir) {
     case NAVDIR_DOWN:

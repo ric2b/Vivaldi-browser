@@ -23,6 +23,7 @@
 #include "third_party/isimpledom/ISimpleDOMDocument.h"
 #include "third_party/isimpledom/ISimpleDOMNode.h"
 #include "third_party/isimpledom/ISimpleDOMText.h"
+#include "ui/accessibility/platform/ax_platform_node_win.h"
 
 namespace ui {
 enum TextBoundaryDirection;
@@ -721,8 +722,8 @@ BrowserAccessibilityWin
 
   // |offset| could either be a text character or a child index in case of
   // non-text objects.
-  CONTENT_EXPORT AXPlatformPosition::AXPositionInstance CreatePositionAt(
-      int offset) const override;
+  AXPlatformPosition::AXPositionInstance CreatePositionForSelectionAt(
+      int offset) const;
 
   CONTENT_EXPORT base::string16 GetText() const override;
 
@@ -916,6 +917,8 @@ BrowserAccessibilityWin
 
   // Fire a Windows-specific accessibility event notification on this node.
   void FireNativeEvent(LONG win_event_type) const;
+
+  ui::AXPlatformNodeWin* GetPlatformNodeWin() const;
 
   struct WinAttributes {
     WinAttributes();

@@ -190,6 +190,7 @@ class DirectoryBackingStore : public base::NonThreadSafe {
   bool MigrateVersion87To88();
   bool MigrateVersion88To89();
   bool MigrateVersion89To90();
+  bool MigrateVersion90To91();
 
   bool MigrateVivaldiVersion0To1();
 

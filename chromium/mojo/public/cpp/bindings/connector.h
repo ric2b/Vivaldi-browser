@@ -18,7 +18,7 @@
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/sync_handle_watcher.h"
 #include "mojo/public/cpp/system/core.h"
-#include "mojo/public/cpp/system/watcher.h"
+#include "mojo/public/cpp/system/simple_watcher.h"
 
 namespace base {
 class Lock;
@@ -156,7 +156,10 @@ class MOJO_CPP_BINDINGS_EXPORT Connector
   void SetWatcherHeapProfilerTag(const char* tag);
 
  private:
-  // Callback of mojo::Watcher.
+  class ActiveDispatchTracker;
+  class MessageLoopNestingObserver;
+
+  // Callback of mojo::SimpleWatcher.
   void OnWatcherHandleReady(MojoResult result);
   // Callback of SyncHandleWatcher.
   void OnSyncHandleWatcherHandleReady(MojoResult result);
@@ -188,7 +191,7 @@ class MOJO_CPP_BINDINGS_EXPORT Connector
   MessageReceiver* incoming_receiver_ = nullptr;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  std::unique_ptr<Watcher> handle_watcher_;
+  std::unique_ptr<SimpleWatcher> handle_watcher_;
 
   bool error_ = false;
   bool drop_writes_ = false;
@@ -214,6 +217,14 @@ class MOJO_CPP_BINDINGS_EXPORT Connector
   // The tag used to track heap allocations that originated from a Watcher
   // notification.
   const char* heap_profiler_tag_ = nullptr;
+
+  // A cached pointer to the MessageLoopNestingObserver for the MessageLoop on
+  // which this Connector was created.
+  MessageLoopNestingObserver* const nesting_observer_;
+
+  // |true| iff the Connector is currently dispatching a message. Used to detect
+  // nested dispatch operations.
+  bool is_dispatching_ = false;
 
   // Create a single weak ptr and use it everywhere, to avoid the malloc/free
   // cost of creating a new weak ptr whenever it is needed.

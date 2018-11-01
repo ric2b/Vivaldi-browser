@@ -46,7 +46,7 @@
 <translation id="1723824996674794290">Нови прозор</translation>
 <translation id="1725149567830788547">Прикажи контроле</translation>
 <translation id="1729533290416704613">Контролише и која страница ће се приказати када претражујете из траке адресе.</translation>
-<translation id="1731589410171062430">Укупно: <ph name="NUMBER_OF_SHEETS" /><ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
+<translation id="1731589410171062430">Укупно: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">страница у позадини</translation>
 <translation id="176587472219019965">Нови прозор</translation>
 <translation id="1769104665586091481">Отвори везу у новом прозору</translation>
@@ -108,14 +108,15 @@
 <translation id="2501797496290880632">Унесите пречицу</translation>
 <translation id="2509495747794740764">Износ промене величине мора да буде број између 10 и 200.</translation>
 <translation id="2509857212037838238">Инсталирање додатне компоненте <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Број задржавања активности</translation>
 <translation id="2550212893339833758">Замењена меморија</translation>
-<translation id="2580924999637585241">Укупно: <ph name="NUMBER_OF_SHEETS" /><ph name="SHEETS_LABEL" /></translation>
+<translation id="2580924999637585241">Укупно: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome веб-продавница</translation>
 <translation id="2678063897982469759">Поново омогући</translation>
-<translation id="2679385451463308372">Одштампај помоћу системског дијалога…</translation>
+<translation id="2679385451463308372">Штампај помоћу системског дијалога…</translation>
 <translation id="2680208403056680091">Проширење је променило подешавања проксија</translation>
 <translation id="2721037002783622288">Тражи слику помоћу <ph name="SEARCH_ENGINE" /></translation>
-<translation id="2726934403674109201">(Укупно <ph name="COUNT" />)</translation>
+<translation id="2726934403674109201">(укупно <ph name="COUNT" />)</translation>
 <translation id="2785873697295365461">Дескриптори датотека</translation>
 <translation id="2809586584051668049">и још <ph name="NUMBER_ADDITIONAL_DISABLED" /> других</translation>
 <translation id="2844111009524261443">Покрени након клика</translation>
@@ -214,7 +215,7 @@
 <translation id="4088095054444612037">Прихвати за групу</translation>
 <translation id="4089192115462111328">У прегледачу Vivaldi</translation>
 <translation id="4090535558450035482">(Овим проширењем се управља и не може се уклонити.)</translation>
-<translation id="4091434297613116013">листова папира</translation>
+<translation id="4091434297613116013">лист(ов)а папира</translation>
 <translation id="4096508467498758490">Онемогући проширења покренута у режиму програмера</translation>
 <translation id="4100839878934973028">Други програм на рачунару је додао апликацију која може да промени начин на који Vivaldi функционише.</translation>
 <translation id="411666854932687641">Приватна меморија</translation>
@@ -289,7 +290,7 @@
 <translation id="5233231016133573565">ID процеса</translation>
 <translation id="5233638681132016545">Нова картица</translation>
 <translation id="5233736638227740678">Налепи</translation>
-<translation id="5265562206369321422">Ван мреже дуже од недељу дана</translation>
+<translation id="5265562206369321422">Ван мреже дуже од једне седмице</translation>
 <translation id="5269977353971873915">Штампање није успело</translation>
 <translation id="52912272896845572">Датотека приватног кључа је неважећа.</translation>
 <translation id="5301954838959518834">У реду, схватам</translation>
@@ -303,7 +304,7 @@
 <translation id="5370819323174483825">Поново учитај</translation>
 <translation id="5398572795982417028">Превелика референца за странице, ограничење је <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5427459444770871191">Ротирај у смеру кретања казаљке на сату</translation>
-<translation id="5431318178759467895">У боји</translation>
+<translation id="5431318178759467895">Боја</translation>
 <translation id="5438430601586617544">(Распаковано)</translation>
 <translation id="5451285724299252438">оквир за текст за опсег страница</translation>
 <translation id="5483785310822538350">Опозови приступ датотекама и уређају</translation>
@@ -366,6 +367,7 @@
 <translation id="6273677812470008672">Квалитет</translation>
 <translation id="6295855836753816081">Чување…</translation>
 <translation id="6308937455967653460">Сачувај везу као...</translation>
+<translation id="6326855256003666642">Број задржавања активности</translation>
 <translation id="6348109281845364640">Неуспешно подешавање штампача</translation>
 <translation id="6370021412472292592">Учитавање манифеста није могуће.</translation>
 <translation id="6398765197997659313">Изађи из режима целог екрана</translation>

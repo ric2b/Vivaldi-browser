@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2016-2017 Vivaldi Technologies AS. All rights reserved
 
 #include "extensions/api/runtime/runtime_api.h"
 
@@ -15,6 +15,7 @@
 #include "base/path_service.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/download/download_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -27,6 +28,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/runtime_private.h"
+#include "ui/devtools/devtools_connector.h"
 #include "prefs/vivaldi_pref_names.h"
 
 namespace extensions {
@@ -51,7 +53,8 @@ VivaldiRuntimeFeatures::VivaldiRuntimeFeatures()
 VivaldiRuntimeFeatures::~VivaldiRuntimeFeatures() {}
 
 /* static */
-bool IsEnabled(Profile* profile, const std::string& feature_name) {
+bool VivaldiRuntimeFeatures::IsEnabled(Profile* profile,
+                                       const std::string& feature_name) {
   extensions::VivaldiRuntimeFeatures* features =
       extensions::VivaldiRuntimeFeaturesFactory::GetForProfile(profile);
   DCHECK(features);
@@ -75,7 +78,7 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
         JsonPrefStore::GetTaskRunnerForFile(
             path, content::BrowserThread::GetBlockingPool());
 
-    store_ = new JsonPrefStore(path, base::FilePath(), sequenced_task_runner,
+    store_ = new JsonPrefStore(path, sequenced_task_runner,
                                std::unique_ptr<PrefFilter>());
     store_->ReadPrefs();
 
@@ -160,7 +163,7 @@ bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap* flags) {
   // Check for any features that might be enabled by the user now.
   for (auto& flag_entry : *flags) {
     base::ListValue::const_iterator it =
-        list->Find(base::StringValue(flag_entry.first));
+        list->Find(base::Value(flag_entry.first));
     if (it != list->end() && flag_entry.second->force_value == false) {
       flag_entry.second->enabled = true;
     }
@@ -223,6 +226,13 @@ RuntimePrivateExitFunction::RuntimePrivateExitFunction() {}
 RuntimePrivateExitFunction::~RuntimePrivateExitFunction() {}
 
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
+  // Free any open devtools if the user selects Exit from the menu.
+  extensions::DevtoolsConnectorAPI* api =
+      extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
+          Profile::FromBrowserContext(browser_context()));
+  DCHECK(api);
+  api->CloseAllDevtools();
+
   PerformApplicationShutdown();
   return RespondNow(NoArguments());
 }

@@ -31,6 +31,7 @@
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "platform/weborigin/Referrer.h"
@@ -39,74 +40,77 @@ namespace blink {
 
 using namespace HTMLNames;
 
-bool HTMLTablePartElement::isPresentationAttribute(
+bool HTMLTablePartElement::IsPresentationAttribute(
     const QualifiedName& name) const {
   if (name == bgcolorAttr || name == backgroundAttr || name == valignAttr ||
       name == alignAttr || name == heightAttr)
     return true;
-  return HTMLElement::isPresentationAttribute(name);
+  return HTMLElement::IsPresentationAttribute(name);
 }
 
-void HTMLTablePartElement::collectStyleForPresentationAttribute(
+void HTMLTablePartElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
     MutableStylePropertySet* style) {
   if (name == bgcolorAttr) {
-    addHTMLColorToStyle(style, CSSPropertyBackgroundColor, value);
+    AddHTMLColorToStyle(style, CSSPropertyBackgroundColor, value);
   } else if (name == backgroundAttr) {
-    String url = stripLeadingAndTrailingHTMLSpaces(value);
-    if (!url.isEmpty()) {
-      CSSImageValue* imageValue =
-          CSSImageValue::create(url, document().completeURL(url));
-      imageValue->setReferrer(Referrer(document().outgoingReferrer(),
-                                       document().getReferrerPolicy()));
-      style->setProperty(CSSProperty(CSSPropertyBackgroundImage, *imageValue));
+    String url = StripLeadingAndTrailingHTMLSpaces(value);
+    if (!url.IsEmpty()) {
+      UseCounter::Count(
+          GetDocument(),
+          UseCounter::kHTMLTableElementPresentationAttributeBackground);
+      CSSImageValue* image_value =
+          CSSImageValue::Create(url, GetDocument().CompleteURL(url),
+                                Referrer(GetDocument().OutgoingReferrer(),
+                                         GetDocument().GetReferrerPolicy()));
+      style->SetProperty(CSSProperty(CSSPropertyBackgroundImage, *image_value));
     }
   } else if (name == valignAttr) {
-    if (equalIgnoringCase(value, "top"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
+    if (DeprecatedEqualIgnoringCase(value, "top"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
                                               CSSValueTop);
-    else if (equalIgnoringCase(value, "middle"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
+    else if (DeprecatedEqualIgnoringCase(value, "middle"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
                                               CSSValueMiddle);
-    else if (equalIgnoringCase(value, "bottom"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
+    else if (DeprecatedEqualIgnoringCase(value, "bottom"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
                                               CSSValueBottom);
-    else if (equalIgnoringCase(value, "baseline"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
+    else if (DeprecatedEqualIgnoringCase(value, "baseline"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
                                               CSSValueBaseline);
     else
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
                                               value);
   } else if (name == alignAttr) {
-    if (equalIgnoringCase(value, "middle") ||
-        equalIgnoringCase(value, "center"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
+    if (DeprecatedEqualIgnoringCase(value, "middle") ||
+        DeprecatedEqualIgnoringCase(value, "center"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
                                               CSSValueWebkitCenter);
-    else if (equalIgnoringCase(value, "absmiddle"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
+    else if (DeprecatedEqualIgnoringCase(value, "absmiddle"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
                                               CSSValueCenter);
-    else if (equalIgnoringCase(value, "left"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
+    else if (DeprecatedEqualIgnoringCase(value, "left"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
                                               CSSValueWebkitLeft);
-    else if (equalIgnoringCase(value, "right"))
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
+    else if (DeprecatedEqualIgnoringCase(value, "right"))
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
                                               CSSValueWebkitRight);
     else
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
+      AddPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
                                               value);
   } else if (name == heightAttr) {
-    if (!value.isEmpty())
-      addHTMLLengthToStyle(style, CSSPropertyHeight, value);
+    if (!value.IsEmpty())
+      AddHTMLLengthToStyle(style, CSSPropertyHeight, value);
   } else {
-    HTMLElement::collectStyleForPresentationAttribute(name, value, style);
+    HTMLElement::CollectStyleForPresentationAttribute(name, value, style);
   }
 }
 
-HTMLTableElement* HTMLTablePartElement::findParentTable() const {
-  ContainerNode* parent = FlatTreeTraversal::parent(*this);
+HTMLTableElement* HTMLTablePartElement::FindParentTable() const {
+  ContainerNode* parent = FlatTreeTraversal::Parent(*this);
   while (parent && !isHTMLTableElement(*parent))
-    parent = FlatTreeTraversal::parent(*parent);
+    parent = FlatTreeTraversal::Parent(*parent);
   return toHTMLTableElement(parent);
 }
 

@@ -46,7 +46,8 @@ bool HardwareDisplayPlaneManagerAtomic::Commit(
       HardwareDisplayPlaneAtomic* atomic_plane =
           static_cast<HardwareDisplayPlaneAtomic*>(plane);
       atomic_plane->SetPlaneData(plane_list->atomic_property_set.get(), 0, 0,
-                                 gfx::Rect(), gfx::Rect());
+                                 gfx::Rect(), gfx::Rect(),
+                                 gfx::OVERLAY_TRANSFORM_NONE);
     }
   }
 
@@ -95,9 +96,12 @@ bool HardwareDisplayPlaneManagerAtomic::SetPlaneData(
     CrtcController* crtc) {
   HardwareDisplayPlaneAtomic* atomic_plane =
       static_cast<HardwareDisplayPlaneAtomic*>(hw_plane);
-  if (!atomic_plane->SetPlaneData(plane_list->atomic_property_set.get(),
-                                  crtc_id, overlay.buffer->GetFramebufferId(),
-                                  overlay.display_bounds, src_rect)) {
+  uint32_t framebuffer_id = overlay.z_order
+                                ? overlay.buffer->GetFramebufferId()
+                                : overlay.buffer->GetOpaqueFramebufferId();
+  if (!atomic_plane->SetPlaneData(
+          plane_list->atomic_property_set.get(), crtc_id, framebuffer_id,
+          overlay.display_bounds, src_rect, overlay.plane_transform)) {
     LOG(ERROR) << "Failed to set plane properties";
     return false;
   }

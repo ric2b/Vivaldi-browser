@@ -14,7 +14,11 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_ui.h"
+#include "net/base/data_url.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -24,6 +28,11 @@
 namespace settings {
 
 namespace {
+
+#if defined(OS_CHROMEOS)
+constexpr char fake_id[] = "fake_id";
+constexpr char fake_email[] = "fake_id@gmail.com";
+#endif
 
 class TestProfileInfoHandler : public ProfileInfoHandler {
  public:
@@ -39,17 +48,18 @@ class ProfileInfoHandlerTest : public testing::Test {
  public:
   ProfileInfoHandlerTest()
       : profile_manager_(TestingBrowserProcess::GetGlobal()),
-#if defined(OS_CHROMEOS)
-        user_manager_enabler_(new chromeos::FakeChromeUserManager),
-#endif
-        profile_(nullptr) {
-  }
+        profile_(nullptr) {}
 
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
 
 #if defined(OS_CHROMEOS)
-    profile_ = profile_manager_.CreateTestingProfile("fake_id@gmail.com");
+    chromeos::FakeChromeUserManager* fake_user_manager =
+        new chromeos::FakeChromeUserManager;
+    user_manager_enabler_.reset(
+        new chromeos::ScopedUserManagerEnabler(fake_user_manager));
+    profile_ = profile_manager_.CreateTestingProfile(fake_email);
+    fake_user_manager->AddUser(AccountId::FromUserEmail(fake_email));
 #else
     profile_ = profile_manager_.CreateTestingProfile("Profile 1");
 #endif
@@ -68,11 +78,19 @@ class ProfileInfoHandlerTest : public testing::Test {
     ASSERT_TRUE(response->GetString("iconUrl", &icon_url));
 
 #if defined(OS_CHROMEOS)
-    EXPECT_EQ("fake_id@gmail.com", name);
+    EXPECT_EQ(fake_id, name);
     EXPECT_FALSE(icon_url.empty());
 #else
     EXPECT_EQ("Profile 1", name);
-    EXPECT_EQ("chrome://theme/IDR_PROFILE_AVATAR_0", icon_url);
+
+    std::string mime, charset, data;
+    EXPECT_TRUE(net::DataURL::Parse(GURL(icon_url), &mime, &charset, &data));
+
+    EXPECT_EQ("image/png", mime);
+    SkBitmap bitmap;
+    EXPECT_TRUE(gfx::PNGCodec::Decode(
+        reinterpret_cast<const unsigned char*>(data.data()), data.size(),
+        &bitmap));
 #endif
   }
 
@@ -86,7 +104,7 @@ class ProfileInfoHandlerTest : public testing::Test {
   content::TestWebUI web_ui_;
 
 #if defined(OS_CHROMEOS)
-  chromeos::ScopedUserManagerEnabler user_manager_enabler_;
+  std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
 #endif
 
   Profile* profile_;

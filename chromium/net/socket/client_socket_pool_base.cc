@@ -620,6 +620,18 @@ void ClientSocketPoolBaseHelper::CloseIdleSockets() {
   DCHECK_EQ(0, idle_socket_count_);
 }
 
+void ClientSocketPoolBaseHelper::CloseIdleSocketsInGroup(
+    const std::string& group_name) {
+  if (idle_socket_count_ == 0)
+    return;
+  GroupMap::iterator it = group_map_.find(group_name);
+  if (it == group_map_.end())
+    return;
+  CleanupIdleSocketsInGroup(true, it->second, base::TimeTicks::Now());
+  if (it->second->IsEmpty())
+    RemoveGroup(it);
+}
+
 int ClientSocketPoolBaseHelper::IdleSocketCountInGroup(
     const std::string& group_name) const {
   GroupMap::const_iterator i = group_map_.find(group_name);
@@ -770,42 +782,46 @@ void ClientSocketPoolBaseHelper::CleanupIdleSockets(bool force) {
   // inside the inner loop, since it shouldn't change by any meaningful amount.
   base::TimeTicks now = base::TimeTicks::Now();
 
-  GroupMap::iterator i = group_map_.begin();
-  while (i != group_map_.end()) {
+  for (GroupMap::iterator i = group_map_.begin(); i != group_map_.end();) {
     Group* group = i->second;
-
-    auto idle_socket_it = group->mutable_idle_sockets()->begin();
-    while (idle_socket_it != group->idle_sockets().end()) {
-      base::TimeDelta timeout = idle_socket_it->socket->WasEverUsed()
-                                    ? used_idle_socket_timeout_
-                                    : unused_idle_socket_timeout_;
-      bool timed_out = (now - idle_socket_it->start_time) >= timeout;
-      bool should_clean_up = force || timed_out || !idle_socket_it->IsUsable();
-      if (should_clean_up) {
-        if (force) {
-          RecordIdleSocketFate(IDLE_SOCKET_FATE_CLEAN_UP_FORCED);
-        } else if (timed_out) {
-          RecordIdleSocketFate(
-              idle_socket_it->socket->WasEverUsed()
-                  ? IDLE_SOCKET_FATE_CLEAN_UP_TIMED_OUT_REUSED
-                  : IDLE_SOCKET_FATE_CLEAN_UP_TIMED_OUT_UNUSED);
-        } else {
-          DCHECK(!idle_socket_it->IsUsable());
-          RecordIdleSocketFate(IDLE_SOCKET_FATE_CLEAN_UP_UNUSABLE);
-        }
-        delete idle_socket_it->socket;
-        idle_socket_it = group->mutable_idle_sockets()->erase(idle_socket_it);
-        DecrementIdleCount();
-      } else {
-        ++idle_socket_it;
-      }
-    }
-
+    CleanupIdleSocketsInGroup(force, group, now);
     // Delete group if no longer needed.
     if (group->IsEmpty()) {
-      RemoveGroup(i++);
+      GroupMap::iterator old = i++;
+      RemoveGroup(old);
     } else {
       ++i;
+    }
+  }
+}
+
+void ClientSocketPoolBaseHelper::CleanupIdleSocketsInGroup(
+    bool force,
+    Group* group,
+    const base::TimeTicks& now) {
+  auto idle_socket_it = group->mutable_idle_sockets()->begin();
+  while (idle_socket_it != group->idle_sockets().end()) {
+    base::TimeDelta timeout = idle_socket_it->socket->WasEverUsed()
+                                  ? used_idle_socket_timeout_
+                                  : unused_idle_socket_timeout_;
+    bool timed_out = (now - idle_socket_it->start_time) >= timeout;
+    bool should_clean_up = force || timed_out || !idle_socket_it->IsUsable();
+    if (should_clean_up) {
+      if (force) {
+        RecordIdleSocketFate(IDLE_SOCKET_FATE_CLEAN_UP_FORCED);
+      } else if (timed_out) {
+        RecordIdleSocketFate(idle_socket_it->socket->WasEverUsed()
+                                 ? IDLE_SOCKET_FATE_CLEAN_UP_TIMED_OUT_REUSED
+                                 : IDLE_SOCKET_FATE_CLEAN_UP_TIMED_OUT_UNUSED);
+      } else {
+        DCHECK(!idle_socket_it->IsUsable());
+        RecordIdleSocketFate(IDLE_SOCKET_FATE_CLEAN_UP_UNUSABLE);
+      }
+      delete idle_socket_it->socket;
+      idle_socket_it = group->mutable_idle_sockets()->erase(idle_socket_it);
+      DecrementIdleCount();
+    } else {
+      ++idle_socket_it;
     }
   }
 }
@@ -886,37 +902,36 @@ void ClientSocketPoolBaseHelper::ReleaseSocket(
 }
 
 void ClientSocketPoolBaseHelper::CheckForStalledSocketGroups() {
-  // If we have idle sockets, see if we can give one to the top-stalled group.
-  std::string top_group_name;
-  Group* top_group = NULL;
-  if (!FindTopStalledGroup(&top_group, &top_group_name)) {
-    // There may still be a stalled group in a lower level pool.
-    for (std::set<LowerLayeredPool*>::iterator it = lower_pools_.begin();
-         it != lower_pools_.end();
-         ++it) {
-       if ((*it)->IsStalled()) {
-         CloseOneIdleSocket();
-         break;
-       }
-    }
-    return;
-  }
-
-  if (ReachedMaxSocketsLimit()) {
-    if (idle_socket_count() > 0) {
-      CloseOneIdleSocket();
-    } else {
-      // We can't activate more sockets since we're already at our global
-      // limit.
+  // Loop until there's nothing more to do.
+  while (true) {
+    // If we have idle sockets, see if we can give one to the top-stalled group.
+    std::string top_group_name;
+    Group* top_group = NULL;
+    if (!FindTopStalledGroup(&top_group, &top_group_name)) {
+      // There may still be a stalled group in a lower level pool.
+      for (std::set<LowerLayeredPool*>::iterator it = lower_pools_.begin();
+           it != lower_pools_.end(); ++it) {
+        if ((*it)->IsStalled()) {
+          CloseOneIdleSocket();
+          break;
+        }
+      }
       return;
     }
-  }
 
-  // Note:  we don't loop on waking stalled groups.  If the stalled group is at
-  //        its limit, may be left with other stalled groups that could be
-  //        woken.  This isn't optimal, but there is no starvation, so to avoid
-  //        the looping we leave it at this.
-  OnAvailableSocketSlot(top_group_name, top_group);
+    if (ReachedMaxSocketsLimit()) {
+      if (idle_socket_count() > 0) {
+        CloseOneIdleSocket();
+      } else {
+        // We can't activate more sockets since we're already at our global
+        // limit.
+        return;
+      }
+    }
+
+    // Note that this may delete top_group.
+    OnAvailableSocketSlot(top_group_name, top_group);
+  }
 }
 
 // Search for the highest priority pending request, amongst the groups that
@@ -1136,10 +1151,8 @@ void ClientSocketPoolBaseHelper::CancelAllConnectJobs() {
 
     // Delete group if no longer needed.
     if (group->IsEmpty()) {
-      // RemoveGroup() will call .erase() which will invalidate the iterator,
-      // but i will already have been incremented to a valid iterator before
-      // RemoveGroup() is called.
-      RemoveGroup(i++);
+      GroupMap::iterator old = i++;
+      RemoveGroup(old);
     } else {
       ++i;
     }
@@ -1160,10 +1173,8 @@ void ClientSocketPoolBaseHelper::CancelAllRequestsWithError(int error) {
 
     // Delete group if no longer needed.
     if (group->IsEmpty()) {
-      // RemoveGroup() will call .erase() which will invalidate the iterator,
-      // but i will already have been incremented to a valid iterator before
-      // RemoveGroup() is called.
-      RemoveGroup(i++);
+      GroupMap::iterator old = i++;
+      RemoveGroup(old);
     } else {
       ++i;
     }

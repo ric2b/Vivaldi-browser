@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 
-#include "ash/common/material_design/material_design_controller.h"
-#include "ash/common/wm/window_state.h"
+#include "ash/material_design/material_design_controller.h"
 #include "ash/shared/immersive_revealed_lock.h"
 #include "ash/shell.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -344,7 +344,7 @@ void ImmersiveModeControllerAsh::Observe(
       IsWindowFullscreenForTabOrPending();
   ash::wm::GetWindowState(native_window_)
       ->set_hide_shelf_when_fullscreen(in_tab_fullscreen);
-  ash::Shell::GetInstance()->UpdateShelfVisibility();
+  ash::Shell::Get()->UpdateShelfVisibility();
 }
 
 void ImmersiveModeControllerAsh::OnWindowPropertyChanged(aura::Window* window,

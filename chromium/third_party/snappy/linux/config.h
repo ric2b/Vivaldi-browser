@@ -99,7 +99,7 @@
 #define PACKAGE_NAME "snappy"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "snappy 1.1.0"
+#define PACKAGE_STRING "snappy 1.1.4"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "snappy"
@@ -108,13 +108,13 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.1.0"
+#define PACKAGE_VERSION "1.1.4"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
 /* Version number of package */
-#define VERSION "1.1.0"
+#define VERSION "1.1.4"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

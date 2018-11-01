@@ -29,8 +29,8 @@
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_socket_address_coder.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/platform/api/quic_string_piece.h"
 
-using base::StringPiece;
 using std::string;
 
 namespace net {
@@ -225,7 +225,8 @@ std::unique_ptr<base::Value> NetLogQuicCryptoHandshakeMessageCallback(
     const CryptoHandshakeMessage* message,
     NetLogCaptureMode /* capture_mode */) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetString("quic_crypto_handshake_message", message->DebugString());
+  dict->SetString("quic_crypto_handshake_message",
+                  message->DebugString(Perspective::IS_CLIENT));
   return std::move(dict);
 }
 
@@ -606,7 +607,7 @@ void QuicConnectionLogger::OnCryptoHandshakeMessageReceived(
       base::Bind(&NetLogQuicCryptoHandshakeMessageCallback, &message));
 
   if (message.tag() == kSHLO) {
-    StringPiece address;
+    QuicStringPiece address;
     QuicSocketAddressCoder decoder;
     if (message.GetStringPiece(kCADR, &address) &&
         decoder.Decode(address.data(), address.size())) {

@@ -59,9 +59,9 @@ SurfacesInstance::SurfacesInstance()
   constexpr bool is_root = true;
   constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
-  support_.reset(new cc::CompositorFrameSinkSupport(
+  support_ = cc::CompositorFrameSinkSupport::Create(
       this, surface_manager_.get(), frame_sink_id_, is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points));
+      handles_frame_sink_id_invalidation, needs_sync_points);
 
   begin_frame_source_.reset(new cc::StubBeginFrameSource);
   std::unique_ptr<cc::TextureMailboxDeleter> texture_mailbox_deleter(
@@ -134,6 +134,9 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
                        cc::SurfaceDrawQuadType::PRIMARY, nullptr);
 
   cc::CompositorFrame frame;
+  // We draw synchronously, so acknowledge a manual BeginFrame.
+  frame.metadata.begin_frame_ack =
+      cc::BeginFrameAck::CreateManualAckWithDamage();
   frame.render_pass_list.push_back(std::move(render_pass));
   frame.metadata.referenced_surfaces = child_ids_;
 
@@ -165,11 +168,17 @@ void SurfacesInstance::RemoveChildId(const cc::SurfaceId& child_id) {
 
 void SurfacesInstance::SetEmptyRootFrame() {
   cc::CompositorFrame empty_frame;
+  // We draw synchronously, so acknowledge a manual BeginFrame.
+  empty_frame.metadata.begin_frame_ack =
+      cc::BeginFrameAck::CreateManualAckWithDamage();
   empty_frame.metadata.referenced_surfaces = child_ids_;
   support_->SubmitCompositorFrame(root_id_, std::move(empty_frame));
 }
 
-void SurfacesInstance::DidReceiveCompositorFrameAck() {}
+void SurfacesInstance::DidReceiveCompositorFrameAck(
+    const cc::ReturnedResourceArray& resources) {
+  ReclaimResources(resources);
+}
 
 void SurfacesInstance::OnBeginFrame(const cc::BeginFrameArgs& args) {}
 

@@ -4,7 +4,7 @@
 
 // Custom binding for the contextMenus API.
 
-var binding = require('binding').Binding.create('contextMenus');
+var binding = apiBridge || require('binding').Binding.create('contextMenus');
 var contextMenusHandlers = require('contextMenusHandlers');
 
 binding.registerCustomHook(function(bindingsAPI) {
@@ -14,13 +14,13 @@ binding.registerCustomHook(function(bindingsAPI) {
 
   apiFunctions.setHandleRequest('create', handlers.requestHandlers.create);
 
-  apiFunctions.setCustomCallback('create', handlers.callbacks.create);
+  apiFunctions.setHandleRequest('remove', handlers.requestHandlers.remove);
 
-  apiFunctions.setCustomCallback('remove', handlers.callbacks.remove);
+  apiFunctions.setHandleRequest('update', handlers.requestHandlers.update);
 
-  apiFunctions.setCustomCallback('update', handlers.callbacks.update);
-
-  apiFunctions.setCustomCallback('removeAll', handlers.callbacks.removeAll);
+  apiFunctions.setHandleRequest('removeAll',
+                                handlers.requestHandlers.removeAll);
 });
 
-exports.$set('binding', binding.generate());
+if (!apiBridge)
+  exports.$set('binding', binding.generate());

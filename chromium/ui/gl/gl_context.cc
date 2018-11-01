@@ -25,10 +25,10 @@
 namespace gl {
 
 namespace {
-base::LazyInstance<base::ThreadLocalPointer<GLContext> >::Leaky
+base::LazyInstance<base::ThreadLocalPointer<GLContext>>::Leaky
     current_context_ = LAZY_INSTANCE_INITIALIZER;
 
-base::LazyInstance<base::ThreadLocalPointer<GLContext> >::Leaky
+base::LazyInstance<base::ThreadLocalPointer<GLContext>>::Leaky
     current_real_context_ = LAZY_INSTANCE_INITIALIZER;
 }  // namespace
 
@@ -44,17 +44,9 @@ void GLContext::ScopedReleaseCurrent::Cancel() {
   canceled_ = true;
 }
 
-GLContext::GLContext(GLShareGroup* share_group)
-    : static_bindings_initialized_(false),
-      dynamic_bindings_initialized_(false),
-      share_group_(share_group),
-      current_virtual_context_(nullptr),
-      state_dirtied_externally_(false),
-      swap_interval_(1),
-      force_swap_interval_zero_(false) {
+GLContext::GLContext(GLShareGroup* share_group) : share_group_(share_group) {
   if (!share_group_.get())
     share_group_ = new gl::GLShareGroup();
-
   share_group_->AddContext(this);
 }
 
@@ -138,6 +130,12 @@ CurrentGL* GLContext::GetCurrentGL() {
   return current_gl_.get();
 }
 
+void GLContext::ReinitializeDynamicBindings() {
+  DCHECK(IsCurrent(nullptr));
+  dynamic_bindings_initialized_ = false;
+  InitializeDynamicBindings();
+}
+
 bool GLContext::HasExtension(const char* name) {
   std::string extensions = GetExtensions();
   extensions += " ";
@@ -217,11 +215,15 @@ void GLContext::SetGLStateRestorer(GLStateRestorer* state_restorer) {
 }
 
 void GLContext::SetSwapInterval(int interval) {
+  if (swap_interval_ == interval)
+    return;
   swap_interval_ = interval;
   OnSetSwapInterval(force_swap_interval_zero_ ? 0 : swap_interval_);
 }
 
 void GLContext::ForceSwapIntervalZero(bool force) {
+  if (force_swap_interval_zero_ == force)
+    return;
   force_swap_interval_zero_ = force;
   OnSetSwapInterval(force_swap_interval_zero_ ? 0 : swap_interval_);
 }

@@ -5,13 +5,13 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_button_cell.h"
 
 #include "base/logging.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_constants.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_button.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_context_menu_cocoa_controller.h"
 #include "chrome/grit/generated_resources.h"
 #import "components/bookmarks/browser/bookmark_model.h"
-#include "content/public/browser/user_metrics.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -35,8 +35,13 @@ const int kIconLeftPadding = 4;
 
 const int kDefaultFontSize = 12;
 
+// Kerning value for the title text.
+const CGFloat kKernAmount = 0.2;
+
 };  // namespace
 
+// TODO(lgrey): Bake setting the chevron image into this
+// class instead of setting it externally.
 @interface OffTheSideButtonCell : BookmarkButtonCell
 
 - (NSString*)accessibilityTitle;
@@ -63,7 +68,7 @@ const int kDefaultFontSize = 12;
 
 @end
 
-@interface BookmarkButtonCell(Private)
+@interface BookmarkButtonCell (Private)
 // Returns YES if the cell is the offTheSide button cell.
 - (BOOL)isOffTheSideButtonCell;
 - (void)configureBookmarkButtonCell;
@@ -106,6 +111,28 @@ const int kDefaultFontSize = 12;
   return buttonCell;
 }
 
++ (id)offTheSideButtonCell {
+  return [[[OffTheSideButtonCell alloc] init] autorelease];
+}
+
++ (CGFloat)cellWidthForNode:(const bookmarks::BookmarkNode*)node
+                      image:(NSImage*)image {
+  NSString* title =
+      [self cleanTitle:base::SysUTF16ToNSString(node->GetTitle())];
+  CGFloat width = kIconLeftPadding + [image size].width;
+  if ([title length] > 0) {
+    CGSize titleSize = [title sizeWithAttributes:@{
+      NSParagraphStyleAttributeName : [self paragraphStyleForBookmarkBarCell],
+      NSKernAttributeName : @(kKernAmount),
+      NSFontAttributeName : [self fontForBookmarkBarCell],
+    }];
+    width += kIconTextSpacer + std::ceil(titleSize.width) + kTextRightPadding;
+  } else {
+    width += kIconLeftPadding;
+  }
+  return width;
+}
+
 - (id)initForNode:(const BookmarkNode*)node
              text:(NSString*)text
             image:(NSImage*)image
@@ -114,7 +141,7 @@ const int kDefaultFontSize = 12;
     menuController_ = menuController;
     [self configureBookmarkButtonCell];
     [self setTextColor:[NSColor blackColor]];
-    [self setBookmarkNode:node];
+    [self setBookmarkNode:node image:image];
     // When opening a bookmark folder, the default behavior is that the
     // favicon is greyed when menu item is hovered with the mouse cursor.
     // When using NSNoCellMask, the favicon won't be greyed when menu item
@@ -124,15 +151,6 @@ const int kDefaultFontSize = 12;
     // It makes the behavior of the bookmark folder consistent with hovering
     // on the bookmark bar.
     [self setHighlightsBy:NSNoCellMask];
-
-    if (node) {
-      NSString* title = base::SysUTF16ToNSString(node->GetTitle());
-      [self setBookmarkCellText:title image:image];
-    } else {
-      [self setEmpty:YES];
-      [self setBookmarkCellText:l10n_util::GetNSString(IDS_MENU_EMPTY_SUBMENU)
-                          image:nil];
-    }
   }
 
   return self;
@@ -179,7 +197,7 @@ const int kDefaultFontSize = 12;
   [self setShowsBorderOnlyWhileMouseInside:YES];
   [self setControlSize:NSSmallControlSize];
   [self setAlignment:NSLeftTextAlignment];
-  [self setFont:[NSFont systemFontOfSize:kDefaultFontSize]];
+  [self setFont:[[self class] fontForBookmarkBarCell]];
   [self setBordered:NO];
   [self setBezeled:NO];
   [self setWraps:NO];
@@ -214,12 +232,8 @@ const int kDefaultFontSize = 12;
 
 - (void)setBookmarkCellText:(NSString*)title
                       image:(NSImage*)image {
-  title = [title stringByReplacingOccurrencesOfString:@"\n"
-                                           withString:@" "];
-  title = [title stringByReplacingOccurrencesOfString:@"\r"
-                                           withString:@" "];
-
-  if ([title length]) {
+  title = [[self class] cleanTitle:title];
+  if ([title length] && ![self isOffTheSideButtonCell]) {
     [self setImagePosition:NSImageLeft];
     [self setTitle:title];
   } else if ([self isFolderButtonCell]) {
@@ -239,7 +253,19 @@ const int kDefaultFontSize = 12;
 }
 
 - (void)setBookmarkNode:(const BookmarkNode*)node {
+  [self setBookmarkNode:node image:nil];
+}
+
+- (void)setBookmarkNode:(const BookmarkNode*)node image:(NSImage*)image {
   [self setRepresentedObject:[NSValue valueWithPointer:node]];
+  if (node) {
+    NSString* title = base::SysUTF16ToNSString(node->GetTitle());
+    [self setBookmarkCellText:title image:image];
+  } else {
+    [self setEmpty:YES];
+    [self setBookmarkCellText:l10n_util::GetNSString(IDS_MENU_EMPTY_SUBMENU)
+                        image:nil];
+  }
 }
 
 - (const BookmarkNode*)bookmarkNode {
@@ -254,9 +280,9 @@ const int kDefaultFontSize = 12;
 
   if (node && node->parent() &&
       node->parent()->type() == BookmarkNode::FOLDER) {
-    content::RecordAction(UserMetricsAction("BookmarkBarFolder_CtxMenu"));
+    base::RecordAction(UserMetricsAction("BookmarkBarFolder_CtxMenu"));
   } else {
-    content::RecordAction(UserMetricsAction("BookmarkBar_CtxMenu"));
+    base::RecordAction(UserMetricsAction("BookmarkBar_CtxMenu"));
   }
   return [menuController_ menuForBookmarkNode:node];
 }
@@ -309,10 +335,7 @@ const int kDefaultFontSize = 12;
 }
 
 - (NSDictionary*)titleTextAttributes {
-  base::scoped_nsobject<NSMutableParagraphStyle> style(
-      [NSMutableParagraphStyle new]);
-  [style setAlignment:NSNaturalTextAlignment];
-  [style setLineBreakMode:NSLineBreakByTruncatingTail];
+  NSParagraphStyle* style = [[self class] paragraphStyleForBookmarkBarCell];
   NSColor* textColor = textColor_.get();
   if (!textColor) {
     textColor = [NSColor blackColor];
@@ -322,14 +345,14 @@ const int kDefaultFontSize = 12;
   }
   NSFont* theFont = [self font];
   if (!theFont) {
-    theFont = [NSFont systemFontOfSize:kDefaultFontSize];
+    theFont = [[self class] fontForBookmarkBarCell];
   }
 
   return @{
-     NSFontAttributeName : theFont,
-     NSForegroundColorAttributeName : textColor,
-     NSParagraphStyleAttributeName : style.get(),
-     NSKernAttributeName : [NSNumber numberWithFloat:0.2]
+    NSFontAttributeName : theFont,
+    NSForegroundColorAttributeName : textColor,
+    NSParagraphStyleAttributeName : style,
+    NSKernAttributeName : @(kKernAmount),
   };
 }
 
@@ -435,5 +458,23 @@ const int kDefaultFontSize = 12;
   return 0.0;
 }
 
++ (NSFont*)fontForBookmarkBarCell {
+  return [NSFont systemFontOfSize:kDefaultFontSize];
+}
+
++ (NSParagraphStyle*)paragraphStyleForBookmarkBarCell {
+  NSMutableParagraphStyle* style = [[NSMutableParagraphStyle alloc] init];
+  [style setAlignment:NSNaturalTextAlignment];
+  [style setLineBreakMode:NSLineBreakByTruncatingTail];
+  return [style autorelease];
+}
+
+// Returns |title| with newlines and line feeds replaced with
+// spaces.
++ (NSString*)cleanTitle:(NSString*)title {
+  title = [title stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+  title = [title stringByReplacingOccurrencesOfString:@"\r" withString:@" "];
+  return title;
+}
 
 @end

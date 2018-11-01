@@ -99,6 +99,7 @@ SettingsAutofillSectionBrowserTest.prototype = {
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
     'passwords_and_autofill_fake_data.js',
     'test_util.js',
+    'ensure_lazy_loaded.js',
   ]),
 
   /**
@@ -115,14 +116,13 @@ SettingsAutofillSectionBrowserTest.prototype = {
     // Test is run on an individual element that won't have a page language.
     this.accessibilityAuditConfig.auditRulesToIgnore.push('humanLangMissing');
 
-    settings.address.CountryDetailManagerImpl.instance_ =
-        new CountryDetailManagerTestImpl();
+    settings.ensureLazyLoaded();
   },
 
   /**
    * Creates the autofill section for the given lists.
    * @param {!Array<!chrome.passwordsPrivate.PasswordUiEntry>} passwordList
-   * @param {!Array<!chrome.passwordsPrivate.ExceptionPair>} exceptionList
+   * @param {!Array<!chrome.passwordsPrivate.ExceptionEntry>} exceptionList
    * @return {!Object}
    * @private
    */
@@ -170,14 +170,38 @@ SettingsAutofillSectionBrowserTest.prototype = {
   },
 };
 
+TEST_F('SettingsAutofillSectionBrowserTest', 'uiTest', function() {
+  suite('AutofillSection', function() {
+    test('testAutofillExtensionIndicator', function() {
+      // Initializing with fake prefs
+      var section = document.createElement('settings-autofill-section');
+      section.prefs = {autofill: {enabled: {}}};
+      document.body.appendChild(section);
+
+      assertFalse(!!section.$$('#autofillExtensionIndicator'));
+      section.set('prefs.autofill.enabled.extensionId', 'test-id');
+      Polymer.dom.flush();
+
+      assertTrue(!!section.$$('#autofillExtensionIndicator'));
+    });
+  });
+
+  mocha.run();
+});
+
 TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
   var self = this;
 
-  setup(function() {
-    PolymerTest.clearBody();
-  });
-
   suite('AutofillSection', function() {
+    suiteSetup(function() {
+      settings.address.CountryDetailManagerImpl.instance_ =
+          new CountryDetailManagerTestImpl();
+    });
+
+    setup(function() {
+      PolymerTest.clearBody();
+    });
+
     test('verifyCreditCardCount', function() {
       var section = self.createAutofillSection_([], []);
       assertTrue(!!section);
@@ -417,11 +441,17 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
 TEST_F('SettingsAutofillSectionBrowserTest', 'AddressTests', function() {
   var self = this;
 
-  setup(function() {
-    PolymerTest.clearBody();
-  });
 
   suite('AutofillSection', function() {
+    suiteSetup(function() {
+      settings.address.CountryDetailManagerImpl.instance_ =
+          new CountryDetailManagerTestImpl();
+    });
+
+    setup(function() {
+      PolymerTest.clearBody();
+    });
+
     test('verifyNoAddresses', function() {
       var section = self.createAutofillSection_([], []);
       assertTrue(!!section);
@@ -691,11 +721,16 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'AddressTests', function() {
 TEST_F('SettingsAutofillSectionBrowserTest', 'AddressLocaleTests', function() {
   var self = this;
 
-  setup(function() {
-    PolymerTest.clearBody();
-  });
-
   suite('AutofillSection', function() {
+    suiteSetup(function() {
+      settings.address.CountryDetailManagerImpl.instance_ =
+          new CountryDetailManagerTestImpl();
+    });
+
+    setup(function() {
+      PolymerTest.clearBody();
+    });
+
     // US address has 3 fields on the same line.
     test('verifyEditingUSAddress', function() {
       var address = FakeDataMaker.emptyAddressEntry();
@@ -738,9 +773,8 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'AddressLocaleTests', function() {
         assertEquals(address.postalCode, cols[2].value);
         // Country
         row = rows[4];
-        cols = row.querySelectorAll('.address-column');
-        assertEquals(1, cols.length);
-        var countrySelect = /** @type {!HTMLSelectElement} */ (cols[0]);
+        var countrySelect = row.querySelector('select');
+        assertTrue(!!countrySelect);
         assertEquals(
             'United States',
             countrySelect.selectedOptions[0].textContent.trim());
@@ -797,10 +831,11 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'AddressLocaleTests', function() {
         assertEquals(address.postalCode, cols[0].value);
         // Country
         row = rows[5];
-        cols = row.querySelectorAll('.address-column');
-        assertEquals(1, cols.length);
+        var countrySelect = row.querySelector('select');
+        assertTrue(!!countrySelect);
         assertEquals(
-            'United Kingdom', cols[0].selectedOptions[0].textContent.trim());
+            'United Kingdom',
+            countrySelect.selectedOptions[0].textContent.trim());
         // Phone, Email
         row = rows[6];
         cols = row.querySelectorAll('.address-column');
@@ -851,10 +886,10 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'AddressLocaleTests', function() {
         assertEquals(address.postalCode, cols[1].value);
         // Country
         row = rows[4];
-        cols = row.querySelectorAll('.address-column');
-        assertEquals(1, cols.length);
+        var countrySelect = row.querySelector('select');
+        assertTrue(!!countrySelect);
         assertEquals(
-            'Israel', cols[0].selectedOptions[0].textContent.trim());
+            'Israel', countrySelect.selectedOptions[0].textContent.trim());
         // Phone, Email
         row = rows[5];
         cols = row.querySelectorAll('.address-column');

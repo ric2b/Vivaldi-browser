@@ -27,7 +27,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '296320'
+CLANG_REVISION = '299960'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -283,7 +283,6 @@ def CreateChromeToolsShim():
     f.write('# two arg version to specify where build artifacts go. CMake\n')
     f.write('# disallows reuse of the same binary dir for multiple source\n')
     f.write('# dirs, so the build artifacts need to go into a subdirectory.\n')
-    f.write('# dirs, so the build artifacts need to go into a subdirectory.\n')
     f.write('if (CHROMIUM_TOOLS_SRC)\n')
     f.write('  add_subdirectory(${CHROMIUM_TOOLS_SRC} ' +
               '${CMAKE_CURRENT_BINARY_DIR}/a)\n')
@@ -450,7 +449,6 @@ def UpdateClang(args):
     return 1
 
   DownloadHostGcc(args)
-  AddSvnToPathOnWin()
   AddCMakeToPath()
   AddGnuWinToPath()
 
@@ -458,7 +456,7 @@ def UpdateClang(args):
 
   Checkout('LLVM', LLVM_REPO_URL + '/llvm/trunk', LLVM_DIR)
   Checkout('Clang', LLVM_REPO_URL + '/cfe/trunk', CLANG_DIR)
-  if sys.platform == 'win32' or use_head_revision:
+  if sys.platform != 'darwin':
     Checkout('LLD', LLVM_REPO_URL + '/lld/trunk', LLD_DIR)
   elif os.path.exists(LLD_DIR):
     # In case someone sends a tryjob that temporary adds lld to the checkout,
@@ -498,7 +496,6 @@ def UpdateClang(args):
   base_cmake_args = ['-GNinja',
                      '-DCMAKE_BUILD_TYPE=Release',
                      '-DLLVM_ENABLE_ASSERTIONS=ON',
-                     '-DLLVM_ENABLE_THREADS=OFF',
                      # Statically link MSVCRT to avoid DLL dependencies.
                      '-DLLVM_USE_CRT_RELEASE=MT',
                      ]
@@ -567,8 +564,8 @@ def UpdateClang(args):
                 os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'lib', 'LLVMgold.so'),
                 os.path.join(BFD_PLUGINS_DIR, 'LLVMgold.so')])
 
-    lto_cflags = ['-flto']
-    lto_ldflags = ['-fuse-ld=gold']
+    lto_cflags = ['-flto=thin']
+    lto_ldflags = ['-fuse-ld=lld']
     if args.gcc_toolchain:
       # Tell the bootstrap compiler to use a specific gcc prefix to search
       # for standard library headers and shared object files.
@@ -589,7 +586,7 @@ def UpdateClang(args):
 
     RmCmakeCache('.')
     RunCommand(['cmake'] + lto_cmake_args + [LLVM_DIR], env=lto_env)
-    RunCommand(['ninja', 'LLVMgold'], env=lto_env)
+    RunCommand(['ninja', 'LLVMgold', 'lld'], env=lto_env)
 
 
   # LLVM uses C++11 starting in llvm 3.5. On Linux, this means libstdc++4.7+ is
@@ -619,6 +616,13 @@ def UpdateClang(args):
     cflags += ['-DLLVM_FORCE_HEAD_REVISION']
     cxxflags += ['-DLLVM_FORCE_HEAD_REVISION']
 
+  # Build PDBs for archival on Windows.  Don't use RelWithDebInfo since it
+  # has different optimization defaults than Release.
+  if sys.platform == 'win32' and args.bootstrap:
+    cflags += ['/Zi']
+    cxxflags += ['/Zi']
+    ldflags += ['/DEBUG', '/OPT:REF', '/OPT:ICF']
+
   CreateChromeToolsShim()
 
   deployment_env = None
@@ -634,6 +638,7 @@ def UpdateClang(args):
   if cxx is not None: cc_args.append('-DCMAKE_CXX_COMPILER=' + cxx)
   chrome_tools = list(set(['plugins', 'blink_gc_plugin'] + args.extra_tools))
   cmake_args += base_cmake_args + [
+      '-DLLVM_ENABLE_THREADS=OFF',
       '-DLLVM_BINUTILS_INCDIR=' + binutils_incdir,
       '-DCMAKE_C_FLAGS=' + ' '.join(cflags),
       '-DCMAKE_CXX_FLAGS=' + ' '.join(cxxflags),
@@ -641,9 +646,6 @@ def UpdateClang(args):
       '-DCMAKE_SHARED_LINKER_FLAGS=' + ' '.join(ldflags),
       '-DCMAKE_MODULE_LINKER_FLAGS=' + ' '.join(ldflags),
       '-DCMAKE_INSTALL_PREFIX=' + LLVM_BUILD_DIR,
-      # TODO(thakis): Remove this once official builds pass -Wl,--build-id
-      # explicitly, https://crbug.com/622775
-      '-DENABLE_LINKER_BUILD_ID=ON',
       '-DCHROMIUM_TOOLS_SRC=%s' % os.path.join(CHROMIUM_DIR, 'tools', 'clang'),
       '-DCHROMIUM_TOOLS=%s' % ';'.join(chrome_tools)]
 
@@ -662,6 +664,11 @@ def UpdateClang(args):
     CopyFile(libstdcpp, os.path.join(LLVM_BUILD_DIR, 'lib'))
 
   RunCommand(['ninja'], msvc_arch='x64')
+
+  # Copy LTO-optimized lld, if any.
+  if args.bootstrap and args.lto_gold_plugin:
+    CopyFile(os.path.join(LLVM_LTO_GOLD_PLUGIN_DIR, 'bin', 'lld'),
+             os.path.join(LLVM_BUILD_DIR, 'bin'))
 
   if chrome_tools:
     # If any Chromium tools were built, install those now.
@@ -691,6 +698,7 @@ def UpdateClang(args):
     #cflags += ['-m32']
     #cxxflags += ['-m32']
   compiler_rt_args = base_cmake_args + [
+      '-DLLVM_ENABLE_THREADS=OFF',
       '-DCMAKE_C_FLAGS=' + ' '.join(cflags),
       '-DCMAKE_CXX_FLAGS=' + ' '.join(cxxflags)]
   if sys.platform == 'darwin':
@@ -793,6 +801,7 @@ def UpdateClang(args):
                 '--sysroot=%s/sysroot' % toolchain_dir,
                 '-B%s' % toolchain_dir]
       android_args = base_cmake_args + [
+        '-DLLVM_ENABLE_THREADS=OFF',
         '-DCMAKE_C_COMPILER=' + os.path.join(LLVM_BUILD_DIR, 'bin/clang'),
         '-DCMAKE_CXX_COMPILER=' + os.path.join(LLVM_BUILD_DIR, 'bin/clang++'),
         '-DLLVM_CONFIG_PATH=' + os.path.join(LLVM_BUILD_DIR, 'bin/llvm-config'),
@@ -866,6 +875,11 @@ def main():
     if re.search(r'\b(make_clang_dir)=', os.environ.get('GYP_DEFINES', '')):
       print 'Skipping Clang update (make_clang_dir= was set in GYP_DEFINES).'
       return 0
+
+  # Get svn if we're going to use it to check the revision or do a local build.
+  if (use_head_revision or args.llvm_force_head_revision or
+      args.force_local_build):
+    AddSvnToPathOnWin()
 
   global CLANG_REVISION, PACKAGE_VERSION
   if args.print_revision:

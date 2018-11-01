@@ -31,8 +31,8 @@ namespace extensions {
 
 namespace {
 
-base::LazyInstance<BrowserContextKeyedAPIFactory<StorageFrontend> > g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<BrowserContextKeyedAPIFactory<StorageFrontend>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // Settings change Observer which forwards changes on to the extension
 // processes for |context| and its incognito partner if it exists.
@@ -56,9 +56,6 @@ class DefaultObserver : public SettingsObserver {
     if (!changes)
       changes = base::MakeUnique<base::DictionaryValue>();
     args->Append(std::move(changes));
-    if (*(args->begin()) == NULL)
-      args->Set(0,base::JSONReader::Read("{}"));
-
     args->AppendString(settings_namespace::ToString(settings_namespace));
     std::unique_ptr<Event> event(new Event(events::STORAGE_ON_CHANGED,
                                            api::storage::OnChanged::kEventName,

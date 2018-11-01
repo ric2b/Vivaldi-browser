@@ -6,6 +6,7 @@ define([
     "console",
     "file",
     "gin/test/expect",
+    "mojo/public/interfaces/bindings/tests/validation_test_associated_interfaces.mojom",
     "mojo/public/interfaces/bindings/tests/validation_test_interfaces.mojom",
     "mojo/public/js/bindings",
     "mojo/public/js/buffer",
@@ -16,6 +17,7 @@ define([
 ], function(console,
             file,
             expect,
+            testAssociatedInterface,
             testInterface,
             bindings,
             buffer,
@@ -270,6 +272,12 @@ define([
         testInterface.BoundsCheckTestInterface.validateResponse]);
   }
 
+  function testAssociatedConformanceMessageValidation() {
+    testMessageValidation("associated_conformance_", [
+        testAssociatedInterface.AssociatedConformanceTestInterface
+                               .validateRequest]);
+  }
+
   function testIntegratedMessageValidation(testFilesPattern, endpoint) {
     var testFiles = getMessageTestFiles(testFilesPattern);
     expect(testFiles.length).toBeGreaterThan(0);
@@ -278,15 +286,9 @@ define([
     expect(testMessagePipe.result).toBe(core.RESULT_OK);
 
     endpoint.bind(testMessagePipe.handle1);
-    var testingController = endpoint.enableTestingMode();
-
-    var validationError;
-    testingController.setInvalidIncomingMessageHandler(function(error) {
-      validationError = error;
-    });
+    var observer = validator.ValidationErrorObserverForTesting.getInstance();
 
     for (var i = 0; i < testFiles.length; i++) {
-      validationError = noError;
       var testMessage = readTestMessage(testFiles[i]);
       var handles = new Array(testMessage.handleCount);
 
@@ -297,8 +299,9 @@ define([
           core.WRITE_MESSAGE_FLAG_NONE);
       expect(writeMessageValue).toBe(core.RESULT_OK);
 
-      testingController.waitForNextMessage();
-      checkValidationResult(testFiles[i], validationError);
+      endpoint.waitForNextMessageForTesting();
+      checkValidationResult(testFiles[i], observer.lastError);
+      observer.reset();
     }
 
     expect(core.close(testMessagePipe.handle0)).toBe(core.RESULT_OK);
@@ -326,6 +329,7 @@ define([
   }
 
   expect(checkTestMessageParser()).toBeNull();
+  testAssociatedConformanceMessageValidation();
   testConformanceMessageValidation();
   testBoundsCheckMessageValidation();
   testResponseConformanceMessageValidation();
@@ -333,6 +337,7 @@ define([
   testIntegratedMessageHeaderValidation();
   testIntegratedResponseMessageValidation();
   testIntegratedRequestMessageValidation();
+  validator.clearTestingMode();
 
   this.result = "PASS";
 });

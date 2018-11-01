@@ -4,6 +4,7 @@
 
 #include "net/spdy/spdy_pinnable_buffer_piece.h"
 
+#include "net/spdy/platform/api/spdy_string.h"
 #include "net/spdy/spdy_prefixed_buffer_reader.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -11,18 +12,16 @@ namespace net {
 
 namespace test {
 
-using base::StringPiece;
-
 class SpdyPinnableBufferPieceTest : public ::testing::Test {
  protected:
-  SpdyPrefixedBufferReader Build(const std::string& prefix,
-                                 const std::string& suffix) {
+  SpdyPrefixedBufferReader Build(const SpdyString& prefix,
+                                 const SpdyString& suffix) {
     prefix_ = prefix;
     suffix_ = suffix;
     return SpdyPrefixedBufferReader(prefix_.data(), prefix_.length(),
                                     suffix_.data(), suffix_.length());
   }
-  std::string prefix_, suffix_;
+  SpdyString prefix_, suffix_;
 };
 
 TEST_F(SpdyPinnableBufferPieceTest, Pin) {
@@ -31,14 +30,14 @@ TEST_F(SpdyPinnableBufferPieceTest, Pin) {
   EXPECT_TRUE(reader.ReadN(6, &piece));
 
   // Piece points to underlying prefix storage.
-  EXPECT_EQ(StringPiece("foobar"), piece);
+  EXPECT_EQ(SpdyStringPiece("foobar"), SpdyStringPiece(piece));
   EXPECT_FALSE(piece.IsPinned());
   EXPECT_EQ(prefix_.data(), piece.buffer());
 
   piece.Pin();
 
   // Piece now points to allocated storage.
-  EXPECT_EQ(StringPiece("foobar"), piece);
+  EXPECT_EQ(SpdyStringPiece("foobar"), SpdyStringPiece(piece));
   EXPECT_TRUE(piece.IsPinned());
   EXPECT_NE(prefix_.data(), piece.buffer());
 
@@ -56,22 +55,22 @@ TEST_F(SpdyPinnableBufferPieceTest, Swap) {
 
   piece1.Pin();
 
-  EXPECT_EQ(StringPiece("foob"), piece1);
+  EXPECT_EQ(SpdyStringPiece("foob"), SpdyStringPiece(piece1));
   EXPECT_TRUE(piece1.IsPinned());
-  EXPECT_EQ(StringPiece("ar"), piece2);
+  EXPECT_EQ(SpdyStringPiece("ar"), SpdyStringPiece(piece2));
   EXPECT_FALSE(piece2.IsPinned());
 
   piece1.Swap(&piece2);
 
-  EXPECT_EQ(StringPiece("ar"), piece1);
+  EXPECT_EQ(SpdyStringPiece("ar"), SpdyStringPiece(piece1));
   EXPECT_FALSE(piece1.IsPinned());
-  EXPECT_EQ(StringPiece("foob"), piece2);
+  EXPECT_EQ(SpdyStringPiece("foob"), SpdyStringPiece(piece2));
   EXPECT_TRUE(piece2.IsPinned());
 
   SpdyPinnableBufferPiece empty;
   piece2.Swap(&empty);
 
-  EXPECT_EQ(StringPiece(""), piece2);
+  EXPECT_EQ(SpdyStringPiece(""), SpdyStringPiece(piece2));
   EXPECT_FALSE(piece2.IsPinned());
 }
 

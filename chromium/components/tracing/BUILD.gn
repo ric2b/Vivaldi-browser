@@ -7,8 +7,6 @@ import("//third_party/protobuf/proto_library.gni")
 
 component("tracing") {
   sources = [
-    "child/child_memory_dump_manager_delegate_impl.cc",
-    "child/child_memory_dump_manager_delegate_impl.h",
     "child/child_trace_message_filter.cc",
     "child/child_trace_message_filter.h",
     "common/graphics_memory_dump_provider_android.cc",
@@ -101,6 +99,7 @@ source_set("unit_tests") {
     "core/trace_buffer_writer_unittest.cc",
     "core/trace_ring_buffer_unittest.cc",
     "test/fake_scattered_buffer.cc",
+    "test/fake_scattered_buffer.h",
     "test/proto_zero_generation_unittest.cc",
   ]
 

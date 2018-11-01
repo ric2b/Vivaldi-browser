@@ -5,8 +5,8 @@
 #ifndef InterpolationTypesMap_h
 #define InterpolationTypesMap_h
 
-#include "wtf/Vector.h"
 #include <memory>
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -19,8 +19,8 @@ class InterpolationTypesMap {
   STACK_ALLOCATED();
 
  public:
-  virtual const InterpolationTypes& get(const PropertyHandle&) const = 0;
-  virtual size_t version() const { return 0; }
+  virtual const InterpolationTypes& Get(const PropertyHandle&) const = 0;
+  virtual size_t Version() const { return 0; }
 };
 
 }  // namespace blink

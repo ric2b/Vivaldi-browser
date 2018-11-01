@@ -67,7 +67,8 @@ class APIBindingsSystem {
   // listeners.
   void FireEventInContext(const std::string& event_name,
                           v8::Local<v8::Context> context,
-                          const base::ListValue& response);
+                          const base::ListValue& response,
+                          const EventFilteringInfo& filter);
 
   // Returns the APIBindingHooks object for the given api to allow for
   // registering custom hooks. These must be registered *before* the
@@ -84,7 +85,11 @@ class APIBindingsSystem {
   void RegisterCustomType(const std::string& type_name,
                           const CustomTypeHandler& function);
 
+  // Handles any cleanup necessary before releasing the given |context|.
+  void WillReleaseContext(v8::Local<v8::Context> context);
+
   APIRequestHandler* request_handler() { return &request_handler_; }
+  APIEventHandler* event_handler() { return &event_handler_; }
   APITypeReferenceMap* type_reference_map() { return &type_reference_map_; }
 
  private:

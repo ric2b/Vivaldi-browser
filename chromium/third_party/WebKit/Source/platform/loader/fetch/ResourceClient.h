@@ -28,8 +28,8 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 class Resource;
@@ -37,24 +37,24 @@ class Resource;
 class PLATFORM_EXPORT ResourceClient : public GarbageCollectedMixin {
  public:
   enum ResourceClientType {
-    BaseResourceType,
-    FontType,
-    StyleSheetType,
-    DocumentType,
-    RawResourceType,
-    ScriptType
+    kBaseResourceType,
+    kFontType,
+    kStyleSheetType,
+    kDocumentType,
+    kRawResourceType,
+    kScriptType
   };
 
   virtual ~ResourceClient() {}
-  virtual void notifyFinished(Resource*) {}
+  virtual void NotifyFinished(Resource*) {}
 
-  static bool isExpectedType(ResourceClient*) { return true; }
-  virtual ResourceClientType getResourceClientType() const {
-    return BaseResourceType;
+  static bool IsExpectedType(ResourceClient*) { return true; }
+  virtual ResourceClientType GetResourceClientType() const {
+    return kBaseResourceType;
   }
 
   // Name for debugging, e.g. shown in memory-infra.
-  virtual String debugName() const = 0;
+  virtual String DebugName() const = 0;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 

@@ -28,8 +28,8 @@
 
 #include "platform/ContextMenuItem.h"
 #include "platform/PlatformExport.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -39,13 +39,13 @@ class PLATFORM_EXPORT ContextMenu {
 
  public:
   ContextMenu() {}
-  const ContextMenuItem* itemWithAction(unsigned) const;
-  const Vector<ContextMenuItem>& items() const { return m_items; }
-  void appendItem(const ContextMenuItem& item) { m_items.push_back(item); }
-  void removeLastItem() { m_items.pop_back(); }
+  const ContextMenuItem* ItemWithAction(unsigned) const;
+  const Vector<ContextMenuItem>& Items() const { return items_; }
+  void AppendItem(const ContextMenuItem& item) { items_.push_back(item); }
+  void RemoveLastItem() { items_.pop_back(); }
 
  private:
-  Vector<ContextMenuItem> m_items;
+  Vector<ContextMenuItem> items_;
 };
 
 }  // namespace blink

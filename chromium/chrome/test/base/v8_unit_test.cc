@@ -6,6 +6,8 @@
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -46,7 +48,7 @@ base::FilePath g_gen_test_data_directory;
 
 }  // namespace
 
-V8UnitTest::V8UnitTest() : handle_scope_(blink::mainThreadIsolate()) {
+V8UnitTest::V8UnitTest() : handle_scope_(blink::MainThreadIsolate()) {
   InitPathsAndLibraries();
 }
 
@@ -90,7 +92,7 @@ bool V8UnitTest::RunJavascriptTestF(const std::string& test_fixture,
   if (!ExecuteJavascriptLibraries())
     return false;
 
-  v8::Isolate* isolate = blink::mainThreadIsolate();
+  v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context =
       v8::Local<v8::Context>::New(isolate, context_);
@@ -164,7 +166,7 @@ void V8UnitTest::InitPathsAndLibraries() {
 }
 
 void V8UnitTest::SetUp() {
-  v8::Isolate* isolate = blink::mainThreadIsolate();
+  v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(isolate);
   v8::Local<v8::String> log_string = v8::String::NewFromUtf8(isolate, "log");
   v8::Local<v8::FunctionTemplate> log_function =
@@ -192,11 +194,13 @@ void V8UnitTest::SetUp() {
   console->Set(v8::String::NewFromUtf8(isolate, "error"), error_function);
 
   context_.Reset(isolate, v8::Context::New(isolate, NULL, global));
+
+  loop_ = base::MakeUnique<base::MessageLoop>();
 }
 
 void V8UnitTest::SetGlobalStringVar(const std::string& var_name,
                                     const std::string& value) {
-  v8::Isolate* isolate = blink::mainThreadIsolate();
+  v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::Local<v8::Context> context =
       v8::Local<v8::Context>::New(isolate, context_);
   v8::Context::Scope context_scope(context);
@@ -211,7 +215,7 @@ void V8UnitTest::SetGlobalStringVar(const std::string& var_name,
 
 void V8UnitTest::ExecuteScriptInContext(const base::StringPiece& script_source,
                                         const base::StringPiece& script_name) {
-  v8::Isolate* isolate = blink::mainThreadIsolate();
+  v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context =
       v8::Local<v8::Context>::New(isolate, context_);
@@ -261,7 +265,7 @@ std::string V8UnitTest::ExceptionToString(const v8::TryCatch& try_catch) {
 }
 
 void V8UnitTest::TestFunction(const std::string& function_name) {
-  v8::Isolate* isolate = blink::mainThreadIsolate();
+  v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context =
       v8::Local<v8::Context>::New(isolate, context_);

@@ -8,13 +8,16 @@
 #include <memory>
 
 #include "base/logging.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -106,7 +109,7 @@ void DistantSession::InitWithSyncedSession(
   } else {
     // Order tabs by their visual position within window.
     for (const auto& kv : synced_session->windows) {
-      for (const auto& session_tab : kv.second->tabs) {
+      for (const auto& session_tab : kv.second->wrapped_window.tabs) {
         AddTabToDistantSession(*session_tab, synced_session->session_tag, this);
       }
     }

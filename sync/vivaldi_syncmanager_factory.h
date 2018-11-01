@@ -6,7 +6,6 @@
 #include "base/memory/singleton.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
-#include "sync/vivaldi_sync_model.h"
 
 class Profile;
 

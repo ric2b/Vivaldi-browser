@@ -22,7 +22,8 @@ from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.common.net.buildbot import current_build_link
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, TestExpectationParser
-from webkitpy.w3c.common import WPT_REPO_URL, CSS_REPO_URL, WPT_DEST_NAME, CSS_DEST_NAME, exportable_commits_since
+from webkitpy.layout_tests.port.base import Port
+from webkitpy.w3c.common import WPT_REPO_URL, WPT_DEST_NAME, exportable_commits_since
 from webkitpy.w3c.directory_owners_extractor import DirectoryOwnersExtractor
 from webkitpy.w3c.local_wpt import LocalWPT
 from webkitpy.w3c.test_copier import TestCopier
@@ -61,21 +62,17 @@ class TestImporter(object):
         _, show_ref_output = self.run(['git', 'show-ref', 'HEAD'])
         chromium_commit = show_ref_output.split()[0]
 
-        assert options.target in ('wpt', 'css')
         dest_dir_name = WPT_DEST_NAME
         repo_url = WPT_REPO_URL
-        if options.target != 'wpt':
-            dest_dir_name = CSS_DEST_NAME
-            repo_url = CSS_REPO_URL
 
         # TODO(qyearsley): Simplify this to use LocalWPT.fetch when csswg-test
-        # is merged into web-platform-tests.
+        # is merged into web-platform-tests (crbug.com/706118).
         temp_repo_path = self.path_from_webkit_base(dest_dir_name)
         _log.info('Cloning repo: %s', repo_url)
         _log.info('Local path: %s', temp_repo_path)
         self.run(['git', 'clone', repo_url, temp_repo_path])
 
-        if options.target == 'wpt' and not options.ignore_exportable_commits:
+        if not options.ignore_exportable_commits:
             commits = self.exportable_but_not_exported_commits(temp_repo_path)
             if commits:
                 # If there are exportable commits, then there's no more work
@@ -92,8 +89,7 @@ class TestImporter(object):
 
         self.clean_up_temp_repo(temp_repo_path)
 
-        if options.target == 'wpt':
-            self._copy_resources()
+        self._copy_resources()
 
         has_changes = self._has_changes()
         if not has_changes:
@@ -119,8 +115,6 @@ class TestImporter(object):
                             help='allow script to run even if we have local commits')
         parser.add_argument('-r', dest='revision', action='store',
                             help='Target revision.')
-        parser.add_argument('target', choices=['css', 'wpt'],
-                            help='Target repository.  "css" for csswg-test, "wpt" for web-platform-tests.')
         parser.add_argument('--auto-update', action='store_true',
                             help='uploads CL and initiates commit queue.')
         parser.add_argument('--auth-refresh-token-json',
@@ -129,7 +123,10 @@ class TestImporter(object):
                                  'generally not necessary on developer machines')
         parser.add_argument('--ignore-exportable-commits', action='store_true',
                             help='Continue even if there are exportable commits that may be overwritten.')
-        return parser.parse_args(argv)
+        # TODO(qyearsley): Change this back to parse_args once this script
+        # is no longer being called with the "wpt" argument. See crbug.com/706118.
+        args, _ = parser.parse_known_args(argv)
+        return args
 
     def checkout_is_okay(self, allow_local_commits):
         git_diff_retcode, _ = self.run(['git', 'diff', '--quiet', 'HEAD'], exit_on_failure=False)
@@ -144,10 +141,6 @@ class TestImporter(object):
 
         if self.fs.exists(self.path_from_webkit_base(WPT_DEST_NAME)):
             _log.warning('WebKit/%s exists; aborting.', WPT_DEST_NAME)
-            return False
-
-        if self.fs.exists(self.path_from_webkit_base(CSS_DEST_NAME)):
-            _log.warning('WebKit/%s repo exists; aborting.', CSS_DEST_NAME)
             return False
 
         return True
@@ -199,12 +192,14 @@ class TestImporter(object):
         Runs the (newly-updated) manifest command if it's found, and then
         stages the generated MANIFEST.json in the git index, ready to commit.
         """
-        if 'css' in dest_path:
-            # Do nothing for csswg-test.
-            return
         _log.info('Generating MANIFEST.json')
         WPTManifest.generate_manifest(self.host, dest_path)
-        self.run(['git', 'add', self.fs.join(dest_path, 'MANIFEST.json')])
+        manifest_path = self.fs.join(dest_path, 'MANIFEST.json')
+        assert self.fs.exists(manifest_path)
+        manifest_base_path = self.fs.normpath(
+            self.fs.join(dest_path, '..', 'WPT_BASE_MANIFEST.json'))
+        self.copyfile(manifest_path, manifest_base_path)
+        self.run(['git', 'add', manifest_base_path])
 
     def update(self, dest_dir_name, temp_repo_path, revision):
         """Updates an imported repository.
@@ -227,12 +222,8 @@ class TestImporter(object):
         _, show_ref_output = self.run(['git', 'show-ref', 'origin/master'], cwd=temp_repo_path)
         master_commitish = show_ref_output.split()[0]
 
-        _log.info('Cleaning out tests from LayoutTests/external/%s.', dest_dir_name)
         dest_path = self.path_from_webkit_base('LayoutTests', 'external', dest_dir_name)
-        is_not_baseline_filter = lambda fs, dirname, basename: not self.is_baseline(basename)
-        files_to_delete = self.fs.files_under(dest_path, file_filter=is_not_baseline_filter)
-        for subpath in files_to_delete:
-            self.remove('LayoutTests', 'external', subpath)
+        self._clear_out_dest_path(dest_path)
 
         _log.info('Importing the tests.')
         test_copier = TestCopier(self.host, temp_repo_path)
@@ -240,15 +231,7 @@ class TestImporter(object):
 
         self.run(['git', 'add', '--all', 'LayoutTests/external/%s' % dest_dir_name])
 
-        _log.info('Deleting any orphaned baselines.')
-
-        is_baseline_filter = lambda fs, dirname, basename: self.is_baseline(basename)
-        previous_baselines = self.fs.files_under(dest_path, file_filter=is_baseline_filter)
-
-        for subpath in previous_baselines:
-            full_path = self.fs.join(dest_path, subpath)
-            if self.fs.glob(full_path.replace('-expected.txt', '*')) == [full_path]:
-                self.fs.remove(full_path)
+        self._delete_orphaned_baselines(dest_path)
 
         self._generate_manifest(dest_path)
 
@@ -256,6 +239,16 @@ class TestImporter(object):
         self.update_all_test_expectations_files(self._list_deleted_tests(), self._list_renamed_tests())
 
         return '%s@%s' % (dest_dir_name, master_commitish)
+
+    def _clear_out_dest_path(self, dest_path):
+        _log.info('Cleaning out tests from %s.', dest_path)
+        should_remove = lambda fs, dirname, basename: (
+            not self.is_baseline(basename) and
+            # See http://crbug.com/702283 for context.
+            basename != 'OWNERS')
+        files_to_delete = self.fs.files_under(dest_path, file_filter=should_remove)
+        for subpath in files_to_delete:
+            self.remove('LayoutTests', 'external', subpath)
 
     def _commit_changes(self, commit_message):
         _log.info('Committing changes.')
@@ -271,9 +264,23 @@ class TestImporter(object):
                 'NOEXPORT=true' %
                 (import_commit, chromium_commit))
 
+    def _delete_orphaned_baselines(self, dest_path):
+        _log.info('Deleting any orphaned baselines.')
+        is_baseline_filter = lambda fs, dirname, basename: self.is_baseline(basename)
+        previous_baselines = self.fs.files_under(dest_path, file_filter=is_baseline_filter)
+        for sub_path in previous_baselines:
+            full_baseline_path = self.fs.join(dest_path, sub_path)
+            if not self._has_corresponding_test(full_baseline_path):
+                self.fs.remove(full_baseline_path)
+
+    def _has_corresponding_test(self, full_baseline_path):
+        base = full_baseline_path.replace('-expected.txt', '')
+        return any(self.fs.exists(base + ext) for ext in Port.supported_file_extensions)
+
     @staticmethod
     def is_baseline(basename):
         # TODO(qyearsley): Find a better, centralized place for this.
+        # Also, the name for this method should be is_text_baseline.
         return basename.endswith('-expected.txt')
 
     def run(self, cmd, exit_on_failure=True, cwd=None, stdin=''):
@@ -332,9 +339,10 @@ class TestImporter(object):
         _log.info('Issue: %s', self.git_cl.run(['issue']).strip())
 
         # First, try on Blink try bots in order to get any new baselines.
+        # TODO(qyearsley): Make this faster by triggering all try jobs in
+        # one invocation.
         _log.info('Triggering try jobs.')
-        for try_bot in self.host.builders.all_try_builder_names():
-            self.git_cl.run(['try', '-b', try_bot])
+        self.git_cl.trigger_try_jobs()
         try_results = self.git_cl.wait_for_try_jobs(
             poll_delay_seconds=POLL_DELAY_SECONDS, timeout_seconds=TIMEOUT_SECONDS)
 
@@ -344,6 +352,9 @@ class TestImporter(object):
 
         if try_results and self.git_cl.has_failing_try_results(try_results):
             self.fetch_new_expectations_and_baselines()
+            message = 'Update test expectations and baselines.'
+            self.check_run(['git', 'commit', '-a', '-m', message])
+            self._upload_patchset(message)
 
         # Trigger CQ and wait for CQ try jobs to finish.
         self.git_cl.run(['set-commit', '--gerrit'])
@@ -377,6 +388,9 @@ class TestImporter(object):
             '-m',
             description,
         ] + self._cc_part(directory_owners))
+
+    def _upload_patchset(self, message):
+        self.git_cl.run(['upload', '-f', '-t', message, '--gerrit'])
 
     @staticmethod
     def _cc_part(directory_owners):
@@ -427,9 +441,6 @@ class TestImporter(object):
         _log.info('Adding test expectations lines to LayoutTests/TestExpectations.')
         expectation_updater = WPTExpectationsUpdater(self.host)
         expectation_updater.run(args=[])
-        message = 'Update test expectations and baselines.'
-        self.check_run(['git', 'commit', '-a', '-m', message])
-        self.git_cl.run(['upload', '-t', message, '--gerrit'])
 
     def update_all_test_expectations_files(self, deleted_tests, renamed_tests):
         """Updates all test expectations files for tests that have been deleted or renamed."""

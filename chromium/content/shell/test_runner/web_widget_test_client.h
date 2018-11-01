@@ -27,17 +27,17 @@ class WebWidgetTestClient : public blink::WebWidgetClient {
   // live longer than |this|.
   WebWidgetTestClient(WebWidgetTestProxyBase* web_widget_test_proxy_base);
 
-  virtual ~WebWidgetTestClient();
+  ~WebWidgetTestClient() override;
 
   // WebWidgetClient overrides needed by WebWidgetTestProxy.
-  blink::WebScreenInfo screenInfo() override;
-  void scheduleAnimation() override;
-  bool requestPointerLock() override;
-  void requestPointerUnlock() override;
-  bool isPointerLocked() override;
-  void setToolTipText(const blink::WebString& text,
+  blink::WebScreenInfo GetScreenInfo() override;
+  void ScheduleAnimation() override;
+  bool RequestPointerLock() override;
+  void RequestPointerUnlock() override;
+  bool IsPointerLocked() override;
+  void SetToolTipText(const blink::WebString& text,
                       blink::WebTextDirection direction) override;
-  void startDragging(blink::WebReferrerPolicy policy,
+  void StartDragging(blink::WebReferrerPolicy policy,
                      const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
                      const blink::WebImage& image,

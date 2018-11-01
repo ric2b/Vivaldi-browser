@@ -32,32 +32,24 @@
 #define SpellCheckerClientImpl_h
 
 #include "core/page/SpellCheckerClient.h"
-#include "platform/heap/Handle.h"
-#include "platform/text/TextCheckerClient.h"
 
 namespace blink {
 
 class WebViewImpl;
 
-class SpellCheckerClientImpl final : public SpellCheckerClient,
-                                     public TextCheckerClient {
+// TODO(xiaochengh): Split SpellCheckerClientImpl into two classes according to
+// the split that should be done to its interface.
+class SpellCheckerClientImpl final : public SpellCheckerClient {
  public:
   explicit SpellCheckerClientImpl(WebViewImpl*);
 
   ~SpellCheckerClientImpl() override;
 
-  bool isSpellCheckingEnabled() override;
-  void toggleSpellCheckingEnabled() override;
-  void checkSpellingOfString(const String&,
-                             int* misspellingLocation,
-                             int* misspellingLength) override;
-  void updateSpellingUIWithMisspelledWord(const String&) override;
-  void showSpellingUI(bool show) override;
-  bool spellingUIIsShowing() override;
-  void requestCheckingOfString(TextCheckingRequest*) override;
-  void cancelAllPendingRequests() override;
-
-  TextCheckerClient& textChecker() override { return *this; }
+  bool IsSpellCheckingEnabled() override;
+  void ToggleSpellCheckingEnabled() override;
+  void UpdateSpellingUIWithMisspelledWord(const String&) override;
+  void ShowSpellingUI(bool show) override;
+  bool SpellingUIIsShowing() override;
 
  private:
   // Returns whether or not the focused control needs spell-checking.
@@ -67,17 +59,17 @@ class SpellCheckerClientImpl final : public SpellCheckerClient,
   // FIXME: Bug 740540: This code just implements the default behavior
   // proposed in this issue. We should also retrieve "spellcheck" attributes
   // for text fields and create a flag to over-write the default behavior.
-  bool shouldSpellcheckByDefault();
+  bool ShouldSpellcheckByDefault();
 
-  WebViewImpl* m_webView;
+  WebViewImpl* web_view_;
 
   // This flag is set to false if spell check for this editor is manually
   // turned off. The default setting is SpellCheckAutomatic.
   enum {
-    SpellCheckAutomatic,
-    SpellCheckForcedOn,
-    SpellCheckForcedOff
-  } m_spellCheckThisFieldStatus;
+    kSpellCheckAutomatic,
+    kSpellCheckForcedOn,
+    kSpellCheckForcedOff
+  } spell_check_this_field_status_;
 };
 
 }  // namespace blink

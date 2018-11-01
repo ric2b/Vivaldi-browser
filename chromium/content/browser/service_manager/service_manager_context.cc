@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
@@ -19,13 +20,16 @@
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/service_manager/merge_dictionary.h"
+#include "content/browser/wake_lock/wake_lock_context_host.h"
 #include "content/common/service_manager/service_manager_connection_impl.h"
 #include "content/grit/content_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/gpu_service_registry.h"
 #include "content/public/browser/utility_process_host.h"
 #include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -34,6 +38,7 @@
 #include "services/catalog/public/cpp/manifest_parsing_util.h"
 #include "services/catalog/public/interfaces/constants.mojom.h"
 #include "services/catalog/store.h"
+#include "services/data_decoder/public/interfaces/constants.mojom.h"
 #include "services/device/device_service.h"
 #include "services/device/public/interfaces/constants.mojom.h"
 #include "services/service_manager/connect_params.h"
@@ -53,65 +58,42 @@ base::LazyInstance<std::unique_ptr<service_manager::Connector>>::Leaky
 
 void DestroyConnectorOnIOThread() { g_io_thread_connector.Get().reset(); }
 
-void StartUtilityProcessOnIOThread(
-    service_manager::mojom::ServiceFactoryRequest request,
+void StartServiceInUtilityProcess(
+    const std::string& service_name,
     const base::string16& process_name,
-    bool use_sandbox) {
+    bool use_sandbox,
+    service_manager::mojom::ServiceRequest request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   UtilityProcessHost* process_host =
       UtilityProcessHost::Create(nullptr, nullptr);
   process_host->SetName(process_name);
   if (!use_sandbox)
     process_host->DisableSandbox();
   process_host->Start();
-  process_host->GetRemoteInterfaces()->GetInterface(std::move(request));
-}
-
-void StartServiceInUtilityProcess(
-    const std::string& service_name,
-    const base::string16& process_name,
-    bool use_sandbox,
-    service_manager::mojom::ServiceRequest request) {
   service_manager::mojom::ServiceFactoryPtr service_factory;
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&StartUtilityProcessOnIOThread,
-                 base::Passed(MakeRequest(&service_factory)), process_name,
-                 use_sandbox));
+  BindInterface(process_host, mojo::MakeRequest(&service_factory));
   service_factory->CreateService(std::move(request), service_name);
 }
 
-#if (ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
-
 // Request service_manager::mojom::ServiceFactory from GPU process host. Must be
-// called on
-// IO thread.
-void RequestGpuServiceFactory(
-    service_manager::mojom::ServiceFactoryRequest request) {
-  GpuProcessHost* process_host =
-      GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED);
+// called on IO thread.
+void StartServiceInGpuProcess(const std::string& service_name,
+                              service_manager::mojom::ServiceRequest request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  GpuProcessHost* process_host = GpuProcessHost::Get();
   if (!process_host) {
     DLOG(ERROR) << "GPU process host not available.";
     return;
   }
 
+  service_manager::mojom::ServiceFactoryPtr service_factory;
   // TODO(xhwang): It's possible that |process_host| is non-null, but the actual
   // process is dead. In that case, |request| will be dropped and application
   // load requests through ServiceFactory will also fail. Make sure we handle
   // these cases correctly.
-  process_host->GetRemoteInterfaces()->GetInterface(std::move(request));
-}
-
-void StartServiceInGpuProcess(const std::string& service_name,
-                              service_manager::mojom::ServiceRequest request) {
-  service_manager::mojom::ServiceFactoryPtr service_factory;
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&RequestGpuServiceFactory,
-                 base::Passed(MakeRequest(&service_factory))));
+  BindInterfaceInGpuProcess(mojo::MakeRequest(&service_factory));
   service_factory->CreateService(std::move(request), service_name);
 }
-
-#endif  // ENABLE_MOJO_MEDIA_IN_GPU_PROCESS
 
 // A ManifestProvider which resolves application names to builtin manifest
 // resources for the catalog service to consume.
@@ -301,13 +283,23 @@ ServiceManagerContext::ServiceManagerContext() {
       std::move(root_browser_service), mojo::MakeRequest(&pid_receiver));
   pid_receiver->SetPID(base::GetCurrentProcId());
 
-  packaged_services_connection_->Start();
-  ServiceManagerConnection::GetForProcess()->Start();
 
   ServiceInfo device_info;
+#if defined(OS_ANDROID)
+  // See the comments on wake_lock_context_host.h for details on this
+  // callback.
   device_info.factory =
       base::Bind(&device::CreateDeviceService,
-                 BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
+                 BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
+                 BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+                 base::Bind(&WakeLockContextHost::GetNativeViewForContext));
+#else
+  device_info.factory =
+      base::Bind(&device::CreateDeviceService,
+                 BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
+                 BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+#endif
+  device_info.task_runner = base::ThreadTaskRunnerHandle::Get();
   packaged_services_connection_->AddEmbeddedService(device::mojom::kServiceName,
                                                     device_info);
 
@@ -328,6 +320,9 @@ ServiceManagerContext::ServiceManagerContext() {
   GetContentClient()
       ->browser()
       ->RegisterOutOfProcessServices(&sandboxed_services);
+  sandboxed_services.insert(
+      std::make_pair(data_decoder::mojom::kServiceName,
+                     base::ASCIIToUTF16("Data Decoder Service")));
   for (const auto& service : sandboxed_services) {
     packaged_services_connection_->AddServiceRequestHandler(
         service.first, base::Bind(&StartServiceInUtilityProcess, service.first,
@@ -338,9 +333,12 @@ ServiceManagerContext::ServiceManagerContext() {
   GetContentClient()
       ->browser()
       ->RegisterUnsandboxedOutOfProcessServices(&unsandboxed_services);
-  unsandboxed_services.insert(
-      std::make_pair(shape_detection::mojom::kServiceName,
-                     base::ASCIIToUTF16("Shape Detection Service")));
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableNetworkService)) {
+    unsandboxed_services.insert(
+        std::make_pair(content::mojom::kNetworkServiceName,
+                       base::ASCIIToUTF16("Network Service")));
+  }
   for (const auto& service : unsandboxed_services) {
     packaged_services_connection_->AddServiceRequestHandler(
         service.first, base::Bind(&StartServiceInUtilityProcess, service.first,
@@ -351,6 +349,14 @@ ServiceManagerContext::ServiceManagerContext() {
   packaged_services_connection_->AddServiceRequestHandler(
       "media", base::Bind(&StartServiceInGpuProcess, "media"));
 #endif
+
+  packaged_services_connection_->AddServiceRequestHandler(
+      shape_detection::mojom::kServiceName,
+      base::Bind(&StartServiceInGpuProcess,
+                 shape_detection::mojom::kServiceName));
+
+  packaged_services_connection_->Start();
+  ServiceManagerConnection::GetForProcess()->Start();
 }
 
 ServiceManagerContext::~ServiceManagerContext() {

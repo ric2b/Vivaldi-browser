@@ -11,6 +11,7 @@
 #include "base/i18n/time_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
@@ -28,6 +29,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_response_writer.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -188,7 +190,7 @@ void RecordFetchValidHistogram(bool valid) {
 // static
 void NetworkTimeTracker::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kNetworkTimeMapping,
-                                   new base::DictionaryValue());
+                                   base::MakeUnique<base::DictionaryValue>());
 }
 
 NetworkTimeTracker::NetworkTimeTracker(
@@ -459,8 +461,28 @@ void NetworkTimeTracker::CheckTime() {
   replacements.SetQueryStr(query_string);
   url = url.ReplaceComponents(replacements);
 
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("network_time_component", R"(
+        semantics {
+          sender: "Network Time Component"
+          description:
+            "Sends a request to a Google server to retrieve the current "
+            "timestamp."
+          trigger:
+            "A request can be sent to retrieve the current time when the user "
+            "encounters an SSL date error, or in the background if Chromium "
+            "determines that it doesn't have an accurate timestamp."
+          data: "None"
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled by settings."
+          policy_exception_justification: "Not implemented."
+        })");
   // This cancels any outstanding fetch.
-  time_fetcher_ = net::URLFetcher::Create(url, net::URLFetcher::GET, this);
+  time_fetcher_ = net::URLFetcher::Create(url, net::URLFetcher::GET, this,
+                                          traffic_annotation);
   if (!time_fetcher_) {
     DVLOG(1) << "tried to make fetch happen; failed";
     return;

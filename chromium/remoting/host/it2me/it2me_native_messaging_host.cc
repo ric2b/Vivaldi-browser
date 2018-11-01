@@ -25,11 +25,11 @@
 #include "net/socket/client_socket_factory.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/auto_thread_task_runner.h"
+#include "remoting/base/name_value_map.h"
+#include "remoting/base/service_urls.h"
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/host_exit_codes.h"
 #include "remoting/host/policy_watcher.h"
-#include "remoting/host/service_urls.h"
-#include "remoting/protocol/name_value_map.h"
 #include "remoting/signaling/delegating_signal_strategy.h"
 
 #if defined(OS_WIN)
@@ -43,7 +43,7 @@ namespace remoting {
 
 namespace {
 
-const remoting::protocol::NameMapElement<It2MeHostState> kIt2MeHostStates[] = {
+const NameMapElement<It2MeHostState> kIt2MeHostStates[] = {
     {kDisconnected, "DISCONNECTED"},
     {kStarting, "STARTING"},
     {kRequestedAccessCode, "REQUESTED_ACCESS_CODE"},
@@ -296,11 +296,14 @@ void It2MeNativeMessagingHost::ProcessConnect(
       return;
     }
 
-    delegating_signal_strategy_ = new DelegatingSignalStrategy(
-        local_jid, host_context_->network_task_runner(),
-        base::Bind(&It2MeNativeMessagingHost::SendOutgoingIq,
-                   weak_factory_.GetWeakPtr()));
-    signal_strategy.reset(delegating_signal_strategy_);
+    auto delegating_signal_strategy =
+        base::MakeUnique<DelegatingSignalStrategy>(
+            SignalingAddress(local_jid), host_context_->network_task_runner(),
+            base::Bind(&It2MeNativeMessagingHost::SendOutgoingIq,
+                       weak_factory_.GetWeakPtr()));
+    incoming_message_callback_ =
+        delegating_signal_strategy->GetIncomingMessageCallback();
+    signal_strategy = std::move(delegating_signal_strategy);
   }
 
   std::string directory_bot_jid = service_urls->directory_bot_jid();
@@ -357,8 +360,7 @@ void It2MeNativeMessagingHost::ProcessIncomingIq(
     return;
   }
 
-  if (delegating_signal_strategy_)
-    delegating_signal_strategy_->OnIncomingMessage(iq);
+  incoming_message_callback_.Run(iq);
   SendMessageToClient(std::move(response));
 };
 

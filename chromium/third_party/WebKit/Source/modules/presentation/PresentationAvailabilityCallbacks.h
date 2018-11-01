@@ -8,9 +8,9 @@
 #include "modules/presentation/PresentationPromiseProperty.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/Vector.h"
 #include "public/platform/WebCallbacks.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -27,12 +27,12 @@ class PresentationAvailabilityCallbacks final
                                     const WTF::Vector<KURL>&);
   ~PresentationAvailabilityCallbacks() override;
 
-  void onSuccess(bool value) override;
-  void onError(const WebPresentationError&) override;
+  void OnSuccess(bool value) override;
+  void OnError(const WebPresentationError&) override;
 
  private:
-  Persistent<PresentationAvailabilityProperty> m_resolver;
-  const WTF::Vector<KURL> m_urls;
+  Persistent<PresentationAvailabilityProperty> resolver_;
+  const WTF::Vector<KURL> urls_;
 
   WTF_MAKE_NONCOPYABLE(PresentationAvailabilityCallbacks);
 };

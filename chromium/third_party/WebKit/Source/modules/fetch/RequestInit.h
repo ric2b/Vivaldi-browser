@@ -5,17 +5,17 @@
 #ifndef RequestInit_h
 #define RequestInit_h
 
-#include "bindings/core/v8/Dictionary.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/weborigin/Referrer.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
-#include <memory>
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 class BytesConsumer;
+class Dictionary;
+class ExecutionContext;
 class ExceptionState;
 class Headers;
 
@@ -28,18 +28,18 @@ class RequestInit {
 
   String method;
   Member<Headers> headers;
-  Dictionary headersDictionary;
-  String contentType;
+  String content_type;
   Member<BytesConsumer> body;
   Referrer referrer;
   String mode;
   String credentials;
+  String cache;
   String redirect;
   String integrity;
-  RefPtr<EncodedFormData> attachedCredential;
+  RefPtr<EncodedFormData> attached_credential;
   // True if any members in RequestInit are set and hence the referrer member
   // should be used in the Request constructor.
-  bool areAnyMembersSet;
+  bool are_any_members_set;
 };
 
 }  // namespace blink

@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Розтягнута.</translation>
 <translation id="1025074108959230262">Закріплений режим вимкнено</translation>
 <translation id="1031961866430398710">тоді</translation>
+<translation id="1038643060055067718">Рядків:</translation>
 <translation id="1038795173450935438">Щоб переходити між елементами на сторінці, натискайте Search і стрілку вправо або вліво. Щоб переходити між рядками, натискайте Search і стрілку вгору або вниз. Щоб активувати вибраний елемент, натисніть Search і пробіл.</translation>
 <translation id="1044777062731150180">Немає заголовків</translation>
 <translation id="106222400312645156">заголовок рядка</translation>
@@ -109,7 +110,7 @@
 <translation id="2110480898214777136">Перехід із початку в кінець або з кінця на початок сторінки, діалогового вікна чи іншого контейнера</translation>
 <translation id="2119965627982867824">лічильник</translation>
 <translation id="2121067395472282800">клавіша доступу: <ph name="KEY" /></translation>
-<translation id="2155457205053847599">Змініть поточний 6-крапковий шрифт Брайля, вибравши опцію зі списку нижче.</translation>
+<translation id="2138345533858834403">Імітує вивід оновлюваного екрана Брайля на панелі ChromeVox угорі.</translation>
 <translation id="2169714232367507776">Натиснути поточний елемент</translation>
 <translation id="2179452035581866348">ChromeVox використовує звуки, щоб надавати вам важливу та додаткову інформацію. За допомогою цих звуків можна швидше переходити між елементами. Вивчивши ці звуки, ви зможете вимкнути голосові описи й отримувати потрібну інформацію про сторінку лише на основі звуків. Нижче перелічено всі звуки та їх значення.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{права кругла дужка}one{# права кругла дужка}few{# праві круглі дужки}many{# правих круглих дужок}other{# close parens}}</translation>
@@ -124,6 +125,7 @@
 <translation id="2344193891939537199">Елемент керування для вибору дати та часу</translation>
 <translation id="2347456970887948350">Посилання</translation>
 <translation id="2359897517538099099">Не в режимі таблиці.</translation>
+<translation id="2381733276052567791">Вмикає або вимикає голосові підказки</translation>
 <translation id="2390264819538553347">Щоб перейти далі, натисніть клавішу Enter, щоб повернутися назад – клавішу Backspace.</translation>
 <translation id="241124561063364910">а потім –</translation>
 <translation id="2416512023405990736">Невибрана опція</translation>
@@ -166,6 +168,7 @@
 <translation id="2800204403141299078">Інших несхожих елементів немає.</translation>
 <translation id="2800780099804980316">Немає попереднього заголовка рівня 1.</translation>
 <translation id="280499067616661124">Пошук ChromeVox на сторінці</translation>
+<translation id="2808001342598757276">Активувати екран</translation>
 <translation id="2811019999044652585">Щоб переходити між частинами екрана, наприклад перейти на панель інструментів чи системну область, натисніть Control+Forward. На Chromebook клавіша Forward розташована прямо над клавішею цифри 2.</translation>
 <translation id="2811204574343810641">Рядок</translation>
 <translation id="2816654101880605877">Немає наступного повзунка.</translation>
@@ -185,11 +188,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{знак табуляції}one{# знак табуляції}few{# знаки табуляції}many{# знаків табуляції}other{# tabs}}</translation>
 <translation id="2972078295414139404">Немає попереднього натиснутого посилання.</translation>
 <translation id="2972205263822847197">Підказка</translation>
-<translation id="2978549349327282388">Стовпців:</translation>
 <translation id="2998131015536248178">Попередній символ</translation>
 <translation id="2999559350546931576">Зменшити висоту звуку</translation>
 <translation id="2999945368667127852">Немає наступного медіа-віджета.</translation>
 <translation id="3012414509011670858">Немає попереднього розділу.</translation>
+<translation id="3014130421870723208">8-крапкове поле @</translation>
 <translation id="3030432017085518523">Перемикач пунктів меню</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостроф}one{# апостроф}few{# апострофи}many{# апострофів}other{# apostrophes}}</translation>
 <translation id="3040901448410802366">Індикатор перебігу</translation>
@@ -212,6 +215,7 @@
 <translation id="3138767756593758860">Показати список орієнтирів</translation>
 <translation id="3143851963874289911">клітинка</translation>
 <translation id="3149472044574196936">Наступний рядок</translation>
+<translation id="3153024374267644603">Вмикає голосові підказки</translation>
 <translation id="3155083529632865074">Немає попередньої кнопки.</translation>
 <translation id="3163593631834463955">Порожній заголовок стовпця</translation>
 <translation id="316542773973815724">Навігація</translation>
@@ -224,6 +228,7 @@
 <translation id="3229375994964697375">Натиснуте посилання</translation>
 <translation id="3232388865800379423">Кнопка спливаючої підказки</translation>
 <translation id="3241052487511142956">Попереднє натиснуте посилання</translation>
+<translation id="3241638166094654466">Клітинок у кожному рядку:</translation>
 <translation id="3286390186030710347">Повзунок</translation>
 <translation id="3299925995433437805">Немає наступного натиснутого посилання.</translation>
 <translation id="3307886118343381874">Перейти в кінець таблиці</translation>
@@ -380,6 +385,7 @@
 <translation id="4376316291247992553">Перегляд графіки за допомогою шрифту Брайля</translation>
 <translation id="4391478986194775161">інформація про вміст</translation>
 <translation id="443163561286008705">скинути</translation>
+<translation id="4457472090507035117">Виберіть поточний голос:</translation>
 <translation id="4471074325120394300">Немає посилань.</translation>
 <translation id="4476183483923481720">новий рядок</translation>
 <translation id="4482330759234983253">Попередня таблиця</translation>
@@ -453,7 +459,6 @@
 <translation id="5105050547967751155">обов’язково</translation>
 <translation id="5110983769041734144">Немає попереднього поля форми.</translation>
 <translation id="5111640677200759579">Заголовок стовпця</translation>
-<translation id="5117636609870536415">електронна адреса</translation>
 <translation id="5136967254288895616">Немає попереднього посилання.</translation>
 <translation id="513774504516943387">посилання</translation>
 <translation id="517143700877085897">, не вибрано</translation>
@@ -564,10 +569,10 @@
 <translation id="5968607524793740041">Показати контекстне меню</translation>
 <translation id="5983179082906765664">Збільшити деталізацію навігації</translation>
 <translation id="5999630716831179808">Голоси</translation>
-<translation id="6000417740266304866">Змініть поточний 8-крапковий шрифт Брайля, вибравши опцію зі списку нижче.</translation>
 <translation id="6006050241733874051">Форма</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{зворотна коса риска}one{# зворотна коса риска}few{# зворотні косі риски}many{# зворотних косих рисок}other{# backslashes}}</translation>
 <translation id="6037602951055904232">На задній план</translation>
+<translation id="6044160928851315051">Дезактивувати екран</translation>
 <translation id="6082768461603900813">Основна навігація</translation>
 <translation id="611827076493383239">натиснуто</translation>
 <translation id="6119955456199054975">Кінець клітинки.</translation>
@@ -606,7 +611,6 @@
 <translation id="6444046323172968959">Діалогове вікно сповіщень</translation>
 <translation id="6459511626086141404">Звичайна розкладка</translation>
 <translation id="6468049171101508116">Наступна кнопка</translation>
-<translation id="6491972999578897419">Змініть поточний голос, вибравши один із варіантів зі списку нижче.</translation>
 <translation id="6493991254603208962">Зменшити яскравість</translation>
 <translation id="6508059270146105198">Перемістити брайлівський дисплей униз сторінки</translation>
 <translation id="6536864053412760904">Маркер Math ML</translation>
@@ -658,6 +662,7 @@
 <translation id="7116595520562830928">багаторядковий</translation>
 <translation id="712735679809149106">озвучення слів</translation>
 <translation id="713824876195128146">Цитування наступного блока</translation>
+<translation id="7143034430156387447">Переключитися між 6- та 8-крапковим шрифтом Брайля</translation>
 <translation id="7161771961008409533">Кнопка зі спливаючою підказкою</translation>
 <translation id="7165714724802225287">Поточний стиль дисплея – чергування.</translation>
 <translation id="7167657087543110">озвучення символів</translation>
@@ -668,6 +673,7 @@
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">рядок</translation>
 <translation id="7226216518520804442">маркований список</translation>
+<translation id="7229749224609077523">Виберіть таблицю із 6-крапковим шрифтом Брайля:</translation>
 <translation id="72393384879519786">Заголовок</translation>
 <translation id="7241683698754534149">Відкрити докладний опис у новій вкладці</translation>
 <translation id="7248671827512403053">Додаток</translation>
@@ -741,6 +747,7 @@
 <translation id="7974390230414479278">Пункт меню</translation>
 <translation id="8007540374018858731">заголовок 3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{лапка}one{# лапка}few{# лапки}many{# лапок}other{# quotes}}</translation>
+<translation id="8017588669690167134">Вимикає голосові підказки</translation>
 <translation id="8033827949643255796">виділено</translation>
 <translation id="8035962149453661158">макс.: <ph name="X" /></translation>
 <translation id="8042761080832772327">Редагування введеного тексту, пошукового запиту</translation>
@@ -759,7 +766,6 @@
 <translation id="820417203470636242">Порожня клітинка.</translation>
 <translation id="8215202828671303819">Вибір кількох елементів</translation>
 <translation id="8224171046658870249">Ви перейшли на ChromeVox Next</translation>
-<translation id="8259358278692921574">Рядків:</translation>
 <translation id="8276439074553447000">Перейти до попереднього інтерактивного елемента</translation>
 <translation id="8278417001922463147">Немає попередньої статті.</translation>
 <translation id="8283603667300770666">Наступне поле форми</translation>
@@ -797,7 +803,6 @@
 <translation id="8638532244051952400">Повідомити координати поточної клітинки</translation>
 <translation id="8650576015643545550">Немає попереднього списку.</translation>
 <translation id="8651481478098336970">вимкнути звук</translation>
-<translation id="8653031188082306838">посилання</translation>
 <translation id="8653646212587894517">Показати список посилань</translation>
 <translation id="8664519043722036194">секунд</translation>
 <translation id="867187640362843212">Заголовок 5</translation>
@@ -817,6 +822,7 @@
 <translation id="8856538297388979332">Натискайте стрілки вгору чи вниз, щоб переглядати команди; натискайте Enter, щоб їх активувати</translation>
 <translation id="8864099967139188018">Немає наступного заголовка рівня 6.</translation>
 <translation id="8882002077197914455">Заголовок рядка</translation>
+<translation id="8883850400338911892">8-крапкове посилання</translation>
 <translation id="8896347895970027998">Зробити розширення ChromeVox активним чи неактивним.</translation>
 <translation id="8898516272131543774">Ще раз озвучити розділові знаки</translation>
 <translation id="8900148057318340779">Клавіша-префікс</translation>
@@ -830,6 +836,7 @@
 <translation id="9027462562263121875">Немає таблиць.</translation>
 <translation id="9040132695316389094">Заголовок 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" />%</translation>
+<translation id="9061884144798498064">Виберіть таблицю з 8-крапковим шрифтом Брайля:</translation>
 <translation id="9065283790526219006">+ спливаюче вікно</translation>
 <translation id="9077213568694924680">видалено з виділеного</translation>
 <translation id="9082874451376019682">Немає попереднього повзунка.</translation>

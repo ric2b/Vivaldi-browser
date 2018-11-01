@@ -36,7 +36,6 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "net/base/crypto_module.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
 #include "net/der/input.h"
@@ -89,13 +88,12 @@ struct DictionaryIdComparator {
       : collator_(collator) {
   }
 
-  bool operator()(const std::unique_ptr<base::Value>& a,
-                  const std::unique_ptr<base::Value>& b) const {
+  bool operator()(const base::Value& a, const base::Value& b) const {
     const base::DictionaryValue* a_dict;
-    bool a_is_dictionary = a->GetAsDictionary(&a_dict);
+    bool a_is_dictionary = a.GetAsDictionary(&a_dict);
     DCHECK(a_is_dictionary);
     const base::DictionaryValue* b_dict;
-    bool b_is_dictionary = b->GetAsDictionary(&b_dict);
+    bool b_is_dictionary = b.GetAsDictionary(&b_dict);
     DCHECK(b_is_dictionary);
     base::string16 a_str;
     base::string16 b_str;
@@ -1012,7 +1010,7 @@ void CertificateManagerHandler::ImportCAFileRead(const int* read_errno,
 
   // TODO(mattm): check here if root_cert is not a CA cert and show error.
 
-  base::StringValue cert_name(root_cert->subject().GetDisplayName());
+  base::Value cert_name(root_cert->subject().GetDisplayName());
   web_ui()->CallJavascriptFunctionUnsafe(
       "CertificateEditCaTrustOverlay.showImport", cert_name);
 }
@@ -1192,13 +1190,13 @@ void CertificateManagerHandler::PopulateTree(
 
 void CertificateManagerHandler::ShowError(const std::string& title,
                                           const std::string& error) const {
-  auto title_value = base::MakeUnique<base::StringValue>(title);
-  auto error_value = base::MakeUnique<base::StringValue>(error);
+  auto title_value = base::MakeUnique<base::Value>(title);
+  auto error_value = base::MakeUnique<base::Value>(error);
   auto ok_title_value =
-      base::MakeUnique<base::StringValue>(l10n_util::GetStringUTF8(IDS_OK));
-  auto cancel_title_value = base::Value::CreateNullValue();
-  auto ok_callback_value = base::Value::CreateNullValue();
-  auto cancel_callback_value = base::Value::CreateNullValue();
+      base::MakeUnique<base::Value>(l10n_util::GetStringUTF8(IDS_OK));
+  auto cancel_title_value = base::MakeUnique<base::Value>();
+  auto ok_callback_value = base::MakeUnique<base::Value>();
+  auto cancel_callback_value = base::MakeUnique<base::Value>();
   std::vector<const base::Value*> args = {
       title_value.get(),       error_value.get(),
       ok_title_value.get(),    cancel_title_value.get(),
@@ -1227,8 +1225,8 @@ void CertificateManagerHandler::ShowImportErrors(
     cert_error_list.Append(std::move(dict));
   }
 
-  base::StringValue title_value(title);
-  base::StringValue error_value(error);
+  base::Value title_value(title);
+  base::Value error_value(error);
   web_ui()->CallJavascriptFunctionUnsafe("CertificateImportErrorOverlay.show",
                                          title_value, error_value,
                                          cert_error_list);

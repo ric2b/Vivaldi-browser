@@ -32,17 +32,15 @@ default_args = {
     # Dependencies used by the extra libraries. Putting them here causes them
     # to be executed first during snapshot creation.
     "//third_party/WebKit/Source/core/streams/CommonStrings.js",
+    "//third_party/WebKit/Source/core/streams/SimpleQueue.js",
 
     # Extra libraries.
     "//third_party/WebKit/Source/core/streams/ByteLengthQueuingStrategy.js",
     "//third_party/WebKit/Source/core/streams/CountQueuingStrategy.js",
     "//third_party/WebKit/Source/core/streams/ReadableStream.js",
-  ]
-  v8_experimental_extra_library_files = [
-    "//third_party/WebKit/Source/core/streams/ReadableStreamExperimentalPipeTo.js",
     "//third_party/WebKit/Source/core/streams/WritableStream.js",
   ]
-  v8_enable_inspector = true
+  v8_experimental_extra_library_files = []
   v8_enable_gdbjit = false
   v8_imminent_deprecation_warnings = false
 }
@@ -257,16 +255,13 @@ exec_script_whitelist =
       # //build/dotfile_settings.gni instead, so that they can be shared
       # with other repos. The entries in this list should be only for files
       # in the Chromium repo outside of //build.
-      "//android_webview/BUILD.gn",
       "//build_overrides/build.gni",
-      "//chromeos/BUILD.gn",
 
       # TODO(dgn): Layer violation but breaks the build otherwise, see
       # https://crbug.com/474506.
       "//clank/java/BUILD.gn",
       "//clank/native/BUILD.gn",
 
-      "//jingle/BUILD.gn",
       "//remoting/host/installer/linux/BUILD.gn",
       "//remoting/remoting_version.gni",
       "//remoting/host/installer/win/generate_clsids.gni",

@@ -30,8 +30,11 @@ class WorkDelegate : public WorkerThread::Delegate {
   ~WorkDelegate() {}
 
   void DoWork(const WorkerThread* thread) override {
-    if (++work_count_ == waiting_for_count_)
-      semaphore_.Signal();
+    if (work_count_ < waiting_for_count_) {
+      if (++work_count_ == waiting_for_count_) {
+        semaphore_.Signal();
+      }
+    }
   }
 
   void SetDesiredWorkCount(int times) {
@@ -59,6 +62,7 @@ TEST(WorkerThread, DoWork) {
   WorkerThread thread(0.05, &delegate);
 
   uint64_t start = ClockMonotonicNanoseconds();
+
   delegate.SetDesiredWorkCount(2);
   thread.Start(0);
   EXPECT_TRUE(thread.is_running());
@@ -77,7 +81,7 @@ TEST(WorkerThread, StopBeforeDoWork) {
   thread.Start(15);
   thread.Stop();
 
-  EXPECT_EQ(0, delegate.work_count());
+  EXPECT_EQ(delegate.work_count(), 0);
 }
 
 TEST(WorkerThread, Restart) {
@@ -103,20 +107,20 @@ TEST(WorkerThread, DoWorkNow) {
   WorkDelegate delegate;
   WorkerThread thread(100, &delegate);
 
+  uint64_t start = ClockMonotonicNanoseconds();
+
   delegate.SetDesiredWorkCount(1);
   thread.Start(0);
   EXPECT_TRUE(thread.is_running());
 
-  uint64_t start = ClockMonotonicNanoseconds();
-
   delegate.WaitForWorkCount();
-  EXPECT_EQ(1, delegate.work_count());
+  EXPECT_EQ(delegate.work_count(), 1);
 
   delegate.SetDesiredWorkCount(2);
   thread.DoWorkNow();
   delegate.WaitForWorkCount();
   thread.Stop();
-  EXPECT_EQ(2, delegate.work_count());
+  EXPECT_EQ(delegate.work_count(), 2);
 
   EXPECT_GE(100 * kNanosecondsPerSecond, ClockMonotonicNanoseconds() - start);
 }
@@ -133,7 +137,7 @@ TEST(WorkerThread, DoWorkNowAtStart) {
 
   thread.DoWorkNow();
   delegate.WaitForWorkCount();
-  EXPECT_EQ(1, delegate.work_count());
+  EXPECT_EQ(delegate.work_count(), 1);
 
   EXPECT_GE(100 * kNanosecondsPerSecond, ClockMonotonicNanoseconds() - start);
 

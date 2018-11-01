@@ -9,13 +9,13 @@
 #include <stdint.h>
 
 #include <memory>
-#include <string>
 #include <vector>
 
-#include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
 #include "net/spdy/hpack/hpack_decoder.h"
 #include "net/spdy/hpack/hpack_encoder.h"
+#include "net/spdy/platform/api/spdy_string.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 
 namespace net {
 
@@ -26,8 +26,8 @@ class NET_EXPORT_PRIVATE HpackFuzzUtil {
   struct NET_EXPORT_PRIVATE GeneratorContext {
     GeneratorContext();
     ~GeneratorContext();
-    std::vector<std::string> names;
-    std::vector<std::string> values;
+    std::vector<SpdyString> names;
+    std::vector<SpdyString> values;
   };
 
   // Initializes a GeneratorContext with a random seed and name/value fixtures.
@@ -40,7 +40,7 @@ class NET_EXPORT_PRIVATE HpackFuzzUtil {
   // upper-bounded by |sanity_bound|.
   static size_t SampleExponential(size_t mean, size_t sanity_bound);
 
-  // Holds an input string, and manages an offset into that string.
+  // Holds an input SpdyString, and manages an offset into that SpdyString.
   struct NET_EXPORT_PRIVATE Input {
     Input();  // Initializes |offset| to zero.
     ~Input();
@@ -52,17 +52,17 @@ class NET_EXPORT_PRIVATE HpackFuzzUtil {
       return input.data() + offset;
     }
 
-    std::string input;
+    SpdyString input;
     size_t offset;
   };
 
   // Returns true if the next header block was set at |out|. Returns
   // false if no input header blocks remain.
-  static bool NextHeaderBlock(Input* input, base::StringPiece* out);
+  static bool NextHeaderBlock(Input* input, SpdyStringPiece* out);
 
   // Returns the serialized header block length prefix for a block of
   // |block_size| bytes.
-  static std::string HeaderBlockPrefix(size_t block_size);
+  static SpdyString HeaderBlockPrefix(size_t block_size);
 
   // A FuzzerContext holds fuzzer input, as well as each of the decoder and
   // encoder stages which fuzzed header blocks are processed through.
@@ -80,7 +80,7 @@ class NET_EXPORT_PRIVATE HpackFuzzUtil {
   // |second_stage| and |third_stage| as well. Returns whether all stages
   // processed the input without error.
   static bool RunHeaderBlockThroughFuzzerStages(FuzzerContext* context,
-                                                base::StringPiece input_block);
+                                                SpdyStringPiece input_block);
 
   // Flips random bits within |buffer|. The total number of flips is
   // |flip_per_thousand| bits for every 1,024 bytes of |buffer_length|,

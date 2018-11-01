@@ -384,6 +384,50 @@ void VideoCaptureDeviceMac::TakePhoto(TakePhotoCallback callback) {
   [capture_device_ takePhoto];
 }
 
+void VideoCaptureDeviceMac::GetPhotoCapabilities(
+    GetPhotoCapabilitiesCallback callback) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+
+  auto photo_capabilities = mojom::PhotoCapabilities::New();
+
+  photo_capabilities->exposure_compensation = mojom::Range::New();
+  photo_capabilities->color_temperature = mojom::Range::New();
+  photo_capabilities->iso = mojom::Range::New();
+
+  photo_capabilities->brightness = mojom::Range::New();
+  photo_capabilities->contrast = mojom::Range::New();
+  photo_capabilities->saturation = mojom::Range::New();
+  photo_capabilities->sharpness = mojom::Range::New();
+
+  photo_capabilities->zoom = mojom::Range::New();
+
+  photo_capabilities->red_eye_reduction = mojom::RedEyeReduction::NEVER;
+  photo_capabilities->height = mojom::Range::New(
+      capture_format_.frame_size.height(), capture_format_.frame_size.height(),
+      capture_format_.frame_size.height(), 0 /* step */);
+  photo_capabilities->width = mojom::Range::New(
+      capture_format_.frame_size.width(), capture_format_.frame_size.width(),
+      capture_format_.frame_size.width(), 0 /* step */);
+  photo_capabilities->torch = false;
+
+  callback.Run(std::move(photo_capabilities));
+}
+
+void VideoCaptureDeviceMac::SetPhotoOptions(mojom::PhotoSettingsPtr settings,
+                                            SetPhotoOptionsCallback callback) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  // Drop |callback| and return if there are any unsupported |settings|.
+  // TODO(mcasas): centralise checks elsewhere, https://crbug.com/724285.
+  if ((settings->has_width &&
+       settings->width != capture_format_.frame_size.width()) ||
+      (settings->has_height &&
+       settings->height != capture_format_.frame_size.height()) ||
+      settings->has_fill_light_mode || settings->has_red_eye_reduction) {
+    return;
+  }
+  callback.Run(true);
+}
+
 bool VideoCaptureDeviceMac::Init(VideoCaptureApi capture_api_type) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kNotInitialized);

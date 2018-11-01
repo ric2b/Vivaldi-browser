@@ -60,9 +60,9 @@ class WebStateObserver {
   // and related methods to listen for continued events from this
   // WebState.
   //
-  // This is also fired by same-page navigations, such as fragment navigations
-  // or pushState/replaceState, which will not result in a document change. To
-  // filter these out, use NavigationContext::IsSamePage().
+  // This is also fired by same-document navigations, such as fragment
+  // navigations or pushState/replaceState, which will not result in a document
+  // change. To filter these out, use NavigationContext::IsSameDocument().
   //
   // |navigation_context| will be destroyed at the end of this call, so do not
   // keep a reference to it afterward.
@@ -87,6 +87,15 @@ class WebStateObserver {
 
   // Called when the title of the WebState is set.
   virtual void TitleWasSet() {}
+
+  // Called when the visible security state of the page changes.
+  virtual void DidChangeVisibleSecurityState() {}
+
+  // Called when a dialog (JavaScript, geolocation) or window open request was
+  // suppressed.
+  // NOTE: Called only if WebState::SetShouldSuppressDialogs() was called with
+  // false.
+  virtual void DidSuppressDialog() {}
 
   // Called on form submission. |user_initiated| is true if the user
   // interacted with the page.

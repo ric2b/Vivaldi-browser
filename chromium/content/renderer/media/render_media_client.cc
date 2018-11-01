@@ -4,123 +4,44 @@
 
 #include "content/renderer/media/render_media_client.h"
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/time/default_tick_clock.h"
 #include "content/public/common/content_client.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "media/base/media_switches.h"
+#include "media/base/video_color_space.h"
+#include "ui/display/display_switches.h"
 
 namespace content {
 
 void RenderMediaClient::Initialize() {
-  GetInstance();
+  static RenderMediaClient* client = new RenderMediaClient();
+  media::SetMediaClient(client);
 }
 
-RenderMediaClient::RenderMediaClient()
-    : has_updated_(false),
-      is_update_needed_(true),
-      tick_clock_(new base::DefaultTickClock()) {
-  media::SetMediaClient(this);
-}
+RenderMediaClient::RenderMediaClient() {}
 
 RenderMediaClient::~RenderMediaClient() {
 }
 
-void RenderMediaClient::AddKeySystemsInfoForUMA(
-    std::vector<media::KeySystemInfoForUMA>* key_systems_info_for_uma) {
-  DVLOG(2) << __func__;
-#if defined(WIDEVINE_CDM_AVAILABLE)
-  key_systems_info_for_uma->push_back(media::KeySystemInfoForUMA(
-      kWidevineKeySystem, kWidevineKeySystemNameForUMA));
-#endif  // WIDEVINE_CDM_AVAILABLE
+void RenderMediaClient::AddSupportedKeySystems(
+    std::vector<std::unique_ptr<media::KeySystemProperties>>* key_systems) {
+  GetContentClient()->renderer()->AddSupportedKeySystems(key_systems);
 }
 
 bool RenderMediaClient::IsKeySystemsUpdateNeeded() {
-  DVLOG(2) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  // Always needs update if we have never updated, regardless the
-  // |last_update_time_ticks_|'s initial value.
-  if (!has_updated_) {
-    DCHECK(is_update_needed_);
-    return true;
-  }
-
-  if (!is_update_needed_)
-    return false;
-
-  // The update could be expensive. For example, it could involve a sync IPC to
-  // the browser process. Use a minimum update interval to avoid unnecessarily
-  // frequent update.
-  static const int kMinUpdateIntervalInMilliseconds = 1000;
-  if ((tick_clock_->NowTicks() - last_update_time_ticks_).InMilliseconds() <
-      kMinUpdateIntervalInMilliseconds) {
-    return false;
-  }
-
-  return true;
+  return GetContentClient()->renderer()->IsKeySystemsUpdateNeeded();
 }
 
-void RenderMediaClient::AddSupportedKeySystems(
-    std::vector<std::unique_ptr<media::KeySystemProperties>>*
-        key_systems_properties) {
-  DVLOG(2) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  GetContentClient()->renderer()->AddSupportedKeySystems(
-      key_systems_properties);
-
-  has_updated_ = true;
-  last_update_time_ticks_ = tick_clock_->NowTicks();
-
-  // Check whether all potentially supported key systems are supported. If so,
-  // no need to update again.
-#if defined(WIDEVINE_CDM_AVAILABLE) && defined(WIDEVINE_CDM_IS_COMPONENT)
-  for (const auto& properties : *key_systems_properties) {
-    if (properties->GetKeySystemName() == kWidevineKeySystem)
-      is_update_needed_ = false;
-  }
-#else
-  is_update_needed_ = false;
-#endif
+bool RenderMediaClient::IsSupportedAudioConfig(
+    const media::AudioConfig& config) {
+  return GetContentClient()->renderer()->IsSupportedAudioConfig(config);
 }
 
-void RenderMediaClient::RecordRapporURL(const std::string& metric,
-                                        const GURL& url) {
-  GetContentClient()->renderer()->RecordRapporURL(metric, url);
-}
-
-bool RenderMediaClient::IsSupportedVideoConfig(media::VideoCodec codec,
-                                               media::VideoCodecProfile profile,
-                                               int level) {
-  switch (codec) {
-    case media::kCodecH264:
-    case media::kCodecVP8:
-    case media::kCodecVP9:
-    case media::kCodecTheora:
-      return true;
-
-    case media::kUnknownVideoCodec:
-    case media::kCodecVC1:
-    case media::kCodecMPEG2:
-    case media::kCodecMPEG4:
-    case media::kCodecHEVC:
-    case media::kCodecDolbyVision:
-      return false;
-  }
-
-  NOTREACHED();
-  return false;
-}
-
-void RenderMediaClient::SetTickClockForTesting(
-    std::unique_ptr<base::TickClock> tick_clock) {
-  tick_clock_.swap(tick_clock);
-}
-
-// static
-RenderMediaClient* RenderMediaClient::GetInstance() {
-  static RenderMediaClient* client = new RenderMediaClient();
-  return client;
+bool RenderMediaClient::IsSupportedVideoConfig(
+    const media::VideoConfig& config) {
+  return GetContentClient()->renderer()->IsSupportedVideoConfig(config);
 }
 
 }  // namespace content

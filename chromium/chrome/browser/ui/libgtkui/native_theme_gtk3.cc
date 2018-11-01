@@ -26,6 +26,23 @@ enum BackgroundRenderMode {
   BG_RENDER_RECURSIVE,
 };
 
+std::string GetGtkSettingsStringProperty(GtkSettings* settings,
+                                         const gchar* prop_name) {
+  GValue layout = G_VALUE_INIT;
+  g_value_init(&layout, G_TYPE_STRING);
+  g_object_get_property(G_OBJECT(settings), prop_name, &layout);
+  DCHECK(G_VALUE_HOLDS_STRING(&layout));
+  std::string prop_value(g_value_get_string(&layout));
+  g_value_unset(&layout);
+  return prop_value;
+}
+
+ScopedStyleContext GetTooltipContext() {
+  return AppendCssNodeToStyleContext(
+      nullptr, GtkVersionCheck(3, 20) ? "#tooltip.background"
+                                      : "GtkWindow#window.background.tooltip");
+}
+
 SkBitmap GetWidgetBitmap(const gfx::Size& size,
                          GtkStyleContext* context,
                          BackgroundRenderMode bg_mode,
@@ -148,8 +165,7 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
       GdkColor* color;
       gtk_style_context_get_style(link_context, "link-color", &color, nullptr);
       if (color) {
-        SkColor ret_color = SkColorSetRGB(color->red / 255, color->green / 255,
-                                          color->blue / 255);
+        SkColor ret_color = GdkColorToSkColor(*color);
         // gdk_color_free() was deprecated in Gtk3.14.  This code path is only
         // taken on versions earlier than Gtk3.12, but the compiler doesn't know
         // that, so silence the deprecation warnings.
@@ -204,39 +220,41 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     case ui::NativeTheme::kColorId_TextOnProminentButtonColor:
       return GetFgColor(
           "GtkTreeView#treeview.view "
-          "GtkTreeview#treeview.view.cell:selected:focus GtkLabel");
+          "GtkTreeView#treeview.view.cell:selected:focus GtkLabel");
 
     // Textfield
     case ui::NativeTheme::kColorId_TextfieldDefaultColor:
       return GetFgColor(GtkVersionCheck(3, 20)
                             ? "GtkTextView#textview.view #text"
-                            : "GtkTextView");
+                            : "GtkTextView.view");
     case ui::NativeTheme::kColorId_TextfieldDefaultBackground:
       return GetBgColor(GtkVersionCheck(3, 20) ? "GtkTextView#textview.view"
-                                               : "GtkTextView");
+                                               : "GtkTextView.view");
     case ui::NativeTheme::kColorId_TextfieldReadOnlyColor:
       return GetFgColor(GtkVersionCheck(3, 20)
                             ? "GtkTextView#textview.view:disabled #text"
-                            : "GtkTextView:disabled");
+                            : "GtkTextView.view:disabled");
     case ui::NativeTheme::kColorId_TextfieldReadOnlyBackground:
       return GetBgColor(GtkVersionCheck(3, 20)
                             ? "GtkTextView#textview.view:disabled"
-                            : "GtkTextView:disabled");
+                            : "GtkTextView.view:disabled");
     case ui::NativeTheme::kColorId_TextfieldSelectionColor:
       return GetFgColor(GtkVersionCheck(3, 20)
                             ? "GtkTextView#textview.view #text #selection"
-                            : "GtkTextView:selected");
+                            : "GtkTextView.view:selected");
     case ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused:
       return GetSelectionBgColor(
           GtkVersionCheck(3, 20) ? "GtkTextView#textview.view #text #selection"
-                                 : "GtkTextView:selected");
+                                 : "GtkTextView.view:selected");
 
     // Tooltips
     case ui::NativeTheme::kColorId_TooltipBackground:
-      return GetBgColor("GtkTooltip#tooltip");
-    case ui::NativeTheme::kColorId_TooltipText:
-      return color_utils::GetReadableColor(GetFgColor("GtkTooltip#tooltip"),
-                                           GetBgColor("GtkTooltip#tooltip"));
+      return GetBgColorFromStyleContext(GetTooltipContext());
+    case ui::NativeTheme::kColorId_TooltipText: {
+      auto context = GetTooltipContext();
+      context = AppendCssNodeToStyleContext(context, "GtkLabel");
+      return GetFgColorFromStyleContext(context);
+    }
 
     // Trees and Tables (implemented on GTK using the same class)
     case ui::NativeTheme::kColorId_TableBackground:
@@ -348,28 +366,31 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     // Throbber
     // TODO(thomasanderson): Render GtkSpinner directly.
     case ui::NativeTheme::kColorId_ThrobberSpinningColor:
+      return GetFgColor("GtkSpinner#spinner");
     case ui::NativeTheme::kColorId_ThrobberWaitingColor:
-      return GetFgColor("GtkMenu#menu GtkSpinner#spinner");
     case ui::NativeTheme::kColorId_ThrobberLightColor:
-      return GetFgColor("GtkMenu#menu GtkSpinner#spinner:disabled");
+      return GetFgColor("GtkSpinner#spinner:disabled");
 
     // Alert icons
+    // Fallback to the same colors as Aura.
     case ui::NativeTheme::kColorId_AlertSeverityLow:
-      return GetBgColor("GtkInfoBar#infobar.info");
     case ui::NativeTheme::kColorId_AlertSeverityMedium:
-      return GetBgColor("GtkInfoBar#infobar.warning");
-    case ui::NativeTheme::kColorId_AlertSeverityHigh:
-      return GetBgColor("GtkInfoBar#infobar.error");
+    case ui::NativeTheme::kColorId_AlertSeverityHigh: {
+      // Alert icons appear on the toolbar, so use the toolbar BG
+      // color (the GTK window bg color) to determine if the dark Aura
+      // theme should be used.
+      ui::NativeTheme* fallback_theme =
+          color_utils::IsDark(GetBgColor(""))
+              ? ui::NativeTheme::GetInstanceForNativeUi()
+              : ui::NativeThemeDarkAura::instance();
+      return fallback_theme->GetSystemColor(color_id);
+    }
 
     case ui::NativeTheme::kColorId_NumColors:
       NOTREACHED();
       break;
   }
   return kInvalidColorIdColor;
-}
-
-void OnThemeChanged(GObject* obj, GParamSpec* param, NativeThemeGtk3* theme) {
-  theme->ResetColorCache();
 }
 
 }  // namespace
@@ -380,7 +401,6 @@ NativeThemeGtk3* NativeThemeGtk3::instance() {
   return &s_native_theme;
 }
 
-// Constructors automatically called
 NativeThemeGtk3::NativeThemeGtk3() {
   // These types are needed by g_type_from_name(), but may not be registered at
   // this point.  We need the g_type_class magic to make sure the compiler
@@ -398,21 +418,51 @@ NativeThemeGtk3::NativeThemeGtk3() {
   g_type_class_unref(g_type_class_ref(gtk_separator_get_type()));
   g_type_class_unref(g_type_class_ref(gtk_spinner_get_type()));
   g_type_class_unref(g_type_class_ref(gtk_text_view_get_type()));
-  g_type_class_unref(g_type_class_ref(gtk_toolbar_get_type()));
-  g_type_class_unref(g_type_class_ref(gtk_tooltip_get_type()));
   g_type_class_unref(g_type_class_ref(gtk_tree_view_get_type()));
   g_type_class_unref(g_type_class_ref(gtk_window_get_type()));
 
   g_signal_connect_after(gtk_settings_get_default(), "notify::gtk-theme-name",
-                         G_CALLBACK(OnThemeChanged), this);
+                         G_CALLBACK(OnThemeChangedThunk), this);
+  OnThemeChanged(gtk_settings_get_default(), nullptr);
 }
 
-// This doesn't actually get called
-NativeThemeGtk3::~NativeThemeGtk3() {}
+NativeThemeGtk3::~NativeThemeGtk3() {
+  NOTREACHED();
+}
 
-void NativeThemeGtk3::ResetColorCache() {
+void NativeThemeGtk3::SetThemeCssOverride(ScopedCssProvider provider) {
+  if (theme_css_override_) {
+    gtk_style_context_remove_provider_for_screen(
+        gdk_screen_get_default(),
+        GTK_STYLE_PROVIDER(theme_css_override_.get()));
+  }
+  theme_css_override_ = std::move(provider);
+  if (theme_css_override_) {
+    gtk_style_context_add_provider_for_screen(
+        gdk_screen_get_default(), GTK_STYLE_PROVIDER(theme_css_override_.get()),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  }
+}
+
+void NativeThemeGtk3::OnThemeChanged(GtkSettings* settings,
+                                     GtkParamSpec* param) {
+  SetThemeCssOverride(ScopedCssProvider());
   for (auto& color : color_cache_)
     color = base::nullopt;
+
+  // Hack to workaround a bug on GNOME standard themes which would
+  // cause black patches to be rendered on GtkFileChooser dialogs.
+  std::string theme_name =
+      GetGtkSettingsStringProperty(settings, "gtk-theme-name");
+  if (!GtkVersionCheck(3, 14)) {
+    if (theme_name == "Adwaita") {
+      SetThemeCssOverride(GetCssProvider(
+          "GtkFileChooser GtkPaned { background-color: @theme_bg_color; }"));
+    } else if (theme_name == "HighContrast") {
+      SetThemeCssOverride(GetCssProvider(
+          "GtkFileChooser GtkPaned { background-color: @theme_base_color; }"));
+    }
+  }
 }
 
 SkColor NativeThemeGtk3::GetSystemColor(ColorId color_id) const {
@@ -574,7 +624,8 @@ void NativeThemeGtk3::PaintFrameTopArea(
     State state,
     const gfx::Rect& rect,
     const FrameTopAreaExtraParams& frame_top_area) const {
-  auto context = GetStyleContextFromCss(frame_top_area.use_custom_frame
+  auto context = GetStyleContextFromCss(frame_top_area.use_custom_frame &&
+                                                GtkVersionCheck(3, 10)
                                             ? "#headerbar.header-bar.titlebar"
                                             : "GtkMenuBar#menubar");
   ApplyCssToContext(context, "* { border-radius: 0px; border-style: none; }");

@@ -15,6 +15,7 @@ cr.define('cr.ui', function() {
    * @implements {EventListener}
    */
   function ContextMenuHandler() {
+    /** @private {!EventTracker} */
     this.showingEvents_ = new EventTracker();
   }
 
@@ -48,7 +49,7 @@ cr.define('cr.ui', function() {
 
       // When the menu is shown we steal a lot of events.
       var doc = menu.ownerDocument;
-      var win = doc.defaultView;
+      var win = /** @type {!Window} */ (doc.defaultView);
       this.showingEvents_.add(doc, 'keydown', this, true);
       this.showingEvents_.add(doc, 'mousedown', this, true);
       this.showingEvents_.add(doc, 'touchstart', this, true);
@@ -153,7 +154,9 @@ cr.define('cr.ui', function() {
         case 'mousedown':
           if (!this.menu.contains(e.target)) {
             this.hideMenu();
-            if (e.button == 0 /* Left click */) {
+            if (e.button == 0 /* Left button */ && (cr.isLinux || cr.isMac)) {
+              // Emulate Mac and Linux, which swallow native 'mousedown' events
+              // that close menus.
               e.preventDefault();
               e.stopPropagation();
             }

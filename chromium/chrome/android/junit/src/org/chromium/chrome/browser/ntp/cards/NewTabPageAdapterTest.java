@@ -53,6 +53,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.DisableHistogramsRule;
+import org.chromium.chrome.browser.Features;
 import org.chromium.chrome.browser.ntp.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.cards.SignInPromo.SigninObserver;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
@@ -63,6 +64,7 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
+import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetricsReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
@@ -80,9 +82,13 @@ import java.util.List;
  */
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@Features(@Features.Register(value = ChromeFeatureList.NTP_CONDENSED_LAYOUT, enabled = false))
 public class NewTabPageAdapterTest {
     @Rule
     public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
+
+    @Rule
+    public Features.Processor mFeatureProcessor = new Features.Processor();
 
     @CategoryInt
     private static final int TEST_CATEGORY = 42;
@@ -195,8 +201,6 @@ public class NewTabPageAdapterTest {
         // Set empty variation params for the test.
         CardsVariationParameters.setTestVariationParams(new HashMap<String, String>());
 
-        ChromeFeatureList.setTestEnabledFeatures(Collections.<String>emptySet());
-
         // Initialise the sign in state. We will be signed in by default in the tests.
         assertFalse(ChromePreferenceManager.getInstance().getNewTabPageSigninPromoDismissed());
         SigninManager.setInstanceForTesting(mMockSigninManager);
@@ -217,7 +221,6 @@ public class NewTabPageAdapterTest {
     @After
     public void tearDown() {
         CardsVariationParameters.setTestVariationParams(null);
-        ChromeFeatureList.setTestEnabledFeatures(null);
         SigninManager.setInstanceForTesting(null);
         ChromePreferenceManager.getInstance().setNewTabPageSigninPromoDismissed(false);
     }
@@ -275,15 +278,18 @@ public class NewTabPageAdapterTest {
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
         assertItemsFor(section(4));
 
-        // When the category is disabled, the suggestions are cleared and we should go back to
-        // the situation with the status card.
-        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.SIGNED_OUT);
-        assertItemsFor(sectionWithStatusCard());
+        // When the category is disabled, the section should go away completely.
+        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+        assertItemsFor();
 
-        // The adapter should now be waiting for new suggestions.
+        // Now we're in the "all dismissed" state. No suggestions should be accepted.
         suggestions = createDummySuggestions(6, TEST_CATEGORY);
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
         mSource.setSuggestionsForCategory(TEST_CATEGORY, suggestions);
+        assertItemsFor();
+
+        // After a full refresh, the adapter should accept suggestions again.
+        mSource.fireFullRefreshRequired();
         assertItemsFor(section(6));
     }
 
@@ -304,20 +310,26 @@ public class NewTabPageAdapterTest {
         suggestions.add(new SnippetArticle(TEST_CATEGORY, "https://site.com/url1", "title1", "pub1",
                 "txt1", "https://site.com/url1", 0, 0, 0));
 
-        // When suggestion are disabled, we should not be able to load them.
-        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.SIGNED_OUT);
+        // When the provider is removed, we should not be able to load suggestions. The UI should
+        // stay the same though.
+        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.NOT_PROVIDED);
         mSource.setSuggestionsForCategory(TEST_CATEGORY, suggestions);
-        assertItemsFor(sectionWithStatusCard());
+        assertItemsFor(section(3));
 
-        // INITIALIZING lets us load suggestion still.
+        // INITIALIZING lets us load suggestions still.
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.INITIALIZING);
         mSource.setSuggestionsForCategory(TEST_CATEGORY, suggestions);
         assertItemsFor(sectionWithStatusCard().withProgress());
 
-        // The adapter should now be waiting for new suggestion and the fourth one should appear.
+        // The adapter should now be waiting for new suggestions and the fourth one should appear.
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
         mSource.setSuggestionsForCategory(TEST_CATEGORY, suggestions);
         assertItemsFor(section(4));
+
+        // When the category gets disabled, the section should go away and not load any suggestions.
+        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+        mSource.setSuggestionsForCategory(TEST_CATEGORY, suggestions);
+        assertItemsFor();
     }
 
     /**
@@ -339,8 +351,10 @@ public class NewTabPageAdapterTest {
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE_LOADING);
         assertTrue(progress.isVisible());
 
-        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.SIGNED_OUT);
-        assertFalse(progress.isVisible());
+        // After the section gets disabled, it should gone completely, so checking the progress
+        // indicator doesn't make sense anymore.
+        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+        assertEquals(mAdapter.getSectionListForTesting().getSectionForTesting(TEST_CATEGORY), null);
     }
 
     /**
@@ -487,7 +501,10 @@ public class NewTabPageAdapterTest {
         FakeSuggestionsSource suggestionsSource = new FakeSuggestionsSource();
         suggestionsSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.INITIALIZING);
         suggestionsSource.setInfoForCategory(TEST_CATEGORY,
-                new CategoryInfoBuilder(TEST_CATEGORY).withViewAllAction().showIfEmpty().build());
+                new CategoryInfoBuilder(TEST_CATEGORY)
+                        .withAction(ContentSuggestionsAdditionalAction.VIEW_ALL)
+                        .showIfEmpty()
+                        .build());
 
         // 1.1 - Initial state.
         when(mUiDelegate.getSuggestionsSource()).thenReturn(suggestionsSource);
@@ -565,9 +582,10 @@ public class NewTabPageAdapterTest {
 
         int dynamicCategory1 = 1010;
         List<SnippetArticle> dynamics1 = createDummySuggestions(5, dynamicCategory1);
-        mSource.setInfoForCategory(dynamicCategory1, new CategoryInfoBuilder(dynamicCategory1)
-                                                             .withViewAllAction()
-                                                             .build());
+        mSource.setInfoForCategory(dynamicCategory1,
+                new CategoryInfoBuilder(dynamicCategory1)
+                        .withAction(ContentSuggestionsAdditionalAction.VIEW_ALL)
+                        .build());
         mSource.setStatusForCategory(dynamicCategory1, CategoryStatus.AVAILABLE);
         mSource.setSuggestionsForCategory(dynamicCategory1, dynamics1);
         reloadNtp();
@@ -731,11 +749,12 @@ public class NewTabPageAdapterTest {
         suggestionsSource.setSuggestionsForCategory(
                 TEST_CATEGORY, createDummySuggestions(0, TEST_CATEGORY));
         mAdapter.getSectionListForTesting().onCategoryStatusChanged(
-                TEST_CATEGORY, CategoryStatus.SIGNED_OUT);
-        verify(dataObserver).onItemRangeRemoved(2, newSuggestionCount);
-        verify(dataObserver).onItemRangeChanged(4, 1, null); // Spacer refresh
-        verify(dataObserver).onItemRangeInserted(2, 1); // Status card added
-        verify(dataObserver).onItemRangeChanged(5, 1, null); // Spacer refresh
+                TEST_CATEGORY, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+        // All suggestions as well as the header and the action should be gone.
+        verify(dataObserver).onItemRangeRemoved(1, newSuggestionCount + 2);
+        // The spacer gets refreshed twice: Once when the section is removed, and then again when
+        // the "all dismissed" item gets added.
+        verify(dataObserver, times(2)).onItemRangeChanged(2, 1, null);
     }
 
     @Test
@@ -926,7 +945,6 @@ public class NewTabPageAdapterTest {
     public static class MyShadowResources extends ShadowResources {
         public static final Resources sResources = mock(Resources.class);
 
-        @Override
         @Implementation
         public CharSequence getText(int id) {
             return sResources.getText(id);

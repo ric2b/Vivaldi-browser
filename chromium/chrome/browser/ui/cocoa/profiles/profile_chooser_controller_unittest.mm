@@ -107,52 +107,6 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
     [controller_ showWindow:nil];
   }
 
-  void AssertRightClickTutorialShown() {
-    // The right click menu doesn't exist in the MD user menu, so it doesn't
-    // show the tutorial.
-    if (switches::IsMaterialDesignUserMenu())
-      return;
-
-    NSArray* subviews = [[[controller() window] contentView] subviews];
-    ASSERT_EQ(2U, [subviews count]);
-    subviews = [[subviews objectAtIndex:0] subviews];
-
-    // There should be 4 views: the tutorial, the active profile card, a
-    // separator and the options view.
-    ASSERT_EQ(4U, [subviews count]);
-
-    // The tutorial is the topmost view, so the last in the array. It should
-    // contain 3 views: the title, the content text and the OK button.
-    NSArray* tutorialSubviews = [[subviews objectAtIndex:3] subviews];
-    ASSERT_EQ(3U, [tutorialSubviews count]);
-
-    NSTextField* tutorialTitle = base::mac::ObjCCastStrict<NSTextField>(
-        [tutorialSubviews objectAtIndex:2]);
-    EXPECT_GT([[tutorialTitle stringValue] length], 0U);
-
-    NSTextField* tutorialContent = base::mac::ObjCCastStrict<NSTextField>(
-        [tutorialSubviews objectAtIndex:1]);
-    EXPECT_GT([[tutorialContent stringValue] length], 0U);
-
-    NSButton* tutorialOKButton = base::mac::ObjCCastStrict<NSButton>(
-        [tutorialSubviews objectAtIndex:0]);
-    EXPECT_GT([[tutorialOKButton title] length], 0U);
-  }
-
-  void StartFastUserSwitcher() {
-    NSRect frame = [test_window() frame];
-    NSPoint point = NSMakePoint(NSMidX(frame), NSMidY(frame));
-    controller_.reset([[ProfileChooserController alloc]
-        initWithBrowser:browser()
-             anchoredAt:point
-               viewMode:profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER
-           tutorialMode:profiles::TUTORIAL_MODE_NONE
-            serviceType:signin::GAIA_SERVICE_TYPE_NONE
-            accessPoint:signin_metrics::AccessPoint::
-                            ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN]);
-    [controller_ showWindow:nil];
-  }
-
   void SignInFirstProfile() {
     std::vector<ProfileAttributesEntry*> entries = testing_profile_manager()->
         profile_attributes_storage()->GetAllProfilesAttributes();
@@ -190,56 +144,23 @@ TEST_F(ProfileChooserControllerTest, InitialLayoutWithNewMenu) {
   // There should be one button in the option buttons view.
   NSArray* buttonSubviews = [[subviews objectAtIndex:0] subviews];
   NSButton* userSwitcherButton;
-  if (switches::IsMaterialDesignUserMenu()) {
-    // There are 2 buttons in the initial layout: "Manage People" and "Guest".
-    ASSERT_EQ(2U, [buttonSubviews count]);
-    // There should be a user switcher button.
-    userSwitcherButton =
+  // There are 2 buttons in the initial layout: "Manage People" and "Guest".
+  ASSERT_EQ(2U, [buttonSubviews count]);
+  // There should be a user switcher button.
+  userSwitcherButton =
       base::mac::ObjCCast<NSButton>([buttonSubviews objectAtIndex:0]);
-  } else {
-    // For non-material-design user menu, there should be two buttons and a
-    // separator in the option buttons view.
-    ASSERT_EQ(3U, [buttonSubviews count]);
-
-    // There should be an incognito button.
-    NSButton* incognitoButton =
-        base::mac::ObjCCast<NSButton>([buttonSubviews objectAtIndex:0]);
-    EXPECT_EQ(@selector(goIncognito:), [incognitoButton action]);
-    EXPECT_EQ(controller(), [incognitoButton target]);
-
-    // There should be a separator.
-    EXPECT_TRUE([[subviews objectAtIndex:1] isKindOfClass:[NSBox class]]);
-
-    // There should be a user switcher button.
-    userSwitcherButton =
-      base::mac::ObjCCast<NSButton>([buttonSubviews objectAtIndex:2]);
-  }
 
   EXPECT_EQ(@selector(showUserManager:), [userSwitcherButton action]);
   EXPECT_EQ(controller(), [userSwitcherButton target]);
 
-  NSUInteger lastSubviewIndex = switches::IsMaterialDesignUserMenu() ? 4 : 2;
+  NSUInteger lastSubviewIndex = 4;
   NSArray* activeCardSubviews =
       [[subviews objectAtIndex:lastSubviewIndex] subviews];
 
   // There should be the profile avatar, name and links container in the active
   // card view. The links displayed in the container are checked separately.
   // In the MD user menu, the profile avatar and name are in the same subview.
-  if (switches::IsMaterialDesignUserMenu()) {
-    ASSERT_EQ(2U, [activeCardSubviews count]);
-  } else {
-    ASSERT_EQ(3U, [activeCardSubviews count]);
-
-    // Profile icon.
-    NSView* activeProfileImage = [activeCardSubviews objectAtIndex:2];
-    EXPECT_TRUE([activeProfileImage isKindOfClass:[NSButton class]]);
-
-    // Profile name.
-    NSView* activeProfileName = [activeCardSubviews objectAtIndex:1];
-    EXPECT_TRUE([activeProfileName isKindOfClass:[NSButton class]]);
-    EXPECT_EQ(menu()->GetItemAt(0).name, base::SysNSStringToUTF16(
-        [base::mac::ObjCCast<NSButton>(activeProfileName) title]));
-  }
+  ASSERT_EQ(2U, [activeCardSubviews count]);
   // Profile links. This is a local profile, so there should be a signin button
   // and a signin promo.
   NSArray* linksSubviews = [[activeCardSubviews objectAtIndex:0] subviews];
@@ -280,7 +201,6 @@ TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterWelcome) {
       profiles::TUTORIAL_MODE_WELCOME_UPGRADE);
 
   [controller() dismissTutorial:nil];
-  AssertRightClickTutorialShown();
 }
 
 TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterReopen) {
@@ -290,86 +210,11 @@ TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterReopen) {
 
   [controller() close];
   StartProfileChooserController();
-  AssertRightClickTutorialShown();
 
   // The tutorial must be manually dismissed so it should still be shown after
   // closing and reopening the menu,
   [controller() close];
   StartProfileChooserController();
-  AssertRightClickTutorialShown();
-}
-
-TEST_F(ProfileChooserControllerTest, RightClickTutorialNotShownAfterDismiss) {
-  // The welcome upgrade tutorial takes precedence so show it then close the
-  // menu. Reopening the menu should show the tutorial.
-  StartProfileChooserController();
-
-  [controller() close];
-  StartProfileChooserControllerWithTutorialMode(
-      profiles::TUTORIAL_MODE_RIGHT_CLICK_SWITCHING);
-  AssertRightClickTutorialShown();
-
-  // Dismissing the tutorial should prevent it from being shown forever.
-  [controller() dismissTutorial:nil];
-  NSArray* subviews = [[[controller() window] contentView] subviews];
-  ASSERT_EQ(2U, [subviews count]);
-  subviews = [[subviews objectAtIndex:0] subviews];
-
-  // There should be 3 views since there's no tutorial. There are 2 extra
-  // buttons in the MD user menu.
-  NSUInteger viewsCount = switches::IsMaterialDesignUserMenu() ? 5 : 3;
-  ASSERT_EQ(viewsCount, [subviews count]);
-
-  // Closing and reopening the menu shouldn't show the tutorial.
-  [controller() close];
-  StartProfileChooserControllerWithTutorialMode(
-      profiles::TUTORIAL_MODE_RIGHT_CLICK_SWITCHING);
-  subviews = [[[controller() window] contentView] subviews];
-  ASSERT_EQ(2U, [subviews count]);
-  subviews = [[subviews objectAtIndex:0] subviews];
-
-  ASSERT_EQ(viewsCount, [subviews count]);
-}
-
-TEST_F(ProfileChooserControllerTest, OtherProfilesSortedAlphabetically) {
-  // This test is related to the fast user switcher, which doesn't exist under
-  // the MD user menu.
-  if (switches::IsMaterialDesignUserMenu())
-    return;
-  // Add two extra profiles, to make sure sorting is alphabetical and not
-  // by order of creation.
-  testing_profile_manager()->CreateTestingProfile(
-      "test3", std::unique_ptr<sync_preferences::PrefServiceSyncable>(),
-      base::ASCIIToUTF16("New Profile"), 1, std::string(),
-      TestingProfile::TestingFactories());
-  testing_profile_manager()->CreateTestingProfile(
-      "test4", std::unique_ptr<sync_preferences::PrefServiceSyncable>(),
-      base::ASCIIToUTF16("Another Test"), 1, std::string(),
-      TestingProfile::TestingFactories());
-  StartFastUserSwitcher();
-
-  NSArray* subviews = [[[controller() window] contentView] subviews];
-  ASSERT_EQ(2U, [subviews count]);
-  subviews = [[subviews objectAtIndex:0] subviews];
-  NSString* sortedNames[] = { @"Another Test",
-                              @"New Profile",
-                              @"Test 1",
-                              @"Test 2" };
-  // There are four "other" profiles, each with a button and a separator.
-  ASSERT_EQ([subviews count], 8U);
-  // There should be four "other profiles" items, sorted alphabetically. The
-  // "other profiles" start at index 2 (after the option buttons view and its
-  // separator), and each have a separator. We need to iterate through the
-  // profiles in the order displayed in the bubble, which is opposite from the
-  // drawn order.
-  int sortedNameIndex = 0;
-  for (int i = 7; i > 0; i -= 2) {
-    // The item at index i is the separator.
-    NSButton* button = base::mac::ObjCCast<NSButton>(
-        [subviews objectAtIndex:i-1]);
-    EXPECT_TRUE(
-        [[button title] isEqualToString:sortedNames[sortedNameIndex++]]);
-  }
 }
 
 TEST_F(ProfileChooserControllerTest,
@@ -380,7 +225,7 @@ TEST_F(ProfileChooserControllerTest,
   subviews = [[subviews objectAtIndex:0] subviews];
   // The active card is the last subview and the MD User Menu has 2 extra
   // buttons.
-  NSUInteger lastSubviewIndex = switches::IsMaterialDesignUserMenu() ? 4 : 2;
+  NSUInteger lastSubviewIndex = 4;
   NSArray* activeCardSubviews =
       [[subviews objectAtIndex:lastSubviewIndex] subviews];
   NSArray* activeCardLinks = [[activeCardSubviews objectAtIndex:0] subviews];
@@ -412,7 +257,7 @@ TEST_F(ProfileChooserControllerTest,
   subviews = [[subviews objectAtIndex:0] subviews];
   // The active card is the last subview and the MD User Menu has 2 extra
   // buttons.
-  NSUInteger lastSubviewIndex = switches::IsMaterialDesignUserMenu() ? 4 : 2;
+  NSUInteger lastSubviewIndex = 4;
   NSArray* activeCardSubviews =
       [[subviews objectAtIndex:lastSubviewIndex] subviews];
   NSArray* activeCardLinks = [[activeCardSubviews objectAtIndex:0] subviews];
@@ -435,23 +280,13 @@ TEST_F(ProfileChooserControllerTest,
   subviews = [[subviews objectAtIndex:0] subviews];
   // The active card is the last subview and the MD User Menu has 2 extra
   // buttons.
-  NSUInteger lastSubviewIndex = switches::IsMaterialDesignUserMenu() ? 4 : 2;
+  NSUInteger lastSubviewIndex = 4;
   NSArray* activeCardSubviews =
       [[subviews objectAtIndex:lastSubviewIndex] subviews];
   NSArray* activeCardLinks = [[activeCardSubviews objectAtIndex:0] subviews];
 
-  if (switches::IsMaterialDesignUserMenu()) {
-    // There is the profile avatar and the profile name.
-    ASSERT_EQ(2U, [activeCardLinks count]);
-  } else {
-    // There is one disabled button with the user's email.
-    ASSERT_EQ(1U, [activeCardLinks count]);
-    NSButton* emailButton =
-        base::mac::ObjCCast<NSButton>([activeCardLinks objectAtIndex:0]);
-    EXPECT_EQ(kEmail, base::SysNSStringToUTF8([emailButton title]));
-    EXPECT_EQ(nil, [emailButton action]);
-    EXPECT_FALSE([emailButton isEnabled]);
-  }
+  // There is the profile avatar and the profile name.
+  ASSERT_EQ(2U, [activeCardLinks count]);
 }
 
 TEST_F(ProfileChooserControllerTest, AccountManagementLayout) {
@@ -494,40 +329,21 @@ TEST_F(ProfileChooserControllerTest, AccountManagementLayout) {
 
   // There should be one active card, one accounts container, two separators
   // and one option buttons view. In the MD User Menu, there are 2 more buttons.
-  NSUInteger viewsCount = switches::IsMaterialDesignUserMenu() ? 7 : 5;
+  NSUInteger viewsCount = 7;
   ASSERT_EQ(viewsCount, [subviews count]);
 
   NSArray* buttonSubviews = [[subviews objectAtIndex:0] subviews];
   NSButton* userSwitcherButton;
-  if (switches::IsMaterialDesignUserMenu()) {
-    // There should be two buttons in the option buttons view.
-    ASSERT_EQ(2U, [buttonSubviews count]);
-    // There should be a user switcher button.
-    userSwitcherButton =
-        base::mac::ObjCCast<NSButton>([buttonSubviews objectAtIndex:0]);
-  } else {
-    // For non-material-design user menu, there should be two buttons and one
-    // separator in the option buttons view.
-    ASSERT_EQ(3U, [buttonSubviews count]);
-
-    // There should be an incognito button.
-    NSButton* incognitoButton =
-        base::mac::ObjCCast<NSButton>([buttonSubviews objectAtIndex:0]);
-    EXPECT_EQ(@selector(goIncognito:), [incognitoButton action]);
-    EXPECT_EQ(controller(), [incognitoButton target]);
-
-    // There should be a separator.
-    EXPECT_TRUE([[buttonSubviews objectAtIndex:1] isKindOfClass:[NSBox class]]);
-
-    // There should be a user switcher button.
-    userSwitcherButton =
-        base::mac::ObjCCast<NSButton>([buttonSubviews objectAtIndex:2]);
-  }
+  // There should be two buttons in the option buttons view.
+  ASSERT_EQ(2U, [buttonSubviews count]);
+  // There should be a user switcher button.
+  userSwitcherButton =
+      base::mac::ObjCCast<NSButton>([buttonSubviews objectAtIndex:0]);
 
   EXPECT_EQ(@selector(showUserManager:), [userSwitcherButton action]);
   EXPECT_EQ(controller(), [userSwitcherButton target]);
 
-  NSUInteger accountsViewIndex = switches::IsMaterialDesignUserMenu() ? 4 : 2;
+  NSUInteger accountsViewIndex = 4;
   // In the accounts view, there should be the account list container
   // accounts and one "add accounts" button.
   NSArray* accountsSubviews =
@@ -566,37 +382,11 @@ TEST_F(ProfileChooserControllerTest, AccountManagementLayout) {
   // There should be the profile avatar, name and a "hide accounts" link
   // container in the active card view.
   NSArray* activeCardSubviews = [[subviews objectAtIndex:4] subviews];
-  if (switches::IsMaterialDesignUserMenu()) {
-    // In the MD user menu, the profile name and avatar are in the same subview.
-    ASSERT_EQ(2U, [activeCardSubviews count]);
-  } else {
-    ASSERT_EQ(3U, [activeCardSubviews count]);
-
-    // Profile icon.
-    NSView* activeProfileImage = [activeCardSubviews objectAtIndex:2];
-    EXPECT_TRUE([activeProfileImage isKindOfClass:[NSButton class]]);
-
-    // Profile name.
-    NSView* activeProfileName = [activeCardSubviews objectAtIndex:1];
-    EXPECT_TRUE([activeProfileName isKindOfClass:[NSButton class]]);
-    EXPECT_EQ(menu()->GetItemAt(0).name, base::SysNSStringToUTF16(
-        [base::mac::ObjCCast<NSButton>(activeProfileName) title]));
-
-    // Profile links. This is a local profile, so there should be a signin
-    // button.
-    NSArray* linksSubviews = [[activeCardSubviews objectAtIndex:0] subviews];
-    ASSERT_EQ(1U, [linksSubviews count]);
-    NSButton* link = base::mac::ObjCCast<NSButton>(
-        [linksSubviews objectAtIndex:0]);
-    EXPECT_EQ(@selector(hideAccountManagement:), [link action]);
-    EXPECT_EQ(controller(), [link target]);
-  }
+  // In the MD user menu, the profile name and avatar are in the same subview.
+  ASSERT_EQ(2U, [activeCardSubviews count]);
 }
 
 TEST_F(ProfileChooserControllerTest, SignedInProfileLockDisabled) {
-  switches::EnableNewProfileManagementForTesting(
-      base::CommandLine::ForCurrentProcess());
-
   SignInFirstProfile();
 
   // The preference, not the email, determines whether the profile can lock.
@@ -609,14 +399,8 @@ TEST_F(ProfileChooserControllerTest, SignedInProfileLockDisabled) {
   subviews = [[subviews objectAtIndex:0] subviews];
 
   NSArray* buttonSubviews = [[subviews objectAtIndex:0] subviews];
-  if (switches::IsMaterialDesignUserMenu()) {
-    // There will be two buttons in the option buttons view.
-    ASSERT_EQ(2U, [buttonSubviews count]);
-  } else {
-    // For non-material-design user menu, there will be two buttons and one
-    // separators in the option buttons view.
-    ASSERT_EQ(3U, [buttonSubviews count]);
-  }
+  // There will be two buttons in the option buttons view.
+  ASSERT_EQ(2U, [buttonSubviews count]);
 
   // The last button should not be the lock button.
   NSButton* lastButton =
@@ -626,9 +410,6 @@ TEST_F(ProfileChooserControllerTest, SignedInProfileLockDisabled) {
 }
 
 TEST_F(ProfileChooserControllerTest, SignedInProfileLockEnabled) {
-  switches::EnableNewProfileManagementForTesting(
-      base::CommandLine::ForCurrentProcess());
-
   SignInFirstProfile();
 
   // The preference, not the email, determines whether the profile can lock.
@@ -645,14 +426,8 @@ TEST_F(ProfileChooserControllerTest, SignedInProfileLockEnabled) {
   subviews = [[subviews objectAtIndex:0] subviews];
 
   NSArray* buttonSubviews = [[subviews objectAtIndex:0] subviews];
-  if (switches::IsMaterialDesignUserMenu()) {
-    // There will be two buttons and one separator in the option buttons view.
-    ASSERT_EQ(3U, [buttonSubviews count]);
-  } else {
-    // FOr non-material-design user menu, There will be three buttons and two
-    // separators in the option buttons view.
-    ASSERT_EQ(5U, [buttonSubviews count]);
-  }
+  // There will be two buttons and one separator in the option buttons view.
+  ASSERT_EQ(3U, [buttonSubviews count]);
 
   // There should be a lock button.
   NSButton* lockButton =

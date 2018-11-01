@@ -131,9 +131,8 @@ Animation.AnimationTimeline = class extends UI.VBox {
     this._updatePlaybackControls();
 
     this._previewContainer = this.contentElement.createChild('div', 'animation-timeline-buffer');
-    this._popoverHelper = new UI.PopoverHelper(this._previewContainer, true);
-    this._popoverHelper.initializeCallbacks(
-        this._getPopoverAnchor.bind(this), this._showPopover.bind(this), this._onHidePopover.bind(this));
+    this._popoverHelper = new UI.PopoverHelper(this._previewContainer, this._getPopoverRequest.bind(this));
+    this._popoverHelper.setDisableOnClick(true);
     this._popoverHelper.setTimeout(0);
     var emptyBufferHint = this.contentElement.createChild('div', 'animation-timeline-buffer-hint');
     emptyBufferHint.textContent = Common.UIString('Listening for animations...');
@@ -162,46 +161,44 @@ Animation.AnimationTimeline = class extends UI.VBox {
   }
 
   /**
-   * @param {!Element} element
    * @param {!Event} event
-   * @return {!Element|!AnchorBox|undefined}
+   * @return {?UI.PopoverRequest}
    */
-  _getPopoverAnchor(element, event) {
-    if (element.isDescendant(this._previewContainer))
-      return element;
-  }
+  _getPopoverRequest(event) {
+    var element = event.target;
+    if (!element.isDescendant(this._previewContainer))
+      return null;
 
-  /**
-   * @param {!Element} anchor
-   * @param {!UI.Popover} popover
-   */
-  _showPopover(anchor, popover) {
-    var animGroup;
-    for (var group of this._previewMap.keysArray()) {
-      if (this._previewMap.get(group).element === anchor.parentElement)
-        animGroup = group;
-    }
-    console.assert(animGroup);
-    var screenshots = animGroup.screenshots();
-    if (!screenshots.length)
-      return;
+    return {
+      box: event.target.boxInWindow(),
+      show: popover => {
+        var animGroup;
+        for (var group of this._previewMap.keysArray()) {
+          if (this._previewMap.get(group).element === element.parentElement)
+            animGroup = group;
+        }
+        console.assert(animGroup);
+        var screenshots = animGroup.screenshots();
+        if (!screenshots.length)
+          return Promise.resolve(false);
 
-    if (!screenshots[0].complete)
-      screenshots[0].onload = onFirstScreenshotLoaded.bind(null, screenshots);
-    else
-      onFirstScreenshotLoaded(screenshots);
+        var fulfill;
+        var promise = new Promise(x => fulfill = x);
+        if (!screenshots[0].complete)
+          screenshots[0].onload = onFirstScreenshotLoaded.bind(null, screenshots);
+        else
+          onFirstScreenshotLoaded(screenshots);
+        return promise;
 
-    /**
-     * @param  {!Array.<!Image>} screenshots
-     */
-    function onFirstScreenshotLoaded(screenshots) {
-      var content = new Animation.AnimationScreenshotPopover(screenshots);
-      popover.setNoPadding(true);
-      popover.showView(content, anchor);
-    }
-  }
-
-  _onHidePopover() {
+        /**
+         * @param  {!Array.<!Image>} screenshots
+         */
+        function onFirstScreenshotLoaded(screenshots) {
+          new Animation.AnimationScreenshotPopover(screenshots).show(popover.contentElement);
+          fulfill(true);
+        }
+      }
+    };
   }
 
   _togglePauseAll() {

@@ -29,11 +29,12 @@ class NotesSubMenuObserver : public RenderViewContextMenuObserver {
   // The interface for adding a submenu to the parent.
   RenderViewContextMenuProxy* proxy_;
 
-  void AddMenuItems(vivaldi::Notes_Node* node);
+  void AddMenuItems(vivaldi::Notes_Node* node, ui::SimpleMenuModel* menu_model);
 
   // The submenu of the 'Notes'. This class adds items to this
   // submenu and adds it to the parent menu.
   ui::SimpleMenuModel submenu_model_;
+  ui::SimpleMenuModel::Delegate* delegate_;
 
   int min_notes_id_ = 0;
   int max_notes_id_ = 0;

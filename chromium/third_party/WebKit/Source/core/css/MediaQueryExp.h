@@ -34,8 +34,8 @@
 #include "core/MediaFeatureNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSValue.h"
-#include "wtf/Allocator.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -49,31 +49,31 @@ struct MediaQueryExpValue {
   unsigned numerator;
   unsigned denominator;
 
-  bool isID;
-  bool isValue;
-  bool isRatio;
+  bool is_id;
+  bool is_value;
+  bool is_ratio;
 
   MediaQueryExpValue()
       : id(CSSValueInvalid),
         value(0),
-        unit(CSSPrimitiveValue::UnitType::Unknown),
+        unit(CSSPrimitiveValue::UnitType::kUnknown),
         numerator(0),
         denominator(1),
-        isID(false),
-        isValue(false),
-        isRatio(false) {}
+        is_id(false),
+        is_value(false),
+        is_ratio(false) {}
 
-  bool isValid() const { return (isID || isValue || isRatio); }
-  String cssText() const;
-  bool equals(const MediaQueryExpValue& expValue) const {
-    if (isID)
-      return (id == expValue.id);
-    if (isValue)
-      return (value == expValue.value);
-    if (isRatio)
-      return (numerator == expValue.numerator &&
-              denominator == expValue.denominator);
-    return !expValue.isValid();
+  bool IsValid() const { return (is_id || is_value || is_ratio); }
+  String CssText() const;
+  bool Equals(const MediaQueryExpValue& exp_value) const {
+    if (is_id)
+      return (id == exp_value.id);
+    if (is_value)
+      return (value == exp_value.value);
+    if (is_ratio)
+      return (numerator == exp_value.numerator &&
+              denominator == exp_value.denominator);
+    return !exp_value.IsValid();
   }
 };
 
@@ -82,35 +82,34 @@ class CORE_EXPORT MediaQueryExp {
 
  public:
   // Returns an invalid MediaQueryExp if the arguments are invalid.
-  static MediaQueryExp create(const String& mediaFeature,
+  static MediaQueryExp Create(const String& media_feature,
                               const Vector<CSSParserToken, 4>&);
-  static MediaQueryExp invalid() {
+  static MediaQueryExp Invalid() {
     return MediaQueryExp(String(), MediaQueryExpValue());
   }
 
   MediaQueryExp(const MediaQueryExp& other);
   ~MediaQueryExp();
 
-  const String& mediaFeature() const { return m_mediaFeature; }
+  const String& MediaFeature() const { return media_feature_; }
 
-  MediaQueryExpValue expValue() const { return m_expValue; }
+  MediaQueryExpValue ExpValue() const { return exp_value_; }
 
-  bool isValid() const { return !m_mediaFeature.isNull(); }
+  bool IsValid() const { return !media_feature_.IsNull(); }
 
   bool operator==(const MediaQueryExp& other) const;
 
-  bool isViewportDependent() const;
+  bool IsViewportDependent() const;
 
-  bool isDeviceDependent() const;
+  bool IsDeviceDependent() const;
 
-  String serialize() const;
-
+  String Serialize() const;
 
  private:
   MediaQueryExp(const String&, const MediaQueryExpValue&);
 
-  String m_mediaFeature;
-  MediaQueryExpValue m_expValue;
+  String media_feature_;
+  MediaQueryExpValue exp_value_;
 };
 
 }  // namespace blink

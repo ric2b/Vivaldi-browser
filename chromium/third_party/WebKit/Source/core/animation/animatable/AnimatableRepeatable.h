@@ -33,55 +33,42 @@
 
 #include "core/CoreExport.h"
 #include "core/animation/animatable/AnimatableValue.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
 // This class represents collections of values that animate in a repeated
 // fashion as described by the CSS Transitions spec:
 // http://www.w3.org/TR/css3-transitions/#animtype-repeatable-list
-class CORE_EXPORT AnimatableRepeatable : public AnimatableValue {
+class AnimatableRepeatable : public AnimatableValue {
  public:
   ~AnimatableRepeatable() override {}
 
   // This will consume the vector passed into it.
-  static PassRefPtr<AnimatableRepeatable> create(
+  static PassRefPtr<AnimatableRepeatable> Create(
       Vector<RefPtr<AnimatableValue>>& values) {
-    return adoptRef(new AnimatableRepeatable(values));
+    return AdoptRef(new AnimatableRepeatable(values));
   }
-
-  const Vector<RefPtr<AnimatableValue>>& values() const { return m_values; }
 
  protected:
   AnimatableRepeatable() {}
   AnimatableRepeatable(Vector<RefPtr<AnimatableValue>>& values) {
-    DCHECK(!values.isEmpty());
-    m_values.swap(values);
+    DCHECK(!values.IsEmpty());
+    values_.Swap(values);
   }
 
-  static bool interpolateLists(
-      const Vector<RefPtr<AnimatableValue>>& fromValues,
-      const Vector<RefPtr<AnimatableValue>>& toValues,
-      double fraction,
-      Vector<RefPtr<AnimatableValue>>& interpolatedValues);
-
-  bool usesDefaultInterpolationWith(const AnimatableValue*) const override;
-
-  Vector<RefPtr<AnimatableValue>> m_values;
+  Vector<RefPtr<AnimatableValue>> values_;
 
  private:
-  PassRefPtr<AnimatableValue> interpolateTo(const AnimatableValue*,
-                                            double fraction) const override;
-
-  AnimatableType type() const override { return TypeRepeatable; }
-  bool equalTo(const AnimatableValue*) const final;
+  AnimatableType GetType() const override { return kTypeRepeatable; }
+  bool EqualTo(const AnimatableValue*) const final;
 };
 
 DEFINE_TYPE_CASTS(AnimatableRepeatable,
                   AnimatableValue,
                   value,
-                  (value->isRepeatable() || value->isStrokeDasharrayList()),
-                  (value.isRepeatable() || value.isStrokeDasharrayList()));
+                  (value->IsRepeatable() || value->IsStrokeDasharrayList()),
+                  (value.IsRepeatable() || value.IsStrokeDasharrayList()));
 
 }  // namespace blink
 

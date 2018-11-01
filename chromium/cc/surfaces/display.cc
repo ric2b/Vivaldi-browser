@@ -10,7 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/debug/benchmark_instrumentation.h"
+#include "cc/benchmarks/benchmark_instrumentation.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/direct_renderer.h"
 #include "cc/output/gl_renderer.h"
@@ -24,9 +24,10 @@
 #include "cc/surfaces/surface_aggregator.h"
 #include "cc/surfaces/surface_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/vulkan/features.h"
 #include "ui/gfx/buffer_types.h"
 
-#if defined(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN)
 #include "cc/output/vulkan_renderer.h"
 #endif
 
@@ -159,10 +160,13 @@ void Display::Resize(const gfx::Size& size) {
     scheduler_->DisplayResized();
 }
 
-void Display::SetColorSpace(const gfx::ColorSpace& color_space) {
-  device_color_space_ = color_space;
-  if (aggregator_)
-    aggregator_->SetOutputColorSpace(device_color_space_);
+void Display::SetColorSpace(const gfx::ColorSpace& blending_color_space,
+                            const gfx::ColorSpace& device_color_space) {
+  blending_color_space_ = blending_color_space;
+  device_color_space_ = device_color_space;
+  if (aggregator_) {
+    aggregator_->SetOutputColorSpace(blending_color_space, device_color_space_);
+  }
 }
 
 void Display::SetOutputIsSecure(bool secure) {
@@ -219,7 +223,7 @@ void Display::InitializeRenderer() {
   aggregator_.reset(new SurfaceAggregator(
       surface_manager_, resource_provider_.get(), output_partial_list));
   aggregator_->set_output_is_secure(output_is_secure_);
-  aggregator_->SetOutputColorSpace(device_color_space_);
+  aggregator_->SetOutputColorSpace(blending_color_space_, device_color_space_);
 }
 
 void Display::UpdateRootSurfaceResourcesLocked() {

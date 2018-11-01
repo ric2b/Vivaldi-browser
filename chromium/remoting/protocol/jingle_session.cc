@@ -66,6 +66,8 @@ ErrorCode AuthRejectionReasonToErrorCode(
       return INCOMPATIBLE_PROTOCOL;
     case Authenticator::INVALID_ACCOUNT:
       return INVALID_ACCOUNT;
+    case Authenticator::TOO_MANY_CONNECTIONS:
+      return SESSION_REJECTED;
     case Authenticator::REJECTED_BY_USER:
       return SESSION_REJECTED;
   }
@@ -83,7 +85,7 @@ int GetSequentialId(const std::string& id) {
   }
 
   int result = kInvalid;
-  if (!base::StringToInt(tokens[1].c_str(), &result)) {
+  if (!base::StringToInt(tokens[1], &result)) {
     return kInvalid;
   }
   return result;
@@ -195,13 +197,13 @@ ErrorCode JingleSession::error() {
 }
 
 void JingleSession::StartConnection(
-    const std::string& peer_jid,
+    const SignalingAddress& peer_address,
     std::unique_ptr<Authenticator> authenticator) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(authenticator.get());
   DCHECK_EQ(authenticator->state(), Authenticator::MESSAGE_READY);
 
-  peer_address_ = SignalingAddress(peer_jid);
+  peer_address_ = peer_address;
   authenticator_ = std::move(authenticator);
 
   // Generate random session ID. There are usually not more than 1
@@ -790,7 +792,8 @@ void JingleSession::SendSessionInitiateMessage() {
   }
   std::unique_ptr<JingleMessage> message(new JingleMessage(
       peer_address_, JingleMessage::SESSION_INITIATE, session_id_));
-  message->initiator = session_manager_->signal_strategy_->GetLocalJid();
+  message->initiator =
+      session_manager_->signal_strategy_->GetLocalAddress().jid();
   message->description.reset(new ContentDescription(
       session_manager_->protocol_config_->Clone(),
       authenticator_->GetNextMessage()));

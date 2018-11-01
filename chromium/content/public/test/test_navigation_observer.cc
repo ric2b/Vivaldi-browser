@@ -45,7 +45,7 @@ class TestNavigationObserver::TestWebContentsObserver
   }
 
   void DidStartNavigation(NavigationHandle* navigation_handle) override {
-    if (navigation_handle->IsSamePage())
+    if (navigation_handle->IsSameDocument())
       return;
 
     parent_->OnDidStartNavigation();
@@ -93,12 +93,12 @@ void TestNavigationObserver::Wait() {
 }
 
 void TestNavigationObserver::StartWatchingNewWebContents() {
-  WebContentsImpl::FriendZone::AddCreatedCallbackForTesting(
+  WebContentsImpl::FriendWrapper::AddCreatedCallbackForTesting(
       web_contents_created_callback_);
 }
 
 void TestNavigationObserver::StopWatchingNewWebContents() {
-  WebContentsImpl::FriendZone::RemoveCreatedCallbackForTesting(
+  WebContentsImpl::FriendWrapper::RemoveCreatedCallbackForTesting(
       web_contents_created_callback_);
 }
 

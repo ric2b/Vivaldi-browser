@@ -206,28 +206,40 @@ Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(std::unique_ptr<media:
   return nullptr;
 }
 
-void PlatformPipelineTestBase::AppendPlatformDecoders(
-        ScopedVector<VideoDecoder> & video_decoders,
+void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
         ScopedVector<AudioDecoder> & audio_decoders,
-        base::MessageLoop & message_loop_)
+        const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner)
 {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
   if (IPCDemuxer::CanPlayType(content_type, url)) {
     audio_decoders.push_back(
-        new PassThroughAudioDecoder(message_loop_.task_runner()));
-    video_decoders.push_back(
-        new PassThroughVideoDecoder(message_loop_.task_runner()));
+        new PassThroughAudioDecoder(media_task_runner));
   }
 
 #if defined(OS_MACOSX)
   audio_decoders.push_back(
-      new ATAudioDecoder(message_loop_.task_runner()));
+      new ATAudioDecoder(media_task_runner));
 #elif defined(OS_WIN)
   audio_decoders.push_back(
-      new media::WMFAudioDecoder(message_loop_.task_runner()));
+      new media::WMFAudioDecoder(media_task_runner));
+#endif
+}
+
+void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
+        ScopedVector<VideoDecoder> & video_decoders,
+        const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner)
+{
+  const std::string content_type;
+  const GURL url("file://" + filepath_.AsUTF8Unsafe());
+  if (IPCDemuxer::CanPlayType(content_type, url)) {
+    video_decoders.push_back(
+        new PassThroughVideoDecoder(media_task_runner));
+  }
+
+#if defined(OS_WIN)
   video_decoders.push_back(
-      new media::WMFVideoDecoder(message_loop_.task_runner()));
+      new media::WMFVideoDecoder(media_task_runner));
 #endif
 
   video_decoders.push_back(
@@ -238,7 +250,7 @@ void PlatformPipelineTestBase::AppendPlatformDecoders(
   capabilities.supported_profiles = GetSupportedProfiles();
 
   EXPECT_CALL(*mock_video_accelerator_factories_, GetTaskRunner())
-      .WillRepeatedly(testing::Return(message_loop_.task_runner()));
+      .WillRepeatedly(testing::Return(media_task_runner));
   EXPECT_CALL(*mock_video_accelerator_factories_,
               GetVideoDecodeAcceleratorCapabilities())
       .WillRepeatedly(testing::Return(capabilities));

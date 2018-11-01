@@ -28,12 +28,12 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/image-decoders/SegmentReader.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
 
 class SkData;
 
@@ -52,37 +52,37 @@ class PLATFORM_EXPORT DecodingImageGenerator final : public SkImageGenerator {
   // Make SkImageGenerator::kNeedNewImageUniqueID accessible.
   enum { kNeedNewImageUniqueID = SkImageGenerator::kNeedNewImageUniqueID };
 
-  static SkImageGenerator* create(SkData*);
+  static SkImageGenerator* Create(SkData*);
 
   DecodingImageGenerator(PassRefPtr<ImageFrameGenerator>,
                          const SkImageInfo&,
                          PassRefPtr<SegmentReader>,
-                         bool allDataReceived,
+                         bool all_data_received,
                          size_t index,
-                         uint32_t uniqueID = kNeedNewImageUniqueID);
+                         uint32_t unique_id = kNeedNewImageUniqueID);
   ~DecodingImageGenerator() override;
 
-  void setCanYUVDecode(bool yes) { m_canYUVDecode = yes; }
+  void SetCanYUVDecode(bool yes) { can_yuv_decode_ = yes; }
 
  protected:
   SkData* onRefEncodedData(GrContext* ctx) override;
 
   bool onGetPixels(const SkImageInfo&,
                    void* pixels,
-                   size_t rowBytes,
+                   size_t row_bytes,
                    SkPMColor table[],
-                   int* tableCount) override;
+                   int* table_count) override;
 
   bool onQueryYUV8(SkYUVSizeInfo*, SkYUVColorSpace*) const override;
 
   bool onGetYUV8Planes(const SkYUVSizeInfo&, void* planes[3]) override;
 
  private:
-  RefPtr<ImageFrameGenerator> m_frameGenerator;
-  const RefPtr<SegmentReader> m_data;  // Data source.
-  const bool m_allDataReceived;
-  const size_t m_frameIndex;
-  bool m_canYUVDecode;
+  RefPtr<ImageFrameGenerator> frame_generator_;
+  const RefPtr<SegmentReader> data_;  // Data source.
+  const bool all_data_received_;
+  const size_t frame_index_;
+  bool can_yuv_decode_;
 };
 
 }  // namespace blink

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -19,16 +20,16 @@ class TaskQueue;
 
 class BLINK_PLATFORM_EXPORT WebTaskRunnerImpl : public WebTaskRunner {
  public:
-  static RefPtr<WebTaskRunnerImpl> create(scoped_refptr<TaskQueue> task_queue);
+  static RefPtr<WebTaskRunnerImpl> Create(scoped_refptr<TaskQueue> task_queue);
 
   // WebTaskRunner implementation:
-  void postDelayedTask(const WebTraceLocation&,
-                       const base::Closure&,
-                       double delayMs) override;
-  bool runsTasksOnCurrentThread() override;
-  double virtualTimeSeconds() const override;
-  double monotonicallyIncreasingVirtualTimeSeconds() const override;
-  base::SingleThreadTaskRunner* toSingleThreadTaskRunner() override;
+  void PostDelayedTask(const WebTraceLocation&,
+                       base::OnceClosure,
+                       double delay_ms) override;
+  bool RunsTasksOnCurrentThread() override;
+  double VirtualTimeSeconds() const override;
+  double MonotonicallyIncreasingVirtualTimeSeconds() const override;
+  base::SingleThreadTaskRunner* ToSingleThreadTaskRunner() override;
 
  private:
   explicit WebTaskRunnerImpl(scoped_refptr<TaskQueue> task_queue);

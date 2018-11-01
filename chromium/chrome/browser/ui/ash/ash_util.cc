@@ -4,17 +4,21 @@
 
 #include "chrome/browser/ui/ash/ash_util.h"
 
-#include "ash/common/accelerators/accelerator_controller.h"
-#include "ash/common/mojo_interface_factory.h"
-#include "ash/common/wm_shell.h"
+#include "ash/accelerators/accelerator_controller.h"
+#include "ash/mojo_interface_factory.h"
+#include "ash/public/cpp/config.h"
+#include "ash/public/interfaces/event_properties.mojom.h"
+#include "ash/shell.h"
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/ui/ash/ash_init.h"
 #include "content/public/common/service_names.mojom.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_info.h"
 #include "services/service_manager/public/interfaces/interface_provider_spec.mojom.h"
-#include "services/service_manager/runner/common/client_util.h"
 #include "ui/aura/window_event_dispatcher.h"
 
 namespace ash_util {
@@ -25,8 +29,7 @@ class EmbeddedAshService : public service_manager::Service {
  public:
   explicit EmbeddedAshService(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-      : task_runner_(task_runner),
-        interfaces_(service_manager::mojom::kServiceManager_ConnectorSpec) {}
+      : task_runner_(task_runner) {}
   ~EmbeddedAshService() override {}
 
   // service_manager::Service:
@@ -37,12 +40,13 @@ class EmbeddedAshService : public service_manager::Service {
   void OnBindInterface(const service_manager::ServiceInfo& remote_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle handle) override {
-    interfaces_.BindInterface(interface_name, std::move(handle));
+    interfaces_.BindInterface(remote_info.identity, interface_name,
+                              std::move(handle));
   }
 
  private:
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  service_manager::InterfaceRegistry interfaces_;
+  service_manager::BinderRegistry interfaces_;
 
   DISALLOW_COPY_AND_ASSIGN(EmbeddedAshService);
 };
@@ -59,7 +63,7 @@ bool ShouldOpenAshOnStartup() {
 }
 
 bool IsRunningInMash() {
-  return service_manager::ServiceManagerIsRemote();
+  return chromeos::GetAshConfig() == ash::Config::MASH;
 }
 
 bool IsAcceleratorDeprecated(const ui::Accelerator& accelerator) {
@@ -67,8 +71,13 @@ bool IsAcceleratorDeprecated(const ui::Accelerator& accelerator) {
   if (IsRunningInMash())
     return false;
 
-  return ash::WmShell::Get()->accelerator_controller()->IsDeprecated(
-      accelerator);
+  return ash::Shell::Get()->accelerator_controller()->IsDeprecated(accelerator);
+}
+
+bool WillAshProcessAcceleratorForEvent(const ui::KeyEvent& key_event) {
+  return key_event.properties() &&
+         key_event.properties()->count(
+             ash::mojom::kWillProcessAccelerator_KeyEventProperty);
 }
 
 }  // namespace ash_util

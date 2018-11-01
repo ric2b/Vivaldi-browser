@@ -28,6 +28,7 @@
 #include "extensions/common/extension.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -54,7 +55,7 @@ std::unique_ptr<WebRequestActionSet> CreateSetOfActions(const char* json) {
        it != parsed_list->end();
        ++it) {
     const base::DictionaryValue* dict;
-    CHECK((*it)->GetAsDictionary(&dict));
+    CHECK(it->GetAsDictionary(&dict));
     actions.push_back(dict->CreateDeepCopy());
   }
 
@@ -146,7 +147,8 @@ bool WebRequestActionWithThreadsTest::ActionWorksOnRequest(
     const WebRequestActionSet* action_set,
     RequestStage stage) {
   std::unique_ptr<net::URLRequest> regular_request(
-      context_.CreateRequest(GURL(url_string), net::DEFAULT_PRIORITY, NULL));
+      context_.CreateRequest(GURL(url_string), net::DEFAULT_PRIORITY, NULL,
+                             TRAFFIC_ANNOTATION_FOR_TESTS));
   std::list<LinkedPtrEventResponseDelta> deltas;
   scoped_refptr<net::HttpResponseHeaders> headers(
       new net::HttpResponseHeaders(""));

@@ -13,6 +13,10 @@
 #include <string>
 #include <vector>
 
+namespace version_info {
+enum class Channel;
+}
+
 namespace install_static {
 
 struct InstallConstants;
@@ -54,10 +58,74 @@ template <typename T> inline void IgnoreUnused(T) {}
 // Returns true if Chrome is running at system level.
 bool IsSystemInstall();
 
+// Returns the string "[kCompanyPathName\]kProductPathName[install_suffix]"
+std::wstring GetChromeInstallSubDirectory();
+
+// Returns the path
+// "Software\[kCompanyPathName\]kProductPathName[install_suffix]". This subkey
+// of HKEY_CURRENT_USER can be used to save and restore state. With the
+// exception of data that is used by third parties (e.g., a subkey that
+// specifies the location of a native messaging host's manifest), state stored
+// in this key is removed during uninstall when the user chooses to also delete
+// their browsing data.
+std::wstring GetRegistryPath();
+
+// Returns the path
+// "Software\Microsoft\Windows\CurrentVersion\Uninstall\[kCompanyPathName ]
+// kProductPathName[install_suffix]. This is the key used for the browser's
+// "Programs and Features" control panel entry for non-MSI installs (the entry
+// for MSI installs is created and owned by Windows Installer).
+std::wstring GetUninstallRegistryPath();
+
 // Returns the app GUID with which Chrome is registered with Google Update, or
 // an empty string if this brand does not integrate with Google Update. This is
 // a simple convenience wrapper around InstallDetails.
 const wchar_t* GetAppGuid();
+
+// Returns the unsuffixed application name of this program. This is the base of
+// the name registered with Default Programs. IMPORTANT: This must only be
+// called by the installer.
+std::wstring GetBaseAppName();
+
+// Returns the unsuffixed portion of the AppUserModelId. The AppUserModelId is
+// used to group an app's windows together on the Windows taskbar along with its
+// corresponding shortcuts; see
+// https://msdn.microsoft.com/library/windows/desktop/dd378459.aspx for more
+// information. Use ShellUtil::GetBrowserModelId to get the suffixed value -- it
+// is almost never correct to use the unsuffixed (base) portion of this id
+// directly.
+const wchar_t* GetBaseAppId();
+
+// Returns the browser's ProgID prefix (e.g., ChromeHTML or ChromiumHTM). The
+// full id is of the form |prefix|.|suffix| and is limited to a maximum length
+// of 39 characters including null-terminator; see
+// https://msdn.microsoft.com/library/windows/desktop/dd542719.aspx for details.
+// We define |suffix| as a fixed-length 26-character alphanumeric identifier,
+// therefore the return value of this function must have a maximum length of
+// 39 - 1(null-term) - 26(|suffix|) - 1(dot separator) = 11 characters.
+const wchar_t* GetProgIdPrefix();
+
+// Returns the browser's ProgId description.
+const wchar_t* GetProgIdDescription();
+
+// Returns the path to the Active Setup registry entries
+// (e.g., Software\Microsoft\Active Setup\Installed Components\[guid]).
+std::wstring GetActiveSetupPath();
+
+// Returns the legacy CommandExecuteImpl CLSID, or an empty string if the
+// install mode never included a DelegateExecute verb handler.
+std::wstring GetLegacyCommandExecuteImplClsid();
+
+// Returns true if this mode supports in-product mechanisms to make the browser
+// the user's chosen default browser.
+bool SupportsSetAsDefaultBrowser();
+
+// Returns true if this mode supports user retention experiments run by the
+// installer following updates.
+bool SupportsRetentionExperiments();
+
+// Returns the index of the icon resource in the main executable for the mode.
+int GetIconResourceIndex();
 
 // Returns true if usage stats collecting is enabled for this user for the
 // current executable.
@@ -127,16 +195,9 @@ void GetExecutableVersionDetails(const std::wstring& exe_path,
                                  std::wstring* special_build,
                                  std::wstring* channel_name);
 
-// Gets the channel name for the current Chrome process.
+// Gets the channel or channel name for the current Chrome process.
+version_info::Channel GetChromeChannel();
 std::wstring GetChromeChannelName();
-
-// Returns the registry path where the browser crash dumps metrics need to be
-// written to.
-// TODO(ananta)
-// http://crbug.com/604923
-// Unify this with the version in
-// chrome\common\metrics_constants_util_win.cc
-std::wstring GetBrowserCrashDumpAttemptsRegistryPath();
 
 // Returns true if the |source| string matches the |pattern|. The pattern
 // may contain wildcards like '?', which matches one character or a '*'
@@ -182,10 +243,15 @@ bool RecursiveDirectoryCreate(const std::wstring& full_path);
 // Returns the unadorned channel name based on the channel strategy for the
 // install mode. |from_binaries| forces the registry locations corresponding to
 // the now-deprecated multi-install binaries to be read, and is only for use by
-// the installer.
+// the installer. |update_ap|, if not null, is set to the raw "ap" value read
+// from Chrome's ClientState key in the registry. |update_cohort_name|, if not
+// null, is set to the raw "cohort\name" value read from Chrome's ClientState
+// key in the registry.
 std::wstring DetermineChannel(const InstallConstants& mode,
                               bool system_level,
-                              bool from_binaries = false);
+                              bool from_binaries,
+                              std::wstring* update_ap,
+                              std::wstring* update_cohort_name);
 
 // Caches the |ProcessType| of the current process.
 extern ProcessType g_process_type;

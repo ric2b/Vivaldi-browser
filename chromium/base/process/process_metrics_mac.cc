@@ -13,31 +13,49 @@
 
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
+#include "base/mac/mac_util.h"
 #include "base/mac/mach_logging.h"
 #include "base/mac/scoped_mach_port.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/safe_conversions.h"
+#include "base/numerics/safe_math.h"
 #include "base/sys_info.h"
-
-#if !defined(TASK_POWER_INFO)
-// Doesn't exist in the 10.6 or 10.7 SDKs.
-#define TASK_POWER_INFO        21
-struct task_power_info {
-        uint64_t                total_user;
-        uint64_t                total_system;
-        uint64_t                task_interrupt_wakeups;
-        uint64_t                task_platform_idle_wakeups;
-        uint64_t                task_timer_wakeups_bin_1;
-        uint64_t                task_timer_wakeups_bin_2;
-};
-typedef struct task_power_info        task_power_info_data_t;
-typedef struct task_power_info        *task_power_info_t;
-#define TASK_POWER_INFO_COUNT        ((mach_msg_type_number_t) \
-                (sizeof (task_power_info_data_t) / sizeof (natural_t)))
-#endif
 
 namespace base {
 
 namespace {
+
+#if !defined(MAC_OS_X_VERSION_10_11) || \
+    MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_11
+// The |phys_footprint| field was introduced in 10.11.
+struct ChromeTaskVMInfo {
+  mach_vm_size_t virtual_size;
+  integer_t region_count;
+  integer_t page_size;
+  mach_vm_size_t resident_size;
+  mach_vm_size_t resident_size_peak;
+  mach_vm_size_t device;
+  mach_vm_size_t device_peak;
+  mach_vm_size_t internal;
+  mach_vm_size_t internal_peak;
+  mach_vm_size_t external;
+  mach_vm_size_t external_peak;
+  mach_vm_size_t reusable;
+  mach_vm_size_t reusable_peak;
+  mach_vm_size_t purgeable_volatile_pmap;
+  mach_vm_size_t purgeable_volatile_resident;
+  mach_vm_size_t purgeable_volatile_virtual;
+  mach_vm_size_t compressed;
+  mach_vm_size_t compressed_peak;
+  mach_vm_size_t compressed_lifetime;
+  mach_vm_size_t phys_footprint;
+};
+mach_msg_type_number_t ChromeTaskVMInfoCount =
+    sizeof(ChromeTaskVMInfo) / sizeof(natural_t);
+#else
+using ChromeTaskVMInfo = task_vm_info;
+mach_msg_type_number_t ChromeTaskVMInfoCount = TASK_VM_INFO_REV1_COUNT;
+#endif  // MAC_OS_X_VERSION_10_11
 
 bool GetTaskInfo(mach_port_t task, task_basic_info_64* task_info_data) {
   if (task == MACH_PORT_NULL)
@@ -78,12 +96,17 @@ bool IsAddressInSharedRegion(mach_vm_address_t addr, cpu_type_t type) {
   }
 }
 
+MachVMRegionResult ParseOutputFromMachVMRegion(kern_return_t kr) {
+  if (kr == KERN_INVALID_ADDRESS) {
+    // We're at the end of the address space.
+    return MachVMRegionResult::Finished;
+  } else if (kr != KERN_SUCCESS) {
+    return MachVMRegionResult::Error;
+  }
+  return MachVMRegionResult::Success;
+}
+
 }  // namespace
-
-SystemMemoryInfoKB::SystemMemoryInfoKB() : total(0), free(0) {}
-
-SystemMemoryInfoKB::SystemMemoryInfoKB(const SystemMemoryInfoKB& other) =
-    default;
 
 // Getting a mach task from a pid for another process requires permissions in
 // general, so there doesn't really seem to be a way to do these (and spinning
@@ -110,26 +133,31 @@ size_t ProcessMetrics::GetPeakPagefileUsage() const {
 }
 
 size_t ProcessMetrics::GetWorkingSetSize() const {
-  task_basic_info_64 task_info_data;
-  if (!GetTaskInfo(TaskForPid(process_), &task_info_data))
+  size_t resident_bytes = 0;
+  if (!GetMemoryBytes(nullptr, nullptr, &resident_bytes, nullptr))
     return 0;
-  return task_info_data.resident_size;
+  return resident_bytes;
 }
 
 size_t ProcessMetrics::GetPeakWorkingSetSize() const {
   return 0;
 }
 
+bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
+                                    size_t* shared_bytes) const {
+  return GetMemoryBytes(private_bytes, shared_bytes, nullptr, nullptr);
+}
+
 // This is a rough approximation of the algorithm that libtop uses.
 // private_bytes is the size of private resident memory.
 // shared_bytes is the size of shared resident memory.
 bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
-                                    size_t* shared_bytes) {
+                                    size_t* shared_bytes,
+                                    size_t* resident_bytes,
+                                    size_t* locked_bytes) const {
   size_t private_pages_count = 0;
   size_t shared_pages_count = 0;
-
-  if (!private_bytes && !shared_bytes)
-    return true;
+  size_t wired_pages_count = 0;
 
   mach_port_t task = TaskForPid(process_);
   if (task == MACH_PORT_NULL) {
@@ -157,29 +185,31 @@ bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
   // See libtop_update_vm_regions in
   // http://www.opensource.apple.com/source/top/top-67/libtop.c
   mach_vm_size_t size = 0;
-  for (mach_vm_address_t address = MACH_VM_MIN_ADDRESS;; address += size) {
-    vm_region_top_info_data_t info;
-    mach_msg_type_number_t info_count = VM_REGION_TOP_INFO_COUNT;
-    mach_port_t object_name;
-    kern_return_t kr = mach_vm_region(task,
-                                      &address,
-                                      &size,
-                                      VM_REGION_TOP_INFO,
-                                      reinterpret_cast<vm_region_info_t>(&info),
-                                      &info_count,
-                                      &object_name);
-    if (kr == KERN_INVALID_ADDRESS) {
-      // We're at the end of the address space.
-      break;
-    } else if (kr != KERN_SUCCESS) {
-      MACH_DLOG(ERROR, kr) << "mach_vm_region";
+  mach_vm_address_t address = MACH_VM_MIN_ADDRESS;
+  while (true) {
+    base::CheckedNumeric<mach_vm_address_t> next_address(address);
+    next_address += size;
+    if (!next_address.IsValid())
       return false;
-    }
+    address = next_address.ValueOrDie();
 
-    // The kernel always returns a null object for VM_REGION_TOP_INFO, but
-    // balance it with a deallocate in case this ever changes. See 10.9.2
-    // xnu-2422.90.20/osfmk/vm/vm_map.c vm_map_region.
-    mach_port_deallocate(mach_task_self(), object_name);
+    mach_vm_address_t address_copy = address;
+    vm_region_top_info_data_t info;
+    MachVMRegionResult result = GetTopInfo(task, &size, &address, &info);
+    if (result == MachVMRegionResult::Error)
+      return false;
+    if (result == MachVMRegionResult::Finished)
+      break;
+
+    vm_region_basic_info_64 basic_info;
+    mach_vm_size_t dummy_size = 0;
+    result = GetBasicInfo(task, &dummy_size, &address_copy, &basic_info);
+    if (result == MachVMRegionResult::Error)
+      return false;
+    if (result == MachVMRegionResult::Finished)
+      break;
+
+    bool is_wired = basic_info.user_wired_count > 0;
 
     if (IsAddressInSharedRegion(address, cpu_type) &&
         info.share_mode != SM_PRIVATE)
@@ -189,6 +219,7 @@ bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
       info.share_mode = SM_PRIVATE;
 
     switch (info.share_mode) {
+      case SM_LARGE_PAGE:
       case SM_PRIVATE:
         private_pages_count += info.private_pages_resident;
         private_pages_count += info.shared_pages_resident;
@@ -197,6 +228,9 @@ bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
         private_pages_count += info.private_pages_resident;
         // Fall through
       case SM_SHARED:
+      case SM_PRIVATE_ALIASED:
+      case SM_TRUESHARED:
+      case SM_SHARED_ALIASED:
         if (seen_objects.count(info.obj_id) == 0) {
           // Only count the first reference to this region.
           seen_objects.insert(info.obj_id);
@@ -206,12 +240,20 @@ bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
       default:
         break;
     }
+    if (is_wired) {
+      wired_pages_count +=
+          info.private_pages_resident + info.shared_pages_resident;
+    }
   }
 
   if (private_bytes)
     *private_bytes = private_pages_count * PAGE_SIZE;
   if (shared_bytes)
     *shared_bytes = shared_pages_count * PAGE_SIZE;
+  if (resident_bytes)
+    *resident_bytes = (private_pages_count + shared_pages_count) * PAGE_SIZE;
+  if (locked_bytes)
+    *locked_bytes = wired_pages_count * PAGE_SIZE;
 
   return true;
 }
@@ -244,6 +286,20 @@ bool ProcessMetrics::GetCommittedAndWorkingSetKBytes(
   ws_usage->shared = 0;
 
   return true;
+}
+
+size_t ProcessMetrics::GetPhysicalFootprint() const {
+  if (mac::IsAtMostOS10_11())
+    return 0;
+
+  ChromeTaskVMInfo task_vm_info;
+  mach_msg_type_number_t count = ChromeTaskVMInfoCount;
+  kern_return_t result =
+      task_info(TaskForPid(process_), TASK_VM_INFO,
+                reinterpret_cast<task_info_t>(&task_vm_info), &count);
+  if (result != KERN_SUCCESS)
+    return 0;
+  return task_vm_info.phys_footprint;
 }
 
 #define TIME_VALUE_TO_TIMEVAL(a, r) do {  \
@@ -377,7 +433,6 @@ size_t GetSystemCommitCharge() {
   return (data.active_count * PAGE_SIZE) / 1024;
 }
 
-// On Mac, We only get total memory and free memory from the system.
 bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
   struct host_basic_info hostinfo;
   mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
@@ -390,19 +445,61 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
   DCHECK_EQ(HOST_BASIC_INFO_COUNT, count);
   meminfo->total = static_cast<int>(hostinfo.max_mem / 1024);
 
-  vm_statistics_data_t vm_info;
-  count = HOST_VM_INFO_COUNT;
+  vm_statistics64_data_t vm_info;
+  count = HOST_VM_INFO64_COUNT;
 
-  if (host_statistics(host.get(), HOST_VM_INFO,
-                      reinterpret_cast<host_info_t>(&vm_info),
-                      &count) != KERN_SUCCESS) {
+  if (host_statistics64(host.get(), HOST_VM_INFO64,
+                        reinterpret_cast<host_info64_t>(&vm_info),
+                        &count) != KERN_SUCCESS) {
     return false;
   }
+  DCHECK_EQ(HOST_VM_INFO64_COUNT, count);
 
-  meminfo->free = static_cast<int>(
-      (vm_info.free_count - vm_info.speculative_count) * PAGE_SIZE / 1024);
+  static_assert(PAGE_SIZE % 1024 == 0, "Invalid page size");
+  meminfo->free = saturated_cast<int>(
+      PAGE_SIZE / 1024 * (vm_info.free_count - vm_info.speculative_count));
+  meminfo->speculative =
+      saturated_cast<int>(PAGE_SIZE / 1024 * vm_info.speculative_count);
+  meminfo->file_backed =
+      saturated_cast<int>(PAGE_SIZE / 1024 * vm_info.external_page_count);
+  meminfo->purgeable =
+      saturated_cast<int>(PAGE_SIZE / 1024 * vm_info.purgeable_count);
 
   return true;
+}
+
+// Both |size| and |address| are in-out parameters.
+// |info| is an output parameter, only valid on Success.
+MachVMRegionResult GetTopInfo(mach_port_t task,
+                              mach_vm_size_t* size,
+                              mach_vm_address_t* address,
+                              vm_region_top_info_data_t* info) {
+  mach_msg_type_number_t info_count = VM_REGION_TOP_INFO_COUNT;
+  mach_port_t object_name;
+  kern_return_t kr = mach_vm_region(task, address, size, VM_REGION_TOP_INFO,
+                                    reinterpret_cast<vm_region_info_t>(info),
+                                    &info_count, &object_name);
+  // The kernel always returns a null object for VM_REGION_TOP_INFO, but
+  // balance it with a deallocate in case this ever changes. See 10.9.2
+  // xnu-2422.90.20/osfmk/vm/vm_map.c vm_map_region.
+  mach_port_deallocate(task, object_name);
+  return ParseOutputFromMachVMRegion(kr);
+}
+
+MachVMRegionResult GetBasicInfo(mach_port_t task,
+                                mach_vm_size_t* size,
+                                mach_vm_address_t* address,
+                                vm_region_basic_info_64* info) {
+  mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object_name;
+  kern_return_t kr = mach_vm_region(
+      task, address, size, VM_REGION_BASIC_INFO_64,
+      reinterpret_cast<vm_region_info_t>(info), &info_count, &object_name);
+  // The kernel always returns a null object for VM_REGION_BASIC_INFO_64, but
+  // balance it with a deallocate in case this ever changes. See 10.9.2
+  // xnu-2422.90.20/osfmk/vm/vm_map.c vm_map_region.
+  mach_port_deallocate(task, object_name);
+  return ParseOutputFromMachVMRegion(kr);
 }
 
 }  // namespace base

@@ -2,18 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ======                        New Architecture                         =====
-// =         This code is only used in the new iOS Chrome architecture.       =
-// ============================================================================
-
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_view_controller.h"
 
 #import "base/mac/foundation_util.h"
-#import "ios/clean/chrome/browser/ui/actions/navigation_actions.h"
 #import "ios/clean/chrome/browser/ui/actions/tab_grid_actions.h"
 #import "ios/clean/chrome/browser/ui/actions/tab_strip_actions.h"
-#import "ios/clean/chrome/browser/ui/actions/tools_menu_actions.h"
-#import "ios/clean/chrome/browser/ui/commands/toolbar_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/navigation_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_button+factory.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_component_options.h"
 
@@ -28,8 +23,8 @@ CGFloat kVerticalMargin = 5.0f;
 CGFloat kHorizontalMargin = 8.0f;
 }  // namespace
 
-@interface ToolbarViewController ()<ToolsMenuActions>
-@property(nonatomic, weak) UITextField* omnibox;
+@interface ToolbarViewController ()
+@property(nonatomic, strong) UIView* locationBarContainer;
 @property(nonatomic, strong) UIStackView* stackView;
 @property(nonatomic, strong) ToolbarButton* backButton;
 @property(nonatomic, strong) ToolbarButton* forwardButton;
@@ -42,9 +37,10 @@ CGFloat kHorizontalMargin = 8.0f;
 @end
 
 @implementation ToolbarViewController
-@synthesize toolbarCommandHandler = _toolbarCommandHandler;
+@synthesize dispatcher = _dispatcher;
+@synthesize locationBarViewController = _locationBarViewController;
 @synthesize stackView = _stackView;
-@synthesize omnibox = _omnibox;
+@synthesize locationBarContainer = _locationBarContainer;
 @synthesize backButton = _backButton;
 @synthesize forwardButton = _forwardButton;
 @synthesize tabSwitchStripButton = _tabSwitchStripButton;
@@ -54,28 +50,31 @@ CGFloat kHorizontalMargin = 8.0f;
 @synthesize reloadButton = _reloadButton;
 @synthesize stopButton = _stopButton;
 
+- (instancetype)init {
+  self = [super init];
+  if (self) {
+    [self setUpToolbarButtons];
+    [self setUpLocationBarContainer];
+  }
+  return self;
+}
+
 - (void)viewDidLoad {
   self.view.backgroundColor = [UIColor lightGrayColor];
 
-  [self setUpToolbarButtons];
-
-  // PLACEHOLDER: Omnibox could have some "Toolbar component" traits if needed.
-  UITextField* omnibox = [[UITextField alloc] initWithFrame:CGRectZero];
-  omnibox.translatesAutoresizingMaskIntoConstraints = NO;
-  omnibox.backgroundColor = [UIColor whiteColor];
-  omnibox.enabled = NO;
-  self.omnibox = omnibox;
+  [self addChildViewController:self.locationBarViewController
+                     toSubview:self.locationBarContainer];
 
   // Stack view to contain toolbar items.
   self.stackView = [[UIStackView alloc] initWithArrangedSubviews:@[
     self.backButton, self.forwardButton, self.reloadButton, self.stopButton,
-    omnibox, self.shareButton, self.tabSwitchStripButton,
+    self.locationBarContainer, self.shareButton, self.tabSwitchStripButton,
     self.tabSwitchGridButton, self.toolsMenuButton
   ]];
   [self updateAllButtonsVisibility];
   self.stackView.translatesAutoresizingMaskIntoConstraints = NO;
   self.stackView.spacing = 16.0;
-  self.stackView.distribution = UIStackViewDistributionFillProportionally;
+  self.stackView.distribution = UIStackViewDistributionFill;
   [self.view addSubview:self.stackView];
 
   // Set constraints.
@@ -95,12 +94,6 @@ CGFloat kHorizontalMargin = 8.0f;
   ]];
 }
 
-- (void)viewWillLayoutSubviews {
-  // This forces the ToolMenu to close whenever a Device Rotation, iPad
-  // Multitasking change, etc. happens.
-  [self.toolbarCommandHandler closeToolsMenu];
-}
-
 #pragma mark - Components Setup
 
 - (void)setUpToolbarButtons {
@@ -108,15 +101,16 @@ CGFloat kHorizontalMargin = 8.0f;
   self.backButton = [ToolbarButton backToolbarButton];
   self.backButton.visibilityMask = ToolbarComponentVisibilityCompactWidth |
                                    ToolbarComponentVisibilityRegularWidth;
-  [self.backButton addTarget:nil
+  [self.backButton addTarget:self
                       action:@selector(goBack:)
             forControlEvents:UIControlEventTouchUpInside];
 
   // Forward button.
   self.forwardButton = [ToolbarButton forwardToolbarButton];
-  self.forwardButton.visibilityMask = ToolbarComponentVisibilityCompactWidth |
-                                      ToolbarComponentVisibilityRegularWidth;
-  [self.forwardButton addTarget:nil
+  self.forwardButton.visibilityMask =
+      ToolbarComponentVisibilityCompactWidthOnlyWhenEnabled |
+      ToolbarComponentVisibilityRegularWidth;
+  [self.forwardButton addTarget:self
                          action:@selector(goForward:)
                forControlEvents:UIControlEventTouchUpInside];
 
@@ -143,32 +137,76 @@ CGFloat kHorizontalMargin = 8.0f;
   self.toolsMenuButton = [ToolbarButton toolsMenuToolbarButton];
   self.toolsMenuButton.visibilityMask = ToolbarComponentVisibilityCompactWidth |
                                         ToolbarComponentVisibilityRegularWidth;
-  [self.toolsMenuButton addTarget:nil
+  [self.toolsMenuButton addTarget:self
                            action:@selector(showToolsMenu:)
                  forControlEvents:UIControlEventTouchUpInside];
 
   // Share button.
   self.shareButton = [ToolbarButton shareToolbarButton];
   self.shareButton.visibilityMask = ToolbarComponentVisibilityRegularWidth;
-  [self.shareButton addTarget:nil
+  [self.shareButton addTarget:self
                        action:@selector(showShareMenu:)
              forControlEvents:UIControlEventTouchUpInside];
 
   // Reload button.
   self.reloadButton = [ToolbarButton reloadToolbarButton];
   self.reloadButton.visibilityMask = ToolbarComponentVisibilityRegularWidth;
-  [self.reloadButton addTarget:nil
+  [self.reloadButton addTarget:self
                         action:@selector(reload:)
               forControlEvents:UIControlEventTouchUpInside];
 
   // Stop button.
-  // PLACEHOLDER: The stop Button state Mask is not being set and will not be
-  // shown on any SizeClass. We will hook this to a WebState later on.
   self.stopButton = [ToolbarButton stopToolbarButton];
-  self.stopButton.visibilityMask = ToolbarComponentVisibilityNone;
-  [self.stopButton addTarget:nil
+  self.stopButton.visibilityMask = ToolbarComponentVisibilityRegularWidth;
+  [self.stopButton addTarget:self
                       action:@selector(stop:)
             forControlEvents:UIControlEventTouchUpInside];
+}
+
+- (void)setUpLocationBarContainer {
+  UIView* locationBarContainer = [[UIView alloc] initWithFrame:CGRectZero];
+  locationBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+  locationBarContainer.backgroundColor = [UIColor whiteColor];
+  [locationBarContainer
+      setContentHuggingPriority:UILayoutPriorityDefaultLow
+                        forAxis:UILayoutConstraintAxisHorizontal];
+  self.locationBarContainer = locationBarContainer;
+}
+
+#pragma mark - View Controller Containment
+
+- (void)addChildViewController:(UIViewController*)viewController
+                     toSubview:(UIView*)subview {
+  if (!viewController || !subview) {
+    return;
+  }
+  [self addChildViewController:viewController];
+  viewController.view.translatesAutoresizingMaskIntoConstraints = YES;
+  viewController.view.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  viewController.view.frame = subview.bounds;
+  [subview addSubview:viewController.view];
+  [viewController didMoveToParentViewController:self];
+}
+
+- (void)setLocationBarViewController:(UIViewController*)controller {
+  if (self.locationBarViewController == controller) {
+    return;
+  }
+
+  if ([self isViewLoaded]) {
+    // Remove the old child view controller.
+    if (self.locationBarViewController) {
+      DCHECK_EQ(self, self.locationBarViewController.parentViewController);
+      [self.locationBarViewController willMoveToParentViewController:nil];
+      [self.locationBarViewController.view removeFromSuperview];
+      [self.locationBarViewController removeFromParentViewController];
+    }
+    // Add the new child view controller.
+    [self addChildViewController:controller
+                       toSubview:self.locationBarContainer];
+  }
+  _locationBarViewController = controller;
 }
 
 #pragma mark - Trait Collection Changes
@@ -189,7 +227,23 @@ CGFloat kHorizontalMargin = 8.0f;
 #pragma mark - ToolbarWebStateConsumer
 
 - (void)setCurrentPageText:(NSString*)text {
-  self.omnibox.text = text;
+}
+
+- (void)setCanGoForward:(BOOL)canGoForward {
+  self.forwardButton.enabled = canGoForward;
+  // Update the visibility since the Forward button will be hidden on
+  // CompactWidth when disabled.
+  [self.forwardButton updateHiddenInCurrentSizeClass];
+}
+
+- (void)setCanGoBack:(BOOL)canGoBack {
+  self.backButton.enabled = canGoBack;
+}
+
+- (void)setIsLoading:(BOOL)isLoading {
+  self.reloadButton.hiddenInCurrentState = isLoading;
+  self.stopButton.hiddenInCurrentState = !isLoading;
+  [self updateAllButtonsVisibility];
 }
 
 #pragma mark - ZoomTransitionDelegate
@@ -199,14 +253,34 @@ CGFloat kHorizontalMargin = 8.0f;
                   fromView:self.toolsMenuButton];
 }
 
-#pragma mark - ToolsMenuActions
+#pragma mark - Private Methods
 
 - (void)showToolsMenu:(id)sender {
-  [self.toolbarCommandHandler showToolsMenu];
+  [self.dispatcher showToolsMenu];
 }
 
 - (void)closeToolsMenu:(id)sender {
-  [self.toolbarCommandHandler closeToolsMenu];
+  [self.dispatcher closeToolsMenu];
+}
+
+- (void)showShareMenu:(id)sender {
+  [self.dispatcher showShareMenu];
+}
+
+- (void)goBack:(id)sender {
+  [self.dispatcher goBack];
+}
+
+- (void)goForward:(id)sender {
+  [self.dispatcher goForward];
+}
+
+- (void)stop:(id)sender {
+  [self.dispatcher stopLoadingPage];
+}
+
+- (void)reload:(id)sender {
+  [self.dispatcher reloadPage];
 }
 
 #pragma mark - TabStripEvents
@@ -225,10 +299,6 @@ CGFloat kHorizontalMargin = 8.0f;
 
 #pragma mark - Helper Methods
 
-// PLACEHOLDER: We are not sure yet how WebState changes will affect Toolbar
-// Buttons, but the VC will eventually set the flag on the ToolbarButton
-// indicating it could or not it should be hidden. Once this is done we will
-// update all the ToolbarButtons visibility.
 // Updates all Buttons visibility to match any recent WebState change.
 - (void)updateAllButtonsVisibility {
   for (UIView* view in self.stackView.arrangedSubviews) {

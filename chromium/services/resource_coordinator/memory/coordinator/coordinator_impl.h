@@ -9,7 +9,6 @@
 #include <set>
 #include <unordered_map>
 
-#include "base/lazy_instance.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_request_args.h"
@@ -22,14 +21,21 @@ namespace memory_instrumentation {
 
 class CoordinatorImpl : public Coordinator, public mojom::Coordinator {
  public:
+  // The getter of the unique instance.
   static CoordinatorImpl* GetInstance();
+
+  explicit CoordinatorImpl(bool initialize_memory_dump_manager);
 
   // Coordinator
   void BindCoordinatorRequest(mojom::CoordinatorRequest) override;
 
+  bool initialize_memory_dump_manager() const {
+    return initialize_memory_dump_manager_;
+  }
+
  private:
-  friend class CoordinatorImplTest;  // For testing
-  friend struct base::DefaultLazyInstanceTraits<CoordinatorImpl>;
+  friend std::default_delete<CoordinatorImpl>;  // For testing
+  friend class CoordinatorImplTest;             // For testing
 
   struct QueuedMemoryDumpRequest {
     QueuedMemoryDumpRequest(const base::trace_event::MemoryDumpRequestArgs args,
@@ -39,7 +45,6 @@ class CoordinatorImpl : public Coordinator, public mojom::Coordinator {
     const RequestGlobalMemoryDumpCallback callback;
   };
 
-  CoordinatorImpl();
   ~CoordinatorImpl() override;
 
   // mojom::Coordinator
@@ -61,7 +66,9 @@ class CoordinatorImpl : public Coordinator, public mojom::Coordinator {
   void OnProcessMemoryDumpResponse(
       mojom::ProcessLocalDumpManager* process_manager,
       uint64_t dump_guid,
-      bool success);
+      bool success,
+      const base::Optional<base::trace_event::MemoryDumpCallbackResult>&
+          result);
 
   void PerformNextQueuedGlobalMemoryDump();
   void FinalizeGlobalMemoryDumpIfAllManagersReplied();
@@ -77,6 +84,8 @@ class CoordinatorImpl : public Coordinator, public mojom::Coordinator {
   std::set<mojom::ProcessLocalDumpManager*> pending_process_managers_;
   int failed_memory_dump_count_;
   std::list<QueuedMemoryDumpRequest> queued_memory_dump_requests_;
+
+  const bool initialize_memory_dump_manager_;
 
   base::ThreadChecker thread_checker_;
 

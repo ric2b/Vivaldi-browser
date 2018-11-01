@@ -29,7 +29,13 @@ class HttpServerPropertiesImplPeer {
       base::TimeTicks when) {
     impl.broken_alternative_services_.insert(
         std::make_pair(alternative_service, when));
-    ++impl.recently_broken_alternative_services_[alternative_service];
+    auto it =
+        impl.recently_broken_alternative_services_.Get(alternative_service);
+    if (it == impl.recently_broken_alternative_services_.end()) {
+      impl.recently_broken_alternative_services_.Put(alternative_service, 1);
+    } else {
+      it->second++;
+    }
   }
 
   static void ExpireBrokenAlternateProtocolMappings(
@@ -37,10 +43,6 @@ class HttpServerPropertiesImplPeer {
     impl.ExpireBrokenAlternateProtocolMappings();
   }
 };
-
-void PrintTo(const AlternativeService& alternative_service, std::ostream* os) {
-  *os << alternative_service.ToString();
-}
 
 namespace {
 
@@ -1108,6 +1110,17 @@ TEST_F(ServerNetworkStatsServerPropertiesTest, SetServerNetworkStats) {
   impl_.Clear();
   EXPECT_EQ(NULL, impl_.GetServerNetworkStats(foo_http_server));
   EXPECT_EQ(NULL, impl_.GetServerNetworkStats(foo_https_server));
+}
+
+TEST_F(ServerNetworkStatsServerPropertiesTest, ClearServerNetworkStats) {
+  ServerNetworkStats stats;
+  stats.srtt = base::TimeDelta::FromMicroseconds(10);
+  stats.bandwidth_estimate = QuicBandwidth::FromBitsPerSecond(100);
+  url::SchemeHostPort foo_https_server("https", "foo", 443);
+  impl_.SetServerNetworkStats(foo_https_server, stats);
+
+  impl_.ClearServerNetworkStats(foo_https_server);
+  EXPECT_EQ(nullptr, impl_.GetServerNetworkStats(foo_https_server));
 }
 
 typedef HttpServerPropertiesImplTest QuicServerInfoServerPropertiesTest;

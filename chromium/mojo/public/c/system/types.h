@@ -14,9 +14,6 @@
 
 #include "mojo/public/c/system/macros.h"
 
-// TODO(vtl): Notes: Use of undefined flags will lead to undefined behavior
-// (typically they'll be ignored), not necessarily an error.
-
 // |MojoTimeTicks|: A time delta, in microseconds, the meaning of which is
 // source-dependent.
 
@@ -80,12 +77,10 @@ const MojoHandle MOJO_HANDLE_INVALID = 0;
 //       the resource being invalidated.
 //   |MOJO_RESULT_SHOULD_WAIT| - The request cannot currently be completed
 //       (e.g., if the data requested is not yet available). The caller should
-//       wait for it to be feasible using |MojoWait()| or |MojoWaitMany()|.
+//       wait for it to be feasible using a watcher.
 //
 // The codes from |MOJO_RESULT_OK| to |MOJO_RESULT_DATA_LOSS| come from
 // Google3's canonical error codes.
-//
-// TODO(vtl): Add a |MOJO_RESULT_UNSATISFIABLE|?
 
 typedef uint32_t MojoResult;
 
@@ -141,14 +136,19 @@ const MojoDeadline MOJO_DEADLINE_INDEFINITE = static_cast<MojoDeadline>(-1);
 #define MOJO_DEADLINE_INDEFINITE ((MojoDeadline) - 1)
 #endif
 
-// |MojoHandleSignals|: Used to specify signals that can be waited on for a
+// |MojoHandleSignals|: Used to specify signals that can be watched for on a
 // handle (and which can be triggered), e.g., the ability to read or write to
 // the handle.
-//   |MOJO_HANDLE_SIGNAL_NONE| - No flags. |MojoWait()|, etc. will return
-//       |MOJO_RESULT_FAILED_PRECONDITION| if you attempt to wait on this.
+//   |MOJO_HANDLE_SIGNAL_NONE| - No flags. A registered watch will always fail
+//       to arm with |MOJO_RESULT_FAILED_PRECONDITION| when watching for this.
 //   |MOJO_HANDLE_SIGNAL_READABLE| - Can read (e.g., a message) from the handle.
 //   |MOJO_HANDLE_SIGNAL_WRITABLE| - Can write (e.g., a message) to the handle.
 //   |MOJO_HANDLE_SIGNAL_PEER_CLOSED| - The peer handle is closed.
+//   |MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE| - Can read data from a data pipe
+//       consumer handle (implying MOJO_HANDLE_SIGNAL_READABLE is also set),
+//       AND there is some nonzero quantity of new data available on the pipe
+//       since the last |MojoReadData()| or |MojoBeginReadData()| call on the
+//       handle.
 
 typedef uint32_t MojoHandleSignals;
 
@@ -157,15 +157,18 @@ const MojoHandleSignals MOJO_HANDLE_SIGNAL_NONE = 0;
 const MojoHandleSignals MOJO_HANDLE_SIGNAL_READABLE = 1 << 0;
 const MojoHandleSignals MOJO_HANDLE_SIGNAL_WRITABLE = 1 << 1;
 const MojoHandleSignals MOJO_HANDLE_SIGNAL_PEER_CLOSED = 1 << 2;
+const MojoHandleSignals MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE = 1 << 3;
 #else
 #define MOJO_HANDLE_SIGNAL_NONE ((MojoHandleSignals)0)
 #define MOJO_HANDLE_SIGNAL_READABLE ((MojoHandleSignals)1 << 0)
 #define MOJO_HANDLE_SIGNAL_WRITABLE ((MojoHandleSignals)1 << 1)
 #define MOJO_HANDLE_SIGNAL_PEER_CLOSED ((MojoHandleSignals)1 << 2)
+#define MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE ((MojoHandleSignals)1 << 3);
 #endif
 
-// |MojoHandleSignalsState|: Returned by wait functions to indicate the
-// signaling state of handles. Members are as follows:
+// |MojoHandleSignalsState|: Returned by watch notification callbacks and
+// |MojoQueryHandleSignalsState| functions to indicate the signaling state of
+// handles. Members are as follows:
 //   - |satisfied signals|: Bitmask of signals that were satisfied at some time
 //         before the call returned.
 //   - |satisfiable signals|: These are the signals that are possible to
@@ -182,24 +185,25 @@ struct MOJO_ALIGNAS(4) MojoHandleSignalsState {
 MOJO_STATIC_ASSERT(sizeof(MojoHandleSignalsState) == 8,
                    "MojoHandleSignalsState has wrong size");
 
-// |MojoWatchNotificationFlags|: Passed to a callback invoked as a result of
-// signals being raised on a handle watched by |MojoWatch()|. May take the
-// following values:
-//   |MOJO_WATCH_NOTIFICATION_FLAG_FROM_SYSTEM| - The callback is being invoked
-//       as a result of a system-level event rather than a direct API call from
-//       user code. This may be used as an indication that user code is safe to
-//       call without fear of reentry.
+// |MojoWatcherNotificationFlags|: Passed to a callback invoked by a watcher
+// when some observed signals are raised or a watched handle is closed. May take
+// on any combination of the following values:
+//
+//   |MOJO_WATCHER_NOTIFICATION_FLAG_FROM_SYSTEM| - The callback is being
+//       invoked as a result of a system-level event rather than a direct API
+//       call from user code. This may be used as an indication that user code
+//       is safe to call without fear of reentry.
 
-typedef uint32_t MojoWatchNotificationFlags;
+typedef uint32_t MojoWatcherNotificationFlags;
 
 #ifdef __cplusplus
-const MojoWatchNotificationFlags MOJO_WATCH_NOTIFICATION_FLAG_NONE = 0;
-const MojoWatchNotificationFlags MOJO_WATCH_NOTIFICATION_FLAG_FROM_SYSTEM =
+const MojoWatcherNotificationFlags MOJO_WATCHER_NOTIFICATION_FLAG_NONE = 0;
+const MojoWatcherNotificationFlags MOJO_WATCHER_NOTIFICATION_FLAG_FROM_SYSTEM =
     1 << 0;
 #else
-#define MOJO_WATCH_NOTIFICATION_FLAG_NONE ((MojoWatchNotificationFlags)0)
-#define MOJO_WATCH_NOTIFICATION_FLAG_FROM_SYSTEM \
-    ((MojoWatchNotificationFlags)1 << 0);
+#define MOJO_WATCHER_NOTIFICATION_FLAG_NONE ((MojoWatcherNotificationFlags)0)
+#define MOJO_WATCHER_NOTIFICATION_FLAG_FROM_SYSTEM \
+  ((MojoWatcherNotificationFlags)1 << 0);
 #endif
 
 // |MojoPropertyType|: Property types that can be passed to |MojoGetProperty()|

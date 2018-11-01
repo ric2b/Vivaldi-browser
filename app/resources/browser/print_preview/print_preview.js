@@ -960,7 +960,10 @@ cr.define('print_preview', function() {
      */
     onSettingsInvalid_: function() {
       this.uiState_ = PrintPreview.UiState_.ERROR;
+      this.isPreviewGenerationInProgress_ = false;
+      this.printHeader_.isPrintButtonEnabled = false;
       console.error('Invalid settings error reported from native layer');
+      this.previewArea_.cancelTimeout();
       this.previewArea_.showCustomMessage(
           loadTimeData.getString('invalidPrinterSettings'));
     },
@@ -1365,7 +1368,9 @@ cr.define('print_preview', function() {
 // <include src="resources/print_preview/search/destination_list_item.js">
 // <include src="resources/print_preview/search/destination_search.js">
 // <include src="resources/print_preview/search/fedex_tos.js">
-// <include src="resources/print_preview/search/cros_destination_resolver.js">
+// <include src="resources/print_preview/search/destination_list_item.js">
+// <include src="resources/print_preview/search/destination_search.js">
+// <include src="resources/print_preview/search/fedex_tos.js">
 // <include src="resources/print_preview/search/provisional_destination_resolver.js">
 
 window.addEventListener('DOMContentLoaded', function() {

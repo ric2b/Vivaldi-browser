@@ -20,7 +20,7 @@
 #include "content/public/common/resource_type.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
-#include "mojo/public/cpp/system/watcher.h"
+#include "mojo/public/cpp/system/simple_watcher.h"
 #include "net/base/io_buffer.h"
 #include "net/base/request_priority.h"
 
@@ -69,8 +69,9 @@ class CONTENT_EXPORT MojoAsyncResourceHandler
       std::unique_ptr<ResourceController> controller) override;
   void OnWillStart(const GURL& url,
                    std::unique_ptr<ResourceController> controller) override;
-  bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
-                  int* buf_size) override;
+  void OnWillRead(scoped_refptr<net::IOBuffer>* buf,
+                  int* buf_size,
+                  std::unique_ptr<ResourceController> controller) override;
   void OnReadCompleted(int bytes_read,
                        std::unique_ptr<ResourceController> controller) override;
   void OnResponseCompleted(
@@ -131,12 +132,20 @@ class CONTENT_EXPORT MojoAsyncResourceHandler
   bool has_checked_for_sufficient_resources_ = false;
   bool sent_received_response_message_ = false;
   bool is_using_io_buffer_not_from_writer_ = false;
+  // True if OnWillRead was deferred, in order to wait to be able to allocate a
+  // buffer.
+  bool did_defer_on_will_read_ = false;
   bool did_defer_on_writing_ = false;
   bool did_defer_on_redirect_ = false;
   base::TimeTicks response_started_ticks_;
   int64_t reported_total_received_bytes_ = 0;
 
-  mojo::Watcher handle_watcher_;
+  // Pointer to parent's information about the read buffer. Only non-null while
+  // OnWillRead is deferred.
+  scoped_refptr<net::IOBuffer>* parent_buffer_ = nullptr;
+  int* parent_buffer_size_ = nullptr;
+
+  mojo::SimpleWatcher handle_watcher_;
   std::unique_ptr<mojom::URLLoader> url_loader_;
   mojom::URLLoaderClientPtr url_loader_client_;
   scoped_refptr<net::IOBufferWithSize> buffer_;

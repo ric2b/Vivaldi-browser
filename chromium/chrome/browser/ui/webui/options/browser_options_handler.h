@@ -35,6 +35,7 @@
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/pointer_device_observer.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "components/user_manager/user_manager.h"
@@ -107,6 +108,10 @@ class BrowserOptionsHandler
   void OnPolicyUpdated(const policy::PolicyNamespace& ns,
                        const policy::PolicyMap& previous,
                        const policy::PolicyMap& current) override;
+#if defined(OS_CHROMEOS)
+  static void DisablePolymerPreloadForTesting();
+#endif  // defined(OS_CHROMEOS)
+
  private:
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -442,6 +447,9 @@ class BrowserOptionsHandler
   bool enable_factory_reset_;
 
   PrefChangeRegistrar local_state_pref_change_registrar_;
+
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      system_timezone_policy_observer_;
 #endif
 
   ScopedObserver<SigninManagerBase, SigninManagerBase::Observer>

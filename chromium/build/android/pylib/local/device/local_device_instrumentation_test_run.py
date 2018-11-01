@@ -6,7 +6,6 @@ import logging
 import os
 import posixpath
 import re
-import tempfile
 import time
 
 from devil.android import device_errors
@@ -15,24 +14,14 @@ from devil.android.sdk import shared_prefs
 from devil.utils import reraiser_thread
 from pylib import valgrind_tools
 from pylib.android import logdog_logcat_monitor
-from pylib.constants import host_paths
 from pylib.base import base_test_result
 from pylib.instrumentation import instrumentation_test_instance
 from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
-from pylib.utils import google_storage_helper
 from pylib.utils import logdog_helper
 from py_trace_event import trace_event
 from py_utils import contextlib_ext
-from py_utils import tempfile_ext
 import tombstones
-
-try:
-  from PIL import Image  # pylint: disable=import-error
-  from PIL import ImageChops  # pylint: disable=import-error
-  can_compute_diffs = True
-except ImportError:
-  can_compute_diffs = False
 
 _TAG = 'test_runner_py'
 
@@ -46,15 +35,7 @@ TIMEOUT_ANNOTATIONS = [
   ('SmallTest', 1 * 60),
 ]
 
-_RE_RENDER_IMAGE_NAME = re.compile(
-      r'(?P<test_class>\w+)\.'
-      r'(?P<description>\w+)\.'
-      r'(?P<device_model>\w+)\.'
-      r'(?P<orientation>port|land)\.png')
-
-RENDER_TESTS_RESULTS_DIR = {
-  'ChromePublicTest': 'chrome/test/data/android/render_tests'
-}
+LOGCAT_FILTERS = ['*:e', 'chromium:v', 'cr_*:v']
 
 # TODO(jbudorick): Make this private once the instrumentation test_runner is
 # deprecated.
@@ -94,30 +75,40 @@ class LocalDeviceInstrumentationTestRun(
         self._env.BlacklistDevice)
     @trace_event.traced
     def individual_device_set_up(dev, host_device_tuples):
-      def install_apk():
-        if self._test_instance.apk_under_test:
-          if self._test_instance.apk_under_test_incremental_install_script:
-            local_device_test_run.IncrementalInstall(
-                dev,
-                self._test_instance.apk_under_test,
-                self._test_instance.apk_under_test_incremental_install_script)
-          else:
-            permissions = self._test_instance.apk_under_test.GetPermissions()
-            dev.Install(self._test_instance.apk_under_test,
-                        permissions=permissions)
+      steps = []
+      def install_helper(apk, permissions):
+        return lambda: dev.Install(apk, permissions=permissions)
+      def incremental_install_helper(dev, apk, script):
+        return lambda: local_device_test_run.IncrementalInstall(
+                           dev, apk, script)
 
-        if self._test_instance.test_apk_incremental_install_script:
-          local_device_test_run.IncrementalInstall(
-              dev,
-              self._test_instance.test_apk,
-              self._test_instance.test_apk_incremental_install_script)
+      if self._test_instance.apk_under_test:
+        if self._test_instance.apk_under_test_incremental_install_script:
+          steps.append(incremental_install_helper(
+                           dev,
+                           self._test_instance.apk_under_test,
+                           self._test_instance.
+                               apk_under_test_incremental_install_script))
         else:
-          permissions = self._test_instance.test_apk.GetPermissions()
-          dev.Install(self._test_instance.test_apk, permissions=permissions)
+          permissions = self._test_instance.apk_under_test.GetPermissions()
+          steps.append(install_helper(self._test_instance.apk_under_test,
+                                      permissions))
 
-        for apk in self._test_instance.additional_apks:
-          dev.Install(apk)
+      if self._test_instance.test_apk_incremental_install_script:
+        steps.append(incremental_install_helper(
+                         dev,
+                         self._test_instance.test_apk,
+                         self._test_instance.
+                             test_apk_incremental_install_script))
+      else:
+        permissions = self._test_instance.test_apk.GetPermissions()
+        steps.append(install_helper(self._test_instance.test_apk,
+                                    permissions))
 
+      steps.extend(install_helper(apk, None)
+                   for apk in self._test_instance.additional_apks)
+
+      def set_debug_app():
         # Set debug app in order to enable reading command line flags on user
         # builds
         if self._test_instance.flags:
@@ -184,8 +175,8 @@ class LocalDeviceInstrumentationTestRun(
         valgrind_tools.SetChromeTimeoutScale(
             dev, self._test_instance.timeout_scale)
 
-      steps = (install_apk, edit_shared_prefs, push_test_data,
-               create_flag_changer)
+      steps += [set_debug_app, edit_shared_prefs, push_test_data,
+                create_flag_changer]
       if self._env.concurrent_adb:
         reraiser_thread.RunAsync(steps)
       else:
@@ -225,7 +216,11 @@ class LocalDeviceInstrumentationTestRun(
 
   #override
   def _GetTests(self):
-    return self._test_instance.GetTests()
+    tests = self._test_instance.GetTests()
+    tests = self._ApplyExternalSharding(
+        tests, self._test_instance.external_shard_index,
+        self._test_instance.total_external_shards)
+    return tests
 
   #override
   def _GetUniqueTestName(self, test):
@@ -311,7 +306,8 @@ class LocalDeviceInstrumentationTestRun(
           time.strftime('%Y%m%dT%H%M%S', time.localtime()),
           device.serial)
       logmon = logdog_logcat_monitor.LogdogLogcatMonitor(
-          device.adb, stream_name)
+          device.adb, stream_name, filter_specs=LOGCAT_FILTERS)
+
       with contextlib_ext.Optional(
           logmon, self._test_instance.should_save_logcat):
         with contextlib_ext.Optional(
@@ -340,8 +336,6 @@ class LocalDeviceInstrumentationTestRun(
     for result in results:
       if logcat_url:
         result.SetLink('logcat', logcat_url)
-
-    self._ProcessRenderTestResults(device, results)
 
     # Update the result name if the test used flags.
     if flags:
@@ -374,19 +368,11 @@ class LocalDeviceInstrumentationTestRun(
         file_name = '%s-%s.png' % (
             test_display_name,
             time.strftime('%Y%m%dT%H%M%S', time.localtime()))
-        screenshot_file = device.TakeScreenshot(
+        saved_dir = device.TakeScreenshot(
             os.path.join(self._test_instance.screenshot_dir, file_name))
         logging.info(
             'Saved screenshot for %s to %s.',
-            test_display_name, screenshot_file)
-        if self._test_instance.should_save_images:
-          link = google_storage_helper.upload(
-              google_storage_helper.unique_name('screenshot', device=device),
-              screenshot_file,
-              bucket='chromium-render-tests')
-          for result in results:
-            result.SetLink('failure_screenshot', link)
-
+            test_display_name, saved_dir)
       logging.info('detected failure in %s. raw output:', test_display_name)
       for l in output:
         logging.info('  %s', l)
@@ -398,6 +384,7 @@ class LocalDeviceInstrumentationTestRun(
             else None)
         device.ClearApplicationState(self._test_instance.package_info.package,
                                      permissions=permissions)
+
     else:
       logging.debug('raw output from %s:', test_display_name)
       for l in output:
@@ -405,8 +392,9 @@ class LocalDeviceInstrumentationTestRun(
     if self._test_instance.coverage_directory:
       device.PullFile(coverage_directory,
           self._test_instance.coverage_directory)
-      device.RunShellCommand('rm -f %s' % os.path.join(coverage_directory,
-          '*'))
+      device.RunShellCommand(
+          'rm -f %s' % posixpath.join(coverage_directory, '*'),
+          check_return=True, shell=True)
     if self._test_instance.store_tombstones:
       tombstones_url = None
       for result in results:
@@ -424,95 +412,6 @@ class LocalDeviceInstrumentationTestRun(
                 stream_name, resolved_tombstones)
           result.SetLink('tombstones', tombstones_url)
     return results, None
-
-  def _ProcessRenderTestResults(self, device, results):
-    render_results_dir = RENDER_TESTS_RESULTS_DIR.get(self._test_instance.suite)
-    if not render_results_dir:
-      return
-
-    failure_images_device_dir = posixpath.join(
-        device.GetExternalStoragePath(),
-        'chromium_tests_root', render_results_dir, 'failures')
-    if not device.FileExists(failure_images_device_dir):
-      return
-
-    if self._test_instance.should_save_images:
-      with tempfile_ext.NamedTemporaryDirectory() as temp_dir:
-        device.PullFile(failure_images_device_dir, temp_dir)
-        device.RemovePath(failure_images_device_dir, recursive=True)
-
-        for failure_filename in os.listdir(
-            os.path.join(temp_dir, 'failures')):
-
-          m = _RE_RENDER_IMAGE_NAME.match(failure_filename)
-          if not m:
-            logging.warning('Unexpected file in render test failures: %s',
-                            failure_filename)
-            continue
-
-          failure_filepath = os.path.join(
-              temp_dir, 'failures', failure_filename)
-          failure_link = google_storage_helper.upload(
-              google_storage_helper.unique_name(
-                  failure_filename, device=device),
-              failure_filepath,
-              bucket='chromium-render-tests')
-
-          golden_filepath = os.path.join(
-              host_paths.DIR_SOURCE_ROOT, render_results_dir,
-              failure_filename)
-          if not os.path.exists(golden_filepath):
-            logging.error('Cannot find golden image for %s', failure_filename)
-            continue
-          golden_link = google_storage_helper.upload(
-              google_storage_helper.unique_name(
-                  failure_filename, device=device),
-              golden_filepath,
-              bucket='chromium-render-tests')
-
-          if can_compute_diffs:
-            diff_filename = '_diff'.join(
-                os.path.splitext(failure_filename))
-            diff_filepath = os.path.join(temp_dir, diff_filename)
-            (ImageChops.difference(
-                Image.open(failure_filepath), Image.open(golden_filepath))
-                    .convert('L')
-                    .point(lambda i: 255 if i else 0)
-                    .save(diff_filepath))
-            diff_link = google_storage_helper.upload(
-                google_storage_helper.unique_name(
-                    diff_filename, device=device),
-                diff_filepath,
-                bucket='chromium-render-tests')
-          else:
-            diff_link = ''
-            logging.error('Error importing PIL library. Image diffs for '
-                          'render test results will not be computed.')
-
-          with tempfile.NamedTemporaryFile(suffix='.html') as temp_html:
-            temp_html.write('''
-                <html>
-                <table>
-                <tr>
-                  <th>Failure</th>
-                  <th>Golden</th>
-                  <th>Diff</th>
-                </tr>
-                <tr>
-                  <td><img src="%s"/></td>
-                  <td><img src="%s"/></td>
-                  <td><img src="%s"/></td>
-                </tr>
-                </table>
-                </html>
-                ''' % (failure_link, golden_link, diff_link))
-            html_results_link = google_storage_helper.upload(
-                google_storage_helper.unique_name(
-                    'render_html', device=device),
-                temp_html.name,
-                bucket='chromium-render-tests')
-            for result in results:
-              result.SetLink(failure_filename, html_results_link)
 
   #override
   def _ShouldRetry(self, test):
@@ -549,4 +448,3 @@ class LocalDeviceInstrumentationTestRun(
     timeout *= cls._GetTimeoutScaleFromAnnotations(annotations)
 
     return timeout
-

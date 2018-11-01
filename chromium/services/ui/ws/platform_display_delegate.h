@@ -11,7 +11,8 @@ class Display;
 
 namespace ui {
 
-class Event;
+class EventSink;
+class OzonePlatform;
 
 namespace ws {
 
@@ -23,21 +24,23 @@ class ServerWindow;
 class PlatformDisplayDelegate {
  public:
   // Returns a display::Display for this display.
-  virtual display::Display GetDisplay() = 0;
+  virtual const display::Display& GetDisplay() = 0;
 
   // Returns the root window of this display.
   virtual ServerWindow* GetRootWindow() = 0;
 
+  // Returns the event sink of this display;
+  virtual EventSink* GetEventSink() = 0;
+
   // Called once when the AcceleratedWidget is available for drawing.
   virtual void OnAcceleratedWidgetAvailable() = 0;
 
-  virtual bool IsInHighContrastMode() = 0;
-
-  // Called when an event arrives.
-  virtual void OnEvent(const ui::Event& event) = 0;
-
   // Called when the Display loses capture.
   virtual void OnNativeCaptureLost() = 0;
+
+  // Allows the OzonePlatform to be overridden, e.g. for tests. Returns null
+  // for non-Ozone platforms.
+  virtual OzonePlatform* GetOzonePlatform() = 0;
 
  protected:
   virtual ~PlatformDisplayDelegate() {}

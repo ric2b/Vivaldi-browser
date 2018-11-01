@@ -25,6 +25,8 @@
 #include "ui/aura/window.h"
 #endif  // USE_AURA
 
+#include "ui/devtools/devtools_connector.h"
+
 namespace extensions {
 
 class ExtensionHostForWebContents : public ExtensionHost {

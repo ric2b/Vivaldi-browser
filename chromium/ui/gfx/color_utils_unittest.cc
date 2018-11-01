@@ -128,7 +128,7 @@ TEST(ColorUtils, CalculateBoringScore_SingleColor) {
   // Fill all pixels in black.
   canvas.FillRect(gfx::Rect(kSize), SK_ColorBLACK);
 
-  SkBitmap bitmap = canvas.ToBitmap();
+  SkBitmap bitmap = canvas.GetBitmap();
   // The thumbnail should deserve the highest boring score.
   EXPECT_DOUBLE_EQ(1.0, CalculateBoringScore(bitmap));
 }
@@ -143,7 +143,7 @@ TEST(ColorUtils, CalculateBoringScore_TwoColors) {
   canvas.FillRect(gfx::Rect(0, 0, kSize.width() / 2, kSize.height()),
                   SK_ColorWHITE);
 
-  SkBitmap bitmap = canvas.ToBitmap();
+  SkBitmap bitmap = canvas.GetBitmap();
   ASSERT_EQ(kSize.width(), bitmap.width());
   ASSERT_EQ(kSize.height(), bitmap.height());
   // The thumbnail should be less boring because two colors are used.
@@ -164,6 +164,18 @@ TEST(ColorUtils, AlphaBlend) {
   // Both are fully transparent, result is fully transparent.
   fore = SkColorSetA(fore, 0);
   EXPECT_EQ(0U, SkColorGetA(AlphaBlend(fore, back, 255)));
+}
+
+TEST(ColorUtils, SkColorToRgbaString) {
+  SkColor color = SkColorSetARGB(153, 100, 150, 200);
+  std::string color_string = SkColorToRgbaString(color);
+  EXPECT_EQ(color_string, "rgba(100,150,200,.6)");
+}
+
+TEST(ColorUtils, SkColorToRgbString) {
+  SkColor color = SkColorSetARGB(200, 50, 100, 150);
+  std::string color_string = SkColorToRgbString(color);
+  EXPECT_EQ(color_string, "50,100,150");
 }
 
 }  // namespace color_utils

@@ -10,8 +10,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
-#include "base/threading/thread_checker.h"
 #include "components/subresource_filter/content/browser/verified_ruleset_dealer.h"
 #include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/activation_state.h"
@@ -82,14 +82,10 @@ class AsyncDocumentSubresourceFilter {
   // with the current thread. If MemoryMappedRuleset is not present or
   // malformed, then a default ActivationState is reported (with ActivationLevel
   // equal to DISABLED).
-  //
-  // The |first_disallowed_load_callback|, if it is non-null, is invoked on the
-  // first ReportDisallowedLoad() call.
   AsyncDocumentSubresourceFilter(
       VerifiedRuleset::Handle* ruleset_handle,
       InitializationParams params,
-      base::Callback<void(ActivationState)> activation_state_callback,
-      base::OnceClosure first_disallowed_load_callback);
+      base::Callback<void(ActivationState)> activation_state_callback);
 
   ~AsyncDocumentSubresourceFilter();
 
@@ -104,13 +100,32 @@ class AsyncDocumentSubresourceFilter {
   // |task_runner|.
   void ReportDisallowedLoad();
 
+  // Must be called after activation state computation is finished.
+  const ActivationState& activation_state() const {
+    return activation_state_.value();
+  }
+
+  // The |first_disallowed_load_callback|, if it is non-null, is invoked on the
+  // first ReportDisallowedLoad() call.
+  void set_first_disallowed_load_callback(base::OnceClosure callback) {
+    first_disallowed_load_callback_ = std::move(callback);
+  }
+
  private:
+  void OnActivateStateCalculated(
+      base::Callback<void(ActivationState)> activation_state_callback,
+      ActivationState activation_state);
+
   // Note: Raw pointer, |core_| already holds a reference to |task_runner_|.
   base::SequencedTaskRunner* task_runner_;
   std::unique_ptr<Core, base::OnTaskRunnerDeleter> core_;
   base::OnceClosure first_disallowed_load_callback_;
 
-  base::ThreadChecker thread_checker_;
+  base::Optional<ActivationState> activation_state_;
+
+  base::SequenceChecker sequence_checker_;
+
+  base::WeakPtrFactory<AsyncDocumentSubresourceFilter> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AsyncDocumentSubresourceFilter);
 };
@@ -125,7 +140,7 @@ class AsyncDocumentSubresourceFilter::Core {
   // Can return nullptr even after initialization in case MemoryMappedRuleset
   // was not present, or was malformed during it.
   DocumentSubresourceFilter* filter() {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequence());
     return filter_ ? &filter_.value() : nullptr;
   }
 
@@ -138,7 +153,7 @@ class AsyncDocumentSubresourceFilter::Core {
                              VerifiedRuleset* verified_ruleset);
 
   base::Optional<DocumentSubresourceFilter> filter_;
-  base::ThreadChecker thread_checker_;
+  base::SequenceChecker sequence_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };

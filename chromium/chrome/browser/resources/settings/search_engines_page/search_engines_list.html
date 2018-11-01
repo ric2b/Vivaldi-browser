@@ -1,31 +1,34 @@
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
-<link rel="import" href="../global_scroll_target_behavior.html">
 <link rel="import" href="../settings_vars_css.html">
 <link rel="import" href="search_engine_entry.html">
 
 <dom-module id="settings-search-engines-list">
   <template>
-    <style include="cr-shared-style">
-      .headers {
+    <style include="settings-shared">
+      #headers {
         display: flex;
         padding: 10px 0;
       }
 
-      .headers .name,
-      .headers .keyword {
+      #headers .name,
+      #headers .keyword {
         flex: 3;
       }
 
-      .headers .url {
+      #headers .url {
         flex: 4;
       }
 
-      div#outer {
+      #outer {
         @apply(--settings-list-frame-padding);
       }
 
+      /* TODO(dbeam): this rule results in incorrectly showing a top border for
+       * "Other Search Engines", which hides the headers while still adding a
+       * dividing line (even though there's no content above the other engines
+       * to actually divide). */
       settings-search-engine-entry {
         border-top: var(--settings-separator-line);
       }
@@ -35,17 +38,20 @@
       }
     </style>
     <div id="outer">
-      <div class="headers" hidden$="[[hideHeaders]]">
+      <div id="headers" class="column-header" hidden$="[[hideHeaders]]">
         <div class="name">$i18n{searchEnginesSearchEngine}</div>
         <div class="keyword">$i18n{searchEnginesKeyword}</div>
         <div class="url">$i18n{searchEnginesQueryURL}</div>
         <div class="icon-placeholder"></div>
       </div>
       <div id="container" class="scroll-container">
-        <iron-list items="[[engines]]" scroll-target="[[subpageScrollTarget]]">
+        <iron-list items="[[engines]]" scroll-target="[[scrollTarget]]"
+            class$="[[getIronListClass_(scrollTarget)]]"
+            scroll-offset="[[scrollOffset]]">
           <template>
             <settings-search-engine-entry engine="[[item]]"
-                tabindex$="[[tabIndex]]">
+                tabindex$="[[tabIndex]]" iron-list-tab-index="[[tabIndex]]"
+                last-focused="{{lastFocused_}}">
             </settings-search-engine-entry>
           </template>
         </iron-list>

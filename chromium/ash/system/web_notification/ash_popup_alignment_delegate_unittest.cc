@@ -2,19 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/system/web_notification/ash_popup_alignment_delegate.h"
+#include "ash/system/web_notification/ash_popup_alignment_delegate.h"
 
 #include <utility>
 #include <vector>
 
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wm_lookup.h"
-#include "ash/common/wm_window.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "ui/display/manager/display_manager.h"
@@ -26,7 +26,6 @@
 
 namespace ash {
 
-// TODO(jamescook): Move this to //ash/common. http://crbug.com/620955
 class AshPopupAlignmentDelegateTest : public test::AshTestBase {
  public:
   AshPopupAlignmentDelegateTest() {}
@@ -152,34 +151,6 @@ TEST_F(AshPopupAlignmentDelegateTest, AutoHide) {
   EXPECT_LT(baseline, alignment_delegate()->GetBaseLine());
 }
 
-// Verify that docked window doesn't affect the popup alignment.
-TEST_F(AshPopupAlignmentDelegateTest, DockedWindow) {
-  const gfx::Rect toast_size(0, 0, 10, 10);
-  UpdateDisplay("600x600");
-  int origin_x = alignment_delegate()->GetToastOriginX(toast_size);
-  int baseline = alignment_delegate()->GetBaseLine();
-
-  std::unique_ptr<views::Widget> widget = CreateTestWidget(
-      nullptr, kShellWindowId_DockedContainer, gfx::Rect(0, 0, 50, 50));
-
-  // Left-side dock should not affect popup alignment
-  EXPECT_EQ(origin_x, alignment_delegate()->GetToastOriginX(toast_size));
-  EXPECT_EQ(baseline, alignment_delegate()->GetBaseLine());
-  EXPECT_FALSE(alignment_delegate()->IsTopDown());
-  EXPECT_FALSE(alignment_delegate()->IsFromLeft());
-
-  // Force dock to right-side
-  WmShelf* shelf = GetPrimaryShelf();
-  shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
-  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
-
-  // Right-side dock should not affect popup alignment
-  EXPECT_EQ(origin_x, alignment_delegate()->GetToastOriginX(toast_size));
-  EXPECT_EQ(baseline, alignment_delegate()->GetBaseLine());
-  EXPECT_FALSE(alignment_delegate()->IsTopDown());
-  EXPECT_FALSE(alignment_delegate()->IsFromLeft());
-}
-
 TEST_F(AshPopupAlignmentDelegateTest, DisplayResize) {
   const gfx::Rect toast_size(0, 0, 10, 10);
   UpdateDisplay("600x600");
@@ -196,6 +167,10 @@ TEST_F(AshPopupAlignmentDelegateTest, DisplayResize) {
 }
 
 TEST_F(AshPopupAlignmentDelegateTest, DockedMode) {
+  // TODO: needs unified mode. http://crbug.com/698024.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   const gfx::Rect toast_size(0, 0, 10, 10);
   UpdateDisplay("600x600");
   int origin_x = alignment_delegate()->GetToastOriginX(toast_size);
@@ -234,10 +209,9 @@ TEST_F(AshPopupAlignmentDelegateTest, Extended) {
   SetAlignmentDelegate(
       base::MakeUnique<AshPopupAlignmentDelegate>(GetPrimaryShelf()));
 
-  display::Display second_display = display_manager()->GetDisplayAt(1u);
+  display::Display second_display = GetSecondaryDisplay();
   WmShelf* second_shelf =
-      WmLookup::Get()
-          ->GetRootWindowControllerWithDisplayId(second_display.id())
+      Shell::GetRootWindowControllerWithDisplayId(second_display.id())
           ->GetShelf();
   AshPopupAlignmentDelegate for_2nd_display(second_shelf);
   UpdateWorkArea(&for_2nd_display, second_display);
@@ -248,6 +222,10 @@ TEST_F(AshPopupAlignmentDelegateTest, Extended) {
 }
 
 TEST_F(AshPopupAlignmentDelegateTest, Unified) {
+  // TODO: needs unified mode. http://crbug.com/698024.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   display_manager()->SetUnifiedDesktopEnabled(true);
 
   // Reset the delegate as the primary display's shelf will be destroyed during

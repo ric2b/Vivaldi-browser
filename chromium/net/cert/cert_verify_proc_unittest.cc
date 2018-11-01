@@ -21,6 +21,7 @@
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/cert_verify_proc_builtin.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/crl_set_storage.h"
@@ -47,6 +48,9 @@
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #endif
+
+// TODO(crbug.com/649017): Add tests that only certificates with
+// serverAuth are accepted.
 
 using net::test::IsError;
 using net::test::IsOk;
@@ -113,6 +117,7 @@ enum CertVerifyProcType {
   CERT_VERIFY_PROC_IOS,
   CERT_VERIFY_PROC_MAC,
   CERT_VERIFY_PROC_WIN,
+  CERT_VERIFY_PROC_BUILTIN,
 };
 
 // Returns the CertVerifyProcType corresponding to what
@@ -162,6 +167,8 @@ std::string VerifyProcTypeToName(
       return "CertVerifyProcMac";
     case CERT_VERIFY_PROC_WIN:
       return "CertVerifyProcWin";
+    case CERT_VERIFY_PROC_BUILTIN:
+      return "CertVerifyProcBuiltin";
   }
 
   return nullptr;
@@ -170,13 +177,21 @@ std::string VerifyProcTypeToName(
 // The set of all CertVerifyProcTypes that tests should be
 // parameterized on.
 const std::vector<CertVerifyProcType> kAllCertVerifiers = {
-    GetDefaultCertVerifyProcType()};
+    GetDefaultCertVerifyProcType()
+
+// TODO(crbug.com/649017): Enable this everywhere. Right now this is
+// gated on having CertVerifyProcBuiltin understand the roots added
+// via TestRootCerts.
+#if defined(USE_NSS_CERTS)
+        ,
+    CERT_VERIFY_PROC_BUILTIN
+#endif
+};
 
 }  // namespace
 
 // This fixture is for tests that apply to concrete implementations of
-// CertVerifyProc. It will be run for all of the concrete
-// CertVerifyProc types.
+// CertVerifyProc. It will be run for all of the concrete CertVerifyProc types.
 //
 // It is called "Internal" as it tests the internal methods like
 // "VerifyInternal()".
@@ -184,8 +199,14 @@ class CertVerifyProcInternalTest
     : public testing::TestWithParam<CertVerifyProcType> {
  protected:
   void SetUp() override {
-    EXPECT_EQ(verify_proc_type(), GetDefaultCertVerifyProcType());
-    verify_proc_ = CertVerifyProc::CreateDefault();
+    CertVerifyProcType type = verify_proc_type();
+    if (type == CERT_VERIFY_PROC_BUILTIN) {
+      verify_proc_ = CreateCertVerifyProcBuiltin();
+    } else if (type == GetDefaultCertVerifyProcType()) {
+      verify_proc_ = CertVerifyProc::CreateDefault();
+    } else {
+      ADD_FAILURE() << "Unhandled CertVerifyProcType";
+    }
   }
 
   int Verify(X509Certificate* cert,
@@ -243,12 +264,14 @@ class CertVerifyProcInternalTest
   }
 
   bool SupportsCRLSet() const {
+    // TODO(crbug.com/649017): Return true for CERT_VERIFY_PROC_BUILTIN.
     return verify_proc_type() == CERT_VERIFY_PROC_NSS ||
            verify_proc_type() == CERT_VERIFY_PROC_WIN ||
            verify_proc_type() == CERT_VERIFY_PROC_MAC;
   }
 
   bool SupportsCRLSetsInPathBuilding() const {
+    // TODO(crbug.com/649017): Return true for CERT_VERIFY_PROC_BUILTIN.
     return verify_proc_type() == CERT_VERIFY_PROC_WIN ||
            verify_proc_type() == CERT_VERIFY_PROC_NSS;
   }
@@ -280,18 +303,11 @@ TEST_P(CertVerifyProcInternalTest, DISABLED_EVVerification) {
     return;
   }
 
-  CertificateList certs =
-      CreateCertificateListFromFile(GetTestCertsDirectory(), "comodo.chain.pem",
-                                    X509Certificate::FORMAT_PEM_CERT_SEQUENCE);
-  ASSERT_EQ(3U, certs.size());
-
-  X509Certificate::OSCertHandles intermediates;
-  intermediates.push_back(certs[1]->os_cert_handle());
-  intermediates.push_back(certs[2]->os_cert_handle());
-
-  scoped_refptr<X509Certificate> comodo_chain =
-      X509Certificate::CreateFromHandle(certs[0]->os_cert_handle(),
-                                        intermediates);
+  scoped_refptr<X509Certificate> comodo_chain = CreateCertificateChainFromFile(
+      GetTestCertsDirectory(), "comodo.chain.pem",
+      X509Certificate::FORMAT_PEM_CERT_SEQUENCE);
+  ASSERT_TRUE(comodo_chain);
+  ASSERT_EQ(2U, comodo_chain->GetIntermediateCertificates().size());
 
   scoped_refptr<CRLSet> crl_set(CRLSet::ForTesting(false, NULL, ""));
   CertVerifyResult verify_result;
@@ -424,13 +440,10 @@ TEST_P(CertVerifyProcInternalTest, RejectExpiredCert) {
   ScopedTestRoot test_root(
       ImportCertFromFile(certs_dir, "root_ca_cert.pem").get());
 
-  CertificateList certs = CreateCertificateListFromFile(
+  scoped_refptr<X509Certificate> cert = CreateCertificateChainFromFile(
       certs_dir, "expired_cert.pem", X509Certificate::FORMAT_AUTO);
-  ASSERT_EQ(1U, certs.size());
-
-  X509Certificate::OSCertHandles intermediates;
-  scoped_refptr<X509Certificate> cert = X509Certificate::CreateFromHandle(
-      certs[0]->os_cert_handle(), intermediates);
+  ASSERT_TRUE(cert);
+  ASSERT_EQ(0U, cert->GetIntermediateCertificates().size());
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -498,6 +511,7 @@ TEST_P(CertVerifyProcInternalTest, RejectWeakKeys) {
       scoped_refptr<X509Certificate> cert_chain =
           X509Certificate::CreateFromHandle(ee_cert->os_cert_handle(),
                                             intermediates);
+      ASSERT_TRUE(cert_chain);
 
       CertVerifyResult verify_result;
       int error = Verify(cert_chain.get(), "127.0.0.1", 0, NULL,
@@ -553,6 +567,7 @@ TEST_P(CertVerifyProcInternalTest, ExtraneousMD5RootCert) {
   intermediates.push_back(extra_cert->os_cert_handle());
   scoped_refptr<X509Certificate> cert_chain = X509Certificate::CreateFromHandle(
       server_cert->os_cert_handle(), intermediates);
+  ASSERT_TRUE(cert_chain);
 
   CertVerifyResult verify_result;
   int flags = 0;
@@ -587,6 +602,7 @@ TEST_P(CertVerifyProcInternalTest, GoogleDigiNotarTest) {
   intermediates.push_back(intermediate_cert->os_cert_handle());
   scoped_refptr<X509Certificate> cert_chain = X509Certificate::CreateFromHandle(
       server_cert->os_cert_handle(), intermediates);
+  ASSERT_TRUE(cert_chain);
 
   CertVerifyResult verify_result;
   int flags = CertVerifier::VERIFY_REV_CHECKING_ENABLED;
@@ -653,14 +669,11 @@ TEST_P(CertVerifyProcInternalTest, NameConstraintsOk) {
   ASSERT_EQ(1U, ca_cert_list.size());
   ScopedTestRoot test_root(ca_cert_list[0].get());
 
-  CertificateList cert_list = CreateCertificateListFromFile(
+  scoped_refptr<X509Certificate> leaf = CreateCertificateChainFromFile(
       GetTestCertsDirectory(), "name_constraint_good.pem",
       X509Certificate::FORMAT_AUTO);
-  ASSERT_EQ(1U, cert_list.size());
-
-  X509Certificate::OSCertHandles intermediates;
-  scoped_refptr<X509Certificate> leaf = X509Certificate::CreateFromHandle(
-      cert_list[0]->os_cert_handle(), intermediates);
+  ASSERT_TRUE(leaf);
+  ASSERT_EQ(0U, leaf->GetIntermediateCertificates().size());
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -693,8 +706,8 @@ class CertVerifyProcInspectSignatureAlgorithmsTest : public ::testing::Test {
     DigestAlgorithm tbs_algorithm;
   };
 
-  // On iOS trying to import a certificate with mismatched signature will
-  // fail. Consequently the rest of the tests can't be performed.
+  // On some platforms trying to import a certificate with mismatched signature
+  // will fail. Consequently the rest of the tests can't be performed.
   WARN_UNUSED_RESULT bool SupportsImportingMismatchedAlgorithms() const {
 #if defined(OS_IOS)
     LOG(INFO) << "Skipping test on iOS because certs with mismatched "
@@ -1059,6 +1072,7 @@ TEST_P(CertVerifyProcInternalTest, NameConstraintsFailure) {
   X509Certificate::OSCertHandles intermediates;
   scoped_refptr<X509Certificate> leaf = X509Certificate::CreateFromHandle(
       cert_list[0]->os_cert_handle(), intermediates);
+  ASSERT_TRUE(leaf);
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -1116,6 +1130,7 @@ TEST_P(CertVerifyProcInternalTest, DISABLED_TestKnownRoot) {
 
   scoped_refptr<X509Certificate> cert_chain = X509Certificate::CreateFromHandle(
       certs[0]->os_cert_handle(), intermediates);
+  ASSERT_TRUE(cert_chain);
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -1187,6 +1202,11 @@ TEST_P(CertVerifyProcInternalTest, PublicKeyHashes) {
 // The Key Usage extension in this RSA SSL server certificate does not have
 // the keyEncipherment bit.
 TEST_P(CertVerifyProcInternalTest, InvalidKeyUsage) {
+  if (verify_proc_type() == CERT_VERIFY_PROC_BUILTIN) {
+    LOG(INFO) << "TODO(crbug.com/649017): Skipping test as not yet implemented "
+                 "in builting verifier";
+    return;
+  }
   base::FilePath certs_dir = GetTestCertsDirectory();
 
   scoped_refptr<X509Certificate> server_cert =

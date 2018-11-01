@@ -13,7 +13,9 @@
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/translate/android/translate_utils.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
+#include "chrome/browser/ui/android/infobars/translate_compact_infobar.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "jni/TranslateInfoBar_jni.h"
 
@@ -25,7 +27,10 @@ using base::android::ScopedJavaLocalRef;
 
 std::unique_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
-  return base::MakeUnique<TranslateInfoBar>(std::move(delegate));
+  if (translate::TranslateInfoBarDelegate::IsCompactUIEnabled())
+    return base::MakeUnique<TranslateCompactInfoBar>(std::move(delegate));
+  else
+    return base::MakeUnique<TranslateInfoBar>(std::move(delegate));
 }
 
 
@@ -40,19 +45,10 @@ TranslateInfoBar::~TranslateInfoBar() {
 
 ScopedJavaLocalRef<jobject> TranslateInfoBar::CreateRenderInfoBar(JNIEnv* env) {
   translate::TranslateInfoBarDelegate* delegate = GetDelegate();
-  std::vector<base::string16> languages;
-  std::vector<std::string> codes;
-  languages.reserve(delegate->num_languages());
-  codes.reserve(delegate->num_languages());
-  for (size_t i = 0; i < delegate->num_languages(); ++i) {
-    languages.push_back(delegate->language_name_at(i));
-    codes.push_back(delegate->language_code_at(i));
-  }
-  DCHECK(codes.size() == languages.size());
   base::android::ScopedJavaLocalRef<jobjectArray> java_languages =
-      base::android::ToJavaArrayOfStrings(env, languages);
+      TranslateUtils::GetJavaLanguages(env, delegate);
   base::android::ScopedJavaLocalRef<jobjectArray> java_codes =
-      base::android::ToJavaArrayOfStrings(env, codes);
+      TranslateUtils::GetJavaLanguageCodes(env, delegate);
 
   ScopedJavaLocalRef<jstring> source_language_code =
       base::android::ConvertUTF8ToJavaString(
@@ -104,8 +100,8 @@ void TranslateInfoBar::SetJavaInfoBar(
     const base::android::JavaRef<jobject>& java_info_bar) {
   InfoBarAndroid::SetJavaInfoBar(java_info_bar);
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_TranslateInfoBar_setNativePtr(env, java_info_bar,
-                                     reinterpret_cast<intptr_t>(this));
+    Java_TranslateInfoBar_setNativePtr(env, java_info_bar,
+                                       reinterpret_cast<intptr_t>(this));
 }
 
 void TranslateInfoBar::ApplyTranslateOptions(

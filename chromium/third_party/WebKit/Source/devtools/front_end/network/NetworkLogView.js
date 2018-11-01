@@ -29,7 +29,7 @@
  */
 /**
  * @implements {UI.Searchable}
- * @implements {SDK.TargetManager.Observer}
+ * @implements {SDK.SDKModelObserver<!SDK.NetworkManager>}
  * @unrestricted
  */
 Network.NetworkLogView = class extends UI.VBox {
@@ -74,8 +74,11 @@ Network.NetworkLogView = class extends UI.VBox {
 
     /** @type {!Map.<string, !Network.NetworkRequestNode>} */
     this._nodesByRequestId = new Map();
-    /** @type {!Map.<string, !Network.NetworkGroupNode>} */
+    /** @type {!Map<*, !Network.NetworkGroupNode>} */
     this._nodeGroups = new Map();
+    /** @type {!Set<!Network.NetworkRowDecorator>} */
+    this._rowDecorators = new Set();
+
     /** @type {!Object.<string, boolean>} */
     this._staleRequestIds = {};
     /** @type {number} */
@@ -107,9 +110,10 @@ Network.NetworkLogView = class extends UI.VBox {
     this._resetSuggestionBuilder();
     this._initializeView();
 
-    Common.moduleSetting('networkColorCodeResourceTypes').addChangeListener(this._invalidateAllItems, this);
+    Common.moduleSetting('networkColorCodeResourceTypes')
+        .addChangeListener(this._invalidateAllItems.bind(this, false), this);
 
-    SDK.targetManager.observeTargets(this);
+    SDK.targetManager.observeModels(SDK.NetworkManager, this);
     SDK.targetManager.addModelListener(
         SDK.NetworkManager, SDK.NetworkManager.Events.RequestStarted, this._onRequestStarted, this);
     SDK.targetManager.addModelListener(
@@ -352,7 +356,15 @@ Network.NetworkLogView = class extends UI.VBox {
    */
   setGrouping(grouping) {
     this._activeGroupLookup = grouping;
+    this._nodeGroups.clear();
     this._invalidateAllItems();
+  }
+
+  /**
+   * @return {!Set<!Network.NetworkRowDecorator>}
+   */
+  rowDecorators() {
+    return this._rowDecorators;
   }
 
   /**
@@ -387,11 +399,11 @@ Network.NetworkLogView = class extends UI.VBox {
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!SDK.NetworkManager} networkManager
    */
-  targetAdded(target) {
-    if (!target.parentTarget()) {
-      var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(target);
+  modelAdded(networkManager) {
+    if (!networkManager.target().parentTarget()) {
+      var resourceTreeModel = networkManager.target().model(SDK.ResourceTreeModel);
       if (resourceTreeModel) {
         resourceTreeModel.addEventListener(
             SDK.ResourceTreeModel.Events.MainFrameNavigated, this._mainFrameNavigated, this);
@@ -400,18 +412,16 @@ Network.NetworkLogView = class extends UI.VBox {
             SDK.ResourceTreeModel.Events.DOMContentLoaded, this._domContentLoadedEventFired, this);
       }
     }
-    var networkLog = SDK.NetworkLog.fromTarget(target);
-    if (networkLog)
-      networkLog.requests().forEach(this._appendRequest.bind(this));
+    NetworkLog.networkLog.requestsForManager(networkManager).forEach(this._appendRequest.bind(this));
   }
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!SDK.NetworkManager} networkManager
    */
-  targetRemoved(target) {
-    if (!target.parentTarget()) {
-      var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(target);
+  modelRemoved(networkManager) {
+    if (!networkManager.target().parentTarget()) {
+      var resourceTreeModel = networkManager.target().model(SDK.ResourceTreeModel);
       if (resourceTreeModel) {
         resourceTreeModel.removeEventListener(
             SDK.ResourceTreeModel.Events.MainFrameNavigated, this._mainFrameNavigated, this);
@@ -488,6 +498,12 @@ Network.NetworkLogView = class extends UI.VBox {
     this.element.id = 'network-container';
     this._setupDataGrid();
 
+    self.runtime.allInstances(Network.NetworkRowDecorator).then(instances => {
+      for (var instance of instances)
+        this._rowDecorators.add(instance);
+      this._invalidateAllItems(true);
+    });
+
     this._columns.show(this.element);
 
     this._summaryBarElement = this.element.createChild('div', 'network-summary-bar');
@@ -530,6 +546,10 @@ Network.NetworkLogView = class extends UI.VBox {
     if (!this._dataGrid)  // Not initialized yet.
       return [];
     return [this._dataGrid.scrollContainer];
+  }
+
+  columnExtensionResolved() {
+    this._invalidateAllItems(true);
   }
 
   _setupDataGrid() {
@@ -601,7 +621,8 @@ Network.NetworkLogView = class extends UI.VBox {
         selectedRequestsNumber++;
         selectedTransferSize += requestTransferSize;
       }
-      if (request.url() === request.target().inspectedURL() && request.resourceType() === Common.resourceTypes.Document)
+      if (request.url() === request.networkManager().target().inspectedURL() &&
+          request.resourceType() === Common.resourceTypes.Document)
         baseTime = request.startTime;
       if (request.endTime > maxTime)
         maxTime = request.endTime;
@@ -683,11 +704,17 @@ Network.NetworkLogView = class extends UI.VBox {
       this._refresh();
   }
 
-  _invalidateAllItems() {
+  /**
+   * @param {boolean=} deferUpdate
+   */
+  _invalidateAllItems(deferUpdate) {
     var requestIds = this._nodesByRequestId.keysArray();
     for (var i = 0; i < requestIds.length; ++i)
       this._staleRequestIds[requestIds[i]] = true;
-    this._refresh();
+    if (deferUpdate)
+      this.scheduleRefresh();
+    else
+      this._refresh();
   }
 
   /**
@@ -732,10 +759,10 @@ Network.NetworkLogView = class extends UI.VBox {
     if (!this._recording)
       return;
 
-    var data = /** @type {number} */ (event.data);
-    if (data) {
-      this._mainRequestLoadTime = data;
-      this._columns.addEventDividers([data], 'network-red-divider');
+    var time = /** @type {number} */ (event.data.loadTime);
+    if (time) {
+      this._mainRequestLoadTime = time;
+      this._columns.addEventDividers([time], 'network-red-divider');
     }
   }
 
@@ -810,7 +837,8 @@ Network.NetworkLogView = class extends UI.VBox {
       var request = node.request();
       this._timeCalculator.updateBoundaries(request);
       this._durationCalculator.updateBoundaries(request);
-
+      if (node[Network.NetworkLogView._isFilteredOutSymbol] === isFilteredOut)
+        continue;
       node[Network.NetworkLogView._isFilteredOutSymbol] = isFilteredOut;
       var newParent = this._parentNodeForInsert(node);
       var removeFromParent = node.parent && (isFilteredOut || node.parent !== newParent);
@@ -865,15 +893,16 @@ Network.NetworkLogView = class extends UI.VBox {
     if (!this._activeGroupLookup)
       return this._dataGrid.rootNode();
 
-    var groupName = this._activeGroupLookup.lookup(node.request());
-    if (!groupName)
+    var groupKey = this._activeGroupLookup.groupForRequest(node.request());
+    if (!groupKey)
       return this._dataGrid.rootNode();
 
-    var group = this._nodeGroups.get(groupName);
+    var group = this._nodeGroups.get(groupKey);
     if (group)
       return group;
-    group = new Network.NetworkGroupNode(this, groupName);
-    this._nodeGroups.set(groupName, group);
+    group = new Network.NetworkGroupNode(this, this._activeGroupLookup.groupName(groupKey));
+    group.setColumnExtensions(this._columns.columnExtensions());
+    this._nodeGroups.set(groupKey, group);
     return group;
   }
 
@@ -934,6 +963,7 @@ Network.NetworkLogView = class extends UI.VBox {
    */
   _appendRequest(request) {
     var node = new Network.NetworkRequestNode(this, request);
+    node.setColumnExtensions(this._columns.columnExtensions());
     node[Network.NetworkLogView._isFilteredOutSymbol] = true;
     node[Network.NetworkLogView._isMatchingSearchQuerySymbol] = false;
 
@@ -1026,8 +1056,8 @@ Network.NetworkLogView = class extends UI.VBox {
 
     // Pick provisional load requests.
     var requestsToPick = [];
-    var networkLog = SDK.NetworkLog.fromTarget(frame.target());
-    var requests = networkLog ? networkLog.requests() : [];
+    var networkManager = frame.resourceTreeModel().target().model(SDK.NetworkManager);
+    var requests = networkManager ? NetworkLog.networkLog.requestsForManager(networkManager) : [];
     for (var i = 0; i < requests.length; ++i) {
       var request = requests[i];
       if (request.loaderId === loaderId)
@@ -1107,50 +1137,48 @@ Network.NetworkLogView = class extends UI.VBox {
     contextMenu.appendItem(Common.UIString.capitalize('Clear ^browser ^cache'), this._clearBrowserCache.bind(this));
     contextMenu.appendItem(Common.UIString.capitalize('Clear ^browser ^cookies'), this._clearBrowserCookies.bind(this));
 
-    if (request && Runtime.experiments.isEnabled('requestBlocking')) {  // Disabled until ready.
+    if (request) {
       contextMenu.appendSeparator();
 
-      var blockedSetting = Common.moduleSetting('networkBlockedURLs');
-      var blockedSettingData = blockedSetting.get();
-
       const maxBlockedURLLength = 20;
+      var manager = SDK.multitargetNetworkManager;
+      var patterns = manager.blockedPatterns();
+
       var urlWithoutScheme = request.parsedURL.urlWithoutScheme();
-      var blockedURLIndex = blockedSettingData.indexOf(urlWithoutScheme);
-      if (urlWithoutScheme && blockedURLIndex === -1) {
+      if (urlWithoutScheme && !patterns.find(pattern => pattern.url === urlWithoutScheme)) {
         contextMenu.appendItem(
             Common.UIString.capitalize('Block ^request URL'), addBlockedURL.bind(null, urlWithoutScheme));
       } else if (urlWithoutScheme) {
         const croppedURL = urlWithoutScheme.trimMiddle(maxBlockedURLLength);
         contextMenu.appendItem(
-            Common.UIString.capitalize('Unblock ' + croppedURL), removeBlockedURLIndex.bind(null, blockedURLIndex));
+            Common.UIString.capitalize('Unblock ' + croppedURL), removeBlockedURL.bind(null, urlWithoutScheme));
       }
 
       var domain = request.parsedURL.domain();
-      var blockedDomainIndex = blockedSettingData.indexOf(domain);
-      if (domain && blockedDomainIndex === -1) {
+      if (domain && !patterns.find(pattern => pattern.url === domain)) {
         contextMenu.appendItem(Common.UIString.capitalize('Block ^request ^domain'), addBlockedURL.bind(null, domain));
       } else if (domain) {
         const croppedDomain = domain.trimMiddle(maxBlockedURLLength);
         contextMenu.appendItem(
-            Common.UIString.capitalize('Unblock ' + croppedDomain),
-            removeBlockedURLIndex.bind(null, blockedDomainIndex));
+            Common.UIString.capitalize('Unblock ' + croppedDomain), removeBlockedURL.bind(null, domain));
       }
 
       /**
        * @param {string} url
        */
       function addBlockedURL(url) {
-        blockedSettingData.push(url);
-        blockedSetting.set(blockedSettingData);
+        patterns.push({enabled: true, url: url});
+        manager.setBlockedPatterns(patterns);
+        manager.setBlockingEnabled(true);
         UI.viewManager.showView('network.blocked-urls');
       }
 
       /**
-       * @param {number} index
+       * @param {string} url
        */
-      function removeBlockedURLIndex(index) {
-        blockedSettingData.splice(index, 1);
-        blockedSetting.set(blockedSettingData);
+      function removeBlockedURL(url) {
+        patterns = patterns.filter(pattern => pattern.url !== url);
+        manager.setBlockedPatterns(patterns);
         UI.viewManager.showView('network.blocked-urls');
       }
     }
@@ -1171,7 +1199,7 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   _copyAll() {
-    var harArchive = {log: (new SDK.HARLog(this._harRequests())).build()};
+    var harArchive = {log: (new NetworkLog.HARLog(this._harRequests())).build()};
     InspectorFrontendHost.copyText(JSON.stringify(harArchive, null, 2));
   }
 
@@ -1797,7 +1825,25 @@ Network.NetworkGroupLookupInterface = function() {};
 Network.NetworkGroupLookupInterface.prototype = {
   /**
    * @param {!SDK.NetworkRequest} request
-   * @return {?string}
+   * @return {?*}
    */
-  lookup(request) {}
+  groupForRequest(request) {},
+
+  /**
+   * @param {!*} key
+   * @return {string}
+   */
+  groupName(key) {}
+};
+
+/**
+ * @interface
+ */
+Network.NetworkRowDecorator = function() {};
+
+Network.NetworkRowDecorator.prototype = {
+  /**
+   * @param {!Network.NetworkNode} node
+   */
+  decorate(node) {}
 };

@@ -35,8 +35,8 @@ void RecordImmediateTaskQueueingDuration(tracked_objects::Duration duration) {
       base::TimeDelta::FromMilliseconds(duration.InMilliseconds()));
 }
 
-double MonotonicTimeInSeconds(base::TimeTicks timeTicks) {
-  return (timeTicks - base::TimeTicks()).InSecondsF();
+double MonotonicTimeInSeconds(base::TimeTicks time_ticks) {
+  return (time_ticks - base::TimeTicks()).InSecondsF();
 }
 
 // Converts a OnceClosure to a RepeatingClosure. It hits CHECK failure to run
@@ -166,16 +166,16 @@ void TaskQueueManager::ReloadEmptyWorkQueues(
   }
 }
 
-void TaskQueueManager::WakeupReadyDelayedQueues(LazyNow* lazy_now) {
+void TaskQueueManager::WakeUpReadyDelayedQueues(LazyNow* lazy_now) {
   TRACE_EVENT0(disabled_by_default_tracing_category_,
-               "TaskQueueManager::WakeupReadyDelayedQueues");
+               "TaskQueueManager::WakeUpReadyDelayedQueues");
 
   for (TimeDomain* time_domain : time_domains_) {
     if (time_domain == real_time_domain_.get()) {
-      time_domain->WakeupReadyDelayedQueues(lazy_now);
+      time_domain->WakeUpReadyDelayedQueues(lazy_now);
     } else {
       LazyNow time_domain_lazy_now = time_domain->CreateLazyNow();
-      time_domain->WakeupReadyDelayedQueues(&time_domain_lazy_now);
+      time_domain->WakeUpReadyDelayedQueues(&time_domain_lazy_now);
     }
   }
 }
@@ -188,6 +188,12 @@ void TaskQueueManager::OnBeginNestedMessageLoop() {
     any_thread().immediate_do_work_posted_count++;
     any_thread().is_nested = true;
   }
+
+  // When a nested message loop starts, task time observers may want to ignore
+  // the current task.
+  for (auto& observer : task_time_observers_)
+    observer.OnBeginNestedMessageLoop();
+
   delegate_->PostTask(FROM_HERE, immediate_do_work_closure_);
 }
 
@@ -234,7 +240,7 @@ void TaskQueueManager::MaybeScheduleDelayedWork(
     base::TimeTicks now,
     base::TimeTicks run_time) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
-  // Make sure we don't cancel another TimeDomain's wakeup.
+  // Make sure we don't cancel another TimeDomain's wake-up.
   DCHECK(!next_delayed_do_work_ ||
          next_delayed_do_work_.time_domain() == requesting_time_domain);
   {
@@ -320,7 +326,7 @@ void TaskQueueManager::DoWork(bool delayed) {
     // avoid a lock order inversion.
     ReloadEmptyWorkQueues(queues_to_reload);
 
-    WakeupReadyDelayedQueues(&lazy_now);
+    WakeUpReadyDelayedQueues(&lazy_now);
 
     internal::WorkQueue* work_queue = nullptr;
     if (!SelectWorkQueueToService(&work_queue))
@@ -390,7 +396,7 @@ void TaskQueueManager::PostDoWorkContinuationLocked(
     if (any_thread().immediate_do_work_posted_count > 0)
       return;
 
-    if (next_delay->delay() <= base::TimeDelta()) {
+    if (next_delay->Delay() <= base::TimeDelta()) {
       // If a delayed DoWork is pending then we don't need to post a
       // continuation because it should run immediately.
       if (next_delayed_do_work_ &&
@@ -403,10 +409,10 @@ void TaskQueueManager::PostDoWorkContinuationLocked(
   }
 
   // We avoid holding |any_thread_lock_| while posting the task.
-  if (next_delay->delay() <= base::TimeDelta()) {
+  if (next_delay->Delay() <= base::TimeDelta()) {
     delegate_->PostTask(FROM_HERE, immediate_do_work_closure_);
   } else {
-    base::TimeTicks run_time = lazy_now->Now() + next_delay->delay();
+    base::TimeTicks run_time = lazy_now->Now() + next_delay->Delay();
 
     if (next_delayed_do_work_.run_time() == run_time)
       return;
@@ -416,7 +422,7 @@ void TaskQueueManager::PostDoWorkContinuationLocked(
     cancelable_delayed_do_work_closure_.Reset(delayed_do_work_closure_);
     delegate_->PostDelayedTask(FROM_HERE,
                                cancelable_delayed_do_work_closure_.callback(),
-                               next_delay->delay());
+                               next_delay->Delay());
   }
 }
 
@@ -438,7 +444,7 @@ TaskQueueManager::ComputeDelayTillNextTaskLocked(LazyNow* lazy_now) {
     return NextTaskDelay();
 
   // Otherwise we need to find the shortest delay, if any.  NB we don't need to
-  // call WakeupReadyDelayedQueues because it's assumed DelayTillNextTask will
+  // call WakeUpReadyDelayedQueues because it's assumed DelayTillNextTask will
   // return base::TimeDelta>() if the delayed task is due to run now.
   base::Optional<NextTaskDelay> delay_till_next_task;
   for (TimeDomain* time_domain : time_domains_) {
@@ -518,7 +524,7 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
     if (notify_time_observers) {
       task_start_time = MonotonicTimeInSeconds(time_before_task.Now());
       for (auto& observer : task_time_observers_)
-        observer.willProcessTask(queue, task_start_time);
+        observer.WillProcessTask(queue, task_start_time);
     }
   }
 
@@ -544,7 +550,7 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
       *time_after_task = real_time_domain()->Now();
       double task_end_time = MonotonicTimeInSeconds(*time_after_task);
       for (auto& observer : task_time_observers_)
-        observer.didProcessTask(queue, task_start_time, task_end_time);
+        observer.DidProcessTask(queue, task_start_time, task_end_time);
     }
 
     for (auto& observer : task_observers_)
@@ -611,7 +617,7 @@ bool TaskQueueManager::GetAndClearSystemIsQuiescentBit() {
   return !task_was_run;
 }
 
-const scoped_refptr<TaskQueueManagerDelegate>& TaskQueueManager::delegate()
+const scoped_refptr<TaskQueueManagerDelegate>& TaskQueueManager::Delegate()
     const {
   return delegate_;
 }
@@ -648,7 +654,7 @@ TaskQueueManager::AsValueWithSelectorResult(
   if (should_run) {
     state->SetString("selected_queue",
                      selected_work_queue->task_queue()->GetName());
-    state->SetString("work_queue_name", selected_work_queue->name());
+    state->SetString("work_queue_name", selected_work_queue->GetName());
   }
 
   state->BeginArray("time_domains");

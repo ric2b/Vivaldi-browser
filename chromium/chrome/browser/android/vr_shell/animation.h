@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 
 namespace vr_shell {
 
@@ -22,8 +23,7 @@ class Easing;
 class Animation {
  public:
   enum Property {
-    COPYRECT = 0,
-    SIZE,
+    SIZE = 0,
     TRANSLATION,
     SCALE,
     ROTATION,
@@ -35,8 +35,8 @@ class Animation {
             std::unique_ptr<easing::Easing> easing,
             std::vector<float> from,
             std::vector<float> to,
-            int64_t start,
-            int64_t duration);
+            const base::TimeTicks& start,
+            const base::TimeDelta& duration);
   ~Animation();
 
   int id;
@@ -44,8 +44,8 @@ class Animation {
   std::unique_ptr<easing::Easing> easing;
   std::vector<float> from;
   std::vector<float> to;
-  int64_t start;
-  int64_t duration;
+  base::TimeTicks start;
+  base::TimeDelta duration;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Animation);

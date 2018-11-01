@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import copy
+import json
 
 from webkitpy.common.host_mock import MockHost
 from webkitpy.common.net.buildbot import Build
@@ -52,6 +53,26 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
                 'is_try_builder': True,
             },
         })
+
+        host.filesystem.write_text_file(
+            host.port_factory.get().layout_tests_dir() + '/external/wpt/MANIFEST.json',
+            json.dumps({
+                'items': {
+                    'reftest': {
+                        'reftest.html': [
+                            ['/reftest.html', [['/reftest-ref.html', '==']], {}]
+                        ]
+                    },
+                    'testharness': {
+                        'test/path.html': [['/test/path.html', {}]],
+                        'test/zzzz.html': [['/test/zzzz.html', {}]],
+                    },
+                    'manual': {
+                        'x-manual.html': [['/x-manual.html', {}]],
+                    },
+                },
+            }))
+
         return host
 
     def test_get_failing_results_dict_only_passing_results(self):
@@ -62,6 +83,22 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
                     'passing-test.html': {
                         'expected': 'PASS',
                         'actual': 'PASS',
+                    },
+                },
+            },
+        }))
+        updater = WPTExpectationsUpdater(host)
+        self.assertEqual(updater.get_failing_results_dict(Build('MOCK Try Mac10.10', 123)), {})
+
+    def test_get_failing_results_dict_unexpected_pass(self):
+        host = self.mock_host()
+        host.buildbot.set_results(Build('MOCK Try Mac10.10', 123), LayoutTestResults({
+            'tests': {
+                'x': {
+                    'passing-test.html': {
+                        'expected': 'FAIL TIMEOUT',
+                        'actual': 'PASS',
+                        'is_unexpected': True,
                     },
                 },
             },
@@ -137,11 +174,17 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             updater.get_expectations({'expected': 'TIMEOUT', 'actual': 'PASS'}),
             {'Pass'})
         self.assertEqual(
-            updater.get_expectations({'expected': 'PASS', 'actual': 'TIMEOUT CRASH FAIL'}),
+            updater.get_expectations({'expected': 'PASS', 'actual': 'TEXT PASS'}),
+            {'Pass', 'Failure'})
+        self.assertEqual(
+            updater.get_expectations({'expected': 'PASS', 'actual': 'TIMEOUT CRASH TEXT'}),
             {'Crash', 'Failure', 'Timeout'})
         self.assertEqual(
             updater.get_expectations({'expected': 'SLOW CRASH FAIL TIMEOUT', 'actual': 'PASS'}),
             {'Pass'})
+        self.assertEqual(
+            updater.get_expectations({'expected': 'Pass', 'actual': 'IMAGE+TEXT IMAGE IMAGE'}),
+            {'Failure'})
 
     def test_create_line_list_old_tests(self):
         # In this example, there are two failures that are not in w3c tests.
@@ -155,24 +198,27 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
         self.assertEqual(updater.create_line_list(results), [])
 
     def test_create_line_list_new_tests(self):
-        # In this example, there are three unexpected results. The new
-        # test expectation lines are sorted by test, and then specifier.
+        # In this example, there are three unexpected results for wpt tests.
+        # The new test expectation lines are sorted by test, and then specifier.
         updater = WPTExpectationsUpdater(self.mock_host())
         results = {
-            'external/fake/test/zzzz.html': {
-                'test-mac-mac10.10': {'expected': 'PASS', 'actual': 'FAIL', 'bug': 'crbug.com/test'},
+            'external/wpt/test/zzzz.html': {
+                'test-mac-mac10.10': {'expected': 'PASS', 'actual': 'TEXT', 'bug': 'crbug.com/test'},
             },
-            'external/fake/test/path.html': {
+            'virtual/foo/external/wpt/test/zzzz.html': {
                 'test-linux-trusty': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
                 'test-mac-mac10.11': {'expected': 'FAIL', 'actual': 'TIMEOUT', 'bug': 'crbug.com/test'},
+            },
+            'unrelated/test.html': {
+                'test-linux-trusty': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
             },
         }
         self.assertEqual(
             updater.create_line_list(results),
             [
-                'crbug.com/test [ Trusty ] external/fake/test/path.html [ Pass ]',
-                'crbug.com/test [ Mac10.11 ] external/fake/test/path.html [ Timeout ]',
-                'crbug.com/test [ Mac10.10 ] external/fake/test/zzzz.html [ Failure ]',
+                'crbug.com/test [ Mac10.10 ] external/wpt/test/zzzz.html [ Failure ]',
+                'crbug.com/test [ Trusty ] virtual/foo/external/wpt/test/zzzz.html [ Pass ]',
+                'crbug.com/test [ Mac10.11 ] virtual/foo/external/wpt/test/zzzz.html [ Timeout ]',
             ])
 
     def test_specifier_part(self):
@@ -183,8 +229,10 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
     def test_skipped_specifiers_when_test_is_wontfix(self):
         host = self.mock_host()
         expectations_path = '/test.checkout/LayoutTests/NeverFixTests'
-        host.filesystem.files[expectations_path] = 'crbug.com/111 [ Trusty ] external/wpt/test.html [ WontFix ]\n'
-        host.filesystem.files['/test.checkout/LayoutTests/external/wpt/test.html'] = ''
+        host.filesystem.write_text_file(
+            expectations_path,
+            'crbug.com/111 [ Trusty ] external/wpt/test.html [ WontFix ]\n')
+        host.filesystem.write_text_file('/test.checkout/LayoutTests/external/wpt/test.html', '')
         updater = WPTExpectationsUpdater(host)
         self.assertEqual(updater.skipped_specifiers('external/wpt/test.html'), ['Trusty'])
 
@@ -204,8 +252,10 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
     def test_specifier_part_with_skipped_test(self):
         host = self.mock_host()
         expectations_path = '/test.checkout/LayoutTests/NeverFixTests'
-        host.filesystem.files[expectations_path] = 'crbug.com/111 [ Linux Mac10.11 ] external/wpt/test.html [ WontFix ]\n'
-        host.filesystem.files['/test.checkout/LayoutTests/external/wpt/test.html'] = ''
+        host.filesystem.write_text_file(
+            expectations_path,
+            'crbug.com/111 [ Linux Mac10.11 ] external/wpt/test.html [ WontFix ]\n')
+        host.filesystem.write_text_file('/test.checkout/LayoutTests/external/wpt/test.html', '')
         updater = WPTExpectationsUpdater(host)
         self.assertEqual(
             updater.specifier_part(['test-mac-mac10.10', 'test-win-win7', 'test-win-win10'], 'external/wpt/test.html'), '')
@@ -218,14 +268,14 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
         with self.assertRaises(ValueError):
             updater.merge_dicts(
                 {
-                    'external/fake/test/path.html': {
+                    'external/wpt/test/path.html': {
                         'one': {'expected': 'FAIL', 'actual': 'PASS'},
                         'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
                         'three': {'expected': 'FAIL', 'actual': 'PASS'},
                     },
                 },
                 {
-                    'external/fake/test/path.html': {
+                    'external/wpt/test/path.html': {
                         'one': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
                     }
                 })
@@ -239,14 +289,14 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             }
         }
         two = {
-            'external/fake/test/path.html': {
+            'external/wpt/test/path.html': {
                 'one': {'expected': 'FAIL', 'actual': 'PASS'},
                 'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
                 'three': {'expected': 'FAIL', 'actual': 'PASS'},
             }
         }
         three = {
-            'external/fake/test/path.html': {
+            'external/wpt/test/path.html': {
                 'four': {'expected': 'FAIL', 'actual': 'PASS'},
             }
         }
@@ -281,7 +331,9 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
         host = self.mock_host()
 
         expectations_path = host.port_factory.get().path_to_generic_test_expectations_file()
-        host.filesystem.files[expectations_path] = MARKER_COMMENT + '\n'
+        host.filesystem.write_text_file(
+            expectations_path,
+            MARKER_COMMENT + '\n')
         updater = WPTExpectationsUpdater(host)
         line_list = ['crbug.com/123 [ Trusty ] fake/file/path.html [ Pass ]']
         updater.write_to_test_expectations(line_list)
@@ -294,7 +346,9 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
     def test_write_to_test_expectations_with_no_marker_comment(self):
         host = self.mock_host()
         expectations_path = host.port_factory.get().path_to_generic_test_expectations_file()
-        host.filesystem.files[expectations_path] = 'crbug.com/111 [ Trusty ] foo/bar.html [ Failure ]\n'
+        host.filesystem.write_text_file(
+            expectations_path,
+            'crbug.com/111 [ Trusty ] foo/bar.html [ Failure ]\n')
         updater = WPTExpectationsUpdater(host)
         line_list = ['crbug.com/123 [ Trusty ] fake/file/path.html [ Pass ]']
         updater.write_to_test_expectations(line_list)
@@ -308,7 +362,9 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
     def test_write_to_test_expectations_skips_existing_lines(self):
         host = self.mock_host()
         expectations_path = host.port_factory.get().path_to_generic_test_expectations_file()
-        host.filesystem.files[expectations_path] = 'crbug.com/111 dont/copy/me.html [ Failure ]\n'
+        host.filesystem.write_text_file(
+            expectations_path,
+            'crbug.com/111 dont/copy/me.html [ Failure ]\n')
         updater = WPTExpectationsUpdater(host)
         line_list = [
             'crbug.com/111 dont/copy/me.html [ Failure ]',
@@ -325,60 +381,48 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
     def test_write_to_test_expectations_with_marker_and_no_lines(self):
         host = self.mock_host()
         expectations_path = host.port_factory.get().path_to_generic_test_expectations_file()
-        host.filesystem.files[expectations_path] = (
-            MARKER_COMMENT + '\n'
-            'crbug.com/123 [ Trusty ] fake/file/path.html [ Pass ]\n')
+        host.filesystem.write_text_file(
+            expectations_path,
+            MARKER_COMMENT + '\n' + 'crbug.com/123 [ Trusty ] fake/file/path.html [ Pass ]\n')
         updater = WPTExpectationsUpdater(host)
         updater.write_to_test_expectations([])
         value = updater.host.filesystem.read_text_file(expectations_path)
         self.assertMultiLineEqual(
             value,
-            (MARKER_COMMENT + '\n'
-             'crbug.com/123 [ Trusty ] fake/file/path.html [ Pass ]\n'))
+            MARKER_COMMENT + '\n' + 'crbug.com/123 [ Trusty ] fake/file/path.html [ Pass ]\n')
 
-    def test_is_js_test_true(self):
-        host = self.mock_host()
-        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/foo/bar.html'] = (
-            '<script src="/resources/testharness.js"></script>')
-        updater = WPTExpectationsUpdater(host)
-        self.assertTrue(updater.is_js_test('foo/bar.html'))
-
-    def test_is_js_test_false(self):
-        host = self.mock_host()
-        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/foo/bar.html'] = (
-            '<script src="ref-test.html"></script>')
-        updater = WPTExpectationsUpdater(host)
-        self.assertFalse(updater.is_js_test('foo/bar.html'))
-
-    def test_is_js_test_non_existent_file(self):
+    def test_is_reference_test_given_testharness_test(self):
         updater = WPTExpectationsUpdater(self.mock_host())
-        self.assertFalse(updater.is_js_test('foo/bar.html'))
+        self.assertFalse(updater.is_reference_test('test/path.html'))
+
+    def test_is_reference_test_given_reference_test(self):
+        updater = WPTExpectationsUpdater(self.mock_host())
+        self.assertTrue(updater.is_reference_test('external/wpt/reftest.html'))
+
+    def test_is_reference_test_given_non_existent_file(self):
+        updater = WPTExpectationsUpdater(self.mock_host())
+        self.assertFalse(updater.is_reference_test('foo/bar.html'))
 
     def test_get_test_to_rebaseline_returns_only_tests_with_failures(self):
         host = self.mock_host()
-        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
-            '<script src="/resources/testharness.js"></script>')
-        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/other/test/path.html'] = (
-            '<script src="/resources/testharness.js"></script>')
         updater = WPTExpectationsUpdater(host)
         two = {
-            'external/fake/test/path.html': {
+            'external/wpt/test/path.html': {
                 'one': {'expected': 'FAIL', 'actual': 'PASS'},
                 'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
                 'three': {'expected': 'FAIL', 'actual': 'PASS'},
             }
         }
         tests_to_rebaseline, _ = updater.get_tests_to_rebaseline(two)
-        # The other test doesn't have an entry in the test results dict, so it is not listed as a test to rebaseline.
-        self.assertEqual(tests_to_rebaseline, ['external/fake/test/path.html'])
+        # external/wpt/test/zzzz.html is another possible candidate, but it
+        # is not listed in the results dict, so it shall not be rebaselined.
+        self.assertEqual(tests_to_rebaseline, ['external/wpt/test/path.html'])
 
-    def test_get_test_to_rebaseline_returns_only_js_tests(self):
+    def test_get_test_to_rebaseline_does_not_return_ref_tests(self):
         host = self.mock_host()
-        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
-            'this file does not look like a testharness JS test.')
         updater = WPTExpectationsUpdater(host)
         two = {
-            'external/fake/test/path.html': {
+            'external/wpt/reftest.html': {
                 'one': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
                 'two': {'expected': 'FAIL', 'actual': 'TIMEOUT', 'bug': 'crbug.com/test'},
                 'three': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
@@ -389,53 +433,47 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
 
     def test_get_tests_to_rebaseline_returns_updated_dict(self):
         host = self.mock_host()
-        test_results_dict = {
-            'external/fake/test/path.html': {
+        results = {
+            'external/wpt/test/path.html': {
                 'one': {'expected': 'PASS', 'actual': 'TEXT'},
                 'two': {'expected': 'PASS', 'actual': 'TIMEOUT'},
             },
         }
-        test_results_dict_copy = copy.deepcopy(test_results_dict)
-        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
-            '<script src="/resources/testharness.js"></script>')
+        results_copy = copy.deepcopy(results)
         updater = WPTExpectationsUpdater(host)
-        tests_to_rebaseline, modified_test_results = updater.get_tests_to_rebaseline(
-            test_results_dict)
-        self.assertEqual(tests_to_rebaseline, ['external/fake/test/path.html'])
+        tests_to_rebaseline, modified_test_results = updater.get_tests_to_rebaseline(results)
+        self.assertEqual(tests_to_rebaseline, ['external/wpt/test/path.html'])
         # The record for the builder with a timeout is kept, but not with a text mismatch,
         # since that should be covered by downloading a new baseline.
         self.assertEqual(modified_test_results, {
-            'external/fake/test/path.html': {
+            'external/wpt/test/path.html': {
                 'two': {'expected': 'PASS', 'actual': 'TIMEOUT'},
             },
         })
         # The original dict isn't modified.
-        self.assertEqual(test_results_dict, test_results_dict_copy)
+        self.assertEqual(results, results_copy)
 
     def test_get_tests_to_rebaseline_also_returns_slow_tests(self):
         host = self.mock_host()
-        test_results_dict = {
-            'external/fake/test/path.html': {
+        results = {
+            'external/wpt/test/path.html': {
                 'one': {'expected': 'SLOW', 'actual': 'TEXT'},
                 'two': {'expected': 'SLOW', 'actual': 'TIMEOUT'},
             },
         }
-        test_results_dict_copy = copy.deepcopy(test_results_dict)
-        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
-            '<script src="/resources/testharness.js"></script>')
+        results_copy = copy.deepcopy(results)
         updater = WPTExpectationsUpdater(host)
-        tests_to_rebaseline, modified_test_results = updater.get_tests_to_rebaseline(
-            test_results_dict)
-        self.assertEqual(tests_to_rebaseline, ['external/fake/test/path.html'])
+        tests_to_rebaseline, modified_test_results = updater.get_tests_to_rebaseline(results)
+        self.assertEqual(tests_to_rebaseline, ['external/wpt/test/path.html'])
         # The record for the builder with a timeout is kept, but not with a text mismatch,
         # since that should be covered by downloading a new baseline.
         self.assertEqual(modified_test_results, {
-            'external/fake/test/path.html': {
+            'external/wpt/test/path.html': {
                 'two': {'expected': 'SLOW', 'actual': 'TIMEOUT'},
             },
         })
         # The original dict isn't modified.
-        self.assertEqual(test_results_dict, test_results_dict_copy)
+        self.assertEqual(results, results_copy)
 
     def test_run_no_issue_number(self):
         # TODO(qyearsley): For testing: Consider making a MockGitCL class
@@ -450,3 +488,24 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
         updater.get_latest_try_jobs = lambda: []
         self.assertEqual(1, updater.run(args=[]))
         self.assertLog(['ERROR: No try job information was collected.\n'])
+
+    def test_new_manual_tests_get_skip_expectation(self):
+        host = self.mock_host()
+        updater = WPTExpectationsUpdater(host)
+        results = {
+            'external/wpt/x-manual.html': {
+                (
+                    'test-linux-precise',
+                    'test-linux-trusty',
+                    'test-mac-mac10.10',
+                    'test-mac-mac10.11',
+                    'test-win-win7',
+                    'test-win-win10',
+                ): {'expected': 'PASS', 'actual': 'MISSING', 'bug': 'crbug.com/test'}
+            }
+        }
+        tests_to_rebaseline, _ = updater.get_tests_to_rebaseline(results)
+        self.assertEqual(tests_to_rebaseline, [])
+        self.assertEqual(
+            updater.create_line_list(results),
+            ['crbug.com/test external/wpt/x-manual.html [ Skip ]'])

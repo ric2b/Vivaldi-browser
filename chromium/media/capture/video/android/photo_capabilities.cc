@@ -13,6 +13,27 @@ using base::android::AttachCurrentThread;
 
 namespace media {
 
+namespace {
+
+static_assert(
+    std::is_same<int,
+                 std::underlying_type<
+                     PhotoCapabilities::AndroidMeteringMode>::type>::value,
+    "AndroidMeteringMode underlying type should be int");
+
+std::vector<PhotoCapabilities::AndroidMeteringMode> ToAndroidMeteringModes(
+    base::android::ScopedJavaLocalRef<jintArray> jni_modes) {
+  JNIEnv* env = AttachCurrentThread();
+  std::vector<PhotoCapabilities::AndroidMeteringMode> modes;
+  if (jni_modes.obj()) {
+    base::android::JavaIntArrayToIntVector(
+        env, jni_modes.obj(), reinterpret_cast<std::vector<int>*>(&modes));
+  }
+  return modes;
+}
+
+}  // anonymous namespace
+
 PhotoCapabilities::PhotoCapabilities(
     base::android::ScopedJavaLocalRef<jobject> object)
     : object_(object) {}
@@ -106,11 +127,31 @@ PhotoCapabilities::AndroidMeteringMode PhotoCapabilities::getFocusMode() const {
       Java_PhotoCapabilities_getFocusMode(AttachCurrentThread(), object_));
 }
 
+std::vector<PhotoCapabilities::AndroidMeteringMode>
+PhotoCapabilities::getFocusModes() const {
+  DCHECK(!object_.is_null());
+
+  JNIEnv* env = AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jintArray> jni_modes =
+      Java_PhotoCapabilities_getFocusModes(env, object_);
+  return ToAndroidMeteringModes(jni_modes);
+}
+
 PhotoCapabilities::AndroidMeteringMode PhotoCapabilities::getExposureMode()
     const {
   DCHECK(!object_.is_null());
   return static_cast<AndroidMeteringMode>(
       Java_PhotoCapabilities_getExposureMode(AttachCurrentThread(), object_));
+}
+
+std::vector<PhotoCapabilities::AndroidMeteringMode>
+PhotoCapabilities::getExposureModes() const {
+  DCHECK(!object_.is_null());
+
+  JNIEnv* env = AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jintArray> jni_modes =
+      Java_PhotoCapabilities_getExposureModes(env, object_);
+  return ToAndroidMeteringModes(jni_modes);
 }
 
 double PhotoCapabilities::getMinExposureCompensation() const {
@@ -145,11 +186,45 @@ PhotoCapabilities::AndroidMeteringMode PhotoCapabilities::getWhiteBalanceMode()
                                                  object_));
 }
 
-PhotoCapabilities::AndroidFillLightMode PhotoCapabilities::getFillLightMode()
-    const {
+std::vector<PhotoCapabilities::AndroidMeteringMode>
+PhotoCapabilities::getWhiteBalanceModes() const {
   DCHECK(!object_.is_null());
-  return static_cast<AndroidFillLightMode>(
-      Java_PhotoCapabilities_getFillLightMode(AttachCurrentThread(), object_));
+
+  JNIEnv* env = AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jintArray> jni_modes =
+      Java_PhotoCapabilities_getWhiteBalanceModes(env, object_);
+  return ToAndroidMeteringModes(jni_modes);
+}
+
+std::vector<PhotoCapabilities::AndroidFillLightMode>
+PhotoCapabilities::getFillLightModes() const {
+  DCHECK(!object_.is_null());
+
+  JNIEnv* env = AttachCurrentThread();
+  std::vector<AndroidFillLightMode> modes;
+  static_assert(
+      std::is_same<int,
+                   std::underlying_type<AndroidFillLightMode>::type>::value,
+      "AndroidFillLightMode underlying type should be int");
+
+  base::android::ScopedJavaLocalRef<jintArray> jni_modes =
+      Java_PhotoCapabilities_getFillLightModes(env, object_);
+  if (jni_modes.obj()) {
+    base::android::JavaIntArrayToIntVector(
+        env, jni_modes.obj(), reinterpret_cast<std::vector<int>*>(&modes));
+  }
+  return modes;
+}
+
+bool PhotoCapabilities::getSupportsTorch() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getSupportsTorch(AttachCurrentThread(),
+                                                 object_);
+}
+
+bool PhotoCapabilities::getTorch() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getTorch(AttachCurrentThread(), object_);
 }
 
 bool PhotoCapabilities::getRedEyeReduction() const {

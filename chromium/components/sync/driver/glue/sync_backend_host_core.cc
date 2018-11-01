@@ -576,18 +576,24 @@ void SyncBackendHostCore::SaveChanges() {
 }
 
 void SyncBackendHostCore::DoClearServerData(
-    const SyncManager::ClearServerDataCallback& frontend_callback) {
+    const base::Closure& frontend_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  const SyncManager::ClearServerDataCallback callback =
+  const base::Closure callback =
       base::Bind(&SyncBackendHostCore::ClearServerDataDone,
                  weak_ptr_factory_.GetWeakPtr(), frontend_callback);
   sync_manager_->ClearServerData(callback);
 }
 
 void SyncBackendHostCore::DoOnCookieJarChanged(bool account_mismatch,
-                                               bool empty_jar) {
+                                               bool empty_jar,
+                                               const base::Closure& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   sync_manager_->OnCookieJarChanged(account_mismatch, empty_jar);
+  if (!callback.is_null()) {
+    host_.Call(FROM_HERE,
+               &SyncBackendHostImpl::OnCookieJarChangedDoneOnFrontendLoop,
+               callback);
+  }
 }
 
 void SyncBackendHostCore::ClearServerDataDone(

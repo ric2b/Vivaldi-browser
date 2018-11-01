@@ -5,10 +5,11 @@
 #ifndef IOS_CHROME_BROWSER_PAYMENTS_PAYMENT_REQUEST_H_
 #define IOS_CHROME_BROWSER_PAYMENTS_PAYMENT_REQUEST_H_
 
+#include <set>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
+#include "components/payments/core/payment_options_provider.h"
 #include "ios/web/public/payments/payment_request.h"
 
 namespace autofill {
@@ -21,33 +22,38 @@ namespace payments {
 class CurrencyFormatter;
 }  // namespace payments
 
-// Owns an instance of web::PaymentRequest as provided by the page invoking the
+// Has a copy of web::PaymentRequest as provided by the page invoking the
 // PaymentRequest API. Also caches credit cards and addresses provided by the
 // |personal_data_manager| and manages shared resources and user selections for
-// the current PaymentRequest flow. It takes ownership of |web_payment_request|
-// and must be initialized with a non-null instance of |personal_data_manager|
-// that outlives this class.
-class PaymentRequest {
+// the current PaymentRequest flow. It must be initialized with a non-null
+// instance of |personal_data_manager| that outlives this class.
+class PaymentRequest : payments::PaymentOptionsProvider {
  public:
   // |personal_data_manager| should not be null and should outlive this object.
-  PaymentRequest(std::unique_ptr<web::PaymentRequest> web_payment_request,
+  PaymentRequest(const web::PaymentRequest& web_payment_request,
                  autofill::PersonalDataManager* personal_data_manager);
-  ~PaymentRequest();
+  ~PaymentRequest() override;
+
+  autofill::PersonalDataManager* GetPersonalDataManager() const {
+    return personal_data_manager_;
+  }
 
   // Returns the payment details from |web_payment_request_|.
   const web::PaymentDetails& payment_details() const {
-    return web_payment_request_->details;
-  }
-
-  // Returns the payment options from |web_payment_request_|.
-  const web::PaymentOptions& payment_options() const {
-    return web_payment_request_->options;
+    return web_payment_request_.details;
   }
 
   // Updates the payment details of the |web_payment_request_|. It also updates
   // the cached references to the shipping options in |web_payment_request_| as
   // well as the reference to the selected shipping option.
   void set_payment_details(const web::PaymentDetails& details);
+
+  // PaymentOptionsProvider:
+  bool request_shipping() const override;
+  bool request_payer_name() const override;
+  bool request_payer_phone() const override;
+  bool request_payer_email() const override;
+  payments::PaymentShippingType shipping_type() const override;
 
   // Returns the payments::CurrencyFormatter instance for this PaymentRequest.
   // Note: Having multiple currencies per PaymentRequest flow is not supported;
@@ -94,6 +100,19 @@ class PaymentRequest {
     return shipping_profiles_;
   }
 
+  const std::vector<std::string>& supported_card_networks() const {
+    return supported_card_networks_;
+  }
+
+  const std::set<std::string>& basic_card_specified_networks() const {
+    return basic_card_specified_networks_;
+  }
+
+  // Adds |credit_card| to the list of cached credit cards and returns a pointer
+  // to the cached copy.
+  virtual autofill::CreditCard* AddCreditCard(
+      const autofill::CreditCard& credit_card);
+
   // Returns the available autofill credit cards for this user that match a
   // supported type specified in |web_payment_request_|.
   const std::vector<autofill::CreditCard*>& credit_cards() const {
@@ -137,8 +156,8 @@ class PaymentRequest {
   void PopulateShippingOptionCache();
 
   // The web::PaymentRequest object as provided by the page invoking the Payment
-  // Request API, owned by this PaymentRequest.
-  std::unique_ptr<web::PaymentRequest> web_payment_request_;
+  // Request API, owned by this object.
+  web::PaymentRequest web_payment_request_;
 
   // Never null and outlives this object.
   autofill::PersonalDataManager* personal_data_manager_;
@@ -148,9 +167,9 @@ class PaymentRequest {
 
   // Profiles returned by the Data Manager may change due to (e.g.) sync events,
   // meaning PaymentRequest may outlive them. Therefore, profiles are fetched
-  // once and owned here. Whenever profiles are requested a vector of pointers
-  // to these copies are returned.
-  std::vector<std::unique_ptr<autofill::AutofillProfile>> profile_cache_;
+  // once and their copies are cached here. Whenever profiles are requested a
+  // vector of pointers to these copies are returned.
+  std::vector<autofill::AutofillProfile> profile_cache_;
 
   std::vector<autofill::AutofillProfile*> shipping_profiles_;
   autofill::AutofillProfile* selected_shipping_profile_;
@@ -160,12 +179,20 @@ class PaymentRequest {
 
   // Credit cards returnd by the Data Manager may change due to (e.g.)
   // sync events, meaning PaymentRequest may outlive them. Therefore, credit
-  // cards are fetched once and owned here. Whenever credit cards are requested
-  // a vector of pointers to these copies are returned.
-  std::vector<std::unique_ptr<autofill::CreditCard>> credit_card_cache_;
+  // cards are fetched once and their copies are cached here. Whenever credit
+  // cards are requested a vector of pointers to these copies are returned.
+  std::vector<autofill::CreditCard> credit_card_cache_;
 
   std::vector<autofill::CreditCard*> credit_cards_;
   autofill::CreditCard* selected_credit_card_;
+
+  // A vector of supported basic card networks. This encompasses everything that
+  // the merchant supports and should be used for support checks.
+  std::vector<std::string> supported_card_networks_;
+  // A subset of |supported_card_networks_| which is only the networks that have
+  // been specified as part of the "basic-card" supported method. Callers should
+  // use |supported_card_networks_| for merchant support checks.
+  std::set<std::string> basic_card_specified_networks_;
 
   // A vector of pointers to the shipping options in |web_payment_request_|.
   std::vector<web::PaymentShippingOption*> shipping_options_;

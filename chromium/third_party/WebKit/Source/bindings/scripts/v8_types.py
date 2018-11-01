@@ -41,7 +41,12 @@ Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 
 import posixpath
 
-from idl_types import IdlTypeBase, IdlType, IdlUnionType, IdlArrayOrSequenceType, IdlNullableType
+from idl_types import IdlArrayOrSequenceType
+from idl_types import IdlNullableType
+from idl_types import IdlRecordType
+from idl_types import IdlType
+from idl_types import IdlTypeBase
+from idl_types import IdlUnionType
 import v8_attributes  # for IdlType.constructor_type_name
 from v8_globals import includes
 from v8_utilities import extended_attribute_value_contains
@@ -69,6 +74,9 @@ TYPED_ARRAY_TYPES = frozenset([
     'Uint16Array',
     'Uint32Array',
 ])
+ARRAY_BUFFER_VIEW_AND_TYPED_ARRAY_TYPES = TYPED_ARRAY_TYPES.union(frozenset([
+    'ArrayBufferView'
+]))
 ARRAY_BUFFER_AND_VIEW_TYPES = TYPED_ARRAY_TYPES.union(frozenset([
     'ArrayBuffer',
     'ArrayBufferView',
@@ -79,6 +87,9 @@ ARRAY_BUFFER_AND_VIEW_TYPES = TYPED_ARRAY_TYPES.union(frozenset([
 
 IdlType.is_array_buffer_or_view = property(
     lambda self: self.base_type in ARRAY_BUFFER_AND_VIEW_TYPES)
+
+IdlType.is_array_buffer_view_or_typed_array = property(
+    lambda self: self.base_type in ARRAY_BUFFER_VIEW_AND_TYPED_ARRAY_TYPES)
 
 IdlType.is_typed_array = property(
     lambda self: self.base_type in TYPED_ARRAY_TYPES)
@@ -96,20 +107,17 @@ IdlType.is_wrapper_type = property(
 CPP_TYPE_SAME_AS_IDL_TYPE = set([
     'double',
     'float',
-    'long long',
-    'unsigned long long',
 ])
-CPP_INT_TYPES = set([
-    'byte',
-    'long',
-    'short',
-])
-CPP_UNSIGNED_TYPES = set([
-    'octet',
-    'unsigned int',
-    'unsigned long',
-    'unsigned short',
-])
+CPP_INTEGER_CONVERSION_RULES = {
+    'byte': 'int8_t',
+    'octet': 'uint8_t',
+    'short': 'int16_t',
+    'unsigned short': 'uint16_t',
+    'long': 'int32_t',
+    'unsigned long': 'uint32_t',
+    'long long': 'int64_t',
+    'unsigned long long': 'uint64_t',
+}
 CPP_SPECIAL_CONVERSION_RULES = {
     'Date': 'double',
     'Dictionary': 'Dictionary',
@@ -143,15 +151,15 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
             bool, True if the C++ type is used as a variadic argument of a method.
         used_in_cpp_sequence:
             bool, True if the C++ type is used as an element of a container.
-            Containers can be an array, a sequence or a dictionary.
+            Containers can be an array, a sequence, a dictionary or a record.
     """
     def string_mode():
         if idl_type.is_nullable:
-            return 'TreatNullAndUndefinedAsNullString'
+            return 'kTreatNullAndUndefinedAsNullString'
         if extended_attributes.get('TreatNullAs') == 'EmptyString':
-            return 'TreatNullAsEmptyString'
+            return 'kTreatNullAsEmptyString'
         if extended_attributes.get('TreatNullAs') == 'NullString':
-            return 'TreatNullAsNullString'
+            return 'kTreatNullAsNullString'
         return ''
 
     extended_attributes = extended_attributes or {}
@@ -169,15 +177,23 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
             return 'const %s&' % vector_template_type
         return vector_template_type
 
+    # Record types.
+    if idl_type.is_record_type:
+        vector_type = cpp_ptr_type('Vector', 'HeapVector', idl_type.value_type.is_gc_type)
+        value_type = idl_type.value_type.cpp_type_args(used_in_cpp_sequence=True)
+        vector_template_type = cpp_template_type(vector_type,
+                                                 'std::pair<String, %s>' % value_type)
+        if used_as_rvalue_type:
+            return 'const %s&' % vector_template_type
+        return vector_template_type
+
     # Simple types
     base_idl_type = idl_type.base_type
 
     if base_idl_type in CPP_TYPE_SAME_AS_IDL_TYPE:
         return base_idl_type
-    if base_idl_type in CPP_INT_TYPES:
-        return 'int'
-    if base_idl_type in CPP_UNSIGNED_TYPES:
-        return 'unsigned'
+    if base_idl_type in CPP_INTEGER_CONVERSION_RULES:
+        return CPP_INTEGER_CONVERSION_RULES[base_idl_type]
     if base_idl_type in CPP_SPECIAL_CONVERSION_RULES:
         return CPP_SPECIAL_CONVERSION_RULES[base_idl_type]
 
@@ -192,6 +208,9 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
         return 'FlexibleArrayBufferView'
     if base_idl_type in TYPED_ARRAY_TYPES and 'FlexibleArrayBufferView' in extended_attributes:
         return 'Flexible' + base_idl_type + 'View'
+    if base_idl_type in ARRAY_BUFFER_VIEW_AND_TYPED_ARRAY_TYPES:
+        if not used_in_cpp_sequence:
+            return cpp_template_type('NotShared', idl_type.implemented_as)
     if idl_type.is_interface_type:
         implemented_as_class = idl_type.implemented_as
         if raw_type or (used_as_rvalue_type and idl_type.is_garbage_collected) or not used_in_cpp_sequence:
@@ -322,19 +341,18 @@ IdlTypeBase.is_traceable = property(is_traceable)
 IdlUnionType.is_traceable = property(lambda self: True)
 IdlArrayOrSequenceType.is_traceable = property(
     lambda self: self.element_type.is_traceable)
+IdlRecordType.is_traceable = property(
+    lambda self: self.value_type.is_traceable)
 
 
 ################################################################################
 # Includes
 ################################################################################
 
-def includes_for_cpp_class(class_name, relative_dir_posix):
-    return set([posixpath.join('bindings', relative_dir_posix, class_name + '.h')])
-
-
 INCLUDES_FOR_TYPE = {
     'object': set(),
     'ArrayBufferView': set(['bindings/core/v8/V8ArrayBufferView.h',
+                            'core/dom/NotShared.h',
                             'core/dom/FlexibleArrayBufferView.h']),
     'Dictionary': set(['bindings/core/v8/Dictionary.h']),
     'EventHandler': set(['bindings/core/v8/V8AbstractEventListener.h',
@@ -374,7 +392,8 @@ def includes_for_type(idl_type, extended_attributes=None):
             set(['bindings/%s/v8/V8%s.h' % (component_dir[base_idl_type], base_idl_type)])
         )
     if idl_type.is_basic_type:
-        return set()
+        return set(['bindings/core/v8/IDLTypes.h',
+                    'bindings/core/v8/NativeValueTraitsImpl.h'])
     if base_idl_type.endswith('ConstructorConstructor'):
         # FIXME: rename to NamedConstructor
         # FIXME: replace with a [NamedConstructorAttribute] extended attribute
@@ -411,6 +430,13 @@ def includes_for_array_or_sequence_type(idl_type, extended_attributes=None):
 IdlArrayOrSequenceType.includes_for_type = includes_for_array_or_sequence_type
 
 
+def includes_for_record_type(idl_type, extended_attributes=None):
+    return set.union(idl_type.key_type.includes_for_type(extended_attributes),
+                     idl_type.value_type.includes_for_type(extended_attributes))
+
+IdlRecordType.includes_for_type = includes_for_record_type
+
+
 def add_includes_for_type(idl_type, extended_attributes=None):
     includes.update(idl_type.includes_for_type(extended_attributes))
 
@@ -433,18 +459,18 @@ def impl_includes_for_type(idl_type, interfaces_info):
     if native_array_element_type:
         includes_for_type.update(impl_includes_for_type(
                 native_array_element_type, interfaces_info))
-        includes_for_type.add('wtf/Vector.h')
+        includes_for_type.add('platform/wtf/Vector.h')
 
     base_idl_type = idl_type.base_type
     if idl_type.is_string_type:
-        includes_for_type.add('wtf/text/WTFString.h')
+        includes_for_type.add('platform/wtf/text/WTFString.h')
     if base_idl_type in interfaces_info:
         interface_info = interfaces_info[base_idl_type]
         includes_for_type.add(interface_info['include_path'])
     if base_idl_type in INCLUDES_FOR_TYPE:
         includes_for_type.update(INCLUDES_FOR_TYPE[base_idl_type])
-    if idl_type.is_typed_array:
-        return set(['core/dom/DOMTypedArray.h'])
+    if idl_type.is_array_buffer_view_or_typed_array:
+        return set(['core/dom/DOMTypedArray.h', 'core/dom/NotShared.h'])
     return includes_for_type
 
 
@@ -483,34 +509,19 @@ def set_component_dirs(new_component_dirs):
 # V8 -> C++
 ################################################################################
 
+# TODO(rakuco): Get rid of this definition altogether and move to NativeValueTraits<T>::nativeValue().
+#               That requires not requiring ExceptionState where it is not used, and we must be careful not
+#               to introduce any performance regressions.
 V8_VALUE_TO_CPP_VALUE = {
     # Basic
-    'Date': 'toCoreDate({isolate}, {v8_value}, exceptionState)',
     'DOMString': '{v8_value}',
-    'ByteString': 'toByteString({isolate}, {arguments})',
-    'USVString': 'toUSVString({isolate}, {arguments})',
-    'boolean': 'toBoolean({isolate}, {arguments})',
-    'float': 'toRestrictedFloat({isolate}, {arguments})',
-    'unrestricted float': 'toFloat({isolate}, {arguments})',
-    'double': 'toRestrictedDouble({isolate}, {arguments})',
-    'unrestricted double': 'toDouble({isolate}, {arguments})',
-    'byte': 'toInt8({isolate}, {arguments})',
-    'octet': 'toUInt8({isolate}, {arguments})',
-    'short': 'toInt16({isolate}, {arguments})',
-    'unsigned short': 'toUInt16({isolate}, {arguments})',
-    'long': 'toInt32({isolate}, {arguments})',
-    'unsigned long': 'toUInt32({isolate}, {arguments})',
-    'long long': 'toInt64({isolate}, {arguments})',
-    'unsigned long long': 'toUInt64({isolate}, {arguments})',
     # Interface types
-    'Dictionary': 'Dictionary({isolate}, {v8_value}, exceptionState)',
-    'FlexibleArrayBufferView': 'toFlexibleArrayBufferView({isolate}, {v8_value}, {variable_name}, allocateFlexibleArrayBufferViewStorage({v8_value}))',
-    'NodeFilter': 'toNodeFilter({v8_value}, info.Holder(), ScriptState::current({isolate}))',
-    'Promise': 'ScriptPromise::cast(ScriptState::current({isolate}), {v8_value})',
-    'SerializedScriptValue': 'SerializedScriptValue::serialize({isolate}, {v8_value}, nullptr, nullptr, exceptionState)',
-    'ScriptValue': 'ScriptValue(ScriptState::current({isolate}), {v8_value})',
-    'Window': 'toDOMWindow({isolate}, {v8_value})',
-    'XPathNSResolver': 'toXPathNSResolver(ScriptState::current({isolate}), {v8_value})',
+    'FlexibleArrayBufferView': 'ToFlexibleArrayBufferView({isolate}, {v8_value}, {variable_name}, allocateFlexibleArrayBufferViewStorage({v8_value}))',
+    'NodeFilter': 'ToNodeFilter({v8_value}, info.Holder(), ScriptState::Current({isolate}))',
+    'Promise': 'ScriptPromise::Cast(ScriptState::Current({isolate}), {v8_value})',
+    'ScriptValue': 'ScriptValue(ScriptState::Current({isolate}), {v8_value})',
+    'Window': 'ToDOMWindow({isolate}, {v8_value})',
+    'XPathNSResolver': 'ToXPathNSResolver(ScriptState::Current({isolate}), {v8_value})',
 }
 
 
@@ -518,10 +529,12 @@ def v8_conversion_needs_exception_state(idl_type):
     return (idl_type.is_numeric_type or
             idl_type.is_enum or
             idl_type.is_dictionary or
+            idl_type.is_array_buffer_view_or_typed_array or
             idl_type.name in ('Boolean', 'ByteString', 'Date', 'Dictionary', 'USVString', 'SerializedScriptValue'))
 
 IdlType.v8_conversion_needs_exception_state = property(v8_conversion_needs_exception_state)
 IdlArrayOrSequenceType.v8_conversion_needs_exception_state = True
+IdlRecordType.v8_conversion_needs_exception_state = True
 IdlUnionType.v8_conversion_needs_exception_state = True
 
 
@@ -545,6 +558,26 @@ def v8_conversion_is_trivial(idl_type):
 IdlType.v8_conversion_is_trivial = property(v8_conversion_is_trivial)
 
 
+def native_value_traits_type_name(idl_type):
+    idl_type = idl_type.preprocessed_type
+
+    if idl_type.is_nullable:
+        idl_type = idl_type.inner_type
+
+    if idl_type.native_array_element_type:
+        name = 'IDLSequence<%s>' % native_value_traits_type_name(idl_type.native_array_element_type)
+    elif idl_type.is_record_type:
+        name = 'IDLRecord<%s, %s>' % (native_value_traits_type_name(idl_type.key_type),
+                                      native_value_traits_type_name(idl_type.value_type))
+    elif idl_type.is_basic_type or idl_type.name == 'Promise':
+        name = 'IDL%s' % idl_type.name
+    elif idl_type.implemented_as is not None:
+        name = idl_type.implemented_as
+    else:
+        name = idl_type.name
+    return name
+
+
 def v8_value_to_cpp_value(idl_type, extended_attributes, v8_value, variable_name, index, isolate):
     if idl_type.name == 'void':
         return ''
@@ -559,35 +592,46 @@ def v8_value_to_cpp_value(idl_type, extended_attributes, v8_value, variable_name
     base_idl_type = idl_type.as_union_type.name if idl_type.is_union_type else idl_type.base_type
 
     if 'FlexibleArrayBufferView' in extended_attributes:
-        if base_idl_type not in TYPED_ARRAY_TYPES.union(set(['ArrayBufferView'])):
-            raise "Unrecognized base type for extended attribute 'FlexibleArrayBufferView': %s" % (idl_type.base_type)
+        if base_idl_type not in ARRAY_BUFFER_VIEW_AND_TYPED_ARRAY_TYPES:
+            raise ValueError("Unrecognized base type for extended attribute 'FlexibleArrayBufferView': %s" % (idl_type.base_type))
         base_idl_type = 'FlexibleArrayBufferView'
 
     if idl_type.is_integer_type:
-        configuration = 'NormalConversion'
+        configuration = 'kNormalConversion'
         if 'EnforceRange' in extended_attributes:
-            configuration = 'EnforceRange'
+            configuration = 'kEnforceRange'
         elif 'Clamp' in extended_attributes:
-            configuration = 'Clamp'
-        arguments = ', '.join([v8_value, configuration, 'exceptionState'])
+            configuration = 'kClamp'
+        arguments = ', '.join([v8_value, 'exceptionState', configuration])
     elif idl_type.v8_conversion_needs_exception_state:
         arguments = ', '.join([v8_value, 'exceptionState'])
     else:
         arguments = v8_value
+
     if base_idl_type in V8_VALUE_TO_CPP_VALUE:
         cpp_expression_format = V8_VALUE_TO_CPP_VALUE[base_idl_type]
-    elif idl_type.is_array_buffer_or_view:
+    elif idl_type.name == 'ArrayBuffer':
         cpp_expression_format = (
             '{v8_value}->Is{idl_type}() ? '
             'V8{idl_type}::toImpl(v8::Local<v8::{idl_type}>::Cast({v8_value})) : 0')
+    elif idl_type.is_array_buffer_view_or_typed_array:
+        this_cpp_type = idl_type.cpp_type
+        cpp_expression_format = ('ToNotShared<%s>({isolate}, {v8_value}, exceptionState)' % this_cpp_type)
     elif idl_type.is_union_type:
-        nullable = 'UnionTypeConversionMode::Nullable' if idl_type.includes_nullable_type else 'UnionTypeConversionMode::NotNullable'
+        nullable = 'UnionTypeConversionMode::kNullable' if idl_type.includes_nullable_type \
+            else 'UnionTypeConversionMode::kNotNullable'
         cpp_expression_format = 'V8{idl_type}::toImpl({isolate}, {v8_value}, {variable_name}, %s, exceptionState)' % nullable
     elif idl_type.use_output_parameter_for_result:
         cpp_expression_format = 'V8{idl_type}::toImpl({isolate}, {v8_value}, {variable_name}, exceptionState)'
     elif idl_type.is_callback_function:
         cpp_expression_format = (
-            '{idl_type}::create(ScriptState::current({isolate}), {v8_value})')
+            '{idl_type}::Create(ScriptState::Current({isolate}), {v8_value})')
+    elif idl_type.v8_conversion_needs_exception_state:
+        # Effectively, this if branch means everything with v8_conversion_needs_exception_state == True
+        # except for unions, sequences and dictionary interfaces.
+        base_idl_type = native_value_traits_type_name(idl_type)
+        cpp_expression_format = (
+            'NativeValueTraits<{idl_type}>::NativeValue({isolate}, {arguments})')
     else:
         cpp_expression_format = (
             'V8{idl_type}::toImplWithTypeCheck({isolate}, {v8_value})')
@@ -605,14 +649,23 @@ def v8_value_to_cpp_value_array_or_sequence(native_array_element_type, v8_value,
     if (native_array_element_type.is_interface_type and
         native_array_element_type.name != 'Dictionary'):
         this_cpp_type = None
-        expression_format = 'toMemberNativeArray<{native_array_element_type}>({v8_value}, {index}, {isolate}, exceptionState)'
+        expression_format = 'ToMemberNativeArray<{native_array_element_type}>({v8_value}, {index}, {isolate}, exceptionState)'
     else:
         this_cpp_type = native_array_element_type.cpp_type
         if native_array_element_type.is_dictionary or native_array_element_type.is_union_type:
             vector_type = 'HeapVector'
         else:
             vector_type = 'Vector'
-        expression_format = 'toImplArray<%s<{cpp_type}>>({v8_value}, {index}, {isolate}, exceptionState)' % vector_type
+        if native_array_element_type.is_primitive_type:
+            value_type = native_value_traits_type_name(native_array_element_type)
+            expression_format = ('ToImplArray<%s<{cpp_type}>, %s>'
+                                 '({v8_value}, {index}, {isolate}, '
+                                 'exceptionState)' % (vector_type, value_type))
+        else:
+            expression_format = ('ToImplArray<%s<{cpp_type}>>'
+                                 '({v8_value}, {index}, {isolate}, '
+                                 'exceptionState)' % vector_type)
+
     expression = expression_format.format(native_array_element_type=native_array_element_type.name, cpp_type=this_cpp_type,
                                           index=index, v8_value=v8_value, isolate=isolate)
     return expression
@@ -638,10 +691,14 @@ def v8_value_to_local_cpp_value(idl_type, extended_attributes, v8_value, variabl
     # meaningful if 'check_expression' is not None.
     return_expression = bailout_return_value
 
-    if idl_type.is_string_type or idl_type.v8_conversion_needs_exception_state:
+    if 'FlexibleArrayBufferView' in extended_attributes:
+        if idl_type.base_type not in ARRAY_BUFFER_VIEW_AND_TYPED_ARRAY_TYPES:
+            raise ValueError("Unrecognized base type for extended attribute 'FlexibleArrayBufferView': %s" % (idl_type.base_type))
+        set_expression = cpp_value
+    elif idl_type.is_string_type or idl_type.v8_conversion_needs_exception_state:
         # Types for which conversion can fail and that need error handling.
 
-        check_expression = 'exceptionState.hadException()'
+        check_expression = 'exceptionState.HadException()'
 
         if idl_type.is_dictionary or idl_type.is_union_type:
             set_expression = cpp_value
@@ -653,17 +710,13 @@ def v8_value_to_local_cpp_value(idl_type, extended_attributes, v8_value, variabl
             # as the condition here would be wrong.
             if not idl_type.v8_conversion_needs_exception_state:
                 if use_exception_state:
-                    check_expression = '!%s.prepare(exceptionState)' % variable_name
+                    check_expression = '!%s.Prepare(exceptionState)' % variable_name
                 else:
-                    check_expression = '!%s.prepare()' % variable_name
+                    check_expression = '!%s.Prepare()' % variable_name
     elif not idl_type.v8_conversion_is_trivial and not idl_type.is_callback_function:
         return {
             'error_message': 'no V8 -> C++ conversion for IDL type: %s' % idl_type.name
         }
-    elif 'FlexibleArrayBufferView' in extended_attributes:
-        if idl_type.base_type not in TYPED_ARRAY_TYPES.union(set(['ArrayBufferView'])):
-            raise "Unrecognized base type for extended attribute 'FlexibleArrayBufferView': %s" % (idl_type.base_type)
-        set_expression = cpp_value
     else:
         assign_expression = cpp_value
 
@@ -731,8 +784,8 @@ def preprocess_idl_type_and_value(idl_type, cpp_value, extended_attributes):
     extended_attributes = extended_attributes or {}
     if ('Reflect' in extended_attributes and
         idl_type.base_type in ['unsigned long', 'unsigned short']):
-        cpp_value = cpp_value.replace('getUnsignedIntegralAttribute',
-                                      'getIntegralAttribute')
+        cpp_value = cpp_value.replace('GetUnsignedIntegralAttribute',
+                                      'GetIntegralAttribute')
         cpp_value = 'std::max(0, static_cast<int>(%s))' % cpp_value
     return idl_type, cpp_value
 
@@ -741,7 +794,7 @@ def v8_conversion_type(idl_type, extended_attributes):
     """Returns V8 conversion type, adding any additional includes.
 
     The V8 conversion type is used to select the C++ -> V8 conversion function
-    or v8SetReturnValue* function; it can be an idl_type, a cpp_type, or a
+    or V8SetReturnValue* function; it can be an idl_type, a cpp_type, or a
     separate name for the type of conversion (e.g., 'DOMWrapper').
     """
     extended_attributes = extended_attributes or {}
@@ -759,13 +812,15 @@ def v8_conversion_type(idl_type, extended_attributes):
     if native_array_element_type:
         return 'FrozenArray' if idl_type.is_frozen_array else 'array'
 
+    # Record types.
+    if idl_type.is_record_type:
+        return 'Record'
+
     # Simple types
     base_idl_type = idl_type.base_type
     # Basic types, without additional includes
-    if base_idl_type in CPP_INT_TYPES:
-        return 'int'
-    if base_idl_type in CPP_UNSIGNED_TYPES:
-        return 'unsigned'
+    if base_idl_type in CPP_INTEGER_CONVERSION_RULES:
+        return CPP_INTEGER_CONVERSION_RULES[base_idl_type]
     if idl_type.is_string_type:
         if idl_type.is_nullable:
             return 'StringOrNull'
@@ -777,7 +832,7 @@ def v8_conversion_type(idl_type, extended_attributes):
         return 'Dictionary'
 
     # Data type with potential additional includes
-    if base_idl_type in V8_SET_RETURN_VALUE:  # Special v8SetReturnValue treatment
+    if base_idl_type in V8_SET_RETURN_VALUE:  # Special V8SetReturnValue treatment
         return base_idl_type
 
     # Pointer type
@@ -787,31 +842,40 @@ IdlTypeBase.v8_conversion_type = v8_conversion_type
 
 
 V8_SET_RETURN_VALUE = {
-    'boolean': 'v8SetReturnValueBool(info, {cpp_value})',
-    'int': 'v8SetReturnValueInt(info, {cpp_value})',
-    'unsigned': 'v8SetReturnValueUnsigned(info, {cpp_value})',
-    'DOMString': 'v8SetReturnValueString(info, {cpp_value}, info.GetIsolate())',
-    'ByteString': 'v8SetReturnValueString(info, {cpp_value}, info.GetIsolate())',
-    'USVString': 'v8SetReturnValueString(info, {cpp_value}, info.GetIsolate())',
-    'StringOrNull': 'v8SetReturnValueStringOrNull(info, {cpp_value}, info.GetIsolate())',
+    'boolean': 'V8SetReturnValueBool(info, {cpp_value})',
+    'DOMString': 'V8SetReturnValueString(info, {cpp_value}, info.GetIsolate())',
+    'ByteString': 'V8SetReturnValueString(info, {cpp_value}, info.GetIsolate())',
+    'USVString': 'V8SetReturnValueString(info, {cpp_value}, info.GetIsolate())',
+    'StringOrNull': 'V8SetReturnValueStringOrNull(info, {cpp_value}, info.GetIsolate())',
     'void': '',
-    # No special v8SetReturnValue* function (set value directly)
-    'float': 'v8SetReturnValue(info, {cpp_value})',
-    'unrestricted float': 'v8SetReturnValue(info, {cpp_value})',
-    'double': 'v8SetReturnValue(info, {cpp_value})',
-    'unrestricted double': 'v8SetReturnValue(info, {cpp_value})',
-    # No special v8SetReturnValue* function, but instead convert value to V8
-    # and then use general v8SetReturnValue.
-    'array': 'v8SetReturnValue(info, {cpp_value})',
-    'FrozenArray': 'v8SetReturnValue(info, {cpp_value})',
-    'Date': 'v8SetReturnValue(info, {cpp_value})',
-    'EventHandler': 'v8SetReturnValue(info, {cpp_value})',
-    'ScriptValue': 'v8SetReturnValue(info, {cpp_value})',
-    'SerializedScriptValue': 'v8SetReturnValue(info, {cpp_value})',
+    # All the int types below are converted to (u)int32_t in the V8SetReturnValue{Int,Unsigned}() calls.
+    # The 64-bit int types have already been converted to double when V8_SET_RETURN_VALUE is used, so they are not
+    # listed here.
+    'int8_t': 'V8SetReturnValueInt(info, {cpp_value})',
+    'int16_t': 'V8SetReturnValueInt(info, {cpp_value})',
+    'int32_t': 'V8SetReturnValueInt(info, {cpp_value})',
+    'uint8_t': 'V8SetReturnValueUnsigned(info, {cpp_value})',
+    'uint16_t': 'V8SetReturnValueUnsigned(info, {cpp_value})',
+    'uint32_t': 'V8SetReturnValueUnsigned(info, {cpp_value})',
+    # No special V8SetReturnValue* function (set value directly)
+    'float': 'V8SetReturnValue(info, {cpp_value})',
+    'unrestricted float': 'V8SetReturnValue(info, {cpp_value})',
+    'double': 'V8SetReturnValue(info, {cpp_value})',
+    'unrestricted double': 'V8SetReturnValue(info, {cpp_value})',
+    # No special V8SetReturnValue* function, but instead convert value to V8
+    # and then use general V8SetReturnValue.
+    'array': 'V8SetReturnValue(info, {cpp_value})',
+    'FrozenArray': 'V8SetReturnValue(info, {cpp_value})',
+    'Date': 'V8SetReturnValue(info, {cpp_value})',
+    'EventHandler': 'V8SetReturnValue(info, {cpp_value})',
+    'ScriptValue': 'V8SetReturnValue(info, {cpp_value})',
+    'SerializedScriptValue': 'V8SetReturnValue(info, {cpp_value})',
+    # Records.
+    'Record': 'V8SetReturnValue(info, ToV8({cpp_value}, info.Holder(), info.GetIsolate()))',
     # DOMWrapper
-    'DOMWrapperForMainWorld': 'v8SetReturnValueForMainWorld(info, {cpp_value})',
-    'DOMWrapperFast': 'v8SetReturnValueFast(info, {cpp_value}, {script_wrappable})',
-    'DOMWrapperDefault': 'v8SetReturnValue(info, {cpp_value})',
+    'DOMWrapperForMainWorld': 'V8SetReturnValueForMainWorld(info, {cpp_value})',
+    'DOMWrapperFast': 'V8SetReturnValueFast(info, {cpp_value}, {script_wrappable})',
+    'DOMWrapperDefault': 'V8SetReturnValue(info, {cpp_value})',
     # If [CheckSecurity=ReturnValue] is specified, the returned object must be
     # wrapped in its own realm, which can be different from the realm of the
     # receiver object.
@@ -824,23 +888,23 @@ V8_SET_RETURN_VALUE = {
     # need to pass |creationContext| in for ToV8(DOMWindow*).
     # Window.frameElement is implemented with [Custom].
     'DOMWrapperAcrossContext': (
-        'v8SetReturnValue(info, ToV8({cpp_value}, ' +
+        'V8SetReturnValue(info, ToV8({cpp_value}, ' +
         'ToV8(impl->contentWindow(), v8::Local<v8::Object>(), ' +
         'info.GetIsolate()).As<v8::Object>(), info.GetIsolate()))'),
     # Note that static attributes and operations do not check whether |this| is
     # an instance of the interface nor |this|'s creation context is the same as
     # the current context.  So we must always use the current context as the
     # creation context of the DOM wrapper for the return value.
-    'DOMWrapperStatic': 'v8SetReturnValue(info, {cpp_value}, info.GetIsolate()->GetCurrentContext()->Global())',
+    'DOMWrapperStatic': 'V8SetReturnValue(info, {cpp_value}, info.GetIsolate()->GetCurrentContext()->Global())',
     # Generic dictionary type
-    'Dictionary': 'v8SetReturnValue(info, {cpp_value})',
+    'Dictionary': 'V8SetReturnValue(info, {cpp_value})',
     'DictionaryStatic': '#error not implemented yet',
     # Nullable dictionaries
-    'NullableDictionary': 'v8SetReturnValue(info, result.get())',
-    'NullableDictionaryStatic': 'v8SetReturnValue(info, result.get(), info.GetIsolate()->GetCurrentContext()->Global())',
+    'NullableDictionary': 'V8SetReturnValue(info, result.Get())',
+    'NullableDictionaryStatic': 'V8SetReturnValue(info, result.Get(), info.GetIsolate()->GetCurrentContext()->Global())',
     # Union types or dictionaries
-    'DictionaryOrUnion': 'v8SetReturnValue(info, result)',
-    'DictionaryOrUnionStatic': 'v8SetReturnValue(info, result, info.GetIsolate()->GetCurrentContext()->Global())',
+    'DictionaryOrUnion': 'V8SetReturnValue(info, result)',
+    'DictionaryOrUnionStatic': 'V8SetReturnValue(info, result, info.GetIsolate()->GetCurrentContext()->Global())',
 }
 
 
@@ -865,7 +929,7 @@ def v8_set_return_value(idl_type, cpp_value, extended_attributes=None, script_wr
     this_v8_conversion_type = idl_type.v8_conversion_type(extended_attributes)
     # SetReturn-specific overrides
     if this_v8_conversion_type in ['Date', 'EventHandler', 'ScriptValue', 'SerializedScriptValue', 'array', 'FrozenArray']:
-        # Convert value to V8 and then use general v8SetReturnValue
+        # Convert value to V8 and then use general V8SetReturnValue
         cpp_value = idl_type.cpp_value_to_v8_value(cpp_value, extended_attributes=extended_attributes)
     if this_v8_conversion_type == 'DOMWrapper':
         this_v8_conversion_type = dom_wrapper_conversion_type()
@@ -882,31 +946,39 @@ IdlTypeBase.v8_set_return_value = v8_set_return_value
 
 CPP_VALUE_TO_V8_VALUE = {
     # Built-in types
-    'Date': 'v8DateOrNaN({isolate}, {cpp_value})',
-    'DOMString': 'v8String({isolate}, {cpp_value})',
-    'ByteString': 'v8String({isolate}, {cpp_value})',
-    'USVString': 'v8String({isolate}, {cpp_value})',
-    'boolean': 'v8Boolean({cpp_value}, {isolate})',
-    'int': 'v8::Integer::New({isolate}, {cpp_value})',
-    'unsigned': 'v8::Integer::NewFromUnsigned({isolate}, {cpp_value})',
+    'Date': 'V8DateOrNaN({isolate}, {cpp_value})',
+    'DOMString': 'V8String({isolate}, {cpp_value})',
+    'ByteString': 'V8String({isolate}, {cpp_value})',
+    'USVString': 'V8String({isolate}, {cpp_value})',
+    'boolean': 'V8Boolean({cpp_value}, {isolate})',
+    # All the int types below are converted to (u)int32_t in the v8::Integer::New*() calls.
+    # The 64-bit int types have already been converted to double when CPP_VALUE_TO_V8_VALUE is used, so they are not
+    # listed here.
+    'int8_t': 'v8::Integer::New({isolate}, {cpp_value})',
+    'int16_t': 'v8::Integer::New({isolate}, {cpp_value})',
+    'int32_t': 'v8::Integer::New({isolate}, {cpp_value})',
+    'uint8_t': 'v8::Integer::NewFromUnsigned({isolate}, {cpp_value})',
+    'uint16_t': 'v8::Integer::NewFromUnsigned({isolate}, {cpp_value})',
+    'uint32_t': 'v8::Integer::NewFromUnsigned({isolate}, {cpp_value})',
     'float': 'v8::Number::New({isolate}, {cpp_value})',
     'unrestricted float': 'v8::Number::New({isolate}, {cpp_value})',
     'double': 'v8::Number::New({isolate}, {cpp_value})',
     'unrestricted double': 'v8::Number::New({isolate}, {cpp_value})',
     'void': 'v8Undefined()',
-    'StringOrNull': '{cpp_value}.isNull() ? v8::Local<v8::Value>(v8::Null({isolate})) : v8String({isolate}, {cpp_value})',
+    'StringOrNull': '{cpp_value}.IsNull() ? v8::Local<v8::Value>(v8::Null({isolate})) : V8String({isolate}, {cpp_value})',
     # Special cases
-    'Dictionary': '{cpp_value}.v8Value()',
+    'Dictionary': '{cpp_value}.V8Value()',
     'EventHandler': (
         '{cpp_value} ? ' +
-        'V8AbstractEventListener::cast({cpp_value})->getListenerOrNull(' +
-        '{isolate}, impl->getExecutionContext()) : ' +
+        'V8AbstractEventListener::Cast({cpp_value})->GetListenerOrNull(' +
+        '{isolate}, impl->GetExecutionContext()) : ' +
         'v8::Null({isolate}).As<v8::Value>()'),
-    'ScriptValue': '{cpp_value}.v8Value()',
-    'SerializedScriptValue': 'v8Deserialize({isolate}, {cpp_value})',
+    'Record': 'ToV8({cpp_value}, {creation_context}, {isolate})',
+    'ScriptValue': '{cpp_value}.V8Value()',
+    'SerializedScriptValue': 'V8Deserialize({isolate}, {cpp_value})',
     # General
     'array': 'ToV8({cpp_value}, {creation_context}, {isolate})',
-    'FrozenArray': 'freezeV8Object(ToV8({cpp_value}, {creation_context}, {isolate}), {isolate})',
+    'FrozenArray': 'FreezeV8Object(ToV8({cpp_value}, {creation_context}, {isolate}), {isolate})',
     'DOMWrapper': 'ToV8({cpp_value}, {creation_context}, {isolate})',
     # Passing nullable dictionaries isn't a pattern currently used
     # anywhere in the web platform, and more work would be needed in
@@ -940,7 +1012,7 @@ def literal_cpp_value(idl_type, idl_literal):
     if idl_type.base_type in ('any', 'object') and idl_literal.is_null:
         return 'ScriptValue()'
     literal_value = str(idl_literal)
-    if idl_type.base_type in CPP_UNSIGNED_TYPES:
+    if idl_type.base_type in ('octet', 'unsigned short', 'unsigned long'):
         return literal_value + 'u'
     return literal_value
 
@@ -980,7 +1052,7 @@ IdlArrayOrSequenceType.literal_cpp_value = array_or_sequence_literal_cpp_value
 
 def cpp_type_has_null_value(idl_type):
     # - String types (String/AtomicString) represent null as a null string,
-    #   i.e. one for which String::isNull() returns true.
+    #   i.e. one for which String::IsNull() returns true.
     # - Enum types, as they are implemented as Strings.
     # - Interface types (raw pointer or RefPtr/PassRefPtr) represent null as
     #   a null pointer.
@@ -1011,21 +1083,6 @@ def is_explicit_nullable(idl_type):
 IdlTypeBase.is_implicit_nullable = property(is_implicit_nullable)
 IdlUnionType.is_implicit_nullable = False
 IdlTypeBase.is_explicit_nullable = property(is_explicit_nullable)
-
-
-def number_of_nullable_member_types_union(idl_type):
-    # http://heycam.github.io/webidl/#dfn-number-of-nullable-member-types
-    count = 0
-    for member in idl_type.member_types:
-        if member.is_nullable:
-            count += 1
-            member = member.inner_type
-        if member.is_union_type:
-            count += number_of_nullable_member_types_union(member)
-    return count
-
-IdlUnionType.number_of_nullable_member_types = property(
-    number_of_nullable_member_types_union)
 
 
 def includes_nullable_type_union(idl_type):

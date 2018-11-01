@@ -139,6 +139,8 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      sync_pb::EntitySpecifics::kPrinterFieldNumber, 37},
     {READING_LIST, "READING_LIST", "reading_list", "Reading List",
      sync_pb::EntitySpecifics::kReadingListFieldNumber, 38},
+    {USER_EVENTS, "USER_EVENT", "user_events", "User Events",
+     sync_pb::EntitySpecifics::kUserEventFieldNumber, 39},
     {NOTES, "NOTES", "vivaldi_notes",
       "Notes", sync_pb::EntitySpecifics::kNotesFieldNumber, 300},
     {PROXY_TABS, "", "", "Tabs", -1, 25},
@@ -273,6 +275,9 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case READING_LIST:
       specifics->mutable_reading_list();
       break;
+    case USER_EVENTS:
+      specifics->mutable_user_event();
+      break;
     case PROXY_TABS:
       NOTREACHED() << "No default field value for " << ModelTypeToString(type);
       break;
@@ -345,7 +350,7 @@ ModelType GetModelType(const sync_pb::SyncEntity& sync_entity) {
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(39 + 1 == MODEL_TYPE_COUNT,
+  static_assert(40 + 1 /* notes */ == MODEL_TYPE_COUNT,
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -416,6 +421,8 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return PRINTERS;
   if (specifics.has_reading_list())
     return READING_LIST;
+  if (specifics.has_user_event())
+    return USER_EVENTS;
   if (specifics.has_nigori())
     return NIGORI;
   if (specifics.has_experiments())
@@ -464,7 +471,7 @@ ModelTypeNameMap GetUserSelectableTypeNameMap() {
 }
 
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(39+1 == MODEL_TYPE_COUNT,
+  static_assert(40+1  /*notes*/ == MODEL_TYPE_COUNT,
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();
@@ -493,6 +500,8 @@ ModelTypeSet EncryptableUserTypes() {
   // Supervised user whitelists are not encrypted since they are managed
   // server-side.
   encryptable_user_types.Remove(SUPERVISED_USER_WHITELISTS);
+  // User events are not encrypted since they are consumed server-side.
+  encryptable_user_types.Remove(USER_EVENTS);
   // Proxy types have no sync representation and are therefore not encrypted.
   // Note however that proxy types map to one or more protocol types, which
   // may or may not be encrypted themselves.
@@ -563,16 +572,16 @@ int ModelTypeToHistogramInt(ModelType model_type) {
   return 0;
 }
 
-base::StringValue* ModelTypeToValue(ModelType model_type) {
+base::Value* ModelTypeToValue(ModelType model_type) {
   if (model_type >= FIRST_REAL_MODEL_TYPE) {
-    return new base::StringValue(ModelTypeToString(model_type));
+    return new base::Value(ModelTypeToString(model_type));
   } else if (model_type == TOP_LEVEL_FOLDER) {
-    return new base::StringValue("Top-level folder");
+    return new base::Value("Top-level folder");
   } else if (model_type == UNSPECIFIED) {
-    return new base::StringValue("Unspecified");
+    return new base::Value("Unspecified");
   }
   NOTREACHED();
-  return new base::StringValue(std::string());
+  return new base::Value(std::string());
 }
 
 ModelType ModelTypeFromValue(const base::Value& value) {
@@ -654,7 +663,7 @@ ModelTypeSet ModelTypeSetFromValue(const base::ListValue& value) {
   ModelTypeSet result;
   for (base::ListValue::const_iterator i = value.begin(); i != value.end();
        ++i) {
-    result.Put(ModelTypeFromValue(**i));
+    result.Put(ModelTypeFromValue(*i));
   }
   return result;
 }

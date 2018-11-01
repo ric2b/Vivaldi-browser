@@ -8,17 +8,19 @@
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
-#include "base/command_line.h"
-#include "build/build_config.h"
-
-#include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
 #include "platform_media/common/media_pipeline_messages.h"
+#include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
+
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/preemption_flag.h"
+#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/message_filter.h"
+#include "base/command_line.h"
+#include "build/build_config.h"
 
 namespace gpu {
 
@@ -34,8 +36,7 @@ ProprietaryMediaGpuChannel::ProprietaryMediaGpuChannel(
              base::SingleThreadTaskRunner* io_task_runner,
              int32_t client_id,
              uint64_t client_tracing_id,
-             bool allow_view_command_buffers,
-             bool allow_real_time_streams)
+             bool is_gpu_host)
   : GpuChannel(
              gpu_channel_manager,
              sync_point_manager,
@@ -48,8 +49,7 @@ ProprietaryMediaGpuChannel::ProprietaryMediaGpuChannel(
              io_task_runner,
              client_id,
              client_tracing_id,
-             allow_view_command_buffers,
-             allow_real_time_streams) {}
+             is_gpu_host) {}
 
 ProprietaryMediaGpuChannel::~ProprietaryMediaGpuChannel() {}
 
@@ -79,15 +79,10 @@ void ProprietaryMediaGpuChannel::OnNewMediaPipeline(
         LookupCommandBuffer(gpu_video_accelerator_factories_route_id);
   }
 
-  scoped_refptr<GpuChannelMessageQueue> queue = LookupStream(
-        gpu_video_accelerator_factories_route_id);
-  if (!queue)
-    queue = CreateStream(gpu_video_accelerator_factories_route_id,
-                         GpuStreamPriority::HIGH);
-
   std::unique_ptr<content::IPCMediaPipeline> ipc_media_pipeline(
       new content::IPCMediaPipeline(this, route_id, command_buffer));
-  AddRoute(route_id, gpu_video_accelerator_factories_route_id,
+  SequenceId sequence_id = message_queue_->sequence_id();
+  AddRoute(route_id, sequence_id,
            ipc_media_pipeline.get());
   media_pipelines_.AddWithID(std::move(ipc_media_pipeline), route_id);
 }

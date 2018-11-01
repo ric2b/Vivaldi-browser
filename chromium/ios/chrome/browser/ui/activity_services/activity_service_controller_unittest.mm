@@ -7,7 +7,6 @@
 #import <MobileCoreServices/MobileCoreServices.h>
 
 #import "base/test/ios/wait_util.h"
-#include "components/reading_list/core/reading_list_switches.h"
 #import "ios/chrome/browser/ui/activity_services/activity_type_util.h"
 #import "ios/chrome/browser/ui/activity_services/appex_constants.h"
 #import "ios/chrome/browser/ui/activity_services/chrome_activity_item_source.h"
@@ -164,27 +163,27 @@ class ActivityServiceControllerTest : public PlatformTest {
         passwordAppExDidFinish:ShareTo::ShareResult::SHARE_CANCEL
                       username:OCMOCK_ANY
                       password:OCMOCK_ANY
-                successMessage:OCMOCK_ANY];
+             completionMessage:OCMOCK_ANY];
     [[[shareToDelegateMock stub] andDo:validationBlock]
         passwordAppExDidFinish:ShareTo::ShareResult::SHARE_NETWORK_FAILURE
                       username:OCMOCK_ANY
                       password:OCMOCK_ANY
-                successMessage:OCMOCK_ANY];
+             completionMessage:OCMOCK_ANY];
     [[[shareToDelegateMock stub] andDo:validationBlock]
         passwordAppExDidFinish:ShareTo::ShareResult::SHARE_SIGN_IN_FAILURE
                       username:OCMOCK_ANY
                       password:OCMOCK_ANY
-                successMessage:OCMOCK_ANY];
+             completionMessage:OCMOCK_ANY];
     [[[shareToDelegateMock stub] andDo:validationBlock]
         passwordAppExDidFinish:ShareTo::ShareResult::SHARE_ERROR
                       username:OCMOCK_ANY
                       password:OCMOCK_ANY
-                successMessage:OCMOCK_ANY];
+             completionMessage:OCMOCK_ANY];
     [[[shareToDelegateMock stub] andDo:validationBlock]
         passwordAppExDidFinish:ShareTo::ShareResult::SHARE_UNKNOWN_RESULT
                       username:OCMOCK_ANY
                       password:OCMOCK_ANY
-                successMessage:OCMOCK_ANY];
+             completionMessage:OCMOCK_ANY];
     [activityController setShareToDelegateForTesting:(id)shareToDelegateMock];
 
     // Sets up the returned item from a Password Management App Extension.
@@ -209,7 +208,7 @@ class ActivityServiceControllerTest : public PlatformTest {
 
 TEST_F(ActivityServiceControllerTest, PresentAndDismissController) {
   [[shareToDelegate_ expect] shareDidComplete:ShareTo::ShareResult::SHARE_CANCEL
-                               successMessage:[OCMArg isNil]];
+                            completionMessage:[OCMArg isNil]];
 
   UIViewController* parentController =
       static_cast<UIViewController*>(parentController_);
@@ -351,7 +350,7 @@ TEST_F(ActivityServiceControllerTest, ProcessItemsReturnedSuccessfully) {
       [[ActivityServiceController alloc] init];
 
   // Sets up a Mock ShareToDelegate object to check that the callback function
-  // -passwordAppExDidFinish:username:password:successMessage:
+  // -passwordAppExDidFinish:username:password:completionMessage:
   // is correct with the correct username and password.
   OCMockObject* shareToDelegateMock =
       [OCMockObject mockForProtocol:@protocol(ShareToDelegate)];
@@ -372,7 +371,7 @@ TEST_F(ActivityServiceControllerTest, ProcessItemsReturnedSuccessfully) {
       passwordAppExDidFinish:ShareTo::ShareResult::SHARE_SUCCESS
                     username:OCMOCK_ANY
                     password:OCMOCK_ANY
-              successMessage:OCMOCK_ANY];
+           completionMessage:OCMOCK_ANY];
   [activityController setShareToDelegateForTesting:(id)shareToDelegateMock];
 
   // Sets up the returned item from a Password Management App Extension.
@@ -392,7 +391,7 @@ TEST_F(ActivityServiceControllerTest, ProcessItemsReturnedSuccessfully) {
                                                     status:result
                                                      items:@[ extensionItem ]];
   ASSERT_FALSE(resetUI);
-  // Wait for -passwordAppExDidFinish:username:password:successMessage:
+  // Wait for -passwordAppExDidFinish:username:password:completionMessage:
   // to be called.
   base::test::ios::WaitUntilCondition(^{
     return blockCalled;
@@ -442,9 +441,7 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
 
   NSArray* items =
       [activityController applicationActivitiesForData:data controller:nil];
-  NSUInteger expected_items_count =
-      reading_list::switches::IsReadingListEnabled() ? 2U : 1U;
-  ASSERT_EQ(expected_items_count, [items count]);
+  ASSERT_EQ(2U, [items count]);
   EXPECT_EQ([PrintActivity class], [[items objectAtIndex:0] class]);
 
   // Verify non-printable data.
@@ -455,7 +452,7 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
                        isPagePrintable:NO
                     thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   items = [activityController applicationActivitiesForData:data controller:nil];
-  EXPECT_EQ(expected_items_count - 1, [items count]);
+  EXPECT_EQ(1U, [items count]);
 }
 
 TEST_F(ActivityServiceControllerTest, FindLoginActionTypeConformsToPublicURL) {

@@ -79,6 +79,8 @@ namespace content {
 struct OpenURLParams;
 struct WebContentsUnresponsiveState;
 
+enum class KeyboardEventProcessingResult;
+
 struct CONTENT_EXPORT DownloadItemAction {
   DownloadItemAction(const bool allow, const bool open, const bool ask_for_target);
   ~DownloadItemAction();
@@ -296,12 +298,10 @@ class CONTENT_EXPORT WebContentsDelegate {
                                   const PageState& page_state);
 
   // Allows delegates to handle keyboard events before sending to the renderer.
-  // Returns true if the |event| was handled. Otherwise, if the |event| would be
-  // handled in HandleKeyboardEvent() method as a normal keyboard shortcut,
-  // |*is_keyboard_shortcut| should be set to true.
-  virtual bool PreHandleKeyboardEvent(WebContents* source,
-                                      const NativeWebKeyboardEvent& event,
-                                      bool* is_keyboard_shortcut);
+  // See enum for description of return values.
+  virtual KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      WebContents* source,
+      const NativeWebKeyboardEvent& event);
 
   // Allows delegates to handle unhandled keyboard messages coming back from
   // the renderer.
@@ -527,12 +527,6 @@ class CONTENT_EXPORT WebContentsDelegate {
                                               MediaStreamType type);
 
 #if defined(OS_ANDROID)
-  // Asks permission to decode media stream. After permission is determined,
-  // |callback| will be called with the result.
-  virtual void RequestMediaDecodePermission(
-      WebContents* web_contents,
-      const base::Callback<void(bool)>& callback);
-
   // Creates a view embedding the video view.
   virtual base::android::ScopedJavaLocalRef<jobject>
       GetContentVideoViewEmbedder();

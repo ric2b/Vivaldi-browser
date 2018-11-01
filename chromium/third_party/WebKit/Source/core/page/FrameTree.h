@@ -22,7 +22,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -33,87 +33,42 @@ class CORE_EXPORT FrameTree final {
   DISALLOW_NEW();
 
  public:
-  explicit FrameTree(Frame* thisFrame);
+  explicit FrameTree(Frame* this_frame);
   ~FrameTree();
 
-  const AtomicString& name() const { return m_name; }
-  void setName(const AtomicString&);
+  const AtomicString& GetName() const;
+  void SetName(const AtomicString&);
 
-  // Unique name of a frame (unique per page).  Mainly used to identify the
-  // frame for session history purposes, but also used in expected results
-  // of layout tests.
-  //
-  // The value should be treated as an unstructured, opaque string.
-  const AtomicString& uniqueName() const { return m_uniqueName; }
+  // TODO(andypaicu): remove this once we have gathered the data
+  void ExperimentalSetNulledName();
 
-  // Directly assigns both the name and uniqueName.  Can be used when
-  // |uniqueName| is already known (i.e. when it has been precalculated by
-  // calculateUniqueNameForNewChildFrame OR when replicating the name between
-  // LocalFrames and RemoteFrames for the same logical frame).
-  void setPrecalculatedName(const AtomicString& name,
-                            const AtomicString& uniqueName);
+  Frame* Parent() const;
+  Frame* Top() const;
+  Frame* NextSibling() const;
+  Frame* FirstChild() const;
 
-  Frame* parent() const;
-  Frame* top() const;
-  Frame* nextSibling() const;
-  Frame* firstChild() const;
+  bool IsDescendantOf(const Frame* ancestor) const;
+  Frame* TraverseNext(const Frame* stay_within = nullptr) const;
 
-  bool isDescendantOf(const Frame* ancestor) const;
-  Frame* traverseNext(const Frame* stayWithin = nullptr) const;
+  Frame* Find(const AtomicString& name) const;
+  unsigned ChildCount() const;
 
-  Frame* find(const AtomicString& name) const;
-  unsigned childCount() const;
-
-  Frame* scopedChild(unsigned index) const;
-  Frame* scopedChild(const AtomicString& name) const;
-  unsigned scopedChildCount() const;
-  void invalidateScopedChildCount();
+  Frame* ScopedChild(unsigned index) const;
+  Frame* ScopedChild(const AtomicString& name) const;
+  unsigned ScopedChildCount() const;
+  void InvalidateScopedChildCount();
 
   DECLARE_TRACE();
 
-  AtomicString calculateUniqueNameForNewChildFrame(
-      const AtomicString& name,
-      const AtomicString& fallbackName = nullAtom) const;
-
  private:
-  // Returns true if one of frames in the tree already has unique name equal
-  // to |uniqueNameCandidate|.
-  bool uniqueNameExists(const String& uniqueNameCandidate) const;
+  Member<Frame> this_frame_;
 
-  // Generates a hopefully-but-not-necessarily unique name based on frame's
-  // relative position in the tree and on unique names of ancestors.
-  String generateUniqueNameCandidate(bool existingChildFrame) const;
+  AtomicString name_;  // The actual frame name (may be empty).
 
-  // Generates a hopefully-but-not-necessarily unique suffix based on |child|
-  // absolute position in the tree.  If |child| is nullptr, calculations are
-  // made for a position that a new child of |this| would have.
-  String generateFramePosition(Frame* child) const;
+  mutable unsigned scoped_child_count_;
 
-  // Concatenates |prefix|, |likelyUniqueSuffix| (and additional, internally
-  // generated suffix) until the result is a unique name, that doesn't exist
-  // elsewhere in the frame tree.  Returns the unique name built in this way.
-  AtomicString appendUniqueSuffix(const String& prefix,
-                                  const String& likelyUniqueSuffix) const;
-
-  // Calculates a unique name for |child| frame (which might be nullptr if the
-  // child has not yet been created - i.e. when we need unique name for a new
-  // frame).  Tries to use the |assignedName| or |fallbackName| if possible,
-  // otherwise falls back to generating a deterministic,
-  // stable-across-page-reloads string based on |child| position in the tree.
-  AtomicString calculateUniqueNameForChildFrame(
-      Frame* child,
-      const AtomicString& assignedName,
-      const AtomicString& fallbackName = nullAtom) const;
-
-  // Sets |m_uniqueName| and asserts its uniqueness.
-  void setUniqueName(const AtomicString&);
-
-  Member<Frame> m_thisFrame;
-
-  AtomicString m_name;  // The actual frame name (may be empty).
-  AtomicString m_uniqueName;
-
-  mutable unsigned m_scopedChildCount;
+  // TODO(andypaicu): remove this once we have gathered the data
+  bool experimental_set_nulled_name_;
 };
 
 }  // namespace blink

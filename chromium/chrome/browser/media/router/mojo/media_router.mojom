@@ -5,7 +5,9 @@
 module media_router.mojom;
 
 import "mojo/common/time.mojom";
+import "net/interfaces/ip_address.mojom";
 import "url/mojo/origin.mojom";
+import "url/mojo/url.mojom";
 
 // Represents an output sink to which media can be routed.
 struct MediaSink {
@@ -13,8 +15,9 @@ struct MediaSink {
     CAST,
     CAST_AUDIO,
     CAST_AUDIO_GROUP,
-    GENERIC,
-    HANGOUT
+    MEETING,
+    HANGOUT,
+    GENERIC
   };
 
   // The sink identifier, e.g. "rs71w7mFzYLFlabir_qO4NHl6SUc."
@@ -27,6 +30,45 @@ struct MediaSink {
   string? domain;
   // The type of icon to show in the UI for this media sink.
   IconType icon_type;
+  // This is currently only set by MediaRouter in OnSinksDiscovered().
+  MediaSinkExtraData? extra_data;
+};
+
+union MediaSinkExtraData {
+  DialMediaSink dial_media_sink;
+  CastMediaSink cast_media_sink;
+};
+
+struct DialMediaSink {
+  net.interfaces.IPAddress ip_address;
+
+  // Model name of the sink, if it represents a physical device.
+  string model_name;
+
+  // Used for DIAL launch
+  url.mojom.Url app_url;
+};
+
+struct CastMediaSink {
+  net.interfaces.IPAddress ip_address;
+
+  // Model name of the sink, if it represents a physical device.
+  string model_name;
+
+  // A bit vector representing capabilities of the sink. Meaning of capacity
+  // value for each bit:
+  // NONE: 0,
+  // VIDEO_OUT: 1 << 0,
+  // VIDEO_IN: 1 << 1,
+  // AUDIO_OUT: 1 << 2,
+  // AUDIO_IN: 1 << 3,
+  // DEV_MODE: 1 << 4,
+  // MULTIZONE_GROUP: 1 << 5
+  uint8 capabilities;
+
+  // ID of Cast channel opened by Media Router. The ID is defined by the
+  // chrome.cast.channel API.
+  int32 cast_channel_id;
 };
 
 // Should be kept in sync with media_route.h.
@@ -322,6 +364,11 @@ interface MediaRouteProvider {
               string media_source,
               SinkSearchCriteria search_criteria) =>
                   (string sink_id);
+
+  // Called when the list of MediaSinks discovered by Media Router has been
+  // updated. The sinks are supplied to the MediaRouteProvider so that they can
+  // be used for other operations, such as route creation.
+  ProvideSinks(string provider_name, array<MediaSink> sinks);
 };
 
 // Interface for a service which observes state changes across media
@@ -339,7 +386,7 @@ interface MediaRouter {
     AVAILABLE
   };
 
-  // Keep in sync with content/public/common/presentation_session.h.
+  // Keep in sync with content/public/common/presentation_info.h.
   enum PresentationConnectionState {
     CONNECTING,
     CONNECTED,
@@ -347,7 +394,7 @@ interface MediaRouter {
     TERMINATED
   };
 
-  // Keep in sync with content/public/common/presentation_session.h.
+  // Keep in sync with content/public/common/presentation_info.h.
   enum PresentationConnectionCloseReason {
     CONNECTION_ERROR,
     CLOSED,

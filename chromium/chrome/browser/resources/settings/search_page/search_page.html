@@ -1,3 +1,4 @@
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
@@ -33,32 +34,42 @@
         -webkit-margin-start: var(--settings-indent-width);
       }
     </style>
-    <settings-animated-pages id="pages" section="search">
+    <settings-animated-pages id="pages" section="search"
+        focus-config="[[focusConfig_]]">
       <neon-animatable route-path="default">
         <!-- Omnibox search engine -->
         <div class="settings-box first block">
           <div id="search-wrapper">
-            <p class="start">$i18nRaw{searchExplanation}</p>
+            <p id="searchExplanation" class="start">
+              $i18nRaw{searchExplanation}
+            </p>
+            <template is="dom-if" if="[[isDefaultSearchControlledByPolicy_(
+                prefs.default_search_provider_data.template_url_data)]]">
+              <cr-policy-pref-indicator pref="[[
+                  prefs.default_search_provider_data.template_url_data]]">
+              </cr-policy-pref-indicator>
+            </template>
             <div>
               <select class="md-select" on-change="onChange_"
-                  disabled$="[[
-                      prefs.default_search_provider.enabled.extensionId]]">
+                  aria-labelledby="searchExplanation"
+                  disabled$="[[isDefaultSearchEngineEnforced_(
+                      prefs.default_search_provider_data.template_url_data)]]">
                 <template is="dom-repeat" items="[[searchEngines_]]">
-                  <option selected$="[[item.default]]">[[item.name]]</option>
+                  <option selected="[[item.default]]">[[item.name]]</option>
                 </template>
               </select>
               <span class="md-select-underline"></span>
             </div>
           </div>
           <template is="dom-if"
-              if="[[prefs.default_search_provider.enabled.extensionId]]">
+              if="[[prefs.default_search_provider_data.template_url_data.extensionId]]">
             <extension-controlled-indicator
                 extension-id="[[
-                    prefs.default_search_provider.enabled.extensionId]]"
+                    prefs.default_search_provider_data.template_url_data.extensionId]]"
                 extension-name="[[
-                    prefs.default_search_provider.enabled.controlledByName]]"
+                    prefs.default_search_provider_data.template_url_data.controlledByName]]"
                 extension-can-be-disabled="[[
-                    prefs.default_search_provider.enabled.extensionCanBeDisabled]]"
+                    prefs.default_search_provider_data.template_url_data.extensionCanBeDisabled]]"
                 on-disable-extension="onDisableExtension_">
             </extension-controlled-indicator>
           </template>
@@ -66,7 +77,7 @@
 
         <template is="dom-if" if="[[googleNowAvailable_]]">
           <!-- Google Now cards in the launcher -->
-          <div class="settings-box continuation">
+          <div class="settings-box continuation indented">
             <settings-toggle-button id="googleNowEnable" class="start"
                 pref="{{prefs.google_now_launcher.enabled}}"
                 label="$i18n{searchEnableGoogleNowLabel}">
@@ -76,7 +87,7 @@
 
         <template is="dom-if" if="[[hotwordInfo_.allowed]]">
           <!-- Hotword (OK Google) -->
-          <div class="settings-box two-line continuation">
+          <div class="settings-box two-line continuation indented">
             <settings-toggle-button id="hotwordSearchEnable" class="start"
                 pref="{{hotwordSearchEnablePref_}}"
                 label="$i18n{searchOkGoogleLabel}"
@@ -120,17 +131,13 @@
         </template>
 
         <!-- Manage search engines -->
-        <div id="subpage-trigger" class="settings-box two-line"
+        <div id="subpage-trigger" class="settings-box"
             on-tap="onManageSearchEnginesTap_" actionable>
           <div class="start">
             $i18n{searchEnginesManage}
-            <div class="secondary" id="manageSearchEnginesSecondary">
-              $i18n{searchEnginesManageDescription}
-            </div>
           </div>
           <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label="$i18n{searchEnginesManage}"
-              aria-describedby="manageSearchEnginesSecondary"></button>
+              aria-label="$i18n{searchEnginesManage}"></button>
         </div>
       </neon-animatable>
       <template is="dom-if" route-path="/searchEngines">

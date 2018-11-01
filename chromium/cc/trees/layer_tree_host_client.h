@@ -43,6 +43,9 @@ class LayerTreeHostClient {
       const gfx::Vector2dF& elastic_overscroll_delta,
       float page_scale,
       float top_controls_delta) = 0;
+  virtual void RecordWheelAndTouchScrollingCount(
+      bool has_scrolled_by_wheel,
+      bool has_scrolled_by_touch) = 0;
   // Request an CompositorFrameSink from the client. When the client has one it
   // should call LayerTreeHost::SetCompositorFrameSink.  This will result in
   // either DidFailToInitializeCompositorFrameSink or
@@ -55,6 +58,10 @@ class LayerTreeHostClient {
   virtual void DidCommitAndDrawFrame() = 0;
   virtual void DidReceiveCompositorFrameAck() = 0;
   virtual void DidCompletePageScaleAnimation() = 0;
+  // The only time a subframe ever gets its own LayerTree is when the subframe
+  // renders in a different process its ancestors; this returns true in
+  // that case.
+  virtual bool IsForSubframe() = 0;
 
  protected:
   virtual ~LayerTreeHostClient() {}

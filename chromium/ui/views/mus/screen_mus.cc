@@ -8,7 +8,6 @@
 
 #include "ui/views/mus/screen_mus.h"
 
-#include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 #include "ui/aura/env.h"
@@ -75,7 +74,7 @@ void ScreenMus::Init(service_manager::Connector* connector) {
 }
 
 display::Display ScreenMus::GetDisplayNearestWindow(
-    aura::Window* window) const {
+    gfx::NativeWindow window) const {
   aura::WindowTreeHostMus* window_tree_host_mus =
       aura::WindowTreeHostMus::ForWindow(window);
   if (!window_tree_host_mus)

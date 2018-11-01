@@ -9,19 +9,33 @@ source_set("web") {
   sources = [
     "dom_altering_lock.h",
     "dom_altering_lock.mm",
+    "navigation_manager_util.h",
+    "navigation_manager_util.mm",
     "network_activity_indicator_tab_helper.h",
     "network_activity_indicator_tab_helper.mm",
     "repost_form_tab_helper.h",
     "repost_form_tab_helper.mm",
+    "sad_tab_tab_helper.h",
+    "sad_tab_tab_helper.mm",
   ]
   deps = [
+    ":sad_tab_tab_helper_delegate",
     "//base",
     "//components/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/alert_coordinator:alert_coordinator",
+    "//ios/chrome/browser/ui/sad_tab:sad_tab",
     "//ios/chrome/browser/ui/util:util",
     "//ios/web",
+    "//ios/web:web_arc",
     "//ui/base",
+  ]
+}
+
+source_set("sad_tab_tab_helper_delegate") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "sad_tab_tab_helper_delegate.h",
   ]
 }
 
@@ -29,10 +43,13 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
+    "navigation_manager_util_unittest.mm",
     "network_activity_indicator_tab_helper_unittest.mm",
     "repost_form_tab_helper_unittest.mm",
+    "sad_tab_tab_helper_unittest.mm",
   ]
   deps = [
+    ":sad_tab_tab_helper_delegate",
     ":web",
     "//base:base",
     "//base/test:test_support",
@@ -40,8 +57,10 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui:ui",
     "//ios/chrome/test:test_support",
     "//ios/web:test_support",
+    "//ios/web:web_arc",
     "//testing/gtest",
     "//ui/base:base",
+    "//url:url",
   ]
 }
 
@@ -139,8 +158,11 @@ bundle_data("resources") {
   ]
 }
 
-js_compile_unchecked("injected_js") {
+js_compile_bundle("chrome_bundle") {
+  closure_entry_point = "__crWeb.chromeBundle"
   sources = [
+    "resources/chrome_bundle.js",
+    "resources/payment_request.js",
     "resources/print.js",
   ]
 }
@@ -166,7 +188,7 @@ source_set("web_internal") {
     "print_observer.mm",
   ]
   deps = [
-    ":injected_js",
+    ":chrome_bundle",
     ":resources",
     "//base",
     "//components/content_settings/core/browser",
@@ -185,6 +207,7 @@ source_set("web_internal") {
     "//ios/chrome/browser/content_settings",
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/ssl",
+    "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/overscroll_actions",
     "//ios/chrome/browser/ui/static_content",
@@ -270,6 +293,7 @@ source_set("eg_tests") {
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/strings",
+    "//components/version_info:version_info",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",

@@ -8,7 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/custom/CustomElementReaction.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -20,16 +20,16 @@ class CORE_EXPORT CustomElementAdoptedCallbackReaction final
 
  public:
   CustomElementAdoptedCallbackReaction(CustomElementDefinition*,
-                                       Document* oldOwner,
-                                       Document* newOwner);
+                                       Document* old_owner,
+                                       Document* new_owner);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  void invoke(Element*) override;
+  void Invoke(Element*) override;
 
-  Member<Document> m_oldOwner;
-  Member<Document> m_newOwner;
+  Member<Document> old_owner_;
+  Member<Document> new_owner_;
 };
 
 }  // namespace blink

@@ -339,7 +339,7 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Object(
 v8::Local<v8::Value> V8ValueConverterImpl::ToArrayBuffer(
     v8::Isolate* isolate,
     v8::Local<v8::Object> creation_context,
-    const base::BinaryValue* value) const {
+    const base::Value* value) const {
   DCHECK(creation_context->CreationContext() == isolate->GetCurrentContext());
   v8::Local<v8::ArrayBuffer> buffer =
       v8::ArrayBuffer::New(isolate, value->GetSize());
@@ -358,7 +358,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
     return nullptr;
 
   if (val->IsNull())
-    return base::Value::CreateNullValue();
+    return base::MakeUnique<base::Value>();
 
   if (val->IsBoolean())
     return base::MakeUnique<base::Value>(val->ToBoolean(isolate)->Value());
@@ -386,8 +386,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
 
   if (val->IsString()) {
     v8::String::Utf8Value utf8(val);
-    return base::MakeUnique<base::StringValue>(
-        std::string(*utf8, utf8.length()));
+    return base::MakeUnique<base::Value>(std::string(*utf8, utf8.length()));
   }
 
   if (val->IsUndefined()) {
@@ -413,7 +412,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
     if (!reg_exp_allowed_)
       // JSON.stringify converts to an object.
       return FromV8Object(val.As<v8::Object>(), state, isolate);
-    return base::MakeUnique<base::StringValue>(*v8::String::Utf8Value(val));
+    return base::MakeUnique<base::Value>(*v8::String::Utf8Value(val));
   }
 
   // v8::Value doesn't have a ToArray() method for some reason.
@@ -443,7 +442,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Array(
     v8::Isolate* isolate) const {
   ScopedUniquenessGuard uniqueness_guard(state, val);
   if (!uniqueness_guard.is_valid())
-    return base::Value::CreateNullValue();
+    return base::MakeUnique<base::Value>();
 
   std::unique_ptr<v8::Context::Scope> scope;
   // If val was created in a different context than our current one, change to
@@ -476,7 +475,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Array(
     }
 
     if (!val->HasRealIndexedProperty(i)) {
-      result->Append(base::Value::CreateNullValue());
+      result->Append(base::MakeUnique<base::Value>());
       continue;
     }
 
@@ -487,7 +486,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Array(
     else
       // JSON.stringify puts null in places where values don't serialize, for
       // example undefined and functions. Emulate that behavior.
-      result->Append(base::Value::CreateNullValue());
+      result->Append(base::MakeUnique<base::Value>());
   }
   return std::move(result);
 }
@@ -503,14 +502,14 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ArrayBuffer(
 
   if (val->IsArrayBuffer()) {
     auto contents = val.As<v8::ArrayBuffer>()->GetContents();
-    return base::BinaryValue::CreateWithCopiedBuffer(
+    return base::Value::CreateWithCopiedBuffer(
         static_cast<const char*>(contents.Data()), contents.ByteLength());
   } else if (val->IsArrayBufferView()) {
     v8::Local<v8::ArrayBufferView> view = val.As<v8::ArrayBufferView>();
     size_t byte_length = view->ByteLength();
     std::vector<char> buffer(byte_length);
     view->CopyContents(buffer.data(), buffer.size());
-    return base::MakeUnique<base::BinaryValue>(std::move(buffer));
+    return base::MakeUnique<base::Value>(std::move(buffer));
   } else {
     NOTREACHED() << "Only ArrayBuffer and ArrayBufferView should get here.";
     return nullptr;
@@ -523,7 +522,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Object(
     v8::Isolate* isolate) const {
   ScopedUniquenessGuard uniqueness_guard(state, val);
   if (!uniqueness_guard.is_valid())
-    return base::Value::CreateNullValue();
+    return base::MakeUnique<base::Value>();
 
   std::unique_ptr<v8::Context::Scope> scope;
   // If val was created in a different context than our current one, change to

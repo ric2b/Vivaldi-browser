@@ -22,18 +22,18 @@
 
 #include "core/CoreExport.h"
 #include "core/svg/SVGPathConsumer.h"
-#include "wtf/text/StringBuilder.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
 class CORE_EXPORT SVGPathStringBuilder final : public SVGPathConsumer {
  public:
-  String result();
+  String Result();
 
-  void emitSegment(const PathSegmentData&) override;
+  void EmitSegment(const PathSegmentData&) override;
 
  private:
-  StringBuilder m_stringBuilder;
+  StringBuilder string_builder_;
 };
 
 }  // namespace blink

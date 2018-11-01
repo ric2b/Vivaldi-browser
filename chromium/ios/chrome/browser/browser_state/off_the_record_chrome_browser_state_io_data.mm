@@ -212,16 +212,9 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
       new net::URLRequestJobFactoryImpl());
 
   InstallProtocolHandlers(main_job_factory.get(), protocol_handlers);
-  URLRequestInterceptorScopedVector empty_interceptors;
   main_job_factory_ = SetUpJobFactoryDefaults(std::move(main_job_factory),
-                                              std::move(empty_interceptors),
                                               main_context->network_delegate());
   main_context->set_job_factory(main_job_factory_.get());
-
-  // Setup SDCH for this profile.
-  sdch_manager_.reset(new net::SdchManager);
-  sdch_policy_.reset(new net::SdchOwner(sdch_manager_.get(), main_context));
-  main_context->set_sdch_manager(sdch_manager_.get());
 }
 
 ChromeBrowserStateIOData::AppRequestContext*

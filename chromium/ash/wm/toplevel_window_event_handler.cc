@@ -4,10 +4,10 @@
 
 #include "ash/wm/toplevel_window_event_handler.h"
 
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_window.h"
 #include "ash/shell.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
+#include "ash/wm_window.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/cursor_client.h"
@@ -24,8 +24,8 @@
 
 namespace ash {
 
-ToplevelWindowEventHandler::ToplevelWindowEventHandler(WmShell* shell)
-    : wm_toplevel_window_event_handler_(shell), weak_factory_(this) {}
+ToplevelWindowEventHandler::ToplevelWindowEventHandler()
+    : weak_factory_(this) {}
 
 ToplevelWindowEventHandler::~ToplevelWindowEventHandler() {}
 

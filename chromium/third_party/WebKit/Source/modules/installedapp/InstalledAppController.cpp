@@ -6,10 +6,8 @@
 
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/weborigin/SecurityOrigin.h"
+#include "platform/wtf/Functional.h"
 #include "public/platform/InterfaceProvider.h"
-#include "wtf/Functional.h"
 
 #include <utility>
 
@@ -22,38 +20,33 @@ class InstalledAppController::GetRelatedAppsCallbacks
     : public AppInstalledCallbacks {
  public:
   GetRelatedAppsCallbacks(InstalledAppController* controller,
-                          WTF::RefPtr<SecurityOrigin> url,
                           std::unique_ptr<AppInstalledCallbacks> callbacks)
-      : m_controller(controller),
-        m_url(url),
-        m_callbacks(std::move(callbacks)) {}
+      : controller_(controller), callbacks_(std::move(callbacks)) {}
 
   // AppInstalledCallbacks overrides:
-  void onSuccess(const WebVector<WebRelatedApplication>& relatedApps) override {
-    if (!m_controller)
+  void OnSuccess(
+      const WebVector<WebRelatedApplication>& related_apps) override {
+    if (!controller_)
       return;
 
-    m_controller->filterByInstalledApps(m_url, relatedApps,
-                                        std::move(m_callbacks));
+    controller_->FilterByInstalledApps(related_apps, std::move(callbacks_));
   }
-  void onError() override { m_callbacks->onError(); }
+  void OnError() override { callbacks_->OnError(); }
 
  private:
-  WeakPersistent<InstalledAppController> m_controller;
-  WTF::RefPtr<SecurityOrigin> m_url;
-  std::unique_ptr<AppInstalledCallbacks> m_callbacks;
+  WeakPersistent<InstalledAppController> controller_;
+  std::unique_ptr<AppInstalledCallbacks> callbacks_;
 };
 
 InstalledAppController::~InstalledAppController() {}
 
-void InstalledAppController::getInstalledRelatedApps(
-    WTF::RefPtr<SecurityOrigin> url,
+void InstalledAppController::GetInstalledRelatedApps(
     std::unique_ptr<AppInstalledCallbacks> callbacks) {
   // When detached, the fetcher is no longer valid.
-  if (!m_relatedAppsFetcher) {
+  if (!related_apps_fetcher_) {
     // TODO(mgiuca): AbortError rather than simply undefined.
     // https://crbug.com/687846
-    callbacks->onError();
+    callbacks->OnError();
     return;
   }
 
@@ -62,56 +55,89 @@ void InstalledAppController::getInstalledRelatedApps(
   // Upon returning, filter the result list to those apps that are installed.
   // TODO(mgiuca): This roundtrip to content could be eliminated if the Manifest
   // class was moved from content into Blink.
-  m_relatedAppsFetcher->getManifestRelatedApplications(
-      WTF::makeUnique<GetRelatedAppsCallbacks>(this, url,
-                                               std::move(callbacks)));
+  related_apps_fetcher_->GetManifestRelatedApplications(
+      WTF::MakeUnique<GetRelatedAppsCallbacks>(this, std::move(callbacks)));
 }
 
-void InstalledAppController::provideTo(
+void InstalledAppController::ProvideTo(
     LocalFrame& frame,
-    WebRelatedAppsFetcher* relatedAppsFetcher) {
-  DCHECK(RuntimeEnabledFeatures::installedAppEnabled());
-
+    WebRelatedAppsFetcher* related_apps_fetcher) {
   InstalledAppController* controller =
-      new InstalledAppController(frame, relatedAppsFetcher);
-  Supplement<LocalFrame>::provideTo(frame, supplementName(), controller);
+      new InstalledAppController(frame, related_apps_fetcher);
+  Supplement<LocalFrame>::ProvideTo(frame, SupplementName(), controller);
 }
 
-InstalledAppController* InstalledAppController::from(LocalFrame& frame) {
+InstalledAppController* InstalledAppController::From(LocalFrame& frame) {
   InstalledAppController* controller = static_cast<InstalledAppController*>(
-      Supplement<LocalFrame>::from(frame, supplementName()));
+      Supplement<LocalFrame>::From(frame, SupplementName()));
   DCHECK(controller);
   return controller;
 }
 
-const char* InstalledAppController::supplementName() {
+const char* InstalledAppController::SupplementName() {
   return "InstalledAppController";
 }
 
 InstalledAppController::InstalledAppController(
     LocalFrame& frame,
-    WebRelatedAppsFetcher* relatedAppsFetcher)
+    WebRelatedAppsFetcher* related_apps_fetcher)
     : Supplement<LocalFrame>(frame),
-      ContextLifecycleObserver(frame.document()),
-      m_relatedAppsFetcher(relatedAppsFetcher) {}
+      ContextLifecycleObserver(frame.GetDocument()),
+      related_apps_fetcher_(related_apps_fetcher) {}
 
-void InstalledAppController::contextDestroyed(ExecutionContext*) {
-  m_relatedAppsFetcher = nullptr;
+void InstalledAppController::ContextDestroyed(ExecutionContext*) {
+  provider_.reset();
+  related_apps_fetcher_ = nullptr;
 }
 
-void InstalledAppController::filterByInstalledApps(
-    WTF::RefPtr<SecurityOrigin> /*origin*/,
-    const WebVector<WebRelatedApplication>& /*relatedApps*/,
-    std::unique_ptr<AppInstalledCallbacks> callbacks) {
-  // TODO(mgiuca): Call through to the browser to filter the list of
-  // applications down to just those that are installed on the device.
-  // For now, just return the empty list (no applications are installed).
-  callbacks->onSuccess(WebVector<WebRelatedApplication>());
+void InstalledAppController::FilterByInstalledApps(
+    const blink::WebVector<blink::WebRelatedApplication>& related_apps,
+    std::unique_ptr<blink::AppInstalledCallbacks> callbacks) {
+  WTF::Vector<mojom::blink::RelatedApplicationPtr> mojo_related_apps;
+  for (const auto& related_application : related_apps) {
+    mojom::blink::RelatedApplicationPtr converted_application(
+        mojom::blink::RelatedApplication::New());
+    DCHECK(!related_application.platform.IsEmpty());
+    converted_application->platform = related_application.platform;
+    converted_application->id = related_application.id;
+    converted_application->url = related_application.url;
+    mojo_related_apps.push_back(std::move(converted_application));
+  }
+
+  if (!provider_) {
+    GetSupplementable()->GetInterfaceProvider()->GetInterface(
+        mojo::MakeRequest(&provider_));
+    // TODO(mgiuca): Set a connection error handler. This requires a refactor to
+    // work like NavigatorShare.cpp (retain a persistent list of clients to
+    // reject all of their promises).
+    DCHECK(provider_);
+  }
+
+  provider_->FilterInstalledApps(
+      std::move(mojo_related_apps),
+      ConvertToBaseCallback(
+          WTF::Bind(&InstalledAppController::OnFilterInstalledApps,
+                    WrapPersistent(this), WTF::Passed(std::move(callbacks)))));
+}
+
+void InstalledAppController::OnFilterInstalledApps(
+    std::unique_ptr<blink::AppInstalledCallbacks> callbacks,
+    WTF::Vector<mojom::blink::RelatedApplicationPtr> result) {
+  std::vector<blink::WebRelatedApplication> applications;
+  for (const auto& res : result) {
+    blink::WebRelatedApplication app;
+    app.platform = res->platform;
+    app.url = res->url;
+    app.id = res->id;
+    applications.push_back(app);
+  }
+  callbacks->OnSuccess(
+      blink::WebVector<blink::WebRelatedApplication>(applications));
 }
 
 DEFINE_TRACE(InstalledAppController) {
-  Supplement<LocalFrame>::trace(visitor);
-  ContextLifecycleObserver::trace(visitor);
+  Supplement<LocalFrame>::Trace(visitor);
+  ContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

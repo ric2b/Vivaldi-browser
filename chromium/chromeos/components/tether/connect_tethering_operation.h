@@ -18,6 +18,7 @@ namespace chromeos {
 
 namespace tether {
 
+class HostScanDevicePrioritizer;
 class MessageWrapper;
 
 // Operation used to request that a tether host share its Internet connection.
@@ -31,14 +32,16 @@ class ConnectTetheringOperation : public MessageTransferOperation {
    public:
     static std::unique_ptr<ConnectTetheringOperation> NewInstance(
         const cryptauth::RemoteDevice& device_to_connect,
-        BleConnectionManager* connection_manager);
+        BleConnectionManager* connection_manager,
+        HostScanDevicePrioritizer* host_scan_device_prioritizer);
 
     static void SetInstanceForTesting(Factory* factory);
 
    protected:
     virtual std::unique_ptr<ConnectTetheringOperation> BuildInstance(
         const cryptauth::RemoteDevice& devices_to_connect,
-        BleConnectionManager* connection_manager);
+        BleConnectionManager* connection_manager,
+        HostScanDevicePrioritizer* host_scan_device_prioritizer);
 
    private:
     static Factory* factory_instance_;
@@ -47,14 +50,18 @@ class ConnectTetheringOperation : public MessageTransferOperation {
   class Observer {
    public:
     virtual void OnSuccessfulConnectTetheringResponse(
+        const cryptauth::RemoteDevice& remote_device,
         const std::string& ssid,
         const std::string& password) = 0;
     virtual void OnConnectTetheringFailure(
+        const cryptauth::RemoteDevice& remote_device,
         ConnectTetheringResponse_ResponseCode error_code) = 0;
   };
 
-  ConnectTetheringOperation(const cryptauth::RemoteDevice& device_to_connect,
-                            BleConnectionManager* connection_manager);
+  ConnectTetheringOperation(
+      const cryptauth::RemoteDevice& device_to_connect,
+      BleConnectionManager* connection_manager,
+      HostScanDevicePrioritizer* host_scan_device_prioritizer);
   ~ConnectTetheringOperation() override;
 
   void AddObserver(Observer* observer);
@@ -68,17 +75,24 @@ class ConnectTetheringOperation : public MessageTransferOperation {
                          const cryptauth::RemoteDevice& remote_device) override;
   void OnOperationFinished() override;
   MessageType GetMessageTypeForConnection() override;
-
- private:
-  friend class ConnectTetheringOperationTest;
-
   void NotifyObserversOfSuccessfulResponse(const std::string& ssid,
                                            const std::string& password);
   void NotifyObserversOfConnectionFailure(
       ConnectTetheringResponse_ResponseCode error_code);
 
+ private:
+  friend class ConnectTetheringOperationTest;
+
+  cryptauth::RemoteDevice remote_device_;
+  HostScanDevicePrioritizer* host_scan_device_prioritizer_;
+
+  // These values are saved in OnMessageReceived() and returned in
+  // OnOperationFinished().
+  std::string ssid_to_return_;
+  std::string password_to_return_;
+  ConnectTetheringResponse_ResponseCode error_code_to_return_;
+
   base::ObserverList<Observer> observer_list_;
-  bool has_authenticated_;
 
   DISALLOW_COPY_AND_ASSIGN(ConnectTetheringOperation);
 };

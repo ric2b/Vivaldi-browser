@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -27,6 +28,7 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_util.h"
@@ -527,12 +529,8 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   if (!request_->blob_uuid.empty())
     return false;
 
-  ServiceWorkerVersion::NavigationPreloadSupportStatus support_status =
-      version_->GetNavigationPreloadSupportStatus();
-  if (support_status !=
-      ServiceWorkerVersion::NavigationPreloadSupportStatus::SUPPORTED) {
+  if (!base::FeatureList::IsEnabled(features::kServiceWorkerNavigationPreload))
     return false;
-  }
 
   ResourceRequestInfoImpl* original_info =
       ResourceRequestInfoImpl::ForRequest(original_request);
@@ -550,7 +548,8 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   mojom::URLLoaderFactoryPtr url_loader_factory;
   URLLoaderFactoryImpl::Create(
       ResourceRequesterInfo::CreateForNavigationPreload(requester_info),
-      mojo::MakeRequest(&url_loader_factory));
+      mojo::MakeRequest(&url_loader_factory),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 
   ResourceRequest request;
   request.method = original_request->method();

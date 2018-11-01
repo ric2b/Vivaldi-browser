@@ -52,13 +52,13 @@ ChromeTabRestoreServiceClient::ChromeTabRestoreServiceClient(Profile* profile)
 ChromeTabRestoreServiceClient::~ChromeTabRestoreServiceClient() {}
 
 sessions::LiveTabContext* ChromeTabRestoreServiceClient::CreateLiveTabContext(
-    const std::string& app_name) {
+    const std::string& app_name, const std::string& ext_data) {
 #if defined(OS_ANDROID)
   // Android does not support creating a LiveTabContext here.
   NOTREACHED();
   return nullptr;
 #else
-  return BrowserLiveTabContext::Create(profile_, app_name);
+  return BrowserLiveTabContext::Create(profile_, app_name, ext_data);
 #endif
 }
 

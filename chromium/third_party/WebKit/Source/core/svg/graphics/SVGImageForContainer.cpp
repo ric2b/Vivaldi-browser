@@ -21,47 +21,48 @@
 
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/FloatSize.h"
+#include "platform/wtf/PassRefPtr.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "wtf/PassRefPtr.h"
 
 namespace blink {
 
-IntSize SVGImageForContainer::size() const {
-  FloatSize scaledContainerSize(m_containerSize);
-  scaledContainerSize.scale(m_zoom);
-  return roundedIntSize(scaledContainerSize);
+IntSize SVGImageForContainer::Size() const {
+  FloatSize scaled_container_size(container_size_);
+  scaled_container_size.Scale(zoom_);
+  return RoundedIntSize(scaled_container_size);
 }
 
-void SVGImageForContainer::draw(PaintCanvas* canvas,
+void SVGImageForContainer::Draw(PaintCanvas* canvas,
                                 const PaintFlags& flags,
-                                const FloatRect& dstRect,
-                                const FloatRect& srcRect,
+                                const FloatRect& dst_rect,
+                                const FloatRect& src_rect,
                                 RespectImageOrientationEnum,
                                 ImageClampingMode) {
-  m_image->drawForContainer(canvas, flags, m_containerSize, m_zoom, dstRect,
-                            srcRect, m_url);
+  image_->DrawForContainer(canvas, flags, container_size_, zoom_, dst_rect,
+                           src_rect, url_);
 }
 
-void SVGImageForContainer::drawPattern(GraphicsContext& context,
-                                       const FloatRect& srcRect,
+void SVGImageForContainer::DrawPattern(GraphicsContext& context,
+                                       const FloatRect& src_rect,
                                        const FloatSize& scale,
                                        const FloatPoint& phase,
                                        SkBlendMode op,
-                                       const FloatRect& dstRect,
-                                       const FloatSize& repeatSpacing) {
-  // TODO(ccameron): This function should not ignore |context|'s color behavior.
-  // https://crbug.com/667431
-  m_image->drawPatternForContainer(context, m_containerSize, m_zoom, srcRect,
-                                   scale, phase, op, dstRect, repeatSpacing,
-                                   m_url);
+                                       const FloatRect& dst_rect,
+                                       const FloatSize& repeat_spacing) {
+  image_->DrawPatternForContainer(context, container_size_, zoom_, src_rect,
+                                  scale, phase, op, dst_rect, repeat_spacing,
+                                  url_);
 }
 
-sk_sp<SkImage> SVGImageForContainer::imageForCurrentFrame(
-    const ColorBehavior& colorBehavior) {
-  // TODO(ccameron): This function should not ignore |colorBehavior|.
-  // https://crbug.com/667431
-  return m_image->imageForCurrentFrameForContainer(m_url, size());
+bool SVGImageForContainer::ApplyShader(PaintFlags& flags,
+                                       const SkMatrix& local_matrix) {
+  return image_->ApplyShaderForContainer(container_size_, zoom_, url_, flags,
+                                         local_matrix);
+}
+
+sk_sp<SkImage> SVGImageForContainer::ImageForCurrentFrame() {
+  return image_->ImageForCurrentFrameForContainer(url_, Size());
 }
 
 }  // namespace blink

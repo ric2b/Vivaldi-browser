@@ -16,12 +16,38 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+namespace {
+const char* kNonDefaultDeviceId = "non-default-device-id";
+}
+
 namespace media {
+
+bool operator==(const media::AudioDeviceDescription& lhs,
+                const media::AudioDeviceDescription& rhs) {
+  return lhs.device_name == rhs.device_name && lhs.unique_id == rhs.unique_id &&
+         lhs.group_id == rhs.group_id;
+}
 
 class AudioSystemImplTest : public testing::TestWithParam<bool> {
  public:
   AudioSystemImplTest()
-      : use_audio_thread_(GetParam()), audio_thread_("AudioSystemThread") {
+      : use_audio_thread_(GetParam()),
+        audio_thread_("AudioSystemThread"),
+        input_params_(AudioParameters::AUDIO_PCM_LINEAR,
+                      CHANNEL_LAYOUT_MONO,
+                      AudioParameters::kTelephoneSampleRate,
+                      16,
+                      AudioParameters::kTelephoneSampleRate / 10),
+        output_params_(AudioParameters::AUDIO_PCM_LINEAR,
+                       CHANNEL_LAYOUT_MONO,
+                       AudioParameters::kTelephoneSampleRate,
+                       16,
+                       AudioParameters::kTelephoneSampleRate / 20),
+        default_output_params_(AudioParameters::AUDIO_PCM_LINEAR,
+                               CHANNEL_LAYOUT_MONO,
+                               AudioParameters::kTelephoneSampleRate,
+                               16,
+                               AudioParameters::kTelephoneSampleRate / 30) {
     if (use_audio_thread_) {
       audio_thread_.StartAndWaitForTesting();
       audio_manager_.reset(
@@ -30,8 +56,23 @@ class AudioSystemImplTest : public testing::TestWithParam<bool> {
       audio_manager_.reset(new media::MockAudioManager(
           base::ThreadTaskRunnerHandle::Get().get()));
     }
-    audio_manager_->SetInputStreamParameters(
-        media::AudioParameters::UnavailableDeviceParams());
+
+    audio_manager_->SetInputStreamParameters(input_params_);
+    audio_manager_->SetOutputStreamParameters(output_params_);
+    audio_manager_->SetDefaultOutputStreamParameters(default_output_params_);
+
+    auto get_device_descriptions = [](const AudioDeviceDescriptions* source,
+                                      AudioDeviceDescriptions* destination) {
+      destination->insert(destination->end(), source->begin(), source->end());
+    };
+
+    audio_manager_->SetInputDeviceDescriptionsCallback(
+        base::Bind(get_device_descriptions,
+                   base::Unretained(&input_device_descriptions_)));
+    audio_manager_->SetOutputDeviceDescriptionsCallback(
+        base::Bind(get_device_descriptions,
+                   base::Unretained(&output_device_descriptions_)));
+
     audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
     EXPECT_EQ(AudioSystem::Get(), audio_system_.get());
   }
@@ -52,12 +93,45 @@ class AudioSystemImplTest : public testing::TestWithParam<bool> {
     AudioParametersReceived();
   }
 
+  void OnHasInputDevices(bool result) {
+    EXPECT_TRUE(thread_checker_.CalledOnValidThread());
+    HasInputDevicesCallback(result);
+  }
+
+  void OnHasOutputDevices(bool result) {
+    EXPECT_TRUE(thread_checker_.CalledOnValidThread());
+    HasOutputDevicesCallback(result);
+  }
+
+  void OnGetDeviceDescriptions(
+      const AudioDeviceDescriptions& expected_descriptions,
+      AudioDeviceDescriptions descriptions) {
+    EXPECT_TRUE(thread_checker_.CalledOnValidThread());
+    EXPECT_EQ(expected_descriptions, descriptions);
+    DeviceDescriptionsReceived();
+  }
+
+  void OnInputDeviceInfo(const AudioParameters& expected_input,
+                         const AudioParameters& expected_associated_output,
+                         const std::string& expected_associated_device_id,
+                         const AudioParameters& input,
+                         const AudioParameters& associated_output,
+                         const std::string& associated_device_id) {
+    EXPECT_TRUE(thread_checker_.CalledOnValidThread());
+    EXPECT_EQ(expected_input.AsHumanReadableString(),
+              input.AsHumanReadableString());
+    EXPECT_EQ(expected_associated_output.AsHumanReadableString(),
+              associated_output.AsHumanReadableString());
+    EXPECT_EQ(expected_associated_device_id, associated_device_id);
+    InputDeviceInfoReceived();
+  }
+
   void WaitForCallback() {
     if (!use_audio_thread_) {
       base::RunLoop().RunUntilIdle();
       return;
     }
-    media::WaitableMessageLoopEvent event;
+    WaitableMessageLoopEvent event;
     audio_thread_.task_runner()->PostTaskAndReply(
         FROM_HERE, base::Bind(&base::DoNothing), event.GetClosure());
     // Runs the loop and waits for the |audio_thread_| to call event's closure,
@@ -67,8 +141,13 @@ class AudioSystemImplTest : public testing::TestWithParam<bool> {
     base::RunLoop().RunUntilIdle();
   }
 
+  // Mocks to verify that AudioSystem replied with an expected callback.
   MOCK_METHOD0(AudioParametersReceived, void(void));
   MOCK_METHOD1(HasInputDevicesCallback, void(bool));
+  MOCK_METHOD1(HasOutputDevicesCallback, void(bool));
+  MOCK_METHOD0(DeviceDescriptionsReceived, void(void));
+  MOCK_METHOD1(AssociatedOutputDeviceIDReceived, void(const std::string&));
+  MOCK_METHOD0(InputDeviceInfoReceived, void(void));
 
  protected:
   base::MessageLoop message_loop_;
@@ -77,6 +156,11 @@ class AudioSystemImplTest : public testing::TestWithParam<bool> {
   base::Thread audio_thread_;
   MockAudioManager::UniquePtr audio_manager_;
   std::unique_ptr<media::AudioSystem> audio_system_;
+  AudioParameters input_params_;
+  AudioParameters output_params_;
+  AudioParameters default_output_params_;
+  AudioDeviceDescriptions input_device_descriptions_;
+  AudioDeviceDescriptions output_device_descriptions_;
 };
 
 TEST_P(AudioSystemImplTest, GetInputStreamParameters) {
@@ -84,7 +168,7 @@ TEST_P(AudioSystemImplTest, GetInputStreamParameters) {
   audio_system_->GetInputStreamParameters(
       media::AudioDeviceDescription::kDefaultDeviceId,
       base::Bind(&AudioSystemImplTest::OnAudioParams, base::Unretained(this),
-                 media::AudioParameters::UnavailableDeviceParams()));
+                 input_params_));
   WaitForCallback();
 }
 
@@ -98,10 +182,44 @@ TEST_P(AudioSystemImplTest, GetInputStreamParametersNoDevice) {
   WaitForCallback();
 }
 
+TEST_P(AudioSystemImplTest, GetOutputStreamParameters) {
+  EXPECT_CALL(*this, AudioParametersReceived());
+  audio_system_->GetOutputStreamParameters(
+      kNonDefaultDeviceId, base::Bind(&AudioSystemImplTest::OnAudioParams,
+                                      base::Unretained(this), output_params_));
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetDefaultOutputStreamParameters) {
+  EXPECT_CALL(*this, AudioParametersReceived());
+  audio_system_->GetOutputStreamParameters(
+      media::AudioDeviceDescription::kDefaultDeviceId,
+      base::Bind(&AudioSystemImplTest::OnAudioParams, base::Unretained(this),
+                 default_output_params_));
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetOutputStreamParametersNoDevice) {
+  audio_manager_->SetHasOutputDevices(false);
+  EXPECT_CALL(*this, AudioParametersReceived()).Times(2);
+
+  audio_system_->GetOutputStreamParameters(
+      media::AudioDeviceDescription::kDefaultDeviceId,
+      base::Bind(&AudioSystemImplTest::OnAudioParams, base::Unretained(this),
+                 media::AudioParameters()));
+  WaitForCallback();
+
+  audio_system_->GetOutputStreamParameters(
+      kNonDefaultDeviceId,
+      base::Bind(&AudioSystemImplTest::OnAudioParams, base::Unretained(this),
+                 media::AudioParameters()));
+  WaitForCallback();
+}
+
 TEST_P(AudioSystemImplTest, HasInputDevices) {
   EXPECT_CALL(*this, HasInputDevicesCallback(true));
   audio_system_->HasInputDevices(base::Bind(
-      &AudioSystemImplTest::HasInputDevicesCallback, base::Unretained(this)));
+      &AudioSystemImplTest::OnHasInputDevices, base::Unretained(this)));
   WaitForCallback();
 }
 
@@ -109,7 +227,124 @@ TEST_P(AudioSystemImplTest, HasNoInputDevices) {
   audio_manager_->SetHasInputDevices(false);
   EXPECT_CALL(*this, HasInputDevicesCallback(false));
   audio_system_->HasInputDevices(base::Bind(
-      &AudioSystemImplTest::HasInputDevicesCallback, base::Unretained(this)));
+      &AudioSystemImplTest::OnHasInputDevices, base::Unretained(this)));
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, HasOutputDevices) {
+  EXPECT_CALL(*this, HasOutputDevicesCallback(true));
+  audio_system_->HasOutputDevices(base::Bind(
+      &AudioSystemImplTest::OnHasOutputDevices, base::Unretained(this)));
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, HasNoOutputDevices) {
+  audio_manager_->SetHasOutputDevices(false);
+  EXPECT_CALL(*this, HasOutputDevicesCallback(false));
+  audio_system_->HasOutputDevices(base::Bind(
+      &AudioSystemImplTest::OnHasOutputDevices, base::Unretained(this)));
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetInputDeviceDescriptionsNoInputDevices) {
+  output_device_descriptions_.emplace_back("output_device_name",
+                                           "output_device_id", "group_id");
+  EXPECT_EQ(0, static_cast<int>(input_device_descriptions_.size()));
+  EXPECT_EQ(1, static_cast<int>(output_device_descriptions_.size()));
+  EXPECT_CALL(*this, DeviceDescriptionsReceived());
+  audio_system_->GetDeviceDescriptions(
+      base::Bind(&AudioSystemImplTest::OnGetDeviceDescriptions,
+                 base::Unretained(this), input_device_descriptions_),
+      true);
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetInputDeviceDescriptions) {
+  output_device_descriptions_.emplace_back("output_device_name",
+                                           "output_device_id", "group_id");
+  input_device_descriptions_.emplace_back("input_device_name1",
+                                          "input_device_id1", "group_id1");
+  input_device_descriptions_.emplace_back("input_device_name2",
+                                          "input_device_id2", "group_id2");
+  EXPECT_EQ(2, static_cast<int>(input_device_descriptions_.size()));
+  EXPECT_EQ(1, static_cast<int>(output_device_descriptions_.size()));
+  EXPECT_CALL(*this, DeviceDescriptionsReceived());
+  audio_system_->GetDeviceDescriptions(
+      base::Bind(&AudioSystemImplTest::OnGetDeviceDescriptions,
+                 base::Unretained(this), input_device_descriptions_),
+      true);
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetOutputDeviceDescriptionsNoInputDevices) {
+  input_device_descriptions_.emplace_back("input_device_name",
+                                          "input_device_id", "group_id");
+  EXPECT_EQ(0, static_cast<int>(output_device_descriptions_.size()));
+  EXPECT_EQ(1, static_cast<int>(input_device_descriptions_.size()));
+  EXPECT_CALL(*this, DeviceDescriptionsReceived());
+  audio_system_->GetDeviceDescriptions(
+      base::Bind(&AudioSystemImplTest::OnGetDeviceDescriptions,
+                 base::Unretained(this), output_device_descriptions_),
+      false);
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetOutputDeviceDescriptions) {
+  input_device_descriptions_.emplace_back("input_device_name",
+                                          "input_device_id", "group_id");
+  output_device_descriptions_.emplace_back("output_device_name1",
+                                           "output_device_id1", "group_id1");
+  output_device_descriptions_.emplace_back("output_device_name2",
+                                           "output_device_id2", "group_id2");
+  EXPECT_EQ(2, static_cast<int>(output_device_descriptions_.size()));
+  EXPECT_EQ(1, static_cast<int>(input_device_descriptions_.size()));
+  EXPECT_CALL(*this, DeviceDescriptionsReceived());
+  audio_system_->GetDeviceDescriptions(
+      base::Bind(&AudioSystemImplTest::OnGetDeviceDescriptions,
+                 base::Unretained(this), output_device_descriptions_),
+      false);
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetAssociatedOutputDeviceID) {
+  const std::string associated_id("associated_id");
+  audio_manager_->SetAssociatedOutputDeviceIDCallback(
+      base::Bind([](const std::string& result,
+                    const std::string&) -> std::string { return result; },
+                 associated_id));
+
+  EXPECT_CALL(*this, AssociatedOutputDeviceIDReceived(associated_id));
+
+  audio_system_->GetAssociatedOutputDeviceID(
+      std::string(),
+      base::Bind(&AudioSystemImplTest::AssociatedOutputDeviceIDReceived,
+                 base::Unretained(this)));
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetInputDeviceInfoNoAssociation) {
+  EXPECT_CALL(*this, InputDeviceInfoReceived());
+
+  audio_system_->GetInputDeviceInfo(
+      kNonDefaultDeviceId, base::Bind(&AudioSystemImplTest::OnInputDeviceInfo,
+                                      base::Unretained(this), input_params_,
+                                      AudioParameters(), std::string()));
+  WaitForCallback();
+}
+
+TEST_P(AudioSystemImplTest, GetInputDeviceInfoWithAssociation) {
+  EXPECT_CALL(*this, InputDeviceInfoReceived());
+
+  const std::string associated_id("associated_id");
+  audio_manager_->SetAssociatedOutputDeviceIDCallback(
+      base::Bind([](const std::string& result,
+                    const std::string&) -> std::string { return result; },
+                 associated_id));
+
+  audio_system_->GetInputDeviceInfo(
+      kNonDefaultDeviceId, base::Bind(&AudioSystemImplTest::OnInputDeviceInfo,
+                                      base::Unretained(this), input_params_,
+                                      output_params_, associated_id));
   WaitForCallback();
 }
 

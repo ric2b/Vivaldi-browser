@@ -51,16 +51,16 @@ bool CupsPrinter::is_default() const {
 }
 
 ipp_attribute_t* CupsPrinter::GetSupportedOptionValues(
-    base::StringPiece option_name) const {
+    const char* option_name) const {
   if (!InitializeDestInfo())
     return nullptr;
 
   return cupsFindDestSupported(cups_http_, destination_.get(), dest_info_.get(),
-                               option_name.as_string().c_str());
+                               option_name);
 }
 
 std::vector<base::StringPiece> CupsPrinter::GetSupportedOptionValueStrings(
-    base::StringPiece option_name) const {
+    const char* option_name) const {
   std::vector<base::StringPiece> values;
   ipp_attribute_t* attr = GetSupportedOptionValues(option_name);
   if (!attr)
@@ -77,22 +77,21 @@ std::vector<base::StringPiece> CupsPrinter::GetSupportedOptionValueStrings(
 }
 
 ipp_attribute_t* CupsPrinter::GetDefaultOptionValue(
-    base::StringPiece option_name) const {
+    const char* option_name) const {
   if (!InitializeDestInfo())
     return nullptr;
 
   return cupsFindDestDefault(cups_http_, destination_.get(), dest_info_.get(),
-                             option_name.as_string().c_str());
+                             option_name);
 }
 
-bool CupsPrinter::CheckOptionSupported(base::StringPiece name,
-                                       base::StringPiece value) const {
+bool CupsPrinter::CheckOptionSupported(const char* name,
+                                       const char* value) const {
   if (!InitializeDestInfo())
     return false;
 
-  int supported = cupsCheckDestSupported(
-      cups_http_, destination_.get(), dest_info_.get(),
-      name.as_string().c_str(), value.as_string().c_str());
+  int supported = cupsCheckDestSupported(cups_http_, destination_.get(),
+                                         dest_info_.get(), name, value);
   return supported == 1;
 }
 
@@ -126,34 +125,37 @@ bool CupsPrinter::ToPrinterInfo(PrinterBasicInfo* printer_info) const {
   return true;
 }
 
-base::FilePath CupsPrinter::GetPPD() const {
-  base::StringPiece printer_name = destination_->name;
-  const char* ppd_path =
-      cupsGetPPD2(cups_http_, printer_name.as_string().c_str());
-  base::FilePath path(ppd_path);
+std::string CupsPrinter::GetPPD() const {
+  std::string ppd_contents;
+  const char* printer_name = destination_->name;
+  const char* ppd_path_str = cupsGetPPD2(cups_http_, printer_name);
+  if (!ppd_path_str)
+    return ppd_contents;
 
-  if (ppd_path) {
-    // There is no reliable way right now to detect full and complete PPD
-    // get downloaded. If we reach http timeout, it may simply return
-    // downloaded part as a full response. It might be good enough to check
-    // http->data_remaining or http->_data_remaining, unfortunately http_t
-    // is an internal structure and fields are not exposed in CUPS headers.
-    // httpGetLength or httpGetLength2 returning the full content size.
-    // Comparing file size against that content length might be unreliable
-    // since some http reponses are encoded and content_length > file size.
-    // Let's just check for the obvious CUPS and http errors here.
-    ipp_status_t error_code = cupsLastError();
-    int http_error = httpError(cups_http_);
-    if (error_code > IPP_OK_EVENTS_COMPLETE || http_error != 0) {
-      LOG(ERROR) << "Error downloading PPD file, name: " << destination_->name
-                 << ", CUPS error: " << static_cast<int>(error_code)
-                 << ", HTTP error: " << http_error;
-      base::DeleteFile(path, false);
-      path.clear();
-    }
+  // There is no reliable way right now to detect full and complete PPD
+  // get downloaded. If we reach http timeout, it may simply return
+  // downloaded part as a full response. It might be good enough to check
+  // http->data_remaining or http->_data_remaining, unfortunately http_t
+  // is an internal structure and fields are not exposed in CUPS headers.
+  // httpGetLength or httpGetLength2 returning the full content size.
+  // Comparing file size against that content length might be unreliable
+  // since some http reponses are encoded and content_length > file size.
+  // Let's just check for the obvious CUPS and http errors here.
+  base::FilePath ppd_path(ppd_path_str);
+  ipp_status_t error_code = cupsLastError();
+  int http_error = httpError(cups_http_);
+  if (error_code <= IPP_OK_EVENTS_COMPLETE && http_error == 0) {
+    bool res = base::ReadFileToString(ppd_path, &ppd_contents);
+    if (!res)
+      ppd_contents.clear();
+  } else {
+    LOG(ERROR) << "Error downloading PPD file, name: " << destination_->name
+               << ", CUPS error: " << static_cast<int>(error_code)
+               << ", HTTP error: " << http_error;
   }
 
-  return path;
+  base::DeleteFile(ppd_path, false);
+  return ppd_contents;
 }
 
 std::string CupsPrinter::GetName() const {
@@ -181,21 +183,21 @@ bool CupsPrinter::InitializeDestInfo() const {
 }
 
 ipp_status_t CupsPrinter::CreateJob(int* job_id,
-                                    base::StringPiece title,
+                                    const std::string& title,
                                     const std::vector<cups_option_t>& options) {
   DCHECK(dest_info_) << "Verify availability before starting a print job";
 
   cups_option_t* data = const_cast<cups_option_t*>(
       options.data());  // createDestJob will not modify the data
-  ipp_status_t create_status = cupsCreateDestJob(
-      cups_http_, destination_.get(), dest_info_.get(), job_id,
-      title.as_string().c_str(), options.size(), data);
+  ipp_status_t create_status =
+      cupsCreateDestJob(cups_http_, destination_.get(), dest_info_.get(),
+                        job_id, title.c_str(), options.size(), data);
 
   return create_status;
 }
 
 bool CupsPrinter::StartDocument(int job_id,
-                                base::StringPiece document_name,
+                                const std::string& document_name,
                                 bool last_document,
                                 const std::vector<cups_option_t>& options) {
   DCHECK(dest_info_);
@@ -203,10 +205,10 @@ bool CupsPrinter::StartDocument(int job_id,
 
   cups_option_t* data = const_cast<cups_option_t*>(
       options.data());  // createStartDestDocument will not modify the data
-  http_status_t start_doc_status = cupsStartDestDocument(
-      cups_http_, destination_.get(), dest_info_.get(), job_id,
-      document_name.as_string().c_str(), CUPS_FORMAT_PDF, options.size(), data,
-      last_document ? 0 : 1);
+  http_status_t start_doc_status =
+      cupsStartDestDocument(cups_http_, destination_.get(), dest_info_.get(),
+                            job_id, document_name.c_str(), CUPS_FORMAT_PDF,
+                            options.size(), data, last_document ? 0 : 1);
 
   return start_doc_status == HTTP_CONTINUE;
 }

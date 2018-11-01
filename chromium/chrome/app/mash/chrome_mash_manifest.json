@@ -16,11 +16,11 @@
       },
       "requires": {
         "*": [ "app" ],
-        "service_manager": [ "service_manager:instance_per_child" ],
-        "catalog": [ "control" ],
         "ash": [ "app" ],
+        "catalog": [ "control" ],
         "content_browser": [ "app" ],
         "quick_launch": [ "app" ],
+        "service_manager": [ "service_manager:instance_per_child" ],
         "ui": [ "app" ]
       }
     }

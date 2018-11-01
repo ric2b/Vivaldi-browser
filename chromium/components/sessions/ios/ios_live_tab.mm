@@ -33,7 +33,7 @@ bool IOSLiveTab::IsInitialBlankNavigation() {
 }
 
 int IOSLiveTab::GetCurrentEntryIndex() {
-  return navigation_manager()->GetCurrentItemIndex();
+  return navigation_manager()->GetLastCommittedItemIndex();
 }
 
 int IOSLiveTab::GetPendingEntryIndex() {
@@ -52,10 +52,6 @@ sessions::SerializedNavigationEntry IOSLiveTab::GetPendingEntry() {
 
 int IOSLiveTab::GetEntryCount() {
   return navigation_manager()->GetItemCount();
-}
-
-void IOSLiveTab::LoadIfNecessary() {
-  navigation_manager()->LoadIfNecessary();
 }
 
 const std::string& IOSLiveTab::GetUserAgentOverride() const {

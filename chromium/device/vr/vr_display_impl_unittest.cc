@@ -47,9 +47,14 @@ class VRDisplayImplTest : public testing::Test {
   }
 
   void RequestPresent(VRDisplayImpl* display_impl) {
+    // TODO(klausw,mthiesse): set up a VRSubmitFrameClient here? Currently,
+    // the FakeVRDisplay doesn't access the submit client, so a nullptr
+    // is ok.
+    device::mojom::VRSubmitFrameClientPtr submit_client = nullptr;
     display_impl->RequestPresent(
-        true, base::Bind(&VRDisplayImplTest::onPresentComplete,
-                         base::Unretained(this)));
+        true, std::move(submit_client),
+        base::Bind(&VRDisplayImplTest::onPresentComplete,
+                   base::Unretained(this)));
   }
 
   void ExitPresent(VRDisplayImpl* display_impl) { display_impl->ExitPresent(); }
@@ -59,6 +64,10 @@ class VRDisplayImplTest : public testing::Test {
   VRDevice* device() { return device_; }
 
   bool presenting() { return !!device_->presenting_display_; }
+
+  VRDisplayImpl* GetVRDisplayImpl(VRServiceImpl* service, VRDevice* device) {
+    return service->GetVRDisplayImplForTesting(device);
+  }
 
   base::MessageLoop message_loop_;
   bool is_request_presenting_success_ = false;
@@ -74,8 +83,8 @@ TEST_F(VRDisplayImplTest, DevicePresentationIsolation) {
   auto service_1 = BindService();
   auto service_2 = BindService();
 
-  VRDisplayImpl* display_1 = service_1->GetVRDisplayImpl(device());
-  VRDisplayImpl* display_2 = service_2->GetVRDisplayImpl(device());
+  VRDisplayImpl* display_1 = GetVRDisplayImpl(service_1.get(), device());
+  VRDisplayImpl* display_2 = GetVRDisplayImpl(service_2.get(), device());
 
   // When not presenting either service should be able to access the device.
   EXPECT_TRUE(device()->IsAccessAllowed(display_1));

@@ -27,7 +27,9 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/variations/variations_associated_data.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -89,17 +91,16 @@ class MockTabStripModelObserver : public TabStripModelObserver {
 class LenientMockTaskRunner {
  public:
   LenientMockTaskRunner() {}
-  MOCK_METHOD3(PostDelayedTask,
-               bool(const tracked_objects::Location&,
-                    const base::Closure&,
-                    base::TimeDelta));
+  MOCK_METHOD2(PostDelayedTask,
+               bool(const tracked_objects::Location&, base::TimeDelta));
+
  private:
   DISALLOW_COPY_AND_ASSIGN(LenientMockTaskRunner);
 };
 using MockTaskRunner = testing::StrictMock<LenientMockTaskRunner>;
 
 // Represents a pending task.
-using Task = std::pair<base::TimeTicks, base::Closure>;
+using Task = std::pair<base::TimeTicks, base::OnceClosure>;
 
 // Comparator used for sorting Task objects. Can't use std::pair's default
 // comparison operators because Closure's are comparable.
@@ -119,11 +120,11 @@ class TaskRunnerProxy : public base::TaskRunner {
       : mock_(mock), clock_(clock) {}
   bool RunsTasksOnCurrentThread() const override { return true; }
   bool PostDelayedTask(const tracked_objects::Location& location,
-                       const base::Closure& closure,
+                       base::OnceClosure closure,
                        base::TimeDelta delta) override {
-    mock_->PostDelayedTask(location, closure, delta);
+    mock_->PostDelayedTask(location, delta);
     base::TimeTicks when = clock_->NowTicks() + delta;
-    tasks_.push_back(Task(when, closure));
+    tasks_.push_back(Task(when, std::move(closure)));
     // Use 'greater' comparator to make this a min heap.
     std::push_heap(tasks_.begin(), tasks_.end(), TaskComparator());
     return true;
@@ -134,7 +135,7 @@ class TaskRunnerProxy : public base::TaskRunner {
     base::TimeTicks now = clock_->NowTicks();
     size_t count = 0;
     while (!tasks_.empty() && tasks_.front().first <= now) {
-      tasks_.front().second.Run();
+      std::move(tasks_.front().second).Run();
       std::pop_heap(tasks_.begin(), tasks_.end(), TaskComparator());
       tasks_.pop_back();
       ++count;
@@ -168,7 +169,7 @@ class TaskRunnerProxy : public base::TaskRunner {
   base::SimpleTestTickClock* clock_;
 
   // A min-heap of outstanding tasks.
-  using Task = std::pair<base::TimeTicks, base::Closure>;
+  using Task = std::pair<base::TimeTicks, base::OnceClosure>;
   std::vector<Task> tasks_;
 
   DISALLOW_COPY_AND_ASSIGN(TaskRunnerProxy);
@@ -593,7 +594,6 @@ TEST_F(TabManagerTest, MAYBE_ChildProcessNotifications) {
       &ReturnSpecifiedPressure, base::Unretained(&level));
   EXPECT_CALL(mock_task_runner, PostDelayedTask(
       testing::_,
-      testing::_,
       base::TimeDelta::FromSeconds(tm.kRendererNotificationDelayInSeconds)));
   EXPECT_CALL(*this, NotifyRendererProcess(renderer2, level));
   tm.OnMemoryPressure(level);
@@ -621,7 +621,6 @@ TEST_F(TabManagerTest, MAYBE_ChildProcessNotifications) {
   // time to the foreground tab. It should also cause another scheduled event.
   EXPECT_CALL(mock_task_runner, PostDelayedTask(
       testing::_,
-      testing::_,
       base::TimeDelta::FromSeconds(tm.kRendererNotificationDelayInSeconds)));
   EXPECT_CALL(*this, NotifyRendererProcess(renderer1, level));
   EXPECT_EQ(1u, task_runner->RunNextTask());
@@ -637,7 +636,6 @@ TEST_F(TabManagerTest, MAYBE_ChildProcessNotifications) {
   // Run the scheduled task. This should cause another notification, to the
   // background tab. It should also cause another scheduled event.
   EXPECT_CALL(mock_task_runner, PostDelayedTask(
-      testing::_,
       testing::_,
       base::TimeDelta::FromSeconds(tm.kRendererNotificationDelayInSeconds)));
   EXPECT_CALL(*this, NotifyRendererProcess(renderer2, level));
@@ -672,7 +670,15 @@ TEST_F(TabManagerTest, MAYBE_ChildProcessNotifications) {
   ASSERT_TRUE(tabstrip.empty());
 }
 
-TEST_F(TabManagerTest, NextPurgeAndSuspendState) {
+TEST_F(TabManagerTest, DefaultTimeToPurgeInCorrectRange) {
+  TabManager tab_manager;
+  base::TimeDelta time_to_purge =
+      tab_manager.GetTimeToPurge(TabManager::kDefaultMinTimeToPurge);
+  EXPECT_GE(time_to_purge, base::TimeDelta::FromMinutes(30));
+  EXPECT_LT(time_to_purge, base::TimeDelta::FromMinutes(60));
+}
+
+TEST_F(TabManagerTest, ShouldPurgeAtDefaultTime) {
   TabManager tab_manager;
   TabStripDummyDelegate delegate;
   TabStripModel tabstrip(&delegate, profile());
@@ -681,102 +687,67 @@ TEST_F(TabManagerTest, NextPurgeAndSuspendState) {
   WebContents* test_contents = CreateWebContents();
   tabstrip.AppendWebContents(test_contents, false);
 
-  // Use default time-to-first-purge  defined in TabManager.
-  base::TimeDelta threshold = TabManager::kDefaultTimeToFirstPurge;
   base::SimpleTestTickClock test_clock;
+  tab_manager.set_test_tick_clock(&test_clock);
 
+  tab_manager.GetWebContentsData(test_contents)->set_is_purged(false);
   tab_manager.GetWebContentsData(test_contents)
-      ->SetPurgeAndSuspendState(TabManager::RUNNING);
+      ->SetLastInactiveTime(test_clock.NowTicks());
   tab_manager.GetWebContentsData(test_contents)
-      ->SetLastPurgeAndSuspendModifiedTimeForTesting(test_clock.NowTicks());
+      ->set_time_to_purge(base::TimeDelta::FromMinutes(1));
 
-  // Wait 30 minutes and verify that the tab is still RUNNING.
-  test_clock.Advance(base::TimeDelta::FromMinutes(30));
-  EXPECT_EQ(TabManager::RUNNING,
-            tab_manager.GetNextPurgeAndSuspendState(
-                test_contents, test_clock.NowTicks(), threshold));
+  // Wait 1 minute and verify that the tab is still not to be purged.
+  test_clock.Advance(base::TimeDelta::FromMinutes(1));
+  EXPECT_FALSE(tab_manager.ShouldPurgeNow(test_contents));
 
-  // Wait another second and verify that it is now SUSPENDED.
+  // Wait another 1 second and verify that it should be purged now .
   test_clock.Advance(base::TimeDelta::FromSeconds(1));
-  EXPECT_EQ(TabManager::SUSPENDED,
-            tab_manager.GetNextPurgeAndSuspendState(
-                test_contents, test_clock.NowTicks(), threshold));
+  EXPECT_TRUE(tab_manager.ShouldPurgeNow(test_contents));
 
+  tab_manager.GetWebContentsData(test_contents)->set_is_purged(true);
   tab_manager.GetWebContentsData(test_contents)
-      ->SetPurgeAndSuspendState(TabManager::SUSPENDED);
-  tab_manager.GetWebContentsData(test_contents)
-      ->SetLastPurgeAndSuspendModifiedTimeForTesting(test_clock.NowTicks());
+      ->SetLastInactiveTime(test_clock.NowTicks());
 
-  test_clock.Advance(base::TimeDelta::FromSeconds(1200));
-  EXPECT_EQ(TabManager::SUSPENDED,
-            tab_manager.GetNextPurgeAndSuspendState(
-                test_contents, test_clock.NowTicks(), threshold));
-
-  test_clock.Advance(base::TimeDelta::FromSeconds(1));
-  EXPECT_EQ(TabManager::RESUMED,
-            tab_manager.GetNextPurgeAndSuspendState(
-                test_contents, test_clock.NowTicks(), threshold));
-
-  tab_manager.GetWebContentsData(test_contents)
-      ->SetPurgeAndSuspendState(TabManager::RESUMED);
-  tab_manager.GetWebContentsData(test_contents)
-      ->SetLastPurgeAndSuspendModifiedTimeForTesting(test_clock.NowTicks());
-
-  test_clock.Advance(base::TimeDelta::FromSeconds(10));
-  EXPECT_EQ(TabManager::RESUMED,
-            tab_manager.GetNextPurgeAndSuspendState(
-                test_contents, test_clock.NowTicks(), threshold));
-
-  test_clock.Advance(base::TimeDelta::FromSeconds(1));
-  EXPECT_EQ(TabManager::SUSPENDED,
-            tab_manager.GetNextPurgeAndSuspendState(
-                test_contents, test_clock.NowTicks(), threshold));
-
-  // Clean up the tabstrip.
-  tabstrip.CloseAllTabs();
-  EXPECT_TRUE(tabstrip.empty());
+  // Wait 1 day and verify that the tab is still be purged.
+  test_clock.Advance(base::TimeDelta::FromHours(24));
+  EXPECT_FALSE(tab_manager.ShouldPurgeNow(test_contents));
 }
 
-TEST_F(TabManagerTest, ActivateTabResetPurgeAndSuspendState) {
+TEST_F(TabManagerTest, ActivateTabResetPurgeState) {
   TabManager tab_manager;
   TabStripDummyDelegate delegate;
   TabStripModel tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
+  tab_manager.test_tab_strip_models_.push_back(
+      TabManager::TestTabStripModel(&tabstrip, false /* !is_app */));
+
+  base::SimpleTestTickClock test_clock;
+  tab_manager.set_test_tick_clock(&test_clock);
 
   WebContents* tab1 = CreateWebContents();
   WebContents* tab2 = CreateWebContents();
   tabstrip.AppendWebContents(tab1, true);
   tabstrip.AppendWebContents(tab2, false);
 
-  base::SimpleTestTickClock test_clock;
+  tab_manager.GetWebContentsData(tab2)->SetLastInactiveTime(
+      test_clock.NowTicks());
+  static_cast<content::MockRenderProcessHost*>(tab2->GetRenderProcessHost())
+      ->set_is_process_backgrounded(true);
+  EXPECT_TRUE(tab2->GetRenderProcessHost()->IsProcessBackgrounded());
 
-  // Initially PurgeAndSuspend state should be RUNNING.
-  EXPECT_EQ(TabManager::RUNNING,
-            tab_manager.GetWebContentsData(tab2)->GetPurgeAndSuspendState());
+  // Initially PurgeAndSuspend state should be NOT_PURGED.
+  EXPECT_FALSE(tab_manager.GetWebContentsData(tab2)->is_purged());
+  tab_manager.GetWebContentsData(tab2)->set_time_to_purge(
+      base::TimeDelta::FromMinutes(1));
+  test_clock.Advance(base::TimeDelta::FromMinutes(2));
+  tab_manager.PurgeBackgroundedTabsIfNeeded();
+  // Since tab2 is kept inactive and background for more than time-to-purge,
+  // tab2 should be purged.
+  EXPECT_TRUE(tab_manager.GetWebContentsData(tab2)->is_purged());
 
-  tab_manager.GetWebContentsData(tab2)->SetPurgeAndSuspendState(
-      TabManager::SUSPENDED);
-  tab_manager.GetWebContentsData(tab2)
-      ->SetLastPurgeAndSuspendModifiedTimeForTesting(test_clock.NowTicks());
-
-  // Activate tab2. Tab2's PurgeAndSuspend state should be RUNNING.
+  // Activate tab2. Tab2's PurgeAndSuspend state should be NOT_PURGED.
   tabstrip.ActivateTabAt(1, true /* user_gesture */);
-  EXPECT_EQ(TabManager::RUNNING,
-            tab_manager.GetWebContentsData(tab2)->GetPurgeAndSuspendState());
-
-  tab_manager.GetWebContentsData(tab1)->SetPurgeAndSuspendState(
-      TabManager::RESUMED);
-  tab_manager.GetWebContentsData(tab1)
-      ->SetLastPurgeAndSuspendModifiedTimeForTesting(test_clock.NowTicks());
-
-  // Activate tab1. Tab1's PurgeAndSuspend state should be RUNNING.
-  tabstrip.ActivateTabAt(0, true /* user_gesture */);
-  EXPECT_EQ(TabManager::RUNNING,
-            tab_manager.GetWebContentsData(tab1)->GetPurgeAndSuspendState());
-
-  // Clean up the tabstrip.
-  tabstrip.CloseAllTabs();
-  EXPECT_TRUE(tabstrip.empty());
+  EXPECT_FALSE(tab_manager.GetWebContentsData(tab2)->is_purged());
 }
 
 }  // namespace memory

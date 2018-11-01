@@ -16,6 +16,7 @@
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
@@ -28,8 +29,8 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/web_applications/web_app_mac.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/mac/app_mode_common.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -49,15 +50,16 @@ class AppShimInteractiveTest : public extensions::PlatformAppBrowserTest {
   AppShimInteractiveTest()
       : auto_reset_(&g_app_shims_allow_update_and_launch_in_tests, true) {}
 
+  // testing::Test:
+  void SetUp() override {
+    PlatformAppBrowserTest::SetUp();
+    scoped_feature_list_.InitAndEnableFeature(features::kBookmarkApps);
+  }
+
   // Install a test app of |type| and reliably wait for its app shim to be
   // created on disk. Sets |shim_path_|.
   const extensions::Extension* InstallAppWithShim(AppType type,
                                                   const char* name);
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    PlatformAppBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kEnableNewBookmarkApps);
-  }
 
  protected:
   base::FilePath shim_path_;
@@ -65,6 +67,7 @@ class AppShimInteractiveTest : public extensions::PlatformAppBrowserTest {
  private:
   // Temporarily enable app shims.
   base::AutoReset<bool> auto_reset_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(AppShimInteractiveTest);
 };
@@ -175,10 +178,11 @@ class AppLifetimeMonitorObserver : public apps::AppLifetimeMonitor::Observer {
  public:
   AppLifetimeMonitorObserver(Profile* profile)
       : profile_(profile), activated_count_(0), deactivated_count_(0) {
-    apps::AppLifetimeMonitorFactory::GetForProfile(profile_)->AddObserver(this);
+    apps::AppLifetimeMonitorFactory::GetForBrowserContext(profile_)
+        ->AddObserver(this);
   }
   ~AppLifetimeMonitorObserver() override {
-    apps::AppLifetimeMonitorFactory::GetForProfile(profile_)
+    apps::AppLifetimeMonitorFactory::GetForBrowserContext(profile_)
         ->RemoveObserver(this);
   }
 
@@ -187,10 +191,12 @@ class AppLifetimeMonitorObserver : public apps::AppLifetimeMonitor::Observer {
 
  protected:
   // AppLifetimeMonitor::Observer overrides:
-  void OnAppActivated(Profile* profile, const std::string& app_id) override {
+  void OnAppActivated(content::BrowserContext* context,
+                      const std::string& app_id) override {
     ++activated_count_;
   }
-  void OnAppDeactivated(Profile* profile, const std::string& app_id) override {
+  void OnAppDeactivated(content::BrowserContext* context,
+                        const std::string& app_id) override {
     ++deactivated_count_;
   }
 

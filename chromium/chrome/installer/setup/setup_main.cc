@@ -517,6 +517,7 @@ bool CheckPreInstallConditions(const InstallationState& original_state,
     // on top of an existing system-level installation.
     const Product& product = installer_state.product();
     BrowserDistribution* browser_dist = product.distribution();
+    DCHECK_EQ(BrowserDistribution::GetDistribution(), browser_dist);
 
     const ProductState* user_level_product_state =
         original_state.GetProductState(false);
@@ -538,8 +539,7 @@ bool CheckPreInstallConditions(const InstallationState& original_state,
       // Instruct Google Update to launch the existing system-level Chrome.
       // There should be no error dialog.
       base::FilePath install_path(
-          installer::GetChromeInstallPath(true,  // system
-                                          browser_dist));
+          installer::GetChromeInstallPath(true /* system_install */));
       if (install_path.empty()) {
         // Give up if we failed to construct the install path.
         *status = installer::OS_ERROR;
@@ -617,17 +617,16 @@ installer::InstallStatus UninstallProducts(
     const InstallerState& installer_state,
     const base::FilePath& setup_exe,
     const base::CommandLine& cmd_line) {
+  DCHECK_EQ(BrowserDistribution::GetDistribution(),
+            installer_state.product().distribution());
   // System-level Chrome will be launched via this command if its program gets
   // set below.
   base::CommandLine system_level_cmd(base::CommandLine::NO_PROGRAM);
 
-  const Product& chrome = installer_state.product();
   if (cmd_line.HasSwitch(installer::switches::kSelfDestruct) &&
       !installer_state.system_install()) {
-    BrowserDistribution* dist = chrome.distribution();
     const base::FilePath system_exe_path(
-        installer::GetChromeInstallPath(true, dist)
-            .Append(installer::kChromeExe));
+        installer::GetChromeInstallPath(true).Append(installer::kChromeExe));
     system_level_cmd.SetProgram(system_exe_path);
   }
 
@@ -844,6 +843,11 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
   // TODO(tommi): Split these checks up into functions and use a data driven
   // map of switch->function.
   if (cmd_line.HasSwitch(installer::switches::kUpdateSetupExe)) {
+    // this commandline switch is handled elsewhere if we are started
+    // with the --vivaldi switch. See InstallProductsHelper().
+    if (installer_state->is_vivaldi())
+      return false;
+
     installer_state->SetStage(installer::UPDATING_SETUP);
     installer::InstallStatus status = installer::SETUP_PATCH_FAILED;
     // If --update-setup-exe command line option is given, we apply the given
@@ -1089,6 +1093,7 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
                                     base::FilePath* installer_directory,
                                     ArchiveType* archive_type) {
   DCHECK(archive_type);
+  bool patch_install = false;
   const bool system_install = installer_state.system_install();
   InstallStatus install_status = UNKNOWN_STATUS;
 
@@ -1115,7 +1120,7 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
       previous_version = base::Version(cmd_line.GetSwitchValueASCII(
           installer::switches::kPreviousVersion));
     }
-
+    patch_install = previous_version.IsValid();
     std::unique_ptr<ArchivePatchHelper> archive_helper(
         CreateChromeArchiveHelper(
             setup_exe, cmd_line, installer_state, unpack_path,
@@ -1137,7 +1142,7 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
       uncompressed_archive = archive_helper->target();
       DCHECK(!uncompressed_archive.empty());
     } else {
-      if (previous_version.IsValid()) { // If true, this is a patch install.
+      if (patch_install) {
         // The delta patch archive is invalid or missing, so bail out here.
         LOG(ERROR) << "Cannot patch Vivaldi without a valid (delta) archive.";
         installer_state.WriteInstallerResult(
@@ -1264,7 +1269,7 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
 
       installer_state.WriteInstallerResult(install_status, install_msg_base,
           write_chrome_launch_string ? &quoted_chrome_exe : NULL);
-
+      // TODO(jarle@vivaldi.com): REMOVE THIS:
       // rename the "Profile" folder to "User Data" for standalone builds if
       // the "Profile" folder exists
       if (installer_state.is_standalone() &&
@@ -1317,6 +1322,48 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
         RemoveChromeLegacyRegistryKeys(chrome.distribution(), chrome_exe);
       }
       }
+      // For Vivaldi, if this is a patch install, we will try to patch
+      // setup.exe as well.
+      if (patch_install &&
+          cmd_line.HasSwitch(installer::switches::kUpdateSetupExe)) {
+        install_status = installer::SETUP_PATCH_FAILED;
+        // If --update-setup-exe command line option is given, we apply
+        // the given patch to current exe, and store the resulting binary in
+        // the path specified by --new-setup-exe. But we need to first unpack
+        // the file given in --update-setup-exe.
+        base::ScopedTempDir temp_path;
+        if (!temp_path.CreateUniqueTempDir()) {
+          PLOG(ERROR) << "Could not create temporary path.";
+        } else {
+          base::FilePath compressed_archive(cmd_line.GetSwitchValuePath(
+              installer::switches::kUpdateSetupExe));
+          VLOG(1) << "Opening archive " << compressed_archive.value();
+          if (installer::ArchivePatchHelper::UncompressAndPatch(
+                  temp_path.GetPath(), compressed_archive, setup_exe,
+                  cmd_line.GetSwitchValuePath(
+                      installer::switches::kNewSetupExe),
+                  installer::UnPackConsumer::SETUP_EXE_PATCH)) {
+            install_status = installer::NEW_VERSION_UPDATED;
+          }
+          if (!temp_path.Delete()) {
+            // PLOG would be nice, but Delete() doesn't leave a meaningful
+            // value in the Windows last-error code.
+            LOG(WARNING) << "Scheduling temporary path "
+                          << temp_path.GetPath().value()
+                          << " for deletion at reboot.";
+            ScheduleDirectoryForDeletion(temp_path.GetPath());
+          }
+        }
+
+        int exit_code = InstallUtil::GetInstallReturnCode(install_status);
+        if (exit_code) {
+          LOG(WARNING) << "setup.exe patching failed.";
+          installer_state.WriteInstallerResult(
+              install_status, IDS_SETUP_PATCH_FAILED_BASE, NULL);
+          return install_status;
+        }
+      }
+
       bool force_launch_vivaldi_on_successful_install =
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kVivaldiForceLaunch);
@@ -1342,7 +1389,15 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
       }
     }
   }
-
+  // For Vivaldi, launch the cleanup process here and not before we patch
+  // the setup.exe (see install.cc).
+  if (installer_state.is_vivaldi()) {
+    const base::FilePath new_version_setup_path =
+        installer_state.GetInstallerDirectory(*installer_version)
+            .Append(setup_exe.BaseName());
+    installer::LaunchDeleteOldVersionsProcess(new_version_setup_path,
+                                              installer_state);
+  }
   // There might be an experiment (for upgrade usually) that needs to happen.
   // An experiment's outcome can include chrome's uninstallation. If that is
   // the case we would not do that directly at this point but in another
@@ -1456,7 +1511,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   if (process_type == crash_reporter::switches::kCrashpadHandler) {
     return crash_reporter::RunAsCrashpadHandler(
-        *base::CommandLine::ForCurrentProcess());
+        *base::CommandLine::ForCurrentProcess(), switches::kProcessType);
   }
 
   // install_util uses chrome paths.

@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include "base/feature_list.h"
 #include "base/time/time.h"
 #include "components/sessions/core/session_id.h"
 #include "url/gurl.h"
@@ -25,6 +26,9 @@ extern const char kLearningMode[];
 extern const char kExternalPrefetchingMode[];
 extern const char kPrefetchingMode[];
 extern const char kEnableUrlLearningParamName[];
+extern const char kEnableManifestsParamName[];
+extern const char kEnableOriginLearningParamName[];
+extern const base::Feature kSpeculativeResourcePrefetchingFeature;
 
 struct ResourcePrefetchPredictorConfig;
 
@@ -108,8 +112,14 @@ struct ResourcePrefetchPredictorConfig {
 
   // The maximum number of resources to store per entry.
   size_t max_resources_per_entry;
-  // The number of consecutive misses after we stop tracking a resource URL.
+  // The maximum number of origins to store per entry.
+  size_t max_origins_per_entry;
+  // The number of consecutive misses after which we stop tracking a resource
+  // URL.
   size_t max_consecutive_misses;
+  // The number of consecutive misses after which we stop tracking a redirect
+  // endpoint.
+  size_t max_redirect_consecutive_misses;
 
   // The minimum confidence (accuracy of hits) required for a resource to be
   // prefetched.
@@ -124,6 +134,10 @@ struct ResourcePrefetchPredictorConfig {
   size_t max_prefetches_inflight_per_host_per_navigation;
   // True iff the predictor could use a url-based database.
   bool is_url_learning_enabled;
+  // True iff the predictor could use manifests.
+  bool is_manifests_enabled;
+  // True iff origin-based learning is enabled.
+  bool is_origin_learning_enabled;
 };
 
 }  // namespace predictors

@@ -6,9 +6,10 @@
 
 #include <stdint.h>
 
-#include "base/message_loop/message_loop.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_delegate.h"
@@ -24,7 +25,7 @@
 #include "components/ownership/mock_owner_key_util.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
 #include "google_apis/gaia/oauth2_token_service_test_util.h"
 #include "net/http/http_status_code.h"
@@ -61,9 +62,8 @@ class DeviceOAuth2TokenServiceTest : public testing::Test {
  public:
   DeviceOAuth2TokenServiceTest()
       : scoped_testing_local_state_(TestingBrowserProcess::GetGlobal()),
-        request_context_getter_(
-            new net::TestURLRequestContextGetter(message_loop_.task_runner())) {
-  }
+        request_context_getter_(new net::TestURLRequestContextGetter(
+            base::ThreadTaskRunnerHandle::Get())) {}
   ~DeviceOAuth2TokenServiceTest() override {}
 
   // Most tests just want a noop crypto impl with a dummy refresh token value in
@@ -143,7 +143,7 @@ class DeviceOAuth2TokenServiceTest : public testing::Test {
   void SetDeviceRefreshTokenInLocalState(const std::string& refresh_token) {
     scoped_testing_local_state_.Get()->SetUserPref(
         prefs::kDeviceRobotAnyApiRefreshToken,
-        new base::StringValue(refresh_token));
+        base::MakeUnique<base::Value>(refresh_token));
   }
 
   std::string GetValidTokenInfoResponse(const std::string& email) {
@@ -203,7 +203,7 @@ class DeviceOAuth2TokenServiceTest : public testing::Test {
     }
   };
 
-  base::MessageLoop message_loop_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
   ScopedTestingLocalState scoped_testing_local_state_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
   net::TestURLFetcherFactory factory_;

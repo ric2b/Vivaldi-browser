@@ -7,7 +7,7 @@ import("//mojo/public/tools/bindings/mojom.gni")
 mojom("interfaces") {
   sources = [
     "audio_decoder.mojom",
-    "audio_output.mojom",
+    "audio_output_stream.mojom",
     "audio_parameters.mojom",
     "content_decryption_module.mojom",
     "decryptor.mojom",
@@ -21,8 +21,16 @@ mojom("interfaces") {
     "video_decoder.mojom",
   ]
 
+  if (is_android) {
+    sources += [ "media_drm_storage.mojom" ]
+  }
+
   if (is_chromeos) {
     sources += [ "platform_verification.mojom" ]
+  }
+
+  if (is_android) {
+    sources += [ "android_overlay.mojom" ]
   }
 
   public_deps = [
@@ -31,6 +39,7 @@ mojom("interfaces") {
     "//services/service_manager/public/interfaces",
     "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
+    "//url/mojo:url_mojom_origin",
   ]
 }
 

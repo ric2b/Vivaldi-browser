@@ -26,9 +26,10 @@
 #include "components/flags_ui/flags_storage.h"
 #include "components/flags_ui/flags_ui_switches.h"
 #include "components/ntp_tiles/switches.h"
-#include "components/reading_list/core/reading_list_switches.h"
+#include "components/signin/core/common/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/chrome_switches.h"
+#include "ios/chrome/browser/ios_chrome_flag_descriptions.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/web/public/user_agent.h"
@@ -55,16 +56,16 @@ namespace {
 //
 // When adding a new choice, add it to the end of the list.
 const flags_ui::FeatureEntry kFeatureEntries[] = {
-    {"contextual-search", IDS_IOS_FLAGS_CONTEXTUAL_SEARCH,
-     IDS_IOS_FLAGS_CONTEXTUAL_SEARCH_DESCRIPTION, flags_ui::kOsIos,
+    {"contextual-search", flag_descriptions::kContextualSearch,
+     flag_descriptions::kContextualSearchDescription, flags_ui::kOsIos,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableContextualSearch,
                                switches::kDisableContextualSearch)},
-    {"ios-physical-web", IDS_IOS_FLAGS_PHYSICAL_WEB,
-     IDS_IOS_FLAGS_PHYSICAL_WEB_DESCRIPTION, flags_ui::kOsIos,
+    {"ios-physical-web", flag_descriptions::kPhysicalWeb,
+     flag_descriptions::kPhysicalWebDescription, flags_ui::kOsIos,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableIOSPhysicalWeb,
                                switches::kDisableIOSPhysicalWeb)},
-    {"browser-task-scheduler", IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_NAME,
-     IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_DESCRIPTION, flags_ui::kOsIos,
+    {"browser-task-scheduler", flag_descriptions::kBrowserTaskScheduler,
+     flag_descriptions::kBrowserTaskSchedulerDescription, flags_ui::kOsIos,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableBrowserTaskScheduler,
                                switches::kDisableBrowserTaskScheduler)},
 };
@@ -229,6 +230,14 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
 
     base::CommandLine temp_command_line(flags);
     command_line->AppendArguments(temp_command_line, false);
+  }
+
+  // Populate command line flag for Sign-in promo.
+  NSString* enableSigninPromo = [defaults stringForKey:@"EnableSigninPromo"];
+  if ([enableSigninPromo isEqualToString:@"Enabled"]) {
+    command_line->AppendSwitch(switches::kEnableSigninPromo);
+  } else if ([enableSigninPromo isEqualToString:@"Disabled"]) {
+    command_line->AppendSwitch(switches::kDisableSigninPromo);
   }
 
   ios::GetChromeBrowserProvider()->AppendSwitchesFromExperimentalSettings(

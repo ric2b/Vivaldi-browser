@@ -31,36 +31,33 @@
 #include "bindings/core/v8/V8MessageChannel.h"
 
 #include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8MessagePort.h"
+#include "bindings/core/v8/V8PrivateProperty.h"
 #include "core/dom/MessageChannel.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 void V8MessageChannel::constructorCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExecutionContext* context = currentExecutionContext(info.GetIsolate());
+  v8::Isolate* isolate = info.GetIsolate();
 
-  MessageChannel* channel = MessageChannel::create(context);
+  ExecutionContext* context = CurrentExecutionContext(isolate);
+  MessageChannel* channel = MessageChannel::Create(context);
 
   v8::Local<v8::Object> wrapper = info.Holder();
 
   // Create references from the MessageChannel wrapper to the two
   // MessagePort wrappers to make sure that the MessagePort wrappers
   // stay alive as long as the MessageChannel wrapper is around.
-  ScriptState* scriptState = ScriptState::current(info.GetIsolate());
-  V8HiddenValue::setHiddenValue(
-      scriptState, wrapper, V8HiddenValue::port1(info.GetIsolate()),
-      ToV8(channel->port1(), info.Holder(), info.GetIsolate()));
-  V8HiddenValue::setHiddenValue(
-      scriptState, wrapper, V8HiddenValue::port2(info.GetIsolate()),
-      ToV8(channel->port2(), info.Holder(), info.GetIsolate()));
+  V8PrivateProperty::GetMessageChannelPort1(isolate).Set(
+      wrapper, ToV8(channel->port1(), wrapper, isolate));
+  V8PrivateProperty::GetMessageChannelPort2(isolate).Set(
+      wrapper, ToV8(channel->port2(), wrapper, isolate));
 
-  v8SetReturnValue(info,
-                   V8DOMWrapper::associateObjectWithWrapper(
-                       info.GetIsolate(), channel, &wrapperTypeInfo, wrapper));
+  V8SetReturnValue(info, V8DOMWrapper::AssociateObjectWithWrapper(
+                             isolate, channel, &wrapperTypeInfo, wrapper));
 }
 
 }  // namespace blink

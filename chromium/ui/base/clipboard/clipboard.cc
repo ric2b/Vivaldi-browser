@@ -17,10 +17,10 @@
 
 namespace ui {
 
-base::LazyInstance<Clipboard::AllowedThreadsVector>
+base::LazyInstance<Clipboard::AllowedThreadsVector>::DestructorAtExit
     Clipboard::allowed_threads_ = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<Clipboard::ClipboardMap> Clipboard::clipboard_map_ =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<Clipboard::ClipboardMap>::DestructorAtExit
+    Clipboard::clipboard_map_ = LAZY_INSTANCE_INITIALIZER;
 base::LazyInstance<base::Lock>::Leaky Clipboard::clipboard_map_lock_ =
     LAZY_INSTANCE_INITIALIZER;
 
@@ -85,6 +85,12 @@ void Clipboard::DestroyClipboardForCurrentThread() {
   if (it != clipboard_map->end())
     clipboard_map->erase(it);
 }
+
+base::Time Clipboard::GetLastModifiedTime() const {
+  return base::Time();
+}
+
+void Clipboard::ClearLastModifiedTime() {}
 
 void Clipboard::DispatchObject(ObjectType type, const ObjectMapParams& params) {
   // Ignore writes with empty parameters.

@@ -37,6 +37,7 @@
                              const gfx::Rect& anchor_in_root_view) override;
 
   // Vivaldi customs below
+  bool IsVivaldiMail();
   bool IsVivaldiWebPanel();
 
   void SetVisible(bool is_visible);
@@ -73,6 +74,9 @@
   void OnMouseEnter();
   void OnMouseLeave();
 
+  // WebContentsDelegate
+  void ShowRepostFormWarningDialog(content::WebContents* source) override;
+
   void ResetGestureState() {
     gesture_recording_ = false;
   }
@@ -97,7 +101,7 @@
       const GURL site);
 
   // vivaldi addition:
-  bool GetMousegesturesEnabled();
+  bool IsMouseGesturesEnabled() const;
   bool IsRockerGesturesEnabled() const;
 
   // Store mouse down actions until up is registered.
@@ -176,5 +180,9 @@
 
  private:
   content::RenderWidgetHost::MouseEventCallback mouseevent_callback_;
+
+  int inspecting_tab_id_ = 0;
+
+  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
 
 // };

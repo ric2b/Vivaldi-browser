@@ -124,13 +124,6 @@ KeyedService* VivaldiSyncManagerFactory::BuildServiceInstanceFor(
   init_params.debug_identifier = profile->GetDebugName();
   init_params.channel = chrome::GetChannel();
 
-  base::SequencedWorkerPool* blocking_pool =
-      content::BrowserThread::GetBlockingPool();
-  init_params.blocking_task_runner =
-      blocking_pool->GetSequencedTaskRunnerWithShutdownBehavior(
-          blocking_pool->GetSequenceToken(),
-          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
-
   auto vss = base::WrapUnique(new VivaldiSyncManager(
       &init_params, sync_client->GetVivaldiInvalidationService()));
 

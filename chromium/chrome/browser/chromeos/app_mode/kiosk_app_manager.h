@@ -87,7 +87,6 @@ class KioskAppManager : public KioskAppDataDelegate,
   //     "auto_login_enabled": true  //
   //   }
   static const char kKioskDictionaryName[];
-  static const char kKeyApps[];
   static const char kKeyAutoLoginState[];
 
   // Sub directory under DIR_USER_DATA to store cached icon files.
@@ -251,7 +250,7 @@ class KioskAppManager : public KioskAppDataDelegate,
   }
 
  private:
-  friend struct base::DefaultLazyInstanceTraits<KioskAppManager>;
+  friend struct base::LazyInstanceTraitsBase<KioskAppManager>;
   friend std::default_delete<KioskAppManager>;
   friend class KioskAppManagerTest;
   friend class KioskTest;

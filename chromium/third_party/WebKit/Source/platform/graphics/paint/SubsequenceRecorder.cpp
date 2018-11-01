@@ -7,39 +7,39 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/graphics/paint/SubsequenceDisplayItem.h"
 
 namespace blink {
 
 SubsequenceRecorder::SubsequenceRecorder(GraphicsContext& context,
                                          const DisplayItemClient& client)
-    : m_paintController(context.getPaintController()),
-      m_client(client),
-      m_beginSubsequenceIndex(0) {
-  if (m_paintController.displayItemConstructionIsDisabled())
+    : paint_controller_(context.GetPaintController()),
+      client_(client),
+      begin_subsequence_index_(0) {
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+  paint_controller_.BeginSubsequence(client_);
+#endif
+
+  if (paint_controller_.DisplayItemConstructionIsDisabled())
     return;
 
-  m_beginSubsequenceIndex = m_paintController.newDisplayItemList().size();
-  m_paintController.createAndAppend<BeginSubsequenceDisplayItem>(m_client);
+  begin_subsequence_index_ = paint_controller_.NewDisplayItemList().size();
 }
 
 SubsequenceRecorder::~SubsequenceRecorder() {
-  if (m_paintController.displayItemConstructionIsDisabled())
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+  paint_controller_.EndSubsequence();
+#endif
+
+  if (paint_controller_.DisplayItemConstructionIsDisabled())
     return;
 
-  if (m_paintController.lastDisplayItemIsNoopBegin()) {
-    ASSERT(m_beginSubsequenceIndex ==
-           m_paintController.newDisplayItemList().size() - 1);
-    // Remove uncacheable no-op BeginSubsequence/EndSubsequence pairs.
-    // Don't remove cacheable no-op pairs because we need to match them later
-    // with CachedSubsequences.
-    if (m_paintController.newDisplayItemList().last().skippedCache()) {
-      m_paintController.removeLastDisplayItem();
-      return;
-    }
-  }
+  // Skip empty subsequences.
+  if (paint_controller_.NewDisplayItemList().size() == begin_subsequence_index_)
+    return;
 
-  m_paintController.createAndAppend<EndSubsequenceDisplayItem>(m_client);
+  paint_controller_.AddCachedSubsequence(
+      client_, begin_subsequence_index_,
+      paint_controller_.NewDisplayItemList().size() - 1);
 }
 
 }  // namespace blink

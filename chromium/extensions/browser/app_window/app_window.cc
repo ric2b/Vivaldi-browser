@@ -22,6 +22,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/invalidate_type.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -99,7 +100,7 @@ void SetConstraintProperty(const std::string& name,
   if (value != SizeConstraints::kUnboundedSize)
     bounds_properties->SetInteger(name, value);
   else
-    bounds_properties->Set(name, base::Value::CreateNullValue());
+    bounds_properties->Set(name, base::MakeUnique<base::Value>());
 }
 
 void SetBoundsProperties(const gfx::Rect& bounds,
@@ -447,13 +448,12 @@ void AppWindow::AddNewContents(WebContents* source,
                                 was_blocked);
 }
 
-bool AppWindow::PreHandleKeyboardEvent(
+content::KeyboardEventProcessingResult AppWindow::PreHandleKeyboardEvent(
     content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event,
-    bool* is_keyboard_shortcut) {
+    const content::NativeWebKeyboardEvent& event) {
   const Extension* extension = GetExtension();
   if (!extension)
-    return false;
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
 
   // Here, we can handle a key event before the content gets it. When we are
   // fullscreen and it is not forced, we want to allow the user to leave
@@ -463,15 +463,15 @@ bool AppWindow::PreHandleKeyboardEvent(
   // ::HandleKeyboardEvent() will only be called if the KeyEvent's default
   // action is not prevented.
   // Thus, we should handle the KeyEvent here only if the permission is not set.
-  if (event.windowsKeyCode == ui::VKEY_ESCAPE && IsFullscreen() &&
+  if (event.windows_key_code == ui::VKEY_ESCAPE && IsFullscreen() &&
       !IsForcedFullscreen() &&
       !extension->permissions_data()->HasAPIPermission(
           APIPermission::kOverrideEscFullscreen)) {
     Restore();
-    return true;
+    return content::KeyboardEventProcessingResult::HANDLED;
   }
 
-  return false;
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 void AppWindow::HandleKeyboardEvent(
@@ -480,7 +480,7 @@ void AppWindow::HandleKeyboardEvent(
   // If the window is currently fullscreen and not forced, ESC should leave
   // fullscreen.  If this code is being called for ESC, that means that the
   // KeyEvent's default behavior was not prevented by the content.
-  if (event.windowsKeyCode == ui::VKEY_ESCAPE && IsFullscreen() &&
+  if (event.windows_key_code == ui::VKEY_ESCAPE && IsFullscreen() &&
       !vivaldi::IsVivaldiRunning() &&
       !IsForcedFullscreen()) {
     Restore();
@@ -1076,8 +1076,8 @@ bool AppWindow::IsFullscreenForTabOrPending(const content::WebContents* source)
 
 blink::WebDisplayMode AppWindow::GetDisplayMode(
     const content::WebContents* source) const {
-  return IsFullscreen() ? blink::WebDisplayModeFullscreen
-                        : blink::WebDisplayModeStandalone;
+  return IsFullscreen() ? blink::kWebDisplayModeFullscreen
+                        : blink::kWebDisplayModeStandalone;
 }
 
 WindowController* AppWindow::GetExtensionWindowController() const {

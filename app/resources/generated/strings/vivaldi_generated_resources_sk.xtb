@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Zadajte skratku</translation>
 <translation id="2509495747794740764">Hodnota mierky musí byť v rozsahu od 10 do 200.</translation>
 <translation id="2509857212037838238">Nainštalovať doplnok <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Počet akcií zabraňujúcich ukončeniu</translation>
 <translation id="2550212893339833758">Swapovaná pamäť</translation>
 <translation id="2580924999637585241">Celkom: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Internetový obchod Vivaldi</translation>
@@ -214,6 +215,7 @@
 <translation id="4088095054444612037">Prijať pozvanie pre skupinu</translation>
 <translation id="4089192115462111328">V prehliadači Vivaldi</translation>
 <translation id="4090535558450035482">(Toto rozšírenie je spravované a nedá sa odstrániť.)</translation>
+<translation id="4091434297613116013">listy/listov papiera</translation>
 <translation id="4096508467498758490">Zakázať rozšírenia v režime pre vývojárov</translation>
 <translation id="4100839878934973028">Iný program v počítači pridal aplikáciu, ktorá môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
 <translation id="411666854932687641">Súkromná pamäť</translation>
@@ -364,6 +366,7 @@
 <translation id="6273677812470008672">Kvalita</translation>
 <translation id="6295855836753816081">Ukladá sa...</translation>
 <translation id="6308937455967653460">Uložiť &amp;odkaz ako...</translation>
+<translation id="6326855256003666642">Počet akcií zabraňujúcich ukončeniu</translation>
 <translation id="6348109281845364640">Nastavovanie tlačiarne zlyhalo</translation>
 <translation id="6370021412472292592">Načítanie súpisky obsahu rozšírenia (manifest) zlyhalo.</translation>
 <translation id="6398765197997659313">Ukončiť režim celej obrazovky</translation>

@@ -6,6 +6,7 @@ import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//remoting/android/client_java_tmpl.gni")
 import("//remoting/android/remoting_apk_tmpl.gni")
+import("//remoting/credits/credits.gni")
 import("//remoting/remoting_options.gni")
 import("//remoting/tools/build/remoting_localize.gni")
 
@@ -19,67 +20,14 @@ generate_jni("jni_headers") {
   jni_package = "remoting"
 }
 
-shared_library("remoting_client_jni") {
-  deps = [
-    "//remoting/android:jni_headers",
-    "//remoting/base",
-    "//remoting/client",
-    "//remoting/client/display",
-    "//remoting/protocol",
-    "//ui/events:dom_keycode_converter",
-    "//ui/gfx",
-  ]
-  sources = [
-    "//remoting/client/audio_player_android.cc",
-    "//remoting/client/audio_player_android.h",
-    "//remoting/client/jni/android_keymap.cc",
-    "//remoting/client/jni/android_keymap.h",
-    "//remoting/client/jni/chromoting_jni_instance.cc",
-    "//remoting/client/jni/chromoting_jni_instance.h",
-    "//remoting/client/jni/chromoting_jni_runtime.cc",
-    "//remoting/client/jni/chromoting_jni_runtime.h",
-    "//remoting/client/jni/connect_to_host_info.cc",
-    "//remoting/client/jni/connect_to_host_info.h",
-    "//remoting/client/jni/display_updater_factory.h",
-    "//remoting/client/jni/egl_thread_context.cc",
-    "//remoting/client/jni/egl_thread_context.h",
-    "//remoting/client/jni/jni_client.cc",
-    "//remoting/client/jni/jni_client.h",
-    "//remoting/client/jni/jni_gl_display_handler.cc",
-    "//remoting/client/jni/jni_gl_display_handler.h",
-    "//remoting/client/jni/jni_pairing_secret_fetcher.cc",
-    "//remoting/client/jni/jni_pairing_secret_fetcher.h",
-    "//remoting/client/jni/jni_touch_event_data.cc",
-    "//remoting/client/jni/jni_touch_event_data.h",
-    "//remoting/client/jni/remoting_jni_onload.cc",
-    "//remoting/client/jni/remoting_jni_registrar.cc",
-    "//remoting/client/jni/remoting_jni_registrar.h",
-  ]
-  libs = [
-    "android",
-    "OpenSLES",
-    "EGL",
-  ]
-  configs += [ "//remoting/build/config:enable_webrtc_remoting_client" ]
-  assert_no_deps = [ "//third_party/ffmpeg:*" ]
-}
+_raw_resources_base_dir = "$target_gen_dir/credits_resources_raw/res"
 
-_raw_resources_base_dir = "$target_gen_dir/remoting_android_raw_resources/res"
-copy("remoting_android_raw_resources") {
-  _credits_html = get_label_info("//remoting/webapp:credits",
-                                 "target_gen_dir") + "/credits.html"
-  sources = [
-    "//remoting/webapp/base/html/credits_css.css",
-    "//remoting/webapp/base/html/main.css",
-    "//remoting/webapp/base/js/credits_js.js",
-    _credits_html,
-  ]
-  outputs = [
-    "$_raw_resources_base_dir/raw/{{source_file_part}}",
-  ]
-  deps = [
-    "//remoting/webapp:credits",
-  ]
+# The target is named this way, instead of "..._raw_resources", specifically
+# to avoid matching any of the _java_target_whitelist items in
+# build/config/android/internal_rules.gni
+remoting_credits("credits_resources_raw") {
+  credits_gen_dir = "$_raw_resources_base_dir/raw"
+  gn_target = "//remoting/android:remoting_apk"
 }
 
 remoting_localize("remoting_apk_manifest") {
@@ -95,11 +43,9 @@ android_resources("remoting_android_client_java_resources") {
   custom_package = "org.chromium.chromoting"
   resource_dirs = [ "java/res" ]
   generated_resource_dirs = [ _raw_resources_base_dir ]
-  generated_resource_files =
-      get_target_outputs(":remoting_android_raw_resources")
-
+  generated_resource_files = get_target_outputs(":credits_resources_raw")
   deps = [
-    ":remoting_android_raw_resources",
+    ":credits_resources_raw",
     "//remoting/resources:strings_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
   ]

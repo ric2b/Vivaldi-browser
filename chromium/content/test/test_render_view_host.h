@@ -77,6 +77,8 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void WasUnOccluded() override;
   void WasOccluded() override;
   gfx::Rect GetViewBounds() const override;
+  void SetBackgroundColor(SkColor color) override;
+  SkColor background_color() const override;
 #if defined(OS_MACOSX)
   ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const override;
   void SetActive(bool active) override;
@@ -86,7 +88,10 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool IsSpeaking() const override;
   void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
-  void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
+  void DidCreateNewRendererCompositorFrameSink(
+      cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink)
+      override;
+  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override {}
   void SetNeedsBeginFrames(bool needs_begin_frames) override {}
@@ -112,6 +117,12 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool is_occluded() const { return is_occluded_; }
   bool did_swap_compositor_frame() const { return did_swap_compositor_frame_; }
   void reset_did_swap_compositor_frame() { did_swap_compositor_frame_ = false; }
+  bool did_change_compositor_frame_sink() {
+    return did_change_compositor_frame_sink_;
+  }
+  void reset_did_change_compositor_frame_sink() {
+    did_change_compositor_frame_sink_ = false;
+  }
 
  protected:
   RenderWidgetHostImpl* rwh_;
@@ -121,6 +132,8 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool is_showing_;
   bool is_occluded_;
   bool did_swap_compositor_frame_;
+  bool did_change_compositor_frame_sink_ = false;
+  SkColor background_color_;
   ui::DummyTextInputClient text_input_client_;
 };
 

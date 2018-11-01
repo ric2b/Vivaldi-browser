@@ -12,7 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/csd.pb.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,10 +36,12 @@ class BinaryFeatureExtractorWinTest : public testing::Test {
       const ClientDownloadRequest_CertificateChain& chain,
       std::vector<scoped_refptr<net::X509Certificate> >* certs) {
     for (int i = 0; i < chain.element_size(); ++i) {
-      certs->push_back(
+      scoped_refptr<net::X509Certificate> cert =
           net::X509Certificate::CreateFromBytes(
               chain.element(i).certificate().data(),
-              chain.element(i).certificate().size()));
+              chain.element(i).certificate().size());
+      if (cert)
+        certs->push_back(cert);
     }
   }
 

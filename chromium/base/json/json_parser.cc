@@ -279,27 +279,31 @@ bool JSONParser::EatComment() {
   if (*pos_ != '/' || !CanConsume(1))
     return false;
 
-  char next_char = *NextChar();
-  if (next_char == '/') {
+  NextChar();
+
+  if (!CanConsume(1))
+    return false;
+
+  if (*pos_ == '/') {
     // Single line comment, read to newline.
     while (CanConsume(1)) {
-      next_char = *NextChar();
-      if (next_char == '\n' || next_char == '\r')
+      if (*pos_ == '\n' || *pos_ == '\r')
         return true;
+      NextChar();
     }
-  } else if (next_char == '*') {
+  } else if (*pos_ == '*') {
     char previous_char = '\0';
     // Block comment, read until end marker.
     while (CanConsume(1)) {
-      next_char = *NextChar();
-      if (previous_char == '*' && next_char == '/') {
+      if (previous_char == '*' && *pos_ == '/') {
         // EatWhitespaceAndComments will inspect pos_, which will still be on
         // the last / of the comment, so advance once more (which may also be
         // end of input).
         NextChar();
         return true;
       }
-      previous_char = next_char;
+      previous_char = *pos_;
+      NextChar();
     }
 
     // If the comment is unterminated, GetNextToken will report T_END_OF_INPUT.
@@ -344,7 +348,7 @@ std::unique_ptr<Value> JSONParser::ConsumeDictionary() {
     return nullptr;
   }
 
-  std::unique_ptr<DictionaryValue> dict(new DictionaryValue);
+  std::vector<Value::DictStorage::value_type> dict_storage;
 
   NextChar();
   Token token = GetNextToken();
@@ -376,7 +380,7 @@ std::unique_ptr<Value> JSONParser::ConsumeDictionary() {
       return nullptr;
     }
 
-    dict->SetWithoutPathExpansion(key.AsStringPiece(), std::move(value));
+    dict_storage.emplace_back(key.DestructiveAsString(), std::move(value));
 
     NextChar();
     token = GetNextToken();
@@ -393,7 +397,8 @@ std::unique_ptr<Value> JSONParser::ConsumeDictionary() {
     }
   }
 
-  return std::move(dict);
+  return MakeUnique<Value>(
+      Value::DictStorage(std::move(dict_storage), KEEP_LAST_OF_DUPES));
 }
 
 std::unique_ptr<Value> JSONParser::ConsumeList() {
@@ -444,7 +449,7 @@ std::unique_ptr<Value> JSONParser::ConsumeString() {
   if (!ConsumeStringRaw(&string))
     return nullptr;
 
-  return base::MakeUnique<StringValue>(string.DestructiveAsString());
+  return base::MakeUnique<Value>(string.DestructiveAsString());
 }
 
 bool JSONParser::ConsumeStringRaw(StringBuilder* out) {
@@ -453,15 +458,29 @@ bool JSONParser::ConsumeStringRaw(StringBuilder* out) {
     return false;
   }
 
+  // Strings are at minimum two characters: the surrounding double quotes.
+  if (!CanConsume(2)) {
+    ReportError(JSONReader::JSON_SYNTAX_ERROR, 1);
+    return false;
+  }
+
   // StringBuilder will internally build a StringPiece unless a UTF-16
   // conversion occurs, at which point it will perform a copy into a
   // std::string.
   StringBuilder string(NextChar());
 
+  // Handle the empty string case early.
+  if (*pos_ == '"') {
+    *out = std::move(string);
+    return true;
+  }
+
   int length = end_pos_ - start_pos_;
   int32_t next_char = 0;
 
-  while (CanConsume(1)) {
+  // There must always be at least two characters left in the stream: the next
+  // string character and the terminating closing quote.
+  while (CanConsume(2)) {
     int start_index = index_;
     pos_ = start_pos_ + index_;  // CBU8_NEXT is postcrement.
     CBU8_NEXT(start_pos_, index_, length, next_char);
@@ -501,12 +520,18 @@ bool JSONParser::ConsumeStringRaw(StringBuilder* out) {
         return false;
       }
 
-      switch (*NextChar()) {
+      NextChar();
+      if (!CanConsume(1)) {
+        ReportError(JSONReader::JSON_INVALID_ESCAPE, 0);
+        return false;
+      }
+
+      switch (*pos_) {
         // Allowed esape sequences:
         case 'x': {  // UTF-8 sequence.
           // UTF-8 \x escape sequences are not allowed in the spec, but they
           // are supported here for backwards-compatiblity with the old parser.
-          if (!CanConsume(2)) {
+          if (!CanConsume(3)) {
             ReportError(JSONReader::JSON_INVALID_ESCAPE, 1);
             return false;
           }
@@ -776,7 +801,7 @@ std::unique_ptr<Value> JSONParser::ConsumeLiteral() {
     case 't': {
       const char kTrueLiteral[] = "true";
       const int kTrueLen = static_cast<int>(strlen(kTrueLiteral));
-      if (!CanConsume(kTrueLen - 1) ||
+      if (!CanConsume(kTrueLen) ||
           !StringsAreEqual(pos_, kTrueLiteral, kTrueLen)) {
         ReportError(JSONReader::JSON_SYNTAX_ERROR, 1);
         return nullptr;
@@ -787,7 +812,7 @@ std::unique_ptr<Value> JSONParser::ConsumeLiteral() {
     case 'f': {
       const char kFalseLiteral[] = "false";
       const int kFalseLen = static_cast<int>(strlen(kFalseLiteral));
-      if (!CanConsume(kFalseLen - 1) ||
+      if (!CanConsume(kFalseLen) ||
           !StringsAreEqual(pos_, kFalseLiteral, kFalseLen)) {
         ReportError(JSONReader::JSON_SYNTAX_ERROR, 1);
         return nullptr;
@@ -798,13 +823,13 @@ std::unique_ptr<Value> JSONParser::ConsumeLiteral() {
     case 'n': {
       const char kNullLiteral[] = "null";
       const int kNullLen = static_cast<int>(strlen(kNullLiteral));
-      if (!CanConsume(kNullLen - 1) ||
+      if (!CanConsume(kNullLen) ||
           !StringsAreEqual(pos_, kNullLiteral, kNullLen)) {
         ReportError(JSONReader::JSON_SYNTAX_ERROR, 1);
         return nullptr;
       }
       NextNChars(kNullLen - 1);
-      return Value::CreateNullValue();
+      return MakeUnique<Value>();
     }
     default:
       ReportError(JSONReader::JSON_UNEXPECTED_TOKEN, 1);

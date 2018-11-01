@@ -2,249 +2,147 @@
 
 *This page is automatically generated from* `gn help --markdown all`.
 
-## **\--args**: Specifies build arguments overrides.
-
-```
-  See "gn help buildargs" for an overview of how build arguments work.
-
-  Most operations take a build directory. The build arguments are taken from
-  the previous build done in that directory. If a command specifies --args, it
-  will override the previous arguments stored in the build directory, and use
-  the specified ones.
-
-  The args specified will be saved to the build directory for subsequent
-  commands. Specifying --args="" will clear all build arguments.
-
-```
-
-### **Formatting**
-
-```
-  The value of the switch is interpreted in GN syntax. For typical usage of
-  string arguments, you will need to be careful about escaping of quotes.
-
-```
-
-### **Examples**
-
-```
-  gn gen out/Default --args="foo=\"bar\""
-
-  gn gen out/Default --args='foo="bar" enable=true blah=7'
-
-  gn check out/Default --args=""
-    Clears existing build args from the directory.
-
-  gn desc out/Default --args="some_list=[1, false, \"foo\"]"
-
-
-```
-## **\--[no]color**: Forces colored output on or off.
-
-```
-  Normally GN will try to detect whether it is outputting to a terminal
-  and will enable or disable color accordingly. Use of these switches
-  will override the default.
-
-```
-
-### **Examples**
-
-```
-  gn gen out/Default --color
-
-  gn gen out/Default --nocolor
-
-
-```
-## **\--dotfile**: Override the name of the ".gn" file.
-
-```
-  Normally GN loads the ".gn"file  from the source root for some basic
-  configuration (see "gn help dotfile"). This flag allows you to
-  use a different file.
-
-  Note that this interacts with "--root" in a possibly incorrect way.
-  It would be nice to test the edge cases and document or fix.
-
-
-```
-## **\--fail-on-unused-args**: Treat unused build args as fatal errors.
-
-```
-  If you set a value in a build's "gn args" and never use it in the build (in
-  a declare_args() block), GN will normally print an error but not fail the
-  build.
-
-  In many cases engineers would use build args to enable or disable features
-  that would sometimes get removed. It would by annoying to block work for
-  typically benign problems. In Chrome in particular, flags might be configured
-  for build bots in a separate infrastructure repository, or a declare_args
-  block might be changed in a third party repository. Treating these errors as
-  blocking forced complex multi- way patches to land what would otherwise be
-  simple changes.
-
-  In some cases, such concerns are not as important, and a mismatch in build
-  flags between the invoker of the build and the build files represents a
-  critical mismatch that should be immediately fixed. Such users can set this
-  flag to force GN to fail in that case.
-
-
-```
-## **\--markdown**: Write help output in the Markdown format.
-
-## **\--[no]color**: Forces colored output on or off.
-
-```
-  Normally GN will try to detect whether it is outputting to a terminal
-  and will enable or disable color accordingly. Use of these switches
-  will override the default.
-
-```
-
-### **Examples**
-
-```
-  gn gen out/Default --color
-
-  gn gen out/Default --nocolor
-
-
-```
-## **-q**: Quiet mode. Don't print output on success.
-
-```
-  This is useful when running as a part of another script.
-
-
-```
-## **\--root**: Explicitly specify source root.
-
-```
-  Normally GN will look up in the directory tree from the current directory to
-  find a ".gn" file. The source root directory specifies the meaning of "//"
-  beginning with paths, and the BUILD.gn file in that directory will be the
-  first thing loaded.
-
-  Specifying --root allows GN to do builds in a specific directory regardless
-  of the current directory.
-
-```
-
-### **Examples**
-
-```
-  gn gen //out/Default --root=/home/baracko/src
-
-  gn desc //out/Default --root="C:\Users\BObama\My Documents\foo"
-
-
-```
-## **\--runtime-deps-list-file**: Save runtime dependencies for targets in file.
-
-```
-  --runtime-deps-list-file=<filename>
-
-  Where <filename> is a text file consisting of the labels, one per line, of
-  the targets for which runtime dependencies are desired.
-
-  See "gn help runtime_deps" for a description of how runtime dependencies are
-  computed.
-
-```
-
-### **Runtime deps output file**
-
-```
-  For each target requested, GN will write a separate runtime dependency file.
-  The runtime dependency file will be in the output directory alongside the
-  output file of the target, with a ".runtime_deps" extension. For example, if
-  the target "//foo:bar" is listed in the input file, and that target produces
-  an output file "bar.so", GN will create a file "bar.so.runtime_deps" in the
-  build directory.
-
-  If a source set, action, copy, or group is listed, the runtime deps file will
-  correspond to the .stamp file corresponding to that target. This is probably
-  not useful; the use-case for this feature is generally executable targets.
-
-  The runtime dependency file will list one file per line, with no escaping.
-  The files will be relative to the root_build_dir. The first line of the file
-  will be the main output file of the target itself (in the above example,
-  "bar.so").
-
-
-```
-## **\--script-executable**: Set the executable used to execute scripts.
-
-```
-  By default GN searches the PATH for Python to execute scripts in action
-  targets and exec_script calls. This flag allows the specification of a
-  specific Python executable or potentially a different language
-  interpreter.
-
-
-```
-## **\--threads**: Specify number of worker threads.
-
-```
-  GN runs many threads to load and run build files. This can make debugging
-  challenging. Or you may want to experiment with different values to see how
-  it affects performance.
-
-  The parameter is the number of worker threads. This does not count the main
-  thread (so there are always at least two).
-
-```
-
-### **Examples**
-
-```
-  gen gen out/Default --threads=1
-
-
-```
-## **\--time**: Outputs a summary of how long everything took.
-
-```
-  Hopefully self-explanatory.
-
-```
-
-### **Examples**
-
-```
-  gn gen out/Default --time
-
-
-```
-## **\--tracelog**: Writes a Chrome-compatible trace log to the given file.
-
-```
-  The trace log will show file loads, executions, scripts, and writes. This
-  allows performance analysis of the generation step.
-
-  To view the trace, open Chrome and navigate to "chrome://tracing/", then
-  press "Load" and specify the file you passed to this parameter.
-
-```
-
-### **Examples**
-
-```
-  gn gen out/Default --tracelog=mytrace.trace
-
-
-```
-## **-v**: Verbose logging.
-
-```
-  This will spew logging events to the console for debugging issues.
-
-  Good luck!
-
-
-```
-## **gn analyze <out_dir> <input_path> <output_path>**
+## Contents
+
+*   [Commands](#commands)
+    *   [analyze: Analyze which targets are affected by a list of files.](#analyze)
+    *   [args: Display or configure arguments declared by the build.](#args)
+    *   [check: Check header dependencies.](#check)
+    *   [clean: Cleans the output directory.](#clean)
+    *   [desc: Show lots of insightful information about a target or config.](#desc)
+    *   [format: Format .gn file.](#format)
+    *   [gen: Generate ninja files.](#gen)
+    *   [help: Does what you think.](#help)
+    *   [ls: List matching targets.](#ls)
+    *   [path: Find paths between two targets.](#path)
+    *   [refs: Find stuff referencing a target or file.](#refs)
+*   [Target declarations](#targets)
+    *   [action: Declare a target that runs a script a single time.](#action)
+    *   [action_foreach: Declare a target that runs a script over a set of files.](#action_foreach)
+    *   [bundle_data: [iOS/OS X] Declare a target without output.](#bundle_data)
+    *   [copy: Declare a target that copies files.](#copy)
+    *   [create_bundle: [iOS/OS X] Build an OS X / iOS bundle.](#create_bundle)
+    *   [executable: Declare an executable target.](#executable)
+    *   [group: Declare a named group of targets.](#group)
+    *   [loadable_module: Declare a loadable module target.](#loadable_module)
+    *   [shared_library: Declare a shared library target.](#shared_library)
+    *   [source_set: Declare a source set target.](#source_set)
+    *   [static_library: Declare a static library target.](#static_library)
+    *   [target: Declare an target with the given programmatic type.](#target)
+*   [Buildfile functions](#functions)
+    *   [assert: Assert an expression is true at generation time.](#assert)
+    *   [config: Defines a configuration object.](#config)
+    *   [declare_args: Declare build arguments.](#declare_args)
+    *   [defined: Returns whether an identifier is defined.](#defined)
+    *   [exec_script: Synchronously run a script and return the output.](#exec_script)
+    *   [foreach: Iterate over a list.](#foreach)
+    *   [forward_variables_from: Copies variables from a different scope.](#forward_variables_from)
+    *   [get_label_info: Get an attribute from a target's label.](#get_label_info)
+    *   [get_path_info: Extract parts of a file or directory name.](#get_path_info)
+    *   [get_target_outputs: [file list] Get the list of outputs from a target.](#get_target_outputs)
+    *   [getenv: Get an environment variable.](#getenv)
+    *   [import: Import a file into the current scope.](#import)
+    *   [pool: Defines a pool object.](#pool)
+    *   [print: Prints to the console.](#print)
+    *   [process_file_template: Do template expansion over a list of files.](#process_file_template)
+    *   [read_file: Read a file into a variable.](#read_file)
+    *   [rebase_path: Rebase a file or directory to another location.](#rebase_path)
+    *   [set_default_toolchain: Sets the default toolchain name.](#set_default_toolchain)
+    *   [set_defaults: Set default values for a target type.](#set_defaults)
+    *   [set_sources_assignment_filter: Set a pattern to filter source files.](#set_sources_assignment_filter)
+    *   [split_list: Splits a list into N different sub-lists.](#split_list)
+    *   [template: Define a template rule.](#template)
+    *   [tool: Specify arguments to a toolchain tool.](#tool)
+    *   [toolchain: Defines a toolchain.](#toolchain)
+    *   [write_file: Write a file to disk.](#write_file)
+*   [Built-in predefined variables](#predefined_variables)
+    *   [current_cpu: [string] The processor architecture of the current toolchain.](#current_cpu)
+    *   [current_os: [string] The operating system of the current toolchain.](#current_os)
+    *   [current_toolchain: [string] Label of the current toolchain.](#current_toolchain)
+    *   [default_toolchain: [string] Label of the default toolchain.](#default_toolchain)
+    *   [host_cpu: [string] The processor architecture that GN is running on.](#host_cpu)
+    *   [host_os: [string] The operating system that GN is running on.](#host_os)
+    *   [invoker: [string] The invoking scope inside a template.](#invoker)
+    *   [python_path: [string] Absolute path of Python.](#python_path)
+    *   [root_build_dir: [string] Directory where build commands are run.](#root_build_dir)
+    *   [root_gen_dir: [string] Directory for the toolchain's generated files.](#root_gen_dir)
+    *   [root_out_dir: [string] Root directory for toolchain output files.](#root_out_dir)
+    *   [target_cpu: [string] The desired cpu architecture for the build.](#target_cpu)
+    *   [target_gen_dir: [string] Directory for a target's generated files.](#target_gen_dir)
+    *   [target_name: [string] The name of the current target.](#target_name)
+    *   [target_os: [string] The desired operating system for the build.](#target_os)
+    *   [target_out_dir: [string] Directory for target output files.](#target_out_dir)
+*   [Variables you set in targets](#target_variables)
+    *   [all_dependent_configs: [label list] Configs to be forced on dependents.](#all_dependent_configs)
+    *   [allow_circular_includes_from: [label list] Permit includes from deps.](#allow_circular_includes_from)
+    *   [arflags: [string list] Arguments passed to static_library archiver.](#arflags)
+    *   [args: [string list] Arguments passed to an action.](#args)
+    *   [asmflags: [string list] Flags passed to the assembler.](#asmflags)
+    *   [assert_no_deps: [label pattern list] Ensure no deps on these targets.](#assert_no_deps)
+    *   [bundle_deps_filter: [label list] A list of labels that are filtered out.](#bundle_deps_filter)
+    *   [bundle_executable_dir: Expansion of {{bundle_executable_dir}} in create_bundle](#bundle_executable_dir)
+    *   [bundle_plugins_dir: Expansion of {{bundle_plugins_dir}} in create_bundle.](#bundle_plugins_dir)
+    *   [bundle_resources_dir: Expansion of {{bundle_resources_dir}} in create_bundle.](#bundle_resources_dir)
+    *   [bundle_root_dir: Expansion of {{bundle_root_dir}} in create_bundle.](#bundle_root_dir)
+    *   [cflags: [string list] Flags passed to all C compiler variants.](#cflags)
+    *   [cflags_c: [string list] Flags passed to the C compiler.](#cflags_c)
+    *   [cflags_cc: [string list] Flags passed to the C++ compiler.](#cflags_cc)
+    *   [cflags_objc: [string list] Flags passed to the Objective C compiler.](#cflags_objc)
+    *   [cflags_objcc: [string list] Flags passed to the Objective C++ compiler.](#cflags_objcc)
+    *   [check_includes: [boolean] Controls whether a target's files are checked.](#check_includes)
+    *   [code_signing_args: [string list] Arguments passed to code signing script.](#code_signing_args)
+    *   [code_signing_outputs: [file list] Output files for code signing step.](#code_signing_outputs)
+    *   [code_signing_script: [file name] Script for code signing.](#code_signing_script)
+    *   [code_signing_sources: [file list] Sources for code signing step.](#code_signing_sources)
+    *   [complete_static_lib: [boolean] Links all deps into a static library.](#complete_static_lib)
+    *   [configs: [label list] Configs applying to this target or config.](#configs)
+    *   [console: [boolean] Run this action in the console pool.](#console)
+    *   [data: [file list] Runtime data file dependencies.](#data)
+    *   [data_deps: [label list] Non-linked dependencies.](#data_deps)
+    *   [defines: [string list] C preprocessor defines.](#defines)
+    *   [depfile: [string] File name for input dependencies for actions.](#depfile)
+    *   [deps: [label list] Private linked dependencies.](#deps)
+    *   [include_dirs: [directory list] Additional include directories.](#include_dirs)
+    *   [inputs: [file list] Additional compile-time dependencies.](#inputs)
+    *   [ldflags: [string list] Flags passed to the linker.](#ldflags)
+    *   [lib_dirs: [directory list] Additional library directories.](#lib_dirs)
+    *   [libs: [string list] Additional libraries to link.](#libs)
+    *   [output_dir: [directory] Directory to put output file in.](#output_dir)
+    *   [output_extension: [string] Value to use for the output's file extension.](#output_extension)
+    *   [output_name: [string] Name for the output file other than the default.](#output_name)
+    *   [output_prefix_override: [boolean] Don't use prefix for output name.](#output_prefix_override)
+    *   [outputs: [file list] Output files for actions and copy targets.](#outputs)
+    *   [precompiled_header: [string] Header file to precompile.](#precompiled_header)
+    *   [precompiled_header_type: [string] "gcc" or "msvc".](#precompiled_header_type)
+    *   [precompiled_source: [file name] Source file to precompile.](#precompiled_source)
+    *   [product_type: [string] Product type for Xcode projects.](#product_type)
+    *   [public: [file list] Declare public header files for a target.](#public)
+    *   [public_configs: [label list] Configs applied to dependents.](#public_configs)
+    *   [public_deps: [label list] Declare public dependencies.](#public_deps)
+    *   [response_file_contents: [string list] Contents of .rsp file for actions.](#response_file_contents)
+    *   [script: [file name] Script file for actions.](#script)
+    *   [sources: [file list] Source files for a target.](#sources)
+    *   [testonly: [boolean] Declares a target must only be used for testing.](#testonly)
+    *   [visibility: [label list] A list of labels that can depend on a target.](#visibility)
+    *   [write_runtime_deps: Writes the target's runtime_deps to the given path.](#write_runtime_deps)
+*   [Other help topics](#other)
+    *   [all: Print all the help at once](#all)
+    *   [buildargs: How build arguments work.](#buildargs)
+    *   [dotfile: Info about the toplevel .gn file.](#dotfile)
+    *   [execution: Build graph and execution overview.](#execution)
+    *   [grammar: Language and grammar for GN build files.](#grammar)
+    *   [input_conversion: Processing input from exec_script and read_file.](#input_conversion)
+    *   [label_pattern: Matching more than one label.](#label_pattern)
+    *   [labels: About labels.](#labels)
+    *   [ninja_rules: How Ninja build rules are named.](#ninja_rules)
+    *   [nogncheck: Annotating includes for checking.](#nogncheck)
+    *   [runtime_deps: How runtime dependency computation works.](#runtime_deps)
+    *   [source_expansion: Map sources to outputs for scripts.](#source_expansion)
+    *   [switches: Show available command-line switches.](#switches)
+
+## <a name="commands"></a>Commands
+
+### <a name="analyze"></a>**gn analyze <out_dir> <input_path> <output_path>**
 
 ```
   Analyze which targets are affected by a list of files.
@@ -313,18 +211,15 @@
   "error" key is non-empty and a non-fatal error occurred. In other words, it
   tries really hard to always write something to the output JSON and convey
   errors that way rather than via return codes.
-
-
 ```
-## **gn args <out_dir> [\--list] [\--short] [\--args]**
+### <a name="args"></a>**gn args <out_dir> [\--list] [\--short] [\--args]**
 
 ```
   See also "gn help buildargs" for a more high-level overview of how
   build arguments work.
-
 ```
 
-### **Usage**
+#### **Usage**
 
 ```
   gn args <out_dir>
@@ -353,10 +248,9 @@
 
       If --short is specified, only the names and current values will be
       printed.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   gn args out/Debug
@@ -375,10 +269,8 @@
     Prints all arguments with the default values for a build with the
     given arguments set (which may affect the values of other
     arguments).
-
-
 ```
-## **gn check <out_dir> [<label_pattern>] [\--force]**
+### <a name="check"></a>**gn check <out_dir> [<label_pattern>] [\--force]**
 
 ```
   GN's include header checker validates that the includes for C-like source
@@ -391,19 +283,17 @@
   The <label_pattern> can take exact labels or patterns that match more than
   one (although not general regular expressions). If specified, only those
   matching targets will be checked. See "gn help label_pattern" for details.
-
 ```
 
-### **Command-specific switches**
+#### **Command-specific switches**
 
 ```
   --force
       Ignores specifications of "check_includes = false" and checks all
       target's files that match the target label.
-
 ```
 
-### **What gets checked**
+#### **What gets checked**
 
 ```
   The .gn file may specify a list of targets to be checked. Only these targets
@@ -456,10 +346,9 @@
     - A target can include headers from a target that depends on it if the
       other target is annotated accordingly. See "gn help
       allow_circular_includes_from".
-
 ```
 
-### **Advice on fixing problems**
+#### **Advice on fixing problems**
 
 ```
   If you have a third party project that uses relative includes, it's generally
@@ -484,10 +373,9 @@
 
   In rare cases it makes sense to list a header in more than one target if it
   could be considered conceptually a member of both.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   gn check out/Debug
@@ -498,19 +386,15 @@
 
   gn check out/Default "//foo/*
       Check only the files in targets in the //foo directory tree.
-
-
 ```
-## **gn clean <out_dir>**
+### <a name="clean"></a>**gn clean <out_dir>**
 
 ```
   Deletes the contents of the output directory except for args.gn and
   creates a Ninja build environment sufficient to regenerate the build.
-
-
 ```
-## **gn desc <out_dir> <label or pattern> [<what to show>] [\--blame] "**
-### **[\--format=json]**
+### <a name="desc"></a>**gn desc <out_dir> <label or pattern> [<what to show>] [\--blame] "**
+#### **[\--format=json]**
 
 ```
   Displays information about a given target or config. The build build
@@ -519,10 +403,9 @@
   The <label or pattern> can be a target label, a config label, or a label
   pattern (see "gn help label_pattern"). A label pattern will only match
   targets.
-
 ```
 
-### **Possibilities for <what to show>**
+#### **Possibilities for <what to show>**
 
 ```
   (If unspecified an overall summary will be displayed.)
@@ -560,10 +443,9 @@
       The output is a list of file names relative to the build directory. See
       "gn help runtime_deps" for how this is computed. This also works with
       "--blame" to see the source of the dependency.
-
 ```
 
-### **Shared flags**
+#### **Shared flags**
 ```
   --all-toolchains
       Normally only inputs in the default toolchain will be included.
@@ -576,10 +458,9 @@
 
   --format=json
       Format the output as JSON instead of text.
-
 ```
 
-### **Target flags**
+#### **Target flags**
 
 ```
   --blame
@@ -587,10 +468,9 @@
       cause that target to get the flag. This doesn't currently work for libs
       and lib_dirs because those are inherited and are more complicated to
       figure out the blame (patches welcome).
-
 ```
 
-### **Configs**
+#### **Configs**
 
 ```
   The "configs" section will list all configs that apply. For targets this will
@@ -598,19 +478,17 @@
   configs pushed onto this target via public or "all dependent" configs.
 
   Configs can have child configs. Specifying --tree will show the hierarchy.
-
 ```
 
-### **Printing outputs**
+#### **Printing outputs**
 
 ```
   The "outputs" section will list all outputs that apply, including the outputs
   computed from the tool definition (eg for "executable", "static_library", ...
   targets).
-
 ```
 
-### **Printing deps**
+#### **Printing deps**
 
 ```
   Deps will include all public, private, and data deps (TODO this could be
@@ -651,17 +529,16 @@
       unspecified, no filtering will be performed.
 ```
 
-### **Note**
+#### **Note**
 
 ```
   This command will show the full name of directories and source files, but
   when directories and source paths are written to the build file, they will be
   adjusted to be relative to the build directory. So the values for paths
   displayed by this command won't match (but should mean the same thing).
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   gn desc out/Debug //base:base
@@ -674,10 +551,8 @@
   gn desc out/Debug //base defines --blame
       Shows defines set for the //base:base target, annotated by where
       each one was set from.
-
-
 ```
-## **gn format [\--dump-tree] (\--stdin | <build_file>)**
+### <a name="format"></a>**gn format [\--dump-tree] (\--stdin | <build_file>)**
 
 ```
   Formats .gn file to a standard format.
@@ -691,10 +566,9 @@
     "z.cc",
     "a.cc",
   ]
-
 ```
 
-### **Arguments**
+#### **Arguments**
 
 ```
   --dry-run
@@ -712,19 +586,16 @@
   --stdin
       Read input from stdin and write to stdout rather than update a file
       in-place.
-
 ```
 
-### **Examples**
+#### **Examples**
 ```
   gn format //some/BUILD.gn
   gn format some\\BUILD.gn
   gn format /abspath/some/BUILD.gn
   gn format --stdin
-
-
 ```
-## **gn gen**: Generate ninja files.
+### <a name="gen:"></a>**gn gen**: Generate ninja files.
 
 ```
   gn gen [<ide options>] <out_dir>
@@ -738,10 +609,9 @@
       out/foo
 
   See "gn help switches" for the common command-line switches.
-
 ```
 
-### **IDE options**
+#### **IDE options**
 
 ```
   GN optionally generates files for IDE. Possibilities for <ide options>
@@ -753,6 +623,7 @@
              (default Visual Studio version: 2015)
       "vs2013" - Visual Studio 2013 project/solution files.
       "vs2015" - Visual Studio 2015 project/solution files.
+      "vs2017" - Visual Studio 2017 project/solution files.
       "xcode" - Xcode workspace/solution files.
       "qtcreator" - QtCreator project files.
       "json" - JSON file containing target information
@@ -762,10 +633,9 @@
       generated projects (see "gn help label_pattern"). Only matching targets
       and their dependencies will be included in the solution. Only used for
       Visual Studio, Xcode and JSON.
-
 ```
 
-### **Visual Studio Flags**
+#### **Visual Studio Flags**
 
 ```
   --sln=<file_name>
@@ -775,10 +645,9 @@
   --no-deps
       Don't include targets dependencies to the solution. Changes the way how
       --filters option works. Only directly matching targets are included.
-
 ```
 
-### **Xcode Flags**
+#### **Xcode Flags**
 
 ```
   --workspace=<file_name>
@@ -793,21 +662,18 @@
   --root-target=<target_name>
       Name of the target corresponding to "All" target in Xcode. If unset,
       "All" invokes ninja without any target and builds everything.
-
 ```
 
-### **QtCreator Flags**
+#### **QtCreator Flags**
 
 ```
   --root-target=<target_name>
       Name of the root target for which the QtCreator project will be generated
       to contain files of it and its dependencies. If unset, the whole build
       graph will be emitted.
-
-
 ```
 
-### **Eclipse IDE Support**
+#### **Eclipse IDE Support**
 
 ```
   GN DOES NOT generate Eclipse CDT projects. Instead, it generates a settings
@@ -817,10 +683,9 @@
   for each file individually. Instead, one set of includes/defines is generated
   for the entire project. This works fairly well but may still result in a few
   indexer issues here and there.
-
 ```
 
-### **Generic JSON Output**
+#### **Generic JSON Output**
 
 ```
   Dumps target information to JSON file and optionally invokes python script on
@@ -838,36 +703,30 @@
 
   --json-ide-script-args=<argument>
       Optional second argument that will passed to executed script.
-
-
 ```
-## **gn help <anything>**
+### <a name="help"></a>**gn help <anything>**
 
 ```
   Yo dawg, I heard you like help on your help so I put help on the help in the
   help.
 
   You can also use "all" as the parameter to get all help at once.
-
 ```
 
-### **Switches**
+#### **Switches**
 
 ```
   --markdown
       Format output in markdown syntax.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   gn help --markdown all
       Dump all help to stdout in markdown format.
-
-
 ```
-## **gn ls <out_dir> [<label_pattern>] [\--all-toolchains] [\--as=...]**
+### <a name="ls"></a>**gn ls <out_dir> [<label_pattern>] [\--all-toolchains] [\--as=...]**
 ```
       [--type=...] [--testonly=...]
 
@@ -878,10 +737,9 @@
   If the label pattern is unspecified, list all targets. The label pattern is
   not a general regular expression (see "gn help label_pattern"). If you need
   more complex expressions, pipe the result through grep.
-
 ```
 
-### **Options**
+#### **Options**
 
 ```
   --as=(buildfile|label|output)
@@ -914,10 +772,9 @@
           source_set|static_library)
       Restrict outputs to targets matching the given type. If
       unspecified, no filtering will be performed.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   gn ls out/Debug
@@ -941,10 +798,8 @@
   gn ls out/Debug //base --all-toolchains
       Lists all variants of the target //base:base (it may be referenced
       in multiple toolchains).
-
-
 ```
-## **gn path <out_dir> <target_one> <target_two>**
+### <a name="path"></a>**gn path <out_dir> <target_one> <target_two>**
 
 ```
   Finds paths of dependencies between two targets. Each unique path will be
@@ -957,20 +812,18 @@
   shortest path using either public or private dependencies will be printed. If
   --with-data is specified, data deps will also be considered. If there are
   multiple shortest paths, an arbitrary one will be selected.
-
 ```
 
-### **Interesting paths**
+#### **Interesting paths**
 
 ```
   In a large project, there can be 100's of millions of unique paths between a
   very high level and a common low-level target. To make the output more useful
   (and terminate in a reasonable time), GN will not revisit sub-paths
   previously known to lead to the target.
-
 ```
 
-### **Options**
+#### **Options**
 
 ```
   --all
@@ -984,17 +837,14 @@
   --with-data
      Additionally follows data deps. Without this flag, only public and private
      linked deps will be followed. Can't be used with --public.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   gn path out/Default //base //tools/gn
-
-
 ```
-## **gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)***
+### <a name="refs"></a>**gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)***
 ```
         [--all] [--all-toolchains] [--as=...] [--testonly=...] [--type=...]
 
@@ -1019,10 +869,9 @@
      a path to a file containing a list of labels or file names, one per line.
      This allows us to handle long lists of inputs without worrying about
      command line limits.
-
 ```
 
-### **Options**
+#### **Options**
 
 ```
   --all
@@ -1073,11 +922,9 @@
           source_set|static_library)
       Restrict outputs to targets matching the given type. If
       unspecified, no filtering will be performed.
-
-
 ```
 
-### **Examples (target input)**
+#### **Examples (target input)**
 
 ```
   gn refs out/Debug //tools/gn:gn
@@ -1099,10 +946,9 @@
 
   gn refs out/Debug //base --tree
       Print a reverse dependency tree of //base:base
-
 ```
 
-### **Examples (file input)**
+#### **Examples (file input)**
 
 ```
   gn refs out/Debug //base/macros.h
@@ -1120,19 +966,18 @@
           --all --as=output
       Display the executable file names of all test executables
       potentially affected by a change to the given file.
-
-
 ```
-## **action**: Declare a target that runs a script a single time.
+## <a name="targets"></a>Target declarations
+
+### <a name="action"></a>**action**: Declare a target that runs a script a single time.
 
 ```
   This target type allows you to run a script a single time to produce one or
   more output files. If you want to run a script once for each of a set of
   input files, see "gn help action_foreach".
-
 ```
 
-### **Inputs**
+#### **Inputs**
 
 ```
   In an action the "sources" and "inputs" are treated the same: they're both
@@ -1159,10 +1004,9 @@
   action is built, but may not have completed before all steps of the
   action are started. This can give additional parallelism in the build
   for runtime-only dependencies.
-
 ```
 
-### **Outputs**
+#### **Outputs**
 
 ```
   You should specify files created by your script by specifying them in the
@@ -1173,28 +1017,25 @@
   file names to be relative to the build directory (file names in the
   sources, outputs, and inputs will be all treated as relative to the
   current build file and converted as needed automatically).
-
 ```
 
-### **File name handling**
+#### **File name handling**
 ```
   All output files must be inside the output directory of the build.
   You would generally use |$target_out_dir| or |$target_gen_dir| to
   reference the output or generated intermediate file directories,
   respectively.
-
 ```
 
-### **Variables**
+#### **Variables**
 
 ```
   args, console, data, data_deps, depfile, deps, inputs, outputs*,
   response_file_contents, script*, sources
   * = required
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action("run_this_guy_once") {
@@ -1210,19 +1051,16 @@
     args = [ "--out", rebase_path(target_gen_dir, root_build_dir) ] +
            rebase_path(sources, root_build_dir)
   }
-
-
 ```
-## **action_foreach**: Declare a target that runs a script over a set of files.
+### <a name="action_foreach"></a>**action_foreach**: Declare a target that runs a script over a set of files.
 
 ```
   This target type allows you to run a script once-per-file over a set of
   sources. If you want to run a script once that takes many files as input, see
   "gn help action".
-
 ```
 
-### **Inputs**
+#### **Inputs**
 
 ```
   The script will be run once per file in the "sources" variable. The "outputs"
@@ -1247,10 +1085,9 @@
   action is built, but may not have completed before all steps of the
   action are started. This can give additional parallelism in the build
   for runtime-only dependencies.
-
 ```
 
-### **Outputs**
+#### **Outputs**
 ```
   The script will be executed with the given arguments with the current
   directory being that of the root build directory. If you pass files
@@ -1258,28 +1095,25 @@
   file names to be relative to the build directory (file names in the
   sources, outputs, and inputs will be all treated as relative to the
   current build file and converted as needed automatically).
-
 ```
 
-### **File name handling**
+#### **File name handling**
 ```
   All output files must be inside the output directory of the build.
   You would generally use |$target_out_dir| or |$target_gen_dir| to
   reference the output or generated intermediate file directories,
   respectively.
-
 ```
 
-### **Variables**
+#### **Variables**
 
 ```
   args, console, data, data_deps, depfile, deps, inputs, outputs*,
   response_file_contents, script*, sources*
   * = required
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   # Runs the script over each IDL file. The IDL script will generate both a .cc
@@ -1305,29 +1139,8 @@
       rebase_path(relative_target_gen_dir, root_build_dir) +
         "/{{source_name_part}}.h" ]
   }
-
-
 ```
-## **assert**: Assert an expression is true at generation time.
-
-```
-  assert(<condition> [, <error string>])
-
-  If the condition is false, the build will fail with an error. If the
-  optional second argument is provided, that string will be printed
-  with the error message.
-
-```
-
-### **Examples**
-
-```
-  assert(is_win)
-  assert(defined(sources), "Sources must be defined");
-
-
-```
-## **bundle_data**: [iOS/OS X] Declare a target without output.
+### <a name="bundle_data"></a>**bundle_data**: [iOS/OS X] Declare a target without output.
 
 ```
   This target type allows to declare data that is required at runtime. It is
@@ -1343,18 +1156,16 @@
   behind iOS/Mac conditionals.
 
   See "gn help create_bundle" for more information.
-
 ```
 
-### **Variables**
+#### **Variables**
 
 ```
   sources*, outputs*, deps, data_deps, public_deps, visibility
   * = required
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   bundle_data("icudata") {
@@ -1382,64 +1193,10 @@
           "{{source_file_part}}"
     ]
   }
-
-
 ```
-## **config**: Defines a configuration object.
+### <a name="copy"></a>**copy**: Declare a target that copies files.
 
-```
-  Configuration objects can be applied to targets and specify sets of compiler
-  flags, includes, defines, etc. They provide a way to conveniently group sets
-  of this configuration information.
-
-  A config is referenced by its label just like a target.
-
-  The values in a config are additive only. If you want to remove a flag you
-  need to remove the corresponding config that sets it. The final set of flags,
-  defines, etc. for a target is generated in this order:
-
-   1. The values specified directly on the target (rather than using a config.
-   2. The configs specified in the target's "configs" list, in order.
-   3. Public_configs from a breadth-first traversal of the dependency tree in
-      the order that the targets appear in "deps".
-   4. All dependent configs from a breadth-first traversal of the dependency
-      tree in the order that the targets appear in "deps".
-
-```
-
-### **Variables valid in a config definition**
-```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
-         precompiled_header, precompiled_source
-  Nested configs: configs
-
-```
-
-### **Variables on a target used to apply configs**
-
-```
-  all_dependent_configs, configs, public_configs
-
-```
-
-### **Example**
-
-```
-  config("myconfig") {
-    includes = [ "include/common" ]
-    defines = [ "ENABLE_DOOM_MELON" ]
-  }
-
-  executable("mything") {
-    configs = [ ":myconfig" ]
-  }
-
-
-```
-## **copy**: Declare a target that copies files.
-
-### **File name handling**
+#### **File name handling**
 
 ```
   All output files must be inside the output directory of the build. You would
@@ -1454,10 +1211,9 @@
   mapping from each source file to an output file name using source expansion
   (see "gn help source_expansion"). The placeholders will look like
   "{{source_name_part}}", for example.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   # Write a rule that copies a checked-in DLL to the output directory.
@@ -1474,10 +1230,8 @@
     # names in the gen dir. This will just copy each file.
     outputs = [ "$target_gen_dir/{{source_file_part}}" ]
   }
-
-
 ```
-## **create_bundle**: [iOS/OS X] Build an OS X / iOS bundle.
+### <a name="create_bundle"></a>**create_bundle**: [iOS/OS X] Build an OS X / iOS bundle.
 
 ```
   This target generates an iOS/OS X bundle (which is a directory with a
@@ -1497,10 +1251,9 @@
   contribute to any data or data_deps. Required runtime dependencies should be
   placed in the bundle. A create_bundle can declare its own explicit data and
   data_deps, however.
-
 ```
 
-### **Code signing**
+#### **Code signing**
 
 ```
   Some bundle needs to be code signed as part of the build (on iOS all
@@ -1516,10 +1269,9 @@
   code_signing_args will be passed as is to the script (so path have to be
   rebased) and additional inputs may be listed with the variable
   code_signing_sources.
-
 ```
 
-### **Variables**
+#### **Variables**
 
 ```
   bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,
@@ -1527,10 +1279,9 @@
   visibility, product_type, code_signing_args, code_signing_script,
   code_signing_sources, code_signing_outputs
   * = required
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   # Defines a template to create an application. On most platform, this is just
@@ -1622,10 +1373,245 @@
       }
     }
   }
+```
+### <a name="executable"></a>**executable**: Declare an executable target.
 
+#### **Variables**
 
 ```
-## **declare_args**: Declare build arguments.
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
+         precompiled_header, precompiled_source
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+  General: check_includes, configs, data, inputs, output_name,
+           output_extension, public, sources, testonly, visibility
+```
+### <a name="group"></a>**group**: Declare a named group of targets.
+
+```
+  This target type allows you to create meta-targets that just collect a set of
+  dependencies into one named target. Groups can additionally specify configs
+  that apply to their dependents.
+```
+
+#### **Variables**
+
+```
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+```
+
+#### **Example**
+
+```
+  group("all") {
+    deps = [
+      "//project:runner",
+      "//project:unit_tests",
+    ]
+  }
+```
+### <a name="loadable_module"></a>**loadable_module**: Declare a loadable module target.
+
+```
+  This target type allows you to create an object file that is (and can only
+  be) loaded and unloaded at runtime.
+
+  A loadable module will be specified on the linker line for targets listing
+  the loadable module in its "deps". If you don't want this (if you don't need
+  to dynamically load the library at runtime), then you should use a
+  "shared_library" target type instead.
+```
+
+#### **Variables**
+
+```
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
+         precompiled_header, precompiled_source
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+  General: check_includes, configs, data, inputs, output_name,
+           output_extension, public, sources, testonly, visibility
+```
+### <a name="shared_library"></a>**shared_library**: Declare a shared library target.
+
+```
+  A shared library will be specified on the linker line for targets listing the
+  shared library in its "deps". If you don't want this (say you dynamically
+  load the library at runtime), then you should depend on the shared library
+  via "data_deps" or, on Darwin platforms, use a "loadable_module" target type
+  instead.
+```
+
+#### **Variables**
+
+```
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
+         precompiled_header, precompiled_source
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+  General: check_includes, configs, data, inputs, output_name,
+           output_extension, public, sources, testonly, visibility
+```
+### <a name="source_set"></a>**source_set**: Declare a source set target.
+
+```
+  A source set is a collection of sources that get compiled, but are not linked
+  to produce any kind of library. Instead, the resulting object files are
+  implicitly added to the linker line of all targets that depend on the source
+  set.
+
+  In most cases, a source set will behave like a static library, except no
+  actual library file will be produced. This will make the build go a little
+  faster by skipping creation of a large static library, while maintaining the
+  organizational benefits of focused build targets.
+
+  The main difference between a source set and a static library is around
+  handling of exported symbols. Most linkers assume declaring a function
+  exported means exported from the static library. The linker can then do dead
+  code elimination to delete code not reachable from exported functions.
+
+  A source set will not do this code elimination since there is no link step.
+  This allows you to link many sources sets into a shared library and have the
+  "exported symbol" notation indicate "export from the final shared library and
+  not from the intermediate targets." There is no way to express this concept
+  when linking multiple static libraries into a shared library.
+```
+
+#### **Variables**
+
+```
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
+         precompiled_header, precompiled_source
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+  General: check_includes, configs, data, inputs, output_name,
+           output_extension, public, sources, testonly, visibility
+```
+### <a name="static_library"></a>**static_library**: Declare a static library target.
+
+```
+  Make a ".a" / ".lib" file.
+
+  If you only need the static library for intermediate results in the build,
+  you should consider a source_set instead since it will skip the (potentially
+  slow) step of creating the intermediate library file.
+```
+
+#### **Variables**
+
+```
+  complete_static_lib
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
+         precompiled_header, precompiled_source
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+  General: check_includes, configs, data, inputs, output_name,
+           output_extension, public, sources, testonly, visibility
+```
+### <a name="target"></a>**target**: Declare an target with the given programmatic type.
+
+```
+  target(target_type_string, target_name_string) { ... }
+
+  The target() function is a way to invoke a built-in target or template with a
+  type determined at runtime. This is useful for cases where the type of a
+  target might not be known statically.
+
+  Only templates and built-in target functions are supported for the
+  target_type_string parameter. Arbitrary functions, configs, and toolchains
+  are not supported.
+
+  The call:
+    target("source_set", "doom_melon") {
+  Is equivalent to:
+    source_set("doom_melon") {
+```
+
+#### **Example**
+
+```
+  if (foo_build_as_shared) {
+    my_type = "shared_library"
+  } else {
+    my_type = "source_set"
+  }
+
+  target(my_type, "foo") {
+    ...
+  }
+```
+## <a name="functions"></a>Buildfile functions
+
+### <a name="assert"></a>**assert**: Assert an expression is true at generation time.
+
+```
+  assert(<condition> [, <error string>])
+
+  If the condition is false, the build will fail with an error. If the
+  optional second argument is provided, that string will be printed
+  with the error message.
+```
+
+#### **Examples**
+
+```
+  assert(is_win)
+  assert(defined(sources), "Sources must be defined");
+```
+### <a name="config"></a>**config**: Defines a configuration object.
+
+```
+  Configuration objects can be applied to targets and specify sets of compiler
+  flags, includes, defines, etc. They provide a way to conveniently group sets
+  of this configuration information.
+
+  A config is referenced by its label just like a target.
+
+  The values in a config are additive only. If you want to remove a flag you
+  need to remove the corresponding config that sets it. The final set of flags,
+  defines, etc. for a target is generated in this order:
+
+   1. The values specified directly on the target (rather than using a config.
+   2. The configs specified in the target's "configs" list, in order.
+   3. Public_configs from a breadth-first traversal of the dependency tree in
+      the order that the targets appear in "deps".
+   4. All dependent configs from a breadth-first traversal of the dependency
+      tree in the order that the targets appear in "deps".
+```
+
+#### **Variables valid in a config definition**
+```
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
+         precompiled_header, precompiled_source
+  Nested configs: configs
+```
+
+#### **Variables on a target used to apply configs**
+
+```
+  all_dependent_configs, configs, public_configs
+```
+
+#### **Example**
+
+```
+  config("myconfig") {
+    includes = [ "include/common" ]
+    defines = [ "ENABLE_DOOM_MELON" ]
+  }
+
+  executable("mything") {
+    configs = [ ":myconfig" ]
+  }
+```
+### <a name="declare_args"></a>**declare_args**: Declare build arguments.
 
 ```
   Introduces the given arguments into the current scope. If they are not
@@ -1670,10 +1656,9 @@
           # Bar defaults to same user-overridden state as foo.
           enable_bar = enable_foo
         }
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   declare_args() {
@@ -1685,10 +1670,8 @@
     gn --args="enable_doom_melon=true enable_teleporter=true"
   This also sets the teleporter, but it's already defaulted to on so it will
   have no effect.
-
-
 ```
-## **defined**: Returns whether an identifier is defined.
+### <a name="defined"></a>**defined**: Returns whether an identifier is defined.
 
 ```
   Returns true if the given argument is defined. This is most useful in
@@ -1704,10 +1687,9 @@
   which will return true or false depending on whether bar is defined in the
   named scope foo. It will throw an error if foo is not defined or is not a
   scope.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   template("mytemplate") {
@@ -1722,10 +1704,8 @@
       values = "some default value"
     }
   }
-
-
 ```
-## **exec_script**: Synchronously run a script and return the output.
+### <a name="exec_script"></a>**exec_script**: Synchronously run a script and return the output.
 
 ```
   exec_script(filename,
@@ -1741,10 +1721,9 @@
   directory. If you are passing file names, you will want to use the
   rebase_path() function to make file names relative to this path (see "gn help
   rebase_path").
-
 ```
 
-### **Arguments**:
+#### **Arguments**:
 
 ```
   filename:
@@ -1769,10 +1748,9 @@
 
       The script itself will be an implicit dependency so you do not need to
       list it.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   all_lines = exec_script(
@@ -1782,25 +1760,8 @@
   # This example just calls the script with no arguments and discards the
   # result.
   exec_script("//foo/bar/myscript.py")
-
-
 ```
-## **executable**: Declare an executable target.
-
-### **Variables**
-
-```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
-         precompiled_header, precompiled_source
-  Deps: data_deps, deps, public_deps
-  Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
-
-
-```
-## **foreach**: Iterate over a list.
+### <a name="foreach"></a>**foreach**: Iterate over a list.
 
 ```
     foreach(<loop_var>, <list>) {
@@ -1818,10 +1779,9 @@
   same name for the duration of the loop. After the loop terminates the loop
   variable will no longer be in scope, and the previous value (if any) will be
   restored.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   mylist = [ "a", "b", "c" ]
@@ -1833,10 +1793,8 @@
   a
   b
   c
-
-
 ```
-## **forward_variables_from**: Copies variables from a different scope.
+### <a name="forward_variables_from"></a>**forward_variables_from**: Copies variables from a different scope.
 
 ```
   forward_variables_from(from_scope, variable_list_or_star,
@@ -1869,10 +1827,9 @@
   If variables_to_not_forward_list is non-empty, then it must contains a list
   of variable names that will not be forwarded. This is mostly useful when
   variable_list_or_star has a value of "*".
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   # This is a common action template. It would invoke a script with some given
@@ -1913,10 +1870,8 @@
       extra_substitutions += [ "BUNDLE_ID_TEST_NAME=$test_bundle_name" ]
     }
   }
-
-
 ```
-## **get_label_info**: Get an attribute from a target's label.
+### <a name="get_label_info"></a>**get_label_info**: Get an attribute from a target's label.
 
 ```
   get_label_info(target_label, what)
@@ -1926,10 +1881,9 @@
   the attributes depend on the actual target definition, only the label itself.
 
   See also "gn help get_target_outputs".
-
 ```
 
-### **Possible values for the "what" parameter**
+#### **Possible values for the "what" parameter**
 
 ```
   "name"
@@ -1970,10 +1924,9 @@
   "toolchain"
       The label of the toolchain. This will match the value of the
       "current_toolchain" variable when inside that target's declaration.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   get_label_info(":foo", "name")
@@ -1981,10 +1934,8 @@
 
   get_label_info("//foo/bar:baz", "gen_dir")
   # Returns string "//out/Debug/gen/foo/bar".
-
-
 ```
-## **get_path_info**: Extract parts of a file or directory name.
+### <a name="get_path_info"></a>**get_path_info**: Extract parts of a file or directory name.
 
 ```
   get_path_info(input, what)
@@ -1992,10 +1943,9 @@
   The first argument is either a string representing a file or directory name,
   or a list of such strings. If the input is a list the return value will be a
   list containing the result of applying the rule to each item in the input.
-
 ```
 
-### **Possible values for the "what" parameter**
+#### **Possible values for the "what" parameter**
 
 ```
   "file"
@@ -2051,10 +2001,9 @@
 
       If you want to make the path relative to another directory, or to be
       system-absolute, see rebase_path().
-
 ```
 
-### **Examples**
+#### **Examples**
 ```
   sources = [ "foo.cc", "foo.h" ]
   result = get_path_info(source, "abspath")
@@ -2065,10 +2014,8 @@
 
   # Extract the source-absolute directory name,
   result = get_path_info(get_path_info(path, "dir"), "abspath"
-
-
 ```
-## **get_target_outputs**: [file list] Get the list of outputs from a target.
+### <a name="get_target_outputs"></a>**get_target_outputs**: [file list] Get the list of outputs from a target.
 
 ```
   get_target_outputs(target_label)
@@ -2083,10 +2030,9 @@
   will depend on the toolchain definition which won't necessarily have been
   loaded by the time a given line of code has run, and source sets and groups
   have no useful output file.
-
 ```
 
-### **Return value**
+#### **Return value**
 
 ```
   The names in the resulting list will be absolute file paths (normally like
@@ -2110,10 +2056,9 @@
   source sets and groups: this will return a list containing the path of the
   "stamp" file that Ninja will produce once all outputs are generated. This
   probably isn't very useful.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   # Say this action generates a bunch of C source files.
@@ -2126,10 +2071,8 @@
   source_set("my_lib") {
     sources = get_target_outputs(":my_action")
   }
-
-
 ```
-## **getenv**: Get an environment variable.
+### <a name="getenv"></a>**getenv**: Get an environment variable.
 
 ```
   value = getenv(env_var_name)
@@ -2142,46 +2085,14 @@
   If the environment variable is not found, the empty string will be returned.
   Note: it might be nice to extend this if we had the concept of "none" in the
   language to indicate lookup failure.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   home_dir = getenv("HOME")
-
-
 ```
-## **group**: Declare a named group of targets.
-
-```
-  This target type allows you to create meta-targets that just collect a set of
-  dependencies into one named target. Groups can additionally specify configs
-  that apply to their dependents.
-
-```
-
-### **Variables**
-
-```
-  Deps: data_deps, deps, public_deps
-  Dependent configs: all_dependent_configs, public_configs
-
-```
-
-### **Example**
-
-```
-  group("all") {
-    deps = [
-      "//project:runner",
-      "//project:unit_tests",
-    ]
-  }
-
-
-```
-## **import**: Import a file into the current scope.
+### <a name="import"></a>**import**: Import a file into the current scope.
 
 ```
   The import command loads the rules and variables resulting from executing the
@@ -2206,46 +2117,17 @@
   Variables and templates beginning with an underscore '_' are considered
   private and will not be imported. Imported files can use such variables for
   internal computation without affecting other files.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   import("//build/rules/idl_compilation_rule.gni")
 
   # Looks in the current directory.
   import("my_vars.gni")
-
-
 ```
-## **loadable_module**: Declare a loadable module target.
-
-```
-  This target type allows you to create an object file that is (and can only
-  be) loaded and unloaded at runtime.
-
-  A loadable module will be specified on the linker line for targets listing
-  the loadable module in its "deps". If you don't want this (if you don't need
-  to dynamically load the library at runtime), then you should use a
-  "shared_library" target type instead.
-
-```
-
-### **Variables**
-
-```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
-         precompiled_header, precompiled_source
-  Deps: data_deps, deps, public_deps
-  Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
-
-
-```
-## **pool**: Defines a pool object.
+### <a name="pool"></a>**pool**: Defines a pool object.
 
 ```
   Pool objects can be applied to a tool to limit the parallelism of the
@@ -2257,18 +2139,16 @@
   explicit toolchain when defining and referencing a pool.
 
   A pool is referenced by its label just like a target.
-
 ```
 
-### **Variables**
+#### **Variables**
 
 ```
   depth*
   * = required
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   if (current_toolchain == default_toolchain) {
@@ -2283,10 +2163,8 @@
       pool = ":link_pool($default_toolchain)")
     }
   }
-
-
 ```
-## **print**: Prints to the console.
+### <a name="print"></a>**print**: Prints to the console.
 
 ```
   Prints all arguments to the console separated by spaces. A newline is
@@ -2297,19 +2175,16 @@
   more than once in parallel in the context of different toolchains so the
   prints from one file may be duplicated or
   interleaved with itself.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   print("Hello world")
 
   print(sources, deps)
-
-
 ```
-## **process_file_template**: Do template expansion over a list of files.
+### <a name="process_file_template"></a>**process_file_template**: Do template expansion over a list of files.
 
 ```
   process_file_template(source_list, template)
@@ -2322,10 +2197,9 @@
   more maintainable code. This function should only be used when that function
   can't be used (like there's no target or the target is defined in another
   build file).
-
 ```
 
-### **Arguments**
+#### **Arguments**
 
 ```
   The source_list is a list of file names.
@@ -2335,10 +2209,9 @@
 
   The template should contain source expansions to which each name in the
   source list is applied. See "gn help source_expansion".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   sources = [
@@ -2355,20 +2228,17 @@
       "//out/Debug/foo.h"
       "//out/Debug/bar.cc"
       "//out/Debug/bar.h" ]
-
-
 ```
-## **read_file**: Read a file into a variable.
+### <a name="read_file"></a>**read_file**: Read a file into a variable.
 
 ```
   read_file(filename, input_conversion)
 
   Whitespace will be trimmed from the end of the file. Throws an error if the
   file can not be opened.
-
 ```
 
-### **Arguments**
+#### **Arguments**
 
 ```
   filename
@@ -2376,17 +2246,14 @@
 
   input_conversion
       Controls how the file is read and parsed. See "gn help input_conversion".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   lines = read_file("foo.txt", "list lines")
-
-
 ```
-## **rebase_path**: Rebase a file or directory to another location.
+### <a name="rebase_path"></a>**rebase_path**: Rebase a file or directory to another location.
 
 ```
   converted = rebase_path(input,
@@ -2411,10 +2278,9 @@
   function. This function won't work because it will always make relative
   paths, and it needs to support making paths relative to the source root, so
   can't also generate source-absolute paths without more special-cases.
-
 ```
 
-### **Arguments**
+#### **Arguments**
 
 ```
   input
@@ -2436,10 +2302,9 @@
       is not an absolute path, it will be treated as being relative to the
       current build file. Use "." (the default) to convert paths from the
       current BUILD-file's directory.
-
 ```
 
-### **Return value**
+#### **Return value**
 
 ```
   The return value will be the same type as the input value (either a string or
@@ -2452,10 +2317,9 @@
   (depending on whether the input ends in a slash) to avoid returning empty
   strings. This means if you want a root path ("//" or "/") not ending in a
   slash, you can add a dot ("//.").
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   # Convert a file in the current directory to be relative to the build
@@ -2484,10 +2348,8 @@
       rebase_path("relative_path.txt", root_build_dir)
     ] + rebase_path(sources, root_build_dir)
   }
-
-
 ```
-## **set_default_toolchain**: Sets the default toolchain name.
+### <a name="set_default_toolchain"></a>**set_default_toolchain**: Sets the default toolchain name.
 
 ```
   set_default_toolchain(toolchain_label)
@@ -2506,18 +2368,16 @@
   target with a 64-bit toolchain, we wouldn't want processing of the build
   config file for the 64-bit toolchain to reset the default toolchain to
   64-bit, we want to keep it 32-bits.
-
 ```
 
-### **Argument**
+#### **Argument**
 
 ```
   toolchain_label
       Toolchain name.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   # Set default toolchain only has an effect when run in the context of the
@@ -2528,10 +2388,8 @@
   } else if (target_cpu == "x86") {
     set_default_toolchain("//toolchains:32")
   }
-
-
 ```
-## **set_defaults**: Set default values for a target type.
+### <a name="set_defaults"></a>**set_defaults**: Set default values for a target type.
 
 ```
   set_defaults(<target_type_name>) { <values...> }
@@ -2550,10 +2408,9 @@
   apply, but there is no way to refer to the previous defaults and modify them
   (each call to set_defaults must supply a complete list of all defaults it
   wants). If you want to share defaults, store them in a separate variable.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   set_defaults("static_library") {
@@ -2565,10 +2422,8 @@
     # you don't want the default for a particular default:
     configs -= [ "//tools/mything:settings" ]
   }
-
-
 ```
-## **set_sources_assignment_filter**: Set a pattern to filter source files.
+### <a name="set_sources_assignment_filter"></a>**set_sources_assignment_filter**: Set a pattern to filter source files.
 
 ```
   The sources assignment filter is a list of patterns that remove files from
@@ -2586,10 +2441,9 @@
   If you want to bypass the filter and add a file even if it might be filtered
   out, call set_sources_assignment_filter([]) to clear the list of filters.
   This will apply until the current scope exits
-
 ```
 
-### **How to use patterns**
+#### **How to use patterns**
 
 ```
   File patterns are VERY limited regular expressions. They must match the
@@ -2606,10 +2460,9 @@
 
    - "\b" Matches a path boundary. This will match the beginning or end of a
      string, or a slash.
-
 ```
 
-### **Pattern examples**
+#### **Pattern examples**
 
 ```
   "*asdf*"
@@ -2623,10 +2476,9 @@
 
   "\bwin/*"
       Matches "win/foo" and "foo/win/bar.cc" but not "iwin/foo".
-
 ```
 
-### **Sources assignment example**
+#### **Sources assignment example**
 
 ```
   # Filter out all _win files.
@@ -2634,73 +2486,8 @@
   sources = [ "a.cc", "b_win.cc" ]
   print(sources)
   # Will print [ "a.cc" ]. b_win one was filtered out.
-
-
 ```
-## **shared_library**: Declare a shared library target.
-
-```
-  A shared library will be specified on the linker line for targets listing the
-  shared library in its "deps". If you don't want this (say you dynamically
-  load the library at runtime), then you should depend on the shared library
-  via "data_deps" or, on Darwin platforms, use a "loadable_module" target type
-  instead.
-
-```
-
-### **Variables**
-
-```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
-         precompiled_header, precompiled_source
-  Deps: data_deps, deps, public_deps
-  Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
-
-
-```
-## **source_set**: Declare a source set target.
-
-```
-  A source set is a collection of sources that get compiled, but are not linked
-  to produce any kind of library. Instead, the resulting object files are
-  implicitly added to the linker line of all targets that depend on the source
-  set.
-
-  In most cases, a source set will behave like a static library, except no
-  actual library file will be produced. This will make the build go a little
-  faster by skipping creation of a large static library, while maintaining the
-  organizational benefits of focused build targets.
-
-  The main difference between a source set and a static library is around
-  handling of exported symbols. Most linkers assume declaring a function
-  exported means exported from the static library. The linker can then do dead
-  code elimination to delete code not reachable from exported functions.
-
-  A source set will not do this code elimination since there is no link step.
-  This allows you to link many sources sets into a shared library and have the
-  "exported symbol" notation indicate "export from the final shared library and
-  not from the intermediate targets." There is no way to express this concept
-  when linking multiple static libraries into a shared library.
-
-```
-
-### **Variables**
-
-```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
-         precompiled_header, precompiled_source
-  Deps: data_deps, deps, public_deps
-  Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
-
-
-```
-## **split_list**: Splits a list into N different sub-lists.
+### <a name="split_list"></a>**split_list**: Splits a list into N different sub-lists.
 
 ```
   result = split_list(input, n)
@@ -2711,10 +2498,9 @@
   elements in the input, it will be padded with empty lists.
 
   The expected use is to divide source files into smaller uniform chunks.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   The code:
@@ -2723,70 +2509,8 @@
 
   Will print:
     [[1, 2], [3, 4], [5, 6]
-
-
 ```
-## **static_library**: Declare a static library target.
-
-```
-  Make a ".a" / ".lib" file.
-
-  If you only need the static library for intermediate results in the build,
-  you should consider a source_set instead since it will skip the (potentially
-  slow) step of creating the intermediate library file.
-
-```
-
-### **Variables**
-
-```
-  complete_static_lib
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         asmflags, defines, include_dirs, ldflags, lib_dirs, libs,
-         precompiled_header, precompiled_source
-  Deps: data_deps, deps, public_deps
-  Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
-
-
-```
-## **target**: Declare an target with the given programmatic type.
-
-```
-  target(target_type_string, target_name_string) { ... }
-
-  The target() function is a way to invoke a built-in target or template with a
-  type determined at runtime. This is useful for cases where the type of a
-  target might not be known statically.
-
-  Only templates and built-in target functions are supported for the
-  target_type_string parameter. Arbitrary functions, configs, and toolchains
-  are not supported.
-
-  The call:
-    target("source_set", "doom_melon") {
-  Is equivalent to:
-    source_set("doom_melon") {
-
-```
-
-### **Example**
-
-```
-  if (foo_build_as_shared) {
-    my_type = "shared_library"
-  } else {
-    my_type = "source_set"
-  }
-
-  target(my_type, "foo") {
-    ...
-  }
-
-
-```
-## **template**: Define a template rule.
+### <a name="template"></a>**template**: Define a template rule.
 
 ```
   A template defines a custom name that acts like a function. It provides a way
@@ -2798,10 +2522,9 @@
   Often you will want to declare your template in a special file that other
   files will import (see "gn help import") so your template rule can be shared
   across build files.
-
 ```
 
-### **Variables and templates**:
+#### **Variables and templates**:
 
 ```
   When you call template() it creates a closure around all variables currently
@@ -2830,10 +2553,9 @@
   more or possibly all variables in this manner:
 
     forward_variables_from(invoker, ["deps", "public_deps"])
-
 ```
 
-### **Target naming**
+#### **Target naming**
 
 ```
   Your template should almost always define a built-in target with the name the
@@ -2858,10 +2580,9 @@
   targets to depend on to link your code. And you would name the action
   something like "${target_name}_action" to make it unique. The source set
   would have a dependency on the action to make it run.
-
 ```
 
-### **Example of defining a template**
+#### **Example of defining a template**
 
 ```
   template("my_idl") {
@@ -2914,10 +2635,9 @@
       deps = [ ":$code_gen_target_name" ]
     }
   }
-
 ```
 
-### **Example of invoking the resulting template**
+#### **Example of invoking the resulting template**
 
 ```
   # This calls the template code above, defining target_name to be
@@ -2936,21 +2656,18 @@
     # gen action.
     deps = [ ":foo_idl_files" ]
   }
-
-
 ```
-## **tool**: Specify arguments to a toolchain tool.
+### <a name="tool"></a>**tool**: Specify arguments to a toolchain tool.
 
-### **Usage**
+#### **Usage**
 
 ```
   tool(<tool type>) {
     <tool variables...>
   }
-
 ```
 
-### **Tool types**
+#### **Tool types**
 
 ```
     Compiler tools:
@@ -2973,10 +2690,9 @@
     Platform specific tools:
       "copy_bundle_data": [iOS, OS X] Tool to copy files in a bundle.
       "compile_xcassets": [iOS, OS X] Tool to compile asset catalogs.
-
 ```
 
-### **Tool variables**
+#### **Tool variables**
 
 ```
     command  [string with substitutions]
@@ -3176,10 +2892,9 @@
         If specified, this list is the subset of the outputs that should be
         added to runtime deps (see "gn help runtime_deps"). By default (if
         runtime_outputs is empty or unspecified), it will be the link_output.
-
 ```
 
-### **Expansions for tool variables**
+#### **Expansions for tool variables**
 
 ```
   All paths are relative to the root build directory, which is the current
@@ -3345,10 +3060,9 @@
         Expands to the product_type of the bundle that will contain the
         compiled asset catalog. Usually corresponds to the product_type
         property of the corresponding create_bundle target.
-
 ```
 
-### **Separate linking and dependencies for shared libraries**
+#### **Separate linking and dependencies for shared libraries**
 
 ```
   Shared libraries are special in that not all changes to them require that
@@ -3381,10 +3095,9 @@
             "{{output_extension}}.TOC"
       restat = true
     }
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   toolchain("my_toolchain") {
@@ -3403,18 +3116,15 @@
       description = "G++ {{source}}"
     }
   };
-
-
 ```
-## **toolchain**: Defines a toolchain.
+### <a name="toolchain"></a>**toolchain**: Defines a toolchain.
 
 ```
   A toolchain is a set of commands and build flags used to compile the source
   code. The toolchain() function defines these commands.
-
 ```
 
-### **Toolchain overview**
+#### **Toolchain overview**
 
 ```
   You can have more than one toolchain in use at once in a build and a target
@@ -3451,10 +3161,9 @@
   set_default_toolchain()). In secondary toolchains, the configuration flows
   from the toolchain to the build config file: the "toolchain_args" in the
   toolchain definition specifies the arguments to re-invoke the build.
-
 ```
 
-### **Functions and variables**
+#### **Functions and variables**
 
 ```
   tool()
@@ -3491,10 +3200,9 @@
 
     This concept is somewhat inefficient to express in Ninja (it requires a lot
     of duplicate of rules) so should only be used when absolutely necessary.
-
 ```
 
-### **Example of defining a toolchain**
+#### **Example of defining a toolchain**
 
 ```
   toolchain("32") {
@@ -3520,10 +3228,9 @@
       current_cpu = "x64"
     }
   }
-
 ```
 
-### **Example of cross-toolchain dependencies**
+#### **Example of cross-toolchain dependencies**
 
 ```
   If a 64-bit target wants to depend on a 32-bit binary, it would specify a
@@ -3545,10 +3252,8 @@
         ...
       }
     }
-
-
 ```
-## **write_file**: Write a file to disk.
+### <a name="write_file"></a>**write_file**: Write a file to disk.
 
 ```
   write_file(filename, data)
@@ -3566,10 +3271,9 @@
 
   TODO(brettw) we probably need an optional third argument to control list
   formatting.
-
 ```
 
-### **Arguments**
+#### **Arguments**
 
 ```
   filename
@@ -3577,10 +3281,10 @@
 
   data
       The list or string to write.
-
-
 ```
-## **current_cpu**: The processor architecture of the current toolchain.
+## <a name="predefined_variables"></a>Built-in predefined variables
+
+### <a name="current_cpu"></a>**current_cpu**: The processor architecture of the current toolchain.
 
 ```
   The build configuration usually sets this value based on the value of
@@ -3593,9 +3297,8 @@
   the command line if so desired.
 
   See "gn help target_cpu" for a list of common values returned.
-
 ```
-## **current_os**: The operating system of the current toolchain.
+### <a name="current_os"></a>**current_os**: The operating system of the current toolchain.
 
 ```
   The build configuration usually sets this value based on the value of
@@ -3608,36 +3311,29 @@
   the command line if so desired.
 
   See "gn help target_os" for a list of common values returned.
-
-
 ```
-## **current_toolchain**: Label of the current toolchain.
+### <a name="current_toolchain"></a>**current_toolchain**: Label of the current toolchain.
 
 ```
   A fully-qualified label representing the current toolchain. You can use this
   to make toolchain-related decisions in the build. See also
   "default_toolchain".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   if (current_toolchain == "//build:64_bit_toolchain") {
     executable("output_thats_64_bit_only") {
       ...
-
-
 ```
-## **default_toolchain**: [string] Label of the default toolchain.
+### <a name="default_toolchain"></a>**default_toolchain**: [string] Label of the default toolchain.
 
 ```
   A fully-qualified label representing the default toolchain, which may not
   necessarily be the current one (see "current_toolchain").
-
-
 ```
-## **host_cpu**: The processor architecture that GN is running on.
+### <a name="host_cpu"></a>**host_cpu**: The processor architecture that GN is running on.
 
 ```
   This is value is exposed so that cross-compile toolchains can access the host
@@ -3647,18 +3343,15 @@
   in order to handle unusual cases where there might be multiple plausible
   values for the host architecture (e.g., if you can do either 32-bit or 64-bit
   builds). The value is not used internally by GN for any purpose.
-
 ```
 
-### **Some possible values**
+#### **Some possible values**
 
 ```
   - "x64"
   - "x86"
-
-
 ```
-## **host_os**: [string] The operating system that GN is running on.
+### <a name="host_os"></a>**host_os**: [string] The operating system that GN is running on.
 
 ```
   This value is exposed so that cross-compiles can access the host build
@@ -3666,19 +3359,16 @@
 
   This value should generally be treated as read-only. It, however, is not used
   internally by GN for any purpose.
-
 ```
 
-### **Some possible values**
+#### **Some possible values**
 
 ```
   - "linux"
   - "mac"
   - "win"
-
-
 ```
-## **invoker**: [string] The invoking scope inside a template.
+### <a name="invoker"></a>**invoker**: [string] The invoking scope inside a template.
 
 ```
   Inside a template invocation, this variable refers to the scope of the
@@ -3693,10 +3383,9 @@
   scope.
 
   See "gn help template" for more examples.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   template("my_template") {
@@ -3709,19 +3398,15 @@
     sources = [ "a.cc", "b.cc" ]
     bar = 123
   }
-
-
 ```
-## **python_path**: Absolute path of Python.
+### <a name="python_path"></a>**python_path**: Absolute path of Python.
 
 ```
   Normally used in toolchain definitions if running some command requires
   Python. You will normally not need this when invoking scripts since GN
   automatically finds it for you.
-
-
 ```
-## **root_build_dir**: [string] Directory where build commands are run.
+### <a name="root_build_dir"></a>**root_build_dir**: [string] Directory where build commands are run.
 
 ```
   This is the root build output directory which will be the current directory
@@ -3729,10 +3414,8 @@
 
   Most often this is used with rebase_path (see "gn help rebase_path") to
   convert arguments to be relative to a script's current directory.
-
-
 ```
-## **root_gen_dir**: Directory for the toolchain's generated files.
+### <a name="root_gen_dir"></a>**root_gen_dir**: Directory for the toolchain's generated files.
 
 ```
   Absolute path to the root of the generated output directory tree for the
@@ -3746,10 +3429,8 @@
 
   See also "target_gen_dir" which is usually a better location for generated
   files. It will be inside the root generated dir.
-
-
 ```
-## **root_out_dir**: [string] Root directory for toolchain output files.
+### <a name="root_out_dir"></a>**root_out_dir**: [string] Root directory for toolchain output files.
 
 ```
   Absolute path to the root of the output directory tree for the current
@@ -3765,20 +3446,17 @@
 
   See also "target_out_dir" which is usually a better location for output
   files. It will be inside the root output dir.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action("myscript") {
     # Pass the output dir to the script.
     args = [ "-o", rebase_path(root_out_dir, root_build_dir) ]
   }
-
-
 ```
-## **target_cpu**: The desired cpu architecture for the build.
+### <a name="target_cpu"></a>**target_cpu**: The desired cpu architecture for the build.
 
 ```
   This value should be used to indicate the desired architecture for the
@@ -3796,10 +3474,9 @@
   string ("") and the configuration files should set it to an appropriate value
   (e.g., setting it to the value of "host_cpu") if it is not overridden on the
   command line or in the args.gn file.
-
 ```
 
-### **Possible values**
+#### **Possible values**
 
 ```
   - "x86"
@@ -3807,10 +3484,8 @@
   - "arm"
   - "arm64"
   - "mipsel"
-
-
 ```
-## **target_gen_dir**: Directory for a target's generated files.
+### <a name="target_gen_dir"></a>**target_gen_dir**: Directory for a target's generated files.
 
 ```
   Absolute path to the target's generated file directory. This will be the
@@ -3824,20 +3499,17 @@
   build directory.
 
   See also "gn help root_gen_dir".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action("myscript") {
     # Pass the generated output dir to the script.
     args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]"
   }
-
-
 ```
-## **target_name**: [string] The name of the current target.
+### <a name="target_name"></a>**target_name**: [string] The name of the current target.
 
 ```
   Inside a target or template invocation, this variable refers to the name
@@ -3856,10 +3528,9 @@
   outside of any target definitions.
 
   See "gn help template" for more examples.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   executable("doom_melon") {
@@ -3876,10 +3547,8 @@
 
   my_template("space_ray") {
   }
-
-
 ```
-## **target_os**: The desired operating system for the build.
+### <a name="target_os"></a>**target_os**: The desired operating system for the build.
 
 ```
   This value should be used to indicate the desired operating system for the
@@ -3893,7 +3562,7 @@
 
   This should be set to the most specific value possible. So, "android" or
   "chromeos" should be used instead of "linux" where applicable, even though
-  Android and Chrome OS are both Linux variants. This can mean that one needs to
+  Android and ChromeOS are both Linux variants. This can mean that one needs to
   write
 
       if (target_os == "android" || target_os == "linux") {
@@ -3907,10 +3576,9 @@
   string ("") and the configuration files should set it to an appropriate value
   (e.g., setting it to the value of "host_os") if it is not set via the command
   line or in the args.gn file.
-
 ```
 
-### **Possible values**
+#### **Possible values**
 
 ```
   - "android"
@@ -3920,10 +3588,8 @@
   - "nacl"
   - "mac"
   - "win"
-
-
 ```
-## **target_out_dir**: [string] Directory for target output files.
+### <a name="target_out_dir"></a>**target_out_dir**: [string] Directory for target output files.
 
 ```
   Absolute path to the target's generated file directory. If your current
@@ -3936,10 +3602,9 @@
   directory.
 
   See also "gn help root_out_dir".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action("myscript") {
@@ -3947,10 +3612,10 @@
     args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]"
 
   }
-
-
 ```
-## **all_dependent_configs**: Configs to be forced on dependents.
+## <a name="target_variables"></a>Variables you set in targets
+
+### <a name="all_dependent_configs"></a>**all_dependent_configs**: Configs to be forced on dependents.
 
 ```
   A list of config labels.
@@ -3967,10 +3632,9 @@
   target's headers.
 
   See also "public_configs".
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -3986,10 +3650,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **allow_circular_includes_from**: Permit includes from deps.
+### <a name="allow_circular_includes_from"></a>**allow_circular_includes_from**: Permit includes from deps.
 
 ```
   A list of target labels. Must be a subset of the target's "deps". These
@@ -4001,10 +3663,9 @@
   external dependencies depend only on one of the two targets, and to set the
   visibility on the other to enforce this. Thus the targets will always be
   linked together in any output.
-
 ```
 
-### **Details**
+#### **Details**
 
 ```
   Normally, for a file in target A to include a file from target B, A must list
@@ -4023,10 +3684,9 @@
   allow_circular_includes_from list. Normally includes must follow the
   direction of dependencies, this flag allows them to go in the opposite
   direction.
-
 ```
 
-### **Danger**
+#### **Danger**
 
 ```
   In the above example, A's headers are likely to include headers from A's
@@ -4043,10 +3703,9 @@
   (consider putting such things in a shared config they can both reference).
   Make sure the dependencies are also the same (you might consider a group to
   collect such dependencies they both depend on).
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   source_set("a") {
@@ -4064,10 +3723,8 @@
   group("a_b_shared_deps") {
     public_deps = [ ":c" ]
   }
-
-
 ```
-## **arflags**: Arguments passed to static_library archiver.
+### <a name="arflags"></a>**arflags**: Arguments passed to static_library archiver.
 
 ```
   A list of flags passed to the archive/lib command that creates static
@@ -4081,10 +3738,9 @@
   to other static libraries. Due to the nature of how arflags are typically
   used, you will normally want to apply them directly on static_library targets
   themselves.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4100,10 +3756,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **args**: Arguments passed to an action.
+### <a name="args"></a>**args**: Arguments passed to an action.
 
 ```
   For action and action_foreach targets, args is the list of arguments to pass
@@ -4111,20 +3765,17 @@
   source_expansion") to insert the source file names.
 
   See also "gn help action" and "gn help action_foreach".
-
-
 ```
-## **asmflags**: Flags passed to the assembler.
+### <a name="asmflags"></a>**asmflags**: Flags passed to the assembler.
 
 ```
   A list of strings.
 
   "asmflags" are passed to any invocation of a tool that takes an .asm or .S
   file as input.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4140,10 +3791,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **assert_no_deps**: Ensure no deps on these targets.
+### <a name="assert_no_deps"></a>**assert_no_deps**: Ensure no deps on these targets.
 
 ```
   A list of label patterns.
@@ -4169,10 +3818,9 @@
   on a target or set of targets. One efficient way to express this is to create
   a group with the assert_no_deps rule on it, and make that group depend on all
   targets you want to apply that assertion to.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   executable("doom_melon") {
@@ -4183,10 +3831,8 @@
       "//foo:test_support",  # This target is also disallowed.
     ]
   }
-
-
 ```
-## **bundle_deps_filter**: [label list] A list of labels that are filtered out.
+### <a name="bundle_deps_filter"></a>**bundle_deps_filter**: [label list] A list of labels that are filtered out.
 
 ```
   A list of target labels.
@@ -4200,10 +3846,9 @@
   bundle and thus do not require a second copy.
 
   See "gn help create_bundle" for more information.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   create_bundle("today_extension") {
@@ -4217,10 +3862,8 @@
       "//third_party/icu:icudata",
     ]
   }
-
-
 ```
-## **bundle_executable_dir**: Expansion of {{bundle_executable_dir}} in
+### <a name="bundle_executable_dir"></a>**bundle_executable_dir**: Expansion of {{bundle_executable_dir}} in
 ```
                               create_bundle.
 
@@ -4231,10 +3874,8 @@
   must correspond to a path under "bundle_root_dir".
 
   See "gn help bundle_root_dir" for examples.
-
-
 ```
-## **bundle_plugins_dir**: Expansion of {{bundle_plugins_dir}} in create_bundle.
+### <a name="bundle_plugins_dir"></a>**bundle_plugins_dir**: Expansion of {{bundle_plugins_dir}} in create_bundle.
 
 ```
   A string corresponding to a path in $root_build_dir.
@@ -4244,10 +3885,8 @@
   correspond to a path under "bundle_root_dir".
 
   See "gn help bundle_root_dir" for examples.
-
-
 ```
-## **bundle_resources_dir**: Expansion of {{bundle_resources_dir}} in
+### <a name="bundle_resources_dir"></a>**bundle_resources_dir**: Expansion of {{bundle_resources_dir}} in
 ```
                              create_bundle.
 
@@ -4258,10 +3897,8 @@
   correspond to a path under "bundle_root_dir".
 
   See "gn help bundle_root_dir" for examples.
-
-
 ```
-## **bundle_root_dir**: Expansion of {{bundle_root_dir}} in create_bundle.
+### <a name="bundle_root_dir"></a>**bundle_root_dir**: Expansion of {{bundle_root_dir}} in create_bundle.
 
 ```
   A string corresponding to a path in root_build_dir.
@@ -4269,10 +3906,9 @@
   This string is used by the "create_bundle" target to expand the
   {{bundle_root_dir}} of the "bundle_data" target it depends on. This must
   correspond to a path under root_build_dir.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   bundle_data("info_plist") {
@@ -4287,10 +3923,8 @@
     bundle_executable_dir = bundle_root_dir + "/MacOS"
     bundle_plugins_dir = bundle_root_dir + "/PlugIns"
   }
-
-
 ```
-## **cflags***: Flags passed to the C compiler.
+### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4304,10 +3938,9 @@
   "cflags".
 
   See also "asmflags" for flags for assembly-language files.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4323,10 +3956,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **cflags***: Flags passed to the C compiler.
+### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4340,10 +3971,9 @@
   "cflags".
 
   See also "asmflags" for flags for assembly-language files.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4359,10 +3989,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **cflags***: Flags passed to the C compiler.
+### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4376,10 +4004,9 @@
   "cflags".
 
   See also "asmflags" for flags for assembly-language files.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4395,10 +4022,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **cflags***: Flags passed to the C compiler.
+### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4412,10 +4037,9 @@
   "cflags".
 
   See also "asmflags" for flags for assembly-language files.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4431,10 +4055,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **cflags***: Flags passed to the C compiler.
+### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4448,10 +4070,9 @@
   "cflags".
 
   See also "asmflags" for flags for assembly-language files.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4467,10 +4088,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **check_includes**: [boolean] Controls whether a target's files are checked.
+### <a name="check_includes"></a>**check_includes**: [boolean] Controls whether a target's files are checked.
 
 ```
   When true (the default), the "gn check" command (as well as "gn gen" with the
@@ -4487,10 +4106,9 @@
 
   The topic "gn help check" has general information on how checking works and
   advice on how to pass a check in problematic cases.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   source_set("busted_includes") {
@@ -4498,10 +4116,8 @@
     check_includes = false
     ...
   }
-
-
 ```
-## **code_signing_args**: [string list] Arguments passed to code signing script.
+### <a name="code_signing_args"></a>**code_signing_args**: [string list] Arguments passed to code signing script.
 
 ```
   For create_bundle targets, code_signing_args is the list of arguments to pass
@@ -4509,30 +4125,24 @@
   help source_expansion") to insert the source file names.
 
   See also "gn help create_bundle".
-
-
 ```
-## **code_signing_outputs**: [file list] Output files for code signing step.
+### <a name="code_signing_outputs"></a>**code_signing_outputs**: [file list] Output files for code signing step.
 
 ```
   Outputs from the code signing step of a create_bundle target. Must refer to
   files in the build directory.
 
   See also "gn help create_bundle".
-
-
 ```
-## **code_signing_script**: [file name] Script for code signing."
+### <a name="code_signing_script"></a>**code_signing_script**: [file name] Script for code signing."
 
 ```
   An absolute or buildfile-relative file name of a Python script to run for a
   create_bundle target to perform code signing step.
 
   See also "gn help create_bundle".
-
-
 ```
-## **code_signing_sources**: [file list] Sources for code signing step.
+### <a name="code_signing_sources"></a>**code_signing_sources**: [file list] Sources for code signing step.
 
 ```
   A list of files used as input for code signing script step of a create_bundle
@@ -4540,10 +4150,8 @@
   file.
 
   See also "gn help create_bundle".
-
-
 ```
-## **complete_static_lib**: [boolean] Links all deps into a static library.
+### <a name="complete_static_lib"></a>**complete_static_lib**: [boolean] Links all deps into a static library.
 
 ```
   A static library normally doesn't include code from dependencies, but instead
@@ -4568,27 +4176,23 @@
 
   In rare cases it makes sense to list a header in more than one target if it
   could be considered conceptually a member of both. libraries.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   static_library("foo") {
     complete_static_lib = true
     deps = [ "bar" ]
   }
-
-
 ```
-## **configs**: Configs applying to this target or config.
+### <a name="configs"></a>**configs**: Configs applying to this target or config.
 
 ```
   A list of config labels.
-
 ```
 
-### **Configs on a target**
+#### **Configs on a target**
 
 ```
   When used on a target, the include_dirs, defines, etc. in each config are
@@ -4604,10 +4208,9 @@
   The build configuration script will generally set up the default configs
   applying to a given target type (see "set_defaults"). When a target is being
   defined, it can add to or remove from this list.
-
 ```
 
-### **Configs on a config**
+#### **Configs on a config**
 
 ```
   It is possible to create composite configs by specifying configs on a config.
@@ -4629,10 +4232,9 @@
      listed as a sub-config that it is only used in that context. (Note that
      it's possible to fix this and de-dupe, but it's not normally relevant and
      complicates the implementation.)
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4648,10 +4250,9 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   # Configs on a target.
@@ -4677,10 +4278,8 @@
       configs = [ ":no_optimization" ]
     }
   }
-
-
 ```
-## **console**: Run this action in the console pool.
+### <a name="console"></a>**console**: Run this action in the console pool.
 
 ```
   Boolean. Defaults to false.
@@ -4692,19 +4291,16 @@
 
   Only one console pool target can run at any one time in Ninja. Refer to the
   Ninja documentation on the console pool for more info.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action("long_action_with_progress_logs") {
     console = true
   }
-
-
 ```
-## **data**: Runtime data file dependencies.
+### <a name="data"></a>**data**: Runtime data file dependencies.
 
 ```
   Lists files or directories required to run the given target. These are
@@ -4732,10 +4328,8 @@
   gathering data. See "gn help create_bundle" for details.
 
   See "gn help runtime_deps" for how these are used.
-
-
 ```
-## **data_deps**: Non-linked dependencies.
+### <a name="data_deps"></a>**data_deps**: Non-linked dependencies.
 
 ```
   A list of target labels.
@@ -4751,30 +4345,26 @@
   gathering data_deps. See "gn help create_bundle" for details.
 
   See also "gn help deps" and "gn help data".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   executable("foo") {
     deps = [ "//base" ]
     data_deps = [ "//plugins:my_runtime_plugin" ]
   }
-
-
 ```
-## **defines**: C preprocessor defines.
+### <a name="defines"></a>**defines**: C preprocessor defines.
 
 ```
   A list of strings
 
   These strings will be passed to the C/C++ compiler as #defines. The strings
   may or may not include an "=" to assign a value.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4790,17 +4380,14 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   defines = [ "AWESOME_FEATURE", "LOG_LEVEL=3" ]
-
-
 ```
-## **depfile**: [string] File name for input dependencies for actions.
+### <a name="depfile"></a>**depfile**: [string] File name for input dependencies for actions.
 
 ```
   If nonempty, this string specifies that the current action or action_foreach
@@ -4822,10 +4409,9 @@
 
   Although depfiles are created by an action, they should not be listed in the
   action's "outputs" unless another target will use the file as an input.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action_foreach("myscript_target") {
@@ -4839,10 +4425,8 @@
     # Say our script uses "-o <d file>" to indicate the depfile.
     args = [ "{{source}}", "-o", depfile ]
   }
-
-
 ```
-## **deps**: Private linked dependencies.
+### <a name="deps"></a>**deps**: Private linked dependencies.
 
 ```
   A list of target labels.
@@ -4851,10 +4435,9 @@
   propagated up the dependency tree and linked to dependant targets, but do not
   grant the ability to include headers from the dependency. Public configs are
   not forwarded.
-
 ```
 
-### **Details of dependency propagation**
+#### **Details of dependency propagation**
 
 ```
   Source sets, shared libraries, and non-complete static libraries will be
@@ -4875,20 +4458,17 @@
   "gn help runtime_deps".
 
   See also "public_deps".
-
-
 ```
-## **include_dirs**: Additional include directories.
+### <a name="include_dirs"></a>**include_dirs**: Additional include directories.
 
 ```
   A list of source directories.
 
   The directories in this list will be added to the include path for the files
   in the affected target.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4904,17 +4484,14 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   include_dirs = [ "src/include", "//third_party/foo" ]
-
-
 ```
-## **inputs**: Additional compile-time dependencies.
+### <a name="inputs"></a>**inputs**: Additional compile-time dependencies.
 
 ```
   Inputs are compile-time dependencies of the current target. This means that
@@ -4922,10 +4499,9 @@
   any actions.
 
   Inputs are typically only used for action and action_foreach targets.
-
 ```
 
-### **Inputs for actions**
+#### **Inputs for actions**
 
 ```
   For action and action_foreach targets, inputs should be the inputs to script
@@ -4944,10 +4520,9 @@
   executing the script. This is more efficient than doing processing while
   running GN to determine the inputs, and is easier to keep in-sync than
   hardcoding the list.
-
 ```
 
-### **Script input gotchas**
+#### **Script input gotchas**
 
 ```
   It may be tempting to write a script that enumerates all files in a directory
@@ -4962,10 +4537,9 @@
   script, or if there are many, create a separate list file that the script
   reads. As long as this file is listed in the inputs, the build will detect
   when it has changed in any way and the action will re-run.
-
 ```
 
-### **Inputs for binary targets**
+#### **Inputs for binary targets**
 
 ```
   Any input dependencies will be resolved before compiling any sources.
@@ -4977,20 +4551,17 @@
   that changes in any of the inputs will force all sources in the target to be
   recompiled. If an input only applies to a subset of source files, you may
   want to split those into a separate target to avoid unnecessary recompiles.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action("myscript") {
     script = "domything.py"
     inputs = [ "input.data" ]
   }
-
-
 ```
-## **ldflags**: Flags passed to the linker.
+### <a name="ldflags"></a>**ldflags**: Flags passed to the linker.
 
 ```
   A list of strings.
@@ -5003,10 +4574,9 @@
   static libraries will be a no-op. If you want to apply ldflags to dependent
   targets, put them in a config and set it in the all_dependent_configs or
   public_configs.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5022,10 +4592,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **lib_dirs**: Additional library directories.
+### <a name="lib_dirs"></a>**lib_dirs**: Additional library directories.
 
 ```
   A list of directories.
@@ -5039,10 +4607,9 @@
   shared library or executable target is reached. Second, they are
   uniquified so each one is only passed once (the first instance of it
   will be the one used).
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5062,17 +4629,14 @@
   For "libs" and "lib_dirs" only, the values propagated from
   dependencies (as described above) are applied last assuming they
   are not already in the list.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   lib_dirs = [ "/usr/lib/foo", "lib/doom_melon" ]
-
-
 ```
-## **libs**: Additional libraries to link.
+### <a name="libs"></a>**libs**: Additional libraries to link.
 
 ```
   A list of library names or library paths.
@@ -5085,10 +4649,9 @@
   shared library or executable target is reached. Second, they are
   uniquified so each one is only passed once (the first instance of it
   will be the one used).
-
 ```
 
-### **Types of libs**
+#### **Types of libs**
 
 ```
   There are several different things that can be expressed in libs:
@@ -5113,10 +4676,9 @@
       "-framework" will be prepended instead of the lib_prefix, and the
       ".framework" suffix will be trimmed. This is to support the way Mac links
       framework dependencies.
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5136,10 +4698,9 @@
   For "libs" and "lib_dirs" only, the values propagated from
   dependencies (as described above) are applied last assuming they
   are not already in the list.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   On Windows:
@@ -5147,10 +4708,8 @@
 
   On Linux:
     libs = [ "ld" ]
-
-
 ```
-## **output_dir**: [directory] Directory to put output file in.
+### <a name="output_dir"></a>**output_dir**: [directory] Directory to put output file in.
 
 ```
   For library and executable targets, overrides the directory for the final
@@ -5167,20 +4726,17 @@
   executables (see "gn help tool"). You will have to consult that for the
   default location. The default location will be used if output_dir is
   undefined or empty.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   shared_library("doom_melon") {
     output_dir = "$root_out_dir/plugin_libs"
     ...
   }
-
-
 ```
-## **output_extension**: Value to use for the output's file extension.
+### <a name="output_extension"></a>**output_extension**: Value to use for the output's file extension.
 
 ```
   Normally the file extension for a target is based on the target type and the
@@ -5194,10 +4750,9 @@
   The output_extension will be used to set the "{{output_extension}}" expansion
   which the linker tool will generally use to specify the output file name. See
   "gn help tool".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   shared_library("freetype") {
@@ -5216,10 +4771,8 @@
       ...
     }
   }
-
-
 ```
-## **output_name**: Define a name for the output file other than the default.
+### <a name="output_name"></a>**output_name**: Define a name for the output file other than the default.
 
 ```
   Normally the output name of a target will be based on the target name, so the
@@ -5236,19 +4789,16 @@
   flexibility, create a copy target to produce the file you want.
 
   This variable is valid for all binary output target types.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   static_library("doom_melon") {
     output_name = "fluffy_bunny"
   }
-
-
 ```
-## **output_prefix_override**: Don't use prefix for output name.
+### <a name="output_prefix_override"></a>**output_prefix_override**: Don't use prefix for output name.
 
 ```
   A boolean that overrides the output prefix for a target. Defaults to false.
@@ -5260,10 +4810,9 @@
   (see "gn help tool"). Sometimes this prefix is undesired.
 
   See also "gn help output_extension".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   shared_library("doom_melon") {
@@ -5272,10 +4821,8 @@
     output_prefix_override = true
     ...
   }
-
-
 ```
-## **outputs**: Output files for actions and copy targets.
+### <a name="outputs"></a>**outputs**: Output files for actions and copy targets.
 
 ```
   Outputs is valid for "copy", "action", and "action_foreach" target types and
@@ -5297,41 +4844,49 @@
   action
     Action targets (excluding action_foreach) must list literal output file(s)
     with no source expansions. See "gn help action".
-
-
 ```
-## **precompiled_header**: [string] Header file to precompile.
+### <a name="precompiled_header"></a>**precompiled_header**: [string] Header file to precompile.
 
 ```
   Precompiled headers will be used when a target specifies this value, or a
   config applying to this target specifies this value. In addition, the tool
   corresponding to the source files must also specify precompiled headers (see
   "gn help tool"). The tool will also specify what type of precompiled headers
-  to use.
+  to use, by setting precompiled_header_type to either "gcc" or "msvc".
 
   The precompiled header/source variables can be specified on a target or a
   config, but must be the same for all configs applying to a given target since
   a target can only have one precompiled header.
 
+  If you use both C and C++ sources, the precompiled header and source file
+  will be compiled once per language. You will want to make sure to wrap C++
+  includes in __cplusplus #ifdefs so the file will compile in C mode.
 ```
 
-### **MSVC precompiled headers**
+#### **GCC precompiled headers**
+
+```
+  When using GCC-style precompiled headers, "precompiled_source" contains the
+  path of a .h file that is precompiled and then included by all source files
+  in targets that set "precompiled_source".
+
+  The value of "precompiled_header" is not used with GCC-style precompiled
+  headers.
+```
+
+#### **MSVC precompiled headers**
 
 ```
   When using MSVC-style precompiled headers, the "precompiled_header" value is
   a string corresponding to the header. This is NOT a path to a file that GN
-  recognises, but rather the exact string that appears in quotes after an
-  #include line in source code. The compiler will match this string against
+  recognises, but rather the exact string that appears in quotes after
+  an #include line in source code. The compiler will match this string against
   includes or forced includes (/FI).
 
   MSVC also requires a source file to compile the header with. This must be
   specified by the "precompiled_source" value. In contrast to the header value,
   this IS a GN-style file name, and tells GN which source file to compile to
   make the .pch file used for subsequent compiles.
-
-  If you use both C and C++ sources, the precompiled header and source file
-  will be compiled using both tools. You will want to make sure to wrap C++
-  includes in __cplusplus #ifdefs so the file will compile in C mode.
 
   For example, if the toolchain specifies MSVC headers:
 
@@ -5357,19 +4912,20 @@
     executable("doom_melon") {
       configs += [ ":use_precompiled_headers" ]
       ...
-
+```
+### <a name="precompiled_header_type"></a>**precompiled_header_type**: [string] "gcc" or "msvc".
 
 ```
-## **precompiled_source**: [file name] Source file to precompile.
+  See "gn help precompiled_header".
+```
+### <a name="precompiled_source"></a>**precompiled_source**: [file name] Source file to precompile.
 
 ```
   The source file that goes along with the precompiled_header when using
   "msvc"-style precompiled headers. It will be implicitly added to the sources
   of the target. See "gn help precompiled_header".
-
-
 ```
-## **product_type**: Product type for Xcode projects.
+### <a name="product_type"></a>**product_type**: Product type for Xcode projects.
 
 ```
   Correspond to the type of the product of a create_bundle target. Only
@@ -5377,10 +4933,8 @@
 
   When generating Xcode project files, only create_bundle target with a
   non-empty product_type will have a corresponding target in Xcode project.
-
-
 ```
-## **public**: Declare public header files for a target.
+### <a name="public"></a>**public**: Declare public header files for a target.
 
 ```
   A list of files that other targets can include. These permissions are checked
@@ -5404,10 +4958,9 @@
   GN only knows about files declared in the "sources" and "public" sections of
   targets. If a file is included that is not known to the build, it will be
   allowed.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   These exact files are public:
@@ -5415,10 +4968,8 @@
 
   No files are public (no targets may include headers from this one):
     public = []
-
-
 ```
-## **public_configs**: Configs to be applied on dependents.
+### <a name="public_configs"></a>**public_configs**: Configs to be applied on dependents.
 
 ```
   A list of config labels.
@@ -5434,10 +4985,9 @@
   target's headers.
 
   See also "all_dependent_configs".
-
 ```
 
-### **Ordering of flags and values**
+#### **Ordering of flags and values**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5453,10 +5003,8 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
-
-
 ```
-## **public_deps**: Declare public dependencies.
+### <a name="public_deps"></a>**public_deps**: Declare public dependencies.
 
 ```
   Public dependencies are like private dependencies (see "gn help deps") but
@@ -5474,10 +5022,9 @@
     - If the current target is a shared library, other shared libraries that it
       publicly depends on (directly or indirectly) are propagated up the
       dependency tree to dependents for linking.
-
 ```
 
-### **Discussion**
+#### **Discussion**
 
 ```
   Say you have three targets: A -> B -> C. C's visibility may allow B to depend
@@ -5490,10 +5037,9 @@
   Generally if you are writing a target B and you include C's headers as part
   of B's public headers, or targets depending on B should consider B and C to
   be part of a unit, you should use public_deps instead of deps.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   # This target can include files from "c" but not from
@@ -5506,10 +5052,8 @@
     deps = [ ":super_secret_implementation_details" ]
     public_deps = [ ":c" ]
   }
-
-
 ```
-## **response_file_contents**: Contents of a response file for actions.
+### <a name="response_file_contents"></a>**response_file_contents**: Contents of a response file for actions.
 
 ```
   Sometimes the arguments passed to a script can be too long for the system's
@@ -5527,10 +5071,9 @@
   The response file contents will always be quoted and escaped according to
   Unix shell rules. To parse the response file, the Python script should use
   "shlex.split(file_contents)".
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   action("process_lots_of_files") {
@@ -5547,27 +5090,22 @@
       "--file-list={{response_file_name}}",
     ]
   }
-
-
 ```
-## **script**: Script file for actions.
+### <a name="script"></a>**script**: Script file for actions.
 
 ```
   An absolute or buildfile-relative file name of a Python script to run for a
   action and action_foreach targets (see "gn help action" and "gn help
   action_foreach").
-
-
 ```
-## **sources**: Source files for a target
+### <a name="sources"></a>**sources**: Source files for a target
 
 ```
   A list of files. Non-absolute paths will be resolved relative to the current
   build file.
-
 ```
 
-### **Sources for binary targets**
+#### **Sources for binary targets**
 
 ```
   For binary targets (source sets, executables, and libraries), the known file
@@ -5582,10 +5120,9 @@
   and they do not cross dependency boundaries (so specifying a .def file in a
   static library or source set will have no effect on the executable or shared
   library they're linked into).
-
 ```
 
-### **Sources for non-binary targets**
+#### **Sources for non-binary targets**
 
 ```
   action_foreach
@@ -5598,10 +5135,8 @@
 
   copy
     The source are the source files to copy.
-
-
 ```
-## **testonly**: Declares a target must only be used for testing.
+### <a name="testonly"></a>**testonly**: Declares a target must only be used for testing.
 
 ```
   Boolean. Defaults to false.
@@ -5612,20 +5147,17 @@
 
   This feature is intended to prevent accidentally shipping test code in a
   final product.
-
 ```
 
-### **Example**
+#### **Example**
 
 ```
   source_set("test_support") {
     testonly = true
     ...
   }
-
-
 ```
-## **visibility**: A list of labels that can depend on a target.
+### <a name="visibility"></a>**visibility**: A list of labels that can depend on a target.
 
 ```
   A list of labels and label patterns that define which targets can depend on
@@ -5641,20 +5173,18 @@
   Tip: Often you will want the same visibility for all targets in a BUILD file.
   In this case you can just put the definition at the top, outside of any
   target, and the targets will inherit that scope and see the definition.
-
 ```
 
-### **Patterns**
+#### **Patterns**
 
 ```
   See "gn help label_pattern" for more details on what types of patterns are
   supported. If a toolchain is specified, only targets in that toolchain will
   be matched. If a toolchain is not specified on a pattern, targets in all
   toolchains will be matched.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   Only targets in the current buildfile ("private"):
@@ -5681,10 +5211,8 @@
   Any target in the current directory and any subdirectory thereof, plus
   any targets in "//bar/" and any subdirectory thereof.
     visibility = [ "./*", "//bar/*" ]
-
-
 ```
-## **write_runtime_deps**: Writes the target's runtime_deps to the given path.
+### <a name="write_runtime_deps"></a>**write_runtime_deps**: Writes the target's runtime_deps to the given path.
 
 ```
   Does not synchronously write the file, but rather schedules it to be written
@@ -5703,18 +5231,17 @@
   be the main output file of the target itself. The file contents will be the
   same as requesting the runtime deps be written on the command line (see "gn
   help --runtime-deps-list-file").
-
-
 ```
-## **Build Arguments Overview**
+## <a name="other"></a>Other help topics
+
+### <a name="buildargs"></a>**Build Arguments Overview**
 
 ```
   Build arguments are variables passed in from outside of the build that build
   files can query to determine how the build works.
-
 ```
 
-### **How build arguments are set**
+#### **How build arguments are set**
 
 ```
   First, system default arguments are set based on the current system. The
@@ -5741,10 +5268,9 @@
 
   If you specify an override for a build argument that never appears in a
   "declare_args" call, a nonfatal error will be displayed.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   gn args out/FooBar
@@ -5757,10 +5283,9 @@
       This will overwrite the build directory with the given arguments. (Note
       that the quotes inside the args command will usually need to be escaped
       for your shell to pass through strings values.)
-
 ```
 
-### **How build arguments are used**
+#### **How build arguments are used**
 
 ```
   If you want to use an argument, you use declare_args() and specify default
@@ -5772,10 +5297,8 @@
   passed to all buildfiles. Individual build files can also specify arguments
   that apply only to those files. It is also useful to specify build args in an
   "import"-ed file if you want such arguments to apply to multiple buildfiles.
-
-
 ```
-## **.gn file**
+### <a name="dotfile"></a>**.gn file**
 
 ```
   When gn starts, it will search the current directory and parent directories
@@ -5790,14 +5313,17 @@
   --dotfile:
 
     gn gen out/Debug --root=/home/build --dotfile=/home/my_gn_file.gn
-
 ```
 
-### **Variables**
+#### **Variables**
 
 ```
+  arg_file_template [optional]
+      Path to a file containing the text that should be used as the default
+      args.gn content when you run `gn args`.
+
   buildconfig [required]
-      Label of the build config file. This file will be used to set up the
+      Path to the build config file. This file will be used to set up the
       build file execution environment for each toolchain.
 
   check_targets [optional]
@@ -5852,10 +5378,9 @@
 
       This is intended to be used when subprojects declare arguments with
       default values that need to be changed for whatever reason.
-
 ```
 
-### **Example .gn file contents**
+#### **Example .gn file contents**
 
 ```
   buildconfig = "//build/config/BUILDCONFIG.gn"
@@ -5874,12 +5399,10 @@
     is_debug = false
     is_component_build = false
   }
-
-
 ```
-## **Build graph and execution overview**
+### <a name="execution"></a>**Build graph and execution overview**
 
-### **Overall build flow**
+#### **Overall build flow**
 
 ```
   1. Look for ".gn" file (see "gn help dotfile") in the current directory and
@@ -5902,10 +5425,9 @@
      file to disk.
 
   6. When all targets are resolved, write out the root build.ninja file.
-
 ```
 
-### **Executing target definitions and templates**
+#### **Executing target definitions and templates**
 
 ```
   Build files are loaded in parallel. This means it is impossible to
@@ -5930,10 +5452,9 @@
   definitions that can be overridden by the target code as necessary. Typically
   this mechanism is used to inject a default set of configs that define the
   global compiler and linker flags.
-
 ```
 
-### **Which targets are built**
+#### **Which targets are built**
 
 ```
   All targets encountered in the default toolchain (see "gn help toolchain")
@@ -5946,10 +5467,9 @@
   toolchain.
 
   See also "gn help ninja_rules".
-
 ```
 
-### **Dependencies**
+#### **Dependencies**
 
 ```
   The only difference between "public_deps" and "deps" except for pushing
@@ -5962,21 +5482,18 @@
   is linked, but this is not semantically guaranteed and this is undesirable
   from a build performance perspective. Since we hope to change this in the
   future, do not rely on this behavior.
-
-
 ```
-## **Language and grammar for GN build files**
+### <a name="grammar"></a>**Language and grammar for GN build files**
 
-### **Tokens**
+#### **Tokens**
 
 ```
   GN build files are read as sequences of tokens.  While splitting the file
   into tokens, the next token is the longest sequence of characters that form a
   valid token.
-
 ```
 
-### **White space and comments**
+#### **White space and comments**
 
 ```
   White space is comprised of spaces (U+0020), horizontal tabs (U+0009),
@@ -5986,10 +5503,9 @@
 
   White space and comments are ignored except that they may separate tokens
   that would otherwise combine into a single token.
-
 ```
 
-### **Identifiers**
+#### **Identifiers**
 
 ```
   Identifiers name variables and functions.
@@ -5997,19 +5513,17 @@
       identifier = letter { letter | digit } .
       letter     = "A" ... "Z" | "a" ... "z" | "_" .
       digit      = "0" ... "9" .
-
 ```
 
-### **Keywords**
+#### **Keywords**
 
 ```
   The following keywords are reserved and may not be used as identifiers:
 
           else    false   if      true
-
 ```
 
-### **Integer literals**
+#### **Integer literals**
 
 ```
   An integer literal represents a decimal integer value.
@@ -6017,10 +5531,9 @@
       integer = [ "-" ] digit { digit } .
 
   Leading zeros and negative zero are disallowed.
-
 ```
 
-### **String literals**
+#### **String literals**
 
 ```
   A string literal represents a string value consisting of the quoted
@@ -6052,10 +5565,9 @@
     "$var_one/$var_two"
   Use the "${var_one}" format to be explicitly deliniate the variable for
   otherwise-ambiguous cases.
-
 ```
 
-### **Punctuation**
+#### **Punctuation**
 
 ```
   The following character sequences represent punctuation:
@@ -6064,10 +5576,9 @@
           -       -=      <       <=      [       ]
           !       =       >       >=      {       }
                           &&      ||      .       ,
-
 ```
 
-### **Grammar**
+#### **Grammar**
 
 ```
   The input tokens form a syntax tree following a context-free grammar:
@@ -6102,10 +5613,9 @@
                | "||" .                     // lowest priority
 
   All binary operators are left-associative.
-
 ```
 
-### **Types**
+#### **Types**
 
 ```
   The GN language is dynamically typed. The following types are used:
@@ -6125,10 +5635,9 @@
 
    - Scopes: Scopes are like dictionaries that use variable names for keys. See
      "Scopes" below for more.
-
 ```
 
-### **Lists**
+#### **Lists**
 
 ```
   Lists are created with [] and using commas to separate items:
@@ -6162,10 +5671,9 @@
   When assigning to a list named 'sources' using '=' or '+=', list items may be
   automatically filtered out. See "gn help set_sources_assignment_filter" for
   more.
-
 ```
 
-### **Scopes**
+#### **Scopes**
 
 ```
   All execution happens in the context of a scope which holds the current state
@@ -6197,10 +5705,8 @@
 
     myvalues.foo += 2
     empty_scope.new_thing = [ 1, 2, 3 ]
-
-
 ```
-## **input_conversion**: Specifies how to transform input to a variable.
+### <a name="input_conversion"></a>**input_conversion**: Specifies how to transform input to a variable.
 
 ```
   input_conversion is an argument to read_file and exec_script that specifies
@@ -6251,10 +5757,8 @@
 
       Note that "trim value" is useless because the value parser skips
       whitespace anyway.
-
-
 ```
-## **Label patterns**
+### <a name="label_pattern"></a>**Label patterns**
 
 ```
   A label pattern is a way of expressing one or more labels in a portion of the
@@ -6288,10 +5792,8 @@
     "//foo/*(//build/toolchain:win)"
         All targets in //foo and any subdirectory using the Windows
         toolchain.
-
-
 ```
-## **About labels**
+### <a name="labels"></a>**About labels**
 
 ```
   Everything that can participate in the dependency graph (targets, configs,
@@ -6308,10 +5810,9 @@
 
     /usr/local/foo:bar    (Posix)
     /C:/Program Files/MyLibs:bar   (Windows)
-
 ```
 
-### **Toolchains**
+#### **Toolchains**
 
 ```
   A canonical label includes the label of the toolchain being used. Normally,
@@ -6322,10 +5823,9 @@
 
   Here GN will look for the toolchain definition called "msvc" in the file
   "//build/toolchain/win" to know how to compile this target.
-
 ```
 
-### **Relative labels**
+#### **Relative labels**
 
 ```
   If you want to refer to something in the same buildfile, you can omit
@@ -6342,10 +5842,9 @@
 
     source/plugin:myplugin
     ../net:url_request
-
 ```
 
-### **Implicit names**
+#### **Implicit names**
 
 ```
   If a name is unspecified, it will inherit the directory name. Stylistically,
@@ -6353,12 +5852,10 @@
 
     //net  ->  //net:net
     //tools/gn  ->  //tools/gn:gn
-
-
 ```
-## **Ninja build rules**
+### <a name="ninja_rules"></a>**Ninja build rules**
 
-### **The "all" and "default" rules**
+#### **The "all" and "default" rules**
 
 ```
   All generated targets (see "gn help execution") will be added to an implicit
@@ -6366,10 +5863,9 @@
   default rule will be used by Ninja if no specific target is specified (just
   typing "ninja"). If there is a target named "//:default" it will be the
   default build rule, otherwise the implicit "all" rule will be used.
-
 ```
 
-### **Phony rules**
+#### **Phony rules**
 
 ```
   GN generates Ninja "phony" rules for targets in the default toolchain.  The
@@ -6404,10 +5900,8 @@
 
   To explicitly compile a target in a non-default toolchain, you must give
   Ninja the exact name of the output file relative to the build directory.
-
-
 ```
-## **nogncheck**: Skip an include line from checking.
+### <a name="nogncheck"></a>**nogncheck**: Skip an include line from checking.
 
 ```
   GN's header checker helps validate that the includes match the build
@@ -6435,19 +5929,16 @@
   But GN's header checker does not understand preprocessor directives, won't
   know it matches the build dependencies, and will flag this include as
   incorrect when the condition is false.
-
 ```
 
-### **More information**
+#### **More information**
 
 ```
   The topic "gn help check" has general information on how checking works and
   advice on fixing problems. Targets can also opt-out of checking, see
   "gn help check_includes".
-
-
 ```
-## **Runtime dependencies**
+### <a name="runtime_deps"></a>**Runtime dependencies**
 
 ```
   Runtime dependencies of a target are exposed via the "runtime_deps" category
@@ -6459,20 +5950,18 @@
   "data" files, data directories, and the shared libraries from all transitive
   dependencies. Executables, shared libraries, and loadable modules are
   considered runtime dependencies of themselves.
-
 ```
 
-### **Executables**
+#### **Executables**
 
 ```
   Executable targets and those executable targets' transitive dependencies are
   not considered unless that executable is listed in "data_deps". Otherwise, GN
   assumes that the executable (and everything it requires) is a build-time
   dependency only.
-
 ```
 
-### **Actions and copies**
+#### **Actions and copies**
 
 ```
   Action and copy targets that are listed as "data_deps" will have all of their
@@ -6505,10 +5994,9 @@
      list of files required at runtime).
    - Split B into run-time and build-time versions with the appropriate "deps"
      for each.
-
 ```
 
-### **Static libraries and source sets**
+#### **Static libraries and source sets**
 
 ```
   The results of static_library or source_set targets are not considered
@@ -6517,19 +6005,16 @@
   manually compute the .a/.lib file name for the current platform and list it
   in the "data" list of a target (possibly on the static library target
   itself).
-
 ```
 
-### **Multiple outputs**
+#### **Multiple outputs**
 
 ```
   Linker tools can specify which of their outputs should be considered when
   computing the runtime deps by setting runtime_outputs. If this is unset on
   the tool, the default will be the first output only.
-
-
 ```
-## **How Source Expansion Works**
+### <a name="source_expansion"></a>**How Source Expansion Works**
 
 ```
   Source expansion is used for the action_foreach and copy target types to map
@@ -6548,10 +6033,9 @@
 
   See "gn help copy" and "gn help action_foreach" for more on how this is
   applied.
-
 ```
 
-### **Placeholders**
+#### **Placeholders**
 
 ```
   This section discusses only placeholders for actions. There are other
@@ -6603,10 +6087,9 @@
       output directory. This can only be used in actions and it is an error to
       use in process_file_template where there is no "target".
         "//foo/bar/baz.txt" => "baz.txt"
-
 ```
 
-### **(*) Note on directories**
+#### **(*) Note on directories**
 
 ```
   Paths containing directories (except the source_root_relative_dir) will be
@@ -6620,10 +6103,9 @@
   relative to the build directory for the script to find. In the other cases,
   the directories will be source- absolute (begin with a "//") because the
   results of those expansions will be handled by GN internally.
-
 ```
 
-### **Examples**
+#### **Examples**
 
 ```
   Non-varying outputs:
@@ -6645,30 +6127,29 @@
     //out/Debug/obj/mydirectory/input1.cc
     //out/Debug/obj/mydirectory/input2.h
     //out/Debug/obj/mydirectory/input2.cc
-
-
 ```
+## <a name="switches"></a>Command Line Switches
+
 **Available global switches
 **  Do "gn help --the_switch_you_want_help_on" for more. Individual
   commands may take command-specific switches not listed here. See the
   help on your specific command for more.
 
 ```
-
-**  \--args**: Specifies build arguments overrides.
-**  \--color**: Force colored output.
-**  \--dotfile**: Override the name of the ".gn" file.
-**  \--fail-on-unused-args**: Treat unused build args as fatal errors.
-**  \--markdown**: Write help output in the Markdown format.
-**  \--nocolor**: Force non-colored output.
-**  -q**: Quiet mode. Don't print output on success.
-**  \--root**: Explicitly specify source root.
-**  \--runtime-deps-list-file**: Save runtime dependencies for targets in file.
-**  \--script-executable**: Set the executable used to execute scripts.
-**  \--threads**: Specify number of worker threads.
-**  \--time**: Outputs a summary of how long everything took.
-**  \--tracelog**: Writes a Chrome-compatible trace log to the given file.
-**  -v**: Verbose logging.
-**  \--version**: Prints the GN version number and exits.
-
+    *   [--args: Specifies build arguments overrides.](#--args)
+    *   [--color: Force colored output.](#--color)
+    *   [--dotfile: Override the name of the ".gn" file.](#--dotfile)
+    *   [--fail-on-unused-args: Treat unused build args as fatal errors.](#--fail-on-unused-args)
+    *   [--markdown: Write help output in the Markdown format.](#--markdown)
+    *   [--nocolor: Force non-colored output.](#--nocolor)
+    *   [-q: Quiet mode. Don't print output on success.](#-q)
+    *   [--root: Explicitly specify source root.](#--root)
+    *   [--runtime-deps-list-file: Save runtime dependencies for targets in file.](#--runtime-deps-list-file)
+    *   [--script-executable: Set the executable used to execute scripts.](#--script-executable)
+    *   [--threads: Specify number of worker threads.](#--threads)
+    *   [--time: Outputs a summary of how long everything took.](#--time)
+    *   [--tracelog: Writes a Chrome-compatible trace log to the given file.](#--tracelog)
+    *   [-v: Verbose logging.](#-v)
+    *   [--version: Prints the GN version number and exits.](#--version)
 ```
+

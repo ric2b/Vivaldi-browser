@@ -4,9 +4,12 @@
 
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
 
+#include <utility>
+
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
 #include "chrome/browser/ui/views/chrome_views_delegate.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/ime_driver/ime_driver_mus.h"
 #include "components/constrained_window/constrained_window_views.h"
 
@@ -27,6 +30,10 @@
 #endif  // defined(USE_AURA)
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include "base/command_line.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/chromium_strings.h"
@@ -34,6 +41,24 @@
 #include "content/public/common/content_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/ash_config.h"
+#endif
+
+namespace {
+
+#if defined(USE_AURA)
+bool ShouldCreateWMState() {
+#if defined(OS_CHROMEOS)
+  return chromeos::GetAshConfig() != ash::Config::MUS;
+#else
+  return true;
+#endif
+}
+#endif
+
+}  // namespace
 
 ChromeBrowserMainExtraPartsViews::ChromeBrowserMainExtraPartsViews() {
 }
@@ -46,12 +71,16 @@ void ChromeBrowserMainExtraPartsViews::ToolkitInitialized() {
   // The delegate needs to be set before any UI is created so that windows
   // display the correct icon.
   if (!views::ViewsDelegate::GetInstance())
-    views_delegate_.reset(new ChromeViewsDelegate);
+    views_delegate_ = base::MakeUnique<ChromeViewsDelegate>();
+
+  if (!views::LayoutProvider::Get())
+    layout_provider_ = ChromeLayoutProvider::CreateLayoutProvider();
 
   SetConstrainedWindowViewsClient(CreateChromeConstrainedWindowViewsClient());
 
 #if defined(USE_AURA)
-  wm_state_.reset(new wm::WMState);
+  if (ShouldCreateWMState())
+    wm_state_.reset(new wm::WMState);
 #endif
 }
 
@@ -75,6 +104,13 @@ void ChromeBrowserMainExtraPartsViews::PreProfileInit() {
   // so that we don't destroy the profile. Now that we have some minimal ui
   // initialized, check to see if we're running as root and bail if we are.
   if (geteuid() != 0)
+    return;
+
+  // Allow running inside an unprivileged user namespace. In that case, the
+  // root directory will be owned by an unmapped UID and GID (although this
+  // may not be the case if a chroot is also being used).
+  struct stat st;
+  if (stat("/", &st) == 0 && st.st_uid != 0)
     return;
 
   const base::CommandLine& command_line =
@@ -101,19 +137,25 @@ void ChromeBrowserMainExtraPartsViews::ServiceManagerConnectionStarted(
     content::ServiceManagerConnection* connection) {
   DCHECK(connection);
 #if defined(USE_AURA)
-  if (service_manager::ServiceManagerIsRemote()) {
-    input_device_client_.reset(new ui::InputDeviceClient());
-    ui::mojom::InputDeviceServerPtr server;
-    connection->GetConnector()->BindInterface(ui::mojom::kServiceName, &server);
-    input_device_client_->Connect(std::move(server));
+  if (!service_manager::ServiceManagerIsRemote())
+    return;
 
-    // WMState is owned as a member, so don't have MusClient create it.
-    const bool create_wm_state = false;
-    mus_client_ = base::MakeUnique<views::MusClient>(
-        connection->GetConnector(), service_manager::Identity(),
-        content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::IO),
-        create_wm_state);
-  }
+  input_device_client_ = base::MakeUnique<ui::InputDeviceClient>();
+  ui::mojom::InputDeviceServerPtr server;
+  connection->GetConnector()->BindInterface(ui::mojom::kServiceName, &server);
+  input_device_client_->Connect(std::move(server));
+
+#if defined(OS_CHROMEOS)
+  if (chromeos::GetAshConfig() != ash::Config::MASH)
+    return;
+#endif
+
+  // WMState is owned as a member, so don't have MusClient create it.
+  const bool create_wm_state = false;
+  mus_client_ = base::MakeUnique<views::MusClient>(
+      connection->GetConnector(), service_manager::Identity(),
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::IO),
+      create_wm_state);
 #endif  // defined(USE_AURA)
 }

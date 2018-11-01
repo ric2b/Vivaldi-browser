@@ -33,9 +33,9 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebStorageQuotaError.h"
-#include "wtf/Assertions.h"
-#include "wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -48,15 +48,15 @@ class PLATFORM_EXPORT StorageQuotaCallbacks
   virtual ~StorageQuotaCallbacks() {}
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 
-  virtual void didQueryStorageUsageAndQuota(unsigned long long usageInBytes,
-                                            unsigned long long quotaInBytes) {
+  virtual void DidQueryStorageUsageAndQuota(unsigned long long usage_in_bytes,
+                                            unsigned long long quota_in_bytes) {
     ASSERT_NOT_REACHED();
   }
-  virtual void didGrantStorageQuota(unsigned long long usageInBytes,
-                                    unsigned long long grantedQuotaInBytes) {
+  virtual void DidGrantStorageQuota(unsigned long long usage_in_bytes,
+                                    unsigned long long granted_quota_in_bytes) {
     ASSERT_NOT_REACHED();
   }
-  virtual void didFail(WebStorageQuotaError) { ASSERT_NOT_REACHED(); }
+  virtual void DidFail(WebStorageQuotaError) { ASSERT_NOT_REACHED(); }
 };
 
 }  // namespace blink

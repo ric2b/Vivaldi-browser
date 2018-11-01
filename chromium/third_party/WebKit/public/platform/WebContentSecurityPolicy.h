@@ -37,15 +37,22 @@
 namespace blink {
 
 enum WebContentSecurityPolicyType {
-  WebContentSecurityPolicyTypeReport,
-  WebContentSecurityPolicyTypeEnforce,
-  WebContentSecurityPolicyTypeLast = WebContentSecurityPolicyTypeEnforce
+  kWebContentSecurityPolicyTypeReport,
+  kWebContentSecurityPolicyTypeEnforce,
+  kWebContentSecurityPolicyTypeLast = kWebContentSecurityPolicyTypeEnforce
 };
 
 enum WebContentSecurityPolicySource {
-  WebContentSecurityPolicySourceHTTP,
-  WebContentSecurityPolicySourceMeta,
-  WebContentSecurityPolicySourceLast = WebContentSecurityPolicySourceMeta
+  kWebContentSecurityPolicySourceHTTP,
+  kWebContentSecurityPolicySourceMeta,
+  kWebContentSecurityPolicySourceLast = kWebContentSecurityPolicySourceMeta
+};
+
+enum WebContentSecurityPolicyDisposition {
+  kWebContentSecurityPolicyDispositionDoNotCheck,
+  kWebContentSecurityPolicyDispositionCheck,
+  kWebContentSecurityPolicyDispositionLast =
+      kWebContentSecurityPolicyDispositionCheck
 };
 
 }  // namespace blink

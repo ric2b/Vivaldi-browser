@@ -102,7 +102,8 @@ void MessageChannel::InstanceDeleted() {
 }
 
 void MessageChannel::PostMessageToJavaScript(PP_Var message_data) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = instance_->GetIsolate();
+  v8::HandleScope scope(isolate);
 
   // Because V8 is probably not on the stack for Native->JS calls, we need to
   // enter the appropriate context for the plugin.
@@ -122,7 +123,7 @@ void MessageChannel::PostMessageToJavaScript(PP_Var message_data) {
   }
 
   WebSerializedScriptValue serialized_val =
-      WebSerializedScriptValue::serialize(v8_val);
+      WebSerializedScriptValue::Serialize(isolate, v8_val);
 
   if (js_message_queue_state_ != SEND_DIRECTLY) {
     // We can't just PostTask here; the messages would arrive out of
@@ -363,7 +364,7 @@ void MessageChannel::PostMessageToJavaScriptImpl(
   //     TODO(dmichael):  Add origin if we change to a more iframe-like origin
   //                      policy (see crbug.com/81537)
   WebDOMMessageEvent msg_event(message_data);
-  container->enqueueMessageEvent(msg_event);
+  container->EnqueueMessageEvent(msg_event);
 }
 
 PluginObject* MessageChannel::GetPluginObject(v8::Isolate* isolate) {

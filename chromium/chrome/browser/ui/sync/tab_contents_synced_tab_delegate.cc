@@ -7,6 +7,7 @@
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
+#include "chrome/browser/sync/sessions/sync_sessions_router_tab_helper.h"
 #include "chrome/common/features.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sync_sessions/sync_sessions_client.h"
@@ -92,22 +93,29 @@ GURL TabContentsSyncedTabDelegate::GetVirtualURLAtIndex(int i) const {
 
 GURL TabContentsSyncedTabDelegate::GetFaviconURLAtIndex(int i) const {
   NavigationEntry* entry = GetPossiblyPendingEntryAtIndex(web_contents_, i);
-  return (entry->GetFavicon().valid ? entry->GetFavicon().url : GURL());
+  return entry ? (entry->GetFavicon().valid ? entry->GetFavicon().url : GURL())
+               : GURL();
 }
 
 ui::PageTransition TabContentsSyncedTabDelegate::GetTransitionAtIndex(
     int i) const {
   NavigationEntry* entry = GetPossiblyPendingEntryAtIndex(web_contents_, i);
-  return entry->GetTransitionType();
+  // If we don't have an entry, there's not a coherent PageTransition we can
+  // supply. There's no PageTransition::Unknown, so we just use the default,
+  // which is PageTransition::LINK.
+  return entry ? entry->GetTransitionType()
+               : ui::PageTransition::PAGE_TRANSITION_LINK;
 }
 
 void TabContentsSyncedTabDelegate::GetSerializedNavigationAtIndex(
     int i,
     sessions::SerializedNavigationEntry* serialized_entry) const {
   NavigationEntry* entry = GetPossiblyPendingEntryAtIndex(web_contents_, i);
-  *serialized_entry =
-      sessions::ContentSerializedNavigationBuilder::FromNavigationEntry(i,
-                                                                        *entry);
+  if (entry) {
+    *serialized_entry =
+        sessions::ContentSerializedNavigationBuilder::FromNavigationEntry(
+            i, *entry);
+  }
 }
 
 bool TabContentsSyncedTabDelegate::ProfileIsSupervised() const {
@@ -163,6 +171,13 @@ bool TabContentsSyncedTabDelegate::ShouldSync(
       return true;
   }
   return false;
+}
+
+SessionID::id_type TabContentsSyncedTabDelegate::GetSourceTabID() const {
+  sync_sessions::SyncSessionsRouterTabHelper* helper =
+      sync_sessions::SyncSessionsRouterTabHelper::FromWebContents(
+          web_contents_);
+  return helper->source_tab_id();
 }
 
 std::string TabContentsSyncedTabDelegate::GetExtData() const {

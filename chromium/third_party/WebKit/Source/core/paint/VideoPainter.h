@@ -5,7 +5,7 @@
 #ifndef VideoPainter_h
 #define VideoPainter_h
 
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -17,12 +17,12 @@ class VideoPainter {
   STACK_ALLOCATED();
 
  public:
-  VideoPainter(const LayoutVideo& layoutVideo) : m_layoutVideo(layoutVideo) {}
+  VideoPainter(const LayoutVideo& layout_video) : layout_video_(layout_video) {}
 
-  void paintReplaced(const PaintInfo&, const LayoutPoint&);
+  void PaintReplaced(const PaintInfo&, const LayoutPoint&);
 
  private:
-  const LayoutVideo& m_layoutVideo;
+  const LayoutVideo& layout_video_;
 };
 
 }  // namespace blink

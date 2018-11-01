@@ -11,7 +11,7 @@
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
-#include "ui/base/ui_base_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_context.h"
@@ -21,9 +21,10 @@
 namespace gpu {
 
 ChildWindowSurfaceWin::ChildWindowSurfaceWin(
+    std::unique_ptr<gfx::VSyncProvider> vsync_provider,
     base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
     HWND parent_window)
-    : gl::NativeViewGLSurfaceEGL(0),
+    : gl::NativeViewGLSurfaceEGL(0, std::move(vsync_provider)),
       child_window_(delegate, parent_window),
       alpha_(true),
       first_swap_(true) {
@@ -35,10 +36,10 @@ ChildWindowSurfaceWin::ChildWindowSurfaceWin(
 EGLConfig ChildWindowSurfaceWin::GetConfig() {
   if (!config_) {
     int alpha_size = alpha_ ? 8 : EGL_DONT_CARE;
-    int bits_per_channel = base::CommandLine::ForCurrentProcess()->HasSwitch(
-                               switches::kEnableHDROutput)
-                               ? 16
-                               : 8;
+    int bits_per_channel =
+        base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)
+            ? 16
+            : 8;
 
     EGLint config_attribs[] = {EGL_ALPHA_SIZE,
                                alpha_size,

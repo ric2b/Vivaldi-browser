@@ -7,13 +7,43 @@
  * Global exports.  Used by popup to show effect of filter during setup.
  */
 (function(exports) {
+  // TODO(wnwen): Replace var with let.
   var curDelta = 0;
   var curSeverity = 0;
   var curType = 'PROTANOMALY';
   var curSimulate = false;
   var curEnable = false;
   var curFilter = 0;
+  var cssTemplate = `
+html[cvd="0"] {
+  -webkit-filter: url('#cvd_extension_0');
+}
+html[cvd="1"] {
+  -webkit-filter: url('#cvd_extension_1');
+}
+`;
 
+  /** @const {string} */
+  var SVG_DEFAULT_MATRIX =
+    '1 0 0 0 0 ' +
+    '0 1 0 0 0 ' +
+    '0 0 1 0 0 ' +
+    '0 0 0 1 0';
+
+  var svgContent = `
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+  <defs>
+    <filter x="0" y="0" width="99999" height="99999" id="cvd_extension_0">
+      <feColorMatrix id="cvd_matrix_0" type="matrix" values="
+          ${SVG_DEFAULT_MATRIX}"/>
+    </filter>
+    <filter x="0" y="0" width="99999" height="99999" id="cvd_extension_1">
+      <feColorMatrix id="cvd_matrix_1" type="matrix" values="
+          ${SVG_DEFAULT_MATRIX}"/>
+    </filter>
+  </defs>
+</svg>
+`;
 
   // ======= 3x3 matrix ops =======
 
@@ -282,7 +312,6 @@
    */
   function getEffectiveCvdMatrix(cvdType, severity, delta, simulate, enable) {
     if (!enable) {
-      //TODO(mustaq): we should remove matrices at the svg level
       return IDENTITY_MATRIX_3x3;
     }
 
@@ -303,35 +332,27 @@
 
   // ======= Page linker =======
 
-  /** @const {string} */
-  var SVG_DEFAULT_MATRIX =
-    '1 0 0 0 0 ' +
-    '0 1 0 0 0 ' +
-    '0 0 1 0 0 ' +
-    '0 0 0 1 0';
-
-  var svgContent =
-    '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">' +
-    '  <defs>' +
-    '    <filter id="cvd_extension_0">' +
-    '      <feColorMatrix id="cvd_matrix_0" type="matrix" values="' +
-        SVG_DEFAULT_MATRIX + '"/>' +
-    '    </filter>' +
-    '    <filter id="cvd_extension_1">' +
-    '      <feColorMatrix id="cvd_matrix_1" type="matrix" values="' +
-        SVG_DEFAULT_MATRIX + '"/>' +
-    '    </filter>' +
-    '  </defs>' +
-    '</svg>';
+  const STYLE_ID = 'cvd_style';
+  const WRAP_ID = 'cvd_extension_svg_filter';
 
   /**
-   * Checks for svg filter matrix presence and append to DOM if not present.
+   * Checks for required elements, adding if missing.
    */
-  function addSvgIfMissing() {
-    var wrap = document.getElementById('cvd_extension_svg_filter');
+  function addElements() {
+    var style = document.getElementById(STYLE_ID);
+    if (!style) {
+      var baseUrl = window.location.href.replace(window.location.hash, '');
+      style = document.createElement('style');
+      style.id = STYLE_ID;
+      style.setAttribute('type', 'text/css');
+      style.innerHTML = cssTemplate.replace(/#/g, baseUrl + '#');
+      document.head.appendChild(style);
+    }
+
+    var wrap = document.getElementById(WRAP_ID);
     if (!wrap) {
       wrap = document.createElement('span');
-      wrap.id = 'cvd_extension_svg_filter';
+      wrap.id = WRAP_ID;
       wrap.setAttribute('hidden', '');
       wrap.innerHTML = svgContent;
       document.body.appendChild(wrap);
@@ -343,7 +364,7 @@
    * @param {!Object} matrix  3x3 RGB transformation matrix.
    */
   function setFilter(matrix) {
-    addSvgIfMissing();
+    addElements();
     var next = 1 - curFilter;
 
     debugPrint('update: matrix#' + next + '=' +
@@ -352,9 +373,7 @@
     var matrixElem = document.getElementById('cvd_matrix_' + next);
     matrixElem.setAttribute('values', svgMatrixStringFrom3x3(matrix));
 
-    var html = document.documentElement;
-    html.classList.remove('filter' + curFilter);
-    html.classList.add('filter' + next);
+    document.documentElement.setAttribute('cvd', next);
 
     curFilter = next;
   }
@@ -363,20 +382,24 @@
    * Updates the SVG matrix using the current settings.
    */
   function update() {
-    if (!document.body) {
-      document.addEventListener('DOMContentLoaded', update);
-      return;
+    if (curEnable) {
+      if (!document.body) {
+        document.addEventListener('DOMContentLoaded', update);
+        return;
+      }
+
+      var effectiveMatrix = getEffectiveCvdMatrix(
+          curType, curSeverity, curDelta * 2 - 1, curSimulate, curEnable);
+
+      setFilter(effectiveMatrix);
+
+      if (window == window.top) {
+        window.scrollBy(0, 1);
+        window.scrollBy(0, -1);
+      }
+    } else {
+      clearFilter();
     }
-
-    var effectiveMatrix = getEffectiveCvdMatrix(
-        curType, curSeverity, curDelta * 2 - 1, curSimulate, curEnable);
-
-    setFilter(effectiveMatrix);
-
-    // TODO(kevers): Check if a call to getComputedStyle is sufficient to force
-    // an update.
-    window.scrollBy(0, 1);
-    window.scrollBy(0, -1);
   }
 
 
@@ -428,8 +451,17 @@
       }
     }
 
-    if (changed)
+    if (changed) {
       update();
+    }
+  }
+
+
+  /**
+   * Remove the filter from the page.
+   */
+  function clearFilter() {
+    document.documentElement.removeAttribute('cvd');
   }
 
 
@@ -465,9 +497,7 @@
    * Clears color correction filter.
    */
   exports.clearColorEnhancementFilter = function() {
-    var html = document.documentElement;
-    html.classList.remove('filter0');
-    html.classList.remove('filter1');
+    clearFilter();
   };
 })(this);
 

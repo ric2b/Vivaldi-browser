@@ -7,15 +7,18 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/geometry/FloatRoundedRect.h"
+#include "platform/graphics/paint/GeometryMapperClipCache.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefCounted.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 
 #include <iosfwd>
 
 namespace blink {
+
+class GeometryMapperClipCache;
 
 // A clip rect created by a css property such as "overflow" or "clip".
 // Along with a reference to the transform space the clip rect is based on,
@@ -28,79 +31,96 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
  public:
   // This node is really a sentinel, and does not represent a real clip
   // space.
-  static ClipPaintPropertyNode* root();
+  static ClipPaintPropertyNode* Root();
 
-  static PassRefPtr<ClipPaintPropertyNode> create(
+  static PassRefPtr<ClipPaintPropertyNode> Create(
       PassRefPtr<const ClipPaintPropertyNode> parent,
-      PassRefPtr<const TransformPaintPropertyNode> localTransformSpace,
-      const FloatRoundedRect& clipRect,
-      CompositingReasons directCompositingReasons = CompositingReasonNone) {
-    return adoptRef(new ClipPaintPropertyNode(
-        std::move(parent), std::move(localTransformSpace), clipRect,
-        directCompositingReasons));
+      PassRefPtr<const TransformPaintPropertyNode> local_transform_space,
+      const FloatRoundedRect& clip_rect,
+      CompositingReasons direct_compositing_reasons = kCompositingReasonNone) {
+    return AdoptRef(new ClipPaintPropertyNode(
+        std::move(parent), std::move(local_transform_space), clip_rect,
+        direct_compositing_reasons));
   }
 
-  void update(PassRefPtr<const ClipPaintPropertyNode> parent,
-              PassRefPtr<const TransformPaintPropertyNode> localTransformSpace,
-              const FloatRoundedRect& clipRect) {
-    DCHECK(!isRoot());
+  void Update(
+      PassRefPtr<const ClipPaintPropertyNode> parent,
+      PassRefPtr<const TransformPaintPropertyNode> local_transform_space,
+      const FloatRoundedRect& clip_rect) {
+    DCHECK(!IsRoot());
     DCHECK(parent != this);
-    m_parent = parent;
-    m_localTransformSpace = localTransformSpace;
-    m_clipRect = clipRect;
+    parent_ = std::move(parent);
+    local_transform_space_ = std::move(local_transform_space);
+    clip_rect_ = clip_rect;
   }
 
-  const TransformPaintPropertyNode* localTransformSpace() const {
-    return m_localTransformSpace.get();
+  const TransformPaintPropertyNode* LocalTransformSpace() const {
+    return local_transform_space_.Get();
   }
-  const FloatRoundedRect& clipRect() const { return m_clipRect; }
+  const FloatRoundedRect& ClipRect() const { return clip_rect_; }
 
   // Reference to inherited clips, or nullptr if this is the only clip.
-  const ClipPaintPropertyNode* parent() const { return m_parent.get(); }
-  bool isRoot() const { return !m_parent; }
+  const ClipPaintPropertyNode* Parent() const { return parent_.Get(); }
+  bool IsRoot() const { return !parent_; }
 
 #if DCHECK_IS_ON()
   // The clone function is used by FindPropertiesNeedingUpdate.h for recording
   // a clip node before it has been updated, to later detect changes.
-  PassRefPtr<ClipPaintPropertyNode> clone() const {
-    return adoptRef(new ClipPaintPropertyNode(m_parent, m_localTransformSpace,
-                                              m_clipRect,
-                                              m_directCompositingReasons));
+  PassRefPtr<ClipPaintPropertyNode> Clone() const {
+    return AdoptRef(new ClipPaintPropertyNode(parent_, local_transform_space_,
+                                              clip_rect_,
+                                              direct_compositing_reasons_));
   }
 
   // The equality operator is used by FindPropertiesNeedingUpdate.h for checking
   // if a clip node has changed.
   bool operator==(const ClipPaintPropertyNode& o) const {
-    return m_parent == o.m_parent &&
-           m_localTransformSpace == o.m_localTransformSpace &&
-           m_clipRect == o.m_clipRect &&
-           m_directCompositingReasons == o.m_directCompositingReasons;
+    return parent_ == o.parent_ &&
+           local_transform_space_ == o.local_transform_space_ &&
+           clip_rect_ == o.clip_rect_ &&
+           direct_compositing_reasons_ == o.direct_compositing_reasons_;
   }
 
-  String toTreeString() const;
+  String ToTreeString() const;
 #endif
 
-  String toString() const;
+  String ToString() const;
 
-  bool hasDirectCompositingReasons() const {
-    return m_directCompositingReasons != CompositingReasonNone;
+  bool HasDirectCompositingReasons() const {
+    return direct_compositing_reasons_ != kCompositingReasonNone;
   }
 
  private:
   ClipPaintPropertyNode(
       PassRefPtr<const ClipPaintPropertyNode> parent,
-      PassRefPtr<const TransformPaintPropertyNode> localTransformSpace,
-      const FloatRoundedRect& clipRect,
-      CompositingReasons directCompositingReasons)
-      : m_parent(parent),
-        m_localTransformSpace(localTransformSpace),
-        m_clipRect(clipRect),
-        m_directCompositingReasons(directCompositingReasons) {}
+      PassRefPtr<const TransformPaintPropertyNode> local_transform_space,
+      const FloatRoundedRect& clip_rect,
+      CompositingReasons direct_compositing_reasons)
+      : parent_(std::move(parent)),
+        local_transform_space_(std::move(local_transform_space)),
+        clip_rect_(clip_rect),
+        direct_compositing_reasons_(direct_compositing_reasons) {}
 
-  RefPtr<const ClipPaintPropertyNode> m_parent;
-  RefPtr<const TransformPaintPropertyNode> m_localTransformSpace;
-  FloatRoundedRect m_clipRect;
-  CompositingReasons m_directCompositingReasons;
+  // For access to getClipCache();
+  friend class GeometryMapper;
+  friend class GeometryMapperTest;
+
+  GeometryMapperClipCache& GetClipCache() const {
+    return const_cast<ClipPaintPropertyNode*>(this)->GetClipCache();
+  }
+
+  GeometryMapperClipCache& GetClipCache() {
+    if (!geometry_mapper_clip_cache_)
+      geometry_mapper_clip_cache_.reset(new GeometryMapperClipCache());
+    return *geometry_mapper_clip_cache_.get();
+  }
+
+  RefPtr<const ClipPaintPropertyNode> parent_;
+  RefPtr<const TransformPaintPropertyNode> local_transform_space_;
+  FloatRoundedRect clip_rect_;
+  CompositingReasons direct_compositing_reasons_;
+
+  std::unique_ptr<GeometryMapperClipCache> geometry_mapper_clip_cache_;
 };
 
 // Redeclared here to avoid ODR issues.

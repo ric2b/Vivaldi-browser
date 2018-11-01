@@ -30,6 +30,9 @@ cr.define('options', function() {
       $('screen-lock-done').onclick = function() {
         QuickUnlockConfigureOverlay.dismiss();
       };
+
+      if (loadTimeData.getBoolean('enablePolymerPreload'))
+        requestIdleCallback(this.ensurePolymerIsLoaded_.bind(this));
     },
 
     /** @override */
@@ -71,9 +74,11 @@ cr.define('options', function() {
       var screenLockDiv = lockScreen.root.querySelector('#screenLockDiv');
       screenLockDiv.hidden = true;
 
-      // The fingerprint settings on options is always hidden.
+      // The fingerprint settings and easy unlock on options is always hidden.
       var fingerprintDiv = lockScreen.root.querySelector('#fingerprintDiv');
       fingerprintDiv.hidden = true;
+      var easyUnlockDiv = lockScreen.root.querySelector('#easyUnlock');
+      easyUnlockDiv.hidden = true;
 
       var passwordPrompt = lockScreen.root.
           querySelector('settings-password-prompt-dialog');

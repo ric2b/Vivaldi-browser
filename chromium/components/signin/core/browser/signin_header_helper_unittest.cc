@@ -10,6 +10,7 @@
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/common/signin_switches.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -42,7 +43,8 @@ class SigninHeaderHelperTest : public testing::Test {
                                 const std::string& expected_request) {
     bool expected_result = !expected_request.empty();
     std::unique_ptr<net::URLRequest> url_request =
-        url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr);
+        url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr,
+                                           TRAFFIC_ANNOTATION_FOR_TESTS);
     EXPECT_EQ(signin::AppendOrRemoveMirrorRequestHeaderIfPossible(
                   url_request.get(), GURL(), account_id, cookie_settings_.get(),
                   signin::PROFILE_MODE_DEFAULT),
@@ -117,11 +119,13 @@ TEST_F(SigninHeaderHelperTest, TestMirrorRequestGoogleCom) {
 
 // Tests that the Mirror request is returned with the GAIA Id on Drive origin,
 // even if account consistency is disabled.
+//
+// Account consistency if always enabled on Android and iOS, so this test is
+// only relevant on Desktop.
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 TEST_F(SigninHeaderHelperTest, TestMirrorRequestDrive) {
   DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableAccountConsistency));
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisableAccountConsistency);
   CheckMirrorHeaderRequest(
       GURL("https://docs.google.com/document"), "0123456789",
       "id=0123456789,mode=0,enable_account_consistency=false");
@@ -139,6 +143,7 @@ TEST_F(SigninHeaderHelperTest, TestMirrorRequestDrive) {
       GURL("https://drive.google.com/drive"), "0123456789",
       "id=0123456789:mode=0:enable_account_consistency=true");
 }
+#endif
 
 // Tests that the Mirror header request is returned normally when the redirect
 // URL is eligible.
@@ -150,7 +155,8 @@ TEST_F(SigninHeaderHelperTest, TestMirrorHeaderEligibleRedirectURL) {
   const GURL redirect_url("https://www.google.com");
   const std::string account_id = "0123456789";
   std::unique_ptr<net::URLRequest> url_request =
-      url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr);
+      url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr,
+                                         TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_TRUE(signin::AppendOrRemoveMirrorRequestHeaderIfPossible(
       url_request.get(), redirect_url, account_id, cookie_settings_.get(),
       signin::PROFILE_MODE_DEFAULT));
@@ -168,7 +174,8 @@ TEST_F(SigninHeaderHelperTest, TestMirrorHeaderNonEligibleRedirectURL) {
   const GURL redirect_url("http://www.foo.com");
   const std::string account_id = "0123456789";
   std::unique_ptr<net::URLRequest> url_request =
-      url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr);
+      url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr,
+                                         TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_FALSE(signin::AppendOrRemoveMirrorRequestHeaderIfPossible(
       url_request.get(), redirect_url, account_id, cookie_settings_.get(),
       signin::PROFILE_MODE_DEFAULT));
@@ -187,7 +194,8 @@ TEST_F(SigninHeaderHelperTest, TestIgnoreMirrorHeaderNonEligibleURLs) {
   const std::string account_id = "0123456789";
   const std::string fake_header = "foo,bar";
   std::unique_ptr<net::URLRequest> url_request =
-      url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr);
+      url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr,
+                                         TRAFFIC_ANNOTATION_FOR_TESTS);
   url_request->SetExtraRequestHeaderByName(signin::kChromeConnectedHeader,
                                            fake_header, false);
   EXPECT_FALSE(signin::AppendOrRemoveMirrorRequestHeaderIfPossible(

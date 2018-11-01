@@ -30,6 +30,7 @@ namespace extensions {
 class Extension;
 class ContentHashFetcher;
 class ContentVerifierIOData;
+class ManagementPolicy;
 
 // Used for managing overall content verification - both fetching content
 // hashes as needed, and supplying job objects to verify file contents as they
@@ -42,11 +43,16 @@ class ContentVerifier : public base::RefCountedThreadSafe<ContentVerifier>,
     virtual void OnFetchComplete(const std::string& extension_id,
                                  bool success) = 0;
   };
+  // Returns true if content verifier should repair the extension (|id|) if it
+  // became courrpted.
+  // Note that this method doesn't check whether |id| is corrupted or not.
+  static bool ShouldRepairIfCorrupted(const ManagementPolicy* management_policy,
+                                      const Extension* id);
+
   static void SetObserverForTests(TestObserver* observer);
 
-  // Takes ownership of |delegate|.
   ContentVerifier(content::BrowserContext* context,
-                  ContentVerifierDelegate* delegate);
+                  std::unique_ptr<ContentVerifierDelegate> delegate);
   void Start();
   void Shutdown();
 
@@ -74,21 +80,23 @@ class ContentVerifier : public base::RefCountedThreadSafe<ContentVerifier>,
   friend class base::RefCountedThreadSafe<ContentVerifier>;
   ~ContentVerifier() override;
 
-  void OnFetchComplete(const std::string& extension_id,
-                       bool success,
-                       bool was_force_check,
-                       const std::set<base::FilePath>& hash_mismatch_paths);
+  void OnFetchComplete(
+      const std::string& extension_id,
+      bool success,
+      bool was_force_check,
+      const std::set<base::FilePath>& hash_mismatch_unix_paths);
 
   void OnFetchCompleteHelper(const std::string& extension_id,
                              bool shouldVerifyAnyPathsResult);
 
-  // Returns true if any of the paths in |relative_paths| *should* have their
-  // contents verified. (Some files get transcoded during the install process,
-  // so we don't want to verify their contents because they are expected not
-  // to match).
-  bool ShouldVerifyAnyPaths(const std::string& extension_id,
-                            const base::FilePath& extension_root,
-                            const std::set<base::FilePath>& relative_paths);
+  // Returns true if any of the paths in |relative_unix_paths| *should* have
+  // their contents verified. (Some files get transcoded during the install
+  // process, so we don't want to verify their contents because they are
+  // expected not to match).
+  bool ShouldVerifyAnyPaths(
+      const std::string& extension_id,
+      const base::FilePath& extension_root,
+      const std::set<base::FilePath>& relative_unix_paths);
 
   // Set to true once we've begun shutting down.
   bool shutdown_;

@@ -9,17 +9,16 @@
 
 #import "base/ios/block_types.h"
 #include "base/strings/sys_string_conversions.h"
-#import "ios/testing/earl_grey/disabled_test_macros.h"
 #import "ios/testing/earl_grey/matchers.h"
 #import "ios/web/public/test/http_server.h"
 #include "ios/web/public/test/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/shell/test/app/web_shell_test_util.h"
 #include "ios/web/shell/test/app/web_view_interaction_test_util.h"
-#import "ios/web/shell/test/earl_grey/shell_base_test_case.h"
 #import "ios/web/shell/test/earl_grey/shell_actions.h"
 #import "ios/web/shell/test/earl_grey/shell_earl_grey.h"
 #import "ios/web/shell/test/earl_grey/shell_matchers.h"
+#import "ios/web/shell/test/earl_grey/web_shell_test_case.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -30,7 +29,7 @@ using testing::ElementToDismissContextMenu;
 using web::WebViewContainingText;
 
 // Context menu test cases for the web shell.
-@interface ContextMenuTestCase : ShellBaseTestCase
+@interface ContextMenuTestCase : WebShellTestCase
 @end
 
 @implementation ContextMenuTestCase
@@ -57,7 +56,7 @@ using web::WebViewContainingText;
       assertWithMatcher:grey_notNil()];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
-      performAction:web::longPressElementForContextMenu(
+      performAction:web::LongPressElementForContextMenu(
                         linkID, true /* menu should appear */)];
 
   id<GREYMatcher> copyItem = ContextMenuItemWithText(@"Copy Link");
@@ -97,7 +96,7 @@ using web::WebViewContainingText;
       assertWithMatcher:grey_notNil()];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
-      performAction:web::longPressElementForContextMenu(
+      performAction:web::LongPressElementForContextMenu(
                         linkID, false /* menu shouldn't appear */)];
 
   id<GREYMatcher> copyItem = ContextMenuItemWithText(@"Copy Link");
@@ -131,7 +130,7 @@ using web::WebViewContainingText;
       assertWithMatcher:grey_notNil()];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
-      performAction:web::longPressElementForContextMenu(
+      performAction:web::LongPressElementForContextMenu(
                         linkID, false /* menu shouldn't appear */)];
 
   id<GREYMatcher> copyItem = ContextMenuItemWithText(@"Copy Link");
@@ -166,7 +165,7 @@ using web::WebViewContainingText;
       assertWithMatcher:grey_notNil()];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
-      performAction:web::longPressElementForContextMenu(
+      performAction:web::LongPressElementForContextMenu(
                         linkID, true /* menu should appear */)];
 
   id<GREYMatcher> copyItem = ContextMenuItemWithText(@"Copy Link");

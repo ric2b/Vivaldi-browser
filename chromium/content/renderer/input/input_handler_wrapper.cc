@@ -24,13 +24,14 @@ InputHandlerWrapper::InputHandlerWrapper(
     bool enable_smooth_scrolling)
     : input_handler_manager_(input_handler_manager),
       routing_id_(routing_id),
-      input_handler_proxy_(input_handler.get(), this),
+      input_handler_proxy_(input_handler.get(),
+                           this,
+                           base::FeatureList::IsEnabled(
+                               features::kTouchpadAndWheelScrollLatching)),
       main_task_runner_(main_task_runner),
       render_widget_(render_widget) {
   DCHECK(input_handler);
   input_handler_proxy_.set_smooth_scroll_enabled(enable_smooth_scrolling);
-  input_handler_proxy_.set_touchpad_and_wheel_scroll_latching_enabled(
-      base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching));
 }
 
 InputHandlerWrapper::~InputHandlerWrapper() {
@@ -64,7 +65,7 @@ blink::WebGestureCurve* InputHandlerWrapper::CreateFlingAnimationCurve(
     blink::WebGestureDevice deviceSource,
     const blink::WebFloatPoint& velocity,
     const blink::WebSize& cumulative_scroll) {
-  return blink::Platform::current()->createFlingAnimationCurve(
+  return blink::Platform::Current()->CreateFlingAnimationCurve(
       deviceSource, velocity, cumulative_scroll);
 }
 

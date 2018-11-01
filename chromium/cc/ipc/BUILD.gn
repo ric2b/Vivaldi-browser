@@ -28,12 +28,12 @@ cc_component("ipc") {
     "//base",
     "//gpu/ipc/common",
     "//ipc",
-    "//ui/events/ipc",
     "//ui/gfx",
     "//ui/gfx/ipc",
     "//ui/gfx/ipc/color",
     "//ui/gfx/ipc/geometry",
     "//ui/gfx/ipc/skia",
+    "//ui/latency/ipc",
   ]
 }
 
@@ -44,16 +44,17 @@ mojom("interfaces") {
     "compositor_frame_metadata.mojom",
     "copy_output_request.mojom",
     "copy_output_result.mojom",
-    "display_compositor.mojom",
     "filter_operation.mojom",
     "filter_operations.mojom",
     "frame_sink_id.mojom",
+    "frame_sink_manager.mojom",
     "local_surface_id.mojom",
     "mojo_compositor_frame_sink.mojom",
     "quads.mojom",
     "render_pass.mojom",
     "returned_resource.mojom",
     "selection.mojom",
+    "shared_bitmap_manager.mojom",
     "shared_quad_state.mojom",
     "surface_id.mojom",
     "surface_info.mojom",
@@ -68,9 +69,9 @@ mojom("interfaces") {
     "//gpu/ipc/common:interfaces",
     "//mojo/common:common_custom_types",
     "//skia/public/interfaces",
-    "//ui/events/mojo:interfaces",
     "//ui/gfx/geometry/mojo",
     "//ui/gfx/mojo",
+    "//ui/latency/mojo:interfaces",
   ]
 }
 

@@ -432,8 +432,9 @@ class DownloadExtensionTest : public ExtensionApiTest {
           (history_info[i].state != content::DownloadItem::CANCELLED
                ? content::DOWNLOAD_INTERRUPT_REASON_NONE
                : content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED),
-          false,                  // opened
-          std::vector<DownloadItem::ReceivedSlice>());
+          false,    // opened
+          current,  // last_access_time
+          false, std::vector<DownloadItem::ReceivedSlice>());
       items->push_back(item);
     }
 
@@ -3998,20 +3999,14 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
-#if defined(OS_WIN)
 // This test is very flaky on Win XP and Aura. http://crbug.com/248438
-#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_InterruptedResume \
-    DISABLED_DownloadExtensionTest_OnDeterminingFilename_InterruptedResume
-#else
-#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_InterruptedResume \
-    DownloadExtensionTest_OnDeterminingFilename_InterruptedResume
-#endif
-
+// Also flaky on Linux. http://crbug.com/700382
+// Also flaky on Mac ASAN with PlzNavigate.
 // Test download interruption while extensions determining filename. Should not
 // re-dispatch onDeterminingFilename.
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    MAYBE_DownloadExtensionTest_OnDeterminingFilename_InterruptedResume) {
+    DISABLED_DownloadExtensionTest_OnDeterminingFilename_InterruptedResume) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   GoOnTheRecord();

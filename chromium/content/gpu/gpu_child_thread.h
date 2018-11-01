@@ -36,17 +36,11 @@
 #include "ui/gfx/native_widget_types.h"
 
 namespace gpu {
-class GpuMemoryBufferFactory;
 class GpuWatchdogThread;
-}
-
-namespace sandbox {
-class TargetServices;
 }
 
 namespace content {
 class GpuServiceFactory;
-struct EstablishChannelParams;
 
 // The main thread of the GPU child process. There will only ever be one of
 // these per process. It does process initialization and shutdown. It forwards
@@ -61,37 +55,34 @@ class GpuChildThread : public ChildThreadImpl,
     std::string header;
     std::string message;
   };
-  typedef std::queue<LogMessage> DeferredMessages;
+  typedef std::vector<LogMessage> DeferredMessages;
 
   GpuChildThread(std::unique_ptr<gpu::GpuWatchdogThread> gpu_watchdog_thread,
                  bool dead_on_arrival,
                  const gpu::GPUInfo& gpu_info,
                  const gpu::GpuFeatureInfo& gpu_feature_info,
-                 const DeferredMessages& deferred_messages,
-                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
+                 DeferredMessages deferred_messages);
 
   GpuChildThread(const InProcessChildThreadParams& params,
                  const gpu::GPUInfo& gpu_info,
-                 const gpu::GpuFeatureInfo& gpu_feature_info,
-                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
+                 const gpu::GpuFeatureInfo& gpu_feature_info);
 
   ~GpuChildThread() override;
 
-  void Shutdown() override;
-
   void Init(const base::Time& process_start_time);
 
-  gpu::GpuWatchdogThread* watchdog_thread() {
-    return gpu_service_->watchdog_thread();
-  }
-
  private:
+  GpuChildThread(const ChildThreadImpl::Options& options,
+                 std::unique_ptr<gpu::GpuWatchdogThread> gpu_watchdog_thread,
+                 bool dead_on_arrival,
+                 bool in_browser_process,
+                 const gpu::GPUInfo& gpu_info,
+                 const gpu::GpuFeatureInfo& gpu_feature_info);
+
   void CreateGpuMainService(ui::mojom::GpuMainAssociatedRequest request);
 
   // ChildThreadImpl:.
   bool Send(IPC::Message* msg) override;
-  bool OnControlMessageReceived(const IPC::Message& msg) override;
-  bool OnMessageReceived(const IPC::Message& msg) override;
 
   // IPC::Listener implementation via ChildThreadImpl:
   void OnAssociatedInterfaceRequest(
@@ -101,38 +92,15 @@ class GpuChildThread : public ChildThreadImpl,
   // ui::mojom::GpuMain:
   void CreateGpuService(ui::mojom::GpuServiceRequest request,
                         ui::mojom::GpuHostPtr gpu_host,
-                        const gpu::GpuPreferences& preferences) override;
-  void CreateDisplayCompositor(
-      cc::mojom::DisplayCompositorRequest request,
-      cc::mojom::DisplayCompositorClientPtr client) override;
+                        const gpu::GpuPreferences& preferences,
+                        mojo::ScopedSharedBufferHandle activity_flags) override;
+  void CreateFrameSinkManager(
+      cc::mojom::FrameSinkManagerRequest request,
+      cc::mojom::FrameSinkManagerClientPtr client) override;
 
   // base::FieldTrialList::Observer:
   void OnFieldTrialGroupFinalized(const std::string& trial_name,
                                   const std::string& group_name) override;
-
-  // Message handlers.
-  void OnFinalize();
-  void OnCollectGraphicsInfo();
-  void OnSetVideoMemoryWindowCount(uint32_t window_count);
-
-  void OnClean();
-  void OnCrash();
-  void OnHang();
-#if defined(OS_ANDROID)
-  void OnJavaCrash();
-#endif
-  void OnGpuSwitched();
-
-  void OnEstablishChannel(const EstablishChannelParams& params);
-  void OnCloseChannel(int32_t client_id);
-  void OnLoadedShader(const std::string& shader);
-  void OnDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
-                                int client_id,
-                                const gpu::SyncToken& sync_token);
-#if defined(OS_ANDROID)
-  void OnWakeUpGpu();
-  void OnDestroyingVideoSurface(int surface_id);
-#endif
 
   void BindServiceFactoryRequest(
       service_manager::mojom::ServiceFactoryRequest request);
@@ -144,21 +112,12 @@ class GpuChildThread : public ChildThreadImpl,
   // Set this flag to true if a fatal error occurred before we receive the
   // OnInitialize message, in which case we just declare ourselves DOA.
   const bool dead_on_arrival_;
-  base::Time process_start_time_;
-
-#if defined(OS_WIN)
-  // Windows specific client sandbox interface.
-  sandbox::TargetServices* target_services_;
-#endif
-
-  // Information about the GPU, such as device and vendor ID.
-  gpu::GPUInfo gpu_info_;
 
   // Error messages collected in gpu_main() before the thread is created.
   DeferredMessages deferred_messages_;
 
   // Whether the GPU thread is running in the browser process.
-  bool in_browser_process_;
+  const bool in_browser_process_;
 
   // ServiceFactory for service_manager::Service hosting.
   std::unique_ptr<GpuServiceFactory> service_factory_;

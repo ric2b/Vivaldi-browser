@@ -37,9 +37,9 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
 // FIXME: Document should have a constructor. crbug.com/238234
 interface Document : Node {
     [SameObject] readonly attribute DOMImplementation implementation;
-    readonly attribute DOMString URL;
+    [ImplementedAs=urlForBinding] readonly attribute DOMString URL;
     // FIXME: documentURI should not be nullable.
-    [ImplementedAs=url] readonly attribute DOMString? documentURI;
+    [ImplementedAs=urlForBinding] readonly attribute DOMString? documentURI;
     [MeasureAs=DocumentOrigin] readonly attribute DOMString origin;
     [RuntimeEnabled=suborigins] readonly attribute DOMString suborigin;
     readonly attribute DOMString compatMode;
@@ -156,19 +156,18 @@ interface Document : Node {
 
     // Touch Events
     // https://w3c.github.io/touch-events/#extensions-to-the-document-interface
-    // FIXME: The arguments should not be optional.
     [RuntimeEnabled=TouchEventFeatureDetection, Measure, LegacyInterfaceTypeChecking, Custom=CallPrologue]
-    Touch createTouch([Default=Undefined] optional Window window,
-                      [Default=Undefined] optional EventTarget target,
-                      [Default=Undefined] optional long identifier,
-                      [Default=Undefined] optional unrestricted double pageX,
-                      [Default=Undefined] optional unrestricted double pageY,
-                      [Default=Undefined] optional unrestricted double screenX,
-                      [Default=Undefined] optional unrestricted double screenY,
-                      [Default=Undefined] optional unrestricted double radiusX,
-                      [Default=Undefined] optional unrestricted double radiusY,
-                      [Default=Undefined] optional unrestricted float rotationAngle,
-                      [Default=Undefined] optional unrestricted float force);
+    Touch createTouch(Window view,
+                      EventTarget target,
+                      long identifier,
+                      double pageX,
+                      double pageY,
+                      double screenX,
+                      double screenY,
+                      optional unrestricted double radiusX = 0,
+                      optional unrestricted double radiusY = 0,
+                      optional unrestricted float rotationAngle = 0,
+                      optional unrestricted float force = 0);
     [RuntimeEnabled=TouchEventFeatureDetection] TouchList createTouchList(Touch... touches);
 
     // Custom Elements

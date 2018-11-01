@@ -25,33 +25,40 @@
 
 #include "web/StorageClientImpl.h"
 
-#include "modules/storage/StorageNamespace.h"
-#include "public/platform/WebStorageNamespace.h"
-#include "public/web/WebContentSettingsClient.h"
-#include "public/web/WebViewClient.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/WebViewImpl.h"
-#include "wtf/PtrUtil.h"
 #include <memory>
+#include "core/frame/ContentSettingsClient.h"
+#include "modules/storage/StorageNamespace.h"
+#include "platform/wtf/PtrUtil.h"
+#include "public/platform/WebStorageNamespace.h"
+#include "public/web/WebViewClient.h"
+#include "web/WebViewImpl.h"
 
 namespace blink {
 
-StorageClientImpl::StorageClientImpl(WebViewImpl* webView)
-    : m_webView(webView) {}
+#define STATIC_ASSERT_MATCHING_ENUM(enum_name1, enum_name2)                   \
+  static_assert(static_cast<int>(enum_name1) == static_cast<int>(enum_name2), \
+                "mismatching enums: " #enum_name1)
+STATIC_ASSERT_MATCHING_ENUM(kLocalStorage,
+                            ContentSettingsClient::StorageType::kLocal);
+STATIC_ASSERT_MATCHING_ENUM(kSessionStorage,
+                            ContentSettingsClient::StorageType::kSession);
+
+StorageClientImpl::StorageClientImpl(WebViewImpl* web_view)
+    : web_view_(web_view) {}
 
 std::unique_ptr<StorageNamespace>
-StorageClientImpl::createSessionStorageNamespace() {
-  if (!m_webView->client())
+StorageClientImpl::CreateSessionStorageNamespace() {
+  if (!web_view_->Client())
     return nullptr;
-  return WTF::wrapUnique(new StorageNamespace(
-      WTF::wrapUnique(m_webView->client()->createSessionStorageNamespace())));
+  return WTF::WrapUnique(new StorageNamespace(
+      WTF::WrapUnique(web_view_->Client()->CreateSessionStorageNamespace())));
 }
 
-bool StorageClientImpl::canAccessStorage(LocalFrame* frame,
+bool StorageClientImpl::CanAccessStorage(LocalFrame* frame,
                                          StorageType type) const {
-  WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(frame);
-  return !webFrame->contentSettingsClient() ||
-         webFrame->contentSettingsClient()->allowStorage(type == LocalStorage);
+  DCHECK(frame->GetContentSettingsClient());
+  return frame->GetContentSettingsClient()->AllowStorage(
+      static_cast<ContentSettingsClient::StorageType>(type));
 }
 
 }  // namespace blink

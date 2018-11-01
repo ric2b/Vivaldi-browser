@@ -72,6 +72,10 @@ def depending_union_type(idl_type):
     def find_base_type(current_type):
         if current_type.is_array_or_sequence_type:
             return find_base_type(current_type.element_type)
+        if current_type.is_record_type:
+            # IdlRecordType.key_type is always a string type, so we only need
+            # to looking into value_type.
+            return find_base_type(current_type.value_type)
         if current_type.is_nullable:
             return find_base_type(current_type.inner_type)
         return current_type
@@ -287,12 +291,20 @@ class CodeGeneratorUnionType(CodeGeneratorBase):
     def __init__(self, info_provider, cache_dir, output_dir, target_component):
         CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir)
         self.target_component = target_component
+        # The code below duplicates parts of TypedefResolver. We do not use it
+        # directly because IdlUnionType is not a type defined in
+        # idl_definitions.py. What we do instead is to resolve typedefs in
+        # _generate_container_code() whenever a new union file is generated.
+        self.typedefs = {}
+        for name, typedef in self.info_provider.typedefs.iteritems():
+            self.typedefs[name] = typedef.idl_type
 
     def _generate_container_code(self, union_type):
+        union_type = union_type.resolve_typedefs(self.typedefs)
         header_template = self.jinja_env.get_template('union_container.h.tmpl')
         cpp_template = self.jinja_env.get_template('union_container.cpp.tmpl')
         template_context = v8_union.container_context(
-            union_type, self.info_provider.interfaces_info)
+            union_type, self.info_provider)
         template_context['header_includes'].append(
             self.info_provider.include_path_for_export)
         template_context['header_includes'] = normalize_and_sort_includes(

@@ -202,10 +202,12 @@ StartupTabs StartupTabProviderImpl::GetWin10OnboardingTabsForState(
   if (set_default_browser_allowed && !has_seen_win10_promo &&
       !is_default_browser) {
     tabs.emplace_back(GetWin10WelcomePageUrl(!is_first_run), false);
-  } else if (!has_seen_welcome_page && is_signin_allowed && !is_signed_in) {
-    tabs.emplace_back(GetWelcomePageUrl(!is_first_run), false);
+    return tabs;
   }
-  return tabs;
+
+  return GetStandardOnboardingTabsForState(is_first_run, has_seen_welcome_page,
+                                           is_signin_allowed, is_signed_in,
+                                           is_supervised_user);
 }
 #endif
 
@@ -282,8 +284,6 @@ StartupTabs StartupTabProviderImpl::GetNewTabPageTabsForState(
 
 // static
 GURL StartupTabProviderImpl::GetWelcomePageUrl(bool use_later_run_variant) {
-  // Record that the Welcome page was added to the startup url list.
-  UMA_HISTOGRAM_BOOLEAN("Welcome.Win10.NewPromoPageAdded", true);
   GURL url(chrome::kChromeUIWelcomeURL);
   if (vivaldi::IsVivaldiRunning()) {
     // 'use_later_run_variant' is true with '--no-first-run' cmd line option
@@ -301,6 +301,8 @@ GURL StartupTabProviderImpl::GetWelcomePageUrl(bool use_later_run_variant) {
 // static
 GURL StartupTabProviderImpl::GetWin10WelcomePageUrl(
     bool use_later_run_variant) {
+  // Record that the Welcome page was added to the startup url list.
+  UMA_HISTOGRAM_BOOLEAN("Welcome.Win10.NewPromoPageAdded", true);
   GURL url(chrome::kChromeUIWelcomeWin10URL);
   return use_later_run_variant
              ? net::AppendQueryParameter(url, "text", "faster")

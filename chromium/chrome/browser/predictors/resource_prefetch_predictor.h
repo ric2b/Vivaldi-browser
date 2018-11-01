@@ -26,6 +26,7 @@
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/precache/content/precache_manager.h"
 #include "content/public/common/resource_type.h"
 #include "url/gurl.h"
 
@@ -100,8 +101,22 @@ class ResourcePrefetcherManager;
 class ResourcePrefetchPredictor
     : public KeyedService,
       public history::HistoryServiceObserver,
-      public base::SupportsWeakPtr<ResourcePrefetchPredictor> {
+      public base::SupportsWeakPtr<ResourcePrefetchPredictor>,
+      public precache::PrecacheManager::Delegate {
  public:
+  // Data collected for origin-based prediction, for a single origin during a
+  // page load (see PageRequestSummary).
+  struct OriginRequestSummary {
+    OriginRequestSummary();
+    OriginRequestSummary(const OriginRequestSummary& other);
+    ~OriginRequestSummary();
+
+    GURL origin;
+    bool always_access_network;
+    bool accessed_network;
+    int first_occurrence;
+  };
+
   // Stores the data that we need to get from the URLRequest.
   struct URLRequestSummary {
     URLRequestSummary();
@@ -110,6 +125,7 @@ class ResourcePrefetchPredictor
 
     NavigationID navigation_id;
     GURL resource_url;
+    GURL request_url;  // URL after all redirects.
     content::ResourceType resource_type;
     net::RequestPriority priority;
 
@@ -120,6 +136,8 @@ class ResourcePrefetchPredictor
 
     bool has_validators;
     bool always_revalidate;
+    bool is_no_store;
+    bool network_accessed;
 
     // Initializes a |URLRequestSummary| from a |URLRequest| response.
     // Returns true for success. Note: NavigationID is NOT initialized
@@ -140,6 +158,9 @@ class ResourcePrefetchPredictor
     // Stores all subresource requests within a single navigation, from initial
     // main frame request to navigation completion.
     std::vector<URLRequestSummary> subresource_requests;
+    // Map of origin -> OriginRequestSummary. Only one instance of each origin
+    // is kept per navigation, but the summary is updated several times.
+    std::map<GURL, OriginRequestSummary> origins;
   };
 
   // Stores a result of prediction. Essentially, |subresource_urls| is main
@@ -220,6 +241,14 @@ class ResourcePrefetchPredictor
   // Returns true if prefetching data exists for the |main_frame_url|.
   virtual bool IsUrlPrefetchable(const GURL& main_frame_url);
 
+  // Returns true iff |resource| has sufficient confidence level and required
+  // number of hits.
+  bool IsResourcePrefetchable(const ResourceData& resource) const;
+
+  // precache::PrecacheManager::Delegate:
+  void OnManifestFetched(const std::string& host,
+                         const precache::PrecacheManifest& manifest) override;
+
   // Sets the |observer| to be notified when the resource prefetch predictor
   // data changes. Previously registered observer will be discarded. Call
   // this with nullptr parameter to de-register observer.
@@ -243,6 +272,10 @@ class ResourcePrefetchPredictor
                            NavigationUrlNotInDBAndDBFull);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, RedirectUrlNotInDB);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, RedirectUrlInDB);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, ManifestHostNotInDB);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, ManifestHostInDB);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
+                           ManifestHostNotInDBAndDBFull);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, OnMainFrameRequest);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, OnMainFrameRedirect);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
@@ -265,6 +298,8 @@ class ResourcePrefetchPredictor
   };
   typedef ResourcePrefetchPredictorTables::PrefetchDataMap PrefetchDataMap;
   typedef ResourcePrefetchPredictorTables::RedirectDataMap RedirectDataMap;
+  typedef ResourcePrefetchPredictorTables::ManifestDataMap ManifestDataMap;
+  typedef ResourcePrefetchPredictorTables::OriginDataMap OriginDataMap;
 
   typedef std::map<NavigationID, std::unique_ptr<PageRequestSummary>>
       NavigationMap;
@@ -281,13 +316,9 @@ class ResourcePrefetchPredictor
                                     const std::string& mime_type);
 
   // Returns true if the request (should have a response in it) is "no-store".
-  static bool IsNoStore(const net::URLRequest* request);
+  static bool IsNoStore(const net::URLRequest& request);
 
-  // Returns true iff |redirect_data_map| contains confident redirect endpoint
-  // for |entry_point| and assigns it to the |redirect_endpoint|.
-  static bool GetRedirectEndpoint(const std::string& entry_point,
-                                  const RedirectDataMap& redirect_data_map,
-                                  std::string* redirect_endpoint);
+  static void SetAllowPortInUrlsForTesting(bool state);
 
   // KeyedService methods override.
   void Shutdown() override;
@@ -298,11 +329,22 @@ class ResourcePrefetchPredictor
   void OnMainFrameResponse(const URLRequestSummary& response);
   void OnMainFrameRedirect(const URLRequestSummary& response);
   void OnSubresourceResponse(const URLRequestSummary& response);
+  void OnSubresourceRedirect(const URLRequestSummary& response);
 
   // Called when onload completes for a navigation. We treat this point as the
   // "completion" of the navigation. The resources requested by the page up to
   // this point are the only ones considered for prefetching.
   void OnNavigationComplete(const NavigationID& nav_id_without_timing_info);
+
+  // Returns true iff one of the following conditions is true
+  // * |redirect_data_map| contains confident redirect endpoint for
+  //   |entry_point| and assigns it to the |redirect_endpoint|
+  //
+  // * |redirect_data_map| doens't contain an entry for |entry_point| and
+  //   assings |entry_point| to the |redirect_endpoint|.
+  bool GetRedirectEndpoint(const std::string& entry_point,
+                           const RedirectDataMap& redirect_data_map,
+                           std::string* redirect_endpoint) const;
 
   // Returns true iff there is PrefetchData that can be used for a
   // |main_frame_url| and fills |prediction| with resources that need to be
@@ -323,7 +365,9 @@ class ResourcePrefetchPredictor
   void CreateCaches(std::unique_ptr<PrefetchDataMap> url_data_map,
                     std::unique_ptr<PrefetchDataMap> host_data_map,
                     std::unique_ptr<RedirectDataMap> url_redirect_data_map,
-                    std::unique_ptr<RedirectDataMap> host_redirect_data_map);
+                    std::unique_ptr<RedirectDataMap> host_redirect_data_map,
+                    std::unique_ptr<ManifestDataMap> manifest_data_map,
+                    std::unique_ptr<OriginDataMap> origin_data_map);
 
   // Called during initialization when history is read and the predictor
   // database has been read.
@@ -352,6 +396,9 @@ class ResourcePrefetchPredictor
   void RemoveOldestEntryInRedirectDataMap(PrefetchKeyType key_type,
                                           RedirectDataMap* data_map);
 
+  void RemoveOldestEntryInManifestDataMap(ManifestDataMap* data_map);
+  void RemoveOldestEntryInOriginDataMap(OriginDataMap* data_map);
+
   // Merges resources in |new_resources| into the |data_map| and correspondingly
   // updates the predictor database. Also calls LearnRedirect if relevant.
   void LearnNavigation(const std::string& key,
@@ -370,9 +417,10 @@ class ResourcePrefetchPredictor
                      size_t max_redirect_map_size,
                      RedirectDataMap* redirect_map);
 
-  // Returns true iff |resource| has sufficient confidence level and required
-  // number of hits.
-  bool IsResourcePrefetchable(const ResourceData& resource) const;
+  void LearnOrigins(const std::string& host,
+                    const std::map<GURL, OriginRequestSummary>& summaries,
+                    size_t max_data_map_size,
+                    OriginDataMap* data_map);
 
   // Reports database readiness metric defined as percentage of navigated hosts
   // found in DB for last X entries in history.
@@ -409,6 +457,8 @@ class ResourcePrefetchPredictor
   std::unique_ptr<PrefetchDataMap> host_table_cache_;
   std::unique_ptr<RedirectDataMap> url_redirect_table_cache_;
   std::unique_ptr<RedirectDataMap> host_redirect_table_cache_;
+  std::unique_ptr<ManifestDataMap> manifest_table_cache_;
+  std::unique_ptr<OriginDataMap> origin_table_cache_;
 
   std::map<GURL, base::TimeTicks> inflight_prefetches_;
   NavigationMap inflight_navigations_;

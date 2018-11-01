@@ -6,7 +6,7 @@
 #define PaymentAppRequestConversion_h
 
 #include "modules/payments/PaymentAppRequest.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -17,7 +17,7 @@ class MODULES_EXPORT PaymentAppRequestConversion {
   STATIC_ONLY(PaymentAppRequestConversion);
 
  public:
-  static PaymentAppRequest toPaymentAppRequest(ScriptState*,
+  static PaymentAppRequest ToPaymentAppRequest(ScriptState*,
                                                const WebPaymentAppRequest&);
 };
 

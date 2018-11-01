@@ -8,10 +8,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/core/infobar.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
+#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -22,13 +24,28 @@ void SubresourceFilterInfobarDelegate::Create(InfoBarService* infobar_service) {
 }
 
 SubresourceFilterInfobarDelegate::SubresourceFilterInfobarDelegate()
-    : ConfirmInfoBarDelegate() {}
+    : ConfirmInfoBarDelegate(),
+      using_experimental_infobar_(base::FeatureList::IsEnabled(
+          subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI)) {}
 
 SubresourceFilterInfobarDelegate::~SubresourceFilterInfobarDelegate() {}
 
 base::string16 SubresourceFilterInfobarDelegate::GetExplanationText() const {
   return l10n_util::GetStringUTF16(
       IDS_FILTERED_DECEPTIVE_CONTENT_PROMPT_EXPLANATION);
+}
+
+// TODO(csharrison): For the time being the experimental infobar will use the
+// PROMPT_RELOAD string for the toggle text. Update this when launch strings are
+// finalized.
+base::string16 SubresourceFilterInfobarDelegate::GetToggleText() const {
+  DCHECK(using_experimental_infobar_);
+  return l10n_util::GetStringUTF16(
+      IDS_FILTERED_DECEPTIVE_CONTENT_PROMPT_RELOAD);
+}
+
+bool SubresourceFilterInfobarDelegate::ShouldShowExperimentalInfobar() const {
+  return using_experimental_infobar_;
 }
 
 infobars::InfoBarDelegate::InfoBarIdentifier
@@ -50,9 +67,13 @@ int SubresourceFilterInfobarDelegate::GetButtons() const {
 
 base::string16 SubresourceFilterInfobarDelegate::GetButtonLabel(
     InfoBarButton button) const {
+  if (button == BUTTON_OK)
+    return l10n_util::GetStringUTF16(IDS_OK);
+
   return l10n_util::GetStringUTF16(
-      (button == BUTTON_OK) ? IDS_OK
-                            : IDS_FILTERED_DECEPTIVE_CONTENT_PROMPT_RELOAD);
+      using_experimental_infobar_
+          ? IDS_APP_MENU_RELOAD
+          : IDS_FILTERED_DECEPTIVE_CONTENT_PROMPT_RELOAD);
 }
 
 bool SubresourceFilterInfobarDelegate::Cancel() {
@@ -62,4 +83,10 @@ bool SubresourceFilterInfobarDelegate::Cancel() {
       web_contents)
       ->OnReloadRequested();
   return true;
+}
+
+bool SubresourceFilterInfobarDelegate::LinkClicked(
+    WindowOpenDisposition disposition) {
+  ChromeSubresourceFilterClient::LogAction(kActionDetailsShown);
+  return false;
 }

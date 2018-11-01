@@ -70,7 +70,7 @@ class ExtensionManagement : public KeyedService {
     INSTALLATION_RECOMMENDED,
   };
 
-  explicit ExtensionManagement(PrefService* pref_service);
+  ExtensionManagement(PrefService* pref_service, bool is_signin_profile);
   ~ExtensionManagement() override;
 
   // KeyedService implementations:
@@ -114,6 +114,16 @@ class ExtensionManagement : public KeyedService {
   // Returns the list of blocked API permissions for |extension|.
   APIPermissionSet GetBlockedAPIPermissions(const Extension* extension) const;
 
+  // Returns the list of hosts blocked by policy for |extension|.
+  const URLPatternSet& GetRuntimeBlockedHosts(const Extension* extension) const;
+
+  // Returns the list of hosts |extension| is limited to by policy.
+  const URLPatternSet& GetRuntimeAllowedHosts(const Extension* extension) const;
+
+  // Checks if a URL is on the blocked host permissions list for a specific
+  // extension.
+  bool IsBlockedHost(const Extension* extension, const GURL& url) const;
+
   // Returns blocked permission set for |extension|.
   std::unique_ptr<const PermissionSet> GetBlockedPermissions(
       const Extension* extension) const;
@@ -153,6 +163,14 @@ class ExtensionManagement : public KeyedService {
   void OnExtensionPrefChanged();
   void NotifyExtensionManagementPrefChanged();
 
+  // Helper to return an extension install list, in format specified by
+  // ExternalPolicyLoader::AddExtension().
+  std::unique_ptr<base::DictionaryValue> GetInstallListByMode(
+      InstallationMode installation_mode) const;
+
+  // Helper to update |extension_dict| for forced installs.
+  void UpdateForcedExtensions(const base::DictionaryValue* extension_dict);
+
   // Helper function to access |settings_by_id_| with |id| as key.
   // Adds a new IndividualSettings entry to |settings_by_id_| if none exists for
   // |id| yet.
@@ -183,7 +201,8 @@ class ExtensionManagement : public KeyedService {
   // Extension settings applicable to all extensions.
   std::unique_ptr<internal::GlobalSettings> global_settings_;
 
-  PrefService* pref_service_;
+  PrefService* pref_service_ = nullptr;
+  bool is_signin_profile_ = false;
 
   base::ObserverList<Observer, true> observer_list_;
   PrefChangeRegistrar pref_change_registrar_;

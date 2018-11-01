@@ -29,6 +29,7 @@
 import base64
 import time
 
+from webkitpy.common import exit_codes
 from webkitpy.common.system.crash_logs import CrashLogs
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
@@ -49,7 +50,7 @@ class TestInstance(object):
 
     def __init__(self, name):
         self.name = name
-        self.base = name[(name.rfind("/") + 1):name.rfind(".")]
+        self.base = name[(name.rfind('/') + 1):name.rfind('.')]
         self.crash = False
         self.web_process_crash = False
         self.exception = False
@@ -109,7 +110,7 @@ class TestList(object):
 #
 # These numbers may need to be updated whenever we add or delete tests. This includes virtual tests.
 #
-TOTAL_TESTS = 106
+TOTAL_TESTS = 108
 TOTAL_WONTFIX = 3
 TOTAL_SKIPS = 22 + TOTAL_WONTFIX
 TOTAL_CRASHES = 76
@@ -140,11 +141,11 @@ def unit_test_list():
               actual_checksum=None)
     tests.add('failures/expected/keyboard.html', keyboard=True)
     tests.add('failures/expected/newlines_leading.html',
-              expected_text="\nfoo\n", actual_text="foo\n")
+              expected_text='\nfoo\n', actual_text='foo\n')
     tests.add('failures/expected/newlines_trailing.html',
-              expected_text="foo\n\n", actual_text="foo\n")
+              expected_text='foo\n\n', actual_text='foo\n')
     tests.add('failures/expected/newlines_with_excess_CR.html',
-              expected_text="foo\r\r\r\n", actual_text="foo\n")
+              expected_text='foo\r\r\r\n', actual_text='foo\n')
     tests.add('failures/expected/text.html', actual_text='text_fail-png')
     tests.add('failures/expected/crash_then_text.html')
     tests.add('failures/expected/skip_text.html', actual_text='text diff')
@@ -162,9 +163,9 @@ layer at (0,0) size 800x34
 """, expected_text=None)
     tests.add('failures/unexpected/crash.html', crash=True)
     tests.add('failures/unexpected/crash-with-stderr.html', crash=True,
-              error="mock-std-error-output")
+              error='mock-std-error-output')
     tests.add('failures/unexpected/web-process-crash-with-stderr.html', web_process_crash=True,
-              error="mock-std-error-output")
+              error='mock-std-error-output')
     tests.add('failures/unexpected/pass.html')
     tests.add('failures/unexpected/text-checksum.html',
               actual_text='text-checksum_fail-txt',
@@ -265,6 +266,7 @@ layer at (0,0) size 800x34
     tests.add('passes/test-virtual-passes.html')
     tests.add('passes/virtual_passes/test-virtual-passes.html')
 
+    tests.add('passes_two/test-virtual-passes.html')
     return tests
 
 
@@ -430,9 +432,6 @@ class TestPort(Port):
     def buildbot_archives_baselines(self):
         return self._name != 'test-win-win7'
 
-    def default_pixel_tests(self):
-        return True
-
     def _path_to_driver(self):
         # This routine shouldn't normally be called, but it is called by
         # the mock_drt Driver. We return something, but make sure it's useless.
@@ -442,10 +441,10 @@ class TestPort(Port):
         return 1
 
     def check_build(self, needs_http, printer):
-        return test_run_results.OK_EXIT_STATUS
+        return exit_codes.OK_EXIT_STATUS
 
     def check_sys_deps(self, needs_http):
-        return test_run_results.OK_EXIT_STATUS
+        return exit_codes.OK_EXIT_STATUS
 
     def default_configuration(self):
         return 'Release'
@@ -457,7 +456,7 @@ class TestPort(Port):
         if not actual_contents or not expected_contents:
             return (True, None)
         if diffed:
-            return ("< %s\n---\n> %s\n" % (expected_contents, actual_contents), None)
+            return ('< %s\n---\n> %s\n' % (expected_contents, actual_contents), None)
         return (None, None)
 
     def layout_tests_dir(self):
@@ -508,7 +507,7 @@ class TestPort(Port):
         pass
 
     def path_to_apache(self):
-        return "/usr/sbin/httpd"
+        return '/usr/sbin/httpd'
 
     def path_to_apache_config_file(self):
         return self._filesystem.join(self.apache_config_directory(), 'httpd.conf')
@@ -535,6 +534,7 @@ class TestPort(Port):
     def virtual_test_suites(self):
         return [
             VirtualTestSuite(prefix='virtual_passes', base='passes', args=['--virtual-arg']),
+            VirtualTestSuite(prefix='virtual_passes', base='passes_two', args=['--virtual-arg']),
             VirtualTestSuite(prefix='skipped', base='failures/expected', args=['--virtual-arg2']),
             VirtualTestSuite(prefix='references_use_default_args', base='passes/reftest.html',
                              args=['--virtual-arg'], references_use_default_args=True),

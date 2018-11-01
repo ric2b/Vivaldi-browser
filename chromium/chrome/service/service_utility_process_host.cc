@@ -275,7 +275,9 @@ bool ServiceUtilityProcessHost::Launch(base::CommandLine* cmd_line,
   }
 
   if (success)
-    process_connection_.Connect(process_.Handle(), std::move(parent_handle));
+    process_connection_.Connect(
+        process_.Handle(),
+        mojo::edk::ConnectionParams(std::move(parent_handle)));
 
   return success;
 }
@@ -328,6 +330,12 @@ bool ServiceUtilityProcessHost::OnMessageReceived(const IPC::Message& message) {
 
 const base::Process& ServiceUtilityProcessHost::GetProcess() const {
   return process_;
+}
+
+void ServiceUtilityProcessHost::BindInterface(
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  child_process_host_->BindInterface(interface_name, std::move(interface_pipe));
 }
 
 void ServiceUtilityProcessHost::OnMetafileSpooled(bool success) {

@@ -9,6 +9,9 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#if defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
+#include "components/safe_browsing/password_protection/password_protection_service.h"
+#endif
 
 namespace password_manager {
 
@@ -60,6 +63,13 @@ void PasswordReuseDetectionManager::OnReuseFound(
   metrics_util::LogPasswordReuse(
       password.size(), saved_passwords, number_matches,
       client_->GetPasswordManager()->IsPasswordFieldDetectedOnPage());
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  // TODO(jialiul): After CSD whitelist being added to Android, we should gate
+  // this by either SAFE_BROWSING_DB_LOCAL or SAFE_BROWSING_DB_REMOTE.
+  safe_browsing::PasswordProtectionService* password_protection_service =
+      client_->GetPasswordProtectionService();
+  password_protection_service->RecordPasswordReuse(main_frame_url_);
+#endif
 }
 
 }  // namespace password_manager

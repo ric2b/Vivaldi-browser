@@ -12,11 +12,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon/core/test/mock_favicon_service.h"
-#include "components/reading_list/ios/reading_list_model.h"
-#include "components/reading_list/ios/reading_list_model_impl.h"
-#include "components/reading_list/ios/reading_list_model_storage.h"
+#include "components/reading_list/core/reading_list_model.h"
+#include "components/reading_list/core/reading_list_model_impl.h"
+#include "components/reading_list/core/reading_list_model_storage.h"
 #include "components/url_formatter/url_formatter.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
@@ -56,9 +57,11 @@ class ReadingListCollectionViewControllerTest : public testing::Test {
                 GetLargestRawFaviconForPageURL(_, _, _, _, _))
         .WillRepeatedly(PostReply<5>(favicon_base::FaviconRawBitmapResult()));
 
-    reading_list_model_.reset(new ReadingListModelImpl(nullptr, nullptr));
+    reading_list_model_.reset(new ReadingListModelImpl(
+        nullptr, nullptr, base::MakeUnique<base::DefaultClock>()));
     large_icon_service_.reset(new favicon::LargeIconService(
-        &mock_favicon_service_, base::ThreadTaskRunnerHandle::Get()));
+        &mock_favicon_service_, base::ThreadTaskRunnerHandle::Get(),
+        /*image_fetcher=*/nullptr));
     reading_list_view_controller_.reset(
         [[ReadingListCollectionViewController alloc]
                          initWithModel:reading_list_model_.get()
@@ -168,12 +171,13 @@ TEST_F(ReadingListCollectionViewControllerTest,
       base::mac::ObjCCastStrict<ReadingListCollectionViewItem>(
           [[reading_list_view_controller_ collectionViewModel]
               itemAtIndexPath:indexPath]);
-  EXPECT_EQ(base::SysNSStringToUTF8([readingListItem text]), title);
+  EXPECT_EQ(base::SysNSStringToUTF8([readingListItem title]), title);
   EXPECT_EQ([readingListItem url], url);
-  EXPECT_EQ(base::SysNSStringToUTF16([readingListItem detailText]),
+  EXPECT_EQ(base::SysNSStringToUTF16([readingListItem subtitle]),
             url_formatter::FormatUrl(url));
   EXPECT_EQ([readingListItem faviconPageURL], url);
-  EXPECT_EQ([readingListItem distillationState], ReadingListEntry::WAITING);
+  EXPECT_EQ([readingListItem distillationState],
+            ReadingListUIDistillationStatusPending);
 }
 
 // Tests that the ReadingListCollectionView is creating
@@ -190,7 +194,7 @@ TEST_F(ReadingListCollectionViewControllerTest,
                                 reading_list::ADDED_VIA_CURRENT_APP);
   int64_t size = 50;
   reading_list_model_->SetEntryDistilledInfo(url, distilled_path, distilled_url,
-                                             size, 100);
+                                             size, base::Time::FromTimeT(100));
   // Load view.
   [reading_list_view_controller_ view];
   DCHECK([reading_list_view_controller_.get().collectionView
@@ -200,10 +204,11 @@ TEST_F(ReadingListCollectionViewControllerTest,
       base::mac::ObjCCastStrict<ReadingListCollectionViewItem>(
           [[reading_list_view_controller_ collectionViewModel]
               itemAtIndexPath:indexPath]);
-  EXPECT_EQ(base::SysNSStringToUTF8([readingListItem text]), title);
+  EXPECT_EQ(base::SysNSStringToUTF8([readingListItem title]), title);
   EXPECT_EQ([readingListItem url], url);
-  EXPECT_EQ(base::SysNSStringToUTF16([readingListItem detailText]),
+  EXPECT_EQ(base::SysNSStringToUTF16([readingListItem subtitle]),
             url_formatter::FormatUrl(url));
   EXPECT_EQ([readingListItem faviconPageURL], distilled_url);
-  EXPECT_EQ([readingListItem distillationState], ReadingListEntry::PROCESSED);
+  EXPECT_EQ([readingListItem distillationState],
+            ReadingListUIDistillationStatusSuccess);
 }

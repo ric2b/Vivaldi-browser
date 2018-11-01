@@ -17,8 +17,7 @@
 #include "device/usb/public/interfaces/device.mojom.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_handle.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace device {
 namespace usb {
@@ -30,13 +29,16 @@ class PermissionProvider;
 // lifetime.
 class DeviceImpl : public Device, public device::UsbDevice::Observer {
  public:
-  DeviceImpl(scoped_refptr<UsbDevice> device,
-             DeviceInfoPtr device_info,
-             base::WeakPtr<PermissionProvider> permission_provider,
-             DeviceRequest request);
+  static void Create(scoped_refptr<UsbDevice> device,
+                     base::WeakPtr<PermissionProvider> permission_provider,
+                     DeviceRequest request);
+
   ~DeviceImpl() override;
 
  private:
+  DeviceImpl(scoped_refptr<UsbDevice> device,
+             base::WeakPtr<PermissionProvider> permission_provider);
+
   // Closes the device if it's open. This will always set |device_handle_| to
   // null.
   void CloseHandle();
@@ -46,12 +48,12 @@ class DeviceImpl : public Device, public device::UsbDevice::Observer {
                                     uint16_t index);
 
   // Handles completion of an open request.
-  void OnOpen(const OpenCallback& callback,
-              scoped_refptr<device::UsbDeviceHandle> handle);
+  static void OnOpen(base::WeakPtr<DeviceImpl> device,
+                     const OpenCallback& callback,
+                     scoped_refptr<device::UsbDeviceHandle> handle);
   void OnPermissionGrantedForOpen(const OpenCallback& callback, bool granted);
 
   // Device implementation:
-  void GetDeviceInfo(const GetDeviceInfoCallback& callback) override;
   void Open(const OpenCallback& callback) override;
   void Close(const CloseCallback& callback) override;
   void SetConfiguration(uint8_t value,
@@ -98,7 +100,6 @@ class DeviceImpl : public Device, public device::UsbDevice::Observer {
   void OnDeviceRemoved(scoped_refptr<device::UsbDevice> device) override;
 
   const scoped_refptr<UsbDevice> device_;
-  const DeviceInfoPtr device_info_;
   base::WeakPtr<PermissionProvider> permission_provider_;
   ScopedObserver<device::UsbDevice, device::UsbDevice::Observer> observer_;
 
@@ -106,7 +107,7 @@ class DeviceImpl : public Device, public device::UsbDevice::Observer {
   // has been closed.
   scoped_refptr<UsbDeviceHandle> device_handle_;
 
-  mojo::Binding<Device> binding_;
+  mojo::StrongBindingPtr<Device> binding_;
   base::WeakPtrFactory<DeviceImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceImpl);

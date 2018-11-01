@@ -418,7 +418,7 @@ TEST_F(V8ValueConverterImplTest, WeirdTypes) {
 
   converter.SetRegExpAllowed(true);
   TestWeirdType(converter, regex, base::Value::Type::STRING,
-                std::unique_ptr<base::Value>(new base::StringValue("/./")));
+                std::unique_ptr<base::Value>(new base::Value("/./")));
 }
 
 TEST_F(V8ValueConverterImplTest, Prototype) {
@@ -814,7 +814,7 @@ TEST_F(V8ValueConverterImplTest, DetectCycles) {
 
   // The first repetition should be trimmed and replaced by a null value.
   base::ListValue expected_list;
-  expected_list.Append(base::Value::CreateNullValue());
+  expected_list.Append(base::MakeUnique<base::Value>());
 
   // The actual result.
   std::unique_ptr<base::Value> actual_list(
@@ -835,7 +835,7 @@ TEST_F(V8ValueConverterImplTest, DetectCycles) {
 
   // The first repetition should be trimmed and replaced by a null value.
   base::DictionaryValue expected_dictionary;
-  expected_dictionary.Set(key, base::Value::CreateNullValue());
+  expected_dictionary.Set(key, base::MakeUnique<base::Value>());
 
   // The actual result.
   std::unique_ptr<base::Value> actual_dictionary(
@@ -1021,7 +1021,7 @@ class V8ValueConverterOverridingStrategyForTesting
 
  private:
   static std::unique_ptr<base::Value> NewReferenceValue() {
-    return base::MakeUnique<base::StringValue>("strategy");
+    return base::MakeUnique<base::Value>("strategy");
   }
   std::unique_ptr<base::Value> reference_value_;
 };
@@ -1148,8 +1148,7 @@ TEST_F(V8ValueConverterImplTest, StrategyBypass) {
       converter.FromV8Value(array_buffer, context));
   ASSERT_TRUE(binary_value);
   std::unique_ptr<base::Value> reference_binary_value(
-      base::BinaryValue::CreateWithCopiedBuffer(kExampleData,
-                                                sizeof(kExampleData)));
+      base::Value::CreateWithCopiedBuffer(kExampleData, sizeof(kExampleData)));
   EXPECT_TRUE(
       base::Value::Equals(reference_binary_value.get(), binary_value.get()));
 
@@ -1159,7 +1158,7 @@ TEST_F(V8ValueConverterImplTest, StrategyBypass) {
       converter.FromV8Value(array_buffer_view, context));
   ASSERT_TRUE(binary_view_value);
   std::unique_ptr<base::Value> reference_binary_view_value(
-      base::BinaryValue::CreateWithCopiedBuffer(&kExampleData[1], 3));
+      base::Value::CreateWithCopiedBuffer(&kExampleData[1], 3));
   EXPECT_TRUE(base::Value::Equals(reference_binary_view_value.get(),
                                   binary_view_value.get()));
 

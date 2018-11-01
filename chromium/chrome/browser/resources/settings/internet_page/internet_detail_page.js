@@ -113,6 +113,12 @@ Polymer({
     /** @private */
     advancedExpanded_: Boolean,
 
+    /** @private */
+    networkExpanded_: Boolean,
+
+    /** @private */
+    proxyExpanded_: Boolean,
+
     /**
      * Object providing network type values for data binding.
      * @const
@@ -137,6 +143,13 @@ Polymer({
    * @private
    */
   networksChangedListener_: null,
+
+  /**
+   * Set to true to once the initial properties have been received. This
+   * prevents setProperties from being called when setting default properties.
+   * @private {boolean}
+   */
+  networkPropertiesReceived_: false,
 
   /**
    * settings.RouteObserverBehavior
@@ -164,6 +177,7 @@ Polymer({
       this.close_();
     }
     // Set basic networkProperties until they are loaded.
+    this.networkPropertiesReceived_ = false;
     var type = /** @type {!chrome.networkingPrivate.NetworkType} */ (
                    queryParams.get('type')) ||
         CrOnc.Type.WI_FI;
@@ -261,12 +275,25 @@ Polymer({
    * @private
    */
   getPropertiesCallback_: function(properties) {
-    this.networkProperties = properties;
-    if (!properties) {
-      // If |properties| is null, the network is no longer visible, close this.
-      console.error('Network no longer exists: ' + this.guid);
+    if (chrome.runtime.lastError) {
+      var message = chrome.runtime.lastError.message;
+      if (message == 'Error.InvalidNetworkGuid') {
+        console.error('Details page: GUID no longer exists: ' + this.guid);
+      } else {
+        console.error(
+            'Unexpected networkingPrivate.getManagedProperties error: ' +
+            message + ' For: ' + this.guid);
+      }
       this.close_();
+      return;
     }
+    if (!properties) {
+      console.error('No properties for: ' + this.guid);
+      this.close_();
+      return;
+    }
+    this.networkProperties = properties;
+    this.networkPropertiesReceived_ = true;
   },
 
   /**
@@ -287,6 +314,7 @@ Polymer({
       Connectable: state.Connectable,
       ConnectionState: state.ConnectionState,
     };
+    this.networkPropertiesReceived_ = true;
   },
 
   /**
@@ -295,6 +323,9 @@ Polymer({
    * @private
    */
   setNetworkProperties_: function(onc) {
+    if (!this.networkPropertiesReceived_)
+      return;
+
     assert(!!this.guid);
     this.networkingPrivate.setProperties(this.guid, onc, function() {
       if (chrome.runtime.lastError) {
@@ -435,9 +466,9 @@ Polymer({
     if (this.connectNotAllowed_(networkProperties, globalPolicy))
       return false;
     var type = networkProperties.Type;
-    if (type == CrOnc.Type.CELLULAR || type == CrOnc.Type.WI_MAX)
+    if (type == CrOnc.Type.CELLULAR)
       return false;
-    if (type == CrOnc.Type.WI_FI &&
+    if ((type == CrOnc.Type.WI_FI || type == CrOnc.Type.WI_MAX) &&
         networkProperties.ConnectionState !=
             CrOnc.ConnectionState.NOT_CONNECTED) {
       return false;
@@ -531,14 +562,36 @@ Polymer({
     this.networkingPrivate.startActivate(this.guid);
   },
 
+  /** @const {string} */ CR_EXPAND_BUTTON_TAG: 'CR-EXPAND-BUTTON',
+
   /**
    * @param {Event} event
    * @private
    */
   toggleAdvancedExpanded_: function(event) {
-    if (event.target.id == 'expandButton')
+    if (event.target.tagName == this.CR_EXPAND_BUTTON_TAG)
       return;  // Already handled.
     this.advancedExpanded_ = !this.advancedExpanded_;
+  },
+
+  /**
+   * @param {Event} event
+   * @private
+   */
+  toggleNetworkExpanded_: function(event) {
+    if (event.target.tagName == this.CR_EXPAND_BUTTON_TAG)
+      return;  // Already handled.
+    this.networkExpanded_ = !this.networkExpanded_;
+  },
+
+  /**
+   * @param {Event} event
+   * @private
+   */
+  toggleProxyExpanded_: function(event) {
+    if (event.target.tagName == this.CR_EXPAND_BUTTON_TAG)
+      return;  // Already handled.
+    this.proxyExpanded_ = !this.proxyExpanded_;
   },
 
   /**
@@ -658,12 +711,13 @@ Polymer({
   },
 
   /**
+   * @param {!CrOnc.NetworkProperties} networkProperties
    * @return {boolean} True if the shared message should be shown.
    * @private
    */
-  showShared_: function() {
-    return this.networkProperties.Source == 'Device' ||
-        this.networkProperties.Source == 'DevicePolicy';
+  showShared_: function(networkProperties) {
+    return networkProperties.Source == 'Device' ||
+        networkProperties.Source == 'DevicePolicy';
   },
 
   /**
@@ -672,7 +726,7 @@ Polymer({
    * @private
    */
   showAutoConnect_: function(networkProperties) {
-    return this.networkProperties.Type != CrOnc.Type.ETHERNET &&
+    return networkProperties.Type != CrOnc.Type.ETHERNET &&
         this.isRemembered_(networkProperties);
   },
 
@@ -840,36 +894,38 @@ Polymer({
 
   /**
    * @param {!CrOnc.NetworkProperties} networkProperties
-   * @return {boolean} True if the network section should be shown.
+   * @return {boolean}
    * @private
    */
   hasNetworkSection_: function(networkProperties) {
-    if (this.networkProperties.Type == CrOnc.Type.VPN)
+    if (networkProperties.Type == CrOnc.Type.VPN)
       return false;
-    if (this.networkProperties.Type == CrOnc.Type.CELLULAR)
+    if (networkProperties.Type == CrOnc.Type.CELLULAR)
       return true;
     return this.isRememberedOrConnected_(networkProperties);
   },
 
   /**
    * @param {string} type The network type.
+   * @param {!CrOnc.NetworkProperties} networkProperties
    * @return {boolean} True if the network type matches 'type'.
    * @private
    */
-  isType_: function(type) {
-    return this.networkProperties.Type == type;
+  isType_: function(type, networkProperties) {
+    return networkProperties.Type == type;
   },
 
   /**
-   * @return {boolean} True if the Cellular SIM section should be shown.
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
    * @private
    */
-  showCellularSim_: function() {
-    if (this.networkProperties.Type != 'Cellular' ||
-        !this.networkProperties.Cellular) {
+  showCellularSim_: function(networkProperties) {
+    if (networkProperties.Type != 'Cellular' ||
+        !networkProperties.Cellular) {
       return false;
     }
-    return this.networkProperties.Cellular.Family == 'GSM';
+    return networkProperties.Cellular.Family == 'GSM';
   },
 
   /**

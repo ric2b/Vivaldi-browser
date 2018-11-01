@@ -12,7 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 
 namespace base {
 namespace trace_event {
@@ -49,6 +49,12 @@ struct CC_EXPORT BeginFrameArgs {
     BEGIN_FRAME_ARGS_TYPE_MAX,
   };
   static const char* TypeToString(BeginFrameArgsType type);
+
+  static constexpr uint32_t kStartingSourceId = 0;
+  // |source_id| for BeginFrameArgs not created by a BeginFrameSource. Used to
+  // avoid sequence number conflicts of BeginFrameArgs manually fed to an
+  // observer with those fed to the observer by the its BeginFrameSource.
+  static constexpr uint32_t kManualSourceId = UINT32_MAX;
 
   static constexpr uint64_t kInvalidFrameNumber = 0;
   static constexpr uint64_t kStartingFrameNumber = 1;
@@ -116,8 +122,11 @@ struct CC_EXPORT BeginFrameAck {
   BeginFrameAck(uint32_t source_id,
                 uint64_t sequence_number,
                 uint64_t latest_confirmed_sequence_number,
-                uint32_t remaining_frames,
                 bool has_damage);
+
+  // Creates a BeginFrameAck for a manual BeginFrame. Used when clients produce
+  // a CompositorFrame without prior BeginFrame, e.g. for synchronous drawing.
+  static BeginFrameAck CreateManualAckWithDamage();
 
   // Sequence number of the BeginFrame that is acknowledged.
   uint64_t sequence_number;
@@ -157,10 +166,6 @@ struct CC_EXPORT BeginFrameAck {
   // may occur when the BeginFrameSource of the observer changes while a
   // BeginFrame from the old source is still in flight.
   uint32_t source_id;  // |source_id| after above fields for packing.
-
-  // Number of BeginFrames queued at the observer at time of acknowledgment.
-  // TODO(eseckler): Remove this field and replace with ack-tracking if needed.
-  uint32_t remaining_frames;
 
   // |true| if the observer has produced damage (e.g. sent a CompositorFrame or
   // damaged a surface) as part of responding to the BeginFrame.

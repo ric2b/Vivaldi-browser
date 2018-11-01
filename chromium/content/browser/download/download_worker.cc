@@ -13,6 +13,23 @@ namespace {
 
 const int kVerboseLevel = 1;
 
+class CompletedByteStreamReader : public ByteStreamReader {
+ public:
+  CompletedByteStreamReader(int status) : status_(status) {};
+  ~CompletedByteStreamReader() override = default;
+
+  // ByteStreamReader implementations:
+  ByteStreamReader::StreamState Read(scoped_refptr<net::IOBuffer>* data,
+                                     size_t* length) override {
+    return ByteStreamReader::STREAM_COMPLETE;
+  }
+  int GetStatus() const override { return status_; }
+  void RegisterCallback(const base::Closure& sink_callback) override {};
+
+ private:
+  int status_;
+};
+
 std::unique_ptr<UrlDownloader, BrowserThread::DeleteOnIOThread>
 CreateUrlDownloader(std::unique_ptr<DownloadUrlParameters> params,
                     base::WeakPtr<UrlDownloader::Delegate> delegate) {
@@ -32,7 +49,17 @@ CreateUrlDownloader(std::unique_ptr<DownloadUrlParameters> params,
 
 }  // namespace
 
-DownloadWorker::DownloadWorker() : weak_factory_(this) {}
+DownloadWorker::DownloadWorker(DownloadWorker::Delegate* delegate,
+                               int64_t offset,
+                               int64_t length)
+    : delegate_(delegate),
+      offset_(offset),
+      length_(length),
+      is_paused_(false),
+      is_canceled_(false),
+      weak_factory_(this) {
+  DCHECK(delegate_);
+}
 
 DownloadWorker::~DownloadWorker() = default;
 
@@ -48,15 +75,21 @@ void DownloadWorker::SendRequest(
 }
 
 void DownloadWorker::Pause() {
-  request_handle_->PauseRequest();
+  is_paused_ = true;
+  if (request_handle_)
+    request_handle_->PauseRequest();
 }
 
 void DownloadWorker::Resume() {
-  request_handle_->ResumeRequest();
+  is_paused_ = false;
+  if (request_handle_)
+    request_handle_->ResumeRequest();
 }
 
 void DownloadWorker::Cancel() {
-  request_handle_->CancelRequest();
+  is_canceled_ = true;
+  if (request_handle_)
+    request_handle_->CancelRequest();
 }
 
 void DownloadWorker::OnUrlDownloaderStarted(
@@ -66,17 +99,30 @@ void DownloadWorker::OnUrlDownloaderStarted(
   // |callback| is not used in subsequent requests.
   DCHECK(callback.is_null());
 
-  // TODO(xingliu): Pass the |stream_reader| to parallel job and handle failed
-  // request.
-  if (create_info->result !=
-      DownloadInterruptReason::DOWNLOAD_INTERRUPT_REASON_NONE) {
-    VLOG(kVerboseLevel) << "Parallel download sub request failed. reason = "
-                        << create_info->result;
-    NOTIMPLEMENTED();
+  // Destroy the request if user canceled.
+  if (is_canceled_) {
+    VLOG(kVerboseLevel) << "Byte stream arrived after user cancel the request.";
+    create_info->request_handle->CancelRequest();
     return;
   }
 
+  // TODO(xingliu): Add metric for error handling.
+  if (create_info->result !=
+      DownloadInterruptReason::DOWNLOAD_INTERRUPT_REASON_NONE) {
+    VLOG(kVerboseLevel) << "Parallel download sub-request failed. reason = "
+                        << create_info->result;
+    stream_reader.reset(new CompletedByteStreamReader(create_info->result));
+  }
+
   request_handle_ = std::move(create_info->request_handle);
+
+  // Pause the stream if user paused, still push the stream reader to the sink.
+  if (is_paused_) {
+    VLOG(kVerboseLevel) << "Byte stream arrived after user pause the request.";
+    Pause();
+  }
+
+  delegate_->OnByteStreamReady(this, std::move(stream_reader));
 }
 
 void DownloadWorker::OnUrlDownloaderStopped(UrlDownloader* downloader) {

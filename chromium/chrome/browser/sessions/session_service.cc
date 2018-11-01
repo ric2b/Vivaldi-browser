@@ -1059,7 +1059,8 @@ bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
   if (json && json->GetAsDictionary(&dict)) {
     dict->GetString("windowType", &window_type);
     // Don't track popup windows (like settings) in the session.
-    return window_type != "settings";
+    // We have "", "popup" and "settings".
+    return window_type != "popup" && window_type != "settings";
   }
   return true;
 }

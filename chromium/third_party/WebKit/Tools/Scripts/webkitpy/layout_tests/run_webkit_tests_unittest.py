@@ -34,6 +34,7 @@ import StringIO
 import sys
 import unittest
 
+from webkitpy.common import exit_codes
 from webkitpy.common.host import Host
 from webkitpy.common.host_mock import MockHost
 from webkitpy.common.system.path import abspath_to_uri
@@ -145,7 +146,7 @@ def get_test_results(args, host=None, port_obj=None):
 
 
 def parse_full_results(full_results_text):
-    json_to_eval = full_results_text.replace("ADD_RESULTS(", "").replace(");", "")
+    json_to_eval = full_results_text.replace('ADD_RESULTS(', '').replace(');', '')
     compressed_results = json.loads(json_to_eval)
     return compressed_results
 
@@ -167,13 +168,9 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         # Windows and Mac to skip some tests.
         self._platform = SystemHost().platform
 
-        # FIXME: Remove this when we fix test-webkitpy to work
-        # properly on cygwin (bug 63846).
-        self.should_test_processes = not self._platform.is_win()
-
     def test_basic(self):
         options, args = parse_args(
-            extra_args=['--json-test-results', '/tmp/json_test_results.json'],
+            extra_args=['--json-failing-test-results', '/tmp/json_failing_test_results.json'],
             tests_included=True)
         logging_stream = StringIO.StringIO()
         stdout = StringIO.StringIO()
@@ -210,11 +207,8 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
 
         # Ensure the results were written out and displayed.
         failing_results_text = host.filesystem.read_text_file('/tmp/layout-test-results/failing_results.json')
-        json_to_eval = failing_results_text.replace("ADD_RESULTS(", "").replace(");", "")
+        json_to_eval = failing_results_text.replace('ADD_RESULTS(', '').replace(');', '')
         self.assertEqual(json.loads(json_to_eval), details.summarized_failing_results)
-
-        json_test_results = host.filesystem.read_text_file('/tmp/json_test_results.json')
-        self.assertEqual(json.loads(json_test_results), details.summarized_failing_results)
 
         full_results_text = host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json')
         self.assertEqual(json.loads(full_results_text), details.summarized_full_results)
@@ -228,23 +222,19 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
 
     def test_max_locked_shards(self):
         # Tests for the default of using one locked shard even in the case of more than one child process.
-        if not self.should_test_processes:
-            return
         _, regular_output, _ = logging_run(['--debug-rwt-logging', '--child-processes', '2'], shared_port=False)
         self.assertTrue(any('1 locked' in line for line in regular_output.buflist))
 
     def test_child_processes_2(self):
-        if self.should_test_processes:
-            _, regular_output, _ = logging_run(
-                ['--debug-rwt-logging', '--child-processes', '2'], shared_port=False)
-            self.assertTrue(any(['Running 2 ' in line for line in regular_output.buflist]))
+        _, regular_output, _ = logging_run(
+            ['--debug-rwt-logging', '--child-processes', '2'], shared_port=False)
+        self.assertTrue(any(['Running 2 ' in line for line in regular_output.buflist]))
 
     def test_child_processes_min(self):
-        if self.should_test_processes:
-            _, regular_output, _ = logging_run(
-                ['--debug-rwt-logging', '--child-processes', '2', '-i', 'passes/virtual_passes', 'passes'],
-                tests_included=True, shared_port=False)
-            self.assertTrue(any(['Running 1 ' in line for line in regular_output.buflist]))
+        _, regular_output, _ = logging_run(
+            ['--debug-rwt-logging', '--child-processes', '2', '-i', 'passes/virtual_passes', 'passes'],
+            tests_included=True, shared_port=False)
+        self.assertTrue(any(['Running 1 ' in line for line in regular_output.buflist]))
 
     def test_dryrun(self):
         tests_run = get_tests_run(['--dry-run'])
@@ -269,13 +259,12 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         self.assertRaises(BaseException, logging_run,
                           ['failures/expected/exception.html', '--child-processes', '1'], tests_included=True)
 
-        if self.should_test_processes:
-            self.assertRaises(
-                BaseException,
-                logging_run,
-                ['--child-processes', '2', '--skipped=ignore', 'failures/expected/exception.html', 'passes/text.html'],
-                tests_included=True,
-                shared_port=False)
+        self.assertRaises(
+            BaseException,
+            logging_run,
+            ['--child-processes', '2', '--skipped=ignore', 'failures/expected/exception.html', 'passes/text.html'],
+            tests_included=True,
+            shared_port=False)
 
     def test_device_failure(self):
         # Test that we handle a device going offline during a test properly.
@@ -293,27 +282,26 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         # Note that this also tests running a test marked as SKIP if
         # you specify it explicitly.
         details, _, _ = logging_run(['failures/expected/keyboard.html', '--child-processes', '1'], tests_included=True)
-        self.assertEqual(details.exit_code, test_run_results.INTERRUPTED_EXIT_STATUS)
+        self.assertEqual(details.exit_code, exit_codes.INTERRUPTED_EXIT_STATUS)
 
-        if self.should_test_processes:
-            _, regular_output, _ = logging_run(
-                ['failures/expected/keyboard.html', 'passes/text.html', '--child-processes', '2', '--skipped=ignore'],
-                tests_included=True, shared_port=False)
-            self.assertTrue(any(['Interrupted, exiting' in line for line in regular_output.buflist]))
+        _, regular_output, _ = logging_run(
+            ['failures/expected/keyboard.html', 'passes/text.html', '--child-processes', '2', '--skipped=ignore'],
+            tests_included=True, shared_port=False)
+        self.assertTrue(any(['Interrupted, exiting' in line for line in regular_output.buflist]))
 
     def test_no_tests_found(self):
         details, err, _ = logging_run(['resources'], tests_included=True)
-        self.assertEqual(details.exit_code, test_run_results.NO_TESTS_EXIT_STATUS)
+        self.assertEqual(details.exit_code, exit_codes.NO_TESTS_EXIT_STATUS)
         self.assert_contains(err, 'No tests to run.\n')
 
     def test_no_tests_found_2(self):
         details, err, _ = logging_run(['foo'], tests_included=True)
-        self.assertEqual(details.exit_code, test_run_results.NO_TESTS_EXIT_STATUS)
+        self.assertEqual(details.exit_code, exit_codes.NO_TESTS_EXIT_STATUS)
         self.assert_contains(err, 'No tests to run.\n')
 
     def test_no_tests_found_3(self):
         details, err, _ = logging_run(['--shard-index', '4', '--total-shards', '400', 'foo/bar.html'], tests_included=True)
-        self.assertEqual(details.exit_code, test_run_results.NO_TESTS_EXIT_STATUS)
+        self.assertEqual(details.exit_code, exit_codes.NO_TESTS_EXIT_STATUS)
         self.assert_contains(err, 'No tests to run.\n')
 
     def test_natural_order(self):
@@ -498,7 +486,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         self.assertEqual(['passes/text.html'], tests_run)
         host.filesystem.remove(filename)
         details, err, _ = logging_run(['--test-list=%s' % filename], tests_included=True, host=host)
-        self.assertEqual(details.exit_code, test_run_results.NO_TESTS_EXIT_STATUS)
+        self.assertEqual(details.exit_code, exit_codes.NO_TESTS_EXIT_STATUS)
         self.assert_not_empty(err)
 
     def test_test_list_with_prefix(self):
@@ -654,7 +642,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         # By returning False, we know that the incremental results were generated and then deleted.
         self.assertFalse(host.filesystem.exists('/tmp/layout-test-results/incremental_results.json'))
 
-        self.assertEqual(details.exit_code, test_run_results.EARLY_EXIT_STATUS)
+        self.assertEqual(details.exit_code, exit_codes.EARLY_EXIT_STATUS)
 
         # This checks that passes/text.html is considered Skip-ped.
         self.assertIn('"skipped":1', host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json'))
@@ -811,9 +799,9 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
             host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.png'))
         json_string = host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json')
         results = parse_full_results(json_string)
-        self.assertEqual(results["tests"]["failures"]["unexpected"]["text-image-checksum.html"],
-                         {"expected": "PASS", "actual": "TEXT IMAGE+TEXT IMAGE+TEXT IMAGE+TEXT", "is_unexpected": True})
-        self.assertFalse(results["pixel_tests_enabled"])
+        self.assertEqual(results['tests']['failures']['unexpected']['text-image-checksum.html'],
+                         {'expected': 'PASS', 'actual': 'TEXT IMAGE+TEXT IMAGE+TEXT IMAGE+TEXT', 'is_unexpected': True})
+        self.assertFalse(results['pixel_tests_enabled'])
         self.assertTrue(details.enabled_pixel_tests_in_retry)
 
     def test_retrying_uses_retry_directories(self):
@@ -867,9 +855,9 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         host = MockHost()
         logging_run(['--no-show-results', 'reftests/foo/'], tests_included=True, host=host)
         results = parse_full_results(host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json'))
-        self.assertEqual(results["tests"]["reftests"]["foo"]["unlistedtest.html"]["actual"], "MISSING")
-        self.assertEqual(results["num_regressions"], 5)
-        self.assertEqual(results["num_flaky"], 0)
+        self.assertEqual(results['tests']['reftests']['foo']['unlistedtest.html']['actual'], 'MISSING')
+        self.assertEqual(results['num_regressions'], 5)
+        self.assertEqual(results['num_flaky'], 0)
 
     def test_reftest_crash(self):
         test_results = get_test_results(['failures/unexpected/crash-reftest.html'])
@@ -976,7 +964,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         stderr = StringIO.StringIO()
         res = run_webkit_tests.main(['--platform', 'foo'], stdout, stderr)
 
-        self.assertEqual(res, test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
+        self.assertEqual(res, exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
         self.assertEqual(stdout.getvalue(), '')
         self.assertTrue('unsupported platform' in stderr.getvalue())
 
@@ -989,17 +977,13 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         out = StringIO.StringIO()
         err = StringIO.StringIO()
         self.assertEqual(run_webkit_tests.main(
-            ['--platform', port_name, 'fast/harness/results.html'], out, err), test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
+            ['--platform', port_name, 'fast/harness/results.html'], out, err), exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
 
     def test_verbose_in_child_processes(self):
         # When we actually run multiple processes, we may have to reconfigure logging in the
         # child process (e.g., on win32) and we need to make sure that works and we still
         # see the verbose log output. However, we can't use logging_run() because using
         # output_capture to capture stdout and stderr latter results in a nonpicklable host.
-
-        # Test is flaky on Windows: https://bugs.webkit.org/show_bug.cgi?id=98559
-        if not self.should_test_processes:
-            return
 
         options, parsed_args = parse_args(['--verbose', '--fully-parallel', '--child-processes',
                                            '2', 'passes/text.html', 'passes/image.html'], tests_included=True)
@@ -1020,12 +1004,38 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
                                 tests_included=True, host=host)
         self.assertIn('OUT:', err.getvalue())
 
-    def test_write_full_results_to(self):
-        host = MockHost()
-        details, _, _ = logging_run(['--write-full-results-to', '/tmp/full_results.json',
-                                     '--order', 'natural'], host=host)
+    def _check_json_test_results(self, host, details):
         self.assertEqual(details.exit_code, 0)
-        self.assertTrue(host.filesystem.exists('/tmp/full_results.json'))
+        self.assertTrue(host.filesystem.exists('/tmp/json_results.json'))
+        json_failing_test_results = host.filesystem.read_text_file('/tmp/json_results.json')
+        self.assertEqual(json.loads(json_failing_test_results), details.summarized_full_results)
+
+    def test_json_test_results(self):
+        host = MockHost()
+        details, _, _ = logging_run(
+            ['--json-test-results', '/tmp/json_results.json'], host=host)
+        self._check_json_test_results(host, details)
+
+    def test_json_test_results_alias_write_full_results_to(self):
+        host = MockHost()
+        details, _, _ = logging_run(
+            ['--write-full-results-to', '/tmp/json_results.json'], host=host)
+        self._check_json_test_results(host, details)
+
+    def test_json_test_results_alias_isolated_script_test_output(self):
+        host = MockHost()
+        details, _, _ = logging_run(
+            ['--isolated-script-test-output', '/tmp/json_results.json'], host=host)
+        self._check_json_test_results(host, details)
+
+    def test_json_failing_test_results(self):
+        host = MockHost()
+        details, _, _ = logging_run(
+            ['--json-failing-test-results', '/tmp/json_failing_results.json'], host=host)
+        self.assertEqual(details.exit_code, 0)
+        self.assertTrue(host.filesystem.exists('/tmp/json_failing_results.json'))
+        json_failing_test_results = host.filesystem.read_text_file('/tmp/json_failing_results.json')
+        self.assertEqual(json.loads(json_failing_test_results), details.summarized_failing_results)
 
     def test_buildbot_results_are_printed_on_early_exit(self):
         stdout = StringIO.StringIO()
@@ -1035,11 +1045,24 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
                                      'failures/unexpected/missing_text.html',
                                      'failures/unexpected/missing_image.html'],
                                     stdout, stderr)
-        self.assertEqual(res, test_run_results.EARLY_EXIT_STATUS)
+        self.assertEqual(res, exit_codes.EARLY_EXIT_STATUS)
         self.assertEqual(stdout.getvalue(),
                          ('\n'
                           'Regressions: Unexpected missing results (1)\n'
                           '  failures/unexpected/missing_image.html [ Missing ]\n\n'))
+
+    def test_image_first_flag_initialized_from_file(self):
+        host = MockHost()
+        image_first_tests_filename = test.LAYOUT_TEST_DIR + '/ImageFirstTests'
+        image_first_folder1 = 'fooFolder1'
+        image_first_folder2 = 'fooFolder2'
+        host.filesystem.write_text_file(image_first_tests_filename, '%s\n%s' % (image_first_folder1, image_first_folder2))
+
+        options, args = parse_args()
+        port_obj = host.port_factory.get(options.platform, options)
+
+        run_webkit_tests.run(port_obj, options, args, StringIO.StringIO(), StringIO.StringIO())
+        self.assertListEqual(options.image_first_tests, [image_first_folder1, image_first_folder2])
 
 
 class EndToEndTest(unittest.TestCase):
@@ -1052,24 +1075,24 @@ class EndToEndTest(unittest.TestCase):
 
         json_string = host.filesystem.read_text_file('/tmp/layout-test-results/failing_results.json')
         results = parse_full_results(json_string)
-        self.assertTrue("multiple-match-success.html" not in results["tests"]["reftests"]["foo"])
-        self.assertTrue("multiple-mismatch-success.html" not in results["tests"]["reftests"]["foo"])
-        self.assertTrue("multiple-both-success.html" not in results["tests"]["reftests"]["foo"])
+        self.assertTrue('multiple-match-success.html' not in results['tests']['reftests']['foo'])
+        self.assertTrue('multiple-mismatch-success.html' not in results['tests']['reftests']['foo'])
+        self.assertTrue('multiple-both-success.html' not in results['tests']['reftests']['foo'])
 
-        self.assertEqual(results["tests"]["reftests"]["foo"]["multiple-match-failure.html"],
-                         {"expected": "PASS", "actual": "IMAGE", "reftest_type": ["=="], "is_unexpected": True})
-        self.assertEqual(results["tests"]["reftests"]["foo"]["multiple-mismatch-failure.html"],
-                         {"expected": "PASS", "actual": "IMAGE", "reftest_type": ["!="], "is_unexpected": True})
-        self.assertEqual(results["tests"]["reftests"]["foo"]["multiple-both-failure.html"],
-                         {"expected": "PASS", "actual": "IMAGE", "reftest_type": ["==", "!="], "is_unexpected": True})
+        self.assertEqual(results['tests']['reftests']['foo']['multiple-match-failure.html'],
+                         {'expected': 'PASS', 'actual': 'IMAGE', 'reftest_type': ['=='], 'is_unexpected': True})
+        self.assertEqual(results['tests']['reftests']['foo']['multiple-mismatch-failure.html'],
+                         {'expected': 'PASS', 'actual': 'IMAGE', 'reftest_type': ['!='], 'is_unexpected': True})
+        self.assertEqual(results['tests']['reftests']['foo']['multiple-both-failure.html'],
+                         {'expected': 'PASS', 'actual': 'IMAGE', 'reftest_type': ['==', '!='], 'is_unexpected': True})
 
 
 class RebaselineTest(unittest.TestCase, StreamTestingMixin):
 
     def assert_baselines(self, file_list, file_base, extensions, err):
-        "assert that the file_list contains the baselines."""
+        'assert that the file_list contains the baselines.'''
         for ext in extensions:
-            baseline = file_base + "-expected" + ext
+            baseline = file_base + '-expected' + ext
             baseline_msg = 'Writing new expected result "%s"\n' % baseline
             self.assertTrue(any(baseline in f for f in file_list))
             self.assert_contains(err, baseline_msg)
@@ -1087,7 +1110,7 @@ class RebaselineTest(unittest.TestCase, StreamTestingMixin):
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 0)
         self.assertEqual(len(file_list), 8)
-        self.assert_baselines(file_list, "passes/image", [".txt", ".png"], err)
+        self.assert_baselines(file_list, 'passes/image', ['.txt', '.png'], err)
 
     def test_missing_results(self):
         # Test that we update expectations in place. If the expectation
@@ -1101,9 +1124,9 @@ class RebaselineTest(unittest.TestCase, StreamTestingMixin):
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 3)
         self.assertEqual(len(file_list), 12)
-        self.assert_baselines(file_list, "failures/unexpected/missing_text", [".txt"], err)
-        self.assert_baselines(file_list, "platform/test/failures/unexpected/missing_image", [".png"], err)
-        self.assert_baselines(file_list, "platform/test/failures/unexpected/missing_render_tree_dump", [".txt"], err)
+        self.assert_baselines(file_list, 'failures/unexpected/missing_text', ['.txt'], err)
+        self.assert_baselines(file_list, 'platform/test/failures/unexpected/missing_image', ['.png'], err)
+        self.assert_baselines(file_list, 'platform/test/failures/unexpected/missing_render_tree_dump', ['.txt'], err)
 
     def test_new_baseline(self):
         # Test that we update the platform expectations in the version-specific directories
@@ -1116,7 +1139,7 @@ class RebaselineTest(unittest.TestCase, StreamTestingMixin):
         self.assertEqual(details.exit_code, 0)
         self.assertEqual(len(file_list), 8)
         self.assert_baselines(file_list,
-                             "platform/test-mac-mac10.10/passes/image", [".txt", ".png"], err)
+                              'platform/test-mac-mac10.10/passes/image', ['.txt', '.png'], err)
 
     def test_reftest_reset_results(self):
         # Test rebaseline of reftests.
@@ -1178,7 +1201,7 @@ class MainTest(unittest.TestCase):
         def successful_run(port, options, args, printer):
 
             class FakeRunDetails(object):
-                exit_code = test_run_results.UNEXPECTED_ERROR_EXIT_STATUS
+                exit_code = exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
             return FakeRunDetails()
 
@@ -1190,14 +1213,14 @@ class MainTest(unittest.TestCase):
         try:
             run_webkit_tests._run_tests = interrupting_run
             res = run_webkit_tests.main([], stdout, stderr)
-            self.assertEqual(res, test_run_results.INTERRUPTED_EXIT_STATUS)
+            self.assertEqual(res, exit_codes.INTERRUPTED_EXIT_STATUS)
 
             run_webkit_tests._run_tests = successful_run
             res = run_webkit_tests.main(['--platform', 'test'], stdout, stderr)
-            self.assertEqual(res, test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
+            self.assertEqual(res, exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
 
             run_webkit_tests._run_tests = exception_raising_run
             res = run_webkit_tests.main([], stdout, stderr)
-            self.assertEqual(res, test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
+            self.assertEqual(res, exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
         finally:
             run_webkit_tests._run_tests = orig_run_fn

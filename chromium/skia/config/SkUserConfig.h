@@ -210,26 +210,18 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_DISABLE_COLOR_XFORM_PIPELINE
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_BITMAP_SETPIXELREF
-#   define SK_SUPPORT_LEGACY_BITMAP_SETPIXELREF
-#endif
-
 // Remove this after we fixed all the issues related to the new SDF algorithm
 // (https://codereview.chromium.org/1643143002)
 #ifndef    SK_USE_LEGACY_DISTANCE_FIELDS
 #   define SK_USE_LEGACY_DISTANCE_FIELDS
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_CLIPOP_EXOTIC_NAMES
-#   define SK_SUPPORT_LEGACY_CLIPOP_EXOTIC_NAMES
-#endif
-
-#ifndef SK_SUPPORT_LEGACY_PATHEFFECT_SUBCLASSES
-#define SK_SUPPORT_LEGACY_PATHEFFECT_SUBCLASSES
-#endif
-
 #ifndef SK_DISABLE_DEFERRED_PROXIES
 #define SK_DISABLE_DEFERRED_PROXIES
+#endif
+
+#ifndef SK_LEGACY_SWEEP_GRADIENT
+#define SK_LEGACY_SWEEP_GRADIENT
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -258,9 +250,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_SUPPORT_LEGACY_X86_BLITS
 
 #define SK_DISABLE_TILE_IMAGE_FILTER_OPTIMIZATION
-
-// Updating to a correct SkPMColor lerp will require layout test rebaselines.
-#define SK_SUPPORT_LEGACY_BROKEN_LERP
 
 // ===== End Chrome-specific definitions =====
 

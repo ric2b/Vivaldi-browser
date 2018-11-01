@@ -5,6 +5,7 @@
 #include "chromecast/base/chromecast_switches.h"
 
 #include "base/command_line.h"
+#include "base/strings/string_number_conversions.h"
 
 namespace switches {
 
@@ -70,6 +71,26 @@ const char kAlsaEnableUpsampling[] = "alsa-enable-upsampling";
 // Optional flag to set a fixed sample rate for the alsa device.
 const char kAlsaFixedOutputSampleRate[] = "alsa-fixed-output-sample-rate";
 
+// Name of the simple mixer control element that the ALSA-based media library
+// should use to control the volume.
+const char kAlsaVolumeElementName[] = "alsa-volume-element-name";
+
+// Name of the device the volume control mixer should be opened on. Will use the
+// same device as kAlsaOutputDevice and fall back to "default" if
+// kAlsaOutputDevice is not supplied.
+const char kAlsaVolumeDeviceName[] = "alsa-volume-device-name";
+
+// Name of the simple mixer control element that the ALSA-based media library
+// should use to mute the system.
+const char kAlsaMuteElementName[] = "alsa-mute-element-name";
+
+// Name of the device the mute mixer should be opened on. If this flag is not
+// specified it will default to the same device as kAlsaVolumeDeviceName.
+const char kAlsaMuteDeviceName[] = "alsa-mute-device-name";
+
+// Calibrated max output volume dBa for voice content at 1 meter, if known.
+const char kMaxOutputVolumeDba1m[] = "max-output-volume-dba1m";
+
 // Some platforms typically have very little 'free' memory, but plenty is
 // available in buffers+cached.  For such platforms, configure this amount
 // as the portion of buffers+cached memory that should be treated as
@@ -81,6 +102,7 @@ const char kMemPressureSystemReservedKb[] = "mem-pressure-system-reserved-kb";
 // screen size correctly (so no need to resize when first window is created).
 const char kCastInitialScreenWidth[] = "cast-initial-screen-width";
 const char kCastInitialScreenHeight[] = "cast-initial-screen-height";
+const char kUseDoubleBuffering[] = "use-double-buffering";
 
 // When present, desktop cast_shell will create 1080p window (provided display
 // resolution is high enough).  Otherwise, cast_shell defaults to 720p.
@@ -109,6 +131,35 @@ bool GetSwitchValueBoolean(const std::string& switch_string,
            switches::kSwitchValueFalse;
   }
   return default_value;
+}
+
+int GetSwitchValueInt(const std::string& switch_name, const int default_value) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switch_name)) {
+    return default_value;
+  }
+
+  int arg_value;
+  if (!base::StringToInt(command_line->GetSwitchValueASCII(switch_name),
+                         &arg_value)) {
+    LOG(DFATAL) << "--" << switch_name << " only accepts integers as arguments";
+    return default_value;
+  }
+  return arg_value;
+}
+
+int GetSwitchValueNonNegativeInt(const std::string& switch_name,
+                                 const int default_value) {
+  DCHECK_GE(default_value, 0)
+      << "--" << switch_name << " must have a non-negative default value";
+
+  int value = GetSwitchValueInt(switch_name, default_value);
+  if (value < 0) {
+    LOG(DFATAL) << "--" << switch_name << " must have a non-negative value";
+    return default_value;
+  }
+  return value;
 }
 
 }  // namespace chromecast

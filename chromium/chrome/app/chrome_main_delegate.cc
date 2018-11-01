@@ -62,12 +62,13 @@
 #if defined(OS_WIN)
 #include <atlbase.h>
 #include <malloc.h>
+
 #include <algorithm>
+
 #include "base/debug/close_handle_hook_win.h"
 #include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/child/v8_breakpad_support_win.h"
 #include "chrome/common/child_process_logging.h"
-#include "components/crash/content/app/crashpad.h"
 #include "sandbox/win/src/sandbox.h"
 #include "ui/base/resource/resource_bundle_win.h"
 #endif
@@ -78,7 +79,6 @@
 #include "chrome/browser/mac/relauncher.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/mac/cfbundle_blocker.h"
-#include "components/crash/content/app/crashpad.h"
 #include "components/crash/core/common/objc_zombie.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #endif
@@ -127,6 +127,7 @@
 
 #if defined(OS_MACOSX) || defined(OS_WIN)
 #include "chrome/browser/policy/policy_path_parser.h"
+#include "components/crash/content/app/crashpad.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -158,17 +159,17 @@
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
 #include "chrome/child/pdf_child_init.h"
 
-base::LazyInstance<ChromeContentGpuClient> g_chrome_content_gpu_client =
-    LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<ChromeContentRendererClient>
+base::LazyInstance<ChromeContentGpuClient>::DestructorAtExit
+    g_chrome_content_gpu_client = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<ChromeContentRendererClient>::DestructorAtExit
     g_chrome_content_renderer_client = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<ChromeContentUtilityClient>
+base::LazyInstance<ChromeContentUtilityClient>::DestructorAtExit
     g_chrome_content_utility_client = LAZY_INSTANCE_INITIALIZER;
 #endif
 
 #if !defined(CHROME_MULTIPLE_DLL_CHILD)
-base::LazyInstance<ChromeContentBrowserClient> g_chrome_content_browser_client =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<ChromeContentBrowserClient>::DestructorAtExit
+    g_chrome_content_browser_client = LAZY_INSTANCE_INITIALIZER;
 #endif
 
 #if defined(OS_POSIX)
@@ -177,7 +178,7 @@ base::LazyInstance<ChromeCrashReporterClient>::Leaky g_chrome_crash_client =
 #endif
 
 extern int NaClMain(const content::MainFunctionParams&);
-extern int ServiceProcessMain(const content::MainFunctionParams&);
+extern int CloudPrintServiceProcessMain(const content::MainFunctionParams&);
 
 namespace {
 
@@ -230,7 +231,7 @@ bool UseHooks() {
 #endif  // defined(OS_WIN)
 
 #if defined(OS_LINUX)
-static void AdjustLinuxOOMScore(const std::string& process_type) {
+void AdjustLinuxOOMScore(const std::string& process_type) {
   // Browsers and zygotes should still be killable, but killed last.
   const int kZygoteScore = 0;
   // The minimum amount to bump a score by.  This is large enough that
@@ -257,7 +258,7 @@ static void AdjustLinuxOOMScore(const std::string& process_type) {
     score = kPluginScore + kScoreBump;
   } else if (process_type == switches::kUtilityProcess ||
              process_type == switches::kGpuProcess ||
-             process_type == switches::kServiceProcess) {
+             process_type == switches::kCloudPrintServiceProcess) {
     score = kMiscScore;
 #ifndef DISABLE_NACL
   } else if (process_type == switches::kNaClLoaderProcess ||
@@ -279,6 +280,9 @@ static void AdjustLinuxOOMScore(const std::string& process_type) {
   } else {
     NOTREACHED() << "Unknown process type";
   }
+  // In the case of a 0 score, still try to adjust it. Most likely the score is
+  // 0 already, but it may not be if this process inherited a higher score from
+  // its parent process.
   if (score > -1)
     base::AdjustOOMScore(base::GetCurrentProcId(), score);
 }
@@ -965,24 +969,24 @@ void ChromeMainDelegate::SandboxInitialized(const std::string& process_type) {
 int ChromeMainDelegate::RunProcess(
     const std::string& process_type,
     const content::MainFunctionParams& main_function_params) {
-  // ANDROID doesn't support "service", so no ServiceProcessMain, and arraysize
-  // doesn't support empty array. So we comment out the block for Android.
+// ANDROID doesn't support "cloud-print-service", so no
+// CloudPrintServiceProcessMain, and arraysize doesn't support empty array. So
+// we comment out the block for Android.
 #if !defined(OS_ANDROID)
   static const MainFunction kMainFunctions[] = {
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(CHROME_MULTIPLE_DLL_CHILD)
-    { switches::kServiceProcess,     ServiceProcessMain },
+    {switches::kCloudPrintServiceProcess, CloudPrintServiceProcessMain},
 #endif
 
 #if defined(OS_MACOSX)
-    { switches::kRelauncherProcess,
-      mac_relauncher::internal::RelauncherMain },
+    {switches::kRelauncherProcess, mac_relauncher::internal::RelauncherMain},
 #endif
 
     // This entry is not needed on Linux, where the NaCl loader
     // process is launched via nacl_helper instead.
 #if !defined(DISABLE_NACL) && !defined(CHROME_MULTIPLE_DLL_BROWSER) && \
     !defined(OS_LINUX)
-    { switches::kNaClLoaderProcess,  NaClMain },
+    {switches::kNaClLoaderProcess, NaClMain},
 #else
     { "<invalid>", NULL },  // To avoid constant array of size 0
                             // when DISABLE_NACL and CHROME_MULTIPLE_DLL_CHILD
@@ -1021,7 +1025,7 @@ bool ChromeMainDelegate::ProcessRegistersWithSystemProcess(
 
 bool ChromeMainDelegate::ShouldSendMachPort(const std::string& process_type) {
   return process_type != switches::kRelauncherProcess &&
-      process_type != switches::kServiceProcess;
+         process_type != switches::kCloudPrintServiceProcess;
 }
 
 bool ChromeMainDelegate::DelaySandboxInitialization(

@@ -8,16 +8,14 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_expandable_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_favicon_item.h"
 
+@class ContentSuggestion;
 @protocol ContentSuggestionsCommands;
 @protocol ContentSuggestionsDataSource;
+@protocol ContentSuggestionIdentification;
 
 // CollectionViewController to display the suggestions items.
-@interface ContentSuggestionsViewController
-    : CollectionViewController<ContentSuggestionsExpandableCellDelegate,
-                               ContentSuggestionsFaviconCellDelegate>
+@interface ContentSuggestionsViewController : CollectionViewController
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
                    dataSource:(id<ContentSuggestionsDataSource>)dataSource
@@ -29,6 +27,17 @@
 // Handler for the commands sent by the ContentSuggestionsViewController.
 @property(nonatomic, weak) id<ContentSuggestionsCommands>
     suggestionCommandHandler;
+// Override from superclass to have a more specific type.
+@property(nonatomic, readonly)
+    CollectionViewModel<CollectionViewItem<ContentSuggestionIdentification>*>*
+        collectionViewModel;
+
+// Removes the entry at |indexPath|, from the collection and its model.
+- (void)dismissEntryAtIndexPath:(NSIndexPath*)indexPath;
+// Removes the |section|.
+- (void)dismissSection:(NSInteger)section;
+// Adds the |suggestions| to the collection and its model.
+- (void)addSuggestions:(NSArray<ContentSuggestion*>*)suggestions;
 
 @end
 

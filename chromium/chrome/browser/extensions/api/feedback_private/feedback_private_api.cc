@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -27,7 +28,6 @@
 #include "components/feedback/tracing_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/browser/user_metrics.h"
 #include "extensions/browser/event_router.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -77,8 +77,8 @@ using feedback_private::FeedbackFlow;
 using SystemInformationList =
     std::vector<api::feedback_private::SystemInformation>;
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<FeedbackPrivateAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<FeedbackPrivateAPI>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<FeedbackPrivateAPI>*
@@ -223,7 +223,7 @@ ExtensionFunction::ResponseAction FeedbackPrivateGetStringsFunction::Run() {
 ExtensionFunction::ResponseAction FeedbackPrivateGetUserEmailFunction::Run() {
   SigninManagerBase* signin_manager = SigninManagerFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
-  return RespondNow(OneArgument(base::MakeUnique<base::StringValue>(
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
       signin_manager ? signin_manager->GetAuthenticatedAccountInfo().email
                      : std::string())));
 }
@@ -347,16 +347,13 @@ FeedbackPrivateLogSrtPromptResultFunction::Run() {
 
   switch (result) {
     case feedback_private::SRT_PROMPT_RESULT_ACCEPTED:
-      content::RecordAction(
-          base::UserMetricsAction("Feedback.SrtPromptAccepted"));
+      base::RecordAction(base::UserMetricsAction("Feedback.SrtPromptAccepted"));
       break;
     case feedback_private::SRT_PROMPT_RESULT_DECLINED:
-      content::RecordAction(
-          base::UserMetricsAction("Feedback.SrtPromptDeclined"));
+      base::RecordAction(base::UserMetricsAction("Feedback.SrtPromptDeclined"));
       break;
     case feedback_private::SRT_PROMPT_RESULT_CLOSED:
-      content::RecordAction(
-          base::UserMetricsAction("Feedback.SrtPromptClosed"));
+      base::RecordAction(base::UserMetricsAction("Feedback.SrtPromptClosed"));
       break;
     default:
       return RespondNow(Error("Invalid arugment."));

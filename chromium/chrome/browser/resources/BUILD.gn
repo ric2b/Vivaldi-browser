@@ -5,9 +5,10 @@
 import("//chrome/common/features.gni")
 import("//tools/grit/grit_rule.gni")
 
+assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
+
 grit("net_internals_resources") {
   source = "net_internals_resources.grd"
-  use_qualified_include = true
   defines = chrome_grit_defines
   outputs = [
     "grit/net_internals_resources.h",
@@ -18,7 +19,6 @@ grit("net_internals_resources") {
 
 grit("invalidations_resources") {
   source = "invalidations_resources.grd"
-  use_qualified_include = true
   defines = chrome_grit_defines
   outputs = [
     "grit/invalidations_resources.h",
@@ -29,7 +29,6 @@ grit("invalidations_resources") {
 
 grit("password_manager_internals_resources") {
   source = "password_manager_internals_resources.grd"
-  use_qualified_include = true
   defines = chrome_grit_defines
   outputs = [
     "grit/password_manager_internals_resources.h",
@@ -41,8 +40,6 @@ grit("password_manager_internals_resources") {
 grit("policy_resources") {
   source = "md_policy/policy_resources.grd"
   defines = chrome_grit_defines
-
-  # TODO(thestig): use_qualified_include = true
   outputs = [
     "grit/policy_resources.h",
     "grit/policy_resources_map.cc",
@@ -54,7 +51,6 @@ grit("policy_resources") {
 
 grit("task_scheduler_internals_resources") {
   source = "task_scheduler_internals/resources.grd"
-  use_qualified_include = true
   defines = chrome_grit_defines
   outputs = [
     "grit/task_scheduler_internals_resources.h",
@@ -65,7 +61,6 @@ grit("task_scheduler_internals_resources") {
 
 grit("translate_internals_resources") {
   source = "translate_internals_resources.grd"
-  use_qualified_include = true
   defines = chrome_grit_defines
   outputs = [
     "grit/translate_internals_resources.h",
@@ -74,11 +69,9 @@ grit("translate_internals_resources") {
   output_dir = "$root_gen_dir/chrome"
 }
 
-if (!is_ios && !is_android) {
+if (!is_android) {
   grit("component_extension_resources") {
     source = "component_extension_resources.grd"
-
-    # TODO(thestig): use_qualified_include = true
     defines = chrome_grit_defines
     if (enable_hangout_services_extension) {
       defines += [ "enable_hangout_services_extension" ]
@@ -107,7 +100,6 @@ if (!is_ios && !is_android) {
       source = "settings/settings_resources.grd"
     }
 
-    # TODO(thestig): use_qualified_include = true
     defines = chrome_grit_defines
     outputs = [
       "grit/settings_resources.h",
@@ -120,7 +112,6 @@ if (!is_ios && !is_android) {
 
   grit("options_resources") {
     source = "options_resources.grd"
-    use_qualified_include = true
     defines = chrome_grit_defines
     outputs = [
       "grit/options_resources.h",
@@ -131,7 +122,6 @@ if (!is_ios && !is_android) {
 
   grit("options_test_resources") {
     source = "options_test_resources.grd"
-    use_qualified_include = true
     defines = chrome_grit_defines
     outputs = [
       "grit/options_test_resources.h",
@@ -141,34 +131,29 @@ if (!is_ios && !is_android) {
   }
 }
 
-if (!is_ios) {
-  grit("quota_internals_resources") {
-    source = "quota_internals_resources.grd"
-    use_qualified_include = true
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/quota_internals_resources.h",
-      "quota_internals_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
+grit("quota_internals_resources") {
+  source = "quota_internals_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/quota_internals_resources.h",
+    "quota_internals_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
 
-  grit("webapks_ui_resources") {
-    source = "webapks_ui_resources.grd"
-    use_qualified_include = true
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/webapks_ui_resources.h",
-      "webapks_ui_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
+grit("webapks_ui_resources") {
+  source = "webapks_ui_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/webapks_ui_resources.h",
+    "webapks_ui_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
 }
 
 if (enable_extensions) {
   grit("sync_file_system_internals_resources") {
     source = "sync_file_system_internals_resources.grd"
-    use_qualified_include = true
     defines = chrome_grit_defines
     outputs = [
       "grit/sync_file_system_internals_resources.h",

@@ -32,7 +32,7 @@
 #define DedicatedWorkerMessagingProxyProviderImpl_h
 
 #include "core/workers/DedicatedWorkerMessagingProxyProvider.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -44,15 +44,15 @@ class DedicatedWorkerMessagingProxyProviderImpl final
   WTF_MAKE_NONCOPYABLE(DedicatedWorkerMessagingProxyProviderImpl);
 
  public:
-  static DedicatedWorkerMessagingProxyProviderImpl* create(Page& page) {
+  static DedicatedWorkerMessagingProxyProviderImpl* Create(Page& page) {
     return new DedicatedWorkerMessagingProxyProviderImpl(page);
   }
 
   ~DedicatedWorkerMessagingProxyProviderImpl() override {}
-  InProcessWorkerMessagingProxy* createWorkerMessagingProxy(Worker*) override;
+  InProcessWorkerMessagingProxy* CreateWorkerMessagingProxy(Worker*) override;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
-    DedicatedWorkerMessagingProxyProvider::trace(visitor);
+    DedicatedWorkerMessagingProxyProvider::Trace(visitor);
   }
 
  private:

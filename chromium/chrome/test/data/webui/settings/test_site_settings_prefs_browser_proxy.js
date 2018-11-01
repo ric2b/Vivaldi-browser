@@ -3,6 +3,33 @@
 // found in the LICENSE file.
 
 /**
+ * Only used for tests.
+ * @typedef {{
+ *   auto_downloads: !Array<!RawSiteException>},
+ *   background_sync: !Array<!RawSiteException>},
+ *   camera: !Array<!RawSiteException>},
+ *   cookies: !Array<!RawSiteException>},
+ *   geolocation: !Array<!RawSiteException>},
+ *   javascript: !Array<!RawSiteException>},
+ *   mic: !Array<!RawSiteException>},
+ *   midiDevices: !Array<!RawSiteException>},
+ *   notifications: !Array<!RawSiteException>},
+ *   plugins: !Array<!RawSiteException>},
+ *   popups: !Array<!RawSiteException>},
+ *   unsandboxed_plugins: !Array<!RawSiteException>},
+ * }}
+ */
+var ExceptionListPref;
+
+/**
+ * In the real (non-test) code, these data come from the C++ handler.
+ * Only used for tests.
+ * @typedef {{defaults: CategoryDefaultsPref,
+ *            exceptions: ExceptionListPref}}
+ */
+var SiteSettingsPref;
+
+/**
  * An example empty pref.
  * @type {SiteSettingsPref}
  */
@@ -19,6 +46,7 @@ var prefsEmpty = {
     notifications: '',
     plugins: '',
     popups: '',
+    subresource_filter: '',
     unsandboxed_plugins: '',
   },
   exceptions: {
@@ -33,6 +61,7 @@ var prefsEmpty = {
     notifications: [],
     plugins: [],
     popups: [],
+    subresource_filter: [],
     unsandboxed_plugins: [],
   },
 };
@@ -67,6 +96,9 @@ var TestSiteSettingsPrefsBrowserProxy = function() {
     'setProtocolDefault'
   ]);
 
+  /** @private {boolean} */
+  this.hasIncognito_ = false;
+
   /** @private {!SiteSettingsPref} */
   this.prefs_ = prefsEmpty;
 
@@ -88,6 +120,15 @@ var TestSiteSettingsPrefsBrowserProxy = function() {
 
 TestSiteSettingsPrefsBrowserProxy.prototype = {
   __proto__: settings.TestBrowserProxy.prototype,
+
+  /**
+   * Pretends an incognito session started or ended.
+   * @param {boolean} hasIncognito True for session started.
+   */
+  setIncognito: function(hasIncognito) {
+    this.hasIncognito_ = hasIncognito;
+    cr.webUIListenerCallback('onIncognitoStatusChanged', hasIncognito);
+  },
 
   /**
    * Sets the prefs to use when testing.
@@ -184,6 +225,9 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     } else if (
         contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS) {
       pref = this.prefs_.defaults.unsandboxed_plugins;
+    }
+    else if (contentType == settings.ContentSettingsTypes.SUBRESOURCE_FILTER) {
+      pref = this.prefs_.defaults.subresource_filter;
     } else {
       console.log('getDefault received unknown category: ' + contentType);
     }
@@ -227,10 +271,21 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.exceptions.popups;
     else if (contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS)
       pref = this.prefs_.exceptions.unsandboxed_plugins;
+    else if (contentType == settings.ContentSettingsTypes.SUBRESOURCE_FILTER) {
+      pref = this.prefs_.exceptions.subresource_filter;
+    }
     else
       console.log('getExceptionList received unknown category: ' + contentType);
 
     assert(pref != undefined, 'Pref is missing for ' + contentType);
+
+    if (this.hasIncognito_) {
+      var incognitoElements = [];
+      for (var i = 0; i < pref.length; ++i)
+        incognitoElements.push(Object.assign({incognito: true}, pref[i]));
+      pref = pref.concat(incognitoElements);
+    }
+
     return Promise.resolve(pref);
   },
 

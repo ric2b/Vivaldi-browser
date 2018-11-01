@@ -131,36 +131,28 @@ class TestImporterTest(LoggingTestCase):
              'TBR=qyearsley@chromium.org\n'
              'NOEXPORT=true'))
 
-    def test_generate_manifest_command_not_found(self):
-        # If we're updating csswg-test, then the manifest file won't be found.
-        host = MockHost()
-        host.filesystem.files = {}
-        importer = TestImporter(host)
-        importer._generate_manifest(
-            '/mock-checkout/third_party/WebKit/LayoutTests/external/csswg-test')
-        self.assertEqual(host.executive.calls, [])
-
     def test_generate_manifest_successful_run(self):
         # This test doesn't test any aspect of the real manifest script, it just
         # asserts that TestImporter._generate_manifest would invoke the script.
         host = MockHost()
         importer = TestImporter(host)
-        importer._generate_manifest(
-            '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt')
+        blink_path = '/mock-checkout/third_party/WebKit'
+        host.filesystem.write_text_file(blink_path + '/LayoutTests/external/wpt/MANIFEST.json', '{}')
+        importer._generate_manifest(blink_path + '/LayoutTests/external/wpt')
         self.assertEqual(
             host.executive.calls,
             [
                 [
                     'python',
-                    '/mock-checkout/third_party/WebKit/Tools/Scripts/webkitpy/thirdparty/wpt/wpt/manifest',
+                    blink_path + '/Tools/Scripts/webkitpy/thirdparty/wpt/wpt/manifest',
                     '--work',
                     '--tests-root',
-                    '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt'
+                    blink_path + '/LayoutTests/external/wpt',
                 ],
                 [
                     'git',
                     'add',
-                    '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt/MANIFEST.json'
+                    blink_path + '/LayoutTests/external/WPT_BASE_MANIFEST.json',
                 ]
             ])
 
@@ -193,3 +185,29 @@ class TestImporterTest(LoggingTestCase):
         self.assertEqual(
             TestImporter._cc_part(directory_owners),
             ['--cc=someone@chromium.org', '--cc=x@chromium.org', '--cc=y@chromium.org'])
+
+    def test_delete_orphaned_baselines(self):
+        host = MockHost()
+        dest_path = '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt'
+        host.filesystem.write_text_file(dest_path + '/b-expected.txt', '')
+        host.filesystem.write_text_file(dest_path + '/b.x-expected.txt', '')
+        host.filesystem.write_text_file(dest_path + '/b.x.html', '')
+        importer = TestImporter(host)
+        importer._delete_orphaned_baselines(dest_path)
+        self.assertFalse(host.filesystem.exists(dest_path + '/b-expected.txt'))
+        self.assertTrue(host.filesystem.exists(dest_path + '/b.x-expected.txt'))
+        self.assertTrue(host.filesystem.exists(dest_path + '/b.x.html'))
+
+    def test_keeps_owners_files_and_baselines(self):
+        host = MockHost()
+        dest_path = '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt'
+        host.filesystem.write_text_file(dest_path + '/foo-test.html', '')
+        host.filesystem.write_text_file(dest_path + '/foo-test-expected.txt', '')
+        host.filesystem.write_text_file(dest_path + '/OWNERS', '')
+        host.filesystem.write_text_file(dest_path + '/bar/baz/OWNERS', '')
+        importer = TestImporter(host)
+        importer._clear_out_dest_path(dest_path)
+        self.assertFalse(host.filesystem.exists(dest_path + '/foo-test.html'))
+        self.assertTrue(host.filesystem.exists(dest_path + '/foo-test-expected.txt'))
+        self.assertTrue(host.filesystem.exists(dest_path + '/OWNERS'))
+        self.assertTrue(host.filesystem.exists(dest_path + '/bar/baz/OWNERS'))

@@ -79,8 +79,6 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
 
     // Called with the path may be degrading. Note that the path may only be
     // temporarily degrading.
-    // TODO(jri): With multipath, this method should probably have a path_id
-    // parameter, and should maybe result in the path being marked as inactive.
     virtual void OnPathDegrading() = 0;
 
     // Called when the Path MTU may have increased.
@@ -196,6 +194,10 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // Returns debugging information about the state of the congestion controller.
   std::string GetDebugState() const;
 
+  // Returns the number of bytes that are considered in-flight, i.e. not lost or
+  // acknowledged.
+  QuicByteCount GetBytesInFlight() const;
+
   // No longer retransmit data for |stream_id|.
   void CancelRetransmissionsForStream(QuicStreamId stream_id);
 
@@ -221,6 +223,10 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   void OnApplicationLimited();
 
   const SendAlgorithmInterface* GetSendAlgorithm() const;
+
+  QuicPacketNumber largest_packet_peer_knows_is_acked() const {
+    return largest_packet_peer_knows_is_acked_;
+  }
 
  private:
   friend class test::QuicConnectionPeer;
@@ -401,6 +407,9 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // Records bandwidth from server to client in normal operation, over periods
   // of time with no loss events.
   QuicSustainedBandwidthRecorder sustained_bandwidth_recorder_;
+
+  // The largest acked value that was sent in an ack, which has then been acked.
+  QuicPacketNumber largest_packet_peer_knows_is_acked_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSentPacketManager);
 };

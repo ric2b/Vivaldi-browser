@@ -9,7 +9,6 @@
 #include "testing/platform_test.h"
 
 using ::testing::_;
-using base::StringPiece;
 
 namespace net {
 
@@ -18,28 +17,28 @@ namespace test {
 // Expose all private methods of class SpdyAltSvcWireFormat.
 class SpdyAltSvcWireFormatPeer {
  public:
-  static void SkipWhiteSpace(StringPiece::const_iterator* c,
-                             StringPiece::const_iterator end) {
+  static void SkipWhiteSpace(SpdyStringPiece::const_iterator* c,
+                             SpdyStringPiece::const_iterator end) {
     SpdyAltSvcWireFormat::SkipWhiteSpace(c, end);
   }
-  static bool PercentDecode(StringPiece::const_iterator c,
-                            StringPiece::const_iterator end,
-                            std::string* output) {
+  static bool PercentDecode(SpdyStringPiece::const_iterator c,
+                            SpdyStringPiece::const_iterator end,
+                            SpdyString* output) {
     return SpdyAltSvcWireFormat::PercentDecode(c, end, output);
   }
-  static bool ParseAltAuthority(StringPiece::const_iterator c,
-                                StringPiece::const_iterator end,
-                                std::string* host,
+  static bool ParseAltAuthority(SpdyStringPiece::const_iterator c,
+                                SpdyStringPiece::const_iterator end,
+                                SpdyString* host,
                                 uint16_t* port) {
     return SpdyAltSvcWireFormat::ParseAltAuthority(c, end, host, port);
   }
-  static bool ParsePositiveInteger16(StringPiece::const_iterator c,
-                                     StringPiece::const_iterator end,
+  static bool ParsePositiveInteger16(SpdyStringPiece::const_iterator c,
+                                     SpdyStringPiece::const_iterator end,
                                      uint16_t* max_age) {
     return SpdyAltSvcWireFormat::ParsePositiveInteger16(c, end, max_age);
   }
-  static bool ParsePositiveInteger32(StringPiece::const_iterator c,
-                                     StringPiece::const_iterator end,
+  static bool ParsePositiveInteger32(SpdyStringPiece::const_iterator c,
+                                     SpdyStringPiece::const_iterator end,
                                      uint32_t* max_age) {
     return SpdyAltSvcWireFormat::ParsePositiveInteger32(c, end, max_age);
   }
@@ -53,7 +52,7 @@ namespace {
 // random case, and corresponding AlternativeService entries.
 void FuzzHeaderFieldValue(
     int i,
-    std::string* header_field_value,
+    SpdyString* header_field_value,
     SpdyAltSvcWireFormat::AlternativeService* expected_altsvc) {
   if (!header_field_value->empty()) {
     header_field_value->push_back(',');
@@ -110,7 +109,7 @@ void FuzzHeaderFieldValue(
 // canonical form, that is, what SerializeHeaderFieldValue() should output.
 void FuzzAlternativeService(int i,
                             SpdyAltSvcWireFormat::AlternativeService* altsvc,
-                            std::string* expected_header_field_value) {
+                            SpdyString* expected_header_field_value) {
   if (!expected_header_field_value->empty()) {
     expected_header_field_value->push_back(',');
   }
@@ -163,7 +162,7 @@ TEST(SpdyAltSvcWireFormatTest, ParseHeaderFieldValueClear) {
 // separator, etc.  Single alternative service at a time.
 TEST(SpdyAltSvcWireFormatTest, ParseHeaderFieldValue) {
   for (int i = 0; i < 1 << 11; ++i) {
-    std::string header_field_value;
+    SpdyString header_field_value;
     SpdyAltSvcWireFormat::AlternativeService expected_altsvc;
     FuzzHeaderFieldValue(i, &header_field_value, &expected_altsvc);
     SpdyAltSvcWireFormat::AlternativeServiceVector altsvc_vector;
@@ -177,7 +176,7 @@ TEST(SpdyAltSvcWireFormatTest, ParseHeaderFieldValue) {
     EXPECT_EQ(expected_altsvc.version, altsvc_vector[0].version);
 
     // Roundtrip test starting with |altsvc_vector|.
-    std::string reserialized_header_field_value =
+    SpdyString reserialized_header_field_value =
         SpdyAltSvcWireFormat::SerializeHeaderFieldValue(altsvc_vector);
     SpdyAltSvcWireFormat::AlternativeServiceVector roundtrip_altsvc_vector;
     ASSERT_TRUE(SpdyAltSvcWireFormat::ParseHeaderFieldValue(
@@ -197,7 +196,7 @@ TEST(SpdyAltSvcWireFormatTest, ParseHeaderFieldValue) {
 // separator, etc.  Possibly multiple alternative service at a time.
 TEST(SpdyAltSvcWireFormatTest, ParseHeaderFieldValueMultiple) {
   for (int i = 0; i < 1 << 11;) {
-    std::string header_field_value;
+    SpdyString header_field_value;
     SpdyAltSvcWireFormat::AlternativeServiceVector expected_altsvc_vector;
     // This will generate almost two hundred header field values with two,
     // three, four, five, six, and seven alternative services each, and
@@ -222,7 +221,7 @@ TEST(SpdyAltSvcWireFormatTest, ParseHeaderFieldValueMultiple) {
     }
 
     // Roundtrip test starting with |altsvc_vector|.
-    std::string reserialized_header_field_value =
+    SpdyString reserialized_header_field_value =
         SpdyAltSvcWireFormat::SerializeHeaderFieldValue(altsvc_vector);
     SpdyAltSvcWireFormat::AlternativeServiceVector roundtrip_altsvc_vector;
     ASSERT_TRUE(SpdyAltSvcWireFormat::ParseHeaderFieldValue(
@@ -256,7 +255,7 @@ TEST(SpdyAltSvcWireFormatTest, SerializeEmptyHeaderFieldValue) {
 TEST(SpdyAltSvcWireFormatTest, RoundTrip) {
   for (int i = 0; i < 1 << 3; ++i) {
     SpdyAltSvcWireFormat::AlternativeService altsvc;
-    std::string expected_header_field_value;
+    SpdyString expected_header_field_value;
     FuzzAlternativeService(i, &altsvc, &expected_header_field_value);
 
     // Test ParseHeaderFieldValue().
@@ -284,7 +283,7 @@ TEST(SpdyAltSvcWireFormatTest, RoundTrip) {
 // parameter.  Multiple alternative services at a time.
 TEST(SpdyAltSvcWireFormatTest, RoundTripMultiple) {
   SpdyAltSvcWireFormat::AlternativeServiceVector altsvc_vector;
-  std::string expected_header_field_value;
+  SpdyString expected_header_field_value;
   for (int i = 0; i < 1 << 3; ++i) {
     SpdyAltSvcWireFormat::AlternativeService altsvc;
     FuzzAlternativeService(i, &altsvc, &expected_header_field_value);
@@ -356,7 +355,7 @@ TEST(SpdyAltSvcWireFormatTest, ParseTruncatedHeaderFieldValue) {
   SpdyAltSvcWireFormat::AlternativeServiceVector altsvc_vector;
   const char* field_value_array[] = {"a=\":137\"", "a=\"foo:137\"",
                                      "a%25=\"foo\\\"bar\\\\baz:137\""};
-  for (const std::string& field_value : field_value_array) {
+  for (const SpdyString& field_value : field_value_array) {
     for (size_t len = 1; len < field_value.size(); ++len) {
       EXPECT_FALSE(SpdyAltSvcWireFormat::ParseHeaderFieldValue(
           field_value.substr(0, len), &altsvc_vector))
@@ -369,8 +368,8 @@ TEST(SpdyAltSvcWireFormatTest, ParseTruncatedHeaderFieldValue) {
 
 // Test SkipWhiteSpace().
 TEST(SpdyAltSvcWireFormatTest, SkipWhiteSpace) {
-  StringPiece input("a \tb  ");
-  StringPiece::const_iterator c = input.begin();
+  SpdyStringPiece input("a \tb  ");
+  SpdyStringPiece::const_iterator c = input.begin();
   test::SpdyAltSvcWireFormatPeer::SkipWhiteSpace(&c, input.end());
   ASSERT_EQ(input.begin(), c);
   ++c;
@@ -383,19 +382,19 @@ TEST(SpdyAltSvcWireFormatTest, SkipWhiteSpace) {
 
 // Test PercentDecode() on valid input.
 TEST(SpdyAltSvcWireFormatTest, PercentDecodeValid) {
-  StringPiece input("");
-  std::string output;
+  SpdyStringPiece input("");
+  SpdyString output;
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::PercentDecode(
       input.begin(), input.end(), &output));
   EXPECT_EQ("", output);
 
-  input = StringPiece("foo");
+  input = SpdyStringPiece("foo");
   output.clear();
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::PercentDecode(
       input.begin(), input.end(), &output));
   EXPECT_EQ("foo", output);
 
-  input = StringPiece("%2ca%5Cb");
+  input = SpdyStringPiece("%2ca%5Cb");
   output.clear();
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::PercentDecode(
       input.begin(), input.end(), &output));
@@ -406,8 +405,8 @@ TEST(SpdyAltSvcWireFormatTest, PercentDecodeValid) {
 TEST(SpdyAltSvcWireFormatTest, PercentDecodeInvalid) {
   const char* invalid_input_array[] = {"a%", "a%x", "a%b", "%J22", "%9z"};
   for (const char* invalid_input : invalid_input_array) {
-    StringPiece input(invalid_input);
-    std::string output;
+    SpdyStringPiece input(invalid_input);
+    SpdyString output;
     EXPECT_FALSE(test::SpdyAltSvcWireFormatPeer::PercentDecode(
         input.begin(), input.end(), &output))
         << input;
@@ -416,21 +415,21 @@ TEST(SpdyAltSvcWireFormatTest, PercentDecodeInvalid) {
 
 // Test ParseAltAuthority() on valid input.
 TEST(SpdyAltSvcWireFormatTest, ParseAltAuthorityValid) {
-  StringPiece input(":42");
-  std::string host;
+  SpdyStringPiece input(":42");
+  SpdyString host;
   uint16_t port;
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::ParseAltAuthority(
       input.begin(), input.end(), &host, &port));
   EXPECT_TRUE(host.empty());
   EXPECT_EQ(42, port);
 
-  input = StringPiece("foo:137");
+  input = SpdyStringPiece("foo:137");
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::ParseAltAuthority(
       input.begin(), input.end(), &host, &port));
   EXPECT_EQ("foo", host);
   EXPECT_EQ(137, port);
 
-  input = StringPiece("[2003:8:0:16::509d:9615]:443");
+  input = SpdyStringPiece("[2003:8:0:16::509d:9615]:443");
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::ParseAltAuthority(
       input.begin(), input.end(), &host, &port));
   EXPECT_EQ("[2003:8:0:16::509d:9615]", host);
@@ -457,8 +456,8 @@ TEST(SpdyAltSvcWireFormatTest, ParseAltAuthorityInvalid) {
                                        "[2003:8:0:16::509d:9615:443",
                                        "2003:8:0:16::509d:9615]:443"};
   for (const char* invalid_input : invalid_input_array) {
-    StringPiece input(invalid_input);
-    std::string host;
+    SpdyStringPiece input(invalid_input);
+    SpdyString host;
     uint16_t port;
     EXPECT_FALSE(test::SpdyAltSvcWireFormatPeer::ParseAltAuthority(
         input.begin(), input.end(), &host, &port))
@@ -468,13 +467,13 @@ TEST(SpdyAltSvcWireFormatTest, ParseAltAuthorityInvalid) {
 
 // Test ParseInteger() on valid input.
 TEST(SpdyAltSvcWireFormatTest, ParseIntegerValid) {
-  StringPiece input("3");
+  SpdyStringPiece input("3");
   uint16_t value;
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger16(
       input.begin(), input.end(), &value));
   EXPECT_EQ(3, value);
 
-  input = StringPiece("1337");
+  input = SpdyStringPiece("1337");
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger16(
       input.begin(), input.end(), &value));
   EXPECT_EQ(1337, value);
@@ -485,7 +484,7 @@ TEST(SpdyAltSvcWireFormatTest, ParseIntegerValid) {
 TEST(SpdyAltSvcWireFormatTest, ParseIntegerInvalid) {
   const char* invalid_input_array[] = {"", " ", "a", "0", "00", "1 ", "12b"};
   for (const char* invalid_input : invalid_input_array) {
-    StringPiece input(invalid_input);
+    SpdyStringPiece input(invalid_input);
     uint16_t value;
     EXPECT_FALSE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger16(
         input.begin(), input.end(), &value))
@@ -496,39 +495,39 @@ TEST(SpdyAltSvcWireFormatTest, ParseIntegerInvalid) {
 // Test ParseIntegerValid() around overflow limit.
 TEST(SpdyAltSvcWireFormatTest, ParseIntegerOverflow) {
   // Largest possible uint16_t value.
-  StringPiece input("65535");
+  SpdyStringPiece input("65535");
   uint16_t value16;
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger16(
       input.begin(), input.end(), &value16));
   EXPECT_EQ(65535, value16);
 
   // Overflow uint16_t, ParsePositiveInteger16() should return false.
-  input = StringPiece("65536");
+  input = SpdyStringPiece("65536");
   ASSERT_FALSE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger16(
       input.begin(), input.end(), &value16));
 
   // However, even if overflow is not checked for, 65536 overflows to 0, which
   // returns false anyway.  Check for a larger number which overflows to 1.
-  input = StringPiece("65537");
+  input = SpdyStringPiece("65537");
   ASSERT_FALSE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger16(
       input.begin(), input.end(), &value16));
 
   // Largest possible uint32_t value.
-  input = StringPiece("4294967295");
+  input = SpdyStringPiece("4294967295");
   uint32_t value32;
   ASSERT_TRUE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger32(
       input.begin(), input.end(), &value32));
   EXPECT_EQ(4294967295, value32);
 
   // Overflow uint32_t, ParsePositiveInteger32() should return false.
-  input = StringPiece("4294967296");
+  input = SpdyStringPiece("4294967296");
   ASSERT_FALSE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger32(
       input.begin(), input.end(), &value32));
 
   // However, even if overflow is not checked for, 4294967296 overflows to 0,
   // which returns false anyway.  Check for a larger number which overflows to
   // 1.
-  input = StringPiece("4294967297");
+  input = SpdyStringPiece("4294967297");
   ASSERT_FALSE(test::SpdyAltSvcWireFormatPeer::ParsePositiveInteger32(
       input.begin(), input.end(), &value32));
 }

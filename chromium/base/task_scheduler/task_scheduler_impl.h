@@ -19,6 +19,7 @@
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -28,15 +29,29 @@ class SchedulerWorkerPoolParams;
 namespace internal {
 
 class DelayedTaskManager;
+class SchedulerSingleThreadTaskRunnerManager;
 class TaskTracker;
 
 // Default TaskScheduler implementation. This class is thread-safe.
 class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
  public:
   // Creates and returns an initialized TaskSchedulerImpl. CHECKs on failure.
+  // |name| is used to label threads and histograms. It should identify the
+  // component that creates the TaskScheduler. |init_params| contains params to
+  // initialize worker pools.
+  //
+  // Note: The names and priority hints in |init_params| are ignored.
+  // https://crbug.com/690706
+  static std::unique_ptr<TaskSchedulerImpl> Create(
+      const std::string& name,
+      const TaskScheduler::InitParams& init_params);
+
+  // Creates and returns an initialized TaskSchedulerImpl. CHECKs on failure.
   // |worker_pool_params_vector| describes the worker pools to create.
   // |worker_pool_index_for_traits_callback| returns the index in |worker_pools|
   // of the worker pool in which a task with given traits should run.
+  //
+  // Deprecated. https://crbug.com/690706
   static std::unique_ptr<TaskSchedulerImpl> Create(
       const std::vector<SchedulerWorkerPoolParams>& worker_pool_params_vector,
       const WorkerPoolIndexForTraitsCallback&
@@ -47,7 +62,7 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   // TaskScheduler:
   void PostDelayedTaskWithTraits(const tracked_objects::Location& from_here,
                                  const TaskTraits& traits,
-                                 const Closure& task,
+                                 OnceClosure task,
                                  TimeDelta delay) override;
   scoped_refptr<TaskRunner> CreateTaskRunnerWithTraits(
       const TaskTraits& traits) override;
@@ -55,6 +70,10 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
       const TaskTraits& traits) override;
   scoped_refptr<SingleThreadTaskRunner> CreateSingleThreadTaskRunnerWithTraits(
       const TaskTraits& traits) override;
+#if defined(OS_WIN)
+  scoped_refptr<SingleThreadTaskRunner> CreateCOMSTATaskRunnerWithTraits(
+      const TaskTraits& traits) override;
+#endif  // defined(OS_WIN)
   std::vector<const HistogramBase*> GetHistograms() const override;
   int GetMaxConcurrentTasksWithTraitsDeprecated(
       const TaskTraits& traits) const override;
@@ -80,6 +99,8 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   Thread service_thread_;
   std::unique_ptr<TaskTracker> task_tracker_;
   std::unique_ptr<DelayedTaskManager> delayed_task_manager_;
+  std::unique_ptr<SchedulerSingleThreadTaskRunnerManager>
+      single_thread_task_runner_manager_;
   const WorkerPoolIndexForTraitsCallback worker_pool_index_for_traits_callback_;
   std::vector<std::unique_ptr<SchedulerWorkerPoolImpl>> worker_pools_;
 

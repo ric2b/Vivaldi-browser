@@ -25,6 +25,8 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
 
+namespace {
+
 static gfx::Transform OrthoProjectionMatrix(float left,
                                             float right,
                                             float bottom,
@@ -62,6 +64,13 @@ static gfx::Transform window_matrix(int x, int y, int width, int height) {
   return canvas;
 }
 
+// Switching between enabling DC layers and not is expensive, so only
+// switch away after a large number of frames not needing DC layers have
+// been produced.
+constexpr int kNumberOfFramesBeforeDisablingDCLayers = 60;
+
+}  // namespace
+
 namespace cc {
 
 DirectRenderer::DrawingFrame::DrawingFrame() = default;
@@ -87,8 +96,8 @@ void DirectRenderer::Initialize() {
   if (context_provider) {
     if (context_provider->ContextCapabilities().commit_overlay_planes)
       allow_empty_swap_ = true;
-    if (context_provider->ContextCapabilities().set_draw_rectangle)
-      use_set_draw_rectangle_ = true;
+    if (context_provider->ContextCapabilities().dc_layers)
+      supports_dc_layers_ = true;
     if (context_provider->ContextCapabilities()
             .disable_non_empty_post_sub_buffers) {
       use_partial_swap_ = false;
@@ -259,6 +268,7 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   bool frame_has_alpha =
       current_frame()->root_render_pass->has_transparent_background;
   bool use_stencil = overdraw_feedback_;
+  bool did_reshape = false;
   if (device_viewport_size != reshape_surface_size_ ||
       device_scale_factor != reshape_device_scale_factor_ ||
       root_render_pass->color_space != reshape_device_color_space_ ||
@@ -273,6 +283,7 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
     output_surface_->Reshape(
         reshape_surface_size_, reshape_device_scale_factor_,
         reshape_device_color_space_, reshape_has_alpha_, reshape_use_stencil_);
+    did_reshape = true;
   }
 
   BeginDrawingFrame();
@@ -315,8 +326,26 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
       resource_provider_, root_render_pass, render_pass_filters_,
       render_pass_background_filters_, &current_frame()->overlay_list,
       &current_frame()->ca_layer_overlay_list,
+      &current_frame()->dc_layer_overlay_list,
       &current_frame()->root_damage_rect,
       &current_frame()->root_content_bounds);
+  bool was_using_dc_layers = using_dc_layers_;
+  if (!current_frame()->dc_layer_overlay_list.empty()) {
+    DCHECK(supports_dc_layers_);
+    using_dc_layers_ = true;
+    frames_since_using_dc_layers_ = 0;
+  } else if (++frames_since_using_dc_layers_ >=
+             kNumberOfFramesBeforeDisablingDCLayers) {
+    using_dc_layers_ = false;
+  }
+  if (supports_dc_layers_ &&
+      (did_reshape || (was_using_dc_layers != using_dc_layers_))) {
+    // The entire surface has to be redrawn if it was reshaped or if switching
+    // from or to DirectComposition layers, because the previous contents are
+    // discarded and some contents would otherwise be undefined.
+    current_frame()->root_damage_rect =
+        current_frame()->root_render_pass->output_rect;
+  }
 
   // We can skip all drawing if the damage rect is now empty.
   bool skip_drawing_root_render_pass =
@@ -378,13 +407,13 @@ bool DirectRenderer::ShouldSkipQuad(const DrawQuad& quad,
   if (render_pass_scissor.IsEmpty())
     return true;
 
-  if (quad.shared_quad_state->is_clipped) {
-    gfx::Rect r = quad.shared_quad_state->clip_rect;
-    r.Intersect(render_pass_scissor);
-    return r.IsEmpty();
-  }
+  gfx::Rect target_rect = MathUtil::MapEnclosingClippedRect(
+      quad.shared_quad_state->quad_to_target_transform, quad.visible_rect);
+  if (quad.shared_quad_state->is_clipped)
+    target_rect.Intersect(quad.shared_quad_state->clip_rect);
 
-  return false;
+  target_rect.Intersect(render_pass_scissor);
+  return target_rect.IsEmpty();
 }
 
 void DirectRenderer::SetScissorStateForQuad(
@@ -510,13 +539,15 @@ void DirectRenderer::DrawRenderPass(const RenderPass* render_pass) {
   bool is_root_render_pass =
       current_frame()->current_render_pass == current_frame()->root_render_pass;
 
+  bool render_pass_is_clipped =
+      !render_pass_scissor_in_draw_space.Contains(surface_rect_in_draw_space);
+
   // The SetDrawRectangleCHROMIUM spec requires that the scissor bit is always
   // set on the root framebuffer or else the rendering may modify something
   // outside the damage rectangle, even if the damage rectangle is the size of
   // the full backbuffer.
-  bool render_pass_is_clipped =
-      (use_set_draw_rectangle_ && is_root_render_pass) ||
-      !render_pass_scissor_in_draw_space.Contains(surface_rect_in_draw_space);
+  bool render_pass_requires_scissor =
+      (supports_dc_layers_ && is_root_render_pass) || render_pass_is_clipped;
   bool has_external_stencil_test =
       is_root_render_pass && output_surface_->HasExternalStencilTest();
   bool should_clear_surface =
@@ -529,7 +560,7 @@ void DirectRenderer::DrawRenderPass(const RenderPass* render_pass) {
          !current_frame()->current_render_pass->has_transparent_background);
 
   SurfaceInitializationMode mode;
-  if (should_clear_surface && render_pass_is_clipped) {
+  if (should_clear_surface && render_pass_requires_scissor) {
     mode = SURFACE_INITIALIZATION_MODE_SCISSORED_CLEAR;
   } else if (should_clear_surface) {
     mode = SURFACE_INITIALIZATION_MODE_FULL_SURFACE_CLEAR;
@@ -557,7 +588,7 @@ void DirectRenderer::DrawRenderPass(const RenderPass* render_pass) {
     if (last_sorting_context_id != quad.shared_quad_state->sorting_context_id) {
       last_sorting_context_id = quad.shared_quad_state->sorting_context_id;
       FlushPolygons(&poly_list, render_pass_scissor_in_draw_space,
-                    render_pass_is_clipped);
+                    render_pass_requires_scissor);
     }
 
     // This layer is in a 3D sorting context so we add it to the list of
@@ -574,12 +605,12 @@ void DirectRenderer::DrawRenderPass(const RenderPass* render_pass) {
 
     // We are not in a 3d sorting context, so we should draw the quad normally.
     SetScissorStateForQuad(quad, render_pass_scissor_in_draw_space,
-                           render_pass_is_clipped);
+                           render_pass_requires_scissor);
 
     DoDrawQuad(&quad, nullptr);
   }
   FlushPolygons(&poly_list, render_pass_scissor_in_draw_space,
-                render_pass_is_clipped);
+                render_pass_requires_scissor);
   FinishDrawingQuadList();
 }
 
@@ -589,8 +620,10 @@ bool DirectRenderer::UseRenderPass(const RenderPass* render_pass) {
   if (render_pass == current_frame()->root_render_pass) {
     BindFramebufferToOutputSurface();
 
-    if (use_set_draw_rectangle_)
+    if (supports_dc_layers_) {
+      SetEnableDCLayers(using_dc_layers_);
       output_surface_->SetDrawRectangle(current_frame()->root_damage_rect);
+    }
     InitializeViewport(current_frame(), render_pass->output_rect,
                        gfx::Rect(current_frame()->device_viewport_size),
                        current_frame()->device_viewport_size);

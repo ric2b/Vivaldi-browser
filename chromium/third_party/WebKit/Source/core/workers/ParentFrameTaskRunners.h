@@ -5,14 +5,14 @@
 #ifndef ParentFrameTaskRunners_h
 #define ParentFrameTaskRunners_h
 
+#include <memory>
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -33,12 +33,12 @@ class CORE_EXPORT ParentFrameTaskRunners final
   WTF_MAKE_NONCOPYABLE(ParentFrameTaskRunners);
 
  public:
-  static ParentFrameTaskRunners* create(LocalFrame* frame) {
+  static ParentFrameTaskRunners* Create(LocalFrame* frame) {
     return new ParentFrameTaskRunners(frame);
   }
 
   // Might return nullptr for unsupported task types.
-  RefPtr<WebTaskRunner> get(TaskType);
+  RefPtr<WebTaskRunner> Get(TaskType);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -52,10 +52,10 @@ class CORE_EXPORT ParentFrameTaskRunners final
   // particular local frame.
   explicit ParentFrameTaskRunners(LocalFrame*);
 
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
-  Mutex m_taskRunnersMutex;
-  TaskRunnerHashMap m_taskRunners;
+  Mutex task_runners_mutex_;
+  TaskRunnerHashMap task_runners_;
 };
 
 }  // namespace blink

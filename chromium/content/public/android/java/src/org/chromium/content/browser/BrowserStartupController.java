@@ -62,7 +62,7 @@ public class BrowserStartupController {
     private static BrowserStartupController sInstance;
 
     private static boolean sBrowserMayStartAsynchronously;
-    private static boolean sShouldStartGpuProcessOnBrowserStartup = true;
+    private static boolean sShouldStartGpuProcessOnBrowserStartup;
 
     private static void setAsynchronousStartup(boolean enable) {
         sBrowserMayStartAsynchronously = enable;
@@ -177,6 +177,9 @@ public class BrowserStartupController {
                 @Override
                 public void run() {
                     ThreadUtils.assertOnUiThread();
+                    // Make sure to not call ContentMain.start twice, if startBrowserProcessesSync
+                    // is called before this runs.
+                    if (!sBrowserMayStartAsynchronously) return;
                     if (contentStart() > 0) {
                         // Failed. The callbacks may not have run, so run them.
                         enqueueCallbackExecution(STARTUP_FAILURE, NOT_ALREADY_STARTED);

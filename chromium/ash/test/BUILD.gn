@@ -4,24 +4,6 @@
 
 import("//build/config/ui.gni")
 
-# Used to test ash with an aura backend.
-source_set("ash_with_aura_test_support") {
-  testonly = true
-  sources = [
-    "ash_test_impl_aura.cc",
-    "ash_test_impl_aura.h",
-  ]
-  deps = [
-    ":test_support_common",
-    "//ash",
-    "//base",
-    "//skia",
-    "//ui/aura:test_support",
-    "//ui/display",
-    "//ui/wm",
-  ]
-}
-
 static_library("test_support_without_content") {
   testonly = true
   sources = [
@@ -67,42 +49,39 @@ static_library("test_support_common") {
   testonly = true
   visibility = [ ":*" ]
   sources = [
-    "../common/test/ash_test.cc",
-    "../common/test/ash_test.h",
-    "../common/test/ash_test_impl.h",
-    "../common/test/test_palette_delegate.cc",
-    "../common/test/test_palette_delegate.h",
-    "../common/test/test_session_state_delegate.cc",
-    "../common/test/test_session_state_delegate.h",
-    "../common/test/test_shelf_delegate.cc",
-    "../common/test/test_shelf_delegate.h",
-    "../common/test/test_shelf_item_delegate.cc",
-    "../common/test/test_shelf_item_delegate.h",
-    "../common/test/test_system_tray_delegate.cc",
-    "../common/test/test_system_tray_delegate.h",
-    "../common/test/wm_shell_test_api.cc",
-    "../common/test/wm_shell_test_api.h",
-    "../common/test/workspace_event_handler_test_helper.cc",
-    "../common/test/workspace_event_handler_test_helper.h",
-
     # TODO(jamescook): Move these files into ash/test.
     "../laser/laser_pointer_controller_test_api.cc",
     "../laser/laser_pointer_controller_test_api.h",
     "../laser/laser_pointer_points_test_api.cc",
     "../laser/laser_pointer_points_test_api.h",
+    "../mus/test/ash_test_impl_mus.cc",
+    "../mus/test/ash_test_impl_mus.h",
+    "../mus/test/wm_test_base.cc",
+    "../mus/test/wm_test_base.h",
+    "../mus/test/wm_test_helper.cc",
+    "../mus/test/wm_test_helper.h",
+    "../rotator/test/screen_rotation_animator_test_api.cc",
+    "../rotator/test/screen_rotation_animator_test_api.h",
     "../shell/toplevel_window.cc",
     "../shell/toplevel_window.h",
+    "ash_test.cc",
+    "ash_test.h",
     "ash_test_base.cc",
     "ash_test_base.h",
     "ash_test_environment.h",
     "ash_test_helper.cc",
     "ash_test_helper.h",
+    "ash_test_impl.h",
+    "ash_test_impl_aura.cc",
+    "ash_test_impl_aura.h",
     "ash_test_views_delegate.cc",
     "ash_test_views_delegate.h",
     "child_modal_window.cc",
     "child_modal_window.h",
     "cursor_manager_test_api.cc",
     "cursor_manager_test_api.h",
+    "display_configuration_controller_test_api.cc",
+    "display_configuration_controller_test_api.h",
     "immersive_fullscreen_controller_test_api.cc",
     "immersive_fullscreen_controller_test_api.h",
     "lock_state_controller_test_api.cc",
@@ -111,6 +90,8 @@ static_library("test_support_common") {
     "mirror_window_test_api.h",
     "overflow_bubble_view_test_api.cc",
     "overflow_bubble_view_test_api.h",
+    "overflow_button_test_api.cc",
+    "overflow_button_test_api.h",
     "screen_orientation_controller_test_api.cc",
     "screen_orientation_controller_test_api.h",
     "shelf_button_pressed_metric_tracker_test_api.cc",
@@ -131,12 +112,24 @@ static_library("test_support_common") {
     "test_keyboard_ui.h",
     "test_overlay_delegate.cc",
     "test_overlay_delegate.h",
+    "test_palette_delegate.cc",
+    "test_palette_delegate.h",
     "test_screenshot_delegate.cc",
     "test_screenshot_delegate.h",
+    "test_session_controller_client.cc",
+    "test_session_controller_client.h",
     "test_session_state_animator.cc",
     "test_session_state_animator.h",
+    "test_session_state_delegate.cc",
+    "test_session_state_delegate.h",
+    "test_shelf_delegate.cc",
+    "test_shelf_delegate.h",
+    "test_shelf_item_delegate.cc",
+    "test_shelf_item_delegate.h",
     "test_shell_delegate.cc",
     "test_shell_delegate.h",
+    "test_system_tray_delegate.cc",
+    "test_system_tray_delegate.h",
     "test_system_tray_item.cc",
     "test_system_tray_item.h",
     "test_wallpaper_delegate.cc",
@@ -147,8 +140,12 @@ static_library("test_support_common") {
     "ui_controls_factory_ash.h",
     "user_metrics_recorder_test_api.cc",
     "user_metrics_recorder_test_api.h",
+    "wallpaper_controller_test_api.cc",
+    "wallpaper_controller_test_api.h",
     "wm_window_test_api.cc",
     "wm_window_test_api.h",
+    "workspace_event_handler_test_helper.cc",
+    "workspace_event_handler_test_helper.h",
   ]
   configs += [ "//build/config:precompiled_headers" ]
 
@@ -163,6 +160,7 @@ static_library("test_support_common") {
     "//ash/mus:lib",
     "//ash/public/cpp:ash_public_cpp",
     "//ash/resources",
+    "//base",
     "//base:i18n",
     "//base/test:test_support",
     "//chromeos",

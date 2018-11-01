@@ -34,16 +34,16 @@ blink_core_sources("inspector") {
     "InspectorCSSAgent.cpp",
     "InspectorCSSAgent.h",
     "InspectorDOMAgent.cpp",
+    "InspectorDOMAgent.h",
     "InspectorDOMDebuggerAgent.cpp",
     "InspectorDOMDebuggerAgent.h",
+    "InspectorFrontendClient.h",
     "InspectorHighlight.cpp",
     "InspectorHighlight.h",
     "InspectorHistory.cpp",
     "InspectorHistory.h",
     "InspectorInputAgent.cpp",
     "InspectorInputAgent.h",
-    "InspectorInstrumentation.cpp",
-    "InspectorInstrumentation.h",
     "InspectorLayerTreeAgent.cpp",
     "InspectorLayerTreeAgent.h",
     "InspectorLogAgent.cpp",
@@ -89,29 +89,6 @@ blink_core_sources("inspector") {
   configs += [
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
     "//build/config/compiler:no_size_t_to_int_warning",
-  ]
-}
-
-action("instrumentation_sources") {
-  visibility = [ ":*" ]
-  script = "CodeGeneratorInstrumentation.py"
-
-  inputs = [
-    # Input file for the script.
-    "InspectorInstrumentation.idl",
-  ]
-
-  outputs = [
-    "$blink_core_output_dir/InspectorInstrumentationInl.h",
-    "$blink_core_output_dir/InspectorOverridesInl.h",
-    "$blink_core_output_dir/InstrumentingAgents.h",
-    "$blink_core_output_dir/InspectorInstrumentationImpl.cpp",
-  ]
-
-  args = [
-    rebase_path("InspectorInstrumentation.idl", root_build_dir),
-    "--output_dir",
-    rebase_path(blink_core_output_dir, root_build_dir),
   ]
 }
 
@@ -193,8 +170,7 @@ inspector_protocol_generate("protocol_sources") {
 
 # Compiles the sources generated above.
 source_set("generated") {
-  sources = get_target_outputs(":protocol_sources") +
-            get_target_outputs(":instrumentation_sources")
+  sources = get_target_outputs(":protocol_sources")
 
   configs -= core_config_remove
   configs += core_config_add + [
@@ -207,7 +183,6 @@ source_set("generated") {
   }
 
   deps = [
-    ":instrumentation_sources",
     ":protocol_sources",
     "//skia",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",

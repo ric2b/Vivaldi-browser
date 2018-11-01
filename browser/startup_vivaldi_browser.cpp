@@ -7,7 +7,6 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "base/command_line.h"
-#include "browser/init_sparkle.h"
 #include "browser/launch_update_notifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
@@ -17,6 +16,10 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "prefs/vivaldi_pref_names.h"
+
+#if defined(OS_MACOSX)
+#include "browser/init_sparkle.h"
+#endif
 
 using extensions::Extension;
 
@@ -68,7 +71,9 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   // specially here, otherwise it will be handled below.
   if (extension) {
     RecordCmdLineAppHistogram(extensions::Manifest::TYPE_PLATFORM_APP);
+#if defined(OS_MACOSX)
     InitializeSparkle(command_line, base::Bind(&IsAutoupdateEnabled, profile));
+#endif
   }
   LaunchUpdateNotifier();
 

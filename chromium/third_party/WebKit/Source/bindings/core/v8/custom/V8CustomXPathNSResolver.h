@@ -33,9 +33,9 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "core/xml/XPathNSResolver.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/RefPtr.h"
 #include "v8/include/v8.h"
-#include "wtf/Forward.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -44,7 +44,7 @@ namespace blink {
 // must not exceed the lifetime of the passed handle.
 class V8CustomXPathNSResolver final : public XPathNSResolver {
  public:
-  static V8CustomXPathNSResolver* create(ScriptState*,
+  static V8CustomXPathNSResolver* Create(ScriptState*,
                                          v8::Local<v8::Object> resolver);
 
   AtomicString lookupNamespaceURI(const String& prefix) override;
@@ -54,8 +54,8 @@ class V8CustomXPathNSResolver final : public XPathNSResolver {
  private:
   V8CustomXPathNSResolver(ScriptState*, v8::Local<v8::Object> resolver);
 
-  RefPtr<ScriptState> m_scriptState;
-  v8::Local<v8::Object> m_resolver;  // Handle to resolver object.
+  RefPtr<ScriptState> script_state_;
+  v8::Local<v8::Object> resolver_;  // Handle to resolver object.
 };
 
 }  // namespace blink

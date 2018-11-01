@@ -35,16 +35,17 @@ namespace net {
 
 namespace {
 
-void GetCertDistinguishedName(
+bool GetCertDistinguishedName(
     const x509_util::CSSMCachedCertificate& cached_cert,
     const CSSM_OID* oid,
     CertPrincipal* result) {
   x509_util::CSSMFieldValue distinguished_name;
   OSStatus status = cached_cert.GetField(oid, &distinguished_name);
   if (status || !distinguished_name.field())
-    return;
+    return false;
   result->ParseDistinguishedName(distinguished_name.field()->Data,
                                  distinguished_name.field()->Length);
+  return true;
 }
 
 bool IsCertIssuerInEncodedList(X509Certificate::OSCertHandle cert_handle,
@@ -73,7 +74,7 @@ bool IsCertIssuerInEncodedList(X509Certificate::OSCertHandle cert_handle,
   return false;
 }
 
-void GetCertDateForOID(const x509_util::CSSMCachedCertificate& cached_cert,
+bool GetCertDateForOID(const x509_util::CSSMCachedCertificate& cached_cert,
                        const CSSM_OID* oid,
                        Time* result) {
   *result = Time();
@@ -81,14 +82,14 @@ void GetCertDateForOID(const x509_util::CSSMCachedCertificate& cached_cert,
   x509_util::CSSMFieldValue field;
   OSStatus status = cached_cert.GetField(oid, &field);
   if (status)
-    return;
+    return false;
 
   const CSSM_X509_TIME* x509_time = field.GetAs<CSSM_X509_TIME>();
   if (x509_time->timeType != BER_TAG_UTC_TIME &&
       x509_time->timeType != BER_TAG_GENERALIZED_TIME) {
     LOG(ERROR) << "Unsupported date/time format "
                << x509_time->timeType;
-    return;
+    return false;
   }
 
   base::StringPiece time_string(
@@ -96,8 +97,11 @@ void GetCertDateForOID(const x509_util::CSSMCachedCertificate& cached_cert,
       x509_time->time.Length);
   CertDateFormat format = x509_time->timeType == BER_TAG_UTC_TIME ?
       CERT_DATE_FORMAT_UTC_TIME : CERT_DATE_FORMAT_GENERALIZED_TIME;
-  if (!ParseCertificateDate(time_string, format, result))
+  if (!ParseCertificateDate(time_string, format, result)) {
     LOG(ERROR) << "Invalid certificate date/time " << time_string;
+    return false;
+  }
+  return true;
 }
 
 std::string GetCertSerialNumber(
@@ -111,37 +115,6 @@ std::string GetCertSerialNumber(
   return std::string(
       reinterpret_cast<const char*>(serial_number.field()->Data),
       serial_number.field()->Length);
-}
-
-// Returns true if |purpose| is listed as allowed in |usage|. This
-// function also considers the "Any" purpose. If the attribute is
-// present and empty, we return false.
-bool ExtendedKeyUsageAllows(const CE_ExtendedKeyUsage* usage,
-                            const CSSM_OID* purpose) {
-  for (unsigned p = 0; p < usage->numPurposes; ++p) {
-    if (CSSMOIDEqual(&usage->purposes[p], purpose))
-      return true;
-    if (CSSMOIDEqual(&usage->purposes[p], &CSSMOID_ExtendedKeyUsageAny))
-      return true;
-  }
-  return false;
-}
-
-// Test that a given |cert_handle| is actually a valid X.509 certificate, and
-// return true if it is.
-//
-// On OS X, SecCertificateCreateFromData() does not return any errors if
-// called with invalid data, as long as data is present. The actual decoding
-// of the certificate does not happen until an API that requires a CSSM
-// handle is called. While SecCertificateGetCLHandle is the most likely
-// candidate, as it performs the parsing, it does not check whether the
-// parsing was actually successful. Instead, SecCertificateGetSubject is
-// used (supported since 10.3), as a means to check that the certificate
-// parsed as a valid X.509 certificate.
-bool IsValidOSCertHandle(SecCertificateRef cert_handle) {
-  const CSSM_X509_NAME* sanity_check = NULL;
-  OSStatus status = SecCertificateGetSubject(cert_handle, &sanity_check);
-  return status == noErr && sanity_check;
 }
 
 // Parses |data| of length |length|, attempting to decode it as the specified
@@ -192,7 +165,7 @@ void AddCertificatesFromBytes(const char* data, size_t length,
       // |input_format|, causing decode to succeed. On OS X 10.6, the data
       // is properly decoded as a PKCS#7, whether PEM or not, which avoids
       // the need to fallback to internal decoding.
-      if (IsValidOSCertHandle(cert)) {
+      if (x509_util::IsValidSecCertificate(cert)) {
         CFRetain(cert);
         output->push_back(cert);
       }
@@ -202,19 +175,21 @@ void AddCertificatesFromBytes(const char* data, size_t length,
 
 }  // namespace
 
-void X509Certificate::Initialize() {
+bool X509Certificate::Initialize() {
   x509_util::CSSMCachedCertificate cached_cert;
-  if (cached_cert.Init(cert_handle_) == CSSM_OK) {
-    GetCertDistinguishedName(cached_cert, &CSSMOID_X509V1SubjectNameStd,
-                             &subject_);
-    GetCertDistinguishedName(cached_cert, &CSSMOID_X509V1IssuerNameStd,
-                             &issuer_);
-    GetCertDateForOID(cached_cert, &CSSMOID_X509V1ValidityNotBefore,
-                      &valid_start_);
-    GetCertDateForOID(cached_cert, &CSSMOID_X509V1ValidityNotAfter,
-                      &valid_expiry_);
-    serial_number_ = GetCertSerialNumber(cached_cert);
-  }
+  if (cached_cert.Init(cert_handle_) != CSSM_OK)
+    return false;
+  serial_number_ = GetCertSerialNumber(cached_cert);
+
+  return (!serial_number_.empty() &&
+          GetCertDistinguishedName(cached_cert, &CSSMOID_X509V1SubjectNameStd,
+                                   &subject_) &&
+          GetCertDistinguishedName(cached_cert, &CSSMOID_X509V1IssuerNameStd,
+                                   &issuer_) &&
+          GetCertDateForOID(cached_cert, &CSSMOID_X509V1ValidityNotBefore,
+                            &valid_start_) &&
+          GetCertDateForOID(cached_cert, &CSSMOID_X509V1ValidityNotAfter,
+                            &valid_expiry_));
 }
 
 bool X509Certificate::IsIssuedByEncoded(
@@ -299,37 +274,16 @@ bool X509Certificate::GetDEREncoded(X509Certificate::OSCertHandle cert_handle,
 bool X509Certificate::IsSameOSCert(X509Certificate::OSCertHandle a,
                                    X509Certificate::OSCertHandle b) {
   DCHECK(a && b);
-  if (a == b)
-    return true;
-  if (CFEqual(a, b))
-    return true;
-  CSSM_DATA a_data, b_data;
-  return SecCertificateGetData(a, &a_data) == noErr &&
-      SecCertificateGetData(b, &b_data) == noErr &&
-      a_data.Length == b_data.Length &&
-      memcmp(a_data.Data, b_data.Data, a_data.Length) == 0;
+  return CFEqual(a, b);
 }
 
 // static
 X509Certificate::OSCertHandle X509Certificate::CreateOSCertHandleFromBytes(
     const char* data,
     size_t length) {
-  CSSM_DATA cert_data;
-  cert_data.Data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(data));
-  cert_data.Length = length;
-
-  OSCertHandle cert_handle = NULL;
-  OSStatus status = SecCertificateCreateFromData(&cert_data,
-                                                 CSSM_CERT_X_509v3,
-                                                 CSSM_CERT_ENCODING_DER,
-                                                 &cert_handle);
-  if (status != noErr)
-    return NULL;
-  if (!IsValidOSCertHandle(cert_handle)) {
-    CFRelease(cert_handle);
-    return NULL;
-  }
-  return cert_handle;
+  return x509_util::CreateSecCertificateFromBytes(
+             reinterpret_cast<const uint8_t*>(data), length)
+      .release();
 }
 
 // static
@@ -373,20 +327,7 @@ void X509Certificate::FreeOSCertHandle(OSCertHandle cert_handle) {
 
 // static
 SHA256HashValue X509Certificate::CalculateFingerprint256(OSCertHandle cert) {
-  SHA256HashValue sha256;
-  memset(sha256.data, 0, sizeof(sha256.data));
-
-  CSSM_DATA cert_data;
-  OSStatus status = SecCertificateGetData(cert, &cert_data);
-  if (status)
-    return sha256;
-
-  DCHECK(cert_data.Data);
-  DCHECK_NE(cert_data.Length, 0U);
-
-  CC_SHA256(cert_data.Data, cert_data.Length, sha256.data);
-
-  return sha256;
+  return x509_util::CalculateFingerprint256(cert);
 }
 
 // static
@@ -409,56 +350,6 @@ SHA256HashValue X509Certificate::CalculateCAFingerprint256(
   CC_SHA256_Final(sha256.data, &sha256_ctx);
 
   return sha256;
-}
-
-bool X509Certificate::SupportsSSLClientAuth() const {
-  x509_util::CSSMCachedCertificate cached_cert;
-  OSStatus status = cached_cert.Init(cert_handle_);
-  if (status)
-    return false;
-
-  // RFC5280 says to take the intersection of the two extensions.
-  //
-  // Our underlying crypto libraries don't expose
-  // ClientCertificateType, so for now we will not support fixed
-  // Diffie-Hellman mechanisms. For rsa_sign, we need the
-  // digitalSignature bit.
-  //
-  // In particular, if a key has the nonRepudiation bit and not the
-  // digitalSignature one, we will not offer it to the user.
-  x509_util::CSSMFieldValue key_usage;
-  status = cached_cert.GetField(&CSSMOID_KeyUsage, &key_usage);
-  if (status == CSSM_OK && key_usage.field()) {
-    const CSSM_X509_EXTENSION* ext = key_usage.GetAs<CSSM_X509_EXTENSION>();
-    const CE_KeyUsage* key_usage_value =
-        reinterpret_cast<const CE_KeyUsage*>(ext->value.parsedValue);
-    if (!((*key_usage_value) & CE_KU_DigitalSignature))
-      return false;
-  }
-
-  status = cached_cert.GetField(&CSSMOID_ExtendedKeyUsage, &key_usage);
-  if (status == CSSM_OK && key_usage.field()) {
-    const CSSM_X509_EXTENSION* ext = key_usage.GetAs<CSSM_X509_EXTENSION>();
-    const CE_ExtendedKeyUsage* ext_key_usage =
-        reinterpret_cast<const CE_ExtendedKeyUsage*>(ext->value.parsedValue);
-    if (!ExtendedKeyUsageAllows(ext_key_usage, &CSSMOID_ClientAuth))
-      return false;
-  }
-  return true;
-}
-
-CFMutableArrayRef X509Certificate::CreateOSCertChainForCert() const {
-  CFMutableArrayRef cert_list =
-      CFArrayCreateMutable(kCFAllocatorDefault, 0,
-                           &kCFTypeArrayCallBacks);
-  if (!cert_list)
-    return NULL;
-
-  CFArrayAppendValue(cert_list, os_cert_handle());
-  for (size_t i = 0; i < intermediate_ca_certs_.size(); ++i)
-    CFArrayAppendValue(cert_list, intermediate_ca_certs_[i]);
-
-  return cert_list;
 }
 
 // static
@@ -533,39 +424,7 @@ void X509Certificate::GetPublicKeyInfo(OSCertHandle cert_handle,
 
 // static
 bool X509Certificate::IsSelfSigned(OSCertHandle cert_handle) {
-  x509_util::CSSMCachedCertificate cached_cert;
-  OSStatus status = cached_cert.Init(cert_handle);
-  if (status != noErr)
-    return false;
-
-  x509_util::CSSMFieldValue subject;
-  status = cached_cert.GetField(&CSSMOID_X509V1SubjectNameStd, &subject);
-  if (status != CSSM_OK || !subject.field())
-    return false;
-
-  x509_util::CSSMFieldValue issuer;
-  status = cached_cert.GetField(&CSSMOID_X509V1IssuerNameStd, &issuer);
-  if (status != CSSM_OK || !issuer.field())
-    return false;
-
-  if (subject.field()->Length != issuer.field()->Length ||
-      memcmp(subject.field()->Data, issuer.field()->Data,
-             issuer.field()->Length) != 0) {
-    return false;
-  }
-
-  CSSM_CL_HANDLE cl_handle = CSSM_INVALID_HANDLE;
-  status = SecCertificateGetCLHandle(cert_handle, &cl_handle);
-  if (status)
-    return false;
-  CSSM_DATA cert_data;
-  status = SecCertificateGetData(cert_handle, &cert_data);
-  if (status)
-    return false;
-
-  if (CSSM_CL_CertVerify(cl_handle, 0, &cert_data, &cert_data, NULL, 0))
-    return false;
-  return true;
+  return x509_util::IsSelfSigned(cert_handle);
 }
 
 #pragma clang diagnostic pop  // "-Wdeprecated-declarations"

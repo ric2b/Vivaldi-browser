@@ -8,9 +8,7 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
 #include "modules/ModulesExport.h"
-#include "modules/serviceworkers/WaitUntilObserver.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
 
 namespace blink {
@@ -20,71 +18,61 @@ class ExecutionContext;
 class ScriptPromise;
 class ScriptState;
 class ScriptValue;
+class WaitUntilObserver;
 
-// This class observes the service worker's handling of a FetchEvent and
-// notifies the client.
+// This is a base class to implement respondWith. The respondWith has the three
+// types of results: fulfilled, rejected and not called. Derived classes for
+// each event should implement the procedure of the three behaviors by
+// overriding onResponseFulfilled, onResponseRejected and onNoResponse.
 class MODULES_EXPORT RespondWithObserver
     : public GarbageCollectedFinalized<RespondWithObserver>,
       public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(RespondWithObserver);
 
  public:
-  virtual ~RespondWithObserver();
+  virtual ~RespondWithObserver() = default;
 
-  static RespondWithObserver* create(ExecutionContext*,
-                                     int fetchEventID,
-                                     const KURL& requestURL,
-                                     WebURLRequest::FetchRequestMode,
-                                     WebURLRequest::FetchRedirectMode,
-                                     WebURLRequest::FrameType,
-                                     WebURLRequest::RequestContext,
-                                     WaitUntilObserver*);
+  void ContextDestroyed(ExecutionContext*) override;
 
-  void contextDestroyed(ExecutionContext*) override;
+  void WillDispatchEvent();
+  void DidDispatchEvent(DispatchEventResult dispatch_result);
 
-  void willDispatchEvent();
-  void didDispatchEvent(DispatchEventResult dispatchResult);
+  // The respondWith() observes the promise until the given promise is resolved
+  // or rejected and then delays calling ServiceWorkerGlobalScopeClient::
+  // didHandle*Event() in order to notify the result to the client.
+  void RespondWith(ScriptState*, ScriptPromise, ExceptionState&);
 
-  // Observes the promise and delays calling didHandleFetchEvent() until the
-  // given promise is resolved or rejected.
-  void respondWith(ScriptState*, ScriptPromise, ExceptionState&);
+  // Called when the respondWith() promise was rejected.
+  virtual void OnResponseRejected(WebServiceWorkerResponseError) = 0;
 
-  void responseWasRejected(WebServiceWorkerResponseError);
-  virtual void responseWasFulfilled(const ScriptValue&);
+  // Called when the respondWith() promise was fulfilled.
+  virtual void OnResponseFulfilled(const ScriptValue&) = 0;
+
+  // Called when the event handler finished without calling respondWith().
+  virtual void OnNoResponse() = 0;
 
   DECLARE_VIRTUAL_TRACE();
 
  protected:
-  RespondWithObserver(ExecutionContext*,
-                      int fetchEventID,
-                      const KURL& requestURL,
-                      WebURLRequest::FetchRequestMode,
-                      WebURLRequest::FetchRedirectMode,
-                      WebURLRequest::FrameType,
-                      WebURLRequest::RequestContext,
-                      WaitUntilObserver*);
+  RespondWithObserver(ExecutionContext*, int event_id, WaitUntilObserver*);
+  const int event_id_;
+  double event_dispatch_time_ = 0;
 
  private:
   class ThenFunction;
 
-  const int m_fetchEventID;
-  const KURL m_requestURL;
-  const WebURLRequest::FetchRequestMode m_requestMode;
-  const WebURLRequest::FetchRedirectMode m_redirectMode;
-  const WebURLRequest::FrameType m_frameType;
-  const WebURLRequest::RequestContext m_requestContext;
+  void ResponseWasRejected(WebServiceWorkerResponseError);
+  void ResponseWasFulfilled(const ScriptValue&);
 
-  double m_eventDispatchTime = 0;
-
-  enum State { Initial, Pending, Done };
-  State m_state;
+  enum State { kInitial, kPending, kDone };
+  State state_;
 
   // RespondWith should ensure the ExtendableEvent is alive until the promise
   // passed to RespondWith is resolved. The lifecycle of the ExtendableEvent
   // is controlled by WaitUntilObserver, so not only
   // WaitUntilObserver::ThenFunction but RespondWith needs to have a strong
   // reference to the WaitUntilObserver.
-  Member<WaitUntilObserver> m_observer;
+  Member<WaitUntilObserver> observer_;
 };
 
 }  // namespace blink

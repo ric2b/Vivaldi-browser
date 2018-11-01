@@ -6,9 +6,8 @@
 #define NGConstraintSpaceBuilder_h
 
 #include "core/layout/ng/ng_constraint_space.h"
-#include "core/layout/ng/ng_units.h"
-#include "wtf/Allocator.h"
-#include "wtf/Optional.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Optional.h"
 
 namespace blink {
 
@@ -73,7 +72,7 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
   NGPhysicalSize initial_containing_block_size_;
   LayoutUnit fragmentainer_space_available_;
 
-  unsigned parent_writing_mode_ : 2;
+  unsigned parent_writing_mode_ : 3;
   unsigned is_fixed_size_inline_ : 1;
   unsigned is_fixed_size_block_ : 1;
   unsigned is_shrink_to_fit_ : 1;

@@ -43,9 +43,6 @@
         "test": "ash_content_unittests"
       },
       {
-        "args": [
-          "--ozone-platform=headless"
-        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -79,6 +76,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "chrome_app_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "chromeos_unittests"
       },
       {
@@ -95,6 +98,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "components_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "compositor_unittests"
       },
       {
         "swarming": {
@@ -143,6 +152,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "exo_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "extensions_browsertests"
       },
       {
@@ -176,18 +191,12 @@
         "test": "google_apis_unittests"
       },
       {
-        "args": [
-          "--ozone-platform=headless"
-        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gpu_ipc_service_unittests"
       },
       {
-        "args": [
-          "--ozone-platform=headless"
-        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -370,6 +379,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "storage_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "sync_integration_tests"
       },
       {
         "swarming": {
@@ -752,6 +767,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "sync_integration_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ui_arc_unittests"
       },
       {
@@ -1093,6 +1114,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "storage_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "sync_integration_tests"
       },
       {
         "swarming": {

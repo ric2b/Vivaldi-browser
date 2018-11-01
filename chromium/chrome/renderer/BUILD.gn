@@ -13,7 +13,6 @@ import("//tools/grit/grit_rule.gni")
 grit("resources") {
   source = "resources/renderer_resources.grd"
   defines = chrome_grit_defines
-  use_qualified_include = true
   output_dir = "$root_gen_dir/chrome"
   output_name = "renderer_resources"
   outputs = [
@@ -46,6 +45,8 @@ static_library("renderer") {
     "loadtimes_extension_bindings.h",
     "media/chrome_key_systems.cc",
     "media/chrome_key_systems.h",
+    "media/chrome_key_systems_provider.cc",
+    "media/chrome_key_systems_provider.h",
     "net/net_error_helper.cc",
     "net/net_error_helper.h",
     "net/net_error_page_controller.cc",
@@ -70,6 +71,8 @@ static_library("renderer") {
     "prerender/prerender_helper.h",
     "prerender/prerenderer_client.cc",
     "prerender/prerenderer_client.h",
+    "sandbox_status_extension_android.cc",
+    "sandbox_status_extension_android.h",
     "searchbox/search_bouncer.cc",
     "searchbox/search_bouncer.h",
     "searchbox/searchbox.cc",
@@ -189,11 +192,10 @@ static_library("renderer") {
   }
 
   if (safe_browsing_mode != 0) {
-    sources += [
-      "safe_browsing/threat_dom_details.cc",
-      "safe_browsing/threat_dom_details.h",
+    deps += [
+      "//components/safe_browsing/common:common",
+      "//components/safe_browsing/renderer",
     ]
-    deps += [ "//components/safe_browsing/common:common" ]
     if (safe_browsing_mode == 1) {
       sources += [
         "safe_browsing/feature_extractor_clock.cc",
@@ -217,6 +219,7 @@ static_library("renderer") {
       ]
       deps += [
         "//chrome/common/safe_browsing:proto",
+        "//components/safe_browsing:csd_proto",
         "//third_party/smhasher:murmurhash3",
       ]
     }
@@ -303,6 +306,9 @@ static_library("renderer") {
       "//media/cast:net",
       "//media/cast:receiver",
       "//media/cast:sender",
+    ]
+    public_deps = [
+      "//ipc",
     ]
     if (!enable_webrtc) {
       sources -= [

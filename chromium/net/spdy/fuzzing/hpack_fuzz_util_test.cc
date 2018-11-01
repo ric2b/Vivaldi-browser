@@ -17,9 +17,7 @@
 namespace net {
 namespace test {
 
-using base::StringPiece;
 using std::map;
-using std::string;
 using test::a2b_hex;
 
 TEST(HpackFuzzUtilTest, GeneratorContextInitialization) {
@@ -66,7 +64,7 @@ TEST(HpackFuzzUtilTest, ParsesSequenceOfHeaderBlocks) {
   HpackFuzzUtil::Input input;
   input.input.assign(fixture, arraysize(fixture) - 1);
 
-  StringPiece block;
+  SpdyStringPiece block;
 
   EXPECT_TRUE(HpackFuzzUtil::NextHeaderBlock(&input, &block));
   EXPECT_EQ("aaaaa", block);
@@ -86,16 +84,16 @@ TEST(HpackFuzzUtilTest, ParsesSequenceOfHeaderBlocks) {
 }
 
 TEST(HpackFuzzUtilTest, SerializedHeaderBlockPrefixes) {
-  EXPECT_EQ(string("\x00\x00\x00\x00", 4), HpackFuzzUtil::HeaderBlockPrefix(0));
-  EXPECT_EQ(string("\x00\x00\x00\x05", 4), HpackFuzzUtil::HeaderBlockPrefix(5));
-  EXPECT_EQ(string("\x4f\xb3\x0a\x91", 4),
-            HpackFuzzUtil::HeaderBlockPrefix(1337133713));
+  EXPECT_EQ(SpdyString("\x00\x00\x00\x00", 4),
+            HpackFuzzUtil::HeaderBlockPrefix(0));
+  EXPECT_EQ(SpdyString("\x00\x00\x00\x05", 4),
+            HpackFuzzUtil::HeaderBlockPrefix(5));
+  EXPECT_EQ("\x4f\xb3\x0a\x91", HpackFuzzUtil::HeaderBlockPrefix(1337133713));
 }
 
 TEST(HpackFuzzUtilTest, PassValidInputThroughAllStages) {
   // Example lifted from HpackDecoderTest.SectionD4RequestHuffmanExamples.
-  string input = a2b_hex("828684418cf1e3c2e5f23a6ba0ab90f4"
-                         "ff");
+  SpdyString input = a2b_hex("828684418cf1e3c2e5f23a6ba0ab90f4ff");
 
   HpackFuzzUtil::FuzzerContext context;
   HpackFuzzUtil::InitializeFuzzerContext(&context);
@@ -127,7 +125,7 @@ TEST(HpackFuzzUtilTest, ValidFuzzExamplesRegressionTest) {
   HpackFuzzUtil::FuzzerContext context;
   HpackFuzzUtil::InitializeFuzzerContext(&context);
 
-  StringPiece block;
+  SpdyStringPiece block;
   while (HpackFuzzUtil::NextHeaderBlock(&input, &block)) {
     // As these are valid examples, all fuzz stages should succeed.
     EXPECT_TRUE(HpackFuzzUtil::RunHeaderBlockThroughFuzzerStages(
@@ -137,7 +135,7 @@ TEST(HpackFuzzUtilTest, ValidFuzzExamplesRegressionTest) {
 
 TEST(HpackFuzzUtilTest, FlipBitsMutatesBuffer) {
   char buffer[] = "testbuffer1234567890";
-  string unmodified(buffer, arraysize(buffer) - 1);
+  SpdyString unmodified(buffer, arraysize(buffer) - 1);
 
   EXPECT_EQ(unmodified, buffer);
   HpackFuzzUtil::FlipBits(reinterpret_cast<uint8_t*>(buffer),

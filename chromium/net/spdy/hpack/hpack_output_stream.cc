@@ -11,9 +11,6 @@
 
 namespace net {
 
-using base::StringPiece;
-using std::string;
-
 HpackOutputStream::HpackOutputStream() : bit_offset_(0) {}
 
 HpackOutputStream::~HpackOutputStream() {}
@@ -44,7 +41,7 @@ void HpackOutputStream::AppendPrefix(HpackPrefix prefix) {
   AppendBits(prefix.bits, prefix.bit_size);
 }
 
-void HpackOutputStream::AppendBytes(StringPiece buffer) {
+void HpackOutputStream::AppendBytes(SpdyStringPiece buffer) {
   DCHECK_EQ(bit_offset_, 0u);
   buffer_.append(buffer.data(), buffer.size());
 }
@@ -66,7 +63,7 @@ void HpackOutputStream::AppendUint32(uint32_t I) {
   }
 }
 
-void HpackOutputStream::TakeString(string* output) {
+void HpackOutputStream::TakeString(SpdyString* output) {
   // This must hold, since all public functions cause the buffer to
   // end on a byte boundary.
   DCHECK_EQ(bit_offset_, 0u);
@@ -75,10 +72,10 @@ void HpackOutputStream::TakeString(string* output) {
   bit_offset_ = 0;
 }
 
-void HpackOutputStream::BoundedTakeString(size_t max_size, string* output) {
+void HpackOutputStream::BoundedTakeString(size_t max_size, SpdyString* output) {
   if (buffer_.size() > max_size) {
     // Save off overflow bytes to temporary string (causes a copy).
-    string overflow(buffer_.data() + max_size, buffer_.size() - max_size);
+    SpdyString overflow(buffer_.data() + max_size, buffer_.size() - max_size);
 
     // Resize buffer down to the given limit.
     buffer_.resize(max_size);

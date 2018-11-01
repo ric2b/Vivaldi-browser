@@ -25,7 +25,6 @@
 #include "chrome/common/extensions/chrome_manifest_url_handlers.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/user_metrics.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -42,7 +41,6 @@
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 
-using base::UserMetricsAction;
 using content::BrowserThread;
 
 namespace extensions {
@@ -134,8 +132,8 @@ void RecordCreationFlags(const Extension* extension) {
   for (int i = 0; i < Extension::kInitFromValueFlagBits; ++i) {
     int flag = 1 << i;
     if (extension->creation_flags() & flag) {
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.LoadCreationFlags", i, Extension::kInitFromValueFlagBits);
+      UMA_HISTOGRAM_EXACT_LINEAR("Extensions.LoadCreationFlags", i,
+                                 Extension::kInitFromValueFlagBits);
     }
   }
 }

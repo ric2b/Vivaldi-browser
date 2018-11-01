@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -162,9 +163,9 @@ Status PrepareCommandLine(uint16_t port,
     return Status(kUnknownError,
                   "cannot create temp dir for unpacking extensions");
   }
-  status = internal::ProcessExtensions(capabilities.extensions,
-                                       extension_dir->GetPath(), true,
-                                       &switches, extension_bg_pages);
+  status = internal::ProcessExtensions(
+      capabilities.extensions, extension_dir->GetPath(),
+      capabilities.use_automation_extension, &switches, extension_bg_pages);
   if (status.IsError())
     return status;
   switches.AppendToCommandLine(&command);
@@ -222,8 +223,9 @@ Status WaitForDevToolsAndCheckVersion(
                     "--disable-build-check. Please don't report bugs that "
                     "cannot be reproduced with this switch removed.";
   } else if (browser_info->build_no < kMinimumSupportedChromeBuildNo) {
-    return Status(kUnknownError, "Chrome version must be >= " +
-        GetMinimumSupportedChromeVersion());
+    return Status(
+        kSessionNotCreatedException,
+        "Chrome version must be >= " + GetMinimumSupportedChromeVersion());
   }
 
   while (base::TimeTicks::Now() < deadline) {
@@ -244,21 +246,19 @@ Status CreateBrowserwideDevToolsClientAndConnect(
     const NetAddress& address,
     const PerfLoggingPrefs& perf_logging_prefs,
     const SyncWebSocketFactory& socket_factory,
-    const ScopedVector<DevToolsEventListener>& devtools_event_listeners,
+    const std::vector<std::unique_ptr<DevToolsEventListener>>&
+        devtools_event_listeners,
     std::unique_ptr<DevToolsClient>* browser_client) {
   std::unique_ptr<DevToolsClient> client(new DevToolsClientImpl(
       socket_factory, base::StringPrintf("ws://%s/devtools/browser/",
                                          address.ToString().c_str()),
       DevToolsClientImpl::kBrowserwideDevToolsClientId));
-  for (ScopedVector<DevToolsEventListener>::const_iterator it =
-          devtools_event_listeners.begin();
-      it != devtools_event_listeners.end();
-      ++it) {
+  for (const auto& listener : devtools_event_listeners) {
     // Only add listeners that subscribe to the browser-wide |DevToolsClient|.
     // Otherwise, listeners will think this client is associated with a webview,
     // and will send unrecognized commands to it.
-    if ((*it)->subscribes_to_browser())
-      client->AddListener(*it);
+    if (listener->subscribes_to_browser())
+      client->AddListener(listener.get());
   }
   // Provide the client regardless of whether it connects, so that Chrome always
   // has a valid |devtools_websocket_client_|. If not connected, no listeners
@@ -278,7 +278,8 @@ Status LaunchRemoteChromeSession(
     URLRequestContextGetter* context_getter,
     const SyncWebSocketFactory& socket_factory,
     const Capabilities& capabilities,
-    ScopedVector<DevToolsEventListener>* devtools_event_listeners,
+    std::vector<std::unique_ptr<DevToolsEventListener>>
+        devtools_event_listeners,
     std::unique_ptr<Chrome>* chrome) {
   Status status(kOk);
   std::unique_ptr<DevToolsHttpClient> devtools_http_client;
@@ -294,28 +295,27 @@ Status LaunchRemoteChromeSession(
   std::unique_ptr<DevToolsClient> devtools_websocket_client;
   status = CreateBrowserwideDevToolsClientAndConnect(
       capabilities.debugger_address, capabilities.perf_logging_prefs,
-      socket_factory, *devtools_event_listeners, &devtools_websocket_client);
+      socket_factory, devtools_event_listeners, &devtools_websocket_client);
   if (status.IsError()) {
     LOG(WARNING) << "Browser-wide DevTools client failed to connect: "
                  << status.message();
   }
 
-  chrome->reset(new ChromeRemoteImpl(std::move(devtools_http_client),
-                                     std::move(devtools_websocket_client),
-                                     *devtools_event_listeners,
-                                     capabilities.page_load_strategy));
+  chrome->reset(new ChromeRemoteImpl(
+      std::move(devtools_http_client), std::move(devtools_websocket_client),
+      std::move(devtools_event_listeners), capabilities.page_load_strategy));
   return Status(kOk);
 }
 
-Status LaunchDesktopChrome(
-    URLRequestContextGetter* context_getter,
-    uint16_t port,
-    std::unique_ptr<PortReservation> port_reservation,
-    const SyncWebSocketFactory& socket_factory,
-    const Capabilities& capabilities,
-    ScopedVector<DevToolsEventListener>* devtools_event_listeners,
-    std::unique_ptr<Chrome>* chrome,
-    bool w3c_compliant) {
+Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
+                           uint16_t port,
+                           std::unique_ptr<PortReservation> port_reservation,
+                           const SyncWebSocketFactory& socket_factory,
+                           const Capabilities& capabilities,
+                           std::vector<std::unique_ptr<DevToolsEventListener>>
+                               devtools_event_listeners,
+                           std::unique_ptr<Chrome>* chrome,
+                           bool w3c_compliant) {
   base::CommandLine command(base::CommandLine::NO_PROGRAM);
   base::ScopedTempDir user_data_dir;
   base::ScopedTempDir extension_dir;
@@ -432,23 +432,17 @@ Status LaunchDesktopChrome(
   std::unique_ptr<DevToolsClient> devtools_websocket_client;
   status = CreateBrowserwideDevToolsClientAndConnect(
       NetAddress(port), capabilities.perf_logging_prefs, socket_factory,
-      *devtools_event_listeners, &devtools_websocket_client);
+      devtools_event_listeners, &devtools_websocket_client);
   if (status.IsError()) {
     LOG(WARNING) << "Browser-wide DevTools client failed to connect: "
                  << status.message();
   }
 
-  std::unique_ptr<ChromeDesktopImpl> chrome_desktop(
-      new ChromeDesktopImpl(std::move(devtools_http_client),
-                            std::move(devtools_websocket_client),
-                            *devtools_event_listeners,
-                            std::move(port_reservation),
-                            capabilities.page_load_strategy,
-                            std::move(process),
-                            command,
-                            &user_data_dir,
-                            &extension_dir,
-                            capabilities.network_emulation_enabled));
+  std::unique_ptr<ChromeDesktopImpl> chrome_desktop(new ChromeDesktopImpl(
+      std::move(devtools_http_client), std::move(devtools_websocket_client),
+      std::move(devtools_event_listeners), std::move(port_reservation),
+      capabilities.page_load_strategy, std::move(process), command,
+      &user_data_dir, &extension_dir, capabilities.network_emulation_enabled));
   for (size_t i = 0; i < extension_bg_pages.size(); ++i) {
     VLOG(0) << "Waiting for extension bg page load: " << extension_bg_pages[i];
     std::unique_ptr<WebView> web_view;
@@ -466,15 +460,15 @@ Status LaunchDesktopChrome(
   return Status(kOk);
 }
 
-Status LaunchAndroidChrome(
-    URLRequestContextGetter* context_getter,
-    uint16_t port,
-    std::unique_ptr<PortReservation> port_reservation,
-    const SyncWebSocketFactory& socket_factory,
-    const Capabilities& capabilities,
-    ScopedVector<DevToolsEventListener>* devtools_event_listeners,
-    DeviceManager* device_manager,
-    std::unique_ptr<Chrome>* chrome) {
+Status LaunchAndroidChrome(URLRequestContextGetter* context_getter,
+                           uint16_t port,
+                           std::unique_ptr<PortReservation> port_reservation,
+                           const SyncWebSocketFactory& socket_factory,
+                           const Capabilities& capabilities,
+                           std::vector<std::unique_ptr<DevToolsEventListener>>
+                               devtools_event_listeners,
+                           DeviceManager* device_manager,
+                           std::unique_ptr<Chrome>* chrome) {
   Status status(kOk);
   std::unique_ptr<Device> device;
   if (capabilities.android_device_serial.empty()) {
@@ -518,37 +512,35 @@ Status LaunchAndroidChrome(
   std::unique_ptr<DevToolsClient> devtools_websocket_client;
   status = CreateBrowserwideDevToolsClientAndConnect(
       NetAddress(port), capabilities.perf_logging_prefs, socket_factory,
-      *devtools_event_listeners, &devtools_websocket_client);
+      devtools_event_listeners, &devtools_websocket_client);
   if (status.IsError()) {
     LOG(WARNING) << "Browser-wide DevTools client failed to connect: "
                  << status.message();
   }
 
-  chrome->reset(new ChromeAndroidImpl(std::move(devtools_http_client),
-                                      std::move(devtools_websocket_client),
-                                      *devtools_event_listeners,
-                                      std::move(port_reservation),
-                                      capabilities.page_load_strategy,
-                                      std::move(device)));
+  chrome->reset(new ChromeAndroidImpl(
+      std::move(devtools_http_client), std::move(devtools_websocket_client),
+      std::move(devtools_event_listeners), std::move(port_reservation),
+      capabilities.page_load_strategy, std::move(device)));
   return Status(kOk);
 }
 
 }  // namespace
 
-Status LaunchChrome(
-    URLRequestContextGetter* context_getter,
-    const SyncWebSocketFactory& socket_factory,
-    DeviceManager* device_manager,
-    PortServer* port_server,
-    PortManager* port_manager,
-    const Capabilities& capabilities,
-    ScopedVector<DevToolsEventListener>* devtools_event_listeners,
-    std::unique_ptr<Chrome>* chrome,
-    bool w3c_compliant) {
+Status LaunchChrome(URLRequestContextGetter* context_getter,
+                    const SyncWebSocketFactory& socket_factory,
+                    DeviceManager* device_manager,
+                    PortServer* port_server,
+                    PortManager* port_manager,
+                    const Capabilities& capabilities,
+                    std::vector<std::unique_ptr<DevToolsEventListener>>
+                        devtools_event_listeners,
+                    std::unique_ptr<Chrome>* chrome,
+                    bool w3c_compliant) {
   if (capabilities.IsRemoteBrowser()) {
     return LaunchRemoteChromeSession(
-        context_getter, socket_factory,
-        capabilities, devtools_event_listeners, chrome);
+        context_getter, socket_factory, capabilities,
+        std::move(devtools_event_listeners), chrome);
   }
 
   uint16_t port = 0;
@@ -565,7 +557,8 @@ Status LaunchChrome(
                     port_status);
     return LaunchAndroidChrome(
         context_getter, port, std::move(port_reservation), socket_factory,
-        capabilities, devtools_event_listeners, device_manager, chrome);
+        capabilities, std::move(devtools_event_listeners), device_manager,
+        chrome);
   } else {
     if (port_server)
       port_status = port_server->ReservePort(&port, &port_reservation);
@@ -574,10 +567,10 @@ Status LaunchChrome(
     if (port_status.IsError())
       return Status(kUnknownError, "cannot reserve port for Chrome",
                     port_status);
-    return LaunchDesktopChrome(context_getter, port,
-                               std::move(port_reservation), socket_factory,
-                               capabilities, devtools_event_listeners, chrome,
-                               w3c_compliant);
+    return LaunchDesktopChrome(
+        context_getter, port, std::move(port_reservation), socket_factory,
+        capabilities, std::move(devtools_event_listeners), chrome,
+        w3c_compliant);
   }
 }
 

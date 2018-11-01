@@ -46,7 +46,7 @@
       }
 
       paper-toggle-button {
-        -webkit-margin-start: var(--checkbox-spacing);
+        -webkit-margin-start: var(--settings-control-spacing);
       }
     </style>
 
@@ -67,7 +67,7 @@
         <div class="error">$i18n{networkSimCardLocked}</div>
       </div>
       <div class="secondary-action">
-        <paper-button on-tap="onUnlockPinTap_">
+        <paper-button id="unlockPinButton" on-tap="onUnlockPinTap_">
           $i18n{networkSimUnlock}
         </paper-button>
       </div>
@@ -79,21 +79,23 @@
       <div id="simLockToggleLabel" class="start">
         $i18n{networkSimLockEnable}
       </div>
-      <paper-button on-tap="onChangePinTap_"
+      <paper-button id="changePinButton" on-tap="onChangePinTap_"
           hidden$="[[!networkProperties.Cellular.SIMLockStatus.LockEnabled]]">
         $i18n{networkSimChangePin}
       </paper-button>
-      <paper-toggle-button on-change="onSimLockEnabledChange_"
-          checked="[[networkProperties.Cellular.SIMLockStatus.LockEnabled]]"
+      <paper-toggle-button id="simLockButton"
+          on-change="onSimLockEnabledChange_" checked="{{lockEnabled_}}"
           aria-labelledby="simLockToggleLabel">
       </paper-toggle-button>
     </div>
 
     <!-- Enter PIN dialog -->
-    <dialog is="cr-dialog" id="enterPinDialog" close-text="$i18n{close}">
+    <dialog is="cr-dialog" id="enterPinDialog" close-text="$i18n{close}"
+        on-cancel="onEnterPinDialogCancel_"
+        on-close="onEnterPinDialogClose_">
       <div class="title">$i18n{networkSimEnterPinTitle}</div>
       <div class="body">
-        <paper-input id="enterPin" class="pin" no-label-float
+        <paper-input id="enterPin" class="pin" no-label-float autofocus
             label="$i18n{networkSimEnterPin}">
           <iron-a11y-keys keys="enter" on-keys-pressed="sendEnterPin_">
           </iron-a11y-keys>
@@ -110,10 +112,11 @@
     </dialog>
 
     <!-- Change PIN dialog -->
-    <dialog is="cr-dialog" id="changePinDialog" close-text="$i18n{close}">
+    <dialog is="cr-dialog" id="changePinDialog" close-text="$i18n{close}"
+        on-close="onChangePinDialogClose_">
       <div class="title">$i18n{networkSimChangePinTitle}</div>
       <div class="body">
-        <paper-input id="changePinOld" class="pin" no-label-float
+        <paper-input id="changePinOld" class="pin" no-label-float autofocus
             label="$i18n{networkSimEnterOldPin}">
         </paper-input>
         <paper-input id="changePinNew1" class="pin" no-label-float
@@ -136,10 +139,11 @@
     </dialog>
 
     <!-- Unlock PIN dialog -->
-    <dialog is="cr-dialog" id="unlockPinDialog" close-text="$i18n{close}">
+    <dialog is="cr-dialog" id="unlockPinDialog" close-text="$i18n{close}"
+        on-close="onUnlockPinDialogClose_">
       <div class="title">$i18n{networkSimLockedTitle}</div>
       <div class="body">
-        <paper-input id="unlockPin" class="pin" no-label-float
+        <paper-input id="unlockPin" class="pin" no-label-float autofocus
             label="$i18n{networkSimEnterPin}">
           <iron-a11y-keys keys="enter" on-keys-pressed="sendUnlockPin_">
           </iron-a11y-keys>
@@ -156,13 +160,14 @@
     </dialog>
 
     <!-- Unlock PUK dialog -->
-    <dialog is="cr-dialog" id="unlockPukDialog" close-text="$i18n{close}">
+    <dialog is="cr-dialog" id="unlockPukDialog" close-text="$i18n{close}"
+        on-close="onUnlockPinDialogClose_">
       <div class="title">$i18n{networkSimLockedTitle}</div>
       <div class="body">
         <div>
           Enter the 8-digit PIN Unblocking Key provided by your carrier
         </div>
-        <paper-input id="unlockPuk" class="puk" no-label-float
+        <paper-input id="unlockPuk" class="puk" no-label-float autofocus
             label="$i18n{networkSimEnterPuk}">
         </paper-input>
         <paper-input id="unlockPin1" class="pin" no-label-float

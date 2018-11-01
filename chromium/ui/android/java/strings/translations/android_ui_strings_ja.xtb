@@ -1,8 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
+<translation id="1620510694547887537">カメラ</translation>
 <translation id="1768717197362323622">ミリ秒</translation>
 <translation id="1822429046913737220">AM/PM</translation>
+<translation id="1989112275319619282">閲覧</translation>
 <translation id="2429669115401274487">PM</translation>
 <translation id="2732718972699418926">AM</translation>
 <translation id="2841013758207633010">時間</translation>
@@ -24,6 +26,7 @@
 <translation id="6727102863431372879">設定</translation>
 <translation id="7102218676258945610">分</translation>
 <translation id="7138678301420049075">その他</translation>
+<translation id="723171743924126238">画像を選択</translation>
 <translation id="7575803462290353686">時間の設定</translation>
 <translation id="7781164152564914424">月の設定</translation>
 <translation id="7821540960913969614">日付の設定</translation>

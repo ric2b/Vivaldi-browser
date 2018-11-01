@@ -12,7 +12,6 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -153,17 +152,9 @@ void MediaRouterMojoImpl::RegisterMediaRouteProvider(
       &MediaRouterMojoImpl::OnConnectionError, base::Unretained(this)));
   callback.Run(instance_id_);
   ExecutePendingRequests();
+  SyncStateToMediaRouteProvider();
+
   wakeup_attempt_count_ = 0;
-#if defined(OS_WIN)
-  // The MRPM extension already turns on mDNS discovery for platforms other than
-  // Windows. It only relies on this signalling from MR on Windows to avoid
-  // triggering a firewall prompt out of the context of MR from the user's
-  // perspective. This particular call reminds the extension to enable mDNS
-  // discovery when it wakes up, has been upgraded, etc.
-  if (should_enable_mdns_discovery_) {
-    DoEnsureMdnsDiscoveryEnabled();
-  }
-#endif
 }
 
 void MediaRouterMojoImpl::OnIssue(const IssueInfo& issue) {
@@ -174,7 +165,7 @@ void MediaRouterMojoImpl::OnIssue(const IssueInfo& issue) {
 
 void MediaRouterMojoImpl::OnSinksReceived(
     const std::string& media_source,
-    const std::vector<MediaSink>& sinks,
+    const std::vector<MediaSinkInternal>& internal_sinks,
     const std::vector<url::Origin>& origins) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DVLOG_WITH_INSTANCE(1) << "OnSinksReceived";
@@ -183,6 +174,11 @@ void MediaRouterMojoImpl::OnSinksReceived(
     DVLOG_WITH_INSTANCE(1) << "Received sink list without MediaSinksQuery.";
     return;
   }
+
+  std::vector<MediaSink> sinks;
+  sinks.reserve(internal_sinks.size());
+  for (const auto& internal_sink : internal_sinks)
+    sinks.push_back(internal_sink.sink());
 
   auto* sinks_query = it->second.get();
   sinks_query->cached_sink_list = sinks;
@@ -392,6 +388,16 @@ void MediaRouterMojoImpl::SearchSinks(
   RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoSearchSinks,
                         base::Unretained(this), sink_id, source_id,
                         search_input, domain, sink_callback));
+}
+
+void MediaRouterMojoImpl::ProvideSinks(
+    const std::string& provider_name,
+    const std::vector<MediaSinkInternal>& sinks) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  SetWakeReason(MediaRouteProviderWakeReason::PROVIDE_SINKS);
+  RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoProvideSinks,
+                        base::Unretained(this), provider_name, sinks));
 }
 
 bool MediaRouterMojoImpl::RegisterMediaSinksObserver(
@@ -698,6 +704,13 @@ void MediaRouterMojoImpl::DoSearchSinks(
       sink_id, source_id, std::move(sink_search_criteria), sink_callback);
 }
 
+void MediaRouterMojoImpl::DoProvideSinks(
+    const std::string& provider_name,
+    const std::vector<MediaSinkInternal>& sinks) {
+  DVLOG_WITH_INSTANCE(1) << "DoProvideSinks";
+  media_route_provider_->ProvideSinks(provider_name, sinks);
+}
+
 void MediaRouterMojoImpl::OnRouteMessagesReceived(
     const std::string& route_id,
     const std::vector<RouteMessage>& messages) {
@@ -771,13 +784,14 @@ void MediaRouterMojoImpl::DoStartObservingMediaSinks(
     return;
 
   // No need to call MRPM if all observers have been removed in the meantime.
-  auto* sinks_query = sinks_queries_[source_id].get();
-  if (!sinks_query || !sinks_query->observers.might_have_observers())
+  auto it = sinks_queries_.find(source_id);
+  if (it == sinks_queries_.end() ||
+      !it->second->observers.might_have_observers())
     return;
 
   DVLOG_WITH_INSTANCE(1) << "MRPM.StartObservingMediaSinks: " << source_id;
   media_route_provider_->StartObservingMediaSinks(source_id);
-  sinks_query->is_active = true;
+  it->second->is_active = true;
 }
 
 void MediaRouterMojoImpl::DoStopObservingMediaSinks(
@@ -809,7 +823,6 @@ void MediaRouterMojoImpl::DoStartObservingMediaRoutes(
 
   DVLOG_WITH_INSTANCE(1) << "MRPM.StartObservingMediaRoutes: " << source_id;
   media_route_provider_->StartObservingMediaRoutes(source_id);
-  it->second->is_active = true;
 }
 
 void MediaRouterMojoImpl::DoStopObservingMediaRoutes(
@@ -819,7 +832,7 @@ void MediaRouterMojoImpl::DoStopObservingMediaRoutes(
   // No need to call MRPM if observers have been added in the meantime,
   // or StopObservingMediaRoutes has already been called.
   auto it = routes_queries_.find(source_id);
-  if (it == routes_queries_.end() || !it->second->is_active ||
+  if (it == routes_queries_.end() ||
       it->second->observers.might_have_observers()) {
     return;
   }
@@ -897,6 +910,38 @@ void MediaRouterMojoImpl::ExecutePendingRequests() {
     next_request.Run();
 
   pending_requests_.clear();
+}
+
+void MediaRouterMojoImpl::SyncStateToMediaRouteProvider() {
+  DCHECK(media_route_provider_);
+
+  // Sink queries.
+  if (availability_ != mojom::MediaRouter::SinkAvailability::UNAVAILABLE) {
+    for (const auto& it : sinks_queries_) {
+      DoStartObservingMediaSinks(it.first);
+    }
+  }
+
+  // Route queries.
+  for (const auto& it : routes_queries_) {
+    DoStartObservingMediaRoutes(it.first);
+  }
+
+  // Route messages.
+  for (const auto& it : message_observers_) {
+    DoStartListeningForRouteMessages(it.first);
+  }
+
+#if defined(OS_WIN)
+  // The MRPM extension already turns on mDNS discovery for platforms other than
+  // Windows. It only relies on this signalling from MR on Windows to avoid
+  // triggering a firewall prompt out of the context of MR from the user's
+  // perspective. This particular call reminds the extension to enable mDNS
+  // discovery when it wakes up, has been upgraded, etc.
+  if (should_enable_mdns_discovery_) {
+    DoEnsureMdnsDiscoveryEnabled();
+  }
+#endif
 }
 
 void MediaRouterMojoImpl::EventPageWakeComplete(bool success) {

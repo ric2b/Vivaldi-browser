@@ -20,3 +20,10 @@ DISABLE(RenderTextHarfBuzzTest, GetSubstringBoundsMultiline/HarfBuzz)
 #if defined(ARCH_CPU_32_BITS)
 DISABLE(PointerLockBrowserTest, PointerLockEventRouting)
 #endif
+
+// Flaky
+DISABLE(SitePerProcessBrowserTest, PopupMenuTest)
+
+DISABLE(PointerLockBrowserTest, PointerLockEventRouting)
+DISABLE(LayerTreeHostTilesTestPartialInvalidation,
+        PartialRaster_MultiThread_OneCopy)

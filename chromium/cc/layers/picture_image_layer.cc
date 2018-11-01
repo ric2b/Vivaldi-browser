@@ -7,9 +7,9 @@
 #include <stddef.h>
 
 #include "cc/layers/picture_layer_impl.h"
+#include "cc/paint/drawing_display_item.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_recorder.h"
-#include "cc/playback/drawing_display_item.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 
@@ -75,7 +75,7 @@ scoped_refptr<DisplayItemList> PictureImageLayer::PaintContentsToDisplayList(
   // Because Android WebView resourceless software draw mode rasters directly
   // to the root canvas, this draw must use the kSrcOver_Mode so that
   // transparent images blend correctly.
-  canvas->drawImage(image_.get(), 0, 0);
+  canvas->drawImage(image_, 0, 0);
 
   display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
       PaintableRegion(), recorder.finishRecordingAsPicture());

@@ -4,17 +4,18 @@
 
 #include "ash/wm/toplevel_window_event_handler.h"
 
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm/wm_event.h"
-#include "ash/common/wm/workspace_controller.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/resize_shadow.h"
 #include "ash/wm/resize_shadow_controller.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/wm_event.h"
+#include "ash/wm/workspace_controller.h"
 #include "base/compiler_specific.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
@@ -134,7 +135,6 @@ TEST_F(ToplevelWindowEventHandlerTest, WindowPositionAutoManagement) {
   generator.PressLeftButton();
   aura::client::WindowMoveClient* move_client =
       aura::client::GetWindowMoveClient(w1->GetRootWindow());
-  // generator.PressLeftButton();
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&ContinueAndCompleteDrag, base::Unretained(&generator),
@@ -166,36 +166,6 @@ TEST_F(ToplevelWindowEventHandlerTest, WindowPositionAutoManagement) {
   EXPECT_EQ("200,200", w1->bounds().origin().ToString());
   // Size should remain the same.
   EXPECT_EQ(size.ToString(), w1->bounds().size().ToString());
-}
-
-namespace {
-
-class CancelDragObserver : public aura::WindowObserver {
- public:
-  CancelDragObserver() {}
-  ~CancelDragObserver() override {}
-
-  void OnWindowHierarchyChanging(const HierarchyChangeParams& params) override {
-    aura::client::CaptureClient* client =
-        aura::client::GetCaptureClient(params.target->GetRootWindow());
-    client->SetCapture(nullptr);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CancelDragObserver);
-};
-
-}  // namespace
-
-// Cancelling drag while starting window drag should not crash.
-TEST_F(ToplevelWindowEventHandlerTest, CancelWhileDragStart) {
-  std::unique_ptr<aura::Window> w1(CreateWindow(HTCAPTION));
-  CancelDragObserver observer;
-  w1->AddObserver(&observer);
-  gfx::Point origin = w1->bounds().origin();
-  DragFromCenterBy(w1.get(), 100, 100);
-  EXPECT_EQ(origin, w1->bounds().origin());
-  w1->RemoveObserver(&observer);
 }
 
 TEST_F(ToplevelWindowEventHandlerTest, BottomRight) {
@@ -814,6 +784,11 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDragCaptureLoss) {
 // Tests that dragging a snapped window to another display updates the window's
 // bounds correctly.
 TEST_F(ToplevelWindowEventHandlerTest, DragSnappedWindowToExternalDisplay) {
+  // TODO: SetLayoutForCurrentDisplays() needs to ported to mash.
+  // http://crbug.com/698043.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   UpdateDisplay("940x550,940x550");
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   int64_t secondary_id = display_manager()->GetSecondaryDisplay().id();
@@ -830,7 +805,7 @@ TEST_F(ToplevelWindowEventHandlerTest, DragSnappedWindowToExternalDisplay) {
   // Snap the window to the right.
   wm::WindowState* window_state = wm::GetWindowState(w1.get());
   ASSERT_TRUE(window_state->CanSnap());
-  const wm::WMEvent event(wm::WM_EVENT_CYCLE_SNAP_DOCK_RIGHT);
+  const wm::WMEvent event(wm::WM_EVENT_CYCLE_SNAP_RIGHT);
   window_state->OnWMEvent(&event);
   ASSERT_TRUE(window_state->IsSnapped());
 

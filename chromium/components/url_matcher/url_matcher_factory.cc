@@ -98,7 +98,7 @@ class URLMatcherConditionFactoryMethods {
   DISALLOW_COPY_AND_ASSIGN(URLMatcherConditionFactoryMethods);
 };
 
-static base::LazyInstance<URLMatcherConditionFactoryMethods>
+static base::LazyInstance<URLMatcherConditionFactoryMethods>::DestructorAtExit
     g_url_matcher_condition_factory_methods = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
@@ -250,10 +250,10 @@ std::unique_ptr<URLMatcherPortFilter> URLMatcherFactory::CreateURLMatcherPorts(
 
   for (const auto& entry : *value_list) {
     int port = 0;
-    base::ListValue* range = NULL;
-    if (entry->GetAsInteger(&port)) {
+    const base::ListValue* range = NULL;
+    if (entry.GetAsInteger(&port)) {
       ranges.push_back(URLMatcherPortFilter::CreateRange(port));
-    } else if (entry->GetAsList(&range)) {
+    } else if (entry.GetAsList(&range)) {
       int from = 0, to = 0;
       if (range->GetSize() != 2u ||
           !range->GetInteger(0, &from) ||

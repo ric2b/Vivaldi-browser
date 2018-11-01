@@ -6,9 +6,11 @@
 
 #include <oleacc.h>
 
+#include <memory>
 #include <set>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_comptr.h"
@@ -17,6 +19,7 @@
 #include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_text_utils.h"
+#include "ui/base/layout.h"
 #include "ui/base/win/accessibility_misc_utils.h"
 #include "ui/base/win/atl_module.h"
 #include "ui/views/controls/button/custom_button.h"
@@ -28,19 +31,18 @@
 namespace views {
 
 // static
-NativeViewAccessibility* NativeViewAccessibility::Create(View* view) {
-  return new NativeViewAccessibilityWin(view);
+std::unique_ptr<NativeViewAccessibility> NativeViewAccessibility::Create(
+    View* view) {
+  return base::MakeUnique<NativeViewAccessibilityWin>(view);
 }
 
 NativeViewAccessibilityWin::NativeViewAccessibilityWin(View* view)
-    : NativeViewAccessibility(view) {
-}
+    : NativeViewAccessibilityBase(view) {}
 
-NativeViewAccessibilityWin::~NativeViewAccessibilityWin() {
-}
+NativeViewAccessibilityWin::~NativeViewAccessibilityWin() {}
 
 gfx::NativeViewAccessible NativeViewAccessibilityWin::GetParent() {
-  IAccessible* parent = NativeViewAccessibility::GetParent();
+  IAccessible* parent = NativeViewAccessibilityBase::GetParent();
   if (parent)
     return parent;
 
@@ -60,6 +62,14 @@ gfx::NativeViewAccessible NativeViewAccessibilityWin::GetParent() {
 gfx::AcceleratedWidget
 NativeViewAccessibilityWin::GetTargetForNativeAccessibilityEvent() {
   return HWNDForView(view_);
+}
+
+gfx::RectF NativeViewAccessibilityWin::GetBoundsInScreen() const {
+  gfx::RectF bounds = gfx::RectF(view_->GetBoundsInScreen());
+  gfx::NativeView native_view = view_->GetWidget()->GetNativeView();
+  float device_scale = ui::GetScaleFactorForNativeView(native_view);
+  bounds.Scale(device_scale);
+  return bounds;
 }
 
 }  // namespace views

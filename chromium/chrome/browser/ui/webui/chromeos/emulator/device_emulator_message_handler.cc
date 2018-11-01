@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <utility>
 
-#include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shell.h"
+#include "ash/system/bluetooth/tray_bluetooth_helper.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -123,8 +123,7 @@ void DeviceEmulatorMessageHandler::BluetoothObserver::DevicePropertyChanged(
   const std::string& property_name) {
   if (property_name == kPairedPropertyName) {
     owner_->web_ui()->CallJavascriptFunctionUnsafe(
-        kDevicePairedFromTrayJSCallback,
-        base::StringValue(object_path.value()));
+        kDevicePairedFromTrayJSCallback, base::Value(object_path.value()));
   }
 }
 
@@ -132,7 +131,7 @@ void DeviceEmulatorMessageHandler::BluetoothObserver::DeviceRemoved(
     const dbus::ObjectPath& object_path) {
   owner_->web_ui()->CallJavascriptFunctionUnsafe(
       kDeviceRemovedFromMainAdapterJSCallback,
-      base::StringValue(object_path.value()));
+      base::Value(object_path.value()));
 }
 
 class DeviceEmulatorMessageHandler::CrasAudioObserver
@@ -288,11 +287,11 @@ void DeviceEmulatorMessageHandler::HandleRequestBluetoothPair(
 
   // Try to pair the device with the main adapter. The device is identified
   // by its device ID, which, in this case is the same as its address.
-  ash::WmShell::Get()->system_tray_delegate()->ConnectToBluetoothDevice(
+  ash::Shell::Get()->tray_bluetooth_helper()->ConnectToBluetoothDevice(
       props->address.value());
   if (!props->paired.value()) {
     web_ui()->CallJavascriptFunctionUnsafe(kPairFailedJSCallback,
-                                           base::StringValue(path));
+                                           base::Value(path));
   }
 }
 
@@ -427,7 +426,7 @@ void DeviceEmulatorMessageHandler::UpdatePowerSources(
       nullptr;
   for (const auto& val : *sources) {
     const base::DictionaryValue* dict;
-    CHECK(val->GetAsDictionary(&dict));
+    CHECK(val.GetAsDictionary(&dict));
     power_manager::PowerSupplyProperties_PowerSource* source =
         props.add_available_external_power_source();
     std::string id;

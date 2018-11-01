@@ -4,11 +4,14 @@
 
 #include "ash/test/ash_test_impl_aura.h"
 
-#include "ash/common/test/ash_test.h"
-#include "ash/common/wm_window.h"
+#include "ash/mus/test/ash_test_impl_mus.h"
+#include "ash/public/cpp/config.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
+#include "ash/test/ash_test.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/ash_test_helper.h"
+#include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/display/display_layout.h"
@@ -76,15 +79,15 @@ std::unique_ptr<WindowOwner> AshTestImplAura::CreateToplevelTestWindow(
 }
 
 display::Display AshTestImplAura::GetSecondaryDisplay() {
-  return Shell::GetInstance()->display_manager()->GetSecondaryDisplay();
+  return Shell::Get()->display_manager()->GetSecondaryDisplay();
 }
 
 bool AshTestImplAura::SetSecondaryDisplayPlacement(
     display::DisplayPlacement::Position position,
     int offset) {
-  Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
-      display::test::CreateDisplayLayout(
-          Shell::GetInstance()->display_manager(), position, 0));
+  Shell::Get()->display_manager()->SetLayoutForCurrentDisplays(
+      display::test::CreateDisplayLayout(Shell::Get()->display_manager(),
+                                         position, 0));
   return true;
 }
 
@@ -101,7 +104,10 @@ void AshTestImplAura::AddTransientChild(WmWindow* parent, WmWindow* window) {
 
 // static
 std::unique_ptr<AshTestImpl> AshTestImpl::Create() {
-  return base::MakeUnique<AshTestImplAura>();
+  if (test::AshTestHelper::config() == Config::CLASSIC)
+    return base::MakeUnique<AshTestImplAura>();
+
+  return base::MakeUnique<mus::AshTestImplMus>();
 }
 
 }  // namespace ash

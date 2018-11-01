@@ -9,7 +9,6 @@
 #include "net/quic/core/frames/quic_goaway_frame.h"
 #include "net/quic/core/frames/quic_mtu_discovery_frame.h"
 #include "net/quic/core/frames/quic_padding_frame.h"
-#include "net/quic/core/frames/quic_path_close_frame.h"
 #include "net/quic/core/frames/quic_ping_frame.h"
 #include "net/quic/core/frames/quic_rst_stream_frame.h"
 #include "net/quic/core/frames/quic_stop_waiting_frame.h"
@@ -116,14 +115,6 @@ TEST(QuicFramesTest, StopWaitingFrameToString) {
   EXPECT_EQ("{ least_unacked: 2 }\n", stream.str());
 }
 
-TEST(QuicFramesTest, PathCloseFrameToString) {
-  QuicPathCloseFrame frame;
-  frame.path_id = 1;
-  std::ostringstream stream;
-  stream << frame;
-  EXPECT_EQ("{ path_id: 1 }\n", stream.str());
-}
-
 TEST(QuicFramesTest, IsAwaitingPacket) {
   QuicAckFrame ack_frame1;
   ack_frame1.largest_observed = 10u;
@@ -143,6 +134,23 @@ TEST(QuicFramesTest, IsAwaitingPacket) {
 
   ack_frame2.packets.Remove(50);
   EXPECT_TRUE(IsAwaitingPacket(ack_frame2, 50u, 20u));
+}
+
+TEST(QuicFramesTest, RemoveSmallestInterval) {
+  QuicAckFrame ack_frame1;
+  ack_frame1.largest_observed = 100u;
+  ack_frame1.packets.Add(51, 60);
+  ack_frame1.packets.Add(71, 80);
+  ack_frame1.packets.Add(91, 100);
+  ack_frame1.packets.RemoveSmallestInterval();
+  EXPECT_EQ(2u, ack_frame1.packets.NumIntervals());
+  EXPECT_EQ(71u, ack_frame1.packets.Min());
+  EXPECT_EQ(99u, ack_frame1.packets.Max());
+
+  ack_frame1.packets.RemoveSmallestInterval();
+  EXPECT_EQ(1u, ack_frame1.packets.NumIntervals());
+  EXPECT_EQ(91u, ack_frame1.packets.Min());
+  EXPECT_EQ(99u, ack_frame1.packets.Max());
 }
 
 // Tests that a queue contains the expected data after calls to Add().

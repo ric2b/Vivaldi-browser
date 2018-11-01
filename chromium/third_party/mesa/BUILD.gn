@@ -129,6 +129,9 @@ config("mesa_internal_warnings") {
 
       # mesa's STATIC_ASSERT() macro expands to an ununused typedef.
       "-Wno-unused-local-typedef",
+
+      # mesa's flex scanner code uses "register" a lot.
+      "-Wno-deprecated-register",
     ]
   }
   if (is_win) {
@@ -755,11 +758,6 @@ loadable_module("osmesa") {
     ":mesa_libglslcommon",
     "//build/config/sanitizers:deps",
   ]
-
-  # Required for the allocator implementation, which is not used on Mac.
-  if (!is_mac) {
-    deps += [ "//base" ]
-  }
 
   if (is_win) {
     defines = [

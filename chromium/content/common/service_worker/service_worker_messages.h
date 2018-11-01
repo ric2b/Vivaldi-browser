@@ -30,22 +30,22 @@
 #define IPC_MESSAGE_START ServiceWorkerMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerError::ErrorType,
-                          blink::WebServiceWorkerError::ErrorTypeLast)
+                          blink::WebServiceWorkerError::kErrorTypeLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerEventResult,
-                          blink::WebServiceWorkerEventResultLast)
+                          blink::kWebServiceWorkerEventResultLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerState,
-                          blink::WebServiceWorkerStateLast)
+                          blink::kWebServiceWorkerStateLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerResponseType,
-                          blink::WebServiceWorkerResponseTypeLast)
+                          blink::kWebServiceWorkerResponseTypeLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerResponseError,
-                          blink::WebServiceWorkerResponseErrorLast)
+                          blink::kWebServiceWorkerResponseErrorLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerClientType,
-                          blink::WebServiceWorkerClientTypeLast)
+                          blink::kWebServiceWorkerClientTypeLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::ServiceWorkerProviderType,
                           content::SERVICE_WORKER_PROVIDER_TYPE_LAST)
@@ -250,10 +250,6 @@ IPC_MESSAGE_ROUTED4(ServiceWorkerHostMsg_FetchEventResponse,
                     content::ServiceWorkerFetchEventResult,
                     content::ServiceWorkerResponse,
                     base::Time /* dispatch_event_time */)
-
-// Responds to a Ping from the browser.
-// Routed to the target ServiceWorkerVersion.
-IPC_MESSAGE_ROUTED0(ServiceWorkerHostMsg_Pong)
 
 // Asks the browser to retrieve client of the sender ServiceWorker.
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_GetClient,
@@ -489,9 +485,6 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_ClaimClientsError,
                      int /* request_id */,
                      blink::WebServiceWorkerError::ErrorType /* code */,
                      base::string16 /* message */)
-
-// Sent via EmbeddedWorker to Ping the worker, expecting a Pong in response.
-IPC_MESSAGE_CONTROL0(ServiceWorkerMsg_Ping)
 
 // Sent via EmbeddedWorker as a response of GetClient.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_DidGetClient,

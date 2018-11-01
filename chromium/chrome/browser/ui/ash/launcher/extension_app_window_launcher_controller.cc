@@ -4,11 +4,12 @@
 
 #include "chrome/browser/ui/ash/launcher/extension_app_window_launcher_controller.h"
 
-#include "ash/common/shelf/shelf_delegate.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
-#include "ash/common/wm_window_property.h"
+#include "ash/shelf/shelf_delegate.h"
+#include "ash/shelf/shelf_model.h"
+#include "ash/shell.h"
+#include "ash/wm/window_properties.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/profiles/profile.h"
@@ -172,34 +173,38 @@ void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
     controller->AddAppWindow(app_window);
   } else {
     std::string launch_id = GetLaunchId(app_window);
-    ExtensionAppWindowLauncherItemController* controller =
-        new ExtensionAppWindowLauncherItemController(app_id, launch_id,
-                                                     owner());
+    std::unique_ptr<ExtensionAppWindowLauncherItemController> controller =
+        base::MakeUnique<ExtensionAppWindowLauncherItemController>(
+            ash::AppLaunchId(app_id, launch_id));
+    ExtensionAppWindowLauncherItemController* item_controller =
+        controller.get();
+
     controller->AddAppWindow(app_window);
-    // If there is already a shelf id mapped to this app_shelf_id (e.g. pinned),
+    // If there is already a shelf id mapped to this AppLaunchId (e.g. pinned),
     // use that shelf item.
     shelf_id =
-        ash::WmShell::Get()->shelf_delegate()->GetShelfIDForAppIDAndLaunchID(
+        ash::Shell::Get()->shelf_delegate()->GetShelfIDForAppIDAndLaunchID(
             app_id, launch_id);
 
     if (shelf_id == 0) {
-      shelf_id = owner()->CreateAppLauncherItem(controller, app_id, status);
+      shelf_id = owner()->CreateAppLauncherItem(std::move(controller), status);
       // Restore any existing app icon and flag as set.
       if (app_window->HasCustomIcon() && !app_window->app_icon().IsEmpty()) {
         owner()->SetLauncherItemImage(shelf_id,
                                       app_window->app_icon().AsImageSkia());
-        controller->set_image_set_by_controller(true);
+        item_controller->set_image_set_by_controller(true);
       }
     } else {
-      owner()->SetItemController(shelf_id, controller);
+      ash::ShelfModel* shelf_model = ash::Shell::Get()->shelf_model();
+      shelf_model->SetShelfItemDelegate(shelf_id, std::move(controller));
     }
 
     // We need to change the controller associated with app_shelf_id.
-    app_controller_map_[app_shelf_id] = controller;
+    app_controller_map_[app_shelf_id] = item_controller;
   }
   owner()->SetItemStatus(shelf_id, status);
-  ash::WmWindow::Get(window)->SetIntProperty(ash::WmWindowProperty::SHELF_ID,
-                                             shelf_id);
+  ash::WmWindow::Get(window)->aura_window()->SetProperty(ash::kShelfIDKey,
+                                                         shelf_id);
 }
 
 void ExtensionAppWindowLauncherController::UnregisterApp(aura::Window* window) {

@@ -16,8 +16,8 @@
 
 namespace cryptauth {
 class CryptAuthDeviceManager;
+class CryptAuthService;
 class RemoteDeviceLoader;
-class SecureMessageDelegate;
 }  // namespace cryptauth
 
 namespace chromeos {
@@ -28,16 +28,7 @@ namespace tether {
 // synced via CryptAuth.
 class TetherHostFetcher {
  public:
-  class Delegate {
-   public:
-    virtual std::unique_ptr<cryptauth::SecureMessageDelegate>
-    CreateSecureMessageDelegate() = 0;
-  };
-
-  TetherHostFetcher(const std::string& user_id,
-                    const std::string& user_private_key,
-                    std::unique_ptr<Delegate> delegate,
-                    cryptauth::CryptAuthDeviceManager* device_manager);
+  explicit TetherHostFetcher(cryptauth::CryptAuthService* cryptauth_service);
   virtual ~TetherHostFetcher();
 
   // Fetches all tether hosts.
@@ -51,9 +42,10 @@ class TetherHostFetcher {
   virtual void FetchTetherHost(const std::string& device_id,
                                const TetherHostCallback& callback);
 
- private:
+ protected:
   struct TetherHostFetchRequest {
-    TetherHostFetchRequest(const TetherHostListCallback& list_callback);
+    explicit TetherHostFetchRequest(
+        const TetherHostListCallback& list_callback);
     TetherHostFetchRequest(const std::string& device_id,
                            const TetherHostCallback& single_callback);
     TetherHostFetchRequest(const TetherHostFetchRequest& other);
@@ -69,15 +61,19 @@ class TetherHostFetcher {
     TetherHostCallback single_callback;
   };
 
-  void StartLoadingDevicesIfNeeded();
+  TetherHostFetcher(const std::string& user_id,
+                    const std::string& user_private_key,
+                    cryptauth::CryptAuthService* cryptauth_service,
+                    cryptauth::CryptAuthDeviceManager* device_manager);
+
   void OnRemoteDevicesLoaded(const cryptauth::RemoteDeviceList& remote_devices);
 
-  const std::string user_id_;
-  const std::string user_private_key_;
-  std::unique_ptr<Delegate> delegate_;
-  cryptauth::CryptAuthDeviceManager* device_manager_;
-
   std::vector<TetherHostFetchRequest> requests_;
+
+ private:
+  void StartLoadingDevicesIfNeeded();
+
+  cryptauth::CryptAuthService* cryptauth_service_;
 
   std::unique_ptr<cryptauth::RemoteDeviceLoader> remote_device_loader_;
 

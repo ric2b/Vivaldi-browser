@@ -1,55 +1,75 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_network_behavior.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-internet-known-networks-page">
   <template>
     <style include="settings-shared"></style>
-    <div class="settings-box first single-column">
-      <div class="settings-box continuation">
-        <div>$i18n{knownNetworksMessage}</div>
+
+    <div class="settings-box first">
+      <div>$i18n{knownNetworksMessage}</div>
+    </div>
+
+    <div class="settings-box">
+      <div class="secondary">$i18n{knownNetworksPreferred}</div>
+    </div>
+    <div class="list-frame vertical-list">
+      <div class="list-item"
+          hidden$="[[havePreferred_(networkStateList_)]]">
+        $i18n{internetNoNetworks}
       </div>
-      <div class="settings-box first single-column self-stretch">
-        <div class="secondary">$i18n{knownNetworksPreferred}</div>
-        <div class="settings-box self-stretch start"
-            hidden$="[[havePreferred_(networkStateList_)]]">
-          $i18n{internetNoNetworks}
-        </div>
-        <template is="dom-repeat" items="[[networkStateList_]]"
-            filter="networkIsPreferred_">
-          <div class="settings-box self-stretch">
-            <div class="start">[[item.Name]]</div>
+      <template is="dom-repeat" items="[[networkStateList_]]"
+          filter="networkIsPreferred_">
+        <div class="list-item">
+          <div class="start">[[item.Name]]</div>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              actionable on-tap="fireShowDetails_" tabindex$="[[tabindex]]"
+              aria-label$="[[item.Name]]">
+          </button>
+          <div class="secondary-action">
             <paper-icon-button preferred icon="cr:more-vert"
                 tabindex$="[[tabindex]]" on-tap="onMenuButtonTap_"
                 title="$i18n{moreActions}">
             </paper-icon-button>
           </div>
-        </template>
-      </div>
-      <div class="settings-box first single-column self-stretch"
-          hidden$="[[!haveNotPreferred_(networkStateList_)]]">
-        <div class="secondary">$i18n{knownNetworksAll}</div>
-        <template is="dom-repeat" items="[[networkStateList_]]"
-            filter="networkIsNotPreferred_">
-          <div class="settings-box self-stretch">
-            <div class="start">[[item.Name]]</div>
+        </div>
+      </template>
+    </div>
+
+    <div class="settings-box">
+      <div class="secondary">$i18n{knownNetworksAll}</div>
+    </div>
+    <div class="list-frame vertical-list"
+        hidden$="[[!haveNotPreferred_(networkStateList_)]]">
+      <template is="dom-repeat" items="[[networkStateList_]]"
+          filter="networkIsNotPreferred_">
+        <div class="list-item">
+          <div class="start">[[item.Name]]</div>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              actionable on-tap="fireShowDetails_" tabindex$="[[tabindex]]"
+              aria-label$="[[item.Name]]">
+          </button>
+          <div class="secondary-action">
             <paper-icon-button icon="cr:more-vert"  tabindex$="[[tabindex]]"
                 on-tap="onMenuButtonTap_" title="$i18n{moreActions}">
             </paper-icon-button>
           </div>
-        </template>
-      </div>
+        </div>
+      </template>
     </div>
 
     <dialog id="dotsMenu" is="cr-action-menu">
       <button class="dropdown-item" role="option"
-          hidden="[[selectedIsPreferred_]]" on-tap="onAddPreferredTap_">
+          hidden="[[!showAddPreferred_]]" on-tap="onAddPreferredTap_">
         $i18n{knownNetworksMenuAddPreferred}
       </button>
       <button class="dropdown-item" role="option"
-          hidden="[[!selectedIsPreferred_]]" on-tap="onRemovePreferredTap_">
+          hidden="[[!showRemovePreferred_]]" on-tap="onRemovePreferredTap_">
         $i18n{knownNetworksMenuRemovePreferred}
       </button>
       <button class="dropdown-item" role="option" on-tap="onForgetTap_">

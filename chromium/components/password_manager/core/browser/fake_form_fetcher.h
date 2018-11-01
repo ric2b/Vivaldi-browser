@@ -33,6 +33,8 @@ class FakeFormFetcher : public FormFetcher {
   // has to first call AddConsumer and then SetNonFederated.
   void AddConsumer(Consumer* consumer) override;
 
+  void RemoveConsumer(Consumer* consumer) override;
+
   // Returns State::WAITING if Fetch() was called after any Set* calls, and
   // State::NOT_WAITING otherwise.
   State GetState() const override;
@@ -60,6 +62,9 @@ class FakeFormFetcher : public FormFetcher {
 
   // Only sets the internal state to WAITING, no call to PasswordStore.
   void Fetch() override;
+
+  // A no-op, returns null.
+  std::unique_ptr<FormFetcher> Clone() override;
 
  private:
   std::set<Consumer*> consumers_;

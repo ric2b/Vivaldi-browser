@@ -39,12 +39,8 @@ class FakeLayerTreeHostImpl : public LayerTreeHostImpl {
   void NotifyTileStateChanged(const Tile* tile) override;
   BeginFrameArgs CurrentBeginFrameArgs() const override;
   void AdvanceToNextFrame(base::TimeDelta advance_by);
-  void UpdateNumChildrenAndDrawPropertiesForActiveTree(
-      bool force_skip_verify_visible_rect_calculations = false);
-  static void UpdateNumChildrenAndDrawProperties(
-      LayerTreeImpl* layerTree,
-      bool force_skip_verify_visible_rect_calculations = false);
-  static int RecursiveUpdateNumChildren(LayerImpl* layer);
+  void UpdateNumChildrenAndDrawPropertiesForActiveTree();
+  static void UpdateNumChildrenAndDrawProperties(LayerTreeImpl* layerTree);
 
   using LayerTreeHostImpl::ActivateSyncTree;
   using LayerTreeHostImpl::prepare_tiles_needed;

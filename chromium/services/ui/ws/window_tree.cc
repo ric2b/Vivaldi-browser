@@ -35,6 +35,8 @@
 
 using mojo::InterfaceRequest;
 
+using EventProperties = std::unordered_map<std::string, std::vector<uint8_t>>;
+
 namespace ui {
 namespace ws {
 
@@ -66,6 +68,16 @@ class TargetedEvent : public ServerWindowObserver {
   DISALLOW_COPY_AND_ASSIGN(TargetedEvent);
 };
 
+struct WindowTree::DragMoveState {
+  // Whether we've queued a move to |queued_cursor_location_| when we get an
+  // ack from WmMoveDragImage.
+  bool has_queued_drag_window_move = false;
+
+  // When |has_queued_drag_window_move_| is true, this is a location which
+  // should be sent to the window manager as soon as it acked the last one.
+  gfx::Point queued_cursor_location;
+};
+
 WindowTree::WindowTree(WindowServer* window_server,
                        const UserId& user_id,
                        ServerWindow* root,
@@ -76,7 +88,8 @@ WindowTree::WindowTree(WindowServer* window_server,
       next_window_id_(1),
       access_policy_(std::move(access_policy)),
       event_ack_id_(0),
-      window_manager_internal_(nullptr) {
+      window_manager_internal_(nullptr),
+      drag_weak_factory_(this) {
   if (root)
     roots_.insert(root);
   access_policy_->Init(id_, this);
@@ -88,8 +101,10 @@ WindowTree::~WindowTree() {
   // We alert the WindowManagerState that we're destroying this state here
   // because WindowManagerState would attempt to use things that wouldn't have
   // been cleaned up by OnWindowDestroyingTreeImpl().
-  if (window_manager_state_)
+  if (window_manager_state_) {
     window_manager_state_->OnWillDestroyTree(this);
+    window_manager_state_.reset();
+  }
 }
 
 void WindowTree::Init(std::unique_ptr<WindowTreeBinding> binding,
@@ -117,10 +132,12 @@ void WindowTree::Init(std::unique_ptr<WindowTreeBinding> binding,
 
   const bool drawn = root->parent() && root->parent()->IsDrawn();
   client()->OnEmbed(id_, WindowToWindowData(to_send.front()), std::move(tree),
-                    display_id, focused_window_id.id, drawn);
+                    display_id, focused_window_id.id, drawn,
+                    root->frame_sink_id(), root->current_local_surface_id());
 }
 
-void WindowTree::ConfigureWindowManager() {
+void WindowTree::ConfigureWindowManager(
+    bool automatically_create_display_roots) {
   // ConfigureWindowManager() should be called early on, before anything
   // else. |waiting_for_top_level_window_info_| must be null as if
   // |waiting_for_top_level_window_info_| is non-null it means we're about to
@@ -128,6 +145,7 @@ void WindowTree::ConfigureWindowManager() {
   // TODO(sky): DCHECK temporary until 626869 is sorted out.
   DCHECK(!waiting_for_top_level_window_info_);
   DCHECK(!window_manager_internal_);
+  automatically_create_display_roots_ = automatically_create_display_roots;
   window_manager_internal_ = binding_->GetWindowManager();
   window_manager_internal_->OnConnect(id_);
   window_manager_state_ = base::MakeUnique<WindowManagerState>(this);
@@ -190,6 +208,10 @@ void WindowTree::PrepareForWindowServerShutdown() {
 }
 
 void WindowTree::AddRootForWindowManager(const ServerWindow* root) {
+  if (!automatically_create_display_roots_)
+    return;
+
+  DCHECK(automatically_create_display_roots_);
   DCHECK(window_manager_internal_);
   const ClientWindowId client_window_id(WindowIdToTransportId(root->id()));
   DCHECK_EQ(0u, client_id_to_window_id_map_.count(client_window_id));
@@ -197,12 +219,13 @@ void WindowTree::AddRootForWindowManager(const ServerWindow* root) {
   window_id_to_client_id_map_[root->id()] = client_window_id;
   roots_.insert(root);
 
-  Display* display = GetDisplay(root);
-  DCHECK(display);
+  Display* ws_display = GetDisplay(root);
+  DCHECK(ws_display);
 
-  window_manager_internal_->WmNewDisplayAdded(display->ToDisplay(),
-                                              WindowToWindowData(root),
-                                              root->parent()->IsDrawn());
+  window_manager_internal_->WmNewDisplayAdded(
+      ws_display->GetDisplay(), WindowToWindowData(root),
+      root->parent()->IsDrawn(), root->frame_sink_id(),
+      root->current_local_surface_id());
 }
 
 void WindowTree::OnWindowDestroyingTreeImpl(WindowTree* tree) {
@@ -228,6 +251,62 @@ void WindowTree::NotifyChangeCompleted(
     mojom::WindowManagerErrorCode error_code) {
   client()->OnChangeCompleted(
       change_id, error_code == mojom::WindowManagerErrorCode::SUCCESS);
+}
+
+void WindowTree::OnWmMoveDragImageAck() {
+  if (drag_move_state_->has_queued_drag_window_move) {
+    gfx::Point queued_location = drag_move_state_->queued_cursor_location;
+    drag_move_state_.reset();
+    OnDragMoved(queued_location);
+  } else {
+    drag_move_state_.reset();
+  }
+}
+
+bool WindowTree::ProcessSetDisplayRoot(int64_t display_id,
+                                       const ClientWindowId& client_window_id) {
+  DCHECK(window_manager_state_);  // Only called for window manager.
+  Display* display =
+      window_server_->display_manager()->GetDisplayById(display_id);
+  if (!display) {
+    DVLOG(1) << "SetDisplayRoot called with unknown display " << display_id;
+    return false;
+  }
+
+  if (automatically_create_display_roots_) {
+    DVLOG(1) << "SetDisplayRoot is only applicable when "
+             << "automatically_create_display_roots is false";
+    return false;
+  }
+
+  ServerWindow* window = GetWindowByClientId(client_window_id);
+  // The window must not have a parent.
+  if (!window || window->parent()) {
+    DVLOG(1) << "SetDisplayRoot called with invalid window id "
+             << client_window_id.id;
+    return false;
+  }
+
+  WindowManagerDisplayRoot* display_root =
+      display->GetWindowManagerDisplayRootForUser(
+          window_manager_state_->user_id());
+  DCHECK(display_root);
+  if (!display_root->root()->children().empty()) {
+    DVLOG(1) << "SetDisplayRoot called more than once";
+    return false;
+  }
+
+  if (base::ContainsValue(roots_, window)) {
+    DVLOG(1) << "SetDisplayRoot called with existing root";
+    return false;
+  }
+
+  // NOTE: this doesn't resize the window in anyway. We assume the client takes
+  // care of any modifications it needs to do.
+  roots_.insert(window);
+  Operation op(this, window_server_, OperationType::ADD_WINDOW);
+  display_root->root()->Add(window);
+  return true;
 }
 
 bool WindowTree::SetCapture(const ClientWindowId& client_window_id) {
@@ -352,25 +431,58 @@ bool WindowTree::DeleteWindow(const ClientWindowId& window_id) {
   return tree && tree->DeleteWindowImpl(this, window);
 }
 
-bool WindowTree::SetModal(const ClientWindowId& window_id) {
+bool WindowTree::SetModalType(const ClientWindowId& window_id,
+                              ModalType modal_type) {
   ServerWindow* window = GetWindowByClientId(window_id);
-  if (window && access_policy_->CanSetModal(window)) {
-    WindowManagerDisplayRoot* display_root =
-        GetWindowManagerDisplayRoot(window);
-    if (window->transient_parent()) {
-      window->SetModal();
-    } else if (user_id_ != InvalidUserId()) {
-      if (display_root)
-        display_root->window_manager_state()->AddSystemModalWindow(window);
-    } else {
-      return false;
-    }
-    if (display_root)
-      display_root->window_manager_state()->ReleaseCaptureBlockedByModalWindow(
-          window);
+  if (!window) {
+    DVLOG(1) << "SetModalType failed (invalid id)";
+    return false;
+  }
+
+  if (ShouldRouteToWindowManager(window)) {
+    WindowTree* wm_tree = GetWindowManagerDisplayRoot(window)
+                              ->window_manager_state()
+                              ->window_tree();
+    wm_tree->window_manager_internal_->WmSetModalType(
+        wm_tree->ClientWindowIdForWindow(window).id, modal_type);
     return true;
   }
-  return false;
+
+  if (!access_policy_->CanSetModal(window)) {
+    DVLOG(1) << "SetModalType failed (access denied)";
+    return false;
+  }
+
+  if (window->modal_type() == modal_type)
+    return true;
+
+  // TODO(moshayedi): crbug.com/697176. When modality of a window that used to
+  // be a system modal changes, notify window manager state.
+  auto* display_root = GetWindowManagerDisplayRoot(window);
+  switch (modal_type) {
+    case MODAL_TYPE_SYSTEM:
+      if (user_id_ == InvalidUserId()) {
+        DVLOG(1) << "SetModalType failed (invalid user id)";
+        return false;
+      }
+      if (!display_root) {
+        DVLOG(1) << "SetModalType failed (no display root)";
+        return false;
+      }
+      window->SetModalType(modal_type);
+      display_root->window_manager_state()->AddSystemModalWindow(window);
+      break;
+    case MODAL_TYPE_NONE:
+    case MODAL_TYPE_WINDOW:
+    case MODAL_TYPE_CHILD:
+      window->SetModalType(modal_type);
+      break;
+  }
+  if (display_root && modal_type != MODAL_TYPE_NONE) {
+    display_root->window_manager_state()->ReleaseCaptureBlockedByModalWindow(
+        window);
+  }
+  return true;
 }
 
 std::vector<const ServerWindow*> WindowTree::GetWindowTree(
@@ -434,17 +546,18 @@ bool WindowTree::SetFocus(const ClientWindowId& window_id) {
 }
 
 bool WindowTree::Embed(const ClientWindowId& window_id,
-                       mojom::WindowTreeClientPtr client,
+                       mojom::WindowTreeClientPtr window_tree_client,
                        uint32_t flags) {
-  if (!client || !CanEmbed(window_id))
+  if (!window_tree_client || !CanEmbed(window_id))
     return false;
   ServerWindow* window = GetWindowByClientId(window_id);
   PrepareForEmbed(window);
   // When embedding we don't know the user id of where the TreeClient came
   // from. Use an invalid id, which limits what the client is able to do.
-  window_server_->EmbedAtWindow(window, InvalidUserId(), std::move(client),
-                                flags,
+  window_server_->EmbedAtWindow(window, InvalidUserId(),
+                                std::move(window_tree_client), flags,
                                 base::WrapUnique(new DefaultAccessPolicy));
+  client()->OnFrameSinkIdAllocated(window_id.id, window->frame_sink_id());
   return true;
 }
 
@@ -499,7 +612,8 @@ void WindowTree::OnWindowManagerCreatedTopLevelWindow(
   int64_t display_id = display ? display->GetId() : display::kInvalidDisplayId;
   const bool drawn = window->parent() && window->parent()->IsDrawn();
   client()->OnTopLevelCreated(client_change_id, WindowToWindowData(window),
-                              display_id, drawn);
+                              display_id, drawn, window->frame_sink_id(),
+                              window->current_local_surface_id());
 }
 
 void WindowTree::AddActivationParent(const ClientWindowId& window_id) {
@@ -522,6 +636,7 @@ void WindowTree::OnChangeCompleted(uint32_t change_id, bool success) {
 void WindowTree::OnAccelerator(uint32_t accelerator_id,
                                const ui::Event& event,
                                bool needs_ack) {
+  DVLOG(3) << "OnAccelerator client=" << id_;
   DCHECK(window_manager_internal_);
   if (needs_ack)
     GenerateEventAckId();
@@ -535,7 +650,9 @@ void WindowTree::OnAccelerator(uint32_t accelerator_id,
 
 void WindowTree::OnDisplayDestroying(int64_t display_id) {
   DCHECK(window_manager_internal_);
-  window_manager_internal_->WmDisplayRemoved(display_id);
+  if (automatically_create_display_roots_)
+    window_manager_internal_->WmDisplayRemoved(display_id);
+  // For the else case the client should detect removal directly.
 }
 
 void WindowTree::ClientJankinessChanged(WindowTree* tree) {
@@ -548,14 +665,17 @@ void WindowTree::ClientJankinessChanged(WindowTree* tree) {
   }
 }
 
-void WindowTree::ProcessWindowBoundsChanged(const ServerWindow* window,
-                                            const gfx::Rect& old_bounds,
-                                            const gfx::Rect& new_bounds,
-                                            bool originated_change) {
+void WindowTree::ProcessWindowBoundsChanged(
+    const ServerWindow* window,
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds,
+    bool originated_change,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   ClientWindowId client_window_id;
   if (originated_change || !IsWindowKnown(window, &client_window_id))
     return;
-  client()->OnWindowBoundsChanged(client_window_id.id, old_bounds, new_bounds);
+  client()->OnWindowBoundsChanged(client_window_id.id, old_bounds, new_bounds,
+                                  local_surface_id);
 }
 
 void WindowTree::ProcessClientAreaChanged(
@@ -726,7 +846,7 @@ void WindowTree::ProcessWindowOpacityChanged(const ServerWindow* window,
 }
 
 void WindowTree::ProcessCursorChanged(const ServerWindow* window,
-                                      mojom::Cursor cursor_id,
+                                      mojom::CursorType cursor_id,
                                       bool originated_change) {
   if (originated_change)
     return;
@@ -980,11 +1100,19 @@ void WindowTree::RemoveRoot(ServerWindow* window, RemoveRootReason reason) {
   DCHECK(roots_.count(window) > 0);
   roots_.erase(window);
 
-  const ClientWindowId client_window_id(ClientWindowIdForWindow(window));
-
-  // No need to do anything if we created the window.
-  if (window->id().client_id == id_)
+  if (window->id().client_id == id_) {
+    // This cllient created the window. If this client is the window manager and
+    // display roots are manually created, then |window| is a display root and
+    // needs be cleaned.
+    if (window_manager_state_ && !automatically_create_display_roots_) {
+      // The window manager is asking to delete the root it created.
+      window_manager_state_->DeleteWindowManagerDisplayRoot(window->parent());
+      DeleteWindowImpl(this, window);
+    }
     return;
+  }
+
+  const ClientWindowId client_window_id(ClientWindowIdForWindow(window));
 
   if (reason == RemoveRootReason::EMBED) {
     client()->OnUnembed(client_window_id.id);
@@ -1141,6 +1269,7 @@ uint32_t WindowTree::GenerateEventAckId() {
 
 void WindowTree::DispatchInputEventImpl(ServerWindow* target,
                                         const ui::Event& event) {
+  DVLOG(3) << "DispatchInputEventImpl client=" << id_;
   GenerateEventAckId();
   WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(target);
   DCHECK(display_root);
@@ -1278,8 +1407,11 @@ void WindowTree::RemoveTransientWindowFromParent(uint32_t change_id,
   client()->OnChangeCompleted(change_id, success);
 }
 
-void WindowTree::SetModal(uint32_t change_id, Id window_id) {
-  client()->OnChangeCompleted(change_id, SetModal(ClientWindowId(window_id)));
+void WindowTree::SetModalType(uint32_t change_id,
+                              Id window_id,
+                              ModalType modal_type) {
+  client()->OnChangeCompleted(
+      change_id, SetModalType(ClientWindowId(window_id), modal_type));
 }
 
 void WindowTree::ReorderWindow(uint32_t change_id,
@@ -1336,11 +1468,16 @@ void WindowTree::StopPointerWatcher() {
   pointer_watcher_want_moves_ = false;
 }
 
-void WindowTree::SetWindowBounds(uint32_t change_id,
-                                 Id window_id,
-                                 const gfx::Rect& bounds) {
+void WindowTree::SetWindowBounds(
+    uint32_t change_id,
+    Id window_id,
+    const gfx::Rect& bounds,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
   if (window && ShouldRouteToWindowManager(window)) {
+    DVLOG(3) << "Redirecting request to change bounds for "
+             << (window ? WindowIdToTransportId(window->id()) : 0)
+             << " to window manager...";
     const uint32_t wm_change_id =
         window_server_->GenerateWindowManagerChangeId(this, change_id);
     // |window_id| may be a client id, use the id from the window to ensure
@@ -1362,7 +1499,9 @@ void WindowTree::SetWindowBounds(uint32_t change_id,
   bool success = window && access_policy_->CanSetWindowBounds(window);
   if (success) {
     Operation op(this, window_server_, OperationType::SET_WINDOW_BOUNDS);
-    window->SetBounds(bounds);
+    window->SetBounds(bounds, local_surface_id);
+  } else {
+    DVLOG(1) << "Failed to set bounds on window.";
   }
   client()->OnChangeCompleted(change_id, success);
 }
@@ -1454,6 +1593,7 @@ void WindowTree::SetImeVisibility(Id transport_window_id,
 
 void WindowTree::OnWindowInputEventAck(uint32_t event_id,
                                        mojom::EventResult result) {
+  DVLOG(3) << "OnWindowInputEventAck client=" << id_;
   if (event_ack_id_ == 0 || event_id != event_ack_id_) {
     // TODO(sad): Something bad happened. Kill the client?
     NOTIMPLEMENTED() << ": Wrong event acked. event_id=" << event_id
@@ -1579,7 +1719,7 @@ void WindowTree::SetEventTargetingPolicy(Id transport_window_id,
 
 void WindowTree::SetPredefinedCursor(uint32_t change_id,
                                      Id transport_window_id,
-                                     ui::mojom::Cursor cursor_id) {
+                                     ui::mojom::CursorType cursor_id) {
   ServerWindow* window =
       GetWindowByClientId(ClientWindowId(transport_window_id));
 
@@ -1616,20 +1756,20 @@ void WindowTree::DeactivateWindow(Id window_id) {
 void WindowTree::StackAbove(uint32_t change_id, Id above_id, Id below_id) {
   ServerWindow* above = GetWindowByClientId(ClientWindowId(above_id));
   if (!above) {
-    DVLOG(1) << "StackAtTop failed (invalid above id)";
+    DVLOG(1) << "StackAbove failed (invalid above id)";
     client()->OnChangeCompleted(change_id, false);
     return;
   }
 
   ServerWindow* below = GetWindowByClientId(ClientWindowId(below_id));
   if (!below) {
-    DVLOG(1) << "StackAtTop failed (invalid below id)";
+    DVLOG(1) << "StackAbove failed (invalid below id)";
     client()->OnChangeCompleted(change_id, false);
     return;
   }
 
   if (!access_policy_->CanStackAbove(above, below)) {
-    DVLOG(1) << "StackAtTop failed (access denied)";
+    DVLOG(1) << "StackAbove failed (access denied)";
     client()->OnChangeCompleted(change_id, false);
     return;
   }
@@ -1637,24 +1777,24 @@ void WindowTree::StackAbove(uint32_t change_id, Id above_id, Id below_id) {
   ServerWindow* parent = above->parent();
   ServerWindow* below_parent = below->parent();
   if (!parent) {
-    DVLOG(1) << "StackAtTop failed (above unparented)";
+    DVLOG(1) << "StackAbove failed (above unparented)";
     client()->OnChangeCompleted(change_id, false);
     return;
   }
   if (!below_parent) {
-    DVLOG(1) << "StackAtTop failed (below unparented)";
+    DVLOG(1) << "StackAbove failed (below unparented)";
     client()->OnChangeCompleted(change_id, false);
     return;
   }
   if (parent != below_parent) {
-    DVLOG(1) << "StackAtTop failed (windows have different parents)";
+    DVLOG(1) << "StackAbove failed (windows have different parents)";
     client()->OnChangeCompleted(change_id, false);
     return;
   }
 
   WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(above);
   if (!display_root) {
-    DVLOG(1) << "StackAtTop (no display root)";
+    DVLOG(1) << "StackAbove (no display root)";
     client()->OnChangeCompleted(change_id, false);
     return;
   }
@@ -1738,15 +1878,23 @@ void WindowTree::GetCursorLocationMemory(
 void WindowTree::PerformDragDrop(
     uint32_t change_id,
     Id source_window_id,
+    const gfx::Point& screen_location,
     const std::unordered_map<std::string, std::vector<uint8_t>>& drag_data,
-    uint32_t drag_operation) {
+    const SkBitmap& drag_image,
+    const gfx::Vector2d& drag_image_offset,
+    uint32_t drag_operation,
+    ui::mojom::PointerKind source) {
+  // TODO(erg): SkBitmap is the wrong data type for the drag image; we should
+  // be passing ImageSkias once http://crbug.com/655874 is implemented.
+
   ServerWindow* window = GetWindowByClientId(ClientWindowId(source_window_id));
   bool success = window && access_policy_->CanInitiateDragLoop(window);
   if (!success || !ShouldRouteToWindowManager(window)) {
     // We need to fail this move loop change, otherwise the client will just be
     // waiting for |change_id|.
     DVLOG(1) << "PerformDragDrop failed (access denied).";
-    OnChangeCompleted(change_id, false);
+    client()->OnPerformDragDropCompleted(change_id, false,
+                                         mojom::kDropEffectNone);
     return;
   }
 
@@ -1754,7 +1902,8 @@ void WindowTree::PerformDragDrop(
   if (!display_root) {
     // The window isn't parented. There's nothing to do.
     DVLOG(1) << "PerformDragDrop failed (window unparented).";
-    OnChangeCompleted(change_id, false);
+    client()->OnPerformDragDropCompleted(change_id, false,
+                                         mojom::kDropEffectNone);
     return;
   }
 
@@ -1762,17 +1911,20 @@ void WindowTree::PerformDragDrop(
     // Either the window manager is servicing a window drag or we're servicing
     // a drag and drop operation. We can't start a second drag.
     DVLOG(1) << "PerformDragDrop failed (already performing a drag).";
-    OnChangeCompleted(change_id, false);
+    client()->OnPerformDragDropCompleted(change_id, false,
+                                         mojom::kDropEffectNone);
     return;
   }
 
-  // TODO(erg): Dealing with |drag_representation| is hard, so we're going to
-  // deal with that later.
+  WindowManagerState* wms = display_root->window_manager_state();
+
+  // Send the drag representation to the window manager.
+  wms->window_tree()->window_manager_internal_->WmBuildDragImage(
+      screen_location, drag_image, drag_image_offset, source);
 
   // Here, we need to dramatically change how the mouse pointer works. Once
   // we've started a drag drop operation, cursor events don't go to windows as
   // normal.
-  WindowManagerState* wms = display_root->window_manager_state();
   window_server_->StartDragLoop(change_id, window, this);
   wms->SetDragDropSourceWindow(this, window, this, drag_data, drag_operation);
 }
@@ -1880,7 +2032,7 @@ void WindowTree::CancelWindowMove(Id window_id) {
 }
 
 void WindowTree::AddAccelerators(
-    std::vector<mojom::AcceleratorPtr> accelerators,
+    std::vector<mojom::WmAcceleratorPtr> accelerators,
     const AddAcceleratorsCallback& callback) {
   DCHECK(window_manager_state_);
 
@@ -1953,6 +2105,12 @@ void WindowTree::SetExtendedHitArea(Id window_id, const gfx::Insets& hit_area) {
   window->set_extended_hit_test_region(hit_area);
 }
 
+void WindowTree::SetDisplayRoot(int64_t display_id,
+                                Id window_id,
+                                const SetDisplayRootCallback& callback) {
+  callback.Run(ProcessSetDisplayRoot(display_id, ClientWindowId(window_id)));
+}
+
 void WindowTree::WmResponse(uint32_t change_id, bool response) {
   if (window_server_->in_move_loop() &&
       window_server_->GetCurrentMoveLoopChangeId() == change_id) {
@@ -1974,13 +2132,21 @@ void WindowTree::WmResponse(uint32_t change_id, bool response) {
     if (!response && window) {
       // Our move loop didn't succeed, which means that we must restore the
       // original bounds of the window.
-      window->SetBounds(window_server_->GetCurrentMoveLoopRevertBounds());
+      window->SetBounds(window_server_->GetCurrentMoveLoopRevertBounds(),
+                        base::nullopt);
     }
 
     window_server_->EndMoveLoop();
   }
 
   window_server_->WindowManagerChangeCompleted(change_id, response);
+}
+
+void WindowTree::WmSetBoundsResponse(uint32_t change_id) {
+  // The window manager will always give a response of false to the client
+  // because it will always update the bounds of the top level window itself
+  // which will overwrite the request made by the client.
+  WmResponse(change_id, false);
 }
 
 void WindowTree::WmRequestClose(Id transport_window_id) {
@@ -2000,7 +2166,7 @@ void WindowTree::WmSetFrameDecorationValues(
 }
 
 void WindowTree::WmSetNonClientCursor(uint32_t window_id,
-                                      mojom::Cursor cursor_id) {
+                                      mojom::CursorType cursor_id) {
   DCHECK(window_manager_state_);
   ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
   if (window) {
@@ -2019,11 +2185,17 @@ void WindowTree::OnWmCreatedTopLevelWindow(uint32_t change_id,
     window_server_->WindowManagerSentBogusMessage();
     window = nullptr;
   }
+  if (window) {
+    client()->OnFrameSinkIdAllocated(transport_window_id,
+                                     window->frame_sink_id());
+  }
   window_server_->WindowManagerCreatedTopLevelWindow(this, change_id, window);
 }
 
 void WindowTree::OnAcceleratorAck(uint32_t event_id,
-                                  mojom::EventResult result) {
+                                  mojom::EventResult result,
+                                  const EventProperties& properties) {
+  DVLOG(3) << "OnAcceleratorAck client=" << id_;
   if (event_ack_id_ == 0 || event_id != event_ack_id_) {
     DVLOG(1) << "OnAcceleratorAck supplied invalid event_id";
     window_server_->WindowManagerSentBogusMessage();
@@ -2031,7 +2203,7 @@ void WindowTree::OnAcceleratorAck(uint32_t event_id,
   }
   event_ack_id_ = 0;
   DCHECK(window_manager_state_);
-  window_manager_state_->OnAcceleratorAck(result);
+  window_manager_state_->OnAcceleratorAck(result, properties);
 }
 
 bool WindowTree::HasRootForAccessPolicy(const ServerWindow* window) const {
@@ -2062,6 +2234,27 @@ bool WindowTree::IsWindowCreatedByWindowManager(
          window->id().client_id;
 }
 
+void WindowTree::OnDragMoved(const gfx::Point& location) {
+  DCHECK(window_server_->in_drag_loop());
+  DCHECK_EQ(this, window_server_->GetCurrentDragLoopInitiator());
+
+  ServerWindow* window = window_server_->GetCurrentDragLoopWindow();
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root)
+    return;
+
+  if (drag_move_state_) {
+    drag_move_state_->has_queued_drag_window_move = true;
+    drag_move_state_->queued_cursor_location = location;
+  } else {
+    WindowManagerState* wms = display_root->window_manager_state();
+    drag_move_state_ = base::MakeUnique<DragMoveState>();
+    wms->window_tree()->window_manager_internal_->WmMoveDragImage(
+        location, base::Bind(&WindowTree::OnWmMoveDragImageAck,
+                             drag_weak_factory_.GetWeakPtr()));
+  }
+}
+
 void WindowTree::OnDragCompleted(bool success, uint32_t action_taken) {
   DCHECK(window_server_->in_drag_loop());
 
@@ -2077,6 +2270,8 @@ void WindowTree::OnDragCompleted(bool success, uint32_t action_taken) {
   window_server_->EndDragLoop();
   WindowManagerState* wms = display_root->window_manager_state();
   wms->EndDragDrop();
+  wms->window_tree()->window_manager_internal_->WmDestroyDragImage();
+  drag_weak_factory_.InvalidateWeakPtrs();
 
   client()->OnPerformDragDropCompleted(change_id, success, action_taken);
 }

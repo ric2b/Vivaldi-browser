@@ -2,13 +2,173 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Public target that should be used to depend on web_view. Only give access
-# to the web_view public headers while still linking with the implementation.
-group("web_view") {
-  public_deps = [
-    "//ios/web_view/public",
+import("//build/config/ios/ios_sdk.gni")
+import("//build/config/ios/rules.gni")
+import("//tools/grit/repack.gni")
+
+config("config") {
+  defines = [ "CWV_IMPLEMENTATION" ]
+  libs = [
+    "CoreGraphics.framework",
+    "Foundation.framework",
+    "MobileCoreServices.framework",
+    "UIKit.framework",
   ]
+}
+
+# These variables are used to share framework sources with both ChromeWebView
+# and CrNetChromeWebView frameworks.
+ios_web_view_public_headers = [
+  "public/ChromeWebView.h",
+  "public/cwv.h",
+  "public/cwv_export.h",
+  "public/cwv_html_element.h",
+  "public/cwv_navigation_action.h",
+  "public/cwv_navigation_delegate.h",
+  "public/cwv_translate_delegate.h",
+  "public/cwv_translate_manager.h",
+  "public/cwv_ui_delegate.h",
+  "public/cwv_user_content_controller.h",
+  "public/cwv_user_script.h",
+  "public/cwv_web_view.h",
+  "public/cwv_web_view_configuration.h",
+]
+
+ios_web_view_sources = [
+  "internal/cwv.mm",
+  "internal/cwv_html_element.mm",
+  "internal/cwv_html_element_internal.h",
+  "internal/cwv_navigation_action.mm",
+  "internal/cwv_navigation_action_internal.h",
+  "internal/cwv_user_content_controller.mm",
+  "internal/cwv_user_content_controller_internal.h",
+  "internal/cwv_user_script.mm",
+  "internal/cwv_web_view.mm",
+  "internal/cwv_web_view_configuration.mm",
+  "internal/cwv_web_view_configuration_internal.h",
+  "internal/pref_names.cc",
+  "internal/pref_names.h",
+  "internal/translate/cwv_translate_manager_impl.h",
+  "internal/translate/cwv_translate_manager_impl.mm",
+  "internal/translate/web_view_translate_accept_languages_factory.cc",
+  "internal/translate/web_view_translate_accept_languages_factory.h",
+  "internal/translate/web_view_translate_client.h",
+  "internal/translate/web_view_translate_client.mm",
+  "internal/translate/web_view_translate_ranker_factory.cc",
+  "internal/translate/web_view_translate_ranker_factory.h",
+  "internal/web_view_browser_state.h",
+  "internal/web_view_browser_state.mm",
+  "internal/web_view_early_page_script_provider.h",
+  "internal/web_view_early_page_script_provider.mm",
+  "internal/web_view_java_script_dialog_presenter.h",
+  "internal/web_view_java_script_dialog_presenter.mm",
+  "internal/web_view_network_delegate.cc",
+  "internal/web_view_network_delegate.h",
+  "internal/web_view_url_request_context_getter.h",
+  "internal/web_view_url_request_context_getter.mm",
+  "internal/web_view_web_client.h",
+  "internal/web_view_web_client.mm",
+  "internal/web_view_web_main_delegate.h",
+  "internal/web_view_web_main_delegate.mm",
+  "internal/web_view_web_main_parts.h",
+  "internal/web_view_web_main_parts.mm",
+  "internal/web_view_web_state_policy_decider.h",
+  "internal/web_view_web_state_policy_decider.mm",
+]
+ios_web_view_sources += ios_web_view_public_headers
+
+ios_web_view_deps = [
+  ":packed_resources",
+  "//base",
+  "//components/infobars/core",
+  "//components/infobars/core",
+  "//components/keyed_service/core",
+  "//components/keyed_service/ios",
+  "//components/pref_registry",
+  "//components/prefs",
+  "//components/translate/core/browser",
+  "//components/translate/core/common",
+  "//components/translate/ios/browser",
+  "//ios/net",
+  "//ios/net",
+  "//ios/web",
+  "//ios/web:reload_type",
+  "//ios/web:user_agent",
+  "//ios/web:user_agent",
+  "//ios/web/public/app",
+  "//net",
+  "//net:extras",
+  "//ui/base",
+  "//url",
+  "//url",
+]
+
+ios_framework_bundle("web_view") {
+  output_name = "ChromeWebView"
+  info_plist = "Info.plist"
+
+  public_headers = ios_web_view_public_headers
+
+  public = [
+    "public/ChromeWebView.h",
+  ]
+
+  sources = ios_web_view_sources
+
+  deps = ios_web_view_deps
+
+  configs += [
+    ":config",
+    "//build/config/compiler:enable_arc",
+  ]
+}
+
+# Same framework as ChromeWebView above, but also exposes CrNet.
+ios_framework_bundle("crnet_web_view_combined") {
+  output_name = "CrNetChromeWebView"
+  info_plist = "Info.plist"
+
+  public_headers = ios_web_view_public_headers
+  public_headers += [ "../crnet/CrNet.h" ]
+
+  public = [
+    "public/ChromeWebView.h",
+  ]
+
+  sources = ios_web_view_sources
+  sources += [ "../crnet/CrNet.h" ]
+
+  deps = ios_web_view_deps
+  deps += [ "//ios/crnet:crnet_sources" ]
+
+  configs += [
+    ":config",
+    "//build/config/compiler:enable_arc",
+  ]
+}
+
+repack("repack_resources") {
+  visibility = [ ":packed_resources" ]
   deps = [
-    "//ios/web_view/internal",
+    "//components/resources:components_resources",
+    "//ios/web:resources",
+  ]
+  sources = [
+    "$root_gen_dir/components/components_resources.pak",
+    "$root_gen_dir/ios/web/ios_web_resources.pak",
+  ]
+  output = "$target_gen_dir/web_view_resources.pak"
+}
+
+bundle_data("packed_resources") {
+  visibility = [ "//ios/web_view:*" ]
+  public_deps = [
+    ":repack_resources",
+  ]
+  sources = [
+    "$target_gen_dir/web_view_resources.pak",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
   ]
 }

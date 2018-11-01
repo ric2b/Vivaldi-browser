@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">Inserisci un valore valido. Il valore valido più vicino è <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Invia</translation>
 <translation id="2674318244760992338">piè di pagina</translation>
+<translation id="2709516037105925701">Compilazione automatica</translation>
 <translation id="2723001399770238859">audio</translation>
 <translation id="2746543609216772311">Il valore deve essere <ph name="MINIMUM_DATE_OR_TIME" /> o successivo.</translation>
 <translation id="2759744352195237655">pulsante popup</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">directory</translation>
 <translation id="6934078000481955284">citazione lunga</translation>
 <translation id="6941933287844615239">scarica contenuti multimediali</translation>
+<translation id="6989848892321993519">Prolunga questo testo a <ph name="MIN_CHARACTERS" /> o più caratteri (al momento stai utilizzando 1 carattere).</translation>
 <translation id="7057186640035488495">tempo filmato</translation>
 <translation id="709897737746224366">Rispetta il formato richiesto.</translation>
 <translation id="7223624360433298498">tempo trascorso</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">Seleziona un file.</translation>
 <translation id="8461852803063341183">pulsante di opzione</translation>
 <translation id="8511325616783751178">pulsante a discesa</translation>
+<translation id="8519420564908284378">Riproduci su entrambi gli schermi</translation>
 <translation id="8534579021159131403">Minuti</translation>
 <translation id="8541249477527128034">controllo contenuti multimediali</translation>
 <translation id="8583702881314752957">elenco di definizioni</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">gestisci riproduzione remota</translation>
 <translation id="8750798805984357768">Seleziona una di queste opzioni.</translation>
 <translation id="8785498733064193001">inizia riproduzione</translation>
+<translation id="8845239796550121995">Ora in fase di trasmissione alla TV</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8987927404178983737">Mese</translation>
 <translation id="901493112792887934">tempo attuale in secondi</translation>

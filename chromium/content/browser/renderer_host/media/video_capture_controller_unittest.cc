@@ -24,14 +24,15 @@
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
 #include "content/browser/renderer_host/media/video_capture_gpu_jpeg_decoder.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
-#include "content/browser/renderer_host/media/video_frame_receiver_on_io_thread.h"
 #include "content/common/media/media_stream_options.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/base/video_frame_metadata.h"
 #include "media/base/video_util.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "media/capture/video/video_capture_device_client.h"
+#include "media/capture/video/video_frame_receiver_on_task_runner.h"
 #include "media/capture/video_capture_types.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -69,6 +70,7 @@ class MockVideoCaptureControllerEventHandler
   MOCK_METHOD1(DoEnded, void(VideoCaptureControllerID));
   MOCK_METHOD1(DoError, void(VideoCaptureControllerID));
   MOCK_METHOD1(OnStarted, void(VideoCaptureControllerID));
+  MOCK_METHOD1(OnStartedUsingGpuDecode, void(VideoCaptureControllerID));
 
   void OnError(VideoCaptureControllerID id) override { DoError(id); }
   void OnBufferCreated(VideoCaptureControllerID id,
@@ -120,6 +122,31 @@ class MockConsumerFeedbackObserver
                void(int frame_feedback_id, double utilization));
 };
 
+class MockBuildableVideoCaptureDevice : public BuildableVideoCaptureDevice {
+ public:
+  void CreateAndStartDeviceAsync(
+      VideoCaptureController* controller,
+      const media::VideoCaptureParams& params,
+      BuildableVideoCaptureDevice::Callbacks* callbacks,
+      base::OnceClosure done_cb) override {}
+  void ReleaseDeviceAsync(VideoCaptureController* controller,
+                          base::OnceClosure done_cb) override {}
+  bool IsDeviceAlive() const override { return false; }
+  void GetPhotoCapabilities(
+      media::VideoCaptureDevice::GetPhotoCapabilitiesCallback callback)
+      const override {}
+  void SetPhotoOptions(
+      media::mojom::PhotoSettingsPtr settings,
+      media::VideoCaptureDevice::SetPhotoOptionsCallback callback) override {}
+  void TakePhoto(
+      media::VideoCaptureDevice::TakePhotoCallback callback) override {}
+  void MaybeSuspendDevice() override {}
+  void ResumeDevice() override {}
+  void RequestRefreshFrame() override {}
+  void SetDesktopCaptureWindowIdAsync(gfx::NativeViewId window_id,
+                                      base::OnceClosure done_cb) override {}
+};
+
 // Test fixture for testing a unit consisting of an instance of
 // VideoCaptureController connected to an instance of VideoCaptureDeviceClient,
 // an instance of VideoCaptureBufferPoolImpl, as well as related threading glue
@@ -138,7 +165,14 @@ class VideoCaptureControllerTest
   static const int kPoolSize = 3;
 
   void SetUp() override {
-    controller_.reset(new VideoCaptureController());
+    const std::string arbitrary_device_id = "arbitrary_device_id";
+    const MediaStreamType arbitrary_stream_type =
+        content::MEDIA_DEVICE_VIDEO_CAPTURE;
+    const media::VideoCaptureParams arbitrary_params;
+    auto buildable_device = base::MakeUnique<MockBuildableVideoCaptureDevice>();
+    controller_ = new VideoCaptureController(
+        arbitrary_device_id, arbitrary_stream_type, arbitrary_params,
+        std::move(buildable_device));
     InitializeNewDeviceClientAndBufferPoolInstances();
     auto consumer_feedback_observer =
         base::MakeUnique<MockConsumerFeedbackObserver>();
@@ -158,8 +192,9 @@ class VideoCaptureControllerTest
         base::MakeUnique<media::VideoCaptureBufferTrackerFactoryImpl>(),
         kPoolSize);
     device_client_.reset(new media::VideoCaptureDeviceClient(
-        base::MakeUnique<VideoFrameReceiverOnIOThread>(
-            controller_->GetWeakPtrForIOThread()),
+        base::MakeUnique<media::VideoFrameReceiverOnTaskRunner>(
+            controller_->GetWeakPtrForIOThread(),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
         buffer_pool_,
         base::Bind(&CreateGpuJpegDecoder,
                    base::Bind(&media::VideoFrameReceiver::OnFrameReadyInBuffer,
@@ -185,7 +220,7 @@ class VideoCaptureControllerTest
   scoped_refptr<media::VideoCaptureBufferPool> buffer_pool_;
   std::unique_ptr<MockVideoCaptureControllerEventHandler> client_a_;
   std::unique_ptr<MockVideoCaptureControllerEventHandler> client_b_;
-  std::unique_ptr<VideoCaptureController> controller_;
+  scoped_refptr<VideoCaptureController> controller_;
   std::unique_ptr<media::VideoCaptureDevice::Client> device_client_;
   MockConsumerFeedbackObserver* mock_consumer_feedback_observer_;
   const float arbitrary_frame_rate_ = 10.0f;
@@ -803,4 +838,35 @@ TEST_F(VideoCaptureControllerTest,
   Mock::VerifyAndClearExpectations(client_a_.get());
 }
 
+// Tests that the VideoCaptureController reports OnStarted() to all clients,
+// even if they connect after VideoCaptureController::OnStarted() has been
+// invoked.
+TEST_F(VideoCaptureControllerTest, OnStartedForMultipleClients) {
+  media::VideoCaptureParams session_100;
+  session_100.requested_format = media::VideoCaptureFormat(
+      gfx::Size(320, 240), 30, media::PIXEL_FORMAT_I420);
+  media::VideoCaptureParams session_200 = session_100;
+  media::VideoCaptureParams session_300 = session_100;
+
+  const VideoCaptureControllerID client_a_route_1(1);
+  const VideoCaptureControllerID client_a_route_2(2);
+  const VideoCaptureControllerID client_b_route_1(3);
+
+  controller_->AddClient(client_a_route_1, client_a_.get(), 100, session_100);
+  controller_->AddClient(client_b_route_1, client_b_.get(), 300, session_300);
+  ASSERT_EQ(2, controller_->GetClientCount());
+
+  {
+    InSequence s;
+    // Simulate the OnStarted event from device.
+    EXPECT_CALL(*client_a_, OnStarted(_));
+    EXPECT_CALL(*client_b_, OnStarted(_));
+    device_client_->OnStarted();
+
+    // VideoCaptureController will take care of the OnStarted event for the
+    // clients who join later.
+    EXPECT_CALL(*client_a_, OnStarted(_));
+    controller_->AddClient(client_a_route_2, client_a_.get(), 200, session_200);
+  }
+}
 }  // namespace content

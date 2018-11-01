@@ -107,7 +107,6 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
       can_send_midi_sysex_(false) { }
 
   ~SecurityState() {
-    scheme_policy_.clear();
     storage::IsolatedContext* isolated_context =
         storage::IsolatedContext::GetInstance();
     for (FileSystemMap::iterator iter = filesystem_permissions_.begin();
@@ -125,14 +124,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   }
 
   // Grant permission to request URLs with the specified scheme.
-  void GrantScheme(const std::string& scheme) {
-    scheme_policy_[scheme] = true;
-  }
-
-  // Revoke permission to request URLs with the specified scheme.
-  void RevokeScheme(const std::string& scheme) {
-    scheme_policy_[scheme] = false;
-  }
+  void GrantScheme(const std::string& scheme) { scheme_policy_.insert(scheme); }
 
   // Grant certain permissions to a file.
   void GrantPermissionsForFile(const base::FilePath& file, int permissions) {
@@ -212,10 +204,10 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     DCHECK(!url.SchemeIsBlob() && !url.SchemeIsFileSystem())
         << "inner_url extraction should be done already.";
     // Having permission to a scheme implies permission to all of its URLs.
-    SchemeMap::const_iterator scheme_judgment(
+    SchemeSet::const_iterator scheme_judgment(
         scheme_policy_.find(url.scheme()));
     if (scheme_judgment != scheme_policy_.end())
-      return scheme_judgment->second;
+      return true;
 
     // Otherwise, check for permission for specific origin.
     if (CanCommitOrigin(url::Origin(url)))
@@ -289,7 +281,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   }
 
  private:
-  typedef std::map<std::string, bool> SchemeMap;
+  typedef std::set<std::string> SchemeSet;
   typedef std::set<url::Origin> OriginSet;
 
   typedef int FilePermissionFlags;  // bit-set of base::File::Flags
@@ -297,12 +289,10 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   typedef std::map<std::string, FilePermissionFlags> FileSystemMap;
   typedef std::set<base::FilePath> FileSet;
 
-  // Maps URL schemes to whether permission has been granted or revoked:
-  //   |true| means the scheme has been granted.
-  //   |false| means the scheme has been revoked.
-  // If a scheme is not present in the map, then it has never been granted
-  // or revoked.
-  SchemeMap scheme_policy_;
+  // Maps URL schemes to whether permission has been granted, containment means
+  // that the scheme has been granted, otherwise, it has never been granted.
+  // There is no provision for revoking.
+  SchemeSet scheme_policy_;
 
   // The set of URL origins to which the child process has been granted
   // permission.
@@ -815,16 +805,6 @@ bool ChildProcessSecurityPolicyImpl::HasPermissionsForFileSystemFile(
   if (!filesystem_url.is_valid())
     return false;
 
-  // If |filesystem_url.origin()| is not committable in this process, then this
-  // page should not be able to place content in that origin via the filesystem
-  // API either.
-  if (!CanCommitURL(child_id, filesystem_url.origin())) {
-    UMA_HISTOGRAM_BOOLEAN("FileSystem.OriginFailedCanCommitURL", true);
-    // TODO(nick): Temporary instrumentation for https://crbug.com/654479.
-    base::debug::DumpWithoutCrashing();
-    return false;
-  }
-
   if (filesystem_url.path().ReferencesParent())
     return false;
 
@@ -840,6 +820,14 @@ bool ChildProcessSecurityPolicyImpl::HasPermissionsForFileSystemFile(
     // permissions).
     return HasPermissionsForFileSystem(
         child_id, filesystem_url.mount_filesystem_id(), permissions);
+  }
+
+  // If |filesystem_url.origin()| is not committable in this process, then this
+  // page should not be able to place content in that origin via the filesystem
+  // API either.
+  if (!CanCommitURL(child_id, filesystem_url.origin())) {
+    UMA_HISTOGRAM_BOOLEAN("FileSystem.OriginFailedCanCommitURL", true);
+    return false;
   }
 
   FileSystemPermissionPolicyMap::iterator found =

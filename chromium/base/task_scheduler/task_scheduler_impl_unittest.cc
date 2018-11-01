@@ -28,6 +28,10 @@
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_WIN)
+#include <objbase.h>
+#endif  // defined(OS_WIN)
+
 namespace base {
 namespace internal {
 
@@ -238,8 +242,8 @@ TEST_P(TaskSchedulerImplTest, PostDelayedTaskWithTraitsNoDelay) {
                          WaitableEvent::InitialState::NOT_SIGNALED);
   scheduler_->PostDelayedTaskWithTraits(
       FROM_HERE, GetParam().traits,
-      Bind(&VerifyTaskEnvironmentAndSignalEvent, GetParam().traits,
-           Unretained(&task_ran)),
+      BindOnce(&VerifyTaskEnvironmentAndSignalEvent, GetParam().traits,
+               Unretained(&task_ran)),
       TimeDelta());
   task_ran.Wait();
 }
@@ -253,9 +257,9 @@ TEST_P(TaskSchedulerImplTest, PostDelayedTaskWithTraitsWithDelay) {
                          WaitableEvent::InitialState::NOT_SIGNALED);
   scheduler_->PostDelayedTaskWithTraits(
       FROM_HERE, GetParam().traits,
-      Bind(&VerifyTimeAndTaskEnvironmentAndSignalEvent, GetParam().traits,
-           TimeTicks::Now() + TestTimeouts::tiny_timeout(),
-           Unretained(&task_ran)),
+      BindOnce(&VerifyTimeAndTaskEnvironmentAndSignalEvent, GetParam().traits,
+               TimeTicks::Now() + TestTimeouts::tiny_timeout(),
+               Unretained(&task_ran)),
       TestTimeouts::tiny_timeout());
   task_ran.Wait();
 }
@@ -321,6 +325,74 @@ TEST_F(TaskSchedulerImplTest, GetMaxConcurrentTasksWithTraitsDeprecated) {
       scheduler_->GetMaxConcurrentTasksWithTraitsDeprecated(
           TaskTraits().WithPriority(TaskPriority::USER_BLOCKING).MayBlock()));
 }
+
+// Verify that the RunsTasksOnCurrentThread() method of a SequencedTaskRunner
+// returns false when called from a task that isn't part of the sequence.
+TEST_F(TaskSchedulerImplTest, SequencedRunsTasksOnCurrentThread) {
+  auto single_thread_task_runner =
+      scheduler_->CreateSingleThreadTaskRunnerWithTraits(TaskTraits());
+  auto sequenced_task_runner =
+      scheduler_->CreateSequencedTaskRunnerWithTraits(TaskTraits());
+
+  WaitableEvent task_ran(WaitableEvent::ResetPolicy::MANUAL,
+                         WaitableEvent::InitialState::NOT_SIGNALED);
+  single_thread_task_runner->PostTask(
+      FROM_HERE,
+      BindOnce(
+          [](scoped_refptr<TaskRunner> sequenced_task_runner,
+             WaitableEvent* task_ran) {
+            EXPECT_FALSE(sequenced_task_runner->RunsTasksOnCurrentThread());
+            task_ran->Signal();
+          },
+          sequenced_task_runner, Unretained(&task_ran)));
+  task_ran.Wait();
+}
+
+// Verify that the RunsTasksOnCurrentThread() method of a SingleThreadTaskRunner
+// returns false when called from a task that isn't part of the sequence.
+TEST_F(TaskSchedulerImplTest, SingleThreadRunsTasksOnCurrentThread) {
+  auto sequenced_task_runner =
+      scheduler_->CreateSequencedTaskRunnerWithTraits(TaskTraits());
+  auto single_thread_task_runner =
+      scheduler_->CreateSingleThreadTaskRunnerWithTraits(TaskTraits());
+
+  WaitableEvent task_ran(WaitableEvent::ResetPolicy::MANUAL,
+                         WaitableEvent::InitialState::NOT_SIGNALED);
+  sequenced_task_runner->PostTask(
+      FROM_HERE,
+      BindOnce(
+          [](scoped_refptr<TaskRunner> single_thread_task_runner,
+             WaitableEvent* task_ran) {
+            EXPECT_FALSE(single_thread_task_runner->RunsTasksOnCurrentThread());
+            task_ran->Signal();
+          },
+          single_thread_task_runner, Unretained(&task_ran)));
+  task_ran.Wait();
+}
+
+#if defined(OS_WIN)
+TEST_F(TaskSchedulerImplTest, COMSTATaskRunnersRunWithCOMSTA) {
+  auto com_sta_task_runner =
+      scheduler_->CreateCOMSTATaskRunnerWithTraits(TaskTraits());
+
+  WaitableEvent task_ran(WaitableEvent::ResetPolicy::MANUAL,
+                         WaitableEvent::InitialState::NOT_SIGNALED);
+  com_sta_task_runner->PostTask(
+      FROM_HERE,
+      Bind(
+          [](scoped_refptr<TaskRunner> single_thread_task_runner,
+             WaitableEvent* task_ran) {
+            HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            if (SUCCEEDED(hr)) {
+              ADD_FAILURE() << "COM STA was not initialized on this thread";
+              CoUninitialize();
+            }
+            task_ran->Signal();
+          },
+          com_sta_task_runner, Unretained(&task_ran)));
+  task_ran.Wait();
+}
+#endif  // defined(OS_WIN)
 
 }  // namespace internal
 }  // namespace base

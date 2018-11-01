@@ -109,6 +109,8 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const std::string& search_input,
       const std::string& domain,
       const MediaSinkSearchResponseCallback& sink_callback) override;
+  void ProvideSinks(const std::string& provider_name,
+                    const std::vector<MediaSinkInternal>& sinks) override;
 
   const std::string& media_route_provider_extension_id() const {
     return media_route_provider_extension_id_;
@@ -152,6 +154,8 @@ class MediaRouterMojoImpl : public MediaRouterBase,
                            AttemptedWakeupTooManyTimes);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoExtensionTest,
                            WakeupFailedDrainsQueue);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoExtensionTest,
+                           SyncStateToMediaRouteProvider);
 
   // The max number of pending requests allowed. When number of pending requests
   // exceeds this number, the oldest request will be dropped.
@@ -185,9 +189,6 @@ class MediaRouterMojoImpl : public MediaRouterBase,
    public:
     MediaRoutesQuery();
     ~MediaRoutesQuery();
-
-    // True if the query has been sent to the MRPM.  False otherwise.
-    bool is_active = false;
 
     // Cached list of routes and joinable route IDs for the query.
     base::Optional<std::vector<MediaRoute>> cached_route_list;
@@ -284,8 +285,22 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const std::string& domain,
       const MediaSinkSearchResponseCallback& sink_callback);
 
+  void DoProvideSinks(const std::string& provider_name,
+                      const std::vector<MediaSinkInternal>& sinks);
+
   // Error handler callback for |binding_| and |media_route_provider_|.
   void OnConnectionError();
+
+  // Issues 0+ calls to |media_route_provider_| to ensure its state is in sync
+  // with MediaRouter on a best-effort basis. This method can be only called if
+  // |media_route_provider_| is a valid handle.
+  // The extension might have become out of sync with MediaRouter due to one
+  // of few reasons:
+  // (1) The extension crashed and lost unpersisted changes.
+  // (2) The extension was updated; temporary data is cleared.
+  // (3) The extension has an unforseen bug which causes temporary data to be
+  //     persisted incorrectly on suspension.
+  void SyncStateToMediaRouteProvider();
 
   // mojom::MediaRouter implementation.
   void RegisterMediaRouteProvider(
@@ -294,7 +309,7 @@ class MediaRouterMojoImpl : public MediaRouterBase,
           callback) override;
   void OnIssue(const IssueInfo& issue) override;
   void OnSinksReceived(const std::string& media_source,
-                       const std::vector<MediaSink>& sinks,
+                       const std::vector<MediaSinkInternal>& internal_sinks,
                        const std::vector<url::Origin>& origins) override;
   void OnRoutesUpdated(
       const std::vector<MediaRoute>& routes,

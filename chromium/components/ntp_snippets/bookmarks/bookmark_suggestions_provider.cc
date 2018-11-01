@@ -110,8 +110,7 @@ CategoryInfo BookmarkSuggestionsProvider::GetCategoryInfo(Category category) {
   return CategoryInfo(
       l10n_util::GetStringUTF16(IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_HEADER),
       ContentSuggestionsCardLayout::MINIMAL_CARD,
-      /*has_fetch_action=*/false,
-      /*has_view_all_action=*/true,
+      ContentSuggestionsAdditionalAction::VIEW_ALL,
       /*show_if_empty=*/false,
       l10n_util::GetStringUTF16(IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_EMPTY));
 }
@@ -231,11 +230,11 @@ void BookmarkSuggestionsProvider::BookmarkMetaInfoChanged(
 }
 
 void BookmarkSuggestionsProvider::BookmarkNodeRemoved(
-      bookmarks::BookmarkModel* model,
-      const bookmarks::BookmarkNode* parent,
-      int old_index,
-      const bookmarks::BookmarkNode* node,
-      const std::set<GURL>& no_longer_bookmarked) {
+    bookmarks::BookmarkModel* model,
+    const bookmarks::BookmarkNode* parent,
+    int old_index,
+    const bookmarks::BookmarkNode* node,
+    const std::set<GURL>& no_longer_bookmarked) {
   base::Time time;
   if (GetLastVisitDateForNTPBookmark(
           *node, consider_bookmark_visits_from_desktop_, &time) &&

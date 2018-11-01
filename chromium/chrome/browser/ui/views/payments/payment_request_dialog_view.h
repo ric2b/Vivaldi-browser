@@ -8,10 +8,18 @@
 #include <map>
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/views/payments/view_stack.h"
 #include "components/payments/content/payment_request_dialog.h"
+#include "components/payments/content/payment_request_spec.h"
+#include "ui/views/controls/throbber.h"
 #include "ui/views/window/dialog_delegate.h"
+
+namespace autofill {
+class AutofillProfile;
+class CreditCard;
+}  // namespace autofill
 
 namespace payments {
 
@@ -28,7 +36,8 @@ using ControllerMap =
 // is responsible for displaying the view associated with the current state of
 // the WebPayments flow and managing the transition between those states.
 class PaymentRequestDialogView : public views::DialogDelegateView,
-                                 public PaymentRequestDialog {
+                                 public PaymentRequestDialog,
+                                 public PaymentRequestSpec::Observer {
  public:
   class ObserverForTest {
    public:
@@ -40,9 +49,23 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
 
     virtual void OnPaymentMethodOpened() = 0;
 
+    virtual void OnShippingAddressSectionOpened() = 0;
+
+    virtual void OnShippingOptionSectionOpened() = 0;
+
     virtual void OnCreditCardEditorOpened() = 0;
 
+    virtual void OnShippingAddressEditorOpened() = 0;
+
     virtual void OnBackNavigation() = 0;
+
+    virtual void OnEditorViewUpdated() = 0;
+
+    virtual void OnErrorMessageShown() = 0;
+
+    virtual void OnSpecDoneUpdating() = 0;
+
+    virtual void OnCvcPromptShown() = 0;
   };
 
   // Build a Dialog around the PaymentRequest object. |observer| is used to
@@ -52,29 +75,57 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
                            PaymentRequestDialogView::ObserverForTest* observer);
   ~PaymentRequestDialogView() override;
 
-  // views::WidgetDelegate
+  // views::WidgetDelegate:
   ui::ModalType GetModalType() const override;
 
-  // views::DialogDelegate
+  // views::DialogDelegate:
   bool Cancel() override;
   bool ShouldShowCloseButton() const override;
   int GetDialogButtons() const override;
 
-  // payments::PaymentRequestDialog
+  // payments::PaymentRequestDialog:
   void ShowDialog() override;
   void CloseDialog() override;
+  void ShowErrorMessage() override;
 
+  // PaymentRequestSpec::Observer:
+  void OnInvalidSpecProvided() override {}
+  void OnSpecUpdated() override;
+
+  void Pay();
   void GoBack();
-  void ShowContactInfoSheet();
+  void ShowContactProfileSheet();
   void ShowOrderSummary();
-  void ShowShippingListSheet();
+  void ShowShippingProfileSheet();
   void ShowPaymentMethodSheet();
-  void ShowCreditCardEditor();
+  void ShowShippingOptionSheet();
+  // |credit_card| is the card to be edited, or nullptr for adding a card.
+  // |on_edited| is called when |credit_card| was successfully edited, and
+  // |on_added| is called when a new credit card was added (the reference is
+  // short-lived; callee should make a copy of the CreditCard object).
+  void ShowCreditCardEditor(
+      base::OnceClosure on_edited,
+      base::OnceCallback<void(const autofill::CreditCard&)> on_added,
+      autofill::CreditCard* credit_card = nullptr);
+  // |profile| is the address to be edited, or nullptr for adding an address.
+  void ShowShippingAddressEditor(autofill::AutofillProfile* profile = nullptr);
+  void EditorViewUpdated();
 
-  ViewStack* view_stack_for_testing() { return &view_stack_; }
+  void ShowCvcUnmaskPrompt(
+      const autofill::CreditCard& credit_card,
+      base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
+          result_delegate,
+      content::WebContents* web_contents) override;
+
+  // Shows a full dialog spinner with the "processing" label that doesn't offer
+  // a way of closing the dialog.
+  void ShowProcessingSpinner();
+
+  ViewStack* view_stack_for_testing() { return view_stack_.get(); }
 
  private:
   void ShowInitialPaymentSheet();
+  void SetupSpinnerOverlay();
 
   // views::View
   gfx::Size GetPreferredSize() const override;
@@ -87,7 +138,12 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   // between the two.
   PaymentRequest* request_;
   ControllerMap controller_map_;
-  ViewStack view_stack_;
+  std::unique_ptr<ViewStack> view_stack_;
+
+  // A full dialog overlay that shows a spinner and the "processing" label. It's
+  // hidden until ShowProcessingSpinner is called.
+  views::View throbber_overlay_;
+  views::Throbber throbber_;
 
   // May be null.
   ObserverForTest* observer_for_testing_;

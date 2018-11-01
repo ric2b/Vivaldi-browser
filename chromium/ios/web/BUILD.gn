@@ -19,9 +19,11 @@ source_set("web_arc") {
   deps = [
     ":core",
     ":js_resources",
+    ":reload_type",
     ":resources",
     ":user_agent",
     "//base",
+    "//components/payments/core",
     "//components/url_formatter",
     "//ios/net",
     "//ios/third_party/blink:html_tokenizer",
@@ -46,18 +48,12 @@ source_set("web_arc") {
     "interstitials/html_web_interstitial_impl.mm",
     "interstitials/native_web_interstitial_impl.h",
     "interstitials/native_web_interstitial_impl.mm",
-    "interstitials/web_interstitial_facade_delegate.h",
     "interstitials/web_interstitial_impl.h",
     "interstitials/web_interstitial_impl.mm",
     "load_committed_details.cc",
-    "navigation/crw_session_certificate_policy_manager.h",
-    "navigation/crw_session_certificate_policy_manager.mm",
     "navigation/crw_session_controller+private_constructors.h",
     "navigation/crw_session_controller.h",
     "navigation/crw_session_controller.mm",
-    "navigation/crw_session_entry.h",
-    "navigation/crw_session_entry.mm",
-    "navigation/navigation_item_facade_delegate.h",
     "navigation/navigation_item_impl.h",
     "navigation/navigation_item_impl.mm",
     "navigation/navigation_item_impl_list.h",
@@ -65,7 +61,6 @@ source_set("web_arc") {
     "navigation/navigation_item_storage_builder.h",
     "navigation/navigation_item_storage_builder.mm",
     "navigation/navigation_manager_delegate.h",
-    "navigation/navigation_manager_facade_delegate.h",
     "navigation/navigation_manager_impl.h",
     "navigation/navigation_manager_impl.mm",
     "navigation/nscoder_util.h",
@@ -105,6 +100,8 @@ source_set("web_arc") {
     "public/certificate_policy_cache.h",
     "public/crw_navigation_item_storage.h",
     "public/crw_navigation_item_storage.mm",
+    "public/crw_session_certificate_policy_cache_storage.h",
+    "public/crw_session_certificate_policy_cache_storage.mm",
     "public/crw_session_storage.h",
     "public/crw_session_storage.mm",
     "public/favicon_status.cc",
@@ -144,8 +141,6 @@ source_set("web_arc") {
     "public/web_state/context_menu_params.h",
     "public/web_state/credential.h",
     "public/web_state/crw_web_controller_observer.h",
-    "public/web_state/crw_web_view_proxy.h",
-    "public/web_state/crw_web_view_scroll_view_proxy.h",
     "public/web_state/global_web_state_observer.h",
     "public/web_state/js/credential_util.h",
     "public/web_state/js/crw_js_injection_evaluator.h",
@@ -154,6 +149,7 @@ source_set("web_arc") {
     "public/web_state/navigation_context.h",
     "public/web_state/page_display_state.h",
     "public/web_state/page_display_state.mm",
+    "public/web_state/session_certificate_policy_cache.h",
     "public/web_state/ui/crw_content_view.h",
     "public/web_state/ui/crw_context_menu_delegate.h",
     "public/web_state/ui/crw_generic_content_view.h",
@@ -161,6 +157,8 @@ source_set("web_arc") {
     "public/web_state/ui/crw_native_content_provider.h",
     "public/web_state/ui/crw_web_delegate.h",
     "public/web_state/ui/crw_web_view_content_view.h",
+    "public/web_state/ui/crw_web_view_proxy.h",
+    "public/web_state/ui/crw_web_view_scroll_view_proxy.h",
     "public/web_state/url_verification_constants.h",
     "public/web_state/web_state.h",
     "public/web_state/web_state_delegate.h",
@@ -188,9 +186,6 @@ source_set("web_arc") {
     "web_state/credential.cc",
     "web_state/crw_pass_kit_downloader.h",
     "web_state/crw_pass_kit_downloader.mm",
-    "web_state/crw_web_view_proxy_impl.h",
-    "web_state/crw_web_view_proxy_impl.mm",
-    "web_state/crw_web_view_scroll_view_proxy.mm",
     "web_state/error_translation_util.h",
     "web_state/error_translation_util.mm",
     "web_state/global_web_state_event_tracker.h",
@@ -211,12 +206,19 @@ source_set("web_arc") {
     "web_state/navigation_context_impl.mm",
     "web_state/page_viewport_state.h",
     "web_state/page_viewport_state.mm",
+    "web_state/session_certificate_policy_cache_impl.h",
+    "web_state/session_certificate_policy_cache_impl.mm",
+    "web_state/session_certificate_policy_cache_storage_builder.h",
+    "web_state/session_certificate_policy_cache_storage_builder.mm",
     "web_state/ui/crw_context_menu_controller.h",
     "web_state/ui/crw_context_menu_controller.mm",
     "web_state/ui/crw_generic_content_view.mm",
     "web_state/ui/crw_swipe_recognizer_provider.h",
     "web_state/ui/crw_touch_tracking_recognizer.h",
     "web_state/ui/crw_touch_tracking_recognizer.mm",
+    "web_state/ui/crw_web_view_proxy_impl.h",
+    "web_state/ui/crw_web_view_proxy_impl.mm",
+    "web_state/ui/crw_web_view_scroll_view_proxy.mm",
     "web_state/ui/crw_wk_navigation_states.h",
     "web_state/ui/crw_wk_navigation_states.mm",
     "web_thread_impl.cc",
@@ -258,6 +260,7 @@ source_set("web") {
   deps = [
     ":core",
     ":js_resources",
+    ":reload_type",
     ":resources",
     ":user_agent",
     "//base",
@@ -298,7 +301,6 @@ source_set("web") {
     "web_state/web_state.mm",
     "web_state/web_state_delegate.mm",
     "web_state/web_state_delegate_bridge.mm",
-    "web_state/web_state_facade_delegate.h",
     "web_state/web_state_impl.h",
     "web_state/web_state_impl.mm",
     "web_state/web_state_observer.mm",
@@ -344,6 +346,12 @@ source_set("user_agent") {
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("reload_type") {
+  sources = [
+    "public/reload_type.h",
+  ]
 }
 
 source_set("earl_grey_test_support") {
@@ -451,6 +459,7 @@ source_set("test_support") {
     "public/test/test_redirect_observer.mm",
     "public/test/test_web_thread.h",
     "public/test/test_web_thread_bundle.h",
+    "public/test/url_test_util.h",
     "public/test/web_js_test.h",
     "public/test/web_test.h",
     "public/test/web_test.mm",
@@ -465,6 +474,7 @@ source_set("test_support") {
     "test/test_url_constants.h",
     "test/test_web_thread.cc",
     "test/test_web_thread_bundle.cc",
+    "test/url_test_util.mm",
     "test/web_int_test.h",
     "test/web_int_test.mm",
     "test/web_test_suite.mm",
@@ -502,7 +512,7 @@ bundle_data("ios_web_unittests_bundle_data") {
   ]
 }
 
-test("ios_web_unittests") {
+test("ios_web_unittests_arc") {
   deps = [
     ":core",
     ":ios_web_unittests_bundle_data",
@@ -512,8 +522,10 @@ test("ios_web_unittests") {
     ":web",
     "//base",
     "//base/test:test_support",
+    "//components/payments/core",
     "//components/url_formatter",
     "//ios/net",
+    "//ios/testing:ios_test_support",
     "//ios/testing:ocmock_support",
     "//ios/web/test:mojo_bindings",
     "//net:test_support",
@@ -525,12 +537,48 @@ test("ios_web_unittests") {
   ]
 
   sources = [
+    "public/crw_session_certificate_policy_cache_storage_unittest.mm",
+    "web_state/session_certificate_policy_cache_impl_unittest.mm",
+    "web_state/session_certificate_policy_cache_storage_builder_unittest.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+test("ios_web_unittests") {
+  deps = [
+    ":core",
+    ":ios_web_unittests_bundle_data",
+    ":run_all_unittests",
+    ":test_support",
+    ":user_agent",
+    ":web",
+    "//base",
+    "//base/test:test_support",
+    "//components/payments/core",
+    "//components/url_formatter",
+    "//ios/net",
+    "//ios/testing:ios_test_support",
+    "//ios/testing:ocmock_support",
+    "//ios/web/test:mojo_bindings",
+    "//net:test_support",
+    "//services/service_manager/public/cpp",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/ocmock",
+    "//ui/base:test_support",
+  ]
+
+  public_deps = [
+    ":ios_web_unittests_arc",
+  ]
+
+  sources = [
     "active_state_manager_impl_unittest.mm",
     "browser_state_unittest.cc",
     "history_state_util_unittest.mm",
     "navigation/crw_navigation_item_storage_unittest.mm",
     "navigation/crw_session_controller_unittest.mm",
-    "navigation/crw_session_entry_unittest.mm",
     "navigation/crw_session_storage_unittest.mm",
     "navigation/navigation_item_impl_unittest.mm",
     "navigation/navigation_item_storage_test_util.h",
@@ -557,10 +605,9 @@ test("ios_web_unittests") {
     "url_util_unittest.cc",
     "web_state/context_menu_params_utils_unittest.mm",
     "web_state/crw_pass_kit_downloader_unittest.mm",
-    "web_state/crw_web_view_scroll_view_proxy_unittest.mm",
     "web_state/error_translation_util_unittest.mm",
     "web_state/js/common_js_unittest.mm",
-    "web_state/js/core_js_unittest.mm",
+    "web_state/js/context_menu_js_unittest.mm",
     "web_state/js/credential_util_unittest.mm",
     "web_state/js/crw_js_injection_manager_unittest.mm",
     "web_state/js/crw_js_post_request_loader_unittest.mm",
@@ -571,6 +618,7 @@ test("ios_web_unittests") {
     "web_state/ui/crw_web_controller_container_view_unittest.mm",
     "web_state/ui/crw_web_controller_observer_unittest.mm",
     "web_state/ui/crw_web_controller_unittest.mm",
+    "web_state/ui/crw_web_view_scroll_view_proxy_unittest.mm",
     "web_state/ui/crw_wk_navigation_states_unittest.mm",
     "web_state/ui/crw_wk_script_message_router_unittest.mm",
     "web_state/ui/web_view_js_utils_unittest.mm",
@@ -589,6 +637,8 @@ test("ios_web_unittests") {
   ]
 
   assert_no_deps = ios_assert_no_deps
+
+  allow_circular_includes_from = [ ":ios_web_unittests_arc" ]
 }
 
 test("ios_web_inttests") {
@@ -597,6 +647,7 @@ test("ios_web_inttests") {
     ":web",
     "//base/test:test_support",
     "//ios/testing:http_server_bundle_data",
+    "//ios/testing:ios_test_support",
     "//ios/web/test:mojo_bindings",
     "//ios/web/test:packed_resources",
     "//ios/web/test:resources",
@@ -642,9 +693,14 @@ js_compile_bundle("web_bundle") {
     "web_state/js/resources/base.js",
     "web_state/js/resources/common.js",
     "web_state/js/resources/console.js",
-    "web_state/js/resources/core.js",
+    "web_state/js/resources/context_menu.js",
     "web_state/js/resources/dialog_overrides.js",
+    "web_state/js/resources/error.js",
+    "web_state/js/resources/form.js",
+    "web_state/js/resources/legacy.js",
     "web_state/js/resources/message.js",
+    "web_state/js/resources/navigation.js",
+    "web_state/js/resources/scroll_workaround.js",
     "web_state/js/resources/web_bundle.js",
   ]
 }
@@ -664,7 +720,6 @@ js_compile_checked("js_resources") {
 
 grit("resources") {
   source = "ios_web_resources.grd"
-  use_qualified_include = true
   outputs = [
     "grit/ios_web_resources.h",
     "ios_web_resources.pak",

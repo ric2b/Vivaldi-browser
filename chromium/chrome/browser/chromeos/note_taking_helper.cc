@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "apps/launcher.h"
-#include "ash/common/system/chromeos/palette/palette_utils.h"
+#include "ash/system/palette/palette_utils.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -186,12 +186,12 @@ void NoteTakingHelper::LaunchAppForNewNote(Profile* profile,
 }
 
 void NoteTakingHelper::OnIntentFiltersUpdated() {
-  if (android_enabled_)
+  if (play_store_enabled_)
     UpdateAndroidApps();
 }
 
 void NoteTakingHelper::OnArcPlayStoreEnabledChanged(bool enabled) {
-  android_enabled_ = enabled;
+  play_store_enabled_ = enabled;
   if (!enabled) {
     android_apps_.clear();
     android_apps_received_ = false;
@@ -221,7 +221,7 @@ NoteTakingHelper::NoteTakingHelper()
   // Track profiles so we can observe their extension registries.
   registrar_.Add(this, chrome::NOTIFICATION_PROFILE_ADDED,
                  content::NotificationService::AllBrowserContextsAndSources());
-  android_enabled_ = false;
+  play_store_enabled_ = false;
   for (Profile* profile :
        g_browser_process->profile_manager()->GetLoadedProfiles()) {
     extension_registry_observer_.Add(
@@ -229,7 +229,7 @@ NoteTakingHelper::NoteTakingHelper()
     // Check if the profile has already enabled Google Play Store.
     // IsArcPlayStoreEnabledForProfile() can return true only for the primary
     // profile.
-    android_enabled_ |= arc::IsArcPlayStoreEnabledForProfile(profile);
+    play_store_enabled_ |= arc::IsArcPlayStoreEnabledForProfile(profile);
   }
 
   // Watch for changes of Google Play Store enabled state.
@@ -246,12 +246,12 @@ NoteTakingHelper::NoteTakingHelper()
   // If the ARC intent helper is ready, get the Android apps. Otherwise,
   // UpdateAndroidApps() will be called when ArcServiceManager calls
   // OnIntentFiltersUpdated().
-  if (android_enabled_ &&
-      arc::ArcServiceManager::Get()
-          ->arc_bridge_service()
-          ->intent_helper()
-          ->has_instance())
+  if (play_store_enabled_ && arc::ArcServiceManager::Get()
+                                 ->arc_bridge_service()
+                                 ->intent_helper()
+                                 ->has_instance()) {
     UpdateAndroidApps();
+  }
 }
 
 NoteTakingHelper::~NoteTakingHelper() {
@@ -318,7 +318,7 @@ void NoteTakingHelper::UpdateAndroidApps() {
 void NoteTakingHelper::OnGotAndroidApps(
     std::vector<arc::mojom::IntentHandlerInfoPtr> handlers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!android_enabled_)
+  if (!play_store_enabled_)
     return;
 
   android_apps_.clear();
@@ -400,8 +400,8 @@ void NoteTakingHelper::Observe(int type,
 
   // TODO(derat): Remove this once OnArcPlayStoreEnabledChanged() is always
   // called after an ARC-enabled user logs in: http://b/36655474
-  if (!android_enabled_ && arc::IsArcPlayStoreEnabledForProfile(profile)) {
-    android_enabled_ = true;
+  if (!play_store_enabled_ && arc::IsArcPlayStoreEnabledForProfile(profile)) {
+    play_store_enabled_ = true;
     for (auto& observer : observers_)
       observer.OnAvailableNoteTakingAppsUpdated();
   }

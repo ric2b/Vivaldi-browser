@@ -11,7 +11,6 @@
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -39,7 +38,9 @@ const char kUserDataDir[] = "user-data-dir";
 
 }  // namespace filesystem
 
-FileSystemApp::FileSystemApp() : lock_table_(new LockTable) {}
+FileSystemApp::FileSystemApp() : lock_table_(new LockTable) {
+  registry_.AddInterface<mojom::FileSystem>(this);
+}
 
 FileSystemApp::~FileSystemApp() {}
 
@@ -47,10 +48,12 @@ void FileSystemApp::OnStart() {
   tracing_.Initialize(context()->connector(), context()->identity().name());
 }
 
-bool FileSystemApp::OnConnect(const service_manager::ServiceInfo& remote_info,
-                              service_manager::InterfaceRegistry* registry) {
-  registry->AddInterface<mojom::FileSystem>(this);
-  return true;
+void FileSystemApp::OnBindInterface(
+    const service_manager::ServiceInfo& source_info,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  registry_.BindInterface(source_info.identity, interface_name,
+                          std::move(interface_pipe));
 }
 
 // |InterfaceFactory<Files>| implementation:

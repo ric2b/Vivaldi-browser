@@ -23,9 +23,11 @@ mojom("test_interfaces") {
     "test_native_types.mojom",
     "test_structs.mojom",
     "test_sync_methods.mojom",
+    "test_unions.mojom",
     "validation_test_interfaces.mojom",
   ]
   public_deps = [
+    ":echo",
     ":test_mojom_import",
     ":test_mojom_import2",
   ]
@@ -84,6 +86,31 @@ mojom("test_exported_import") {
   }
 }
 
+# Used to test that it is okay to call mojom::Foo::Serialize()/Deserialize()
+# even if the mojom target is linked into another component.
+#
+# We don't use |test_export_component| for this test because
+# //mojo/public/cpp/bindings/tests depends on both |test_export_component| and
+# |test_exported_import| and therefore actually get the shared cpp sources of
+# test_export.mojom from |test_exported_import|.
+component("test_export_component2") {
+  testonly = true
+  public_deps = [
+    ":test_export2",
+  ]
+}
+
+mojom("test_export2") {
+  testonly = true
+  sources = [
+    "test_export2.mojom",
+  ]
+  export_class_attribute = "MOJO_TEST_EXPORT"
+  export_define = "MOJO_TEST_IMPLEMENTATION=1"
+  export_header = "mojo/public/cpp/bindings/tests/mojo_test_export.h"
+  visibility = [ ":test_export_component2" ]
+}
+
 mojom("test_mojom_import") {
   testonly = true
   sources = [
@@ -120,13 +147,6 @@ mojom("test_struct_traits_interfaces") {
   testonly = true
   sources = [
     "struct_with_traits.mojom",
-  ]
-}
-
-mojom("test_interfaces_experimental") {
-  testonly = true
-  sources = [
-    "test_unions.mojom",
   ]
 }
 
@@ -172,4 +192,13 @@ mojom("test_no_sources") {
   public_deps = [
     ":test_interfaces",
   ]
+}
+
+mojom("echo") {
+  testonly = true
+  sources = [
+    "echo.mojom",
+    "echo_import.mojom",
+  ]
+  use_new_js_bindings = true
 }

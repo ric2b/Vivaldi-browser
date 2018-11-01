@@ -8,16 +8,19 @@
 #include "base/memory/ptr_util.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/event_filtering_info.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/renderer/api_binding_bridge.h"
 #include "extensions/renderer/api_binding_hooks.h"
+#include "extensions/renderer/api_binding_js_util.h"
 #include "extensions/renderer/chrome_setting.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
 #include "extensions/renderer/storage_area.h"
+#include "extensions/renderer/web_request_hooks.h"
 #include "gin/converter.h"
 #include "gin/handle.h"
 #include "gin/per_context_data.h"
@@ -75,6 +78,9 @@ struct BindingsSystemPerContextData : public base::SupportsUserData::Data {
 // If no 'chrome' property exists (or is undefined), creates a new
 // object, assigns it to Global().chrome, and returns it.
 v8::Local<v8::Object> GetOrCreateChrome(v8::Local<v8::Context> context) {
+  // Ensure that the creation context for any new chrome object is |context|.
+  v8::Context::Scope context_scope(context);
+
   // TODO(devlin): This is a little silly. We expect that this may do the wrong
   // thing if the window has set some other 'chrome' (as in the case of script
   // doing 'window.chrome = true'), but we don't really handle it. It could also
@@ -87,19 +93,20 @@ v8::Local<v8::Object> GetOrCreateChrome(v8::Local<v8::Context> context) {
   if (!context->Global()->Get(context, chrome_string).ToLocal(&chrome_value))
     return v8::Local<v8::Object>();
 
+  v8::Local<v8::Object> chrome_object;
   if (chrome_value->IsUndefined()) {
-    v8::Local<v8::Object> chrome = v8::Object::New(context->GetIsolate());
+    chrome_object = v8::Object::New(context->GetIsolate());
     v8::Maybe<bool> success =
-        context->Global()->CreateDataProperty(context, chrome_string, chrome);
+        context->Global()->CreateDataProperty(context, chrome_string,
+                                              chrome_object);
     if (!success.IsJust() || !success.FromJust())
       return v8::Local<v8::Object>();
-    return chrome;
+  } else if (chrome_value->IsObject()) {
+    chrome_object = chrome_value.As<v8::Object>();
+    DCHECK(chrome_object->CreationContext() == context);
   }
 
-  if (chrome_value->IsObject())
-    return chrome_value.As<v8::Object>();
-
-  return v8::Local<v8::Object>();
+  return chrome_object;
 }
 
 BindingsSystemPerContextData* GetBindingsDataFromContext(
@@ -185,9 +192,8 @@ v8::Local<v8::Object> CreateRootBinding(v8::Local<v8::Context> context,
 
   gin::Handle<APIBindingBridge> bridge_handle = gin::CreateHandle(
       context->GetIsolate(),
-      new APIBindingBridge(bindings_system->type_reference_map(),
-                           bindings_system->request_handler(), hooks, context,
-                           binding_object, script_context->GetExtensionID(),
+      new APIBindingBridge(hooks, context, binding_object,
+                           script_context->GetExtensionID(),
                            script_context->GetContextTypeDescription(),
                            base::Bind(&CallJsFunction)));
   v8::Local<v8::Value> native_api_bridge = bridge_handle.ToV8();
@@ -335,6 +341,8 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
                                  base::Bind(&StorageArea::CreateStorageArea));
   api_system_.RegisterCustomType("types.ChromeSetting",
                                  base::Bind(&ChromeSetting::Create));
+  api_system_.GetHooksForAPI("webRequest")
+      ->SetDelegate(base::MakeUnique<WebRequestHooks>());
 }
 
 NativeExtensionBindingsSystem::~NativeExtensionBindingsSystem() {}
@@ -364,10 +372,16 @@ void NativeExtensionBindingsSystem::DidCreateScriptContext(
   // web/guest view.
   context->module_system()->SetGetInternalAPIHook(
       get_internal_api_.Get(isolate));
+  context->module_system()->SetJSBindingUtilGetter(
+      base::Bind(&NativeExtensionBindingsSystem::GetJSBindingUtil,
+                 weak_factory_.GetWeakPtr()));
 }
 
 void NativeExtensionBindingsSystem::WillReleaseScriptContext(
-    ScriptContext* context) {}
+    ScriptContext* context) {
+  v8::HandleScope handle_scope(context->isolate());
+  api_system_.WillReleaseContext(context->v8_context());
+}
 
 void NativeExtensionBindingsSystem::UpdateBindingsForContext(
     ScriptContext* context) {
@@ -436,13 +450,15 @@ void NativeExtensionBindingsSystem::UpdateBindingsForContext(
 void NativeExtensionBindingsSystem::DispatchEventInContext(
     const std::string& event_name,
     const base::ListValue* event_args,
-    const base::DictionaryValue* filtering_info,
+    const base::DictionaryValue* filtering_info_dict,
     ScriptContext* context) {
   v8::HandleScope handle_scope(context->isolate());
   v8::Context::Scope context_scope(context->v8_context());
-  // TODO(devlin): Take into account |filtering_info|.
-  api_system_.FireEventInContext(event_name, context->v8_context(),
-                                 *event_args);
+  EventFilteringInfo filter;
+  if (filtering_info_dict)
+    filter = EventFilteringInfo(*filtering_info_dict);
+  api_system_.FireEventInContext(event_name, context->v8_context(), *event_args,
+                                 filter);
 }
 
 void NativeExtensionBindingsSystem::HandleResponse(
@@ -601,8 +617,8 @@ void NativeExtensionBindingsSystem::SendRequest(
 
   GURL url;
   blink::WebLocalFrame* frame = script_context->web_frame();
-  if (frame && !frame->document().isNull())
-    url = frame->document().url();
+  if (frame && !frame->GetDocument().IsNull())
+    url = frame->GetDocument().Url();
   else
     url = script_context->url();
 
@@ -618,15 +634,29 @@ void NativeExtensionBindingsSystem::SendRequest(
   params.worker_thread_id = -1;
   params.service_worker_version_id = kInvalidServiceWorkerVersionId;
 
-  send_request_ipc_.Run(script_context, params);
+  send_request_ipc_.Run(script_context, params, request->thread);
 }
 
 void NativeExtensionBindingsSystem::OnEventListenerChanged(
     const std::string& event_name,
     binding::EventListenersChanged change,
+    const base::DictionaryValue* filter,
+    bool was_manual,
     v8::Local<v8::Context> context) {
-  send_event_listener_ipc_.Run(
-      change, ScriptContextSet::GetContextByV8Context(context), event_name);
+  send_event_listener_ipc_.Run(change,
+                               ScriptContextSet::GetContextByV8Context(context),
+                               event_name, filter, was_manual);
+}
+
+void NativeExtensionBindingsSystem::GetJSBindingUtil(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::Value>* binding_util_out) {
+  gin::Handle<APIBindingJSUtil> handle = gin::CreateHandle(
+      context->GetIsolate(),
+      new APIBindingJSUtil(
+          api_system_.type_reference_map(), api_system_.request_handler(),
+          api_system_.event_handler(), base::Bind(&CallJsFunction)));
+  *binding_util_out = handle.ToV8();
 }
 
 }  // namespace extensions

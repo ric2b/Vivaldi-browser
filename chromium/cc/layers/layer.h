@@ -17,14 +17,14 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "cc/base/cc_export.h"
+#include "cc/base/filter_operations.h"
 #include "cc/base/region.h"
-#include "cc/debug/micro_benchmark.h"
+#include "cc/benchmarks/micro_benchmark.h"
+#include "cc/cc_export.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_position_constraint.h"
 #include "cc/layers/paint_properties.h"
-#include "cc/output/filter_operations.h"
 #include "cc/paint/paint_record.h"
 #include "cc/trees/element_id.h"
 #include "cc/trees/mutator_host_client.h"
@@ -132,14 +132,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetBlendMode(SkBlendMode blend_mode);
   SkBlendMode blend_mode() const { return inputs_.blend_mode; }
 
-  void set_draw_blend_mode(SkBlendMode blend_mode) {
-    if (draw_blend_mode_ == blend_mode)
-      return;
-    draw_blend_mode_ = blend_mode;
-    SetNeedsPushProperties();
-  }
-  SkBlendMode draw_blend_mode() const { return draw_blend_mode_; }
-
   // A layer is root for an isolated group when it and all its descendants are
   // drawn over a black and fully transparent background, creating an isolated
   // group. It should be used along with SetBlendMode(), in order to restrict
@@ -210,8 +202,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     return clip_children_.get();
   }
 
-  // TODO(enne): Fix style here (and everywhere) once LayerImpl does the same.
-  gfx::Transform screen_space_transform() const;
+  gfx::Transform ScreenSpaceTransform() const;
 
   void set_num_unclipped_descendants(size_t descendants) {
     num_unclipped_descendants_ = descendants;
@@ -404,6 +395,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     visible_layer_rect_ = rect;
   }
 
+  // This is for tracking damage.
   void SetSubtreePropertyChanged();
   bool subtree_property_changed() const { return subtree_property_changed_; }
 
@@ -424,29 +416,20 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     return inputs_.has_will_change_transform_hint;
   }
 
-  // The preferred raster bounds are the ideal resolution at which to raster the
-  // contents of this Layer's bitmap. This may not be the same size as the Layer
-  // bounds, in cases where the contents have an "intrinsic" size that differs.
-  // Consider for example an image with a given intrinsic size that is being
-  // scaled into a Layer of a different size.
-  void SetPreferredRasterBounds(const gfx::Size& preferred_Raster_bounds);
-  bool has_preferred_raster_bounds() const {
-    return inputs_.has_preferred_raster_bounds;
-  }
-  const gfx::Size& preferred_raster_bounds() const {
-    return inputs_.preferred_raster_bounds;
-  }
-  void ClearPreferredRasterBounds();
-
   MutatorHost* GetMutatorHost() const;
 
   ElementListType GetElementTypeForAnimation() const;
 
   void SetScrollbarsHiddenFromImplSide(bool hidden);
 
+  void set_is_scroll_clip_layer() { is_scroll_clip_layer_ = true; }
+
   const gfx::Rect& update_rect() const { return inputs_.update_rect; }
 
   LayerTreeHost* layer_tree_host() const { return layer_tree_host_; }
+
+  // Called on the scroll layer to trigger showing the overlay scrollbars.
+  void ShowScrollbars() { needs_show_scrollbars_ = true; }
 
  protected:
   friend class LayerImpl;
@@ -460,9 +443,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // immediately that a commit is required.  This implies SetNeedsPushProperties
   // to push that property.
   void SetNeedsCommit();
-  // This is identical to SetNeedsCommit, but the former requests a rebuild of
-  // the property trees.
-  void SetNeedsCommitNoRebuild();
+
   // Called when there's been a change in layer structure.  Implies
   // SetNeedsCommit and property tree rebuld, but not SetNeedsPushProperties
   // (the full tree is synced over).
@@ -491,7 +472,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   friend class base::RefCounted<Layer>;
   friend class LayerTreeHostCommon;
   friend class LayerTreeHost;
-  friend class LayerInternalsForTest;
 
   // Interactions with attached animations.
   gfx::ScrollOffset ScrollOffsetForAnimation() const;
@@ -499,9 +479,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void OnOpacityAnimated(float opacity);
   void OnTransformAnimated(const gfx::Transform& transform);
   void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
-
-  void OnIsAnimatingChanged(const PropertyAnimationState& mask,
-                            const PropertyAnimationState& state);
 
   bool FilterIsAnimating() const;
   bool TransformIsAnimating() const;
@@ -531,6 +508,10 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // When we detach or attach layer to new LayerTreeHost, all property trees'
   // indices becomes invalid.
   void InvalidatePropertyTreesIndices();
+
+  // This is set whenever a property changed on layer that affects whether this
+  // layer should own a property tree node or not.
+  void SetPropertyTreesNeedRebuild();
 
   // Encapsulates all data, callbacks or interfaces received from the embedder.
   // TODO(khushalsagar): This is only valid when PropertyTrees are built
@@ -612,7 +593,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     Layer* clip_parent;
 
     bool has_will_change_transform_hint : 1;
-    bool has_preferred_raster_bounds : 1;
 
     bool hide_layer_and_subtree : 1;
 
@@ -620,8 +600,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     LayerClient* client;
     base::Callback<void(const gfx::ScrollOffset&)> did_scroll_callback;
     std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests;
-
-    gfx::Size preferred_raster_bounds;
   };
 
   Layer* parent_;
@@ -647,10 +625,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool force_render_surface_for_testing_ : 1;
   bool subtree_property_changed_ : 1;
   bool may_contain_video_ : 1;
+  bool is_scroll_clip_layer_ : 1;
+  bool needs_show_scrollbars_ : 1;
   SkColor safe_opaque_background_color_;
-  // draw_blend_mode may be different than blend_mode_,
-  // when a RenderSurface re-parents the layer's blend_mode.
-  SkBlendMode draw_blend_mode_;
   std::unique_ptr<std::set<Layer*>> scroll_children_;
 
   std::unique_ptr<std::set<Layer*>> clip_children_;

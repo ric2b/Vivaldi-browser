@@ -4,11 +4,13 @@
 
 #import "ios/chrome/app/application_delegate/app_state.h"
 
+#include <utility>
+
+#include "base/callback.h"
 #include "base/critical_closure.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/metrics/metrics_service.h"
-#import "ios/chrome/app/main_application_delegate.h"
 #import "ios/chrome/app/application_delegate/app_navigation.h"
 #import "ios/chrome/app/application_delegate/browser_launcher.h"
 #import "ios/chrome/app/application_delegate/memory_warning_helper.h"
@@ -18,6 +20,7 @@
 #import "ios/chrome/app/application_delegate/tab_switching.h"
 #import "ios/chrome/app/application_delegate/user_activity_handler.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
+#import "ios/chrome/app/main_application_delegate.h"
 #import "ios/chrome/app/safe_mode/safe_mode_coordinator.h"
 #import "ios/chrome/app/safe_mode_crashing_modules_config.h"
 #include "ios/chrome/browser/application_context.h"
@@ -47,8 +50,8 @@
 
 namespace {
 // Helper method to post |closure| on the UI thread.
-void PostTaskOnUIThread(const base::Closure& closure) {
-  web::WebThread::PostTask(web::WebThread::UI, FROM_HERE, closure);
+void PostTaskOnUIThread(base::OnceClosure closure) {
+  web::WebThread::PostTask(web::WebThread::UI, FROM_HERE, std::move(closure));
 }
 NSString* const kStartupAttemptReset = @"StartupAttempReset";
 }  // namespace
@@ -212,17 +215,19 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
         [[_browserLauncher browserViewInformation] currentBVC]
             .browserState->GetRequestContext();
     _savingCookies = YES;
-    base::Closure criticalClosure =
+    base::OnceClosure criticalClosure =
         base::MakeCriticalClosure(base::BindBlockArc(^{
           DCHECK_CURRENTLY_ON(web::WebThread::UI);
           _savingCookies = NO;
         }));
+    base::Closure post_back_to_ui =
+        base::Bind(&PostTaskOnUIThread, base::Passed(&criticalClosure));
     web::WebThread::PostTask(
         web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
           net::CookieStoreIOS* store = static_cast<net::CookieStoreIOS*>(
               getter->GetURLRequestContext()->cookie_store());
           // FlushStore() runs its callback on any thread. Jump back to UI.
-          store->FlushStore(base::Bind(&PostTaskOnUIThread, criticalClosure));
+          store->FlushStore(post_back_to_ui);
         }));
   }
 
@@ -335,12 +340,11 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
                           startupInformation:_startupInformation
                       browserViewInformation:[_browserLauncher
                                                  browserViewInformation]];
-  } else if (_shouldOpenNTPTabOnActive) {
-    if (![tabSwitcher openNewTabFromTabSwitcher]) {
-      [[[_browserLauncher browserViewInformation] currentBVC] newTab:nil];
-    }
-    _shouldOpenNTPTabOnActive = NO;
+  } else if (_shouldOpenNTPTabOnActive &&
+             ![tabSwitcher openNewTabFromTabSwitcher]) {
+    [[[_browserLauncher browserViewInformation] currentBVC] newTab:nil];
   }
+  _shouldOpenNTPTabOnActive = NO;
 
   [MetricsMediator logStartupDuration:_startupInformation];
 }

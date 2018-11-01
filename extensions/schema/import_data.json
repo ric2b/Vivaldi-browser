@@ -344,23 +344,6 @@
         ]
       },
       {
-        "name": "showDevTools",
-        "type": "function",
-        "description": "Open developer tools.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "getStartupAction",
         "type": "function",
         "description": "Returns the startup action.",

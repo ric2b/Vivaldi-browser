@@ -5,11 +5,13 @@
 #ifndef ModuleMap_h
 #define ModuleMap_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/KURLHash.h"
-#include "wtf/HashMap.h"
+#include "platform/wtf/HashMap.h"
 
 namespace blink {
 
@@ -21,38 +23,39 @@ enum class ModuleGraphLevel;
 
 // A ModuleMap implements "module map" spec.
 // https://html.spec.whatwg.org/#module-map
-class CORE_EXPORT ModuleMap final : public GarbageCollected<ModuleMap> {
+class CORE_EXPORT ModuleMap final : public GarbageCollected<ModuleMap>,
+                                    public TraceWrapperBase {
   WTF_MAKE_NONCOPYABLE(ModuleMap);
   class Entry;
-  class LoaderHost;
 
  public:
-  static ModuleMap* create(Modulator* modulator) {
+  static ModuleMap* Create(Modulator* modulator) {
     return new ModuleMap(modulator);
   }
   DECLARE_TRACE();
+  DECLARE_TRACE_WRAPPERS();
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
-  void fetchSingleModuleScript(const ModuleScriptFetchRequest&,
+  void FetchSingleModuleScript(const ModuleScriptFetchRequest&,
                                ModuleGraphLevel,
                                SingleModuleClient*);
 
   // Synchronously get the ModuleScript for a given URL.
   // Note: fetchSingleModuleScript of the ModuleScript must be complete before
   // calling this.
-  ModuleScript* getFetchedModuleScript(const KURL&) const;
+  ModuleScript* GetFetchedModuleScript(const KURL&) const;
 
-  Modulator* modulator() { return m_modulator; }
+  Modulator* GetModulator() { return modulator_; }
 
  private:
   explicit ModuleMap(Modulator*);
 
-  using MapImpl = HeapHashMap<KURL, Member<Entry>>;
+  using MapImpl = HeapHashMap<KURL, TraceWrapperMember<Entry>>;
 
   // A module map is a map of absolute URLs to map entry.
-  MapImpl m_map;
+  MapImpl map_;
 
-  Member<Modulator> m_modulator;
+  Member<Modulator> modulator_;
 };
 
 }  // namespace blink

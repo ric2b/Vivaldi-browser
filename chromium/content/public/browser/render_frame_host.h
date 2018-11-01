@@ -20,6 +20,10 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+namespace blink {
+enum class WebFeaturePolicyFeature;
+}
+
 namespace base {
 class Value;
 }
@@ -223,6 +227,31 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns a bitwise OR of bindings types that have been enabled for this
   // RenderFrame. See BindingsPolicy for details.
   virtual int GetEnabledBindings() const = 0;
+
+  // Causes all new requests for the root RenderFrameHost and its children to
+  // be blocked (not being started) until ResumeBlockedRequestsForFrame is
+  // called.
+  virtual void BlockRequestsForFrame() = 0;
+
+  // Resumes any blocked request for the specified root RenderFrameHost and
+  // child frame hosts.
+  virtual void ResumeBlockedRequestsForFrame() = 0;
+
+#if defined(OS_ANDROID)
+  // Returns an InterfaceProvider for Java-implemented interfaces that are
+  // scoped to this RenderFrameHost. This provides access to interfaces
+  // implemented in Java in the browser process to C++ code in the browser
+  // process.
+  virtual service_manager::InterfaceProvider* GetJavaInterfaces() = 0;
+#endif  // OS_ANDROID
+
+  // Stops and disables the hang monitor for beforeunload. This avoids flakiness
+  // in tests that need to observe beforeunload dialogs, which could fail if the
+  // timeout skips the dialog.
+  virtual void DisableBeforeUnloadHangMonitorForTesting() = 0;
+  virtual bool IsBeforeUnloadHangMonitorDisabledForTesting() = 0;
+
+  virtual bool IsFeatureEnabled(blink::WebFeaturePolicyFeature feature) = 0;
 
  private:
   // This interface should only be implemented inside content.

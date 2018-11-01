@@ -58,7 +58,7 @@ bool UnionTraits<common::mojom::ValueDataView, std::unique_ptr<base::Value>>::
          std::unique_ptr<base::Value>* value_out) {
   switch (data.tag()) {
     case common::mojom::ValueDataView::Tag::NULL_VALUE: {
-      *value_out = base::Value::CreateNullValue();
+      *value_out = base::MakeUnique<base::Value>();
       return true;
     }
     case common::mojom::ValueDataView::Tag::BOOL_VALUE: {
@@ -77,13 +77,13 @@ bool UnionTraits<common::mojom::ValueDataView, std::unique_ptr<base::Value>>::
       base::StringPiece string_value;
       if (!data.ReadStringValue(&string_value))
         return false;
-      *value_out = base::MakeUnique<base::StringValue>(string_value);
+      *value_out = base::MakeUnique<base::Value>(string_value);
       return true;
     }
     case common::mojom::ValueDataView::Tag::BINARY_VALUE: {
       mojo::ArrayDataView<uint8_t> binary_data;
       data.GetBinaryValueDataView(&binary_data);
-      *value_out = base::BinaryValue::CreateWithCopiedBuffer(
+      *value_out = base::Value::CreateWithCopiedBuffer(
           reinterpret_cast<const char*>(binary_data.data()),
           binary_data.size());
       return true;

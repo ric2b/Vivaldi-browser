@@ -36,72 +36,79 @@
 
 namespace blink {
 
-bool EditingStyleUtilities::hasAncestorVerticalAlignStyle(Node& node,
+using namespace cssvalue;
+
+bool EditingStyleUtilities::HasAncestorVerticalAlignStyle(Node& node,
                                                           CSSValueID value) {
-  for (Node& runner : NodeTraversal::inclusiveAncestorsOf(node)) {
-    CSSComputedStyleDeclaration* ancestorStyle =
-        CSSComputedStyleDeclaration::create(&runner);
-    if (getIdentifierValue(ancestorStyle, CSSPropertyVerticalAlign) == value)
+  for (Node& runner : NodeTraversal::InclusiveAncestorsOf(node)) {
+    CSSComputedStyleDeclaration* ancestor_style =
+        CSSComputedStyleDeclaration::Create(&runner);
+    if (GetIdentifierValue(ancestor_style, CSSPropertyVerticalAlign) == value)
       return true;
   }
   return false;
 }
 
 EditingStyle*
-EditingStyleUtilities::createWrappingStyleForAnnotatedSerialization(
+EditingStyleUtilities::CreateWrappingStyleForAnnotatedSerialization(
     ContainerNode* context) {
-  EditingStyle* wrappingStyle =
-      EditingStyle::create(context, EditingStyle::EditingPropertiesInEffect);
+  EditingStyle* wrapping_style =
+      EditingStyle::Create(context, EditingStyle::kEditingPropertiesInEffect);
 
   // Styles that Mail blockquotes contribute should only be placed on the Mail
   // blockquote, to help us differentiate those styles from ones that the user
   // has applied. This helps us get the color of content pasted into
   // blockquotes right.
-  wrappingStyle->removeStyleAddedByElement(toHTMLElement(enclosingNodeOfType(
-      firstPositionInOrBeforeNode(context), isMailHTMLBlockquoteElement,
-      CanCrossEditingBoundary)));
+  wrapping_style->RemoveStyleAddedByElement(ToHTMLElement(EnclosingNodeOfType(
+      FirstPositionInOrBeforeNode(context), IsMailHTMLBlockquoteElement,
+      kCanCrossEditingBoundary)));
 
   // Call collapseTextDecorationProperties first or otherwise it'll copy the
   // value over from in-effect to text-decorations.
-  wrappingStyle->collapseTextDecorationProperties();
+  wrapping_style->CollapseTextDecorationProperties();
 
-  return wrappingStyle;
+  return wrapping_style;
 }
 
-EditingStyle* EditingStyleUtilities::createWrappingStyleForSerialization(
+EditingStyle* EditingStyleUtilities::CreateWrappingStyleForSerialization(
     ContainerNode* context) {
   DCHECK(context);
-  EditingStyle* wrappingStyle = EditingStyle::create();
+  EditingStyle* wrapping_style = EditingStyle::Create();
 
   // When not annotating for interchange, we only preserve inline style
   // declarations.
-  for (Node& node : NodeTraversal::inclusiveAncestorsOf(*context)) {
-    if (node.isDocumentNode())
+  for (Node& node : NodeTraversal::InclusiveAncestorsOf(*context)) {
+    if (node.IsDocumentNode())
       break;
-    if (node.isStyledElement() && !isMailHTMLBlockquoteElement(&node)) {
-      wrappingStyle->mergeInlineAndImplicitStyleOfElement(
-          toElement(&node), EditingStyle::DoNotOverrideValues,
-          EditingStyle::EditingPropertiesInEffect);
+    if (node.IsStyledElement() && !IsMailHTMLBlockquoteElement(&node)) {
+      wrapping_style->MergeInlineAndImplicitStyleOfElement(
+          ToElement(&node), EditingStyle::kDoNotOverrideValues,
+          EditingStyle::kEditingPropertiesInEffect);
     }
   }
 
-  return wrappingStyle;
+  return wrapping_style;
 }
 
-EditingStyle* EditingStyleUtilities::createStyleAtSelectionStart(
+EditingStyle* EditingStyleUtilities::CreateStyleAtSelectionStart(
     const VisibleSelection& selection,
-    bool shouldUseBackgroundColorInEffect,
-    MutableStylePropertySet* styleToCheck) {
-  if (selection.isNone())
+    bool should_use_background_color_in_effect,
+    MutableStylePropertySet* style_to_check) {
+  if (selection.IsNone())
     return nullptr;
 
-  Document& document = *selection.start().document();
+  Document& document = *selection.Start().GetDocument();
 
-  DCHECK(!document.needsLayoutTreeUpdate());
-  DocumentLifecycle::DisallowTransitionScope disallowTransition(
-      document.lifecycle());
+  DCHECK(!document.NeedsLayoutTreeUpdate());
+  DocumentLifecycle::DisallowTransitionScope disallow_transition(
+      document.Lifecycle());
 
-  Position position = adjustedSelectionStartForStyleComputation(selection);
+  // TODO(editing-dev): We should make |position| to |const Position&| by
+  // integrating this expression and if-statement below.
+  Position position =
+      selection.IsCaret()
+          ? CreateVisiblePosition(selection.Start()).DeepEquivalent()
+          : AdjustedSelectionStartForStyleComputation(selection.Start());
 
   // If the pos is at the end of a text node, then this node is not fully
   // selected. Move it to the next deep equivalent position to avoid removing
@@ -110,195 +117,82 @@ EditingStyle* EditingStyleUtilities::createStyleAtSelectionStart(
   // want Position("world", 0) instead.
   // We only do this for range because caret at Position("hello", 5) in
   // <b>hello</b>world should give you font-weight: bold.
-  Node* positionNode = position.computeContainerNode();
-  if (selection.isRange() && positionNode && positionNode->isTextNode() &&
-      position.computeOffsetInContainerNode() ==
-          positionNode->maxCharacterOffset())
-    position = nextVisuallyDistinctCandidate(position);
+  Node* position_node = position.ComputeContainerNode();
+  if (selection.IsRange() && position_node && position_node->IsTextNode() &&
+      position.ComputeOffsetInContainerNode() ==
+          position_node->MaxCharacterOffset())
+    position = NextVisuallyDistinctCandidate(position);
 
-  Element* element = associatedElementOf(position);
+  Element* element = AssociatedElementOf(position);
   if (!element)
     return nullptr;
 
   EditingStyle* style =
-      EditingStyle::create(element, EditingStyle::AllProperties);
-  style->mergeTypingStyle(&element->document());
+      EditingStyle::Create(element, EditingStyle::kAllProperties);
+  style->MergeTypingStyle(&element->GetDocument());
 
   // If |element| has <sub> or <sup> ancestor element, apply the corresponding
   // style(vertical-align) to it so that document.queryCommandState() works with
   // the style. See bug http://crbug.com/582225.
-  CSSValueID valueID =
-      getIdentifierValue(styleToCheck, CSSPropertyVerticalAlign);
-  if (valueID == CSSValueSub || valueID == CSSValueSuper) {
-    CSSComputedStyleDeclaration* elementStyle =
-        CSSComputedStyleDeclaration::create(element);
+  CSSValueID value_id =
+      GetIdentifierValue(style_to_check, CSSPropertyVerticalAlign);
+  if (value_id == CSSValueSub || value_id == CSSValueSuper) {
+    CSSComputedStyleDeclaration* element_style =
+        CSSComputedStyleDeclaration::Create(element);
     // Find the ancestor that has CSSValueSub or CSSValueSuper as the value of
     // CSS vertical-align property.
-    if (getIdentifierValue(elementStyle, CSSPropertyVerticalAlign) ==
+    if (GetIdentifierValue(element_style, CSSPropertyVerticalAlign) ==
             CSSValueBaseline &&
-        hasAncestorVerticalAlignStyle(*element, valueID))
-      style->style()->setProperty(CSSPropertyVerticalAlign, valueID);
+        HasAncestorVerticalAlignStyle(*element, value_id))
+      style->Style()->SetProperty(CSSPropertyVerticalAlign, value_id);
   }
 
   // If background color is transparent, traverse parent nodes until we hit a
   // different value or document root Also, if the selection is a range, ignore
   // the background color at the start of selection, and find the background
   // color of the common ancestor.
-  if (shouldUseBackgroundColorInEffect &&
-      (selection.isRange() || hasTransparentBackgroundColor(style->style()))) {
-    const EphemeralRange range(selection.toNormalizedEphemeralRange());
+  if (should_use_background_color_in_effect &&
+      (selection.IsRange() || HasTransparentBackgroundColor(style->Style()))) {
+    const EphemeralRange range(selection.ToNormalizedEphemeralRange());
     if (const CSSValue* value =
-            backgroundColorValueInEffect(Range::commonAncestorContainer(
-                range.startPosition().computeContainerNode(),
-                range.endPosition().computeContainerNode())))
-      style->setProperty(CSSPropertyBackgroundColor, value->cssText());
+            BackgroundColorValueInEffect(range.CommonAncestorContainer()))
+      style->SetProperty(CSSPropertyBackgroundColor, value->CssText());
   }
 
   return style;
 }
 
-static bool isUnicodeBidiNestedOrMultipleEmbeddings(CSSValueID valueID) {
-  return valueID == CSSValueEmbed || valueID == CSSValueBidiOverride ||
-         valueID == CSSValueWebkitIsolate ||
-         valueID == CSSValueWebkitIsolateOverride ||
-         valueID == CSSValueWebkitPlaintext || valueID == CSSValueIsolate ||
-         valueID == CSSValueIsolateOverride || valueID == CSSValuePlaintext;
-}
-
-WritingDirection EditingStyleUtilities::textDirectionForSelection(
-    const VisibleSelection& selection,
-    EditingStyle* typingStyle,
-    bool& hasNestedOrMultipleEmbeddings) {
-  hasNestedOrMultipleEmbeddings = true;
-
-  if (selection.isNone())
-    return NaturalWritingDirection;
-
-  Position position = mostForwardCaretPosition(selection.start());
-
-  Node* node = position.anchorNode();
-  if (!node)
-    return NaturalWritingDirection;
-
-  Position end;
-  if (selection.isRange()) {
-    end = mostBackwardCaretPosition(selection.end());
-
-    DCHECK(end.document());
-    const EphemeralRange caretRange(position.parentAnchoredEquivalent(),
-                                    end.parentAnchoredEquivalent());
-    for (Node& n : caretRange.nodes()) {
-      if (!n.isStyledElement())
-        continue;
-
-      CSSComputedStyleDeclaration* style =
-          CSSComputedStyleDeclaration::create(&n);
-      const CSSValue* unicodeBidi =
-          style->getPropertyCSSValue(CSSPropertyUnicodeBidi);
-      if (!unicodeBidi || !unicodeBidi->isIdentifierValue())
-        continue;
-
-      CSSValueID unicodeBidiValue =
-          toCSSIdentifierValue(unicodeBidi)->getValueID();
-      if (isUnicodeBidiNestedOrMultipleEmbeddings(unicodeBidiValue))
-        return NaturalWritingDirection;
-    }
-  }
-
-  if (selection.isCaret()) {
-    WritingDirection direction;
-    if (typingStyle && typingStyle->textDirection(direction)) {
-      hasNestedOrMultipleEmbeddings = false;
-      return direction;
-    }
-    node = selection.visibleStart().deepEquivalent().anchorNode();
-  }
-  DCHECK(node);
-
-  // The selection is either a caret with no typing attributes or a range in
-  // which no embedding is added, so just use the start position to decide.
-  Node* block = enclosingBlock(node);
-  WritingDirection foundDirection = NaturalWritingDirection;
-
-  for (Node& runner : NodeTraversal::inclusiveAncestorsOf(*node)) {
-    if (runner == block)
-      break;
-    if (!runner.isStyledElement())
-      continue;
-
-    Element* element = &toElement(runner);
-    CSSComputedStyleDeclaration* style =
-        CSSComputedStyleDeclaration::create(element);
-    const CSSValue* unicodeBidi =
-        style->getPropertyCSSValue(CSSPropertyUnicodeBidi);
-    if (!unicodeBidi || !unicodeBidi->isIdentifierValue())
-      continue;
-
-    CSSValueID unicodeBidiValue =
-        toCSSIdentifierValue(unicodeBidi)->getValueID();
-    if (unicodeBidiValue == CSSValueNormal)
-      continue;
-
-    if (unicodeBidiValue == CSSValueBidiOverride)
-      return NaturalWritingDirection;
-
-    DCHECK(isEmbedOrIsolate(unicodeBidiValue)) << unicodeBidiValue;
-    const CSSValue* direction =
-        style->getPropertyCSSValue(CSSPropertyDirection);
-    if (!direction || !direction->isIdentifierValue())
-      continue;
-
-    int directionValue = toCSSIdentifierValue(direction)->getValueID();
-    if (directionValue != CSSValueLtr && directionValue != CSSValueRtl)
-      continue;
-
-    if (foundDirection != NaturalWritingDirection)
-      return NaturalWritingDirection;
-
-    // In the range case, make sure that the embedding element persists until
-    // the end of the range.
-    if (selection.isRange() && !end.anchorNode()->isDescendantOf(element))
-      return NaturalWritingDirection;
-
-    foundDirection = directionValue == CSSValueLtr
-                         ? LeftToRightWritingDirection
-                         : RightToLeftWritingDirection;
-  }
-  hasNestedOrMultipleEmbeddings = false;
-  return foundDirection;
-}
-
-bool EditingStyleUtilities::isTransparentColorValue(const CSSValue* cssValue) {
-  if (!cssValue)
+bool EditingStyleUtilities::IsTransparentColorValue(const CSSValue* css_value) {
+  if (!css_value)
     return true;
-  if (cssValue->isColorValue())
-    return !toCSSColorValue(cssValue)->value().alpha();
-  if (!cssValue->isIdentifierValue())
+  if (css_value->IsColorValue())
+    return !ToCSSColorValue(css_value)->Value().Alpha();
+  if (!css_value->IsIdentifierValue())
     return false;
-  return toCSSIdentifierValue(cssValue)->getValueID() == CSSValueTransparent;
+  return ToCSSIdentifierValue(css_value)->GetValueID() == CSSValueTransparent;
 }
 
-bool EditingStyleUtilities::hasTransparentBackgroundColor(
+bool EditingStyleUtilities::HasTransparentBackgroundColor(
     CSSStyleDeclaration* style) {
-  const CSSValue* cssValue =
-      style->getPropertyCSSValueInternal(CSSPropertyBackgroundColor);
-  return isTransparentColorValue(cssValue);
+  const CSSValue* css_value =
+      style->GetPropertyCSSValueInternal(CSSPropertyBackgroundColor);
+  return IsTransparentColorValue(css_value);
 }
 
-bool EditingStyleUtilities::hasTransparentBackgroundColor(
+bool EditingStyleUtilities::HasTransparentBackgroundColor(
     StylePropertySet* style) {
-  const CSSValue* cssValue =
-      style->getPropertyCSSValue(CSSPropertyBackgroundColor);
-  return isTransparentColorValue(cssValue);
+  const CSSValue* css_value =
+      style->GetPropertyCSSValue(CSSPropertyBackgroundColor);
+  return IsTransparentColorValue(css_value);
 }
 
-const CSSValue* EditingStyleUtilities::backgroundColorValueInEffect(
+const CSSValue* EditingStyleUtilities::BackgroundColorValueInEffect(
     Node* node) {
   for (Node* ancestor = node; ancestor; ancestor = ancestor->parentNode()) {
-    CSSComputedStyleDeclaration* ancestorStyle =
-        CSSComputedStyleDeclaration::create(ancestor);
-    if (!hasTransparentBackgroundColor(ancestorStyle))
-      return ancestorStyle->getPropertyCSSValue(CSSPropertyBackgroundColor);
+    CSSComputedStyleDeclaration* ancestor_style =
+        CSSComputedStyleDeclaration::Create(ancestor);
+    if (!HasTransparentBackgroundColor(ancestor_style))
+      return ancestor_style->GetPropertyCSSValue(CSSPropertyBackgroundColor);
   }
   return nullptr;
 }

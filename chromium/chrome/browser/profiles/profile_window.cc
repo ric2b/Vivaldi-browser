@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -44,11 +45,9 @@
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/signin/core/common/signin_switches.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/user_metrics.h"
 #include "extensions/features/features.h"
 #include "net/base/escape.h"
 
@@ -221,7 +220,7 @@ void FindOrCreateNewWindowForProfile(
     }
   }
 
-  content::RecordAction(UserMetricsAction("NewWindow"));
+  base::RecordAction(UserMetricsAction("NewWindow"));
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   StartupBrowserCreator browser_creator;
   browser_creator.LaunchBrowser(
@@ -373,7 +372,7 @@ void CloseGuestProfileWindows() {
   if (profile) {
     BrowserList::CloseAllBrowsersWithProfile(
         profile, base::Bind(&ProfileBrowserCloseSuccess),
-        BrowserList::CloseCallback());
+        BrowserList::CloseCallback(), false);
   }
 }
 
@@ -401,15 +400,12 @@ void LockProfile(Profile* profile) {
   if (profile) {
     BrowserList::CloseAllBrowsersWithProfile(
         profile, base::Bind(&LockBrowserCloseSuccess),
-        BrowserList::CloseCallback());
+        BrowserList::CloseCallback(), false);
   }
 }
 
 bool IsLockAvailable(Profile* profile) {
   DCHECK(profile);
-  if (!switches::IsNewProfileManagement())
-    return false;
-
   if (profile->IsGuestSession() || profile->IsSystemProfile())
     return false;
 
@@ -446,7 +442,7 @@ void CloseProfileWindows(Profile* profile) {
   DCHECK(profile);
   BrowserList::CloseAllBrowsersWithProfile(
       profile, base::Bind(&ProfileBrowserCloseSuccess),
-      BrowserList::CloseCallback());
+      BrowserList::CloseCallback(), false);
 }
 
 void CreateSystemProfileForUserManager(
@@ -507,9 +503,6 @@ void BubbleViewModeFromAvatarBubbleMode(
       *bubble_view_mode = BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
       *tutorial_mode = TUTORIAL_MODE_SHOW_ERROR;
       return;
-    case BrowserWindow::AVATAR_BUBBLE_MODE_FAST_USER_SWITCH:
-      *bubble_view_mode = profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER;
-      return;
     default:
       *bubble_view_mode = profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
   }
@@ -525,16 +518,6 @@ bool ShouldShowWelcomeUpgradeTutorial(
 
   return tutorial_mode == TUTORIAL_MODE_WELCOME_UPGRADE ||
          show_count != signin_ui_util::kUpgradeWelcomeTutorialShowMax;
-}
-
-bool ShouldShowRightClickTutorial(Profile* profile) {
-  PrefService* local_state = g_browser_process->local_state();
-  const bool dismissed = local_state->GetBoolean(
-      prefs::kProfileAvatarRightClickTutorialDismissed);
-
-  // Don't show the tutorial if it's already been dismissed or if right-clicking
-  // wouldn't show any targets.
-  return !dismissed && HasProfileSwitchTargets(profile);
 }
 
 }  // namespace profiles

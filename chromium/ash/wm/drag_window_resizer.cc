@@ -4,13 +4,13 @@
 
 #include "ash/wm/drag_window_resizer.h"
 
-#include "ash/common/wm/window_positioning_utils.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_window.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/shell.h"
 #include "ash/wm/drag_window_controller.h"
+#include "ash/wm/window_positioning_utils.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
@@ -31,7 +31,7 @@ DragWindowResizer* DragWindowResizer::instance_ = NULL;
 DragWindowResizer::~DragWindowResizer() {
   if (window_state_)
     window_state_->DeleteDragDetails();
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   shell->mouse_cursor_filter()->set_mouse_warp_enabled(true);
   shell->mouse_cursor_filter()->HideSharedEdgeIndicator();
   if (instance_ == this)
@@ -126,7 +126,7 @@ DragWindowResizer::DragWindowResizer(WindowResizer* next_window_resizer,
   // |mouse_warp_mode_| should be set to WARP_DRAG so that the user could move a
   // window/tab to another display.
   MouseCursorEventFilter* mouse_cursor_filter =
-      Shell::GetInstance()->mouse_cursor_filter();
+      Shell::Get()->mouse_cursor_filter();
   mouse_cursor_filter->set_mouse_warp_enabled(ShouldAllowMouseWarp());
   if (ShouldAllowMouseWarp())
     mouse_cursor_filter->ShowSharedEdgeIndicator(

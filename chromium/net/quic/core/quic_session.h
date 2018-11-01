@@ -16,7 +16,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_crypto_stream.h"
 #include "net/quic/core/quic_packet_creator.h"
@@ -439,7 +438,7 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // call stack of OnCanWrite.
   QuicStreamId currently_writing_stream_id_;
 
-  // Latched value of gfe2_reloadable_flag_quic_flow_control_invariant.
+  // Latched value of quic_reloadable_flag_quic_flow_control_invariant.
   const bool flow_control_invariant_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSession);

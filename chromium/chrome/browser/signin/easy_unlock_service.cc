@@ -13,6 +13,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -106,14 +107,14 @@ class EasyUnlockService::BluetoothDetector
   explicit BluetoothDetector(EasyUnlockService* service)
       : service_(service),
         weak_ptr_factory_(this) {
-    apps::AppLifetimeMonitorFactory::GetForProfile(service_->profile())
+    apps::AppLifetimeMonitorFactory::GetForBrowserContext(service_->profile())
         ->AddObserver(this);
   }
 
   ~BluetoothDetector() override {
     if (adapter_.get())
       adapter_->RemoveObserver(this);
-    apps::AppLifetimeMonitorFactory::GetForProfile(service_->profile())
+    apps::AppLifetimeMonitorFactory::GetForBrowserContext(service_->profile())
         ->RemoveObserver(this);
   }
 
@@ -148,13 +149,15 @@ class EasyUnlockService::BluetoothDetector
   }
 
   // apps::AppLifetimeMonitor::Observer:
-  void OnAppDeactivated(Profile* profile, const std::string& app_id) override {
+  void OnAppDeactivated(content::BrowserContext* context,
+                        const std::string& app_id) override {
     // TODO(tengs): Refactor the lifetime management to EasyUnlockAppManager.
     if (app_id == extension_misc::kEasyUnlockAppId)
       TurnOffBluetoothDiscoverability();
   }
 
-  void OnAppStop(Profile* profile, const std::string& app_id) override {
+  void OnAppStop(content::BrowserContext* context,
+                 const std::string& app_id) override {
     // TODO(tengs): Refactor the lifetime management to EasyUnlockAppManager.
     if (app_id == extension_misc::kEasyUnlockAppId)
       TurnOffBluetoothDiscoverability();
@@ -255,15 +258,11 @@ void EasyUnlockService::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kEasyUnlockAllowed, true);
   registry->RegisterBooleanPref(prefs::kEasyUnlockEnabled, false);
   registry->RegisterDictionaryPref(prefs::kEasyUnlockPairing,
-                                   new base::DictionaryValue());
+                                   base::MakeUnique<base::DictionaryValue>());
   registry->RegisterBooleanPref(
       prefs::kEasyUnlockProximityRequired,
       false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-
-  cryptauth::CryptAuthGCMManager::RegisterPrefs(registry);
-  cryptauth::CryptAuthDeviceManager::RegisterPrefs(registry);
-  cryptauth::CryptAuthEnrollmentManager::RegisterPrefs(registry);
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery))

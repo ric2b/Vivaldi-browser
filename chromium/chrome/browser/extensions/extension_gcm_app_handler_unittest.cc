@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/extension_gcm_app_handler.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -264,7 +265,6 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     extension_system->CreateExtensionService(
         base::CommandLine::ForCurrentProcess(), extensions_install_dir, false);
     extension_service_ = extension_system->Get(profile())->extension_service();
-    extension_service_->set_extensions_enabled(true);
 
     // Create GCMProfileService that talks with fake GCMClient.
     gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactoryAndUse(
@@ -280,6 +280,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
 #endif
 
     waiter_.PumpUILoop();
+    gcm_app_handler_->Shutdown();
   }
 
   // Returns a barebones test extension.
@@ -287,9 +288,9 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     base::DictionaryValue manifest;
     manifest.SetString(manifest_keys::kVersion, "1.0.0.0");
     manifest.SetString(manifest_keys::kName, kTestExtensionName);
-    base::ListValue* permission_list = new base::ListValue;
+    auto permission_list = base::MakeUnique<base::ListValue>();
     permission_list->AppendString("gcm");
-    manifest.Set(manifest_keys::kPermissions, permission_list);
+    manifest.Set(manifest_keys::kPermissions, std::move(permission_list));
 
     std::string error;
     scoped_refptr<Extension> extension = Extension::Create(

@@ -207,6 +207,16 @@ need to be translated for each locale.-->
                {DAYS, plural, =1 {1 day and } other {# days and }}
       </message>
 
+      <message name="IDS_TIME_MONTHS"
+               desc="[ICU Syntax]">
+               {MONTHS, plural, =1 {1 month} other {# months}}
+      </message>
+
+      <message name="IDS_TIME_YEARS"
+               desc="[ICU Syntax]">
+               {YEARS, plural, =1 {1 year} other {# years}}
+      </message>
+
       <message name="IDS_TIME_REMAINING_SECS"
                desc="Seconds remaining for a job completion. Use an abbreviated word for second(s). [ICU Syntax]">
                {SECONDS, plural, =1 {1 sec left} other {# secs left}}
@@ -237,16 +247,35 @@ need to be translated for each locale.-->
                {DAYS, plural, =1 {1 day left} other {# days left}}
       </message>
 
+      <message name="IDS_TIME_REMAINING_MONTHS"
+               desc="Months remaining for a job completion. [ICU Syntax]">
+               {MONTHS, plural, =1 {1 month left} other {# months left}}
+      </message>
+
+      <message name="IDS_TIME_REMAINING_YEARS"
+               desc="Years remaining for a job completion. [ICU Syntax]">
+               {YEARS, plural, =1 {1 year left} other {# years left}}
+      </message>
+
       <message name="IDS_TIME_ELAPSED_SECS"
-               desc="Use an abbreviated word for second(s). [ICU Syntax]">
+               desc="Relative time in browsing history or file list. Use an abbreviated word for second(s). [ICU Syntax]">
                {SECONDS, plural, =1 {1 sec ago} other {# secs ago}}
       </message>
 
+      <message name="IDS_TIME_ELAPSED_LONG_SECS"
+               desc="Relative time in browsing history or file list. [ICU Syntax]">
+               {SECONDS, plural, =1 {1 second ago} other {# seconds ago}}
+      </message>
+
       <message name="IDS_TIME_ELAPSED_MINS"
-               desc="Use an abbreviated word for minute(s). [ICU Syntax]">
+               desc="Relative time in browsing history or file list. Use an abbreviated word for minute(s). [ICU Syntax]">
                {MINUTES, plural, =1 {1 min ago} other {# mins ago}}
       </message>
 
+      <message name="IDS_TIME_ELAPSED_LONG_MINS"
+               desc="Relative time in browsing history or file list. [ICU Syntax]">
+               {SECONDS, plural, =1 {1 minute ago} other {# minutes ago}}
+      </message>
 
       <message name="IDS_TIME_ELAPSED_HOURS"
                desc="Relative time in browsing history or file list. [ICU Syntax]">
@@ -256,6 +285,16 @@ need to be translated for each locale.-->
       <message name="IDS_TIME_ELAPSED_DAYS"
                desc="Relative time in browsing history or file list. [ICU Syntax]">
                {DAYS, plural, =1 {1 day ago} other {# days ago}}
+      </message>
+
+      <message name="IDS_TIME_ELAPSED_MONTHS"
+               desc="Relative time in browsing history or file list. [ICU Syntax]">
+               {MONTHS, plural, =1 {1 month ago} other {# months ago}}
+      </message>
+
+      <message name="IDS_TIME_ELAPSED_YEARS"
+               desc="Relative time in browsing history or file list. [ICU Syntax]">
+               {YEARS, plural, =1 {1 year ago} other {# years ago}}
       </message>
 
       <message name="IDS_PAST_TIME_TODAY" desc="Relative day today">
@@ -624,8 +663,11 @@ need to be translated for each locale.-->
         <message name="IDS_MESSAGE_CENTER_NOTIFIER_HATS_NAME" desc="The name of hats notifier that is a system component">
           Hats
         </message>
-        <message name="IDS_MESSAGE_CENTER_NOTIFIER_QUICK_UNLOCK_FEATURE_NAME" desc="The name of quick unlock feature notifier that is a system component">
-          Quick Unlock Feature
+        <message name="IDS_MESSAGE_CENTER_NOTIFIER_FINGERPRINT_UNLOCK_FEATURE_NAME" desc="The name of fingerprint unlock feature notifier that is a system component">
+          Fingerprint Unlock Feature
+        </message>
+        <message name="IDS_MESSAGE_CENTER_NOTIFIER_PIN_UNLOCK_FEATURE_NAME" desc="The name of PIN unlock feature notifier that is a system component">
+          PIN Unlock Feature
         </message>
       </if>
 
@@ -678,9 +720,6 @@ need to be translated for each locale.-->
       </message>
       <message name="IDS_DISPLAY_NAME_INTERNAL" desc="The name used for internal displays, which is shown in the display settings.">
         Internal Display
-      </message>
-      <message name="IDS_DISPLAY_NAME_VIRTUAL" desc="The name used for virtual displays, which is shown in the display settings. Virtual displays are not associated with a physical monitor.">
-        Virtual Display
       </message>
     </messages>
   </release>

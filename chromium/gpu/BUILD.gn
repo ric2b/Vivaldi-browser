@@ -107,8 +107,9 @@ static_library("test_support") {
     "command_buffer/client/gles2_interface_stub.cc",
     "command_buffer/client/gles2_interface_stub.h",
     "command_buffer/service/error_state_mock.cc",
+    "command_buffer/service/error_state_mock.h",
     "command_buffer/service/gles2_cmd_decoder_mock.cc",
-    "test_message_loop_type.h",
+    "command_buffer/service/gles2_cmd_decoder_mock.h",
   ]
 
   public_deps = [
@@ -120,9 +121,6 @@ static_library("test_support") {
     "//testing/gtest",
     "//ui/gl:gl_unittest_utils",
   ]
-  if (use_ozone) {
-    deps += [ "//ui/ozone" ]
-  }
 }
 
 test("gl_tests") {
@@ -208,6 +206,11 @@ test("gl_tests") {
     deps += [ "//ui/android:ui_java" ]
   } else if (is_mac) {
     libs += [ "IOSurface.framework" ]
+  } else if (is_win) {
+    deps += [
+      "//ui/platform_window",
+      "//ui/platform_window:platform_impls",
+    ]
   }
 }
 
@@ -225,11 +228,13 @@ test("gpu_unittests") {
     "command_buffer/client/ring_buffer_test.cc",
     "command_buffer/client/transfer_buffer_unittest.cc",
     "command_buffer/client/vertex_array_object_manager_unittest.cc",
+    "command_buffer/common/activity_flags_unittest.cc",
     "command_buffer/common/bitfield_helpers_test.cc",
     "command_buffer/common/command_buffer_mock.cc",
     "command_buffer/common/command_buffer_mock.h",
     "command_buffer/common/command_buffer_shared_test.cc",
     "command_buffer/common/debug_marker_manager_unittest.cc",
+    "command_buffer/common/discardable_handle_unittest.cc",
     "command_buffer/common/gles2_cmd_format_test.cc",
     "command_buffer/common/gles2_cmd_format_test_autogen.h",
     "command_buffer/common/gles2_cmd_utils_unittest.cc",
@@ -297,10 +302,14 @@ test("gpu_unittests") {
     "command_buffer/service/vertex_attrib_manager_unittest.cc",
     "config/gpu_blacklist_unittest.cc",
     "config/gpu_control_list_entry_unittest.cc",
-    "config/gpu_control_list_number_info_unittest.cc",
-    "config/gpu_control_list_os_info_unittest.cc",
+    "config/gpu_control_list_testing_arrays_and_structs_autogen.h",
+    "config/gpu_control_list_testing_autogen.cc",
+    "config/gpu_control_list_testing_autogen.h",
+    "config/gpu_control_list_testing_data.h",
+    "config/gpu_control_list_testing_entry_enums_autogen.h",
+    "config/gpu_control_list_testing_exceptions_autogen.h",
     "config/gpu_control_list_unittest.cc",
-    "config/gpu_control_list_version_info_unittest.cc",
+    "config/gpu_control_list_version_unittest.cc",
     "config/gpu_driver_bug_list_unittest.cc",
     "config/gpu_info_collector_unittest.cc",
     "config/gpu_info_unittest.cc",
@@ -315,6 +324,10 @@ test("gpu_unittests") {
 
   if (is_mac) {
     sources += [ "ipc/client/gpu_memory_buffer_impl_io_surface_unittest.cc" ]
+  }
+
+  if (is_linux) {
+    sources += [ "ipc/client/gpu_memory_buffer_impl_native_pixmap_unittest.cc" ]
   }
 
   configs += [
@@ -359,14 +372,13 @@ test("gpu_unittests") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
-    sources +=
-        [ "ipc/client/gpu_memory_buffer_impl_ozone_native_pixmap_unittest.cc" ]
   }
 }
 
 test("gpu_perftests") {
   sources = [
     "perftests/measurements.cc",
+    "perftests/measurements.h",
     "perftests/run_all_tests.cc",
     "perftests/texture_upload_perftest.cc",
   ]
@@ -420,6 +432,29 @@ if (is_linux) {
     ]
 
     defines = [ "GPU_FUZZER_USE_ANGLE" ]
+
+    deps = [
+      ":gpu",
+      "//base",
+      "//base/third_party/dynamic_annotations",
+      "//gpu/command_buffer/common:gles2_utils",
+      "//ui/gfx/geometry",
+      "//ui/gl",
+      "//ui/gl:test_support",
+    ]
+
+    libfuzzer_options = [ "max_len=16384" ]
+  }
+
+  fuzzer_test("gpu_angle_passthrough_fuzzer") {
+    sources = [
+      "command_buffer/tests/fuzzer_main.cc",
+    ]
+
+    defines = [
+      "GPU_FUZZER_USE_ANGLE",
+      "GPU_FUZZER_USE_PASSTHROUGH_CMD_DECODER",
+    ]
 
     deps = [
       ":gpu",

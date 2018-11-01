@@ -13,14 +13,6 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/toolchain/goma.gni")
 
-# One common error that happens is that GYP-generated headers within gen/ get
-# included rather than the GN-generated ones within gen/ subdirectories.
-# TODO(GYP_GONE): Remove once GYP is gone (as well as exec_script exception).
-assert(
-    exec_script("//build/dir_exists.py", [ "obj.host" ], "string") == "False",
-    "GYP artifacts detected in $root_build_dir.$0x0A" +
-        "You must wipe this directory before building with GN.")
-
 declare_args() {
   # When set (the default) enables C++ iterator debugging in debug builds.
   # Iterator debugging is always off in release builds (technically, this flag
@@ -65,10 +57,6 @@ config("feature_flags") {
     # TODO(brettw) should probably be "=1".
     defines += [ "USE_UDEV" ]
   }
-  if (ui_compositor_image_transport) {
-    # TODO(brettw) should probably be "=1".
-    defines += [ "UI_COMPOSITOR_IMAGE_TRANSPORT" ]
-  }
   if (use_ash) {
     defines += [ "USE_ASH=1" ]
   }
@@ -109,10 +97,7 @@ config("feature_flags") {
     defines += [ "ADDRESS_SANITIZER" ]
   }
   if (is_lsan) {
-    defines += [
-      "LEAK_SANITIZER",
-      "WTF_USE_LEAK_SANITIZER=1",
-    ]
+    defines += [ "LEAK_SANITIZER" ]
   }
   if (is_tsan) {
     defines += [
@@ -127,14 +112,8 @@ config("feature_flags") {
   if (is_ubsan || is_ubsan_null || is_ubsan_vptr || is_ubsan_security) {
     defines += [ "UNDEFINED_SANITIZER" ]
   }
-  if (use_external_popup_menu) {
-    defines += [ "USE_EXTERNAL_POPUP_MENU=1" ]
-  }
   if (!enable_nacl) {
     defines += [ "DISABLE_NACL" ]
-  }
-  if (enable_wayland_server) {
-    defines += [ "ENABLE_WAYLAND_SERVER=1" ]
   }
   if (safe_browsing_mode == 1) {
     defines += [ "FULL_SAFE_BROWSING" ]
@@ -153,9 +132,6 @@ config("feature_flags") {
   }
   if (enable_media_router) {
     defines += [ "ENABLE_MEDIA_ROUTER=1" ]
-  }
-  if (enable_webvr) {
-    defines += [ "ENABLE_WEBVR" ]
   }
   if (is_syzyasan) {
     defines += [
@@ -217,6 +193,12 @@ config("release") {
       # 1 for all .nexes.
       defines += [ "DYNAMIC_ANNOTATIONS_ENABLED=0" ]
     }
+  }
+
+  if (is_ios) {
+    # Disable NSAssert and GTMDevAssert (from Google Toolbox for Mac). This
+    # follows XCode's default behavior for Release builds.
+    defines += [ "NS_BLOCK_ASSERTIONS=1" ]
   }
 }
 
@@ -300,6 +282,9 @@ config("executable_config") {
 
   if (is_win) {
     configs += _windows_linker_configs
+
+    # Currently only turn on linker CFI for executables.
+    configs += [ "//build/config/win:cfi_linker" ]
   } else if (is_mac) {
     configs += [
       "//build/config/mac:mac_dynamic_flags",
@@ -392,7 +377,6 @@ config("precompiled_headers") {
       # precompiled configurations.
       cflags_c = [ "/wd4206" ]
     } else if (is_mac) {
-      precompiled_header = "build/precompile.h"
       precompiled_source = "//build/precompile.h"
     }
   }

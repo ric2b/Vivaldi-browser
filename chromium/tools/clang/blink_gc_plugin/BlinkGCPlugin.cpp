@@ -33,14 +33,10 @@ class BlinkGCPluginAction : public PluginASTAction {
     for (const auto& arg : args) {
       if (arg == "dump-graph") {
         options_.dump_graph = true;
-      } else if (arg == "warn-stack-allocated-trace-method") {
-        // TODO(sof): after next roll, remove this option to round out
-        // crbug.com/689874
-        continue;
       } else if (arg == "warn-unneeded-finalizer") {
         options_.warn_unneeded_finalizer = true;
       } else if (arg == "use-chromium-style-naming") {
-        options_.use_chromium_style_naming = true;
+        // TODO(dcheng): Remove this once the build no longer passes this flag.
       } else {
         llvm::errs() << "Unknown blink-gc-plugin argument: " << arg << "\n";
         return false;

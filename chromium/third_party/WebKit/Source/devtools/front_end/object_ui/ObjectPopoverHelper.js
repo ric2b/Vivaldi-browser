@@ -28,42 +28,41 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @unrestricted
- */
-ObjectUI.ObjectPopoverHelper = class extends UI.PopoverHelper {
+ObjectUI.ObjectPopoverHelper = class {
   /**
-   * @param {!Element} panelElement
-   * @param {function(!Element, !Event):(!Element|!AnchorBox|undefined)} getAnchor
-   * @param {function(!Element, function(!SDK.RemoteObject, boolean, !Element=):undefined, string):undefined} queryObject
-   * @param {function()=} onHide
-   * @param {boolean=} disableOnClick
+   * @param {?Components.Linkifier} linkifier
+   * @param {boolean} resultHighlightedAsDOM
    */
-  constructor(panelElement, getAnchor, queryObject, onHide, disableOnClick) {
-    super(panelElement, disableOnClick);
-    this.initializeCallbacks(getAnchor, this._showObjectPopover.bind(this), this._onHideObjectPopover.bind(this));
-    this._queryObject = queryObject;
-    this._onHideCallback = onHide;
-    this._popoverObjectGroup = 'popover';
-    panelElement.addEventListener('scroll', this.hidePopover.bind(this), true);
+  constructor(linkifier, resultHighlightedAsDOM) {
+    this._linkifier = linkifier;
+    this._resultHighlightedAsDOM = resultHighlightedAsDOM;
+  }
+
+  dispose() {
+    if (this._resultHighlightedAsDOM)
+      SDK.DOMModel.hideDOMNodeHighlight();
+    if (this._linkifier)
+      this._linkifier.dispose();
   }
 
   /**
-   * @param {!Element} element
-   * @param {!UI.Popover} popover
+   * @param {!SDK.RemoteObject} result
+   * @param {!UI.GlassPane} popover
+   * @return {!Promise<?ObjectUI.ObjectPopoverHelper>}
    */
-  _showObjectPopover(element, popover) {
+  static buildObjectPopover(result, popover) {
+    var fulfill;
+    var promise = new Promise(x => fulfill = x);
+
     /**
      * @param {!SDK.RemoteObject} funcObject
      * @param {!Element} popoverContentElement
      * @param {!Element} popoverValueElement
-     * @param {!Element} anchorElement
      * @param {?Array.<!SDK.RemoteObjectProperty>} properties
      * @param {?Array.<!SDK.RemoteObjectProperty>} internalProperties
-     * @this {ObjectUI.ObjectPopoverHelper}
      */
     function didGetFunctionProperties(
-        funcObject, popoverContentElement, popoverValueElement, anchorElement, properties, internalProperties) {
+        funcObject, popoverContentElement, popoverValueElement, properties, internalProperties) {
       if (internalProperties) {
         for (var i = 0; i < internalProperties.length; i++) {
           if (internalProperties[i].name === '[[TargetFunction]]') {
@@ -75,18 +74,18 @@ ObjectUI.ObjectPopoverHelper = class extends UI.PopoverHelper {
       ObjectUI.ObjectPropertiesSection.formatObjectAsFunction(funcObject, popoverValueElement, true);
       funcObject.debuggerModel()
           .functionDetailsPromise(funcObject)
-          .then(didGetFunctionDetails.bind(this, popoverContentElement, anchorElement));
+          .then(didGetFunctionDetails.bind(null, popoverContentElement));
     }
 
     /**
      * @param {!Element} popoverContentElement
-     * @param {!Element} anchorElement
      * @param {?SDK.DebuggerModel.FunctionDetails} response
-     * @this {ObjectUI.ObjectPopoverHelper}
      */
-    function didGetFunctionDetails(popoverContentElement, anchorElement, response) {
-      if (!response || this._disposed)
+    function didGetFunctionDetails(popoverContentElement, response) {
+      if (!response) {
+        fulfill(null);
         return;
+      }
 
       var container = createElementWithClass('div', 'object-popover-container');
       var title = container.createChild('div', 'function-popover-title source-code');
@@ -96,102 +95,67 @@ ObjectUI.ObjectPopoverHelper = class extends UI.PopoverHelper {
       var rawLocation = response.location;
       var linkContainer = title.createChild('div', 'function-title-link-container');
       var sourceURL = rawLocation && rawLocation.script() ? rawLocation.script().sourceURL : null;
-      if (rawLocation && sourceURL)
-        linkContainer.appendChild(this._lazyLinkifier().linkifyRawLocation(rawLocation, sourceURL));
+      var linkifier = null;
+      if (rawLocation && sourceURL) {
+        linkifier = new Components.Linkifier();
+        linkContainer.appendChild(linkifier.linkifyRawLocation(rawLocation, sourceURL));
+      }
       container.appendChild(popoverContentElement);
-      popover.showForAnchor(container, anchorElement);
+      popover.contentElement.appendChild(container);
+      fulfill(new ObjectUI.ObjectPopoverHelper(linkifier, false));
     }
 
-    /**
-     * @param {!SDK.RemoteObject} result
-     * @param {boolean} wasThrown
-     * @param {!Element=} anchorOverride
-     * @this {ObjectUI.ObjectPopoverHelper}
-     */
-    function didQueryObject(result, wasThrown, anchorOverride) {
-      if (this._disposed)
-        return;
-      if (wasThrown) {
-        this.hidePopover();
-        return;
+    var description = result.description.trimEnd(ObjectUI.ObjectPopoverHelper.MaxPopoverTextLength);
+    var popoverContentElement = null;
+    if (result.type !== 'object') {
+      popoverContentElement = createElement('span');
+      UI.appendStyle(popoverContentElement, 'object_ui/objectValue.css');
+      UI.appendStyle(popoverContentElement, 'object_ui/objectPopover.css');
+      var valueElement = popoverContentElement.createChild('span', 'monospace object-value-' + result.type);
+      valueElement.style.whiteSpace = 'pre';
+
+      if (result.type === 'string')
+        valueElement.createTextChildren('"', description, '"');
+      else if (result.type !== 'function')
+        valueElement.textContent = description;
+
+      if (result.type === 'function') {
+        result.getOwnProperties(
+            false /* generatePreview */,
+            didGetFunctionProperties.bind(null, result, popoverContentElement, valueElement));
+        return promise;
       }
-      this._objectTarget = result.target();
-      var anchorElement = anchorOverride || element;
-      var description = result.description.trimEnd(ObjectUI.ObjectPopoverHelper.MaxPopoverTextLength);
-      var popoverContentElement = null;
-      if (result.type !== 'object') {
-        popoverContentElement = createElement('span');
-        UI.appendStyle(popoverContentElement, 'object_ui/objectValue.css');
-        UI.appendStyle(popoverContentElement, 'object_ui/objectPopover.css');
-        var valueElement = popoverContentElement.createChild('span', 'monospace object-value-' + result.type);
-        valueElement.style.whiteSpace = 'pre';
+      popover.contentElement.appendChild(popoverContentElement);
+      fulfill(new ObjectUI.ObjectPopoverHelper(null, false));
+    } else {
+      var linkifier = null;
+      var resultHighlightedAsDOM = false;
+      if (result.subtype === 'node') {
+        SDK.DOMModel.highlightObjectAsDOMNode(result);
+        resultHighlightedAsDOM = true;
+      }
 
-        if (result.type === 'string')
-          valueElement.createTextChildren('"', description, '"');
-        else if (result.type !== 'function')
-          valueElement.textContent = description;
-
-        if (result.type === 'function') {
-          result.getOwnProperties(
-              false /* generatePreview */,
-              didGetFunctionProperties.bind(this, result, popoverContentElement, valueElement, anchorElement));
-          return;
-        }
-        popover.showForAnchor(popoverContentElement, anchorElement);
+      if (result.customPreview()) {
+        var customPreviewComponent = new ObjectUI.CustomPreviewComponent(result);
+        customPreviewComponent.expandIfPossible();
+        popoverContentElement = customPreviewComponent.element;
       } else {
-        if (result.subtype === 'node') {
-          SDK.DOMModel.highlightObjectAsDOMNode(result);
-          this._resultHighlightedAsDOM = true;
-        }
-
-        if (result.customPreview()) {
-          var customPreviewComponent = new ObjectUI.CustomPreviewComponent(result);
-          customPreviewComponent.expandIfPossible();
-          popoverContentElement = customPreviewComponent.element;
-        } else {
-          popoverContentElement = createElement('div');
-          UI.appendStyle(popoverContentElement, 'object_ui/objectPopover.css');
-          this._titleElement = popoverContentElement.createChild('div', 'monospace object-popover-title');
-          this._titleElement.createChild('span').textContent = description;
-          var section = new ObjectUI.ObjectPropertiesSection(result, '', this._lazyLinkifier());
-          section.element.classList.add('object-popover-tree');
-          section.titleLessMode();
-          popoverContentElement.appendChild(section.element);
-        }
-        var popoverWidth = 300;
-        var popoverHeight = 250;
-        popover.showForAnchor(popoverContentElement, anchorElement, popoverWidth, popoverHeight);
+        popoverContentElement = createElementWithClass('div', 'object-popover-content');
+        UI.appendStyle(popoverContentElement, 'object_ui/objectPopover.css');
+        var titleElement = popoverContentElement.createChild('div', 'monospace object-popover-title');
+        titleElement.createChild('span').textContent = description;
+        linkifier = new Components.Linkifier();
+        var section = new ObjectUI.ObjectPropertiesSection(result, '', linkifier);
+        section.element.classList.add('object-popover-tree');
+        section.titleLessMode();
+        popoverContentElement.appendChild(section.element);
       }
+      popover.setMaxContentSize(new UI.Size(300, 250));
+      popover.setSizeBehavior(UI.GlassPane.SizeBehavior.SetExactSize);
+      popover.contentElement.appendChild(popoverContentElement);
+      fulfill(new ObjectUI.ObjectPopoverHelper(linkifier, resultHighlightedAsDOM));
     }
-    this._disposed = false;
-    this._queryObject(element, didQueryObject.bind(this), this._popoverObjectGroup);
-  }
-
-  _onHideObjectPopover() {
-    this._disposed = true;
-    if (this._resultHighlightedAsDOM) {
-      SDK.DOMModel.hideDOMNodeHighlight();
-      delete this._resultHighlightedAsDOM;
-    }
-    if (this._linkifier) {
-      this._linkifier.dispose();
-      delete this._linkifier;
-    }
-    if (this._onHideCallback)
-      this._onHideCallback();
-    if (this._objectTarget) {
-      this._objectTarget.runtimeAgent().releaseObjectGroup(this._popoverObjectGroup);
-      delete this._objectTarget;
-    }
-  }
-
-  /**
-   * @return {!Components.Linkifier}
-   */
-  _lazyLinkifier() {
-    if (!this._linkifier)
-      this._linkifier = new Components.Linkifier();
-    return this._linkifier;
+    return promise;
   }
 };
 

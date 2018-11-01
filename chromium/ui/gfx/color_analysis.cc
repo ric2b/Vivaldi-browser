@@ -10,9 +10,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <map>
 #include <memory>
 #include <queue>
+#include <unordered_map>
 #include <vector>
 
 #include "base/logging.h"
@@ -254,7 +254,7 @@ class ColorBox {
   // Returns the average color of this box, weighted by its popularity in
   // |color_counts|.
   WeightedColor GetWeightedAverageColor(
-      const std::map<SkColor, int>& color_counts) const {
+      const std::unordered_map<SkColor, int>& color_counts) const {
     uint64_t sum_r = 0;
     uint64_t sum_g = 0;
     uint64_t sum_b = 0;
@@ -366,11 +366,18 @@ SkColor CalculateProminentColor(const SkBitmap& bitmap,
 
   SkAutoLockPixels auto_lock(bitmap);
   const uint32_t* pixels = static_cast<uint32_t*>(bitmap.getPixels());
-  int pixel_count = bitmap.width() * bitmap.height();
-  std::map<SkColor, int> color_counts;
+  const int pixel_count = bitmap.width() * bitmap.height();
+
+  // For better performance, only consider at most 10k pixels (evenly
+  // distributed throughout the image). This has a very minor impact on the
+  // outcome but improves runtime substantially for large images. 10,007 is a
+  // prime number to reduce the chance of picking an unrepresentative sample.
+  constexpr int kMaxConsideredPixels = 10007;
+  const int pixel_increment = std::max(1, pixel_count / kMaxConsideredPixels);
+  std::unordered_map<SkColor, int> color_counts(kMaxConsideredPixels);
 
   // First extract all colors into counts.
-  for (int i = 0; i < pixel_count; ++i) {
+  for (int i = 0; i < pixel_count; i += pixel_increment) {
     // SkBitmap uses pre-multiplied alpha but the prominent color algorithm
     // needs non-pre-multiplied alpha.
     const SkColor pixel = SkUnPreMultiply::PMColorToColor(pixels[i]);

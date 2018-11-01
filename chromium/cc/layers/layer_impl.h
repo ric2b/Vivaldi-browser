@@ -18,9 +18,10 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "cc/base/cc_export.h"
 #include "cc/base/region.h"
 #include "cc/base/synced_property.h"
+#include "cc/cc_export.h"
+#include "cc/debug/layer_tree_debug_state.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/draw_properties.h"
 #include "cc/layers/layer_collections.h"
@@ -51,6 +52,7 @@ class DictionaryValue;
 
 namespace cc {
 
+class AppendQuadsData;
 class LayerTreeImpl;
 class MicroBenchmarkImpl;
 class MutatorHost;
@@ -60,7 +62,6 @@ class ScrollbarLayerImplBase;
 class SimpleEnclosedRegion;
 class Tile;
 
-struct AppendQuadsData;
 
 enum DrawMode {
   DRAW_MODE_NONE,
@@ -85,8 +86,6 @@ class CC_EXPORT LayerImpl {
 
   // Interactions with attached animations.
   gfx::ScrollOffset ScrollOffsetForAnimation() const;
-  void OnIsAnimatingChanged(const PropertyAnimationState& mask,
-                            const PropertyAnimationState& state);
   bool IsActive() const;
 
   void set_property_tree_sequence_number(int sequence_number) {}
@@ -120,7 +119,6 @@ class CC_EXPORT LayerImpl {
 
   bool is_clipped() const { return draw_properties_.is_clipped; }
 
-  void UpdatePropertyTreeTransformIsAnimated(bool is_animated);
   void UpdatePropertyTreeScrollOffset();
 
   LayerTreeImpl* layer_tree_impl() const { return layer_tree_impl_; }
@@ -190,11 +188,6 @@ class CC_EXPORT LayerImpl {
   void SetMutableProperties(uint32_t properties);
   uint32_t mutable_properties() const { return mutable_properties_; }
 
-  void set_draw_blend_mode(SkBlendMode blend_mode) {
-    draw_blend_mode_ = blend_mode;
-  }
-  SkBlendMode draw_blend_mode() const { return draw_blend_mode_; }
-
   void SetPosition(const gfx::PointF& position);
   gfx::PointF position() const { return position_; }
 
@@ -225,8 +218,11 @@ class CC_EXPORT LayerImpl {
     return should_check_backface_visibility_;
   }
 
-  bool ShowDebugBorders() const;
+  bool ShowDebugBorders(DebugBorderType type) const;
 
+  // TODO(http://crbug.com/557160): Currently SPv2 creates dummy layers for the
+  // sole purpose of representing a render surface. Once that dependency is
+  // removed, also remove dummy layers from PaintArtifactCompositor.
   RenderSurfaceImpl* GetRenderSurface() const;
 
   // The render surface which this layer draws into. This can be either owned by
@@ -416,8 +412,6 @@ class CC_EXPORT LayerImpl {
 
   void UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
 
-  bool IsHidden() const;
-
   float GetIdealContentsScale() const;
 
   bool was_ever_ready_since_last_transform_animation() const {
@@ -435,18 +429,14 @@ class CC_EXPORT LayerImpl {
     return has_will_change_transform_hint_;
   }
 
-  void SetPreferredRasterBounds(const gfx::Size& preferred_raster_bounds);
-  bool has_preferred_raster_bounds() const {
-    return has_preferred_raster_bounds_;
-  }
-  const gfx::Size& preferred_raster_scale() const {
-    return preferred_raster_bounds_;
-  }
-  void ClearPreferredRasterBounds();
-
   MutatorHost* GetMutatorHost() const;
 
   ElementListType GetElementTypeForAnimation() const;
+
+  void set_needs_show_scrollbars(bool yes) { needs_show_scrollbars_ = yes; }
+  bool needs_show_scrollbars() { return needs_show_scrollbars_; }
+
+  bool HasValidPropertyTreeIndices() const;
 
  protected:
   LayerImpl(LayerTreeImpl* layer_impl,
@@ -520,7 +510,6 @@ class CC_EXPORT LayerImpl {
   SkColor background_color_;
   SkColor safe_opaque_background_color_;
 
-  SkBlendMode draw_blend_mode_;
   gfx::PointF position_;
 
   gfx::Rect clip_rect_in_target_space_;
@@ -536,6 +525,7 @@ class CC_EXPORT LayerImpl {
 
  private:
   PropertyTrees* GetPropertyTrees() const;
+  ClipTree& GetClipTree() const;
   EffectTree& GetEffectTree() const;
   ScrollTree& GetScrollTree() const;
   TransformTree& GetTransformTree() const;
@@ -559,17 +549,15 @@ class CC_EXPORT LayerImpl {
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
       owned_debug_info_;
   base::trace_event::ConvertableToTraceFormat* debug_info_;
-  // TODO(http://crbug.com/557160): EffectNode instead of LayerImpl should
-  // own RenderSurfaceImpl. Currently SPv2 creates dummy layers for the sole
-  // purpose of holding a render surface. Once done, remember to remove dummy
-  // layers from PaintArtifactCompositor as well
-  std::unique_ptr<RenderSurfaceImpl> render_surface_;
-  gfx::Size preferred_raster_bounds_;
 
-  bool has_preferred_raster_bounds_ : 1;
   bool has_will_change_transform_hint_ : 1;
   bool needs_push_properties_ : 1;
   bool scrollbars_hidden_ : 1;
+
+  // The needs_show_scrollbars_ bit tracks a pending request from Blink to show
+  // the overlay scrollbars. It's set on the scroll layer (not the scrollbar
+  // layers) and consumed by LayerTreeImpl::PushPropertiesTo during activation.
+  bool needs_show_scrollbars_ : 1;
 
   DISALLOW_COPY_AND_ASSIGN(LayerImpl);
 };

@@ -5,11 +5,10 @@
 #import "ios/web/interstitials/web_interstitial_impl.h"
 
 #include "base/logging.h"
-#include "ios/web/interstitials/web_interstitial_facade_delegate.h"
-#import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #import "ios/web/public/interstitials/web_interstitial_delegate.h"
 #import "ios/web/public/navigation_manager.h"
+#include "ios/web/public/reload_type.h"
 #import "ios/web/web_state/web_state_impl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -29,7 +28,6 @@ WebInterstitialImpl::WebInterstitialImpl(WebStateImpl* web_state,
     : WebStateObserver(web_state),
       navigation_manager_(&web_state->GetNavigationManagerImpl()),
       url_(url),
-      facade_delegate_(nullptr),
       new_navigation_(new_navigation),
       action_taken_(false) {
   DCHECK(web_state);
@@ -37,21 +35,10 @@ WebInterstitialImpl::WebInterstitialImpl(WebStateImpl* web_state,
 
 WebInterstitialImpl::~WebInterstitialImpl() {
   Hide();
-  if (facade_delegate_)
-    facade_delegate_->WebInterstitialDestroyed();
 }
 
 const GURL& WebInterstitialImpl::GetUrl() const {
   return url_;
-}
-
-void WebInterstitialImpl::SetFacadeDelegate(
-    WebInterstitialFacadeDelegate* facade_delegate) {
-  facade_delegate_ = facade_delegate;
-}
-
-WebInterstitialFacadeDelegate* WebInterstitialImpl::GetFacadeDelegate() const {
-  return facade_delegate_;
 }
 
 void WebInterstitialImpl::Show() {
@@ -59,12 +46,9 @@ void WebInterstitialImpl::Show() {
   GetWebStateImpl()->ShowWebInterstitial(this);
 
   if (new_navigation_) {
-    // TODO(stuartmorgan): Plumb transient entry handling through
-    // NavigationManager, and remove the NavigationManagerImpl and
-    // SessionController usage here.
-    CRWSessionController* sessionController =
-        navigation_manager_->GetSessionController();
-    [sessionController addTransientItemWithURL:url_];
+    // TODO(crbug.com/706578): Plumb transient entry handling through
+    // NavigationManager, and remove the NavigationManagerImpl usage here.
+    navigation_manager_->AddTransientItem(url_);
 
     // Give delegates a chance to set some states on the navigation item.
     GetDelegate()->OverrideItem(navigation_manager_->GetTransientItem());
@@ -83,18 +67,11 @@ void WebInterstitialImpl::DontProceed() {
 
   // Clear the pending entry, since that's the page that's not being
   // proceeded to.
-  NavigationManager* nav_manager = GetWebStateImpl()->GetNavigationManager();
-  nav_manager->DiscardNonCommittedItems();
+  GetWebStateImpl()->GetNavigationManager()->DiscardNonCommittedItems();
 
   Hide();
 
   GetDelegate()->OnDontProceed();
-
-  NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
-  if (![user_defaults boolForKey:@"PendingIndexNavigationDisabled"]) {
-    // Reload last committed entry.
-    nav_manager->Reload(true /* check_for_repost */);
-  }
 
   delete this;
 }

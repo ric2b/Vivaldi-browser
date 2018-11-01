@@ -19,7 +19,7 @@
 
 namespace cronet {
 
-TEST(URLRequestContextConfigTest, TestExperimentalOptionPassing) {
+TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   URLRequestContextConfig config(
       // Enable QUIC.
       true,
@@ -50,10 +50,11 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionPassing) {
       "\"race_cert_verification\":true,"
       "\"connection_options\":\"TIME,TBBR,REJ\"},"
       "\"AsyncDNS\":{\"enable\":true},"
+      "\"UnknownOption\":{\"foo\":true},"
       "\"HostResolverRules\":{\"host_resolver_rules\":"
       "\"MAP * 127.0.0.1\"},"
       // See http://crbug.com/696569.
-      "\"disable_ipv6\":true}",
+      "\"disable_ipv6_on_wifi\":true}",
       // Data reduction proxy key.
       "",
       // Data reduction proxy.
@@ -75,6 +76,7 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionPassing) {
   net::URLRequestContextBuilder builder;
   net::NetLog net_log;
   config.ConfigureURLRequestContextBuilder(&builder, &net_log, nullptr);
+  EXPECT_FALSE(config.effective_experimental_options->HasKey("UnknownOption"));
   // Set a ProxyConfigService to avoid DCHECK failure when building.
   builder.set_proxy_config_service(
       base::MakeUnique<net::ProxyConfigServiceFixed>(
@@ -113,9 +115,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionPassing) {
   // Check AsyncDNS resolver is enabled.
   EXPECT_TRUE(context->host_resolver()->GetDnsConfigAsValue());
 
-  // Check IPv6 is disabled.
-  EXPECT_EQ(net::ADDRESS_FAMILY_IPV4,
-            context->host_resolver()->GetDefaultAddressFamily());
+  // Check IPv6 is disabled when on wifi.
+  EXPECT_TRUE(context->host_resolver()->GetNoIPv6OnWifi());
 
   net::HostResolver::RequestInfo info(net::HostPortPair("abcde", 80));
   net::AddressList addresses;

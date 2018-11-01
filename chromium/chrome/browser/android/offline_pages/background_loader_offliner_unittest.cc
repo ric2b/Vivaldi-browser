@@ -94,10 +94,10 @@ class TestBackgroundLoaderOffliner : public BackgroundLoaderOffliner {
 
   content::WebContents* web_contents() { return stub_->web_contents(); }
 
-  bool is_loading() { return stub_->is_loading(); }
+  bool is_loading() { return loader_ && stub_->is_loading(); }
 
  protected:
-  void ResetState() override;
+  void ResetLoader() override;
 
  private:
   background_loader::BackgroundLoaderContentsStub* stub_;
@@ -111,11 +111,9 @@ TestBackgroundLoaderOffliner::TestBackgroundLoaderOffliner(
 
 TestBackgroundLoaderOffliner::~TestBackgroundLoaderOffliner() {}
 
-void TestBackgroundLoaderOffliner::ResetState() {
-  pending_request_.reset();
+void TestBackgroundLoaderOffliner::ResetLoader() {
   stub_ = new background_loader::BackgroundLoaderContentsStub(browser_context_);
   loader_.reset(stub_);
-  content::WebContentsObserver::Observe(stub_->web_contents());
 }
 
 class BackgroundLoaderOfflinerTest : public testing::Test {
@@ -147,13 +145,21 @@ class BackgroundLoaderOfflinerTest : public testing::Test {
   const base::HistogramTester& histograms() const { return histogram_tester_; }
   int64_t progress() { return progress_; }
 
-  void CompleteLoading() {
-    // For some reason, setting loading to True will call DidStopLoading
-    // on the observers.
-    offliner()->web_contents_tester()->TestSetIsLoading(true);
-  }
-
   void PumpLoop() { base::RunLoop().RunUntilIdle(); }
+
+  void CompleteLoading() {
+    // Reset snapshot controller.
+    std::unique_ptr<SnapshotController> snapshot_controller(
+        new SnapshotController(base::ThreadTaskRunnerHandle::Get(),
+                               offliner_.get(),
+                               0L /* DelayAfterDocumentAvailable */,
+                               0L /* DelayAfterDocumentOnLoad */,
+                               false /* DocumentAvailableTriggersSnapshot */));
+    offliner_->SetSnapshotControllerForTest(std::move(snapshot_controller));
+    // Call complete loading.
+    offliner()->DocumentOnLoadCompletedInMainFrame();
+    PumpLoop();
+  }
 
  private:
   void OnCompletion(const SavePageRequest& request,
@@ -185,7 +191,6 @@ BackgroundLoaderOfflinerTest::~BackgroundLoaderOfflinerTest() {}
 void BackgroundLoaderOfflinerTest::SetUp() {
   model_ = new MockOfflinePageModel();
   offliner_.reset(new TestBackgroundLoaderOffliner(profile(), nullptr, model_));
-  offliner_->SetPageDelayForTest(0L);
 }
 
 void BackgroundLoaderOfflinerTest::OnCompletion(
@@ -433,11 +438,35 @@ TEST_F(BackgroundLoaderOfflinerTest, FailsOnErrorPage) {
       "OfflinePages.Background.BackgroundLoadingFailedCode.async_loading",
       105,  // ERR_NAME_NOT_RESOLVED
       1);
-  offliner()->DidStopLoading();
+  CompleteLoading();
   PumpLoop();
 
   EXPECT_TRUE(completion_callback_called());
-  EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED_NO_RETRY, request_status());
+  EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED, request_status());
+}
+
+TEST_F(BackgroundLoaderOfflinerTest, NoNextOnInternetDisconnected) {
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
+                          kUserRequested);
+  EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
+                                      progress_callback()));
+
+  // Create handle with net error code.
+  // Called after calling LoadAndSave so we have web_contents to work with.
+  std::unique_ptr<content::NavigationHandle> handle(
+      content::NavigationHandle::CreateNavigationHandleForTesting(
+          kHttpUrl, offliner()->web_contents()->GetMainFrame(), true,
+          net::Error::ERR_INTERNET_DISCONNECTED));
+  // Call DidFinishNavigation with handle that contains error.
+  offliner()->DidFinishNavigation(handle.get());
+  // NavigationHandle is always destroyed after finishing navigation.
+  handle.reset();
+  CompleteLoading();
+  PumpLoop();
+
+  EXPECT_TRUE(completion_callback_called());
+  EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED_NO_NEXT, request_status());
 }
 
 TEST_F(BackgroundLoaderOfflinerTest, OnlySavesOnceOnMultipleLoads) {
@@ -449,7 +478,7 @@ TEST_F(BackgroundLoaderOfflinerTest, OnlySavesOnceOnMultipleLoads) {
   // First load
   CompleteLoading();
   // Second load
-  offliner()->DidStopLoading();
+  CompleteLoading();
   PumpLoop();
   model()->CompleteSavingAsSuccess();
   PumpLoop();

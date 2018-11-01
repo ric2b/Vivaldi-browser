@@ -10,8 +10,9 @@ namespace blink {
 
 const CSSValue* CSSPropertyAPIStrokeMiterlimit::parseSingleValue(
     CSSParserTokenRange& range,
-    const CSSParserContext* context) {
-  return CSSPropertyParserHelpers::consumeNumber(range, ValueRangeNonNegative);
+    const CSSParserContext& context,
+    CSSPropertyID) {
+  return CSSPropertyParserHelpers::ConsumeNumber(range, kValueRangeNonNegative);
 }
 
 }  // namespace blink

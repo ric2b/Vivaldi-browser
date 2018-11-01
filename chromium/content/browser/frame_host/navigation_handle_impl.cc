@@ -14,6 +14,7 @@
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/frame_host/ancestor_throttle.h"
 #include "content/browser/frame_host/debug_urls.h"
+#include "content/browser/frame_host/form_submission_throttle.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/mixed_content_navigation_throttle.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
@@ -64,11 +65,13 @@ std::unique_ptr<NavigationHandleImpl> NavigationHandleImpl::Create(
     bool is_same_page,
     const base::TimeTicks& navigation_start,
     int pending_nav_entry_id,
-    bool started_from_context_menu) {
+    bool started_from_context_menu,
+    CSPDisposition should_check_main_world_csp,
+    bool is_form_submission) {
   return std::unique_ptr<NavigationHandleImpl>(new NavigationHandleImpl(
       url, redirect_chain, frame_tree_node, is_renderer_initiated, is_same_page,
-      navigation_start, pending_nav_entry_id,
-      started_from_context_menu));
+      navigation_start, pending_nav_entry_id, started_from_context_menu,
+      should_check_main_world_csp, is_form_submission));
 }
 
 NavigationHandleImpl::NavigationHandleImpl(
@@ -79,7 +82,9 @@ NavigationHandleImpl::NavigationHandleImpl(
     bool is_same_page,
     const base::TimeTicks& navigation_start,
     int pending_nav_entry_id,
-    bool started_from_context_menu)
+    bool started_from_context_menu,
+    CSPDisposition should_check_main_world_csp,
+    bool is_form_submission)
     : url_(url),
       has_user_gesture_(false),
       transition_(ui::PAGE_TRANSITION_LINK),
@@ -101,7 +106,8 @@ NavigationHandleImpl::NavigationHandleImpl(
       navigation_start_(navigation_start),
       pending_nav_entry_id_(pending_nav_entry_id),
       request_context_type_(REQUEST_CONTEXT_TYPE_UNSPECIFIED),
-      mixed_content_context_type_(blink::WebMixedContentContextType::Blockable),
+      mixed_content_context_type_(
+          blink::WebMixedContentContextType::kBlockable),
       should_replace_current_entry_(false),
       redirect_chain_(redirect_chain),
       is_download_(false),
@@ -110,6 +116,8 @@ NavigationHandleImpl::NavigationHandleImpl(
       reload_type_(ReloadType::NONE),
       restore_type_(RestoreType::NONE),
       navigation_type_(NAVIGATION_TYPE_UNKNOWN),
+      should_check_main_world_csp_(should_check_main_world_csp),
+      is_form_submission_(is_form_submission),
       weak_factory_(this) {
   DCHECK(!navigation_start.is_null());
   if (redirect_chain_.empty())
@@ -266,7 +274,7 @@ RenderFrameHostImpl* NavigationHandleImpl::GetRenderFrameHost() {
   return render_frame_host_;
 }
 
-bool NavigationHandleImpl::IsSamePage() {
+bool NavigationHandleImpl::IsSameDocument() {
   return is_same_page_;
 }
 
@@ -379,7 +387,7 @@ NavigationHandleImpl::CallWillStartRequestForTesting(
   WillStartRequest(method, resource_request_body, sanitized_referrer,
                    has_user_gesture, transition, is_external_protocol,
                    REQUEST_CONTEXT_TYPE_LOCATION,
-                   blink::WebMixedContentContextType::Blockable,
+                   blink::WebMixedContentContextType::kBlockable,
                    base::Bind(&UpdateThrottleCheckResult, &result));
 
   // Reset the callback to ensure it will not be called later.
@@ -436,7 +444,7 @@ void NavigationHandleImpl::CallDidCommitNavigationForTesting(const GURL& url) {
   params.searchable_form_encoding = std::string();
   params.did_create_new_entry = false;
   params.gesture = NavigationGestureUser;
-  params.was_within_same_page = false;
+  params.was_within_same_document = false;
   params.method = "GET";
   params.page_state = PageState::CreateFromURL(url);
   params.contents_mime_type = std::string("text/html");
@@ -463,6 +471,10 @@ ReloadType NavigationHandleImpl::GetReloadType() {
 
 RestoreType NavigationHandleImpl::GetRestoreType() {
   return restore_type_;
+}
+
+const GURL& NavigationHandleImpl::GetBaseURLForDataURL() {
+  return base_url_for_data_url_;
 }
 
 NavigationData* NavigationHandleImpl::GetNavigationData() {
@@ -630,7 +642,7 @@ void NavigationHandleImpl::ReadyToCommitNavigation(
   render_frame_host_ = render_frame_host;
   state_ = READY_TO_COMMIT;
 
-  if (!IsRendererDebugURL(url_) && !IsSamePage())
+  if (!IsRendererDebugURL(url_) && !IsSameDocument())
     GetDelegate()->ReadyToCommitNavigation(this);
 }
 
@@ -704,9 +716,9 @@ NavigationHandleImpl::CheckWillStartRequest() {
       case NavigationThrottle::PROCEED:
         continue;
 
+      case NavigationThrottle::BLOCK_REQUEST:
       case NavigationThrottle::CANCEL:
       case NavigationThrottle::CANCEL_AND_IGNORE:
-      case NavigationThrottle::BLOCK_REQUEST:
         state_ = CANCELING;
         return result;
 
@@ -736,6 +748,9 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
       case NavigationThrottle::PROCEED:
         continue;
 
+      case NavigationThrottle::BLOCK_REQUEST:
+        CHECK(IsBrowserSideNavigationEnabled())
+            << "BLOCK_REQUEST must not be used on redirect without PlzNavigate";
       case NavigationThrottle::CANCEL:
       case NavigationThrottle::CANCEL_AND_IGNORE:
         state_ = CANCELING;
@@ -746,7 +761,6 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
         next_index_ = i + 1;
         return result;
 
-      case NavigationThrottle::BLOCK_REQUEST:
       case NavigationThrottle::BLOCK_RESPONSE:
         NOTREACHED();
     }
@@ -893,6 +907,11 @@ void NavigationHandleImpl::RunCompleteCallback(
   ThrottleChecksFinishedCallback callback = complete_callback_;
   complete_callback_.Reset();
 
+  if (!complete_callback_for_testing_.is_null()) {
+    complete_callback_for_testing_.Run(result);
+    complete_callback_for_testing_.Reset();
+  }
+
   if (!callback.is_null())
     callback.Run(result);
 
@@ -911,6 +930,20 @@ void NavigationHandleImpl::RegisterNavigationThrottles() {
   std::vector<std::unique_ptr<NavigationThrottle>> throttles_to_register =
       GetDelegate()->CreateThrottlesForNavigation(this);
 
+  std::unique_ptr<content::NavigationThrottle> ancestor_throttle =
+      content::AncestorThrottle::MaybeCreateThrottleFor(this);
+  if (ancestor_throttle)
+    throttles_.push_back(std::move(ancestor_throttle));
+
+  std::unique_ptr<content::NavigationThrottle> form_submission_throttle =
+      content::FormSubmissionThrottle::MaybeCreateThrottleFor(this);
+  if (form_submission_throttle)
+    throttles_.push_back(std::move(form_submission_throttle));
+
+  // Check for mixed content. This is done after the AncestorThrottle and the
+  // FormSubmissionThrottle so that when folks block mixed content with a CSP
+  // policy, they don't get a warning. They'll still get a warning in the
+  // console about CSP blocking the load.
   std::unique_ptr<NavigationThrottle> mixed_content_throttle =
       MixedContentNavigationThrottle::CreateThrottleForNavigation(this);
   if (mixed_content_throttle)
@@ -925,11 +958,6 @@ void NavigationHandleImpl::RegisterNavigationThrottles() {
       ClearSiteDataThrottle::CreateThrottleForNavigation(this);
   if (clear_site_data_throttle)
     throttles_to_register.push_back(std::move(clear_site_data_throttle));
-
-  std::unique_ptr<content::NavigationThrottle> ancestor_throttle =
-      content::AncestorThrottle::MaybeCreateThrottleFor(this);
-  if (ancestor_throttle)
-    throttles_.push_back(std::move(ancestor_throttle));
 
   throttles_.insert(throttles_.begin(),
                     std::make_move_iterator(throttles_to_register.begin()),

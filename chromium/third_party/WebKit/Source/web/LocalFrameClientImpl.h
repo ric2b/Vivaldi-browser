@@ -35,8 +35,8 @@
 #include "core/frame/LocalFrameClient.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
-#include "wtf/RefPtr.h"
 
 #include <memory>
 
@@ -47,181 +47,176 @@ class WebLocalFrameImpl;
 
 class LocalFrameClientImpl final : public LocalFrameClient {
  public:
-  static LocalFrameClientImpl* create(WebLocalFrameImpl*);
+  static LocalFrameClientImpl* Create(WebLocalFrameImpl*);
 
   ~LocalFrameClientImpl() override;
 
   DECLARE_VIRTUAL_TRACE();
 
-  WebLocalFrameImpl* webFrame() const { return m_webFrame.get(); }
+  WebLocalFrameImpl* GetWebFrame() const { return web_frame_.Get(); }
 
   // LocalFrameClient ----------------------------------------------
 
-  void didCreateNewDocument() override;
+  void DidCreateNewDocument() override;
   // Notifies the WebView delegate that the JS window object has been cleared,
   // giving it a chance to bind native objects to the window before script
   // parsing begins.
-  void dispatchDidClearWindowObjectInMainWorld() override;
-  void documentElementAvailable() override;
-  void runScriptsAtDocumentElementAvailable() override;
-  void runScriptsAtDocumentReady(bool documentIsEmpty) override;
+  void DispatchDidClearWindowObjectInMainWorld() override;
+  void DocumentElementAvailable() override;
+  void RunScriptsAtDocumentElementAvailable() override;
+  void RunScriptsAtDocumentReady(bool document_is_empty) override;
+  void RunScriptsAtDocumentIdle() override;
 
-  void didCreateScriptContext(v8::Local<v8::Context>, int worldId) override;
-  void willReleaseScriptContext(v8::Local<v8::Context>, int worldId) override;
+  void DidCreateScriptContext(v8::Local<v8::Context>, int world_id) override;
+  void WillReleaseScriptContext(v8::Local<v8::Context>, int world_id) override;
 
   // Returns true if we should allow register V8 extensions to be added.
-  bool allowScriptExtensions() override;
+  bool AllowScriptExtensions() override;
 
-  bool hasWebView() const override;
-  bool inShadowTree() const override;
-  Frame* opener() const override;
-  void setOpener(Frame*) override;
-  Frame* parent() const override;
-  Frame* top() const override;
-  Frame* nextSibling() const override;
-  Frame* firstChild() const override;
-  void willBeDetached() override;
-  void detached(FrameDetachType) override;
-  void dispatchWillSendRequest(ResourceRequest&) override;
-  void dispatchDidReceiveResponse(const ResourceResponse&) override;
-  void dispatchDidLoadResourceFromMemoryCache(const ResourceRequest&,
+  bool HasWebView() const override;
+  bool InShadowTree() const override;
+  Frame* Opener() const override;
+  void SetOpener(Frame*) override;
+  Frame* Parent() const override;
+  Frame* Top() const override;
+  Frame* NextSibling() const override;
+  Frame* FirstChild() const override;
+  void WillBeDetached() override;
+  void Detached(FrameDetachType) override;
+  void DispatchWillSendRequest(ResourceRequest&) override;
+  void DispatchDidReceiveResponse(const ResourceResponse&) override;
+  void DispatchDidLoadResourceFromMemoryCache(const ResourceRequest&,
                                               const ResourceResponse&) override;
-  void dispatchDidHandleOnloadEvents() override;
-  void dispatchDidReceiveServerRedirectForProvisionalLoad() override;
-  void dispatchDidNavigateWithinPage(HistoryItem*,
+  void DispatchDidHandleOnloadEvents() override;
+  void DispatchDidReceiveServerRedirectForProvisionalLoad() override;
+  void DispatchDidNavigateWithinPage(HistoryItem*,
                                      HistoryCommitType,
-                                     bool contentInitiated) override;
-  void dispatchWillCommitProvisionalLoad() override;
-  void dispatchDidStartProvisionalLoad(DocumentLoader*) override;
-  void dispatchDidReceiveTitle(const String&) override;
-  void dispatchDidChangeIcons(IconType) override;
-  void dispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override;
-  void dispatchDidFailProvisionalLoad(const ResourceError&,
+                                     bool content_initiated) override;
+  void DispatchWillCommitProvisionalLoad() override;
+  void DispatchDidStartProvisionalLoad(DocumentLoader*,
+                                       ResourceRequest&) override;
+  void DispatchDidReceiveTitle(const String&) override;
+  void DispatchDidChangeIcons(IconType) override;
+  void DispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override;
+  void DispatchDidFailProvisionalLoad(const ResourceError&,
                                       HistoryCommitType) override;
-  void dispatchDidFailLoad(const ResourceError&, HistoryCommitType) override;
-  void dispatchDidFinishDocumentLoad() override;
-  void dispatchDidFinishLoad() override;
+  void DispatchDidFailLoad(const ResourceError&, HistoryCommitType) override;
+  void DispatchDidFinishDocumentLoad() override;
+  void DispatchDidFinishLoad() override;
 
-  void dispatchDidChangeThemeColor() override;
-  NavigationPolicy decidePolicyForNavigation(const ResourceRequest&,
-                                             DocumentLoader*,
-                                             NavigationType,
-                                             NavigationPolicy,
-                                             bool shouldReplaceCurrentEntry,
-                                             bool isClientRedirect,
-                                             HTMLFormElement*) override;
-  void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
-  void dispatchWillSubmitForm(HTMLFormElement*) override;
-  void didStartLoading(LoadStartType) override;
-  void didStopLoading() override;
-  void progressEstimateChanged(double progressEstimate) override;
-  void loadURLExternally(const ResourceRequest&,
+  void DispatchDidChangeThemeColor() override;
+  NavigationPolicy DecidePolicyForNavigation(
+      const ResourceRequest&,
+      DocumentLoader*,
+      NavigationType,
+      NavigationPolicy,
+      bool should_replace_current_entry,
+      bool is_client_redirect,
+      HTMLFormElement*,
+      ContentSecurityPolicyDisposition should_bypass_main_world_csp) override;
+  void DispatchWillSendSubmitEvent(HTMLFormElement*) override;
+  void DispatchWillSubmitForm(HTMLFormElement*) override;
+  void DidStartLoading(LoadStartType) override;
+  void DidStopLoading() override;
+  void ProgressEstimateChanged(double progress_estimate) override;
+  void LoadURLExternally(const ResourceRequest&,
                          NavigationPolicy,
-                         const String& suggestedName,
-                         bool shouldReplaceCurrentEntry) override;
-  void loadErrorPage(int reason) override;
-  bool navigateBackForward(int offset) const override;
-  void didAccessInitialDocument() override;
-  void didDisplayInsecureContent() override;
-  void didRunInsecureContent(SecurityOrigin*, const KURL& insecureURL) override;
-  void didDetectXSS(const KURL&, bool didBlockEntirePage) override;
-  void didDispatchPingLoader(const KURL&) override;
-  void didDisplayContentWithCertificateErrors(const KURL&) override;
-  void didRunContentWithCertificateErrors(const KURL&) override;
-  void didChangePerformanceTiming() override;
-  void didObserveLoadingBehavior(WebLoadingBehaviorFlag) override;
-  void selectorMatchChanged(const Vector<String>& addedSelectors,
-                            const Vector<String>& removedSelectors) override;
-  DocumentLoader* createDocumentLoader(LocalFrame*,
+                         const String& suggested_name,
+                         bool should_replace_current_entry) override;
+  void LoadErrorPage(int reason) override;
+  bool NavigateBackForward(int offset) const override;
+  void DidAccessInitialDocument() override;
+  void DidDisplayInsecureContent() override;
+  void DidContainInsecureFormAction() override;
+  void DidRunInsecureContent(SecurityOrigin*,
+                             const KURL& insecure_url) override;
+  void DidDetectXSS(const KURL&, bool did_block_entire_page) override;
+  void DidDispatchPingLoader(const KURL&) override;
+  void DidDisplayContentWithCertificateErrors(const KURL&) override;
+  void DidRunContentWithCertificateErrors(const KURL&) override;
+  void DidChangePerformanceTiming() override;
+  void DidObserveLoadingBehavior(WebLoadingBehaviorFlag) override;
+  void SelectorMatchChanged(const Vector<String>& added_selectors,
+                            const Vector<String>& removed_selectors) override;
+  DocumentLoader* CreateDocumentLoader(LocalFrame*,
                                        const ResourceRequest&,
                                        const SubstituteData&,
                                        ClientRedirectPolicy) override;
-  WTF::String userAgent() override;
-  WTF::String doNotTrackValue() override;
-  void transitionToCommittedForNewPage() override;
-  LocalFrame* createFrame(const FrameLoadRequest&,
+  WTF::String UserAgent() override;
+  WTF::String DoNotTrackValue() override;
+  void TransitionToCommittedForNewPage() override;
+  LocalFrame* CreateFrame(const FrameLoadRequest&,
                           const WTF::AtomicString& name,
                           HTMLFrameOwnerElement*) override;
-  virtual bool canCreatePluginWithoutRenderer(const String& mimeType) const;
-  FrameViewBase* createPlugin(HTMLPlugInElement*,
-                              const KURL&,
-                              const Vector<WTF::String>&,
-                              const Vector<WTF::String>&,
-                              const WTF::String&,
-                              bool loadManually,
-                              DetachedPluginPolicy) override;
-  std::unique_ptr<WebMediaPlayer> createWebMediaPlayer(
+  virtual bool CanCreatePluginWithoutRenderer(const String& mime_type) const;
+  PluginView* CreatePlugin(HTMLPlugInElement*,
+                           const KURL&,
+                           const Vector<WTF::String>&,
+                           const Vector<WTF::String>&,
+                           const WTF::String&,
+                           bool load_manually,
+                           DetachedPluginPolicy) override;
+  std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient*) override;
-  WebRemotePlaybackClient* createWebRemotePlaybackClient(
+  WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) override;
-  ObjectContentType getObjectContentType(
+  ObjectContentType GetObjectContentType(
       const KURL&,
-      const WTF::String& mimeType,
-      bool shouldPreferPlugInsForImages) override;
-  void didChangeScrollOffset() override;
-  void didUpdateCurrentHistoryItem() override;
-  bool allowScript(bool enabledPerSettings) override;
-  bool allowScriptFromSource(bool enabledPerSettings,
-                             const KURL& scriptURL) override;
-  bool allowPlugins(bool enabledPerSettings) override;
-  bool allowImage(bool enabledPerSettings, const KURL& imageURL) override;
-  bool allowRunningInsecureContent(bool enabledPerSettings,
-                                   SecurityOrigin*,
-                                   const KURL&) override;
-  bool allowAutoplay(bool defaultValue) override;
-  void passiveInsecureContentFound(const KURL&) override;
-  void didNotAllowScript() override;
-  void didNotAllowPlugins() override;
+      const WTF::String& mime_type,
+      bool should_prefer_plug_ins_for_images) override;
+  void DidChangeScrollOffset() override;
+  void DidUpdateCurrentHistoryItem() override;
 
-  WebCookieJar* cookieJar() const override;
-  void frameFocused() const override;
-  void didChangeName(const String& name, const String& uniqueName) override;
-  void didEnforceInsecureRequestPolicy(WebInsecureRequestPolicy) override;
-  void didUpdateToUniqueOrigin() override;
-  void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) override;
-  void didSetFeaturePolicyHeader(
-      const WebParsedFeaturePolicyHeader& parsedHeader) override;
-  void didAddContentSecurityPolicy(
-      const String& headerValue,
-      ContentSecurityPolicyHeaderType,
-      ContentSecurityPolicyHeaderSource,
-      const std::vector<WebContentSecurityPolicyPolicy>&) override;
-  void didChangeFrameOwnerProperties(HTMLFrameElementBase*) override;
+  WebCookieJar* CookieJar() const override;
+  void FrameFocused() const override;
+  void DidChangeName(const String&) override;
+  void DidEnforceInsecureRequestPolicy(WebInsecureRequestPolicy) override;
+  void DidUpdateToUniqueOrigin() override;
+  void DidChangeSandboxFlags(Frame* child_frame, SandboxFlags) override;
+  void DidSetFeaturePolicyHeader(
+      const WebParsedFeaturePolicy& parsed_header) override;
+  void DidAddContentSecurityPolicies(
+      const blink::WebVector<WebContentSecurityPolicy>&) override;
+  void DidChangeFrameOwnerProperties(HTMLFrameOwnerElement*) override;
 
-  void dispatchWillStartUsingPeerConnectionHandler(
+  void DispatchWillStartUsingPeerConnectionHandler(
       WebRTCPeerConnectionHandler*) override;
 
-  bool allowWebGL(bool enabledPerSettings) override;
+  bool AllowWebGL(bool enabled_per_settings) override;
 
-  void dispatchWillInsertBody() override;
+  void DispatchWillInsertBody() override;
 
-  std::unique_ptr<WebServiceWorkerProvider> createServiceWorkerProvider()
+  std::unique_ptr<WebServiceWorkerProvider> CreateServiceWorkerProvider()
       override;
-  bool isControlledByServiceWorker(DocumentLoader&) override;
-  int64_t serviceWorkerID(DocumentLoader&) override;
-  SharedWorkerRepositoryClient* sharedWorkerRepositoryClient() override;
+  ContentSettingsClient& GetContentSettingsClient() override;
 
-  std::unique_ptr<WebApplicationCacheHost> createApplicationCacheHost(
+  SharedWorkerRepositoryClient* GetSharedWorkerRepositoryClient() override;
+
+  std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) override;
 
-  void dispatchDidChangeManifest() override;
+  void DispatchDidChangeManifest() override;
 
-  unsigned backForwardLength() override;
+  unsigned BackForwardLength() override;
 
-  void suddenTerminationDisablerChanged(bool present,
+  void SuddenTerminationDisablerChanged(bool present,
                                         SuddenTerminationDisablerType) override;
 
-  BlameContext* frameBlameContext() override;
+  BlameContext* GetFrameBlameContext() override;
 
-  LinkResource* createServiceWorkerLinkResource(HTMLLinkElement*) override;
+  LinkResource* CreateServiceWorkerLinkResource(HTMLLinkElement*) override;
 
-  WebEffectiveConnectionType getEffectiveConnectionType() override;
+  WebEffectiveConnectionType GetEffectiveConnectionType() override;
 
-  KURL overrideFlashEmbedWithHTML(const KURL&) override;
+  KURL OverrideFlashEmbedWithHTML(const KURL&) override;
 
-  void setHasReceivedUserGesture() override;
+  void SetHasReceivedUserGesture(bool received_previously) override;
+
+  void AbortClientNavigation() override;
+
+  TextCheckerClient& GetTextCheckerClient() const override;
 
   // VB-6063:
   void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;
@@ -229,21 +224,21 @@ class LocalFrameClientImpl final : public LocalFrameClient {
  private:
   explicit LocalFrameClientImpl(WebLocalFrameImpl*);
 
-  bool isLocalFrameClientImpl() const override { return true; }
-  WebDevToolsAgentImpl* devToolsAgent();
+  bool IsLocalFrameClientImpl() const override { return true; }
+  WebDevToolsAgentImpl* DevToolsAgent();
 
   // The WebFrame that owns this object and manages its lifetime. Therefore,
   // the web frame object is guaranteed to exist.
-  Member<WebLocalFrameImpl> m_webFrame;
+  Member<WebLocalFrameImpl> web_frame_;
 
-  String m_userAgent;
+  String user_agent_;
 };
 
 DEFINE_TYPE_CASTS(LocalFrameClientImpl,
                   LocalFrameClient,
                   client,
-                  client->isLocalFrameClientImpl(),
-                  client.isLocalFrameClientImpl());
+                  client->IsLocalFrameClientImpl(),
+                  client.IsLocalFrameClientImpl());
 
 }  // namespace blink
 

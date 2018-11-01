@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -19,6 +20,9 @@
 #include "chrome/install_static/policy_path_parser.h"
 #include "chrome/install_static/user_data_dir.h"
 #include "chrome_elf/nt_registry/nt_registry.h"
+#include "components/version_info/channel.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace install_static {
 
@@ -58,11 +62,9 @@ constexpr wchar_t kChromeChannelStableExplicit[] = L"stable";
 // These constants are defined in the chrome/installer directory as well. We
 // need to unify them.
 constexpr wchar_t kRegValueAp[] = L"ap";
+constexpr wchar_t kRegValueName[] = L"name";
 constexpr wchar_t kRegValueUsageStats[] = L"usagestats";
 constexpr wchar_t kMetricsReportingEnabled[] = L"MetricsReportingEnabled";
-
-constexpr wchar_t kBrowserCrashDumpMetricsSubKey[] =
-    L"\\BrowserCrashDumpAttempts";
 
 void Trace(const wchar_t* format_string, ...) {
   static const int kMaxLogBufferSize = 1024;
@@ -161,12 +163,6 @@ bool DirectoryExists(const std::wstring& path) {
   return (file_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
-std::wstring GetChromeInstallRegistryPath() {
-  std::wstring registry_path = L"Software\\";
-  return AppendChromeInstallSubDirectory(
-      InstallDetails::Get().mode(), true /* include_suffix */, &registry_path);
-}
-
 // Returns true if the |source| string matches the |pattern|. The pattern
 // may contain wildcards like '?' which matches one character or a '*'
 // which matches 0 or more characters.
@@ -259,50 +255,39 @@ std::vector<StringType> TokenizeStringT(
   return tokens;
 }
 
+// Returns Chrome's update channel name based on the contents of the given "ap"
+// value from Chrome's ClientState key.
 std::wstring ChannelFromAdditionalParameters(const InstallConstants& mode,
-                                             bool system_level,
-                                             bool from_binaries) {
+                                             const std::wstring& ap_value) {
   assert(kUseGoogleUpdateIntegration);
-  // InitChannelInfo in google_update_settings.cc only reports a failure when
-  // Chrome's ClientState key exists but that the "ap" value therein cannot be
-  // read due to some reason *other* than it not being present. This should be
-  // exceedingly rare. For simplicity's sake, use an empty |value| in case of
-  // any error whatsoever here.
-  std::wstring value;
-  nt::QueryRegValueSZ(system_level ? nt::HKLM : nt::HKCU, nt::WOW6432,
-                      from_binaries
-                          ? GetBinariesClientStateKeyPath().c_str()
-                          : GetClientStateKeyPath(mode.app_guid).c_str(),
-                      kRegValueAp, &value);
 
   static constexpr wchar_t kChromeChannelBetaPattern[] = L"1?1-*";
   static constexpr wchar_t kChromeChannelBetaX64Pattern[] = L"*x64-beta*";
   static constexpr wchar_t kChromeChannelDevPattern[] = L"2?0-d*";
   static constexpr wchar_t kChromeChannelDevX64Pattern[] = L"*x64-dev*";
 
-  std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+  std::wstring value;
+  value.reserve(ap_value.size());
+  std::transform(ap_value.begin(), ap_value.end(), std::back_inserter(value),
+                 ::tolower);
 
   // Empty channel names or those containing "stable" should be reported as
   // an empty string.
-  std::wstring channel_name;
   if (value.empty() ||
       (value.find(kChromeChannelStableExplicit) != std::wstring::npos)) {
-  } else if (MatchPattern(value, kChromeChannelDevPattern) ||
-             MatchPattern(value, kChromeChannelDevX64Pattern)) {
-    channel_name.assign(kChromeChannelDev);
-  } else if (MatchPattern(value, kChromeChannelBetaPattern) ||
-             MatchPattern(value, kChromeChannelBetaX64Pattern)) {
-    channel_name.assign(kChromeChannelBeta);
+    return std::wstring();
+  }
+  if (MatchPattern(value, kChromeChannelDevPattern) ||
+      MatchPattern(value, kChromeChannelDevX64Pattern)) {
+    return kChromeChannelDev;
+  }
+  if (MatchPattern(value, kChromeChannelBetaPattern) ||
+      MatchPattern(value, kChromeChannelBetaX64Pattern)) {
+    return kChromeChannelBeta;
   }
   // Else report values with garbage as stable since they will match the stable
-  // rules in the update configs. ChannelInfo::GetChannelName painstakingly
-  // strips off known modifiers (e.g., "-full") to see if the empty string
-  // remains, returning channel "unknown" if not. This differs here in that some
-  // clients will tag crashes as "stable" rather than "unknown" via this
-  // codepath, but it is an accurate reflection of which update channel the
-  // client is on according to the server-side rules.
-
-  return channel_name;
+  // rules in the update configs.
+  return std::wstring();
 }
 
 }  // namespace
@@ -311,8 +296,69 @@ bool IsSystemInstall() {
   return InstallDetails::Get().system_level();
 }
 
+std::wstring GetChromeInstallSubDirectory() {
+  std::wstring result;
+  AppendChromeInstallSubDirectory(InstallDetails::Get().mode(),
+                                  true /* include_suffix */, &result);
+  return result;
+}
+
+std::wstring GetRegistryPath() {
+  std::wstring result(L"Software\\");
+  AppendChromeInstallSubDirectory(InstallDetails::Get().mode(),
+                                  true /* include_suffix */, &result);
+  return result;
+}
+
+std::wstring GetUninstallRegistryPath() {
+  std::wstring result(
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\");
+  if (*kCompanyPathName)
+    result.append(kCompanyPathName).append(1, L' ');
+  result.append(kProductPathName, kProductPathNameLength);
+  return result.append(InstallDetails::Get().mode().install_suffix);
+}
+
 const wchar_t* GetAppGuid() {
   return InstallDetails::Get().app_guid();
+}
+
+std::wstring GetBaseAppName() {
+  return InstallDetails::Get().mode().base_app_name;
+}
+
+const wchar_t* GetBaseAppId() {
+  return InstallDetails::Get().base_app_id();
+}
+
+const wchar_t* GetProgIdPrefix() {
+  return InstallDetails::Get().mode().prog_id_prefix;
+}
+
+const wchar_t* GetProgIdDescription() {
+  return InstallDetails::Get().mode().prog_id_description;
+}
+
+std::wstring GetActiveSetupPath() {
+  return std::wstring(
+             L"Software\\Microsoft\\Active Setup\\Installed Components\\")
+      .append(InstallDetails::Get().mode().active_setup_guid);
+}
+
+std::wstring GetLegacyCommandExecuteImplClsid() {
+  return InstallDetails::Get().mode().legacy_command_execute_clsid;
+}
+
+bool SupportsSetAsDefaultBrowser() {
+  return InstallDetails::Get().mode().supports_set_as_default_browser;
+}
+
+bool SupportsRetentionExperiments() {
+  return InstallDetails::Get().mode().supports_retention_experiments;
+}
+
+int GetIconResourceIndex() {
+  return InstallDetails::Get().mode().app_icon_resource_index;
 }
 
 bool GetCollectStatsConsent() {
@@ -343,7 +389,7 @@ bool GetCollectStatsConsent() {
 }
 
 bool GetCollectStatsInSample() {
-  std::wstring registry_path = GetChromeInstallRegistryPath();
+  std::wstring registry_path = GetRegistryPath();
 
   DWORD out_value = 0;
   if (!nt::QueryRegValueDWORD(nt::HKCU, nt::WOW6432, registry_path.c_str(),
@@ -356,7 +402,7 @@ bool GetCollectStatsInSample() {
 }
 
 bool SetCollectStatsInSample(bool in_sample) {
-  std::wstring registry_path = GetChromeInstallRegistryPath();
+  std::wstring registry_path = GetRegistryPath();
 
   HANDLE key_handle = INVALID_HANDLE_VALUE;
   if (!nt::CreateRegKey(nt::HKCU, registry_path.c_str(),
@@ -501,7 +547,7 @@ void GetExecutableVersionDetails(const std::wstring& exe_path,
   DWORD dummy = 0;
   DWORD length = ::GetFileVersionInfoSize(exe_path.c_str(), &dummy);
   if (length) {
-    std::unique_ptr<char> data(new char[length]);
+    std::unique_ptr<char[]> data(new char[length]);
     if (::GetFileVersionInfo(exe_path.c_str(), dummy, length, data.get())) {
       GetValueFromVersionResource(data.get(), L"ProductVersion", version);
 
@@ -518,12 +564,30 @@ void GetExecutableVersionDetails(const std::wstring& exe_path,
   *channel_name = GetChromeChannelName();
 }
 
-std::wstring GetChromeChannelName() {
-  return InstallDetails::Get().channel();
+version_info::Channel GetChromeChannel() {
+#if defined(GOOGLE_CHROME_BUILD)
+  std::wstring channel_name(GetChromeChannelName());
+  if (channel_name.empty()) {
+    return version_info::Channel::STABLE;
+  }
+  if (channel_name == L"beta") {
+    return version_info::Channel::BETA;
+  }
+  if (channel_name == L"dev") {
+    return version_info::Channel::DEV;
+  }
+  if (channel_name == L"canary") {
+    return version_info::Channel::CANARY;
+  }
+#elif defined(VIVALDI_BUILD)
+  return version_info::Channel::STABLE;
+#endif
+
+  return version_info::Channel::UNKNOWN;
 }
 
-std::wstring GetBrowserCrashDumpAttemptsRegistryPath() {
-  return GetChromeInstallRegistryPath().append(kBrowserCrashDumpMetricsSubKey);
+std::wstring GetChromeChannelName() {
+  return InstallDetails::Get().channel();
 }
 
 bool MatchPattern(const std::wstring& source, const std::wstring& pattern) {
@@ -747,16 +811,36 @@ bool RecursiveDirectoryCreate(const std::wstring& full_path) {
 // InstallDetails instance since it is used to bootstrap InstallDetails.
 std::wstring DetermineChannel(const InstallConstants& mode,
                               bool system_level,
-                              bool from_binaries) {
+                              bool from_binaries,
+                              std::wstring* update_ap,
+                              std::wstring* update_cohort_name) {
   if (!kUseGoogleUpdateIntegration)
     return std::wstring();
+
+  // Read the "ap" value and cache it if requested.
+  std::wstring client_state(from_binaries
+                                ? GetBinariesClientStateKeyPath()
+                                : GetClientStateKeyPath(mode.app_guid));
+  std::wstring ap_value;
+  // An empty |ap_value| is used in case of error.
+  nt::QueryRegValueSZ(system_level ? nt::HKLM : nt::HKCU, nt::WOW6432,
+                      client_state.c_str(), kRegValueAp, &ap_value);
+  if (update_ap)
+    *update_ap = ap_value;
+
+  // Cache the cohort name if requested.
+  if (update_cohort_name) {
+    nt::QueryRegValueSZ(system_level ? nt::HKLM : nt::HKCU, nt::WOW6432,
+                        client_state.append(L"\\cohort").c_str(), kRegValueName,
+                        update_cohort_name);
+  }
 
   switch (mode.channel_strategy) {
     case ChannelStrategy::UNSUPPORTED:
       assert(false);
       break;
     case ChannelStrategy::ADDITIONAL_PARAMETERS:
-      return ChannelFromAdditionalParameters(mode, system_level, from_binaries);
+      return ChannelFromAdditionalParameters(mode, ap_value);
     case ChannelStrategy::FIXED:
       return mode.default_channel_name;
   }

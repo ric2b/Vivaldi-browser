@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
+#include "chrome/browser/plugins/plugin_installer.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration.h"
@@ -29,13 +31,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
-
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
-#include "chrome/browser/plugins/plugin_installer.h"
-#endif
 
 #if defined(OS_WIN)
 #include <shellapi.h>
@@ -43,8 +40,6 @@
 #endif
 
 using base::UserMetricsAction;
-
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
 
 // OutdatedPluginInfoBarDelegate ----------------------------------------------
 
@@ -58,11 +53,7 @@ void OutdatedPluginInfoBarDelegate::Create(
   infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
       std::unique_ptr<ConfirmInfoBarDelegate>(new OutdatedPluginInfoBarDelegate(
           installer, std::move(plugin_metadata),
-          l10n_util::GetStringFUTF16(
-              (installer->state() == PluginInstaller::INSTALLER_STATE_IDLE)
-                  ? IDS_PLUGIN_OUTDATED_PROMPT
-                  : IDS_PLUGIN_DOWNLOADING,
-              name)))));
+          l10n_util::GetStringUTF16(IDS_PLUGIN_OUTDATED_PROMPT)))));
 }
 
 OutdatedPluginInfoBarDelegate::OutdatedPluginInfoBarDelegate(
@@ -74,31 +65,29 @@ OutdatedPluginInfoBarDelegate::OutdatedPluginInfoBarDelegate(
       identifier_(plugin_metadata->identifier()),
       plugin_metadata_(std::move(plugin_metadata)),
       message_(message) {
-  content::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Shown"));
+  base::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Shown"));
   std::string name = base::UTF16ToUTF8(plugin_metadata_->name());
   if (name == PluginMetadata::kJavaGroupName) {
-    content::RecordAction(
-        UserMetricsAction("OutdatedPluginInfobar.Shown.Java"));
+    base::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Shown.Java"));
   } else if (name == PluginMetadata::kQuickTimeGroupName) {
-    content::RecordAction(
+    base::RecordAction(
         UserMetricsAction("OutdatedPluginInfobar.Shown.QuickTime"));
   } else if (name == PluginMetadata::kShockwaveGroupName) {
-    content::RecordAction(
+    base::RecordAction(
         UserMetricsAction("OutdatedPluginInfobar.Shown.Shockwave"));
   } else if (name == PluginMetadata::kRealPlayerGroupName) {
-    content::RecordAction(
+    base::RecordAction(
         UserMetricsAction("OutdatedPluginInfobar.Shown.RealPlayer"));
   } else if (name == PluginMetadata::kSilverlightGroupName) {
-    content::RecordAction(
+    base::RecordAction(
         UserMetricsAction("OutdatedPluginInfobar.Shown.Silverlight"));
   } else if (name == PluginMetadata::kAdobeReaderGroupName) {
-    content::RecordAction(
-        UserMetricsAction("OutdatedPluginInfobar.Shown.Reader"));
+    base::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Shown.Reader"));
   }
 }
 
 OutdatedPluginInfoBarDelegate::~OutdatedPluginInfoBarDelegate() {
-  content::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Closed"));
+  base::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Closed"));
 }
 
 infobars::InfoBarDelegate::InfoBarIdentifier
@@ -107,7 +96,7 @@ OutdatedPluginInfoBarDelegate::GetIdentifier() const {
 }
 
 void OutdatedPluginInfoBarDelegate::InfoBarDismissed() {
-  content::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Dismissed"));
+  base::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Dismissed"));
 }
 
 const gfx::VectorIcon& OutdatedPluginInfoBarDelegate::GetVectorIcon() const {
@@ -125,8 +114,7 @@ base::string16 OutdatedPluginInfoBarDelegate::GetButtonLabel(
 }
 
 bool OutdatedPluginInfoBarDelegate::Accept() {
-  DCHECK_EQ(PluginInstaller::INSTALLER_STATE_IDLE, installer()->state());
-  content::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Update"));
+  base::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Update"));
   // A call to any of |OpenDownloadURL()| or |StartInstalling()| will
   // result in deleting ourselves. Accordingly, we make sure to
   // not pass a reference to an object that can go away.
@@ -134,17 +122,14 @@ bool OutdatedPluginInfoBarDelegate::Accept() {
   content::WebContents* web_contents =
       InfoBarService::WebContentsFromInfoBar(infobar());
   if (web_contents) {
-    if (plugin_metadata_->url_for_display())
-      installer()->OpenDownloadURL(plugin_url, web_contents);
-    else
-      installer()->StartInstalling(plugin_url, web_contents);
+    DCHECK(plugin_metadata_->url_for_display());
+    installer()->OpenDownloadURL(plugin_url, web_contents);
   }
   return false;
 }
 
 bool OutdatedPluginInfoBarDelegate::Cancel() {
-  content::RecordAction(
-      UserMetricsAction("OutdatedPluginInfobar.AllowThisTime"));
+  base::RecordAction(UserMetricsAction("OutdatedPluginInfobar.AllowThisTime"));
 
   content::WebContents* web_contents =
       InfoBarService::WebContentsFromInfoBar(infobar());
@@ -162,21 +147,6 @@ base::string16 OutdatedPluginInfoBarDelegate::GetLinkText() const {
 
 GURL OutdatedPluginInfoBarDelegate::GetLinkURL() const {
   return GURL(chrome::kOutdatedPluginLearnMoreURL);
-}
-
-void OutdatedPluginInfoBarDelegate::DownloadStarted() {
-  ReplaceWithInfoBar(l10n_util::GetStringFUTF16(IDS_PLUGIN_DOWNLOADING,
-                                                plugin_metadata_->name()));
-}
-
-void OutdatedPluginInfoBarDelegate::DownloadError(const std::string& message) {
-  ReplaceWithInfoBar(l10n_util::GetStringFUTF16(IDS_PLUGIN_DOWNLOAD_ERROR_SHORT,
-                                                plugin_metadata_->name()));
-}
-
-void OutdatedPluginInfoBarDelegate::DownloadCancelled() {
-  ReplaceWithInfoBar(l10n_util::GetStringFUTF16(IDS_PLUGIN_DOWNLOAD_CANCELLED,
-                                                plugin_metadata_->name()));
 }
 
 void OutdatedPluginInfoBarDelegate::DownloadFinished() {
@@ -212,4 +182,3 @@ void OutdatedPluginInfoBarDelegate::Replace(
                            installer, std::move(plugin_metadata), message))));
 }
 
-#endif  // BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)

@@ -164,7 +164,8 @@ MessagePipeDispatcher::MessagePipeDispatcher(NodeController* node_controller,
     : node_controller_(node_controller),
       port_(port),
       pipe_id_(pipe_id),
-      endpoint_(endpoint) {
+      endpoint_(endpoint),
+      watchers_(this) {
   DVLOG(2) << "Creating new MessagePipeDispatcher for port " << port.name()
            << " [pipe_id=" << pipe_id << "; endpoint=" << endpoint << "]";
 
@@ -182,7 +183,7 @@ bool MessagePipeDispatcher::Fuse(MessagePipeDispatcher* other) {
     base::AutoLock lock(signal_lock_);
     port0 = port_;
     port_closed_.Set(true);
-    awakables_.CancelAll();
+    watchers_.NotifyClosed();
   }
 
   ports::PortRef port1;
@@ -190,7 +191,7 @@ bool MessagePipeDispatcher::Fuse(MessagePipeDispatcher* other) {
     base::AutoLock lock(other->signal_lock_);
     port1 = other->port_;
     other->port_closed_.Set(true);
-    other->awakables_.CancelAll();
+    other->watchers_.NotifyClosed();
   }
 
   // Both ports are always closed by this call.
@@ -207,27 +208,6 @@ MojoResult MessagePipeDispatcher::Close() {
   DVLOG(2) << "Closing message pipe " << pipe_id_ << " endpoint " << endpoint_
            << " [port=" << port_.name() << "]";
   return CloseNoLock();
-}
-
-MojoResult MessagePipeDispatcher::Watch(MojoHandleSignals signals,
-                                        const Watcher::WatchCallback& callback,
-                                        uintptr_t context) {
-  base::AutoLock lock(signal_lock_);
-
-  if (port_closed_ || in_transit_)
-    return MOJO_RESULT_INVALID_ARGUMENT;
-
-  return awakables_.AddWatcher(
-      signals, callback, context, GetHandleSignalsStateNoLock());
-}
-
-MojoResult MessagePipeDispatcher::CancelWatch(uintptr_t context) {
-  base::AutoLock lock(signal_lock_);
-
-  if (port_closed_ || in_transit_)
-    return MOJO_RESULT_INVALID_ARGUMENT;
-
-  return awakables_.RemoveWatcher(context);
 }
 
 MojoResult MessagePipeDispatcher::WriteMessage(
@@ -299,6 +279,12 @@ MojoResult MessagePipeDispatcher::ReadMessage(
   }
 
   if (no_space) {
+    if (may_discard) {
+      // May have been the last message on the pipe. Need to update signals just
+      // in case.
+      base::AutoLock lock(signal_lock_);
+      watchers_.NotifyState(GetHandleSignalsStateNoLock());
+    }
     // |*num_handles| (and/or |*num_bytes| if |read_any_size| is false) wasn't
     // sufficient to hold this message's data. The message will still be in
     // queue unless MOJO_READ_MESSAGE_FLAG_MAY_DISCARD was set.
@@ -318,6 +304,13 @@ MojoResult MessagePipeDispatcher::ReadMessage(
 
   // Alright! We have a message and the caller has provided sufficient storage
   // in which to receive it.
+
+  {
+    // We need to update anyone watching our signals in case that was the last
+    // available message.
+    base::AutoLock lock(signal_lock_);
+    watchers_.NotifyState(GetHandleSignalsStateNoLock());
+  }
 
   std::unique_ptr<PortsMessage> msg(
       static_cast<PortsMessage*>(ports_message.release()));
@@ -396,63 +389,21 @@ MessagePipeDispatcher::GetHandleSignalsState() const {
   return GetHandleSignalsStateNoLock();
 }
 
-MojoResult MessagePipeDispatcher::AddAwakable(
-    Awakable* awakable,
-    MojoHandleSignals signals,
-    uintptr_t context,
-    HandleSignalsState* signals_state) {
+MojoResult MessagePipeDispatcher::AddWatcherRef(
+    const scoped_refptr<WatcherDispatcher>& watcher,
+    uintptr_t context) {
   base::AutoLock lock(signal_lock_);
-
-  if (port_closed_ || in_transit_) {
-    if (signals_state)
-      *signals_state = HandleSignalsState();
+  if (port_closed_ || in_transit_)
     return MOJO_RESULT_INVALID_ARGUMENT;
-  }
-
-  HandleSignalsState state = GetHandleSignalsStateNoLock();
-
-  DVLOG(2) << "Getting signal state for pipe " << pipe_id_ << " endpoint "
-           << endpoint_ << " [awakable=" << awakable << "; port="
-           << port_.name() << "; signals=" << signals << "; satisfied="
-           << state.satisfied_signals << "; satisfiable="
-           << state.satisfiable_signals << "]";
-
-  if (state.satisfies(signals)) {
-    if (signals_state)
-      *signals_state = state;
-    DVLOG(2) << "Signals already set for " << port_.name();
-    return MOJO_RESULT_ALREADY_EXISTS;
-  }
-  if (!state.can_satisfy(signals)) {
-    if (signals_state)
-      *signals_state = state;
-    DVLOG(2) << "Signals impossible to satisfy for " << port_.name();
-    return MOJO_RESULT_FAILED_PRECONDITION;
-  }
-
-  DVLOG(2) << "Adding awakable to pipe " << pipe_id_ << " endpoint "
-           << endpoint_ << " [awakable=" << awakable << "; port="
-           << port_.name() << "; signals=" << signals << "]";
-
-  awakables_.Add(awakable, signals, context);
-  return MOJO_RESULT_OK;
+  return watchers_.Add(watcher, context, GetHandleSignalsStateNoLock());
 }
 
-void MessagePipeDispatcher::RemoveAwakable(Awakable* awakable,
-                                           HandleSignalsState* signals_state) {
+MojoResult MessagePipeDispatcher::RemoveWatcherRef(WatcherDispatcher* watcher,
+                                                   uintptr_t context) {
   base::AutoLock lock(signal_lock_);
-  if (port_closed_ || in_transit_) {
-    if (signals_state)
-      *signals_state = HandleSignalsState();
-  } else if (signals_state) {
-    *signals_state = GetHandleSignalsStateNoLock();
-  }
-
-  DVLOG(2) << "Removing awakable from pipe " << pipe_id_ << " endpoint "
-           << endpoint_ << " [awakable=" << awakable << "; port="
-           << port_.name() << "]";
-
-  awakables_.Remove(awakable);
+  if (port_closed_ || in_transit_)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+  return watchers_.Remove(watcher, context);
 }
 
 void MessagePipeDispatcher::StartSerialize(uint32_t* num_bytes,
@@ -496,7 +447,7 @@ void MessagePipeDispatcher::CancelTransit() {
   in_transit_.Set(false);
 
   // Something may have happened while we were waiting for potential transit.
-  awakables_.AwakeForStateChange(GetHandleSignalsStateNoLock());
+  watchers_.NotifyState(GetHandleSignalsStateNoLock());
 }
 
 // static
@@ -531,7 +482,7 @@ MojoResult MessagePipeDispatcher::CloseNoLock() {
     return MOJO_RESULT_INVALID_ARGUMENT;
 
   port_closed_.Set(true);
-  awakables_.CancelAll();
+  watchers_.NotifyClosed();
 
   if (!port_transferred_) {
     base::AutoUnlock unlock(signal_lock_);
@@ -596,7 +547,7 @@ void MessagePipeDispatcher::OnPortStatusChanged() {
   }
 #endif
 
-  awakables_.AwakeForStateChange(GetHandleSignalsStateNoLock());
+  watchers_.NotifyState(GetHandleSignalsStateNoLock());
 }
 
 }  // namespace edk

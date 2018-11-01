@@ -200,7 +200,7 @@
       <part file="new_or_sad_tab_strings.grdp" />
       <part file="ntp_snippets_strings.grdp" />
       <part file="omnibox_strings.grdp" />
-      <part file="pageinfo_strings.grdp" />
+      <part file="page_info_strings.grdp" />
       <part file="password_manager_strings.grdp" />
       <part file="payments_strings.grdp" />
       <part file="pdf_strings.grdp" />
@@ -291,8 +291,17 @@
       <message name="IDS_ACCNAME_CANCEL" desc="The accessible name for the Cancel button.">
         Cancel
       </message>
+      <message name="IDS_ACCNAME_DONE" desc="The accessible name for the DONE button.">
+        Done
+      </message>
       <message name="IDS_ACCNAME_CLOSE" desc="The accessible name for the Close button.">
         Close
+      </message>
+      <message name="IDS_ACCNAME_PREVIOUS" desc="The accessible name for the previous button.">
+        Previous
+      </message>
+      <message name="IDS_ACCNAME_NEXT" desc="The accessible name for the next button.">
+        Next
       </message>
       <message name="IDS_ACCNAME_LOCATION" desc="The accessible name for the editable-text portion of the omnibox.">
         Address and search bar
@@ -310,8 +319,8 @@
         Open startup pages
       </message>
 
-      <!-- Website Settings UI -->
-      <message name="IDS_WEBSITE_SETTINGS_NON_SECURE_TRANSPORT" desc="Text that is displayed in the header of the Website Settings popup if the website uses non-secure transport.">
+      <!-- Page Info UI -->
+      <message name="IDS_PAGE_INFO_NON_SECURE_TRANSPORT" desc="Text that is displayed in the header of the Website Settings popup if the website uses non-secure transport.">
         Your connection to this site is not private.
       </message>
 

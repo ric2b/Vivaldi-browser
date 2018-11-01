@@ -7,13 +7,13 @@
 #include <stddef.h>
 
 #include "cc/animation/animation_host.h"
+#include "cc/base/filter_operation.h"
+#include "cc/base/filter_operations.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
-#include "cc/output/filter_operation.h"
-#include "cc/output/filter_operations.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
@@ -190,7 +190,7 @@ class OcclusionTrackerTest : public testing::Test {
     host_->host_impl()->active_tree()->SetRootLayerForTesting(nullptr);
     render_surface_layer_list_impl_.clear();
     mask_layers_.clear();
-    ResetLayerIterator();
+    layer_iterator_.reset();
   }
 
   void CopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {}
@@ -216,28 +216,28 @@ class OcclusionTrackerTest : public testing::Test {
     // iterations, so rebuild property trees every time.
     root->layer_tree_impl()->property_trees()->needs_rebuild = true;
 
-    FakeLayerTreeHostImpl::RecursiveUpdateNumChildren(root);
-
     LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
         root, root->bounds(), &render_surface_layer_list_impl_);
     inputs.can_adjust_raster_scales = true;
     LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
-    layer_iterator_ = layer_iterator_begin_ =
-        LayerIterator::Begin(&render_surface_layer_list_impl_);
+    layer_iterator_ = base::MakeUnique<EffectTreeLayerListIterator>(
+        host_->host_impl()->active_tree());
   }
 
   void EnterLayer(LayerImpl* layer, OcclusionTracker* occlusion) {
-    ASSERT_EQ(*layer_iterator_, layer);
-    ASSERT_TRUE(layer_iterator_.represents_itself());
-    occlusion->EnterLayer(layer_iterator_);
+    ASSERT_EQ(layer_iterator_->current_layer(), layer);
+    ASSERT_TRUE(layer_iterator_->state() ==
+                EffectTreeLayerListIterator::State::LAYER);
+    occlusion->EnterLayer(*layer_iterator_);
   }
 
   void LeaveLayer(LayerImpl* layer, OcclusionTracker* occlusion) {
-    ASSERT_EQ(*layer_iterator_, layer);
-    ASSERT_TRUE(layer_iterator_.represents_itself());
-    occlusion->LeaveLayer(layer_iterator_);
-    ++layer_iterator_;
+    ASSERT_EQ(layer_iterator_->current_layer(), layer);
+    ASSERT_TRUE(layer_iterator_->state() ==
+                EffectTreeLayerListIterator::State::LAYER);
+    occlusion->LeaveLayer(*layer_iterator_);
+    ++(*layer_iterator_);
   }
 
   void VisitLayer(LayerImpl* layer, OcclusionTracker* occlusion) {
@@ -246,20 +246,25 @@ class OcclusionTrackerTest : public testing::Test {
   }
 
   void EnterContributingSurface(LayerImpl* layer, OcclusionTracker* occlusion) {
-    ASSERT_EQ(*layer_iterator_, layer);
-    ASSERT_TRUE(layer_iterator_.represents_target_render_surface());
-    occlusion->EnterLayer(layer_iterator_);
-    occlusion->LeaveLayer(layer_iterator_);
-    ++layer_iterator_;
-    ASSERT_TRUE(layer_iterator_.represents_contributing_render_surface());
-    occlusion->EnterLayer(layer_iterator_);
+    ASSERT_EQ(layer_iterator_->target_render_surface(),
+              layer->GetRenderSurface());
+    ASSERT_TRUE(layer_iterator_->state() ==
+                EffectTreeLayerListIterator::State::TARGET_SURFACE);
+    occlusion->EnterLayer(*layer_iterator_);
+    occlusion->LeaveLayer(*layer_iterator_);
+    ++(*layer_iterator_);
+    ASSERT_TRUE(layer_iterator_->state() ==
+                EffectTreeLayerListIterator::State::CONTRIBUTING_SURFACE);
+    occlusion->EnterLayer(*layer_iterator_);
   }
 
   void LeaveContributingSurface(LayerImpl* layer, OcclusionTracker* occlusion) {
-    ASSERT_EQ(*layer_iterator_, layer);
-    ASSERT_TRUE(layer_iterator_.represents_contributing_render_surface());
-    occlusion->LeaveLayer(layer_iterator_);
-    ++layer_iterator_;
+    ASSERT_EQ(layer_iterator_->current_render_surface(),
+              layer->GetRenderSurface());
+    ASSERT_TRUE(layer_iterator_->state() ==
+                EffectTreeLayerListIterator::State::CONTRIBUTING_SURFACE);
+    occlusion->LeaveLayer(*layer_iterator_);
+    ++(*layer_iterator_);
   }
 
   void VisitContributingSurface(LayerImpl* layer, OcclusionTracker* occlusion) {
@@ -267,7 +272,10 @@ class OcclusionTrackerTest : public testing::Test {
     LeaveContributingSurface(layer, occlusion);
   }
 
-  void ResetLayerIterator() { layer_iterator_ = layer_iterator_begin_; }
+  void ResetLayerIterator() {
+    *layer_iterator_ =
+        EffectTreeLayerListIterator(host_->host_impl()->active_tree());
+  }
 
   const gfx::Transform identity_matrix;
 
@@ -298,8 +306,7 @@ class OcclusionTrackerTest : public testing::Test {
   std::unique_ptr<FakeLayerTreeHost> host_;
   // These hold ownership of the layers for the duration of the test.
   LayerImplList render_surface_layer_list_impl_;
-  LayerIterator layer_iterator_begin_;
-  LayerIterator layer_iterator_;
+  std::unique_ptr<EffectTreeLayerListIterator> layer_iterator_;
   LayerList mask_layers_;
   int next_layer_impl_id_;
 };

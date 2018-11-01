@@ -32,17 +32,21 @@
 #define RemoteWindowProxy_h
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/WindowProxy.h"
 #include "core/frame/RemoteFrame.h"
+#include "platform/wtf/RefPtr.h"
 #include "v8/include/v8.h"
 
 namespace blink {
 
 // Subclass of WindowProxy that only handles RemoteFrame.
+// TODO(dcheng): This class temporarily contains code duplicated from
+// LocalWindowProxy. It will be removed once the global proxy is instantiated
+// using v8::Context::NewRemoteContext().
 class RemoteWindowProxy final : public WindowProxy {
  public:
-  static RemoteWindowProxy* create(v8::Isolate* isolate,
+  static RemoteWindowProxy* Create(v8::Isolate* isolate,
                                    RemoteFrame& frame,
-
                                    RefPtr<DOMWrapperWorld> world) {
     return new RemoteWindowProxy(isolate, frame, std::move(world));
   }
@@ -50,14 +54,18 @@ class RemoteWindowProxy final : public WindowProxy {
  private:
   RemoteWindowProxy(v8::Isolate*, RemoteFrame&, RefPtr<DOMWrapperWorld>);
 
-  void initialize() override;
-  void disposeContext(GlobalDetachmentBehavior) override;
+  void Initialize() override;
+  void DisposeContext(Lifecycle next_status) override;
 
   // Creates a new v8::Context with the window wrapper object as the global
   // object (aka the inner global).  Note that the window wrapper and its
   // prototype chain do not get fully initialized yet, e.g. the window
   // wrapper is not yet associated with the native DOMWindow object.
-  void createContext();
+  void CreateContext();
+
+  // Associates the window wrapper and its prototype chain with the native
+  // DOMWindow object. Also does some more Window-specific initialization.
+  void SetupWindowPrototypeChain();
 };
 
 }  // namespace blink

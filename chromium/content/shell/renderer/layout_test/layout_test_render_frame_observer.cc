@@ -21,11 +21,14 @@ namespace content {
 LayoutTestRenderFrameObserver::LayoutTestRenderFrameObserver(
     RenderFrame* render_frame)
     : RenderFrameObserver(render_frame), binding_(this) {
-  render_frame->GetWebFrame()->setContentSettingsClient(
+  test_runner::WebTestRunner* test_runner =
       LayoutTestRenderThreadObserver::GetInstance()
           ->test_interfaces()
-          ->TestRunner()
-          ->GetWebContentSettings());
+          ->TestRunner();
+  render_frame->GetWebFrame()->SetContentSettingsClient(
+      test_runner->GetWebContentSettings());
+  render_frame->GetWebFrame()->SetTextCheckClient(
+      test_runner->GetWebTextCheckClient());
   render_frame->GetAssociatedInterfaceRegistry()->AddInterface(base::Bind(
       &LayoutTestRenderFrameObserver::BindRequest, base::Unretained(this)));
 }

@@ -19,20 +19,31 @@ MockWebDocumentSubresourceFilter::MockWebDocumentSubresourceFilter(
 MockWebDocumentSubresourceFilter::~MockWebDocumentSubresourceFilter() {}
 
 blink::WebDocumentSubresourceFilter::LoadPolicy
-MockWebDocumentSubresourceFilter::getLoadPolicy(
+MockWebDocumentSubresourceFilter::GetLoadPolicy(
     const blink::WebURL& resource_url,
-    blink::WebURLRequest::RequestContext /* ignored */) {
-  const std::string resource_path(GURL(resource_url).path());
-  return std::find_if(disallowed_path_suffixes_.begin(),
-                      disallowed_path_suffixes_.end(),
-                      [&resource_path](const std::string& suffix) {
-                        return base::EndsWith(resource_path, suffix,
-                                              base::CompareCase::SENSITIVE);
-                      }) == disallowed_path_suffixes_.end()
-             ? Allow
-             : Disallow;
+    blink::WebURLRequest::RequestContext) {
+  return getLoadPolicyImpl(resource_url);
 }
 
-void MockWebDocumentSubresourceFilter::reportDisallowedLoad() {}
+blink::WebDocumentSubresourceFilter::LoadPolicy
+MockWebDocumentSubresourceFilter::GetLoadPolicyForWebSocketConnect(
+    const blink::WebURL& url) {
+  return getLoadPolicyImpl(url);
+}
+
+blink::WebDocumentSubresourceFilter::LoadPolicy
+MockWebDocumentSubresourceFilter::getLoadPolicyImpl(const blink::WebURL& url) {
+  const std::string path(GURL(url).path());
+  return std::find_if(disallowed_path_suffixes_.begin(),
+                      disallowed_path_suffixes_.end(),
+                      [&path](const std::string& suffix) {
+                        return base::EndsWith(path, suffix,
+                                              base::CompareCase::SENSITIVE);
+                      }) == disallowed_path_suffixes_.end()
+             ? kAllow
+             : kDisallow;
+}
+
+void MockWebDocumentSubresourceFilter::ReportDisallowedLoad() {}
 
 }  // namespace test_runner

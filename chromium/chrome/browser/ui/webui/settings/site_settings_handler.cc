@@ -16,7 +16,10 @@
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/content_settings/web_site_settings_uma_util.h"
 #include "chrome/browser/permissions/chooser_context_base.h"
+#include "chrome/browser/permissions/permission_uma_util.h"
+#include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -206,8 +209,8 @@ void SiteSettingsHandler::OnGetUsageInfo(
     if (entry.usage <= 0) continue;
     if (entry.host == usage_host_) {
       CallJavascriptFunction("settings.WebsiteUsagePrivateApi.returnUsageTotal",
-                             base::StringValue(entry.host),
-                             base::StringValue(ui::FormatBytes(entry.usage)),
+                             base::Value(entry.host),
+                             base::Value(ui::FormatBytes(entry.usage)),
                              base::Value(entry.type));
       return;
     }
@@ -217,7 +220,7 @@ void SiteSettingsHandler::OnGetUsageInfo(
 void SiteSettingsHandler::OnUsageInfoCleared(storage::QuotaStatusCode code) {
   if (code == storage::kQuotaStatusOk) {
     CallJavascriptFunction("settings.WebsiteUsagePrivateApi.onUsageCleared",
-                           base::StringValue(clearing_origin_));
+                           base::Value(clearing_origin_));
   }
 }
 
@@ -232,19 +235,19 @@ void SiteSettingsHandler::OnContentSettingChanged(
   if (primary_pattern.ToString().empty()) {
     CallJavascriptFunction(
         "cr.webUIListenerCallback",
-        base::StringValue("contentSettingCategoryChanged"),
-        base::StringValue(site_settings::ContentSettingsTypeToGroupName(
-            content_type)));
+        base::Value("contentSettingCategoryChanged"),
+        base::Value(
+            site_settings::ContentSettingsTypeToGroupName(content_type)));
   } else {
     CallJavascriptFunction(
         "cr.webUIListenerCallback",
-        base::StringValue("contentSettingSitePermissionChanged"),
-        base::StringValue(site_settings::ContentSettingsTypeToGroupName(
-            content_type)),
-        base::StringValue(primary_pattern.ToString()),
-        base::StringValue(
-            secondary_pattern == ContentSettingsPattern::Wildcard() ?
-            "" : secondary_pattern.ToString()));
+        base::Value("contentSettingSitePermissionChanged"),
+        base::Value(
+            site_settings::ContentSettingsTypeToGroupName(content_type)),
+        base::Value(primary_pattern.ToString()),
+        base::Value(secondary_pattern == ContentSettingsPattern::Wildcard()
+                        ? ""
+                        : secondary_pattern.ToString()));
   }
 }
 
@@ -452,10 +455,10 @@ void SiteSettingsHandler::HandleGetExceptionList(const base::ListValue* args) {
 void SiteSettingsHandler::HandleResetCategoryPermissionForOrigin(
     const base::ListValue* args) {
   CHECK_EQ(4U, args->GetSize());
-  std::string primary_pattern;
-  CHECK(args->GetString(0, &primary_pattern));
-  std::string secondary_pattern;
-  CHECK(args->GetString(1, &secondary_pattern));
+  std::string primary_pattern_string;
+  CHECK(args->GetString(0, &primary_pattern_string));
+  std::string secondary_pattern_string;
+  CHECK(args->GetString(1, &secondary_pattern_string));
   std::string type;
   CHECK(args->GetString(2, &type));
   bool incognito;
@@ -476,21 +479,32 @@ void SiteSettingsHandler::HandleResetCategoryPermissionForOrigin(
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  map->SetContentSettingCustomScope(
-      ContentSettingsPattern::FromString(primary_pattern),
-      secondary_pattern.empty() ?
-          ContentSettingsPattern::Wildcard() :
-          ContentSettingsPattern::FromString(secondary_pattern),
-      content_type, "", CONTENT_SETTING_DEFAULT);
+
+  ContentSettingsPattern primary_pattern =
+      ContentSettingsPattern::FromString(primary_pattern_string);
+  ContentSettingsPattern secondary_pattern =
+      secondary_pattern_string.empty()
+          ? ContentSettingsPattern::Wildcard()
+          : ContentSettingsPattern::FromString(secondary_pattern_string);
+  PermissionUtil::ScopedRevocationReporter scoped_revocation_reporter(
+      profile, primary_pattern, secondary_pattern, content_type,
+      PermissionSourceUI::SITE_SETTINGS);
+
+  map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
+                                    content_type, "", CONTENT_SETTING_DEFAULT);
+
+  WebSiteSettingsUmaUtil::LogPermissionChange(
+      content_type, ContentSetting::CONTENT_SETTING_DEFAULT);
 }
 
 void SiteSettingsHandler::HandleSetCategoryPermissionForOrigin(
     const base::ListValue* args) {
   CHECK_EQ(5U, args->GetSize());
-  std::string primary_pattern;
-  CHECK(args->GetString(0, &primary_pattern));
-  std::string secondary_pattern;
-  CHECK(args->GetString(1, &secondary_pattern));
+  std::string primary_pattern_string;
+  CHECK(args->GetString(0, &primary_pattern_string));
+  // TODO(dschuyler): Review whether |secondary_pattern_string| should be used.
+  std::string secondary_pattern_string;
+  CHECK(args->GetString(1, &secondary_pattern_string));
   std::string type;
   CHECK(args->GetString(2, &type));
   std::string value;
@@ -515,12 +529,22 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForOrigin(
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  map->SetContentSettingCustomScope(
-      ContentSettingsPattern::FromString(primary_pattern),
-      secondary_pattern.empty() ?
-          ContentSettingsPattern::Wildcard() :
-          ContentSettingsPattern::FromString(secondary_pattern),
-      content_type, "", setting);
+
+  ContentSettingsPattern primary_pattern =
+      ContentSettingsPattern::FromString(primary_pattern_string);
+  ContentSettingsPattern secondary_pattern =
+      secondary_pattern_string.empty()
+          ? ContentSettingsPattern::Wildcard()
+          : ContentSettingsPattern::FromString(secondary_pattern_string);
+
+  PermissionUtil::ScopedRevocationReporter scoped_revocation_reporter(
+      profile, primary_pattern, secondary_pattern, content_type,
+      PermissionSourceUI::SITE_SETTINGS);
+
+  map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
+                                    content_type, "", setting);
+
+  WebSiteSettingsUmaUtil::LogPermissionChange(content_type, setting);
 }
 
 void SiteSettingsHandler::HandleGetSiteDetails(
@@ -576,7 +600,7 @@ void SiteSettingsHandler::HandleGetSiteDetails(
   }
 
   if (!exceptions->GetSize()) {
-    RejectJavascriptCallback(*callback_id, *base::Value::CreateNullValue());
+    RejectJavascriptCallback(*callback_id, base::Value());
     return;
   }
 
@@ -596,7 +620,14 @@ void SiteSettingsHandler::HandleIsPatternValid(
 
   ContentSettingsPattern pattern =
       ContentSettingsPattern::FromString(pattern_string);
-  ResolveJavascriptCallback(*callback_id, base::Value(pattern.IsValid()));
+  bool valid = pattern.IsValid();
+
+  // If the input is just '*' don't allow it, even though it's a valid pattern.
+  // This changes the default setting.
+  if (pattern == ContentSettingsPattern::Wildcard())
+    valid = false;
+
+  ResolveJavascriptCallback(*callback_id, base::Value(valid));
 }
 
 void SiteSettingsHandler::HandleUpdateIncognitoStatus(
@@ -617,7 +648,7 @@ void SiteSettingsHandler::SendIncognitoStatus(
       !(was_destroyed && profile == profile_->GetOffTheRecordProfile());
 
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("onIncognitoStatusChanged"),
+                         base::Value("onIncognitoStatusChanged"),
                          base::Value(incognito_enabled));
 }
 
@@ -703,7 +734,7 @@ void SiteSettingsHandler::SendZoomLevels() {
   }
 
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("onZoomLevelsChanged"),
+                         base::Value("onZoomLevelsChanged"),
                          zoom_levels_exceptions);
 }
 

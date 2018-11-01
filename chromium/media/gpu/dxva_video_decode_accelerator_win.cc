@@ -50,7 +50,7 @@
 #include "media/video/video_decode_accelerator.h"
 #include "third_party/angle/include/EGL/egl.h"
 #include "third_party/angle/include/EGL/eglext.h"
-#include "ui/base/ui_base_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/gfx/color_space_win.h"
 #include "ui/gl/gl_angle_util_win.h"
 #include "ui/gl/gl_bindings.h"
@@ -451,14 +451,14 @@ bool H264ConfigChangeDetector::DetectConfig(const uint8_t* stream,
   return true;
 }
 
-gfx::ColorSpace H264ConfigChangeDetector::current_color_space() const {
+VideoColorSpace H264ConfigChangeDetector::current_color_space() const {
   if (!parser_)
-    return gfx::ColorSpace();
+    return VideoColorSpace();
   // TODO(hubbe): Is using last_sps_id_ correct here?
   const H264SPS* sps = parser_->GetSPS(last_sps_id_);
   if (sps)
     return sps->GetColorSpace();
-  return gfx::ColorSpace();
+  return VideoColorSpace();
 }
 
 DXVAVideoDecodeAccelerator::PendingSampleInfo::PendingSampleInfo(
@@ -504,7 +504,9 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       use_keyed_mutex_(false),
       using_angle_device_(false),
       enable_accelerated_vpx_decode_(
-          gpu_preferences.enable_accelerated_vpx_decode),
+          workarounds.disable_accelerated_vpx_decode
+              ? gpu::GpuPreferences::VpxDecodeVendors::VPX_VENDOR_NONE
+              : gpu_preferences.enable_accelerated_vpx_decode),
       processing_config_changed_(false),
       weak_this_factory_(this) {
   weak_ptr_ = weak_this_factory_.GetWeakPtr();
@@ -567,8 +569,7 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
 
   // Unfortunately, the profile is currently unreliable for
   // VP9 (crbug.com/592074) so also try to use fp16 if HDR is on.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableHDROutput)) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)) {
     use_fp16_ = true;
   }
 
@@ -616,7 +617,9 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
                                "Initialize: invalid state: " << state,
                                ILLEGAL_STATE, false);
 
-  InitializeMediaFoundation();
+  RETURN_AND_NOTIFY_ON_FAILURE(InitializeMediaFoundation(),
+                               "Could not initialize Media Foundartion",
+                               PLATFORM_FAILURE, false);
 
   config_ = config;
 
@@ -1192,7 +1195,8 @@ GLenum DXVAVideoDecodeAccelerator::GetSurfaceInternalFormat() const {
 // static
 VideoDecodeAccelerator::SupportedProfiles
 DXVAVideoDecodeAccelerator::GetSupportedProfiles(
-    const gpu::GpuPreferences& preferences) {
+    const gpu::GpuPreferences& preferences,
+    const gpu::GpuDriverBugWorkarounds& workarounds) {
   TRACE_EVENT0("gpu,startup",
                "DXVAVideoDecodeAccelerator::GetSupportedProfiles");
 
@@ -1208,7 +1212,8 @@ DXVAVideoDecodeAccelerator::GetSupportedProfiles(
     }
   }
   for (const auto& supported_profile : kSupportedProfiles) {
-    if (!preferences.enable_accelerated_vpx_decode &&
+    if ((!preferences.enable_accelerated_vpx_decode ||
+         workarounds.disable_accelerated_vpx_decode) &&
         (supported_profile >= VP8PROFILE_MIN) &&
         (supported_profile <= VP9PROFILE_MAX)) {
       continue;
@@ -1977,7 +1982,7 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
   weak_this_factory_.InvalidateWeakPtrs();
   weak_ptr_ = weak_this_factory_.GetWeakPtr();
   pending_output_samples_.clear();
-  decoder_.Release();
+  decoder_.Reset();
   config_change_detector_.reset();
 
   // If we are processing a config change, then leave the d3d9/d3d11 objects
@@ -1993,21 +1998,21 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
     pending_input_buffers_.clear();
     pictures_requested_ = false;
     if (use_dx11_) {
-      d3d11_processor_.Release();
-      enumerator_.Release();
-      video_context_.Release();
-      video_device_.Release();
-      d3d11_device_context_.Release();
-      d3d11_device_.Release();
-      d3d11_device_manager_.Release();
-      d3d11_query_.Release();
-      multi_threaded_.Release();
+      d3d11_processor_.Reset();
+      enumerator_.Reset();
+      video_context_.Reset();
+      video_device_.Reset();
+      d3d11_device_context_.Reset();
+      d3d11_device_.Reset();
+      d3d11_device_manager_.Reset();
+      d3d11_query_.Reset();
+      multi_threaded_.Reset();
       processor_width_ = processor_height_ = 0;
     } else {
-      d3d9_.Release();
-      d3d9_device_ex_.Release();
-      device_manager_.Release();
-      query_.Release();
+      d3d9_.Reset();
+      d3d9_device_ex_.Reset();
+      device_manager_.Reset();
+      query_.Reset();
     }
   }
   sent_drain_message_ = false;
@@ -2087,14 +2092,15 @@ void DXVAVideoDecodeAccelerator::RequestPictureBuffers(int width, int height) {
 void DXVAVideoDecodeAccelerator::NotifyPictureReady(
     int picture_buffer_id,
     int input_buffer_id,
-    const gfx::ColorSpace& color_space) {
+    const gfx::ColorSpace& color_space,
+    bool allow_overlay) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
   // This task could execute after the decoder has been torn down.
   if (GetState() != kUninitialized && client_) {
     // TODO(henryhsu): Use correct visible size instead of (0, 0). We can't use
     // coded size here so use (0, 0) intentionally to have the client choose.
     Picture picture(picture_buffer_id, input_buffer_id, gfx::Rect(0, 0),
-                    color_space, false);
+                    color_space, allow_overlay);
     client_->PictureReady(picture);
   }
 }
@@ -2172,10 +2178,10 @@ void DXVAVideoDecodeAccelerator::FlushInternal() {
   // Attempt to retrieve an output frame from the decoder. If we have one,
   // return and proceed when the output frame is processed. If we don't have a
   // frame then we are done.
-  gfx::ColorSpace color_space = config_change_detector_->current_color_space();
-  if (!color_space.IsValid())
+  VideoColorSpace color_space = config_change_detector_->current_color_space();
+  if (color_space == VideoColorSpace())
     color_space = config_.color_space;
-  DoDecode(color_space);
+  DoDecode(color_space.ToGfxColorSpace());
   if (OutputSamplesPresent())
     return;
 
@@ -2224,8 +2230,8 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
     return;
   }
 
-  gfx::ColorSpace color_space = config_change_detector_->current_color_space();
-  if (!color_space.IsValid())
+  VideoColorSpace color_space = config_change_detector_->current_color_space();
+  if (color_space == VideoColorSpace())
     color_space = config_.color_space;
 
   if (!inputs_before_decode_) {
@@ -2247,7 +2253,7 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
   // process the input again. Failure in either of these steps is treated as a
   // decoder failure.
   if (hr == MF_E_NOTACCEPTING) {
-    DoDecode(color_space);
+    DoDecode(color_space.ToGfxColorSpace());
     // If the DoDecode call resulted in an output frame then we should not
     // process any more input until that frame is copied to the target surface.
     if (!OutputSamplesPresent()) {
@@ -2279,7 +2285,7 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
   RETURN_AND_NOTIFY_ON_HR_FAILURE(hr, "Failed to process input sample",
                                   PLATFORM_FAILURE, );
 
-  DoDecode(color_space);
+  DoDecode(color_space.ToGfxColorSpace());
 
   State state = GetState();
   RETURN_AND_NOTIFY_ON_FAILURE(
@@ -2505,7 +2511,8 @@ void DXVAVideoDecodeAccelerator::CopySurfaceComplete(
                                PLATFORM_FAILURE, );
 
   NotifyPictureReady(picture_buffer->id(), input_buffer_id,
-                     picture_buffer->color_space());
+                     picture_buffer->color_space(),
+                     picture_buffer->AllowOverlay());
 
   {
     base::AutoLock lock(decoder_lock_);
@@ -2558,7 +2565,8 @@ void DXVAVideoDecodeAccelerator::BindPictureBufferToSample(
                                PLATFORM_FAILURE, );
 
   NotifyPictureReady(picture_buffer->id(), input_buffer_id,
-                     picture_buffer->color_space());
+                     picture_buffer->color_space(),
+                     picture_buffer->AllowOverlay());
 
   {
     base::AutoLock lock(decoder_lock_);
@@ -2777,11 +2785,10 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
     int height,
     const gfx::ColorSpace& color_space) {
   if (width < processor_width_ || height != processor_height_) {
-    d3d11_processor_.Release();
-    enumerator_.Release();
+    d3d11_processor_.Reset();
+    enumerator_.Reset();
     processor_width_ = 0;
     processor_height_ = 0;
-    dx11_converter_color_space_ = gfx::ColorSpace();
 
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc;
     desc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
@@ -2825,24 +2832,51 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
     dx11_converter_output_color_space_ = color_space;
   } else {
     dx11_converter_output_color_space_ = gfx::ColorSpace::CreateSRGB();
-    // Not sure if this call is expensive, let's only do it if the color
-    // space changes.
-    if ((use_color_info_ || use_fp16_) &&
-        dx11_converter_color_space_ != color_space) {
+    if (use_color_info_ || use_fp16_) {
       base::win::ScopedComPtr<ID3D11VideoContext1> video_context1;
       HRESULT hr = video_context_.QueryInterface(video_context1.Receive());
       if (SUCCEEDED(hr)) {
-        if (use_fp16_ && base::CommandLine::ForCurrentProcess()->HasSwitch(
-                             switches::kEnableHDROutput)) {
+        if (use_fp16_ &&
+            base::CommandLine::ForCurrentProcess()->HasSwitch(
+                switches::kEnableHDR) &&
+            color_space.IsHDR()) {
+          // Note, we only use the SCRGBLinear output color space when
+          // the input is PQ, because nvidia drivers will not convert
+          // G22 to G10 for some reason.
           dx11_converter_output_color_space_ =
               gfx::ColorSpace::CreateSCRGBLinear();
         }
-        video_context1->VideoProcessorSetStreamColorSpace1(
-            d3d11_processor_.get(), 0,
-            gfx::ColorSpaceWin::GetDXGIColorSpace(color_space));
-        video_context1->VideoProcessorSetOutputColorSpace1(
-            d3d11_processor_.get(), gfx::ColorSpaceWin::GetDXGIColorSpace(
-                                        dx11_converter_output_color_space_));
+        // Since the video processor doesn't support HLG, let's just do the
+        // YUV->RGB conversion and let the output color space be HLG.
+        // This won't work well unless color management is on, but if color
+        // management is off we don't support HLG anyways.
+        if (color_space ==
+            gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
+                            gfx::ColorSpace::TransferID::ARIB_STD_B67,
+                            gfx::ColorSpace::MatrixID::BT709,
+                            gfx::ColorSpace::RangeID::LIMITED)) {
+          video_context1->VideoProcessorSetStreamColorSpace1(
+              d3d11_processor_.get(), 0,
+              DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020);
+          video_context1->VideoProcessorSetOutputColorSpace1(
+              d3d11_processor_.get(),
+              DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+          dx11_converter_output_color_space_ = color_space.GetAsFullRangeRGB();
+        } else {
+          DVLOG(2) << "input color space: " << color_space
+                   << " DXGIColorSpace: "
+                   << gfx::ColorSpaceWin::GetDXGIColorSpace(color_space);
+          DVLOG(2) << "output color space:"
+                   << dx11_converter_output_color_space_ << " DXGIColorSpace: "
+                   << gfx::ColorSpaceWin::GetDXGIColorSpace(
+                          dx11_converter_output_color_space_);
+          video_context1->VideoProcessorSetStreamColorSpace1(
+              d3d11_processor_.get(), 0,
+              gfx::ColorSpaceWin::GetDXGIColorSpace(color_space));
+          video_context1->VideoProcessorSetOutputColorSpace1(
+              d3d11_processor_.get(), gfx::ColorSpaceWin::GetDXGIColorSpace(
+                                          dx11_converter_output_color_space_));
+        }
       } else {
         D3D11_VIDEO_PROCESSOR_COLOR_SPACE d3d11_color_space =
             gfx::ColorSpaceWin::GetD3D11ColorSpace(color_space);
@@ -2853,7 +2887,6 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
         video_context_->VideoProcessorSetOutputColorSpace(
             d3d11_processor_.get(), &d3d11_color_space);
       }
-      dx11_converter_color_space_ = color_space;
     }
   }
   return true;
@@ -2921,7 +2954,7 @@ bool DXVAVideoDecodeAccelerator::SetTransformOutputType(IMFTransform* transform,
       RETURN_ON_HR_FAILURE(hr, "Failed to set output type", false);
       return true;
     }
-    media_type.Release();
+    media_type.Reset();
   }
   return false;
 }

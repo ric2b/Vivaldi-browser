@@ -25,10 +25,16 @@ static_library("notes") {
   ]
   deps = [
     "//base:base",
+    "//base:i18n",
+    "//chrome:strings",
+    "//chrome/common/importer:interfaces",
     "//components/keyed_service/core:core",
+    "//components/keyed_service/content:content",
     "//components/renderer_context_menu:renderer_context_menu",
+    "//content/public/browser",
     "//skia",
     "//third_party/icu",
+    "//ui/base:base",
     "//url:url",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",

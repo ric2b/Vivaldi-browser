@@ -14,8 +14,7 @@
 #include "apps/saved_files_service_factory.h"
 #include "base/memory/ptr_util.h"
 #include "base/value_conversions.h"
-#include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
@@ -107,7 +106,7 @@ void RemoveSavedFileEntry(ExtensionPrefs* prefs,
 // Clears all SavedFileEntry for the app from ExtensionPrefs.
 void ClearSavedFileEntries(ExtensionPrefs* prefs,
                            const std::string& extension_id) {
-  prefs->UpdateExtensionPref(extension_id, kFileEntries, NULL);
+  prefs->UpdateExtensionPref(extension_id, kFileEntries, nullptr);
 }
 
 // Returns all SavedFileEntries for the app.
@@ -158,7 +157,7 @@ SavedFileEntry::SavedFileEntry(const std::string& id,
 
 class SavedFilesService::SavedFiles {
  public:
-  SavedFiles(Profile* profile, const std::string& extension_id);
+  SavedFiles(content::BrowserContext* context, const std::string& extension_id);
   ~SavedFiles();
 
   void RegisterFileEntry(const std::string& id,
@@ -177,7 +176,7 @@ class SavedFilesService::SavedFiles {
 
   void LoadSavedFileEntriesFromPreferences();
 
-  Profile* profile_;
+  content::BrowserContext* context_;
   const std::string extension_id_;
 
   // Contains all file entries that have been registered, keyed by ID.
@@ -193,16 +192,14 @@ class SavedFilesService::SavedFiles {
 };
 
 // static
-SavedFilesService* SavedFilesService::Get(Profile* profile) {
-  return SavedFilesServiceFactory::GetForProfile(profile);
+SavedFilesService* SavedFilesService::Get(content::BrowserContext* context) {
+  return SavedFilesServiceFactory::GetForBrowserContext(context);
 }
 
-SavedFilesService::SavedFilesService(Profile* profile) : profile_(profile) {
+SavedFilesService::SavedFilesService(content::BrowserContext* context)
+    : context_(context) {
   registrar_.Add(this,
                  extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this,
-                 chrome::NOTIFICATION_APP_TERMINATING,
                  content::NotificationService::AllSources());
 }
 
@@ -211,23 +208,12 @@ SavedFilesService::~SavedFilesService() {}
 void SavedFilesService::Observe(int type,
                                 const content::NotificationSource& source,
                                 const content::NotificationDetails& details) {
-  switch (type) {
-    case extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED: {
-      ExtensionHost* host = content::Details<ExtensionHost>(details).ptr();
-      const Extension* extension = host->extension();
-      if (extension) {
-        ClearQueueIfNoRetainPermission(extension);
-        Clear(extension->id());
-      }
-      break;
-    }
-
-    case chrome::NOTIFICATION_APP_TERMINATING: {
-      // Stop listening to NOTIFICATION_EXTENSION_HOST_DESTROYED in particular
-      // as all extension hosts will be destroyed as a result of shutdown.
-      registrar_.RemoveAll();
-      break;
-    }
+  DCHECK_EQ(extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED, type);
+  ExtensionHost* host = content::Details<ExtensionHost>(details).ptr();
+  const Extension* extension = host->extension();
+  if (extension) {
+    ClearQueueIfNoRetainPermission(extension);
+    Clear(extension->id());
   }
 }
 
@@ -248,7 +234,7 @@ std::vector<SavedFileEntry> SavedFilesService::GetAllFileEntries(
   SavedFiles* saved_files = Get(extension_id);
   if (saved_files)
     return saved_files->GetAllFileEntries();
-  return GetSavedFileEntries(ExtensionPrefs::Get(profile_), extension_id);
+  return GetSavedFileEntries(ExtensionPrefs::Get(context_), extension_id);
 }
 
 bool SavedFilesService::IsRegistered(const std::string& extension_id,
@@ -271,8 +257,14 @@ void SavedFilesService::ClearQueueIfNoRetainPermission(
 }
 
 void SavedFilesService::ClearQueue(const extensions::Extension* extension) {
-  ClearSavedFileEntries(ExtensionPrefs::Get(profile_), extension->id());
+  ClearSavedFileEntries(ExtensionPrefs::Get(context_), extension->id());
   Clear(extension->id());
+}
+
+void SavedFilesService::OnApplicationTerminating() {
+  // Stop listening to NOTIFICATION_EXTENSION_HOST_DESTROYED in particular
+  // as all extension hosts will be destroyed as a result of shutdown.
+  registrar_.RemoveAll();
 }
 
 SavedFilesService::SavedFiles* SavedFilesService::Get(
@@ -291,7 +283,7 @@ SavedFilesService::SavedFiles* SavedFilesService::GetOrInsert(
     return saved_files;
 
   std::unique_ptr<SavedFiles> scoped_saved_files(
-      new SavedFiles(profile_, extension_id));
+      new SavedFiles(context_, extension_id));
   saved_files = scoped_saved_files.get();
   extension_id_to_saved_files_.insert(
       std::make_pair(extension_id, std::move(scoped_saved_files)));
@@ -302,9 +294,9 @@ void SavedFilesService::Clear(const std::string& extension_id) {
   extension_id_to_saved_files_.erase(extension_id);
 }
 
-SavedFilesService::SavedFiles::SavedFiles(Profile* profile,
+SavedFilesService::SavedFiles::SavedFiles(content::BrowserContext* context,
                                           const std::string& extension_id)
-    : profile_(profile), extension_id_(extension_id) {
+    : context_(context), extension_id_(extension_id) {
   LoadSavedFileEntriesFromPreferences();
 }
 
@@ -342,7 +334,7 @@ void SavedFilesService::SavedFiles::EnqueueFileEntry(const std::string& id) {
   }
   saved_file_lru_.insert(
       std::make_pair(file_entry->sequence_number, file_entry));
-  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile_);
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(context_);
   if (old_sequence_number) {
     saved_file_lru_.erase(old_sequence_number);
     UpdateSavedFileEntry(prefs, extension_id_, *file_entry);
@@ -397,7 +389,7 @@ void SavedFilesService::SavedFiles::MaybeCompactSequenceNumbers() {
     return;
 
   int sequence_number = 0;
-  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile_);
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(context_);
   for (std::map<int, SavedFileEntry*>::iterator it = saved_file_lru_.begin();
        it != saved_file_lru_.end();
        ++it) {
@@ -418,7 +410,7 @@ void SavedFilesService::SavedFiles::MaybeCompactSequenceNumbers() {
 }
 
 void SavedFilesService::SavedFiles::LoadSavedFileEntriesFromPreferences() {
-  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile_);
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(context_);
   std::vector<SavedFileEntry> saved_entries =
       GetSavedFileEntries(prefs, extension_id_);
   for (std::vector<SavedFileEntry>::iterator it = saved_entries.begin();

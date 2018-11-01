@@ -110,6 +110,8 @@ ios_framework_bundle("earl_grey") {
     "src/EarlGrey/Common/GREYError+Internal.h",
     "src/EarlGrey/Common/GREYError.h",
     "src/EarlGrey/Common/GREYError.m",
+    "src/EarlGrey/Common/GREYErrorConstants.h",
+    "src/EarlGrey/Common/GREYErrorConstants.m",
     "src/EarlGrey/Common/GREYExposed.h",
     "src/EarlGrey/Common/GREYFailureFormatter.h",
     "src/EarlGrey/Common/GREYFailureFormatter.m",
@@ -269,7 +271,6 @@ ios_framework_bundle("earl_grey") {
   deps = [
     "//build/config/ios:xctest",
     "//ios/third_party/fishhook",
-    "//third_party/google_toolbox_for_mac",
   ]
   public_deps = [
     "//ios/third_party/ochamcrest:ochamcrest+link",

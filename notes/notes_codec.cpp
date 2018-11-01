@@ -82,7 +82,7 @@ base::Value* NotesCodec::Encode(const Notes_Node* notes_node,
   // We are going to store the computed checksum. So set stored checksum to be
   // the same as computed checksum.
   stored_checksum_ = computed_checksum_;
-  main->Set(kChecksumKey, new base::StringValue(computed_checksum_));
+  main->Set(kChecksumKey, new base::Value(computed_checksum_));
   return main;
 }
 

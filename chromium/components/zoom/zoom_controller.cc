@@ -152,6 +152,23 @@ bool ZoomController::SetZoomLevelByClient(
     zoom_map->SetTemporaryZoomLevel(render_process_id, render_view_id,
                                     zoom_level);
   } else {
+    if (vivaldi::IsVivaldiRunning()) {
+      bool tabZoom = vivaldi::isTabZoomEnabled(web_contents());
+      std::string host = net::GetHostOrSpecFromURL(web_contents()->GetURL());
+      if (tabZoom && !vivaldi::IsVivaldiApp(host)) {
+        int render_process_id = web_contents()->GetRenderProcessHost()->GetID();
+        int render_view_id =
+            web_contents()->GetRenderViewHost()->GetRoutingID();
+        zoom_map->SetTemporaryZoomLevel(render_process_id, render_view_id,
+                                        zoom_level);
+        last_client_ = NULL;
+        return true;
+      } else if (!entry) {
+        // This could happen for WebViews that had not been navigated. VB-27804.
+        zoom_map->SetZoomLevelForHost(host, zoom_level);
+        // Will clean up and return below.
+      }
+    }
     if (!entry) {
       last_client_ = NULL;
       // If we exit without triggering an update, we should clear event_data_,
@@ -159,21 +176,9 @@ bool ZoomController::SetZoomLevelByClient(
       event_data_.reset();
       return false;
     }
-
-    bool tabZoom = vivaldi::isTabZoomEnabled(web_contents());
-    std::string host =
-      net::GetHostOrSpecFromURL(web_contents()->GetURL());
-
-    if (tabZoom && !vivaldi::IsVivaldiApp(host)) {
-      int render_process_id = web_contents()->GetRenderProcessHost()->GetID();
-      int render_view_id = web_contents()->GetRenderViewHost()->GetRoutingID();
-      zoom_map->SetTemporaryZoomLevel(
-        render_process_id, render_view_id, zoom_level);
-    } else {
     std::string host =
         net::GetHostOrSpecFromURL(content::HostZoomMap::GetURLFromEntry(entry));
     zoom_map->SetZoomLevelForHost(host, zoom_level);
-    }
   }
 
   DCHECK(!event_data_);
@@ -308,7 +313,7 @@ void ZoomController::DidFinishNavigation(
   if (navigation_handle->IsErrorPage())
     content::HostZoomMap::SendErrorPageZoomLevelRefresh(web_contents());
 
-  if (!navigation_handle->IsSamePage())
+  if (!navigation_handle->IsSameDocument())
     ResetZoomModeOnNavigationIfNeeded(navigation_handle->GetURL());
 
   // If the main frame's content has changed, the new page may have a different

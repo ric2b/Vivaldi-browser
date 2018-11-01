@@ -4,18 +4,18 @@
 
 #include "core/css/CSSGridAutoRepeatValue.h"
 
-#include "wtf/text/StringBuilder.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
-String CSSGridAutoRepeatValue::customCSSText() const {
+String CSSGridAutoRepeatValue::CustomCSSText() const {
   StringBuilder result;
-  result.append("repeat(");
-  result.append(getValueName(autoRepeatID()));
-  result.append(", ");
-  result.append(CSSValueList::customCSSText());
-  result.append(')');
-  return result.toString();
+  result.Append("repeat(");
+  result.Append(getValueName(AutoRepeatID()));
+  result.Append(", ");
+  result.Append(CSSValueList::CustomCSSText());
+  result.Append(')');
+  return result.ToString();
 }
 
 }  // namespace blink

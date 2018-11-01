@@ -332,8 +332,7 @@ void PopularSitesImpl::RegisterProfilePrefs(
 
   user_prefs->RegisterInt64Pref(kPopularSitesLastDownloadPref, 0);
   user_prefs->RegisterStringPref(kPopularSitesURLPref, std::string());
-  user_prefs->RegisterListPref(kPopularSitesJsonPref,
-                               DefaultPopularSites().release());
+  user_prefs->RegisterListPref(kPopularSitesJsonPref, DefaultPopularSites());
 }
 
 void PopularSitesImpl::FetchPopularSites() {
@@ -380,8 +379,9 @@ void PopularSitesImpl::OnURLFetchComplete(const net::URLFetcher* source) {
     return;
   }
 
-  parse_json_.Run(json_string, base::Bind(&PopularSitesImpl::OnJsonParsed,
-                                          weak_ptr_factory_.GetWeakPtr()),
+  parse_json_.Run(json_string,
+                  base::Bind(&PopularSitesImpl::OnJsonParsed,
+                             weak_ptr_factory_.GetWeakPtr()),
                   base::Bind(&PopularSitesImpl::OnJsonParseFailed,
                              weak_ptr_factory_.GetWeakPtr()));
 }

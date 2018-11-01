@@ -15,12 +15,15 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_content_type.h"
+#include "third_party/WebKit/public/platform/modules/mediasession/media_session.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "content/browser/media/session/media_session_android.h"
 #endif  // defined(OS_ANDROID)
 
 namespace content {
+
+using MediaSessionUserAction = MediaSessionUmaHelper::MediaSessionUserAction;
 
 namespace {
 
@@ -45,6 +48,26 @@ size_t ComputeFrameDepth(RenderFrameHost* rfh,
   }
   (*map_rfh_to_depth)[rfh] = depth;
   return depth;
+}
+
+MediaSessionUserAction MediaSessionActionToUserAction(
+    blink::mojom::MediaSessionAction action) {
+  switch (action) {
+    case blink::mojom::MediaSessionAction::PLAY:
+      return MediaSessionUserAction::Play;
+    case blink::mojom::MediaSessionAction::PAUSE:
+      return MediaSessionUserAction::Pause;
+    case blink::mojom::MediaSessionAction::PREVIOUS_TRACK:
+      return MediaSessionUserAction::PreviousTrack;
+    case blink::mojom::MediaSessionAction::NEXT_TRACK:
+      return MediaSessionUserAction::NextTrack;
+    case blink::mojom::MediaSessionAction::SEEK_BACKWARD:
+      return MediaSessionUserAction::SeekBackward;
+    case blink::mojom::MediaSessionAction::SEEK_FORWARD:
+      return MediaSessionUserAction::SeekForward;
+  }
+  NOTREACHED();
+  return MediaSessionUserAction::Count;
 }
 
 }  // anonymous namespace
@@ -93,8 +116,10 @@ MediaSessionImpl::~MediaSessionImpl() {
   DCHECK(pepper_players_.empty());
   DCHECK(one_shot_players_.empty());
   DCHECK(audio_focus_state_ == State::INACTIVE);
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.MediaSessionDestroyed();
+    observer.StopObserving();
+  }
 }
 
 void MediaSessionImpl::WebContentsDestroyed() {
@@ -118,8 +143,10 @@ void MediaSessionImpl::RenderFrameDeleted(RenderFrameHost* rfh) {
 
 void MediaSessionImpl::DidFinishNavigation(
     NavigationHandle* navigation_handle) {
-  if (!navigation_handle->HasCommitted() || navigation_handle->IsSamePage())
+  if (!navigation_handle->HasCommitted() ||
+      navigation_handle->IsSameDocument()) {
     return;
+  }
 
   RenderFrameHost* rfh = navigation_handle->GetRenderFrameHost();
   if (services_.count(rfh))
@@ -299,12 +326,17 @@ void MediaSessionImpl::OnPlayerPaused(MediaSessionPlayerObserver* observer,
   }
 
   // Otherwise, suspend the session.
-  DCHECK(!IsSuspended());
+  DCHECK(IsActive());
   OnSuspendInternal(SuspendType::CONTENT, State::SUSPENDED);
 }
 
 void MediaSessionImpl::Resume(SuspendType suspend_type) {
-  DCHECK(IsReallySuspended());
+  DCHECK(IsSuspended());
+
+  if (suspend_type == SuspendType::UI) {
+    MediaSessionUmaHelper::RecordMediaSessionUserAction(
+        MediaSessionUmaHelper::MediaSessionUserAction::PlayDefault);
+  }
 
   // When the resume requests comes from another source than system, audio focus
   // must be requested.
@@ -324,8 +356,13 @@ void MediaSessionImpl::Resume(SuspendType suspend_type) {
 }
 
 void MediaSessionImpl::Suspend(SuspendType suspend_type) {
-  if (IsSuspended())
+  if (!IsActive())
     return;
+
+  if (suspend_type == SuspendType::UI) {
+    MediaSessionUmaHelper::RecordMediaSessionUserAction(
+        MediaSessionUserAction::PauseDefault);
+  }
 
   OnSuspendInternal(suspend_type, State::SUSPENDED);
 }
@@ -334,6 +371,11 @@ void MediaSessionImpl::Stop(SuspendType suspend_type) {
   DCHECK(audio_focus_state_ != State::INACTIVE);
   DCHECK(suspend_type != SuspendType::CONTENT);
   DCHECK(!HasPepper());
+
+  if (suspend_type == SuspendType::UI) {
+    MediaSessionUmaHelper::RecordMediaSessionUserAction(
+        MediaSessionUmaHelper::MediaSessionUserAction::StopDefault);
+  }
 
   // TODO(mlamouri): merge the logic between UI and SYSTEM.
   if (suspend_type == SuspendType::SYSTEM) {
@@ -379,13 +421,8 @@ bool MediaSessionImpl::IsActive() const {
   return audio_focus_state_ == State::ACTIVE;
 }
 
-bool MediaSessionImpl::IsReallySuspended() const {
-  return audio_focus_state_ == State::SUSPENDED;
-}
-
 bool MediaSessionImpl::IsSuspended() const {
-  // TODO(mlamouri): should be == State::SUSPENDED.
-  return audio_focus_state_ != State::ACTIVE;
+  return audio_focus_state_ == State::SUSPENDED;
 }
 
 bool MediaSessionImpl::IsControllable() const {
@@ -419,10 +456,6 @@ MediaSessionImpl::RegisterMediaSessionStateChangedCallbackForTest(
 void MediaSessionImpl::SetDelegateForTests(
     std::unique_ptr<AudioFocusDelegate> delegate) {
   delegate_ = std::move(delegate);
-}
-
-bool MediaSessionImpl::IsActiveForTest() const {
-  return audio_focus_state_ == State::ACTIVE;
 }
 
 MediaSessionUmaHelper* MediaSessionImpl::uma_helper_for_test() {
@@ -640,6 +673,9 @@ void MediaSessionImpl::OnMediaSessionActionsChanged(
 
 void MediaSessionImpl::DidReceiveAction(
     blink::mojom::MediaSessionAction action) {
+  MediaSessionUmaHelper::RecordMediaSessionUserAction(
+      MediaSessionActionToUserAction(action));
+
   // Pause all players in non-routed frames if the action is PAUSE.
   //
   // This is the default PAUSE action handler per Media Session API spec. The
@@ -657,17 +693,17 @@ void MediaSessionImpl::DidReceiveAction(
     RenderFrameHost* rfh_of_routed_service =
         routed_service_ ? routed_service_->GetRenderFrameHost() : nullptr;
     for (const auto& player : normal_players_) {
-      if (player.observer->GetRenderFrameHost() != rfh_of_routed_service)
+      if (player.observer->render_frame_host() != rfh_of_routed_service)
         player.observer->OnSuspend(player.player_id);
     }
     for (const auto& player : pepper_players_) {
-      if (player.observer->GetRenderFrameHost() != rfh_of_routed_service) {
+      if (player.observer->render_frame_host() != rfh_of_routed_service) {
         player.observer->OnSetVolumeMultiplier(player.player_id,
                                                kDuckingVolumeMultiplier);
       }
     }
     for (const auto& player : one_shot_players_) {
-      if (player.observer->GetRenderFrameHost() != rfh_of_routed_service)
+      if (player.observer->render_frame_host() != rfh_of_routed_service)
         player.observer->OnSuspend(player.player_id);
     }
   }
@@ -701,19 +737,19 @@ MediaSessionServiceImpl* MediaSessionImpl::ComputeServiceForRouting() {
   // prefer the top-most frame.
   std::set<RenderFrameHost*> frames;
   for (const auto& player : normal_players_) {
-    RenderFrameHost* frame = player.observer->GetRenderFrameHost();
+    RenderFrameHost* frame = player.observer->render_frame_host();
     if (frame)
       frames.insert(frame);
   }
 
   for (const auto& player : one_shot_players_) {
-    RenderFrameHost* frame = player.observer->GetRenderFrameHost();
+    RenderFrameHost* frame = player.observer->render_frame_host();
     if (frame)
       frames.insert(frame);
   }
 
   for (const auto& player : pepper_players_) {
-    RenderFrameHost* frame = player.observer->GetRenderFrameHost();
+    RenderFrameHost* frame = player.observer->render_frame_host();
     if (frame)
       frames.insert(frame);
   }

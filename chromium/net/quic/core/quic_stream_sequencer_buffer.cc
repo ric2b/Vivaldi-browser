@@ -38,11 +38,7 @@ QuicStreamSequencerBuffer::QuicStreamSequencerBuffer(size_t max_capacity_bytes)
       blocks_count_(
           ceil(static_cast<double>(max_capacity_bytes) / kBlockSizeBytes)),
       total_bytes_read_(0),
-      reduce_sequencer_buffer_memory_life_time_(
-          FLAGS_quic_reloadable_flag_quic_reduce_sequencer_buffer_memory_life_time),  // NOLINT
-      blocks_(reduce_sequencer_buffer_memory_life_time_
-                  ? nullptr
-                  : new BufferBlock*[blocks_count_]()),
+      blocks_(nullptr),
       destruction_indicator_(123456) {
   CHECK_GT(blocks_count_, 1u)
       << "blocks_count_ = " << blocks_count_
@@ -56,7 +52,7 @@ QuicStreamSequencerBuffer::~QuicStreamSequencerBuffer() {
 }
 
 void QuicStreamSequencerBuffer::Clear() {
-  if (!reduce_sequencer_buffer_memory_life_time_ || blocks_ != nullptr) {
+  if (blocks_ != nullptr) {
     for (size_t i = 0; i < blocks_count_; ++i) {
       if (blocks_[i] != nullptr) {
         RetireBlock(i);
@@ -85,7 +81,7 @@ bool QuicStreamSequencerBuffer::RetireBlock(size_t idx) {
 
 QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
     QuicStreamOffset starting_offset,
-    base::StringPiece data,
+    QuicStringPiece data,
     QuicTime timestamp,
     size_t* const bytes_buffered,
     std::string* error_details) {
@@ -108,7 +104,7 @@ QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
   DCHECK(current_gap != gaps_.end());
 
   // "duplication": might duplicate with data alread filled,but also might
-  // overlap across different base::StringPiece objects already written.
+  // overlap across different QuicStringPiece objects already written.
   // In both cases, don't write the data,
   // and allow the caller of this method to handle the result.
   if (offset < current_gap->begin_offset &&
@@ -175,7 +171,7 @@ QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
       bytes_avail = total_bytes_read_ + max_buffer_capacity_bytes_ - offset;
     }
 
-    if (reduce_sequencer_buffer_memory_life_time_ && blocks_ == nullptr) {
+    if (blocks_ == nullptr) {
       blocks_.reset(new BufferBlock*[blocks_count_]());
       for (size_t i = 0; i < blocks_count_; ++i) {
         blocks_[i] = nullptr;
@@ -464,10 +460,6 @@ size_t QuicStreamSequencerBuffer::FlushBufferedFrames() {
 }
 
 void QuicStreamSequencerBuffer::ReleaseWholeBuffer() {
-  if (!reduce_sequencer_buffer_memory_life_time_) {
-    // Don't release buffer if flag is off.
-    return;
-  }
   Clear();
   blocks_.reset(nullptr);
 }

@@ -36,8 +36,6 @@ typedef uint64_t QuicRoundTripCount;
 // pacing is disabled.
 //
 // TODO(vasilvv): implement traffic policer (long-term sampling) mode.
-//
-// TODO(vasilvv): implement packet conservation.
 class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
  public:
   enum Mode {
@@ -102,10 +100,11 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   bool InRecovery() const override;
 
   void SetFromConfig(const QuicConfig& config,
-                     Perspective perspective) override {}
+                     Perspective perspective) override;
+
   void ResumeConnectionState(
       const CachedNetworkParameters& cached_network_params,
-      bool max_bandwidth_resumption) override {}
+      bool max_bandwidth_resumption) override;
   void SetNumEmulatedConnections(int num_connections) override {}
   void OnCongestionEvent(bool rtt_updated,
                          QuicByteCount prior_in_flight,
@@ -130,6 +129,9 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   void OnApplicationLimited(QuicByteCount bytes_in_flight) override;
   // End implementation of SendAlgorithmInterface.
 
+  // Gets the number of RTTs BBR remains in STARTUP phase.
+  QuicRoundTripCount num_startup_rtts() const { return num_startup_rtts_; }
+
   DebugState ExportDebugState() const;
 
  private:
@@ -138,6 +140,18 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
                          QuicRoundTripCount,
                          QuicRoundTripCount>
       MaxBandwidthFilter;
+
+  typedef WindowedFilter<QuicTime::Delta,
+                         MaxFilter<QuicTime::Delta>,
+                         QuicRoundTripCount,
+                         QuicRoundTripCount>
+      MaxAckDelayFilter;
+
+  typedef WindowedFilter<QuicByteCount,
+                         MaxFilter<QuicByteCount>,
+                         QuicRoundTripCount,
+                         QuicRoundTripCount>
+      MaxAckHeightFilter;
 
   // Returns the current estimate of the RTT of the connection.  Outside of the
   // edge cases, this is minimum RTT.
@@ -182,6 +196,15 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
                            bool has_losses,
                            bool is_round_start);
 
+  // Updates the ack spacing max filter if a larger value is observed.
+  void UpdateAckSpacing(QuicTime ack_time,
+                        QuicPacketNumber largest_newly_acked,
+                        const CongestionVector& acked_packets);
+
+  // Updates the ack aggregation max filter in bytes.
+  void UpdateAckAggregationBytes(QuicTime ack_time,
+                                 QuicByteCount newly_acked_bytes);
+
   // Determines the appropriate pacing rate for the connection.
   void CalculatePacingRate();
   // Determines the appropriate congestion window for the connection.
@@ -213,6 +236,20 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // round-trips.
   MaxBandwidthFilter max_bandwidth_;
 
+  // Tracks the maximum spacing between two acks acknowledging in order packets.
+  MaxAckDelayFilter max_ack_spacing_;
+
+  // The time the largest acked packet was acked and when it was sent.
+  QuicTime largest_acked_time_;
+  QuicTime largest_acked_sent_time_;
+
+  // Tracks the maximum number of bytes acked faster than the sending rate.
+  MaxAckHeightFilter max_ack_height_;
+
+  // The time this aggregation started and the number of bytes acked during it.
+  QuicTime aggregation_epoch_start_time_;
+  QuicByteCount aggregation_epoch_bytes_;
+
   // Minimum RTT estimate.  Automatically expires within 10 seconds (and
   // triggers PROBE_RTT mode) if no new value is sampled during that period.
   QuicTime::Delta min_rtt_;
@@ -242,6 +279,8 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // The coefficient by which mean RTT variance is added to the congestion
   // window.  Latched from quic_bbr_rtt_variation_weight flag.
   const float rtt_variance_weight_;
+  // The number of RTTs to stay in STARTUP mode.  Defaults to 3.
+  QuicRoundTripCount num_startup_rtts_;
 
   // Number of round-trips in PROBE_BW mode, used for determining the current
   // pacing gain cycle.

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/i18n/string_compare.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -26,6 +27,10 @@
 namespace translate {
 
 namespace {
+
+// Feature flag for "Translate UI Redesign" project.
+const base::Feature kTranslateCompactUI{"TranslateCompactUI",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Counts used to decide whether infobars should be shown.
 // Android and iOS implementations do not offer a drop down (for space reasons),
@@ -99,7 +104,7 @@ void TranslateInfoBarDelegate::Create(
     old_infobar = infobar_manager->infobar_at(i);
     old_delegate = old_infobar->delegate()->AsTranslateInfoBarDelegate();
     if (old_delegate) {
-      if (!replace_existing_infobar)
+      if (!replace_existing_infobar || IsCompactUIEnabled())
         return;
       break;
     }
@@ -115,6 +120,11 @@ void TranslateInfoBarDelegate::Create(
     infobar_manager->ReplaceInfoBar(old_infobar, std::move(infobar));
   else
     infobar_manager->AddInfoBar(std::move(infobar));
+}
+
+// static
+bool TranslateInfoBarDelegate::IsCompactUIEnabled() {
+  return base::FeatureList::IsEnabled(kTranslateCompactUI);
 }
 
 void TranslateInfoBarDelegate::UpdateOriginalLanguage(
@@ -133,6 +143,8 @@ void TranslateInfoBarDelegate::Translate() {
 
 void TranslateInfoBarDelegate::RevertTranslation() {
   ui_delegate_.RevertTranslation();
+  if (IsCompactUIEnabled())
+    return;
   infobar()->RemoveSelf();
 }
 

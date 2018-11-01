@@ -6,7 +6,7 @@
 #define SerializedScriptValueForModulesFactory_h
 
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -18,17 +18,17 @@ class SerializedScriptValueForModulesFactory final
  public:
   SerializedScriptValueForModulesFactory() : SerializedScriptValueFactory() {}
 
-  PassRefPtr<SerializedScriptValue> create(v8::Isolate*,
-                                           v8::Local<v8::Value>,
-                                           Transferables*,
-                                           WebBlobInfoArray*,
-                                           ExceptionState&) override;
-
  protected:
-  v8::Local<v8::Value> deserialize(SerializedScriptValue*,
-                                   v8::Isolate*,
-                                   MessagePortArray*,
-                                   const WebBlobInfoArray*) override;
+  PassRefPtr<SerializedScriptValue> Create(
+      v8::Isolate*,
+      v8::Local<v8::Value>,
+      const SerializedScriptValue::SerializeOptions&,
+      ExceptionState&) override;
+
+  v8::Local<v8::Value> Deserialize(
+      SerializedScriptValue*,
+      v8::Isolate*,
+      const SerializedScriptValue::DeserializeOptions&) override;
 };
 
 }  // namespace blink

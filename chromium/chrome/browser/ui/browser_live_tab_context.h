@@ -60,7 +60,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
   // see Browser::Create
   static sessions::LiveTabContext* Create(
       Profile* profile,
-      const std::string& app_name);
+      const std::string& app_name, const std::string& ext_data);
 
   // see browser::FindBrowserForWebContents
   static sessions::LiveTabContext* FindContextForWebContents(

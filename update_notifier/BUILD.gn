@@ -23,6 +23,8 @@ executable("update_notifier") {
       "update_notifier_manager.cc",
       "update_notifier_manager.h",
       "update_notifier_resources.h",
+      "update_notifier_switches.cc",
+      "update_notifier_switches.h",
       "update_notifier_window.cc",
       "update_notifier_window.h",
     ]

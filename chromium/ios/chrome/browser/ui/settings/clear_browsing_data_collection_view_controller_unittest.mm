@@ -38,6 +38,10 @@
 #import "testing/gtest_mac.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using testing::Return;
 
 @interface ClearBrowsingDataCollectionViewController (ExposedForTesting)
@@ -89,7 +93,7 @@ class ClearBrowsingDataCollectionViewControllerTest
     return prefs;
   }
 
-  CollectionViewController* NewController() override {
+  CollectionViewController* InstantiateController() override {
     return [[ClearBrowsingDataCollectionViewController alloc]
         initWithBrowserState:browser_state_.get()];
   }
@@ -234,7 +238,7 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest,
   ASSERT_EQ("en", GetApplicationContext()->GetApplicationLocale());
   PrefService* prefs = browser_state_->GetPrefs();
   prefs->SetInteger(browsing_data::prefs::kDeleteTimePeriod,
-                    browsing_data::ALL_TIME);
+                    static_cast<int>(browsing_data::TimePeriod::ALL_TIME));
   CacheCounter counter(browser_state_.get());
 
   // Test multiple possible types of formatting.
@@ -274,7 +278,7 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest,
   }
   PrefService* prefs = browser_state_->GetPrefs();
   prefs->SetInteger(browsing_data::prefs::kDeleteTimePeriod,
-                    browsing_data::LAST_HOUR);
+                    static_cast<int>(browsing_data::TimePeriod::LAST_HOUR));
   CacheCounter counter(browser_state_.get());
 
   // Test multiple possible types of formatting.

@@ -32,8 +32,8 @@
 #define UndoStack_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/Deque.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Deque.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -43,29 +43,44 @@ class UndoStep;
 // |UndoStack| is owned by and always 1:1 to |Editor|. Since |Editor| is 1:1 to
 // |LocalFrame|, |UndoStack| is also 1:1 to |LocalFrame|.
 class UndoStack final : public GarbageCollected<UndoStack> {
+  using UndoStepStack = HeapDeque<Member<UndoStep>>;
   WTF_MAKE_NONCOPYABLE(UndoStack);
 
  public:
-  static UndoStack* create();
+  static UndoStack* Create();
 
-  void registerUndoStep(UndoStep*);
-  void registerRedoStep(UndoStep*);
-  bool canUndo() const;
-  bool canRedo() const;
-  void undo();
-  void redo();
-  void clear();
+  void RegisterUndoStep(UndoStep*);
+  void RegisterRedoStep(UndoStep*);
+  bool CanUndo() const;
+  bool CanRedo() const;
+  void Undo();
+  void Redo();
+  void Clear();
+
+  class UndoStepRange {
+    STACK_ALLOCATED();
+
+   public:
+    using ConstIterator = UndoStepStack::const_reverse_iterator;
+    ConstIterator begin() { return step_stack_.rbegin(); }
+    ConstIterator end() { return step_stack_.rend(); }
+
+    explicit UndoStepRange(const UndoStepStack&);
+
+   private:
+    const UndoStepStack& step_stack_;
+  };
+
+  UndoStepRange UndoSteps() const;
 
   DECLARE_TRACE();
 
  private:
   UndoStack();
 
-  typedef HeapDeque<Member<UndoStep>> UndoStepStack;
-
-  bool m_inRedo;
-  UndoStepStack m_undoStack;
-  UndoStepStack m_redoStack;
+  bool in_redo_;
+  UndoStepStack undo_stack_;
+  UndoStepStack redo_stack_;
 };
 
 }  // namespace blink

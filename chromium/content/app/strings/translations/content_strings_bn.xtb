@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">দয়া করে একটি বৈধ মান লিখুন৷ কাছাকাছির বৈধ মান হল <ph name="VALID_VALUE" />৷</translation>
 <translation id="2653659639078652383">জমা</translation>
 <translation id="2674318244760992338">পাদলেখ</translation>
+<translation id="2709516037105925701">স্বয়ংপূরণ</translation>
 <translation id="2723001399770238859">অডিও</translation>
 <translation id="2746543609216772311">মানকে অবশ্যই <ph name="MINIMUM_DATE_OR_TIME" /> বা পরবর্তী হতে হবে৷</translation>
 <translation id="2759744352195237655">পপ আপ বোতাম</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">ডিরেক্টরি</translation>
 <translation id="6934078000481955284">ব্লক উদ্ধৃতি</translation>
 <translation id="6941933287844615239">মিডিয়া ডাউনলোড করুন</translation>
+<translation id="6989848892321993519">দয়া করে এই পাঠ্যকে ন্যূনতম <ph name="MIN_CHARACTERS" /> অক্ষরের বা তার বেশি দৈর্ঘ্যের করুন (আপনি বর্তমানে ১টি অক্ষর ব্যবহার করেছেন)।</translation>
 <translation id="7057186640035488495">চলচ্চিত্রের সময়</translation>
 <translation id="709897737746224366">দয়া করে অনুরোধ হওয়া বিন্যাসটি মেলান৷</translation>
 <translation id="7223624360433298498">অতিবাহিত সময়</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">দয়া করে একটি ফাইল নির্বাচন করুন৷</translation>
 <translation id="8461852803063341183">রেডিও বোতাম</translation>
 <translation id="8511325616783751178">ড্রপ ডাউন বোতাম</translation>
+<translation id="8519420564908284378">দুটি স্ক্রিনেই প্লে করুন</translation>
 <translation id="8534579021159131403">মিনিট</translation>
 <translation id="8541249477527128034">মিডিয়া নিয়ন্ত্রণ</translation>
 <translation id="8583702881314752957">সংজ্ঞার তালিকা</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">রিমোট প্লেব্যাক নিয়ন্ত্রণ করুন</translation>
 <translation id="8750798805984357768">দয়া করে বিকল্পগুলির একটি নির্বাচন করুন৷</translation>
 <translation id="8785498733064193001">প্লেব্যাক শুরু করুন</translation>
+<translation id="8845239796550121995">এখন আপনার TV তে কাস্ট করা হচ্ছে</translation>
 <translation id="8851136666856101339">প্রধান</translation>
 <translation id="8987927404178983737">মাস</translation>
 <translation id="901493112792887934">সেকেন্ডে বর্তমান সময়</translation>

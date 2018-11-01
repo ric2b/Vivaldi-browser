@@ -18,7 +18,6 @@
 using base::checked_cast;
 using base::Value;
 using base::DictionaryValue;
-using base::StringValue;
 
 namespace autofill {
 
@@ -94,7 +93,7 @@ void SavePasswordProgressLogger::LogHTMLForm(
 void SavePasswordProgressLogger::LogURL(
     SavePasswordProgressLogger::StringID label,
     const GURL& url) {
-  LogValue(label, StringValue(ScrubURL(url)));
+  LogValue(label, Value(ScrubURL(url)));
 }
 
 void SavePasswordProgressLogger::LogBoolean(
@@ -117,7 +116,7 @@ void SavePasswordProgressLogger::LogNumber(
 
 void SavePasswordProgressLogger::LogMessage(
     SavePasswordProgressLogger::StringID message) {
-  LogValue(STRING_MESSAGE, StringValue(GetStringFromID(message)));
+  LogValue(STRING_MESSAGE, Value(GetStringFromID(message)));
 }
 
 // static
@@ -144,7 +143,7 @@ std::string SavePasswordProgressLogger::ScrubElementID(
 // static
 std::string SavePasswordProgressLogger::ScrubElementID(std::string element_id) {
   std::replace_if(element_id.begin(), element_id.end(), IsUnwantedInElementID,
-                  ' ');
+                  '_');
   return element_id;
 }
 
@@ -391,6 +390,39 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Form votes";
     case SavePasswordProgressLogger::STRING_REUSE_FOUND:
       return "Password reused from ";
+    case SavePasswordProgressLogger::STRING_GENERATION_DISABLED_SAVING_DISABLED:
+      return "Generation disabled: saving disabled";
+    case SavePasswordProgressLogger::STRING_GENERATION_DISABLED_NO_SYNC:
+      return "Generation disabled: no sync";
+    case SavePasswordProgressLogger::
+        STRING_GENERATION_DISABLED_CUSTOM_PASSPHRASE:
+      return "Generation disabled: custom passphrase";
+    case STRING_GENERATION_RENDERER_ENABLED:
+      return "Generation renderer enabled";
+    case STRING_GENERATION_RENDERER_INVALID_PASSWORD_FORM:
+      return "Generation invalid PasswordForm";
+    case STRING_GENERATION_RENDERER_POSSIBLE_ACCOUNT_CREATION_FORMS:
+      return "Generation possible account creation forms";
+    case STRING_GENERATION_RENDERER_NO_PASSWORD_MANAGER_ACCESS:
+      return "Generation: no PasswordManager access";
+    case STRING_GENERATION_RENDERER_FORM_ALREADY_FOUND:
+      return "Generation: account creation form already found";
+    case STRING_GENERATION_RENDERER_NO_POSSIBLE_CREATION_FORMS:
+      return "Generation: no possible account creation forms";
+    case STRING_GENERATION_RENDERER_NOT_BLACKLISTED:
+      return "Generation: no non-blacklisted confirmation";
+    case STRING_GENERATION_RENDERER_AUTOCOMPLETE_ATTRIBUTE:
+      return "Generation: autocomplete attributes found";
+    case STRING_GENERATION_RENDERER_NO_SERVER_SIGNAL:
+      return "Generation: no server signal";
+    case STRING_GENERATION_RENDERER_ELIGIBLE_FORM_FOUND:
+      return "Generation: eligible form found";
+    case STRING_GENERATION_RENDERER_NO_FIELD_FOUND:
+      return "Generation: fields for generation are not found";
+    case STRING_GENERATION_RENDERER_SHOW_GENERATION_POPUP:
+      return "Show generation popup";
+    case STRING_GENERATION_RENDERER_GENERATED_PASSWORD_ACCEPTED:
+      return "Generated password accepted";
     case SavePasswordProgressLogger::STRING_INVALID:
       return "INVALID";
       // Intentionally no default: clause here -- all IDs need to get covered.

@@ -6,14 +6,14 @@
 #define BackgroundTaskRunner_h
 
 #include "platform/PlatformExport.h"
+#include "platform/wtf/Functional.h"
 #include "public/platform/WebTraceLocation.h"
-#include "wtf/Functional.h"
 
 namespace blink {
 
 namespace BackgroundTaskRunner {
 
-PLATFORM_EXPORT void postOnBackgroundThread(
+PLATFORM_EXPORT void PostOnBackgroundThread(
     const WebTraceLocation&,
     std::unique_ptr<CrossThreadClosure>);
 

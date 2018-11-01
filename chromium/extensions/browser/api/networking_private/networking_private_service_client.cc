@@ -41,11 +41,8 @@ NetworkingPrivateServiceClient::ServiceCallbacks::~ServiceCallbacks() {
 }
 
 NetworkingPrivateServiceClient::NetworkingPrivateServiceClient(
-    std::unique_ptr<WiFiService> wifi_service,
-    std::unique_ptr<VerifyDelegate> verify_delegate)
-    : NetworkingPrivateDelegate(std::move(verify_delegate)),
-      wifi_service_(std::move(wifi_service)),
-      weak_factory_(this) {
+    std::unique_ptr<WiFiService> wifi_service)
+    : wifi_service_(std::move(wifi_service)), weak_factory_(this) {
   sequence_token_ = BrowserThread::GetBlockingPool()->GetNamedSequenceToken(
       kNetworkingPrivateSequenceTokenName);
   task_runner_ =
@@ -187,8 +184,11 @@ void NetworkingPrivateServiceClient::GetState(
 void NetworkingPrivateServiceClient::SetProperties(
     const std::string& guid,
     std::unique_ptr<base::DictionaryValue> properties,
+    bool allow_set_shared_config,
     const VoidCallback& success_callback,
     const FailureCallback& failure_callback) {
+  CHECK(allow_set_shared_config);
+
   ServiceCallbacks* service_callbacks = AddServiceCallbacks();
   service_callbacks->failure_callback = failure_callback;
   service_callbacks->set_properties_callback = success_callback;
@@ -227,6 +227,7 @@ void NetworkingPrivateServiceClient::CreateNetwork(
 
 void NetworkingPrivateServiceClient::ForgetNetwork(
     const std::string& guid,
+    bool allow_forget_shared_config,
     const VoidCallback& success_callback,
     const FailureCallback& failure_callback) {
   // TODO(mef): Implement for Win/Mac

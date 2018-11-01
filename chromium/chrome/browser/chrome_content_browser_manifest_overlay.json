@@ -8,7 +8,6 @@
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
           "chrome::mojom::NetBenchmarking",
-          "chrome::mojom::FieldTrialRecorder",
           "extensions::StashService",
           "metrics::mojom::LeakDetector",
           "mojom::ModuleEventSink",
@@ -24,11 +23,12 @@
       "requires": {
         "accessibility_autoclick": [ "ash:autoclick" ],
         "ash": [ "ash" ],
-        "image_decoder": [ "decode" ],
+        "identity": [ "identity_manager" ],
         "nacl_broker": [ "browser" ],
         "nacl_loader": [ "browser" ],
-        "preferences": [ "preferences_manager" ],
-        "ui": [ "display_controller", "ime_registrar" ]
+        "preferences_forwarder": [ "pref_client" ],
+        "preferences": [ "pref_client", "pref_control" ],
+        "ui": [ "display_controller", "ime_registrar", "window_manager" ]
       }
     },
     "navigation:frame": {
@@ -36,9 +36,11 @@
         "renderer": [
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
+          "blink::mojom::InstalledAppProvider",
           "blink::mojom::ShareService",
           "bluetooth::mojom::AdapterFactory",
           "chrome::mojom::PrerenderCanceler",
+          "chrome::mojom::OpenSearchDocumentDescriptionHandler",
           "device::usb::ChooserService",
           "device::usb::DeviceManager",
           "contextual_search::mojom::ContextualSearchJsApiService",
@@ -53,7 +55,7 @@
           // TODO(beng): These should be moved to a separate capability.
           "mojom::OmniboxPageHandler",
           "mojom::PluginsPageHandler",
-          "mojom::SiteEngagementUIHandler",
+          "mojom::SiteEngagementDetailsProvider",
           "mojom::UsbInternalsPageHandler"
         ]
       }

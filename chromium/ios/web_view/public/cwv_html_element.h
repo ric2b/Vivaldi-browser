@@ -5,10 +5,12 @@
 #ifndef IOS_WEB_VIEW_PUBLIC_CWV_HTML_ELEMENT_H_
 #define IOS_WEB_VIEW_PUBLIC_CWV_HTML_ELEMENT_H_
 
+#import <ChromeWebView/cwv_export.h>
 #import <Foundation/Foundation.h>
 
 // Encapsulates information about HTML element. Used in
 // delegate methods.
+CWV_EXPORT
 @interface CWVHTMLElement : NSObject
 
 // |href| property of an HTML element.

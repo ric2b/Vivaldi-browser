@@ -5,14 +5,16 @@ import("//vivaldi/gn/config/features.gni")
 # Blink : /media/blink/BUILD.gn
 # ------------------
 
-post_process_target("//media/blink:blink") {
-  sources += [
-    "//vivaldi/platform_media/renderer/data_source/buffered_data_source.cc",
-    "//vivaldi/platform_media/renderer/data_source/buffered_data_source.h",
-    "//vivaldi/platform_media/renderer/data_source/buffered_resource_loader.cc",
-    "//vivaldi/platform_media/renderer/data_source/buffered_resource_loader.h",
-  ]
-}
+#if (system_proprietary_codecs) {
+#post_process_target("//media/blink:blink") {
+#  sources += [
+#    "//vivaldi/platform_media/renderer/data_source/buffered_data_source.cc",
+#    "//vivaldi/platform_media/renderer/data_source/buffered_data_source.h",
+#    "//vivaldi/platform_media/renderer/data_source/buffered_resource_loader.cc",
+#    "//vivaldi/platform_media/renderer/data_source/buffered_resource_loader.h",
+#  ]
+#}
+#}
 
 if (system_proprietary_codecs) {
 
@@ -169,6 +171,9 @@ post_process_target("//media:media") {
 
   if (is_win) {
     sources += [
+      "//vivaldi/platform_media/gpu/decoders/win/read_stream_listener.h",
+      "//vivaldi/platform_media/gpu/decoders/win/read_stream.cc",
+      "//vivaldi/platform_media/gpu/decoders/win/read_stream.h",
       "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.cc",
       "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.h",
       "//vivaldi/platform_media/gpu/pipeline/win/platform_media_pipeline_win.cc",

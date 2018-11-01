@@ -4,10 +4,12 @@
 
 #include "services/ui/ws/platform_display_default.h"
 
+#include <utility>
+
 #include "base/memory/ptr_util.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/ui/display/screen_manager.h"
-#include "services/ui/ws/platform_display_init_params.h"
+#include "services/ui/ws/display_client_compositor_frame_sink.h"
 #include "services/ui/ws/server_window.h"
 #include "ui/base/cursor/image_cursors.h"
 #include "ui/display/display.h"
@@ -30,16 +32,13 @@ namespace ui {
 namespace ws {
 
 PlatformDisplayDefault::PlatformDisplayDefault(
-    const PlatformDisplayInitParams& init_params)
-    : display_id_(init_params.display_id),
-#if !defined(OS_ANDROID)
-      image_cursors_(new ImageCursors),
-#endif
-      metrics_(init_params.metrics),
-      widget_(gfx::kNullAcceleratedWidget),
-      root_window_(init_params.root_window),
-      init_device_scale_factor_(init_params.metrics.device_scale_factor) {
-}
+    ServerWindow* root_window,
+    const display::ViewportMetrics& metrics,
+    std::unique_ptr<ImageCursors> image_cursors)
+    : root_window_(root_window),
+      image_cursors_(std::move(image_cursors)),
+      metrics_(metrics),
+      widget_(gfx::kNullAcceleratedWidget) {}
 
 PlatformDisplayDefault::~PlatformDisplayDefault() {
   // Don't notify the delegate from the destructor.
@@ -52,14 +51,17 @@ PlatformDisplayDefault::~PlatformDisplayDefault() {
   platform_window_.reset();
 }
 
+EventSink* PlatformDisplayDefault::GetEventSink() {
+  return delegate_->GetEventSink();
+}
+
 void PlatformDisplayDefault::Init(PlatformDisplayDelegate* delegate) {
+  DCHECK(delegate);
   delegate_ = delegate;
 
-  DCHECK(!metrics_.pixel_size.IsEmpty());
+  const gfx::Rect& bounds = metrics_.bounds_in_pixels;
+  DCHECK(!bounds.size().IsEmpty());
 
-  // TODO(kylechar): The origin here isn't right if any displays have
-  // scale_factor other than 1.0 but will prevent windows from being stacked.
-  gfx::Rect bounds(metrics_.bounds.origin(), metrics_.pixel_size);
 #if defined(OS_WIN)
   platform_window_ = base::MakeUnique<ui::WinWindow>(this, bounds);
 #elif defined(USE_X11) && !defined(OS_CHROMEOS)
@@ -69,20 +71,16 @@ void PlatformDisplayDefault::Init(PlatformDisplayDelegate* delegate) {
   platform_window_->SetBounds(bounds);
 #elif defined(USE_OZONE)
   platform_window_ =
-      ui::OzonePlatform::GetInstance()->CreatePlatformWindow(this, bounds);
+      delegate_->GetOzonePlatform()->CreatePlatformWindow(this, bounds);
 #else
   NOTREACHED() << "Unsupported platform";
 #endif
 
   platform_window_->Show();
-#if !defined(OS_ANDROID)
-  image_cursors_->SetDisplay(delegate_->GetDisplay(),
-                             metrics_.device_scale_factor);
-#endif
-}
-
-int64_t PlatformDisplayDefault::GetId() const {
-  return display_id_;
+  if (image_cursors_) {
+    image_cursors_->SetDisplay(delegate_->GetDisplay(),
+                               metrics_.device_scale_factor);
+  }
 }
 
 void PlatformDisplayDefault::SetViewportSize(const gfx::Size& size) {
@@ -101,8 +99,10 @@ void PlatformDisplayDefault::ReleaseCapture() {
   platform_window_->ReleaseCapture();
 }
 
-void PlatformDisplayDefault::SetCursorById(mojom::Cursor cursor_id) {
-#if !defined(OS_ANDROID)
+void PlatformDisplayDefault::SetCursorById(mojom::CursorType cursor_id) {
+  if (!image_cursors_)
+    return;
+
   // TODO(erg): This still isn't sufficient, and will only use native cursors
   // that chrome would use, not custom image cursors. For that, we should
   // delegate to the window manager to load images from resource packs.
@@ -111,7 +111,6 @@ void PlatformDisplayDefault::SetCursorById(mojom::Cursor cursor_id) {
   ui::Cursor cursor(static_cast<int32_t>(cursor_id));
   image_cursors_->SetPlatformCursor(&cursor);
   platform_window_->SetCursor(cursor.platform());
-#endif
 }
 
 void PlatformDisplayDefault::UpdateTextInputState(
@@ -127,34 +126,26 @@ void PlatformDisplayDefault::SetImeVisibility(bool visible) {
     ime->SetImeVisibility(visible);
 }
 
-gfx::Rect PlatformDisplayDefault::GetBounds() const {
-  return metrics_.bounds;
-}
-
 FrameGenerator* PlatformDisplayDefault::GetFrameGenerator() {
   return frame_generator_.get();
 }
 
-bool PlatformDisplayDefault::UpdateViewportMetrics(
+void PlatformDisplayDefault::UpdateViewportMetrics(
     const display::ViewportMetrics& metrics) {
   if (metrics_ == metrics)
-    return false;
+    return;
 
   gfx::Rect bounds = platform_window_->GetBounds();
-  if (bounds.size() != metrics.pixel_size) {
-    bounds.set_size(metrics.pixel_size);
+  if (bounds.size() != metrics.bounds_in_pixels.size()) {
+    bounds.set_size(metrics.bounds_in_pixels.size());
     platform_window_->SetBounds(bounds);
   }
 
   metrics_ = metrics;
-  if (frame_generator_)
+  if (frame_generator_) {
     frame_generator_->SetDeviceScaleFactor(metrics_.device_scale_factor);
-  return true;
-}
-
-const display::ViewportMetrics& PlatformDisplayDefault::GetViewportMetrics()
-    const {
-  return metrics_;
+    frame_generator_->OnWindowSizeChanged(metrics_.bounds_in_pixels.size());
+  }
 }
 
 gfx::AcceleratedWidget PlatformDisplayDefault::GetAcceleratedWidget() const {
@@ -162,19 +153,21 @@ gfx::AcceleratedWidget PlatformDisplayDefault::GetAcceleratedWidget() const {
 }
 
 void PlatformDisplayDefault::UpdateEventRootLocation(ui::LocatedEvent* event) {
+  // TODO(riajiang): This is broken for HDPI because it mixes PPs and DIPs. See
+  // http://crbug.com/701036 for details.
+  const display::Display& display = delegate_->GetDisplay();
   gfx::Point location = event->location();
-  location.Offset(metrics_.bounds.x(), metrics_.bounds.y());
+  location.Offset(display.bounds().x(), display.bounds().y());
   event->set_root_location(location);
 }
 
 void PlatformDisplayDefault::OnBoundsChanged(const gfx::Rect& new_bounds) {
   // We only care if the window size has changed.
-  if (new_bounds.size() == metrics_.pixel_size)
+  if (new_bounds.size() == metrics_.bounds_in_pixels.size())
     return;
 
-  // TODO(kylechar): Maybe do something here. For CrOS we don't need to support
-  // PlatformWindow initiated resizes. For other platforms we need to do
-  // something but that isn't fully flushed out.
+  // TODO(tonikitoo): Handle the bounds changing in external window mode. The
+  // window should be resized by the WS and it shouldn't involve ScreenManager.
 }
 
 void PlatformDisplayDefault::OnDamageRect(const gfx::Rect& damaged_region) {
@@ -189,45 +182,26 @@ void PlatformDisplayDefault::DispatchEvent(ui::Event* event) {
   if (event->IsScrollEvent()) {
     // TODO(moshayedi): crbug.com/602859. Dispatch scroll events as
     // they are once we have proper support for scroll events.
-    delegate_->OnEvent(
-        ui::PointerEvent(ui::MouseWheelEvent(*event->AsScrollEvent())));
-  } else if (event->IsMouseEvent()) {
-    delegate_->OnEvent(ui::PointerEvent(*event->AsMouseEvent()));
-  } else if (event->IsTouchEvent()) {
-    delegate_->OnEvent(ui::PointerEvent(*event->AsTouchEvent()));
-  } else {
-    delegate_->OnEvent(*event);
-  }
 
-#if defined(USE_X11) || defined(USE_OZONE)
-  // We want to emulate the WM_CHAR generation behaviour of Windows.
-  //
-  // On Linux, we've previously inserted characters by having
-  // InputMethodAuraLinux take all key down events and send a character event
-  // to the TextInputClient. This causes a mismatch in code that has to be
-  // shared between Windows and Linux, including blink code. Now that we're
-  // trying to have one way of doing things, we need to standardize on and
-  // emulate Windows character events.
-  //
-  // This is equivalent to what we're doing in the current Linux port, but
-  // done once instead of done multiple times in different places.
-  if (event->type() == ui::ET_KEY_PRESSED) {
-    ui::KeyEvent* key_press_event = event->AsKeyEvent();
-    ui::KeyEvent char_event(key_press_event->GetCharacter(),
-                            key_press_event->key_code(),
-                            key_press_event->flags());
-    // We don't check that GetCharacter() is equal because changing a key event
-    // with an accelerator to a character event can change the character, for
-    // example, from 'M' to '^M'.
-    DCHECK_EQ(key_press_event->key_code(), char_event.key_code());
-    DCHECK_EQ(key_press_event->flags(), char_event.flags());
-    delegate_->OnEvent(char_event);
+    ui::PointerEvent pointer_event(
+        ui::MouseWheelEvent(*event->AsScrollEvent()));
+    SendEventToSink(&pointer_event);
+  } else if (event->IsMouseEvent()) {
+    ui::PointerEvent pointer_event(*event->AsMouseEvent());
+    SendEventToSink(&pointer_event);
+  } else if (event->IsTouchEvent()) {
+    ui::PointerEvent pointer_event(*event->AsTouchEvent());
+    SendEventToSink(&pointer_event);
+  } else {
+    SendEventToSink(event);
   }
-#endif
 }
 
 void PlatformDisplayDefault::OnCloseRequest() {
-  display::ScreenManager::GetInstance()->RequestCloseDisplay(GetId());
+  // TODO(tonikitoo): Handle a close request in external window mode. The window
+  // should be closed by the WS and it shouldn't involve ScreenManager.
+  const int64_t display_id = delegate_->GetDisplay().id();
+  display::ScreenManager::GetInstance()->RequestCloseDisplay(display_id);
 }
 
 void PlatformDisplayDefault::OnClosed() {}
@@ -248,9 +222,28 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
   DCHECK_EQ(gfx::kNullAcceleratedWidget, widget_);
   widget_ = widget;
   delegate_->OnAcceleratedWidgetAvailable();
-  frame_generator_ =
-      base::MakeUnique<FrameGenerator>(this, root_window_, widget_);
-  frame_generator_->SetDeviceScaleFactor(init_device_scale_factor_);
+
+  cc::mojom::MojoCompositorFrameSinkAssociatedPtr compositor_frame_sink;
+  cc::mojom::DisplayPrivateAssociatedPtr display_private;
+  cc::mojom::MojoCompositorFrameSinkClientPtr compositor_frame_sink_client;
+  cc::mojom::MojoCompositorFrameSinkClientRequest
+      compositor_frame_sink_client_request =
+          mojo::MakeRequest(&compositor_frame_sink_client);
+
+  root_window_->CreateRootCompositorFrameSink(
+      widget_, mojo::MakeRequest(&compositor_frame_sink),
+      std::move(compositor_frame_sink_client),
+      mojo::MakeRequest(&display_private));
+
+  auto display_client_compositor_frame_sink =
+      base::MakeUnique<DisplayClientCompositorFrameSink>(
+          root_window_->frame_sink_id(), std::move(compositor_frame_sink),
+          std::move(display_private),
+          std::move(compositor_frame_sink_client_request));
+  frame_generator_ = base::MakeUnique<FrameGenerator>(
+      std::move(display_client_compositor_frame_sink));
+  frame_generator_->OnWindowSizeChanged(root_window_->bounds().size());
+  frame_generator_->SetDeviceScaleFactor(metrics_.device_scale_factor);
 }
 
 void PlatformDisplayDefault::OnAcceleratedWidgetDestroyed() {
@@ -258,10 +251,6 @@ void PlatformDisplayDefault::OnAcceleratedWidgetDestroyed() {
 }
 
 void PlatformDisplayDefault::OnActivationChanged(bool active) {}
-
-bool PlatformDisplayDefault::IsInHighContrastMode() {
-  return delegate_ ? delegate_->IsInHighContrastMode() : false;
-}
 
 }  // namespace ws
 }  // namespace ui

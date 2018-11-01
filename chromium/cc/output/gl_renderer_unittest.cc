@@ -11,6 +11,7 @@
 
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/math_util.h"
 #include "cc/output/copy_output_request.h"
@@ -38,8 +39,8 @@
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/effects/SkColorFilterImageFilter.h"
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/transform.h"
+#include "ui/latency/latency_info.h"
 
 using testing::_;
 using testing::AnyNumber;
@@ -138,7 +139,7 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
     const size_t kNumSrcColorSpaces = 4;
     gfx::ColorSpace src_color_spaces[kNumSrcColorSpaces] = {
         gfx::ColorSpace(), gfx::ColorSpace::CreateSRGB(),
-        gfx::ColorSpace::CreateREC709(),
+        gfx::ColorSpace::CreateREC709(), gfx::ColorSpace::CreateExtendedSRGB(),
     };
     const size_t kNumDstColorSpaces = 3;
     gfx::ColorSpace dst_color_spaces[kNumDstColorSpaces] = {
@@ -1178,11 +1179,103 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
   }
 }
 
-class FlippedScissorAndViewportGLES2Interface : public TestGLES2Interface {
+class DrawElementsGLES2Interface : public TestGLES2Interface {
  public:
-  MOCK_METHOD4(Viewport, void(GLint x, GLint y, GLsizei width, GLsizei height));
-  MOCK_METHOD4(Scissor, void(GLint x, GLint y, GLsizei width, GLsizei height));
+  void InitializeTestContext(TestWebGraphicsContext3D* context) override {
+    context->set_have_post_sub_buffer(true);
+  }
+
+  MOCK_METHOD4(
+      DrawElements,
+      void(GLenum mode, GLsizei count, GLenum type, const void* indices));
 };
+
+class GLRendererSkipTest : public GLRendererTest {
+ protected:
+  GLRendererSkipTest() {
+    auto gl_owned = base::MakeUnique<StrictMock<DrawElementsGLES2Interface>>();
+    gl_ = gl_owned.get();
+
+    auto provider = TestContextProvider::Create(std::move(gl_owned));
+    provider->BindToCurrentThread();
+
+    output_surface_ = FakeOutputSurface::Create3d(std::move(provider));
+    output_surface_->BindToClient(&output_surface_client_);
+
+    shared_bitmap_manager_.reset(new TestSharedBitmapManager());
+    resource_provider_ = FakeResourceProvider::Create(
+        output_surface_->context_provider(), shared_bitmap_manager_.get());
+    settings_.partial_swap_enabled = true;
+    renderer_ = base::MakeUnique<FakeRendererGL>(
+        &settings_, output_surface_.get(), resource_provider_.get());
+    renderer_->Initialize();
+    renderer_->SetVisible(true);
+  }
+
+  StrictMock<DrawElementsGLES2Interface>* gl_;
+  RendererSettings settings_;
+  FakeOutputSurfaceClient output_surface_client_;
+  std::unique_ptr<FakeOutputSurface> output_surface_;
+  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
+  std::unique_ptr<ResourceProvider> resource_provider_;
+  std::unique_ptr<FakeRendererGL> renderer_;
+};
+
+TEST_F(GLRendererSkipTest, DrawQuad) {
+  EXPECT_CALL(*gl_, DrawElements(_, _, _, _)).Times(1);
+
+  gfx::Size viewport_size(100, 100);
+  gfx::Rect quad_rect = gfx::Rect(20, 20, 20, 20);
+
+  int root_pass_id = 1;
+  RenderPass* root_pass = AddRenderPass(&render_passes_in_draw_order_,
+                                        root_pass_id, gfx::Rect(viewport_size),
+                                        gfx::Transform(), FilterOperations());
+  root_pass->damage_rect = gfx::Rect(0, 0, 25, 25);
+  AddQuad(root_pass, quad_rect, SK_ColorGREEN);
+
+  renderer_->DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
+  DrawFrame(renderer_.get(), viewport_size);
+}
+
+TEST_F(GLRendererSkipTest, SkipVisibleRect) {
+  gfx::Size viewport_size(100, 100);
+  gfx::Rect quad_rect = gfx::Rect(0, 0, 40, 40);
+
+  int root_pass_id = 1;
+  RenderPass* root_pass = AddRenderPass(&render_passes_in_draw_order_,
+                                        root_pass_id, gfx::Rect(viewport_size),
+                                        gfx::Transform(), FilterOperations());
+  root_pass->damage_rect = gfx::Rect(0, 0, 10, 10);
+  AddQuad(root_pass, quad_rect, SK_ColorGREEN);
+  root_pass->shared_quad_state_list.front()->is_clipped = true;
+  root_pass->shared_quad_state_list.front()->clip_rect =
+      gfx::Rect(0, 0, 40, 40);
+  root_pass->quad_list.front()->visible_rect = gfx::Rect(20, 20, 20, 20);
+
+  renderer_->DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
+  DrawFrame(renderer_.get(), viewport_size);
+  // DrawElements should not be called because the visible rect is outside the
+  // scissor, even though the clip rect and quad rect intersect the scissor.
+}
+
+TEST_F(GLRendererSkipTest, SkipClippedQuads) {
+  gfx::Size viewport_size(100, 100);
+  gfx::Rect quad_rect = gfx::Rect(25, 25, 90, 90);
+
+  int root_pass_id = 1;
+  RenderPass* root_pass = AddRenderPass(&render_passes_in_draw_order_,
+                                        root_pass_id, gfx::Rect(viewport_size),
+                                        gfx::Transform(), FilterOperations());
+  root_pass->damage_rect = gfx::Rect(0, 0, 25, 25);
+  AddClippedQuad(root_pass, quad_rect, SK_ColorGREEN);
+  root_pass->quad_list.front()->rect = gfx::Rect(20, 20, 20, 20);
+
+  renderer_->DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
+  DrawFrame(renderer_.get(), viewport_size);
+  // DrawElements should not be called because the clip rect is outside the
+  // scissor.
+}
 
 TEST_F(GLRendererTest, DrawFramePreservesFramebuffer) {
   // When using render-to-FBO to display the surface, all rendering is done
@@ -1480,7 +1573,8 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
 }
 
 TEST_F(GLRendererShaderTest, DrawSolidColorShader) {
-  gfx::Size viewport_size(1, 1);
+  gfx::Size viewport_size(30, 30);  // Don't translate out of the viewport.
+  gfx::Size quad_size(3, 3);
   int root_pass_id = 1;
   RenderPass* root_pass;
 
@@ -1491,7 +1585,7 @@ TEST_F(GLRendererShaderTest, DrawSolidColorShader) {
   root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
                             gfx::Rect(viewport_size), gfx::Transform(),
                             FilterOperations());
-  AddTransformedQuad(root_pass, gfx::Rect(viewport_size), SK_ColorYELLOW,
+  AddTransformedQuad(root_pass, gfx::Rect(quad_size), SK_ColorYELLOW,
                      pixel_aligned_transform_causing_aa);
 
   renderer_->DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
@@ -1640,6 +1734,7 @@ class TestOverlayProcessor : public OverlayProcessor {
 
     // Returns true if draw quads can be represented as CALayers (Mac only).
     MOCK_METHOD0(AllowCALayerOverlays, bool());
+    MOCK_METHOD0(AllowDCLayerOverlays, bool());
 
     // A list of possible overlay candidates is presented to this function.
     // The expected result is that those candidates that can be in a separate
@@ -1730,6 +1825,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   // list because the render pass is cleaned up by DrawFrame.
   EXPECT_CALL(*processor->strategy_, Attempt(_, _, _, _)).Times(0);
   EXPECT_CALL(*validator, AllowCALayerOverlays()).Times(0);
+  EXPECT_CALL(*validator, AllowDCLayerOverlays()).Times(0);
   DrawFrame(&renderer, viewport_size);
   Mock::VerifyAndClearExpectations(processor->strategy_);
   Mock::VerifyAndClearExpectations(validator.get());
@@ -1747,6 +1843,9 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       premultiplied_alpha, gfx::PointF(0, 0), gfx::PointF(1, 1),
       SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor, false);
   EXPECT_CALL(*validator, AllowCALayerOverlays())
+      .Times(1)
+      .WillOnce(::testing::Return(false));
+  EXPECT_CALL(*validator, AllowDCLayerOverlays())
       .Times(1)
       .WillOnce(::testing::Return(false));
   EXPECT_CALL(*processor->strategy_, Attempt(_, _, _, _)).Times(1);
@@ -1782,6 +1881,7 @@ class SingleOverlayOnTopProcessor : public OverlayProcessor {
     }
 
     bool AllowCALayerOverlays() override { return false; }
+    bool AllowDCLayerOverlays() override { return false; }
 
     void CheckOverlaySupport(OverlayCandidateList* surfaces) override {
       ASSERT_EQ(1U, surfaces->size());
@@ -1900,20 +2000,21 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
 
 class PartialSwapMockGLES2Interface : public TestGLES2Interface {
  public:
-  explicit PartialSwapMockGLES2Interface(bool support_set_draw_rectangle)
-      : support_set_draw_rectangle_(support_set_draw_rectangle) {}
+  explicit PartialSwapMockGLES2Interface(bool support_dc_layers)
+      : support_dc_layers_(support_dc_layers) {}
 
   void InitializeTestContext(TestWebGraphicsContext3D* context) override {
     context->set_have_post_sub_buffer(true);
-    context->set_support_set_draw_rectangle(support_set_draw_rectangle_);
+    context->set_enable_dc_layers(support_dc_layers_);
   }
 
   MOCK_METHOD1(Enable, void(GLenum cap));
   MOCK_METHOD1(Disable, void(GLenum cap));
   MOCK_METHOD4(Scissor, void(GLint x, GLint y, GLsizei width, GLsizei height));
+  MOCK_METHOD1(SetEnableDCLayersCHROMIUM, void(GLboolean enable));
 
  private:
-  bool support_set_draw_rectangle_;
+  bool support_dc_layers_;
 };
 
 class GLRendererPartialSwapTest : public GLRendererTest {
@@ -1945,7 +2046,7 @@ class GLRendererPartialSwapTest : public GLRendererTest {
 
     gfx::Size viewport_size(100, 100);
 
-    {
+    for (int i = 0; i < 2; ++i) {
       int root_pass_id = 1;
       RenderPass* root_pass = AddRenderPass(
           &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
@@ -1964,8 +2065,13 @@ class GLRendererPartialSwapTest : public GLRendererTest {
       // Partial frame, we should use a scissor to swap only that part when
       // partial swap is enabled.
       root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
-      gfx::Rect output_rectangle =
-          partial_swap ? root_pass->damage_rect : gfx::Rect(viewport_size);
+      // With SetDrawRectangle the first frame will have its damage expanded
+      // to cover the entire output rect.
+      bool frame_has_partial_damage =
+          partial_swap && (!set_draw_rectangle || (i > 0));
+      gfx::Rect output_rectangle = frame_has_partial_damage
+                                       ? root_pass->damage_rect
+                                       : gfx::Rect(viewport_size);
 
       if (partial_swap || set_draw_rectangle) {
         EXPECT_CALL(*gl, Enable(GL_SCISSOR_TEST)).InSequence(seq);
@@ -1992,6 +2098,7 @@ class GLRendererPartialSwapTest : public GLRendererTest {
       if (set_draw_rectangle) {
         EXPECT_EQ(output_rectangle, output_surface->last_set_draw_rectangle());
       }
+      Mock::VerifyAndClearExpectations(gl);
     }
   }
 };
@@ -2010,6 +2117,105 @@ TEST_F(GLRendererPartialSwapTest, SetDrawRectangle_PartialSwap) {
 
 TEST_F(GLRendererPartialSwapTest, SetDrawRectangle_NoPartialSwap) {
   RunTest(false, true);
+}
+
+class DCLayerValidator : public OverlayCandidateValidator {
+ public:
+  void GetStrategies(OverlayProcessor::StrategyList* strategies) override {}
+  bool AllowCALayerOverlays() override { return false; }
+  bool AllowDCLayerOverlays() override { return true; }
+  void CheckOverlaySupport(OverlayCandidateList* surfaces) override {}
+};
+
+// Test that SetEnableDCLayersCHROMIUM is properly called when enabling
+// and disabling DC layers.
+TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDirectCompositionUnderlays);
+  auto gl_owned = base::MakeUnique<PartialSwapMockGLES2Interface>(true);
+  auto* gl = gl_owned.get();
+
+  auto provider = TestContextProvider::Create(std::move(gl_owned));
+  provider->BindToCurrentThread();
+
+  FakeOutputSurfaceClient output_surface_client;
+  std::unique_ptr<FakeOutputSurface> output_surface(
+      FakeOutputSurface::Create3d(std::move(provider)));
+  output_surface->BindToClient(&output_surface_client);
+
+  std::unique_ptr<ResourceProvider> resource_provider =
+      FakeResourceProvider::Create(output_surface->context_provider(), nullptr);
+
+  RendererSettings settings;
+  settings.partial_swap_enabled = true;
+  FakeRendererGL renderer(&settings, output_surface.get(),
+                          resource_provider.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
+  TestOverlayProcessor* processor =
+      new TestOverlayProcessor(output_surface.get());
+  processor->Initialize();
+  renderer.SetOverlayProcessor(processor);
+  std::unique_ptr<DCLayerValidator> validator(new DCLayerValidator);
+  output_surface->SetOverlayCandidateValidator(validator.get());
+
+  gfx::Size viewport_size(100, 100);
+
+  TextureMailbox mailbox =
+      TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D,
+                     gfx::Size(256, 256), true, false);
+  std::unique_ptr<SingleReleaseCallbackImpl> release_callback =
+      SingleReleaseCallbackImpl::Create(base::Bind(&MailboxReleased));
+  ResourceId resource_id = resource_provider->CreateResourceFromTextureMailbox(
+      mailbox, std::move(release_callback));
+
+  for (int i = 0; i < 65; i++) {
+    int root_pass_id = 1;
+    RenderPass* root_pass = AddRenderPass(
+        &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
+        gfx::Transform(), FilterOperations());
+    if (i == 0) {
+      gfx::Rect rect(0, 0, 100, 100);
+      gfx::RectF tex_coord_rect(0, 0, 1, 1);
+      SharedQuadState* shared_state =
+          root_pass->CreateAndAppendSharedQuadState();
+      shared_state->SetAll(gfx::Transform(), rect.size(), rect, rect, false, 1,
+                           SkBlendMode::kSrcOver, 0);
+      YUVVideoDrawQuad* quad =
+          root_pass->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
+      quad->SetNew(shared_state, rect, rect, rect, tex_coord_rect,
+                   tex_coord_rect, rect.size(), rect.size(), resource_id,
+                   resource_id, resource_id, resource_id,
+                   YUVVideoDrawQuad::REC_601, gfx::ColorSpace(), 0, 1.0, 8);
+    }
+
+    // A bunch of initialization that happens.
+    EXPECT_CALL(*gl, Disable(_)).Times(AnyNumber());
+    EXPECT_CALL(*gl, Enable(_)).Times(AnyNumber());
+    EXPECT_CALL(*gl, Scissor(_, _, _, _)).Times(AnyNumber());
+
+    // Partial frame, we should use a scissor to swap only that part when
+    // partial swap is enabled.
+    root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
+    // Frame 0 should be completely damaged because it's the first.
+    // Frame 1 should be because it changed. Frame 60 should be
+    // because it's disabling DC layers.
+    gfx::Rect output_rectangle = (i == 0 || i == 1 || i == 60)
+                                     ? root_pass->output_rect
+                                     : root_pass->damage_rect;
+
+    // Frame 0 should have DC Layers enabled because of the overlay.
+    // After 60 frames of no overlays DC layers should be disabled again.
+    if (i < 60)
+      EXPECT_CALL(*gl, SetEnableDCLayersCHROMIUM(GL_TRUE));
+    else
+      EXPECT_CALL(*gl, SetEnableDCLayersCHROMIUM(GL_FALSE));
+
+    renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
+    DrawFrame(&renderer, viewport_size);
+    EXPECT_EQ(output_rectangle, output_surface->last_set_draw_rectangle());
+    testing::Mock::VerifyAndClearExpectations(gl);
+  }
 }
 
 class GLRendererWithMockContextTest : public ::testing::Test {
@@ -2054,6 +2260,106 @@ TEST_F(GLRendererWithMockContextTest,
   EXPECT_CALL(*context_support_ptr_, SetAggressivelyFreeResources(true));
   renderer_->SetVisible(false);
   Mock::VerifyAndClearExpectations(context_support_ptr_);
+}
+
+class SwapWithBoundsMockGLES2Interface : public TestGLES2Interface {
+ public:
+  void InitializeTestContext(TestWebGraphicsContext3D* context) override {
+    context->set_have_swap_buffers_with_bounds(true);
+  }
+};
+
+class ContentBoundsOverlayProcessor : public OverlayProcessor {
+ public:
+  class Strategy : public OverlayProcessor::Strategy {
+   public:
+    explicit Strategy(const std::vector<gfx::Rect>& content_bounds)
+        : content_bounds_(content_bounds) {}
+    ~Strategy() override {}
+    bool Attempt(ResourceProvider* resource_provider,
+                 RenderPass* render_pass,
+                 OverlayCandidateList* candidates,
+                 std::vector<gfx::Rect>* content_bounds) override {
+      content_bounds->insert(content_bounds->end(), content_bounds_.begin(),
+                             content_bounds_.end());
+      return true;
+    }
+
+    const std::vector<gfx::Rect> content_bounds_;
+  };
+
+  ContentBoundsOverlayProcessor(OutputSurface* surface,
+                                const std::vector<gfx::Rect>& content_bounds)
+      : OverlayProcessor(surface), content_bounds_(content_bounds) {}
+
+  void Initialize() override {
+    strategy_ = new Strategy(content_bounds_);
+    strategies_.push_back(base::WrapUnique(strategy_));
+  }
+
+  Strategy* strategy_;
+  const std::vector<gfx::Rect> content_bounds_;
+};
+
+class GLRendererSwapWithBoundsTest : public GLRendererTest {
+ protected:
+  void RunTest(const std::vector<gfx::Rect>& content_bounds) {
+    auto gl_owned = base::MakeUnique<SwapWithBoundsMockGLES2Interface>();
+
+    auto provider = TestContextProvider::Create(std::move(gl_owned));
+    provider->BindToCurrentThread();
+
+    FakeOutputSurfaceClient output_surface_client;
+    std::unique_ptr<FakeOutputSurface> output_surface(
+        FakeOutputSurface::Create3d(std::move(provider)));
+    output_surface->BindToClient(&output_surface_client);
+
+    std::unique_ptr<ResourceProvider> resource_provider =
+        FakeResourceProvider::Create(output_surface->context_provider(),
+                                     nullptr);
+
+    RendererSettings settings;
+    FakeRendererGL renderer(&settings, output_surface.get(),
+                            resource_provider.get());
+    renderer.Initialize();
+    EXPECT_EQ(true, renderer.use_swap_with_bounds());
+    renderer.SetVisible(true);
+
+    OverlayProcessor* processor =
+        new ContentBoundsOverlayProcessor(output_surface.get(), content_bounds);
+    processor->Initialize();
+    renderer.SetOverlayProcessor(processor);
+
+    gfx::Size viewport_size(100, 100);
+
+    {
+      int root_pass_id = 1;
+      AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
+                    gfx::Rect(viewport_size), gfx::Transform(),
+                    FilterOperations());
+
+      renderer.DecideRenderPassAllocationsForFrame(
+          render_passes_in_draw_order_);
+      DrawFrame(&renderer, viewport_size);
+      renderer.SwapBuffers(std::vector<ui::LatencyInfo>());
+
+      std::vector<gfx::Rect> expected_content_bounds;
+      EXPECT_EQ(content_bounds,
+                output_surface->last_sent_frame()->content_bounds);
+    }
+  }
+};
+
+TEST_F(GLRendererSwapWithBoundsTest, EmptyContent) {
+  std::vector<gfx::Rect> content_bounds;
+  RunTest(content_bounds);
+}
+
+TEST_F(GLRendererSwapWithBoundsTest, NonEmpty) {
+  std::vector<gfx::Rect> content_bounds;
+  content_bounds.push_back(gfx::Rect(0, 0, 10, 10));
+  content_bounds.push_back(gfx::Rect(20, 20, 30, 30));
+  RunTest(content_bounds);
 }
 
 }  // namespace

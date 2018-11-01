@@ -5,12 +5,12 @@
 #include "core/paint/PaintPhase.h"
 
 #include "platform/graphics/paint/DisplayItem.h"
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 namespace blink {
 
 // DisplayItem types must be kept in sync with PaintPhase.
-static_assert((unsigned)DisplayItem::kPaintPhaseMax == (unsigned)PaintPhaseMax,
+static_assert((unsigned)DisplayItem::kPaintPhaseMax == (unsigned)kPaintPhaseMax,
               "DisplayItem Type should stay in sync");
 
 }  // namespace blink

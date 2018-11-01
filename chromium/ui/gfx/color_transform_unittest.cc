@@ -24,17 +24,30 @@ ColorSpace::PrimaryID all_primaries[] = {
 };
 
 ColorSpace::TransferID all_transfers[] = {
-    ColorSpace::TransferID::BT709,        ColorSpace::TransferID::GAMMA22,
-    ColorSpace::TransferID::GAMMA28,      ColorSpace::TransferID::SMPTE170M,
-    ColorSpace::TransferID::SMPTE240M,    ColorSpace::TransferID::LINEAR,
-    ColorSpace::TransferID::LOG,          ColorSpace::TransferID::LOG_SQRT,
-    ColorSpace::TransferID::IEC61966_2_4, ColorSpace::TransferID::BT1361_ECG,
-    ColorSpace::TransferID::IEC61966_2_1, ColorSpace::TransferID::BT2020_10,
-    ColorSpace::TransferID::BT2020_12,    ColorSpace::TransferID::SMPTEST2084,
+    ColorSpace::TransferID::BT709,
+    ColorSpace::TransferID::GAMMA22,
+    ColorSpace::TransferID::GAMMA28,
+    ColorSpace::TransferID::SMPTE170M,
+    ColorSpace::TransferID::SMPTE240M,
+    ColorSpace::TransferID::LINEAR,
+    ColorSpace::TransferID::LOG,
+    ColorSpace::TransferID::LOG_SQRT,
+    ColorSpace::TransferID::IEC61966_2_4,
+    ColorSpace::TransferID::BT1361_ECG,
+    ColorSpace::TransferID::IEC61966_2_1,
+    ColorSpace::TransferID::BT2020_10,
+    ColorSpace::TransferID::BT2020_12,
+    ColorSpace::TransferID::SMPTEST2084,
     ColorSpace::TransferID::ARIB_STD_B67,
+    ColorSpace::TransferID::IEC61966_2_1_HDR,
     // This one is weird as the non-linear numbers are not between 0 and 1.
     // TODO(hubbe): Test this separately.
     //  ColorSpace::TransferID::SMPTEST428_1,
+};
+
+ColorSpace::TransferID extended_transfers[] = {
+    ColorSpace::TransferID::LINEAR_HDR,
+    ColorSpace::TransferID::IEC61966_2_1_HDR,
 };
 
 ColorSpace::MatrixID all_matrices[] = {
@@ -193,6 +206,72 @@ TEST(SimpleColorSpace, BT709toSRGBICC) {
   t->Transform(&tmp, 1);
   EXPECT_GT(tmp.z(), tmp.x());
   EXPECT_GT(tmp.z(), tmp.y());
+}
+
+TEST(SimpleColorSpace, ICCProfileOnlyXYZ) {
+  const float kEpsilon = 2.5f / 255.f;
+  ICCProfile icc_profile = ICCProfileForTestingNoAnalyticTrFn();
+  ColorSpace icc_space = icc_profile.GetColorSpace();
+  ColorSpace xyzd50 = ColorSpace::CreateXYZD50();
+
+  ColorTransform::TriStim input_value(127.f / 255, 187.f / 255, 157.f / 255);
+  ColorTransform::TriStim transformed_value = input_value;
+  ColorTransform::TriStim expected_transformed_value(
+      0.34090986847877502f, 0.42633286118507385f, 0.3408740758895874f);
+
+  // One step should be needed, namely, the SkColorSpaceXform.
+  std::unique_ptr<ColorTransform> icc_to_xyzd50(
+      ColorTransform::NewColorTransform(
+          icc_space, xyzd50, ColorTransform::Intent::INTENT_ABSOLUTE));
+  EXPECT_EQ(icc_to_xyzd50->NumberOfStepsForTesting(), 1u);
+  icc_to_xyzd50->Transform(&transformed_value, 1);
+  EXPECT_NEAR(transformed_value.x(), expected_transformed_value.x(), kEpsilon);
+  EXPECT_NEAR(transformed_value.y(), expected_transformed_value.y(), kEpsilon);
+  EXPECT_NEAR(transformed_value.z(), expected_transformed_value.z(), kEpsilon);
+
+  // One step should be needed, namely, the SkColorSpaceXform.
+  std::unique_ptr<ColorTransform> xyzd50_to_icc(
+      ColorTransform::NewColorTransform(
+          xyzd50, icc_space, ColorTransform::Intent::INTENT_ABSOLUTE));
+  EXPECT_EQ(xyzd50_to_icc->NumberOfStepsForTesting(), 1u);
+  xyzd50_to_icc->Transform(&transformed_value, 1);
+  EXPECT_NEAR(input_value.x(), transformed_value.x(), kEpsilon);
+  EXPECT_NEAR(input_value.y(), transformed_value.y(), kEpsilon);
+  EXPECT_NEAR(input_value.z(), transformed_value.z(), kEpsilon);
+}
+
+TEST(SimpleColorSpace, ICCProfileOnlyColorSpin) {
+  const float kEpsilon = 2.5f / 255.f;
+  ICCProfile icc_profile = ICCProfileForTestingNoAnalyticTrFn();
+  ColorSpace icc_space = icc_profile.GetColorSpace();
+  ColorSpace colorspin =
+      ICCProfileForTestingColorSpin().GetParametricColorSpace();
+
+  ColorTransform::TriStim input_value(0.25f, 0.5f, 0.75f);
+  ColorTransform::TriStim transformed_value = input_value;
+  ColorTransform::TriStim expected_transformed_value(
+      0.49694931507110596f, 0.74937951564788818f, 0.31359460949897766f);
+
+  // Three steps will be needed.
+  std::unique_ptr<ColorTransform> icc_to_colorspin(
+      ColorTransform::NewColorTransform(
+          icc_space, colorspin, ColorTransform::Intent::INTENT_PERCEPTUAL));
+  EXPECT_EQ(icc_to_colorspin->NumberOfStepsForTesting(), 3u);
+  icc_to_colorspin->Transform(&transformed_value, 1);
+  EXPECT_NEAR(transformed_value.x(), expected_transformed_value.x(), kEpsilon);
+  EXPECT_NEAR(transformed_value.y(), expected_transformed_value.y(), kEpsilon);
+  EXPECT_NEAR(transformed_value.z(), expected_transformed_value.z(), kEpsilon);
+
+  transformed_value = expected_transformed_value;
+  std::unique_ptr<ColorTransform> colorspin_to_icc(
+      ColorTransform::NewColorTransform(
+          colorspin, icc_space, ColorTransform::Intent::INTENT_PERCEPTUAL));
+  EXPECT_EQ(colorspin_to_icc->NumberOfStepsForTesting(), 3u);
+  transformed_value = expected_transformed_value;
+  colorspin_to_icc->Transform(&transformed_value, 1);
+  EXPECT_NEAR(input_value.x(), transformed_value.x(), kEpsilon);
+  EXPECT_NEAR(input_value.y(), transformed_value.y(), kEpsilon);
+  EXPECT_NEAR(input_value.z(), transformed_value.z(), kEpsilon);
 }
 
 TEST(SimpleColorSpace, GetColorSpace) {
@@ -387,34 +466,30 @@ TEST(SimpleColorSpace, MAYBE_SampleShaderSource) {
           bt709, output, ColorTransform::Intent::INTENT_PERCEPTUAL)
           ->GetShaderSource();
   std::string expected =
+      "float TransferFn1(float v) {\n"
+      "  if (v < 4.04499359e-02)\n"
+      "    return 7.73993805e-02 * v;\n"
+      "  return pow(9.47867334e-01 * v + 5.21326549e-02, 2.40000010e+00);\n"
+      "}\n"
+      "float TransferFn3(float v) {\n"
+      "  return pow(v, 3.57142866e-01);\n"
+      "}\n"
       "vec3 DoColorConversion(vec3 color) {\n"
       "  color = mat3(1.16438353e+00, 1.16438353e+00, 1.16438353e+00,\n"
       "               -2.28029018e-09, -2.13248596e-01, 2.11240172e+00,\n"
       "               1.79274118e+00, -5.32909274e-01, -5.96049432e-10) "
       "* color;\n"
       "  color += vec3(-9.69429970e-01, 3.00019622e-01, -1.12926030e+00);\n"
-      "  if (color.r < 4.04499359e-02)\n"
-      "    color.r = 7.73993805e-02 * color.r;\n"
-      "  else\n"
-      "    color.r = pow(9.47867334e-01 * color.r + 5.21326549e-02, "
-      "2.40000010e+00);\n"
-      "  if (color.g < 4.04499359e-02)\n"
-      "    color.g = 7.73993805e-02 * color.g;\n"
-      "  else\n"
-      "    color.g = pow(9.47867334e-01 * color.g + 5.21326549e-02, "
-      "2.40000010e+00);\n"
-      "  if (color.b < 4.04499359e-02)\n"
-      "    color.b = 7.73993805e-02 * color.b;\n"
-      "  else\n"
-      "    color.b = pow(9.47867334e-01 * color.b + 5.21326549e-02, "
-      "2.40000010e+00);\n"
+      "  color.r = TransferFn1(color.r);\n"
+      "  color.g = TransferFn1(color.g);\n"
+      "  color.b = TransferFn1(color.b);\n"
       "  color = mat3(6.27403915e-01, 6.90973178e-02, 1.63914412e-02,\n"
       "               3.29283148e-01, 9.19540286e-01, 8.80132914e-02,\n"
       "               4.33131084e-02, 1.13623003e-02, 8.95595253e-01) "
       "* color;\n"
-      "  color.r = pow(color.r, 3.57142866e-01);\n"
-      "  color.g = pow(color.g, 3.57142866e-01);\n"
-      "  color.b = pow(color.b, 3.57142866e-01);\n"
+      "  color.r = TransferFn3(color.r);\n"
+      "  color.g = TransferFn3(color.g);\n"
+      "  color.b = TransferFn3(color.b);\n"
       "  return color;\n"
       "}\n";
   EXPECT_EQ(source, expected);
@@ -456,6 +531,37 @@ TEST_P(TransferTest, basicTest) {
 INSTANTIATE_TEST_CASE_P(ColorSpace,
                         TransferTest,
                         testing::ValuesIn(all_transfers));
+
+class ExtendedTransferTest
+    : public testing::TestWithParam<ColorSpace::TransferID> {};
+
+TEST_P(ExtendedTransferTest, extendedTest) {
+  gfx::ColorSpace space_with_transfer(ColorSpace::PrimaryID::BT709, GetParam(),
+                                      ColorSpace::MatrixID::RGB,
+                                      ColorSpace::RangeID::FULL);
+  gfx::ColorSpace space_linear(
+      ColorSpace::PrimaryID::BT709, ColorSpace::TransferID::LINEAR,
+      ColorSpace::MatrixID::RGB, ColorSpace::RangeID::FULL);
+
+  std::unique_ptr<ColorTransform> to_linear(ColorTransform::NewColorTransform(
+      space_with_transfer, space_linear,
+      ColorTransform::Intent::INTENT_ABSOLUTE));
+
+  std::unique_ptr<ColorTransform> from_linear(ColorTransform::NewColorTransform(
+      space_linear, space_with_transfer,
+      ColorTransform::Intent::INTENT_ABSOLUTE));
+
+  for (float x = -2.0f; x <= 2.0f; x += 1.0f / 32.0f) {
+    ColorTransform::TriStim tristim(x, x, x);
+    to_linear->Transform(&tristim, 1);
+    from_linear->Transform(&tristim, 1);
+    EXPECT_NEAR(x, tristim.x(), 0.001f);
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(ColorSpace,
+                        ExtendedTransferTest,
+                        testing::ValuesIn(extended_transfers));
 
 typedef std::tr1::tuple<ColorSpace::PrimaryID,
                         ColorSpace::TransferID,

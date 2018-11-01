@@ -452,16 +452,32 @@ class PathContext(object):
                                                    self.bad_revision)
     return revlist
 
+
+def IsMac():
+  return sys.platform.startswith('darwin')
+
+
 def UnzipFilenameToDir(filename, directory):
   """Unzip |filename| to |directory|."""
   cwd = os.getcwd()
   if not os.path.isabs(filename):
     filename = os.path.join(cwd, filename)
-  zf = zipfile.ZipFile(filename)
   # Make base.
   if not os.path.isdir(directory):
     os.mkdir(directory)
   os.chdir(directory)
+
+  # The Python ZipFile does not support symbolic links, which makes it
+  # unsuitable for Mac builds. so use ditto instead.
+  if IsMac():
+    unzip_cmd = ['ditto', '-x', '-k', filename, '.']
+    proc = subprocess.Popen(unzip_cmd, bufsize=0, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    proc.communicate()
+    os.chdir(cwd)
+    return
+
+  zf = zipfile.ZipFile(filename)
   # Extract files.
   for info in zf.infolist():
     name = info.filename
@@ -779,8 +795,11 @@ def Bisect(context,
       min_str, max_str = 'bad', 'good'
     else:
       min_str, max_str = 'good', 'bad'
-    print 'Bisecting range [%s (%s), %s (%s)].' % (revlist[minrev], min_str,
-                                                   revlist[maxrev], max_str)
+    print ('Bisecting range [%s (%s), %s (%s)], '
+          'roughly %d steps left.') % (revlist[minrev], min_str,
+                                       revlist[maxrev], max_str,
+                                       int(maxrev - minrev)
+                                       .bit_length())
 
     # Pre-fetch next two possible pivots
     #   - down_pivot is the next revision to check if the current revision turns

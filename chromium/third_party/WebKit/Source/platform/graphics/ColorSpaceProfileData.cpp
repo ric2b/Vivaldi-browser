@@ -4,7 +4,7 @@
 
 #include "platform/graphics/ColorSpaceProfileData.h"
 
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 struct bt709ColorProfile {
   static char* data()  // BT.709 HDTV ITU
@@ -94,16 +94,18 @@ struct bt601ColorProfile {
 
 namespace blink {
 
-void bt709ColorProfileData(Vector<char>& data) {
-  ASSERT(WTF::isMainThread() && data.isEmpty());
+void Bt709ColorProfileData(Vector<char>& data) {
+  DCHECK(WTF::IsMainThread());
+  DCHECK(data.IsEmpty());
 
-  data.append(bt709ColorProfile::data(), bt709ColorProfile::size());
+  data.Append(bt709ColorProfile::data(), bt709ColorProfile::size());
 }
 
-void bt601ColorProfileData(Vector<char>& data) {
-  ASSERT(WTF::isMainThread() && data.isEmpty());
+void Bt601ColorProfileData(Vector<char>& data) {
+  DCHECK(WTF::IsMainThread());
+  DCHECK(data.IsEmpty());
 
-  data.append(bt601ColorProfile::data(), bt601ColorProfile::size());
+  data.Append(bt601ColorProfile::data(), bt601ColorProfile::size());
 }
 
 }  // namespace blink

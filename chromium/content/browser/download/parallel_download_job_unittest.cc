@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "content/browser/download/download_item_impl_delegate.h"
 #include "content/browser/download/mock_download_item_impl.h"
+#include "content/browser/download/parallel_download_utils.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,103 +37,287 @@ class ParallelDownloadJobForTest : public ParallelDownloadJob {
  public:
   ParallelDownloadJobForTest(
       DownloadItemImpl* download_item,
-      std::unique_ptr<DownloadRequestHandleInterface> request_handle)
-      : ParallelDownloadJob(download_item, std::move(request_handle)) {}
+      std::unique_ptr<DownloadRequestHandleInterface> request_handle,
+      const DownloadCreateInfo& create_info,
+      int request_count,
+      int64_t min_slice_size,
+      int min_remaining_time)
+      : ParallelDownloadJob(download_item,
+                            std::move(request_handle),
+                            create_info),
+        request_count_(request_count),
+        min_slice_size_(min_slice_size),
+        min_remaining_time_(min_remaining_time) {}
 
   void CreateRequest(int64_t offset, int64_t length) override {
-    fake_tasks_.push_back(std::pair<int64_t, int64_t>(offset, length));
+    std::unique_ptr<DownloadWorker> worker =
+        base::MakeUnique<DownloadWorker>(this, offset, length);
+
+    DCHECK(workers_.find(offset) == workers_.end());
+    workers_[offset] = std::move(worker);
   }
 
-  std::vector<std::pair<int64_t, int64_t>> fake_tasks_;
+  ParallelDownloadJob::WorkerMap& workers() { return workers_; }
+
+  int GetParallelRequestCount() const override { return request_count_; }
+  int64_t GetMinSliceSize() const override { return min_slice_size_; }
+  int GetMinRemainingTimeInSeconds() const override {
+    return min_remaining_time_;
+  }
+
+  void OnByteStreamReady(
+      DownloadWorker* worker,
+      std::unique_ptr<ByteStreamReader> stream_reader) override {
+    CountOnByteStreamReady();
+  }
+
+  MOCK_METHOD0(CountOnByteStreamReady, void());
 
  private:
+  int request_count_;
+  int min_slice_size_;
+  int min_remaining_time_;
   DISALLOW_COPY_AND_ASSIGN(ParallelDownloadJobForTest);
 };
 
 class ParallelDownloadJobTest : public testing::Test {
  public:
-  void SetUp() override {
+  void CreateParallelJob(int64_t initial_request_offset,
+                         int64_t content_length,
+                         const DownloadItem::ReceivedSlices& slices,
+                         int request_count,
+                         int64_t min_slice_size,
+                         int min_remaining_time) {
     item_delegate_ = base::MakeUnique<DownloadItemImplDelegate>();
-    download_item_ =
-        base::MakeUnique<NiceMock<MockDownloadItemImpl>>(item_delegate_.get());
+    download_item_ = base::MakeUnique<NiceMock<MockDownloadItemImpl>>(
+        item_delegate_.get(), slices);
+    EXPECT_CALL(*download_item_, GetTotalBytes())
+        .WillRepeatedly(
+            testing::Return(initial_request_offset + content_length));
+    EXPECT_CALL(*download_item_, GetReceivedBytes())
+        .WillRepeatedly(testing::Return(initial_request_offset));
+
+    DownloadCreateInfo info;
+    info.offset = initial_request_offset;
+    info.total_bytes = content_length;
+    std::unique_ptr<MockDownloadRequestHandle> request_handle =
+        base::MakeUnique<MockDownloadRequestHandle>();
+    mock_request_handle_ = request_handle.get();
     job_ = base::MakeUnique<ParallelDownloadJobForTest>(
-        download_item_.get(), base::MakeUnique<MockDownloadRequestHandle>());
+        download_item_.get(), std::move(request_handle), info, request_count,
+        min_slice_size, min_remaining_time);
   }
 
-  void CreateNewDownloadRequests(int64_t total_bytes,
-                                 int64_t bytes_received,
-                                 int request_num) {
-    job_->request_num_ = request_num;
-    job_->ForkRequestsForNewDownload(bytes_received, total_bytes);
+  void DestroyParallelJob() {
+    job_.reset();
+    download_item_.reset();
+    item_delegate_.reset();
+    mock_request_handle_ = nullptr;
+  }
+
+  void BuildParallelRequests() { job_->BuildParallelRequests(); }
+
+  bool IsJobCanceled() const { return job_->is_canceled_; };
+
+  void MakeWorkerReady(
+      DownloadWorker* worker,
+      std::unique_ptr<MockDownloadRequestHandle> request_handle) {
+    UrlDownloader::Delegate* delegate =
+        static_cast<UrlDownloader::Delegate*>(worker);
+    std::unique_ptr<DownloadCreateInfo> create_info =
+        base::MakeUnique<DownloadCreateInfo>();
+    create_info->request_handle = std::move(request_handle);
+    delegate->OnUrlDownloaderStarted(
+        std::move(create_info), std::unique_ptr<ByteStreamReader>(),
+        DownloadUrlParameters::OnStartedCallback());
+  }
+
+  void VerifyWorker(int64_t offset, int64_t length) const {
+    EXPECT_TRUE(job_->workers_.find(offset) != job_->workers_.end());
+    EXPECT_EQ(offset, job_->workers_[offset]->offset());
+    EXPECT_EQ(length, job_->workers_[offset]->length());
   }
 
   content::TestBrowserThreadBundle browser_threads_;
   std::unique_ptr<DownloadItemImplDelegate> item_delegate_;
   std::unique_ptr<MockDownloadItemImpl> download_item_;
   std::unique_ptr<ParallelDownloadJobForTest> job_;
+  // Request handle for the original request.
+  MockDownloadRequestHandle* mock_request_handle_;
 };
 
-// Test if sub tasks are created correctly.
-TEST_F(ParallelDownloadJobTest, CreateNewDownloadRequests) {
-  EXPECT_TRUE(job_->fake_tasks_.empty());
-
+// Test if parallel requests can be built correctly for a new download without
+// existing slices.
+TEST_F(ParallelDownloadJobTest, CreateNewDownloadRequestsWithoutSlices) {
   // Totally 2 requests for 100 bytes.
   // Original request:  Range:0-49, for 50 bytes.
-  // Task 1:  Range:50-99, for 50 bytes.
-  CreateNewDownloadRequests(100, 0, 2);
-  EXPECT_EQ(1, static_cast<int>(job_->fake_tasks_.size()));
-  EXPECT_EQ(50, job_->fake_tasks_[0].first);
-  EXPECT_EQ(50, job_->fake_tasks_[0].second);
-  job_->fake_tasks_.clear();
+  // Task 1:  Range:50-, for 50 bytes.
+  CreateParallelJob(0, 100, DownloadItem::ReceivedSlices(), 2, 1, 10);
+  BuildParallelRequests();
+  EXPECT_EQ(1, static_cast<int>(job_->workers().size()));
+  VerifyWorker(50, 0);
+  DestroyParallelJob();
 
   // Totally 3 requests for 100 bytes.
   // Original request:  Range:0-32, for 33 bytes.
   // Task 1:  Range:33-65, for 33 bytes.
-  // Task 2:  Range:66-99, for 34 bytes.
-  CreateNewDownloadRequests(100, 0, 3);
-  EXPECT_EQ(2, static_cast<int>(job_->fake_tasks_.size()));
-  EXPECT_EQ(33, job_->fake_tasks_[0].first);
-  EXPECT_EQ(33, job_->fake_tasks_[0].second);
-  EXPECT_EQ(66, job_->fake_tasks_[1].first);
-  EXPECT_EQ(34, job_->fake_tasks_[1].second);
-  job_->fake_tasks_.clear();
-
-  // Totally 3 requests for 100 bytes. Start from the 17th byte.
-  // Original request:  Range:17-43, for 27 bytes.
-  // Task 1:  Range:44-70, for 27 bytes.
-  // Task 2:  Range:71-99, for 29 bytes.
-  CreateNewDownloadRequests(100, 17, 3);
-  EXPECT_EQ(2, static_cast<int>(job_->fake_tasks_.size()));
-  EXPECT_EQ(44, job_->fake_tasks_[0].first);
-  EXPECT_EQ(27, job_->fake_tasks_[0].second);
-  EXPECT_EQ(71, job_->fake_tasks_[1].first);
-  EXPECT_EQ(29, job_->fake_tasks_[1].second);
-  job_->fake_tasks_.clear();
+  // Task 2:  Range:66-, for 34 bytes.
+  CreateParallelJob(0, 100, DownloadItem::ReceivedSlices(), 3, 1, 10);
+  BuildParallelRequests();
+  EXPECT_EQ(2, static_cast<int>(job_->workers().size()));
+  VerifyWorker(33, 33);
+  VerifyWorker(66, 0);
+  DestroyParallelJob();
 
   // Less than 2 requests, do nothing.
-  CreateNewDownloadRequests(100, 17, 1);
-  EXPECT_TRUE(job_->fake_tasks_.empty());
-  CreateNewDownloadRequests(100, 17, 0);
-  EXPECT_TRUE(job_->fake_tasks_.empty());
+  CreateParallelJob(0, 100, DownloadItem::ReceivedSlices(), 1, 1, 10);
+  BuildParallelRequests();
+  EXPECT_TRUE(job_->workers().empty());
+  DestroyParallelJob();
 
-  // Received bytes are no less than total bytes, do nothing.
-  CreateNewDownloadRequests(100, 100, 3);
-  EXPECT_TRUE(job_->fake_tasks_.empty());
-  CreateNewDownloadRequests(100, 255, 3);
-  EXPECT_TRUE(job_->fake_tasks_.empty());
+  CreateParallelJob(0, 100, DownloadItem::ReceivedSlices(), 0, 1, 10);
+  BuildParallelRequests();
+  EXPECT_TRUE(job_->workers().empty());
+  DestroyParallelJob();
 
-  // Edge cases for 0 bytes.
-  CreateNewDownloadRequests(0, 0, 3);
-  EXPECT_TRUE(job_->fake_tasks_.empty());
+  // Content-length is 0, do nothing.
+  CreateParallelJob(0, 0, DownloadItem::ReceivedSlices(), 3, 1, 10);
+  BuildParallelRequests();
+  EXPECT_TRUE(job_->workers().empty());
+  DestroyParallelJob();
+}
 
-  // 2 bytes left for 3 additional requests. Only 1 are built.
-  // Original request:  Range:98-98, for 1 byte.
-  // Task 1:  Range:99-99, for 1 byte.
-  CreateNewDownloadRequests(100, 98, 4);
-  EXPECT_EQ(1, static_cast<int>(job_->fake_tasks_.size()));
-  EXPECT_EQ(99, job_->fake_tasks_[0].first);
-  EXPECT_EQ(1, job_->fake_tasks_[0].second);
-  job_->fake_tasks_.clear();
+TEST_F(ParallelDownloadJobTest, CreateNewDownloadRequestsWithSlices) {
+  // File size: 100 bytes.
+  // Received slices: [0, 17]
+  // Original request: Range:12-. Content-length: 88.
+  // Totally 3 requests for 83 bytes.
+  // Original request:  Range:12-43.
+  // Task 1:  Range:44-70, for 27 bytes.
+  // Task 2:  Range:71-, for 29 bytes.
+  DownloadItem::ReceivedSlices slices = {DownloadItem::ReceivedSlice(0, 17)};
+  CreateParallelJob(12, 88, slices, 3, 1, 10);
+  BuildParallelRequests();
+  EXPECT_EQ(2, static_cast<int>(job_->workers().size()));
+  VerifyWorker(44, 27);
+  VerifyWorker(71, 0);
+  DestroyParallelJob();
+
+  // File size: 100 bytes.
+  // Received slices: [0, 60], Range:0-59.
+  // Original request: Range:60-. Content-length: 40.
+  // 40 bytes left for 4 requests. Only 1 additional request.
+  // Original request: Range:60-79, for 20 bytes.
+  // Task 1:  Range:80-, for 20 bytes.
+  slices = {DownloadItem::ReceivedSlice(0, 60)};
+  CreateParallelJob(60, 40, slices, 4, 20, 10);
+  BuildParallelRequests();
+  EXPECT_EQ(1, static_cast<int>(job_->workers().size()));
+  VerifyWorker(80, 0);
+  DestroyParallelJob();
+
+  // Content-Length is 0, no additional requests.
+  slices = {DownloadItem::ReceivedSlice(0, 100)};
+  CreateParallelJob(100, 0, slices, 3, 1, 10);
+  BuildParallelRequests();
+  EXPECT_TRUE(job_->workers().empty());
+  DestroyParallelJob();
+
+  // File size: 100 bytes.
+  // Original request: Range:0-. Content-length: 12(Incorrect server header).
+  // The request count is 2, however the file contains 3 holes, and we don't
+  // know if the last slice is completed, so there should be 3 requests in
+  // parallel and the last request is an out-of-range request.
+  slices = {
+      DownloadItem::ReceivedSlice(10, 10), DownloadItem::ReceivedSlice(20, 10),
+      DownloadItem::ReceivedSlice(40, 10), DownloadItem::ReceivedSlice(90, 10)};
+  CreateParallelJob(0, 12, slices, 2, 1, 10);
+  BuildParallelRequests();
+  EXPECT_EQ(3, static_cast<int>(job_->workers().size()));
+  VerifyWorker(30, 10);
+  VerifyWorker(50, 40);
+  VerifyWorker(100, 0);
+  DestroyParallelJob();
+}
+
+// Pause, cancel, resume can be called before or after the worker establish
+// the byte stream.
+// These tests ensure the states consistency between the job and workers.
+
+// Ensure cancel before building the requests will result in no requests are
+// built.
+TEST_F(ParallelDownloadJobTest, EarlyCancelBeforeBuildRequests) {
+  CreateParallelJob(0, 100, DownloadItem::ReceivedSlices(), 2, 1, 10);
+  EXPECT_CALL(*mock_request_handle_, CancelRequest());
+
+  // Job is canceled before building parallel requests.
+  job_->Cancel(true);
+  EXPECT_TRUE(IsJobCanceled());
+
+  BuildParallelRequests();
+  EXPECT_TRUE(job_->workers().empty());
+
+  DestroyParallelJob();
+}
+
+// Ensure cancel before adding the byte stream will result in workers being
+// canceled.
+TEST_F(ParallelDownloadJobTest, EarlyCancelBeforeByteStreamReady) {
+  CreateParallelJob(0, 100, DownloadItem::ReceivedSlices(), 2, 1, 10);
+  EXPECT_CALL(*mock_request_handle_, CancelRequest());
+
+  BuildParallelRequests();
+  VerifyWorker(50, 0);
+
+  // Job is canceled after building parallel requests and before byte streams
+  // are added to the file sink.
+  job_->Cancel(true);
+  EXPECT_TRUE(IsJobCanceled());
+
+  for (auto& worker : job_->workers()) {
+    std::unique_ptr<MockDownloadRequestHandle> mock_handle =
+        base::MakeUnique<MockDownloadRequestHandle>();
+    EXPECT_CALL(*mock_handle.get(), CancelRequest());
+    MakeWorkerReady(worker.second.get(), std::move(mock_handle));
+  }
+
+  DestroyParallelJob();
+}
+
+// Ensure pause before adding the byte stream will result in workers being
+// paused.
+TEST_F(ParallelDownloadJobTest, EarlyPauseBeforeByteStreamReady) {
+  CreateParallelJob(0, 100, DownloadItem::ReceivedSlices(), 2, 1, 10);
+  EXPECT_CALL(*mock_request_handle_, PauseRequest());
+
+  BuildParallelRequests();
+  VerifyWorker(50, 0);
+
+  // Job is paused after building parallel requests and before adding the byte
+  // stream to the file sink.
+  job_->Pause();
+  EXPECT_TRUE(job_->is_paused());
+
+  for (auto& worker : job_->workers()) {
+    EXPECT_CALL(*job_.get(), CountOnByteStreamReady());
+    std::unique_ptr<MockDownloadRequestHandle> mock_handle =
+        base::MakeUnique<MockDownloadRequestHandle>();
+    EXPECT_CALL(*mock_handle.get(), PauseRequest());
+    MakeWorkerReady(worker.second.get(), std::move(mock_handle));
+  }
+
+  DestroyParallelJob();
+}
+
+// Test that parallel request is not created if the remaining content can be
+// finish downloading soon.
+TEST_F(ParallelDownloadJobTest, RemainingContentWillFinishSoon) {
+  DownloadItem::ReceivedSlices slices = {DownloadItem::ReceivedSlice(0, 99)};
+  CreateParallelJob(99, 1, slices, 3, 1, 10);
+  BuildParallelRequests();
+  EXPECT_EQ(0, static_cast<int>(job_->workers().size()));
+
+  DestroyParallelJob();
 }
 
 }  // namespace content

@@ -11,6 +11,7 @@
 #include "apps/launcher.h"
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
@@ -21,7 +22,6 @@
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/open_util.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
@@ -198,8 +198,8 @@ void UpdateDefaultTask(PrefService* pref_service,
                                         prefs::kDefaultTasksByMimeType);
     for (std::set<std::string>::const_iterator iter = mime_types.begin();
         iter != mime_types.end(); ++iter) {
-      base::StringValue* value = new base::StringValue(task_id);
-      mime_type_pref->SetWithoutPathExpansion(*iter, value);
+      mime_type_pref->SetWithoutPathExpansion(
+          *iter, base::MakeUnique<base::Value>(task_id));
     }
   }
 
@@ -208,10 +208,10 @@ void UpdateDefaultTask(PrefService* pref_service,
                                         prefs::kDefaultTasksBySuffix);
     for (std::set<std::string>::const_iterator iter = suffixes.begin();
         iter != suffixes.end(); ++iter) {
-      base::StringValue* value = new base::StringValue(task_id);
       // Suffixes are case insensitive.
       std::string lower_suffix = base::ToLowerASCII(*iter);
-      mime_type_pref->SetWithoutPathExpansion(lower_suffix, value);
+      mime_type_pref->SetWithoutPathExpansion(
+          lower_suffix, base::MakeUnique<base::Value>(task_id));
     }
   }
 }

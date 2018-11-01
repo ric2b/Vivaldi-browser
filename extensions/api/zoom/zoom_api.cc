@@ -32,8 +32,8 @@ ZoomAPI::ZoomAPI(content::BrowserContext* context) : browser_context_(context) {
 
 ZoomAPI::~ZoomAPI() {}
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<ZoomAPI> > g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<ZoomAPI> >::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<ZoomAPI>* ZoomAPI::GetFactoryInstance() {

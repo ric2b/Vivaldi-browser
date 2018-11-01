@@ -178,6 +178,27 @@ CommandHandler.onCommand = function(command) {
       cvox.BrailleCaptionsBackground.setActive(
           !cvox.BrailleCaptionsBackground.isEnabled());
       return false;
+    case 'toggleBrailleTable':
+      var brailleTableType = localStorage['brailleTableType'];
+      var output = '';
+      if (brailleTableType == 'brailleTable6') {
+        brailleTableType = 'brailleTable8';
+
+        // This label reads "switch to 8 dot braille".
+        output = '@OPTIONS_BRAILLE_TABLE_TYPE_6';
+      } else {
+        brailleTableType = 'brailleTable6';
+
+        // This label reads "switch to 6 dot braille".
+        output = '@OPTIONS_BRAILLE_TABLE_TYPE_8';
+      }
+
+      localStorage['brailleTable'] = localStorage[brailleTableType];
+      localStorage['brailleTableType'] = brailleTableType;
+      cvox.BrailleBackground.getInstance().getTranslatorManager().refresh(
+          localStorage[brailleTableType]);
+      new Output().format(output).go();
+      return false;
     case 'toggleChromeVoxVersion':
       if (!ChromeVoxState.instance.toggleNext())
         return false;
@@ -192,6 +213,18 @@ CommandHandler.onCommand = function(command) {
     case 'showNextUpdatePage':
       (new PanelCommand(PanelCommandType.UPDATE_NOTES)).send();
       return false;
+    case 'darkenScreen':
+      chrome.accessibilityPrivate.darkenScreen(true);
+      new Output().format('@darken_screen').go();
+      return false;
+    case 'undarkenScreen':
+      chrome.accessibilityPrivate.darkenScreen(false);
+      new Output().format('@undarken_screen').go();
+      return false;
+    case 'toggleSpeechOnOrOff':
+      var state = cvox.ChromeVox.tts.toggleSpeechOnOrOff();
+      new Output().format(state ? '@speech_on' : '@speech_off').go();
+      return false;
     default:
       break;
   }
@@ -201,8 +234,7 @@ CommandHandler.onCommand = function(command) {
     return true;
 
   // Next/classic compat commands hereafter.
-  if (ChromeVoxState.instance.mode == ChromeVoxMode.CLASSIC ||
-      ChromeVoxState.instance.mode == ChromeVoxMode.NEXT_COMPAT)
+  if (ChromeVoxState.instance.mode == ChromeVoxMode.CLASSIC)
     return true;
 
   var current = ChromeVoxState.instance.currentRange_;
@@ -445,11 +477,17 @@ CommandHandler.onCommand = function(command) {
         current = cursors.Range.fromNode(node);
       break;
     case 'forceClickOnCurrentItem':
-      if (ChromeVoxState.instance.currentRange_) {
-        var actionNode = ChromeVoxState.instance.currentRange_.start.node;
-        if (actionNode.role == RoleType.INLINE_TEXT_BOX)
+      if (ChromeVoxState.instance.currentRange) {
+        var actionNode = ChromeVoxState.instance.currentRange.start.node;
+        while (actionNode.role == RoleType.INLINE_TEXT_BOX ||
+            actionNode.role == RoleType.STATIC_TEXT)
           actionNode = actionNode.parent;
-        actionNode.doDefault();
+        if (actionNode.inPageLinkTarget) {
+          ChromeVoxState.instance.navigateToRange(
+              cursors.Range.fromNode(actionNode.inPageLinkTarget));
+        } else {
+          actionNode.doDefault();
+        }
       }
       // Skip all other processing; if focus changes, we should get an event
       // for that.
@@ -842,5 +880,37 @@ CommandHandler.viewGraphicAsBraille_ = function(current) {
     imageNode.getImageData(0, 0);
   }
 };
+
+/**
+ * Performs global initialization.
+ * @private
+ */
+CommandHandler.init_ = function() {
+  var firstRunId = 'jdgcneonijmofocbhmijhacgchbihela';
+  chrome.runtime.onMessageExternal.addListener(
+      function(request, sender, sendResponse) {
+        if (sender.id != firstRunId)
+          return;
+
+        if (request.openTutorial) {
+          var launchTutorial = function(desktop, evt) {
+            desktop.removeEventListener(
+                chrome.automation.EventType.FOCUS, launchTutorial, true);
+            CommandHandler.onCommand('help');
+          };
+
+          // Since we get this command early on ChromeVox launch, the first run
+          // UI is not yet shown. Monitor for when first run gets focused, and
+          // show our tutorial.
+          chrome.automation.getDesktop(function(desktop) {
+            launchTutorial = launchTutorial.bind(this, desktop);
+            desktop.addEventListener(
+                chrome.automation.EventType.FOCUS, launchTutorial, true);
+          });
+        }
+      });
+};
+
+CommandHandler.init_();
 
 }); //  goog.scope

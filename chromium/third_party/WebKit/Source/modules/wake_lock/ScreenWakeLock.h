@@ -10,7 +10,7 @@
 #include "core/page/PageVisibilityObserver.h"
 #include "device/wake_lock/public/interfaces/wake_lock_service.mojom-blink.h"
 #include "modules/ModulesExport.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -29,8 +29,8 @@ class MODULES_EXPORT ScreenWakeLock final
   static bool keepAwake(Screen&);
   static void setKeepAwake(Screen&, bool);
 
-  static const char* supplementName();
-  static ScreenWakeLock* from(LocalFrame*);
+  static const char* SupplementName();
+  static ScreenWakeLock* From(LocalFrame*);
 
   ~ScreenWakeLock() = default;
 
@@ -40,19 +40,19 @@ class MODULES_EXPORT ScreenWakeLock final
   explicit ScreenWakeLock(LocalFrame&);
 
   // Inherited from PageVisibilityObserver.
-  void pageVisibilityChanged() override;
+  void PageVisibilityChanged() override;
 
   // Inherited from ContextLifecycleObserver.
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
   bool keepAwake() const;
   void setKeepAwake(bool);
 
-  static ScreenWakeLock* fromScreen(Screen&);
-  void notifyService();
+  static ScreenWakeLock* FromScreen(Screen&);
+  void NotifyService();
 
-  device::mojom::blink::WakeLockServicePtr m_service;
-  bool m_keepAwake;
+  device::mojom::blink::WakeLockServicePtr service_;
+  bool keep_awake_;
 };
 
 }  // namespace blink

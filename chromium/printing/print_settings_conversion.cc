@@ -189,6 +189,14 @@ bool PrintSettingsFromJobSettings(const base::DictionaryValue& job_settings,
       !job_settings.GetBoolean(kSettingRasterizePdf, &rasterize_pdf)) {
     return false;
   }
+#if defined(OS_WIN)
+  int dpi_horizontal = 0;
+  int dpi_vertical = 0;
+  if (!job_settings.GetInteger(kSettingDpiHorizontal, &dpi_horizontal) ||
+      !job_settings.GetInteger(kSettingDpiVertical, &dpi_vertical)) {
+    return false;
+  }
+#endif
 
   settings->set_collate(collate);
   settings->set_copies(copies);
@@ -203,6 +211,7 @@ bool PrintSettingsFromJobSettings(const base::DictionaryValue& job_settings,
   bool can_modify = false;
   if (job_settings.GetBoolean(kSettingPreviewModifiable, &can_modify))
     settings->set_print_text_with_gdi(can_modify);
+  settings->set_dpi_xy(dpi_horizontal, dpi_vertical);
 #endif
 
   return true;
@@ -241,11 +250,10 @@ void PrintSettingsToJobSettingsDebug(const PrintSettings& settings,
   // common public constants. So just serialize in "debug" section.
   base::DictionaryValue* debug = new base::DictionaryValue;
   job_settings->Set("debug", debug);
-  debug->SetInteger("desiredDpi", settings.desired_dpi());
   debug->SetInteger("dpi", settings.dpi());
   debug->SetInteger("deviceUnitsPerInch", settings.device_units_per_inch());
   debug->SetBoolean("support_alpha_blend", settings.should_print_backgrounds());
-  debug->SetString("media_vendor_od", settings.requested_media().vendor_id);
+  debug->SetString("media_vendor_id", settings.requested_media().vendor_id);
   SetSizeToJobSettings(
       "media_size", settings.requested_media().size_microns, debug);
   SetMarginsToJobSettings("requested_custom_margins_in_points",

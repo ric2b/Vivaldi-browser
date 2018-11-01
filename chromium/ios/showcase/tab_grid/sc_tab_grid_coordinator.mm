@@ -5,7 +5,10 @@
 #import "ios/showcase/tab_grid/sc_tab_grid_coordinator.h"
 
 #import "base/format_macros.h"
-#import "ios/clean/chrome/browser/ui/commands/tab_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/settings_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/tab_grid_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
+#import "ios/clean/chrome/browser/ui/tab_collection/tab_collection_data_source.h"
 #import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_view_controller.h"
 #import "ios/showcase/common/protocol_alerter.h"
 
@@ -13,7 +16,7 @@
 #error "This file requires ARC support."
 #endif
 
-@interface SCTabGridCoordinator ()<TabGridDataSource>
+@interface SCTabGridCoordinator ()<TabCollectionDataSource>
 @property(nonatomic, strong) TabGridViewController* viewController;
 @property(nonatomic, strong) ProtocolAlerter* alerter;
 @end
@@ -24,32 +27,35 @@
 @synthesize alerter = _alerter;
 
 - (void)start {
-  self.alerter =
-      [[ProtocolAlerter alloc] initWithProtocols:@[ @protocol(TabCommands) ]];
+  self.alerter = [[ProtocolAlerter alloc] initWithProtocols:@[
+    @protocol(SettingsCommands), @protocol(TabGridCommands),
+    @protocol(ToolsMenuCommands)
+  ]];
   self.alerter.baseViewController = self.baseViewController;
 
   self.viewController = [[TabGridViewController alloc] init];
   self.viewController.title = @"Tab Grid";
   self.viewController.dataSource = self;
-  self.viewController.tabCommandHandler =
-      static_cast<id<TabCommands>>(self.alerter);
+  self.viewController.dispatcher =
+      static_cast<id<SettingsCommands, TabGridCommands, ToolsMenuCommands>>(
+          self.alerter);
 
   [self.baseViewController setHidesBarsOnSwipe:YES];
   [self.baseViewController pushViewController:self.viewController animated:YES];
 }
 
-#pragma mark - TabGridDataSource
+#pragma mark - TabCollectionDataSource
 
-- (NSUInteger)numberOfTabsInTabGrid {
+- (int)numberOfTabs {
   return 3;
 }
 
-- (NSString*)titleAtIndex:(NSInteger)index {
-  return [NSString stringWithFormat:@"Tab %" PRIdNS, index];
+- (NSString*)titleAtIndex:(int)index {
+  return [NSString stringWithFormat:@"Tab %d", index];
 }
 
-- (NSInteger)indexOfActiveTab {
-  return NSNotFound;
+- (int)indexOfActiveTab {
+  return kTabCollectionDataSourceInvalidIndex;
 }
 
 @end

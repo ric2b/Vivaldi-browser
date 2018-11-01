@@ -23,6 +23,8 @@
 #include "printing/units.h"
 #include "url/gurl.h"
 
+using base::EqualsCaseInsensitiveASCII;
+
 namespace printing {
 
 // This section contains helper code for PPD parsing for semantic capabilities.
@@ -36,9 +38,19 @@ const char kPrintoutMode[] = "PrintoutMode";
 const char kDraftGray[] = "Draft.Gray";
 const char kHighGray[] = "High.Gray";
 
-const char kDuplex[] = "Duplex";
-const char kDuplexNone[] = "None";
-const char kPageSize[] = "PageSize";
+constexpr char kDuplex[] = "Duplex";
+constexpr char kDuplexNone[] = "None";
+constexpr char kDuplexTumble[] = "DuplexTumble";
+constexpr char kPageSize[] = "PageSize";
+
+// Brother printer specific options.
+constexpr char kBrotherDuplex[] = "BRDuplex";
+constexpr char kBrotherMonoColor[] = "BRMonoColor";
+constexpr char kBrotherPrintQuality[] = "BRPrintQuality";
+
+// Samsung printer specific options.
+constexpr char kSamsungColorTrue[] = "True";
+constexpr char kSamsungColorFalse[] = "False";
 
 const double kMicronsPerPoint = 10.0f * kHundrethsMMPerInch / kPointsPerInch;
 
@@ -82,7 +94,7 @@ void ParseLpOptions(const base::FilePath& filepath,
     if (name.empty())
       continue;
 
-    if (!base::EqualsCaseInsensitiveASCII(printer_name, name))
+    if (!EqualsCaseInsensitiveASCII(printer_name, name))
       continue;  // This is not the required printer.
 
     line = line.substr(space_found + 1);
@@ -118,6 +130,34 @@ void MarkLpOptions(base::StringPiece printer_name, ppd_file_t** ppd) {
       cupsMarkOptions(*ppd, num_options, options);
       cupsFreeOptions(num_options, options);
     }
+  }
+}
+
+void GetDuplexSettings(ppd_file_t* ppd,
+                       bool* duplex_capable,
+                       DuplexMode* duplex_default) {
+  ppd_choice_t* duplex_choice = ppdFindMarkedChoice(ppd, kDuplex);
+  if (!duplex_choice) {
+    ppd_option_t* option = ppdFindOption(ppd, kDuplex);
+    if (!option)
+      option = ppdFindOption(ppd, kBrotherDuplex);
+    if (!option)
+      return;
+
+    duplex_choice = ppdFindChoice(option, option->defchoice);
+  }
+
+  if (!duplex_choice)
+    return;
+
+  *duplex_capable = true;
+  const char* choice = duplex_choice->choice;
+  if (EqualsCaseInsensitiveASCII(choice, kDuplexNone)) {
+    *duplex_default = SIMPLEX;
+  } else if (EqualsCaseInsensitiveASCII(choice, kDuplexTumble)) {
+    *duplex_default = SHORT_EDGE;
+  } else {
+    *duplex_default = LONG_EDGE;
   }
 }
 
@@ -159,9 +199,9 @@ bool GetBasicColorModelSettings(ppd_file_t* ppd,
 
   if (marked_choice) {
     *color_is_default =
-        !base::EqualsCaseInsensitiveASCII(marked_choice->choice, kBlack) &&
-        !base::EqualsCaseInsensitiveASCII(marked_choice->choice, kGray) &&
-        !base::EqualsCaseInsensitiveASCII(marked_choice->choice, kGrayscale);
+        !EqualsCaseInsensitiveASCII(marked_choice->choice, kBlack) &&
+        !EqualsCaseInsensitiveASCII(marked_choice->choice, kGray) &&
+        !EqualsCaseInsensitiveASCII(marked_choice->choice, kGrayscale);
   }
   return true;
 }
@@ -192,12 +232,9 @@ bool GetPrintOutModeColorSettings(ppd_file_t* ppd,
                                            printout_mode->defchoice);
   }
   if (printout_mode_choice) {
-    if (base::EqualsCaseInsensitiveASCII(printout_mode_choice->choice,
-                                         kNormalGray) ||
-        base::EqualsCaseInsensitiveASCII(printout_mode_choice->choice,
-                                         kHighGray) ||
-        base::EqualsCaseInsensitiveASCII(printout_mode_choice->choice,
-                                         kDraftGray)) {
+    if (EqualsCaseInsensitiveASCII(printout_mode_choice->choice, kNormalGray) ||
+        EqualsCaseInsensitiveASCII(printout_mode_choice->choice, kHighGray) ||
+        EqualsCaseInsensitiveASCII(printout_mode_choice->choice, kDraftGray)) {
       *color_model_for_black = PRINTOUTMODE_NORMAL_GRAY;
       *color_is_default = false;
     }
@@ -209,16 +246,20 @@ bool GetColorModeSettings(ppd_file_t* ppd,
                           ColorModel* color_model_for_black,
                           ColorModel* color_model_for_color,
                           bool* color_is_default) {
-  // Samsung printers use "ColorMode" attribute in their ppds.
+  // Samsung printers use "ColorMode" attribute in their PPDs.
   ppd_option_t* color_mode_option = ppdFindOption(ppd, kColorMode);
   if (!color_mode_option)
     return false;
 
-  if (ppdFindChoice(color_mode_option, kColor))
+  if (ppdFindChoice(color_mode_option, kColor) ||
+      ppdFindChoice(color_mode_option, kSamsungColorTrue)) {
     *color_model_for_color = COLORMODE_COLOR;
+  }
 
-  if (ppdFindChoice(color_mode_option, kMonochrome))
+  if (ppdFindChoice(color_mode_option, kMonochrome) ||
+      ppdFindChoice(color_mode_option, kSamsungColorFalse)) {
     *color_model_for_black = COLORMODE_MONOCHROME;
+  }
 
   ppd_choice_t* mode_choice = ppdFindMarkedChoice(ppd, kColorMode);
   if (!mode_choice) {
@@ -228,7 +269,43 @@ bool GetColorModeSettings(ppd_file_t* ppd,
 
   if (mode_choice) {
     *color_is_default =
-        base::EqualsCaseInsensitiveASCII(mode_choice->choice, kColor);
+        EqualsCaseInsensitiveASCII(mode_choice->choice, kColor) ||
+        EqualsCaseInsensitiveASCII(mode_choice->choice, kSamsungColorTrue);
+  }
+  return true;
+}
+
+bool GetBrotherColorSettings(ppd_file_t* ppd,
+                             ColorModel* color_model_for_black,
+                             ColorModel* color_model_for_color,
+                             bool* color_is_default) {
+  // Some Brother printers use "BRMonoColor" attribute in their PPDs.
+  // Some Brother printers use "BRPrintQuality" attribute in their PPDs.
+  ppd_option_t* color_mode_option = ppdFindOption(ppd, kBrotherMonoColor);
+  if (!color_mode_option)
+    color_mode_option = ppdFindOption(ppd, kBrotherPrintQuality);
+  if (!color_mode_option)
+    return false;
+
+  if (ppdFindChoice(color_mode_option, kFullColor))
+    *color_model_for_color = BROTHER_CUPS_COLOR;
+  else if (ppdFindChoice(color_mode_option, kColor))
+    *color_model_for_color = BROTHER_BRSCRIPT3_COLOR;
+
+  if (ppdFindChoice(color_mode_option, kMono))
+    *color_model_for_black = BROTHER_CUPS_MONO;
+  else if (ppdFindChoice(color_mode_option, kBlack))
+    *color_model_for_black = BROTHER_BRSCRIPT3_BLACK;
+
+  ppd_choice_t* marked_choice = ppdFindMarkedChoice(ppd, kColorMode);
+  if (!marked_choice) {
+    marked_choice =
+        ppdFindChoice(color_mode_option, color_mode_option->defchoice);
+  }
+  if (marked_choice) {
+    *color_is_default =
+        !EqualsCaseInsensitiveASCII(marked_choice->choice, kBlack) &&
+        !EqualsCaseInsensitiveASCII(marked_choice->choice, kMono);
   }
   return true;
 }
@@ -237,7 +314,7 @@ bool GetHPColorSettings(ppd_file_t* ppd,
                         ColorModel* color_model_for_black,
                         ColorModel* color_model_for_color,
                         bool* color_is_default) {
-  // HP printers use "Color/Color Model" attribute in their ppds.
+  // HP printers use "Color/Color Model" attribute in their PPDs.
   ppd_option_t* color_mode_option = ppdFindOption(ppd, kColor);
   if (!color_mode_option)
     return false;
@@ -253,8 +330,7 @@ bool GetHPColorSettings(ppd_file_t* ppd,
                                 color_mode_option->defchoice);
   }
   if (mode_choice) {
-    *color_is_default =
-        base::EqualsCaseInsensitiveASCII(mode_choice->choice, kColor);
+    *color_is_default = EqualsCaseInsensitiveASCII(mode_choice->choice, kColor);
   }
   return true;
 }
@@ -263,7 +339,7 @@ bool GetProcessColorModelSettings(ppd_file_t* ppd,
                                   ColorModel* color_model_for_black,
                                   ColorModel* color_model_for_color,
                                   bool* color_is_default) {
-  // Canon printers use "ProcessColorModel" attribute in their ppds.
+  // Canon printers use "ProcessColorModel" attribute in their PPDs.
   ppd_option_t* color_mode_option =  ppdFindOption(ppd, kProcessColorModel);
   if (!color_mode_option)
     return false;
@@ -284,7 +360,7 @@ bool GetProcessColorModelSettings(ppd_file_t* ppd,
 
   if (mode_choice) {
     *color_is_default =
-        !base::EqualsCaseInsensitiveASCII(mode_choice->choice, kGreyscale);
+        !EqualsCaseInsensitiveASCII(mode_choice->choice, kGreyscale);
   }
   return true;
 }
@@ -301,10 +377,11 @@ bool GetColorModelSettings(ppd_file_t* ppd,
   *is_color = is_color_device;
   return (is_color_device &&
           GetBasicColorModelSettings(ppd, cm_black, cm_color, is_color)) ||
-      GetPrintOutModeColorSettings(ppd, cm_black, cm_color, is_color) ||
-      GetColorModeSettings(ppd, cm_black, cm_color, is_color) ||
-      GetHPColorSettings(ppd, cm_black, cm_color, is_color) ||
-      GetProcessColorModelSettings(ppd, cm_black, cm_color, is_color);
+         GetPrintOutModeColorSettings(ppd, cm_black, cm_color, is_color) ||
+         GetColorModeSettings(ppd, cm_black, cm_color, is_color) ||
+         GetHPColorSettings(ppd, cm_black, cm_color, is_color) ||
+         GetBrotherColorSettings(ppd, cm_black, cm_color, is_color) ||
+         GetProcessColorModelSettings(ppd, cm_black, cm_color, is_color);
 }
 
 // Default port for IPP print servers.
@@ -377,20 +454,7 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
   caps.collate_default = true;
   caps.copies_capable = true;
 
-  ppd_choice_t* duplex_choice = ppdFindMarkedChoice(ppd, kDuplex);
-  if (!duplex_choice) {
-    ppd_option_t* option = ppdFindOption(ppd, kDuplex);
-    if (option)
-      duplex_choice = ppdFindChoice(option, option->defchoice);
-  }
-
-  if (duplex_choice) {
-    caps.duplex_capable = true;
-    if (!base::EqualsCaseInsensitiveASCII(duplex_choice->choice, kDuplexNone))
-      caps.duplex_default = LONG_EDGE;
-    else
-      caps.duplex_default = SIMPLEX;
-  }
+  GetDuplexSettings(ppd, &caps.duplex_capable, &caps.duplex_default);
 
   bool is_color = false;
   ColorModel cm_color = UNKNOWN_COLOR_MODEL, cm_black = UNKNOWN_COLOR_MODEL;

@@ -8,10 +8,6 @@
 #include "ui/aura/window.h"
 #include "ui/wm/wm_export.h"
 
-namespace aura {
-class Window;
-}
-
 namespace wm {
 
 // Different types of drop shadows that can be drawn under a window by the
@@ -22,6 +18,7 @@ enum class ShadowElevation {
   // default.
   DEFAULT = -1,
   NONE = 0,
+  TINY = 2,
   SMALL = 6,
   MEDIUM = 8,
   LARGE = 24,

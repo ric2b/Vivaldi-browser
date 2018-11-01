@@ -35,13 +35,6 @@ var SyncPrefsIndividualDataTypes = [
 /**
  * @fileoverview
  * 'settings-sync-page' is the settings page containing sync settings.
- *
- * Example:
- *
- *    <iron-animated-pages>
- *      <settings-sync-page></settings-sync-page>
- *      ... other pages ...
- *    </iron-animated-pages>
  */
 Polymer({
   is: 'settings-sync-page',
@@ -53,7 +46,7 @@ Polymer({
 
   properties: {
     /** @private */
-    pages: {
+    pages_: {
       type: Object,
       value: settings.PageStatus,
       readOnly: true,
@@ -225,6 +218,16 @@ Polymer({
     // Hide the new passphrase box if the sync data has been encrypted.
     if (this.syncPrefs.encryptAllData)
       this.creatingNewPassphrase_ = false;
+
+    // Focus the password input box if password is needed to start sync.
+    if (this.syncPrefs.passphraseRequired) {
+      // Async to allow the dom-if templates to render first.
+      this.async(function() {
+        var input = /** @type {!PaperInputElement} */ (
+            this.$$('#existingPassphraseInput'));
+        input.inputElement.focus();
+      }.bind(this));
+    }
   },
 
   /**
@@ -264,6 +267,11 @@ Polymer({
     assert(this.syncPrefs);
     this.browserProxy_.setSyncDatatypes(this.syncPrefs).then(
         this.handlePageStatusChanged_.bind(this));
+  },
+
+  /** @private */
+  onActivityControlsTap_: function() {
+    this.browserProxy_.openActivityControlsUrl();
   },
 
   /** @private */
@@ -345,7 +353,7 @@ Polymer({
           settings.navigateTo(settings.Route.PEOPLE);
         return;
       case settings.PageStatus.PASSPHRASE_FAILED:
-        if (this.pageStatus_ == this.pages.CONFIGURE &&
+        if (this.pageStatus_ == this.pages_.CONFIGURE &&
             this.syncPrefs && this.syncPrefs.passphraseRequired) {
           this.$$('#existingPassphraseInput').invalid = true;
         }

@@ -73,6 +73,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER, "protectedContent"},
 #endif
     {CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC, "background-sync"},
+    {CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER, "subresource-filter"},
 };
 
 }  // namespace
@@ -306,7 +307,7 @@ void GetPolicyAllowedUrls(
   std::vector<ContentSettingsPattern> patterns;
   for (const auto& entry : *policy_urls) {
     std::string url;
-    bool valid_string = entry->GetAsString(&url);
+    bool valid_string = entry.GetAsString(&url);
     if (!valid_string)
       continue;
 

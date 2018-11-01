@@ -15,7 +15,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "chrome/installer/util/browser_distribution.h"
+#include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/user_experiment.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/aura/window.h"
@@ -34,6 +34,7 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_constants.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -100,7 +101,6 @@ TryChromeDialogView::Result TryChromeDialogView::ShowModal(
       views::Background::CreateSolidBackground(0xfc, 0xfc, 0xfc));
 
   views::GridLayout* layout = views::GridLayout::CreatePanel(root_view);
-  root_view->SetLayoutManager(layout);
   views::ColumnSet* columns;
 
   // First row: [icon][pad][text][pad][button].
@@ -134,7 +134,8 @@ TryChromeDialogView::Result TryChromeDialogView::ShowModal(
   columns->AddPaddingColumn(0, icon_size.width());
   columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::FILL, 0,
                      views::GridLayout::USE_PREF, 0, 0);
-  columns->AddPaddingColumn(0, views::kRelatedButtonHSpacing);
+  columns->AddPaddingColumn(0, views::LayoutProvider::Get()->GetDistanceMetric(
+                                   views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
   columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::FILL, 0,
                      views::GridLayout::USE_PREF, 0, 0);
 
@@ -169,15 +170,15 @@ TryChromeDialogView::Result TryChromeDialogView::ShowModal(
 
   // Find out what experiment we are conducting.
   installer::ExperimentDetails experiment;
-  if (!BrowserDistribution::GetDistribution()->HasUserExperiments() ||
+  if (!install_static::SupportsRetentionExperiments() ||
       !installer::CreateExperimentDetails(flavor_, &experiment) ||
       !experiment.heading) {
     NOTREACHED() << "Cannot determine which headline to show.";
     return DIALOG_ERROR;
   }
-  views::Label* label = new views::Label(
-      l10n_util::GetStringUTF16(experiment.heading),
-      rb.GetFontList(ui::ResourceBundle::MediumFont));
+  views::Label* label =
+      new views::Label(l10n_util::GetStringUTF16(experiment.heading),
+                       views::style::CONTEXT_DIALOG_TITLE);
   label->SetMultiLine(true);
   label->SizeToFit(200);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -276,8 +277,7 @@ TryChromeDialogView::Result TryChromeDialogView::ShowModal(
     separator->SetSize(gfx::Size(preferred.width(), separator_height));
   }
 
-  gfx::Rect pos = ComputeWindowPosition(preferred.width(), preferred.height(),
-                                        base::i18n::IsRTL());
+  gfx::Rect pos = ComputeWindowPosition(preferred, base::i18n::IsRTL());
   popup_->SetBounds(pos);
 
   // Carve the toast shape into the window.
@@ -295,23 +295,22 @@ TryChromeDialogView::Result TryChromeDialogView::ShowModal(
   return result_;
 }
 
-gfx::Rect TryChromeDialogView::ComputeWindowPosition(int width,
-                                                     int height,
+gfx::Rect TryChromeDialogView::ComputeWindowPosition(gfx::Size size,
                                                      bool is_RTL) {
-  // The 'Shell_TrayWnd' is the taskbar. We like to show our window in that
-  // monitor if we can. This code works even if such window is not found.
-  HWND taskbar = ::FindWindowW(L"Shell_TrayWnd", NULL);
-  HMONITOR monitor = ::MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY);
+  // A best guess at a visible location in case all else fails.
+  gfx::Point origin(20, 20);
+
+  // The taskbar (the 'Shell_TrayWnd' window) is always on the primary monitor.
+  constexpr POINT kOrigin = {};
   MONITORINFO info = {sizeof(info)};
-  if (!GetMonitorInfoW(monitor, &info)) {
-    // Quite unexpected. Do a best guess at a visible rectangle.
-    return gfx::Rect(20, 20, width + 20, height + 20);
+  if (::GetMonitorInfo(::MonitorFromPoint(kOrigin, MONITOR_DEFAULTTOPRIMARY),
+                       &info)) {
+    // |rcWork| is the work area, accounting for the visible taskbars.
+    origin.set_x(is_RTL ? info.rcWork.left : info.rcWork.right - size.width());
+    origin.set_y(info.rcWork.bottom - size.height());
   }
-  // The |rcWork| is the work area. It should account for the taskbars that
-  // are in the screen when we called the function.
-  int left = is_RTL ? info.rcWork.left : info.rcWork.right - width;
-  int top = info.rcWork.bottom - height;
-  return gfx::Rect(left, top, width, height);
+
+  return gfx::Rect(origin, size);
 }
 
 void TryChromeDialogView::SetToastRegion(HWND window, int w, int h) {

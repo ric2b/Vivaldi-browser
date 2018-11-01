@@ -4,8 +4,11 @@
 
 #include "base/task_scheduler/task_scheduler.h"
 
+#include <algorithm>
+
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/sys_info.h"
 #include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_scheduler_impl.h"
 #include "base/threading/platform_thread.h"
@@ -20,17 +23,48 @@ TaskScheduler* g_task_scheduler = nullptr;
 
 }  // namespace
 
+TaskScheduler::InitParams::InitParams(
+    const SchedulerWorkerPoolParams& background_worker_pool_params_in,
+    const SchedulerWorkerPoolParams& background_blocking_worker_pool_params_in,
+    const SchedulerWorkerPoolParams& foreground_worker_pool_params_in,
+    const SchedulerWorkerPoolParams& foreground_blocking_worker_pool_params_in)
+    : background_worker_pool_params(background_worker_pool_params_in),
+      background_blocking_worker_pool_params(
+          background_blocking_worker_pool_params_in),
+      foreground_worker_pool_params(foreground_worker_pool_params_in),
+      foreground_blocking_worker_pool_params(
+          foreground_blocking_worker_pool_params_in) {}
+
+TaskScheduler::InitParams::~InitParams() = default;
+
+#if !defined(OS_NACL)
 // static
-void TaskScheduler::CreateAndSetSimpleTaskScheduler(int max_threads) {
-  std::vector<SchedulerWorkerPoolParams> worker_pool_params_vector;
-  worker_pool_params_vector.emplace_back(
-      "Simple", ThreadPriority::NORMAL,
-      SchedulerWorkerPoolParams::StandbyThreadPolicy::LAZY, max_threads,
-      TimeDelta::FromSeconds(30));
+void TaskScheduler::CreateAndSetSimpleTaskScheduler(const std::string& name) {
+  using StandbyThreadPolicy = SchedulerWorkerPoolParams::StandbyThreadPolicy;
+
+  // Values were chosen so that:
+  // * There are few background threads.
+  // * Background threads never outnumber foreground threads.
+  // * The system is utilized maximally by foreground threads.
+  const int num_cores = SysInfo::NumberOfProcessors();
+  constexpr int kBackgroundMaxThreads = 1;
+  constexpr int kBackgroundBlockingMaxThreads = 2;
+  const int kForegroundMaxThreads = std::max(1, num_cores);
+  const int kForegroundBlockingMaxThreads = std::max(2, num_cores);
+
+  constexpr TimeDelta kSuggestedReclaimTime = TimeDelta::FromSeconds(30);
+
   CreateAndSetDefaultTaskScheduler(
-      worker_pool_params_vector,
-      Bind([](const TaskTraits&) -> size_t { return 0; }));
+      name, {{StandbyThreadPolicy::LAZY, kBackgroundMaxThreads,
+              kSuggestedReclaimTime},
+             {StandbyThreadPolicy::LAZY, kBackgroundBlockingMaxThreads,
+              kSuggestedReclaimTime},
+             {StandbyThreadPolicy::LAZY, kForegroundMaxThreads,
+              kSuggestedReclaimTime},
+             {StandbyThreadPolicy::LAZY, kForegroundBlockingMaxThreads,
+              kSuggestedReclaimTime}});
 }
+#endif  // !defined(OS_NACL)
 
 // static
 void TaskScheduler::CreateAndSetDefaultTaskScheduler(
@@ -39,6 +73,12 @@ void TaskScheduler::CreateAndSetDefaultTaskScheduler(
         worker_pool_index_for_traits_callback) {
   SetInstance(internal::TaskSchedulerImpl::Create(
       worker_pool_params_vector, worker_pool_index_for_traits_callback));
+}
+
+void TaskScheduler::CreateAndSetDefaultTaskScheduler(
+    const std::string& name,
+    const InitParams& init_params) {
+  SetInstance(internal::TaskSchedulerImpl::Create(name, init_params));
 }
 
 // static

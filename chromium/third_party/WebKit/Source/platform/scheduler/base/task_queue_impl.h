@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/pending_task.h"
 #include "base/threading/thread_checker.h"
@@ -17,8 +18,8 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "platform/scheduler/base/enqueue_order.h"
 #include "platform/scheduler/base/intrusive_heap.h"
+#include "platform/wtf/Deque.h"
 #include "public/platform/scheduler/base/task_queue.h"
-#include "wtf/Deque.h"
 
 namespace blink {
 namespace scheduler {
@@ -45,7 +46,7 @@ class WorkQueueSets;
 // immediate_work_queue is swapped with immediate_incoming_queue when
 // immediate_work_queue becomes empty.
 //
-// Delayed tasks are initially posted to delayed_incoming_queue and a wakeup
+// Delayed tasks are initially posted to delayed_incoming_queue and a wake-up
 // is scheduled with the TimeDomain.  When the delay has elapsed, the TimeDomain
 // calls UpdateDelayedWorkQueue and ready delayed tasks are moved into the
 // delayed_work_queue.  Note the EnqueueOrder (used for ordering) for a delayed
@@ -64,21 +65,40 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
                 const char* disabled_by_default_tracing_category,
                 const char* disabled_by_default_verbose_tracing_category);
 
+  // Represents a time at which a task wants to run. Tasks scheduled for the
+  // same point in time will be ordered by their sequence numbers.
+  struct DelayedWakeUp {
+    base::TimeTicks time;
+    int sequence_num;
+
+    bool operator<=(const DelayedWakeUp& other) const {
+      if (time == other.time) {
+        DCHECK_NE(sequence_num, other.sequence_num);
+        return (sequence_num - other.sequence_num) < 0;
+      }
+      return time < other.time;
+    }
+  };
+
   class BLINK_PLATFORM_EXPORT Task : public base::PendingTask {
    public:
     Task();
     Task(const tracked_objects::Location& posted_from,
-         const base::Closure& task,
+         base::OnceClosure task,
          base::TimeTicks desired_run_time,
          EnqueueOrder sequence_number,
          bool nestable);
 
     Task(const tracked_objects::Location& posted_from,
-         const base::Closure& task,
+         base::OnceClosure task,
          base::TimeTicks desired_run_time,
          EnqueueOrder sequence_number,
          bool nestable,
          EnqueueOrder enqueue_order);
+
+    DelayedWakeUp delayed_wake_up() const {
+      return DelayedWakeUp{delayed_run_time, sequence_num};
+    }
 
     EnqueueOrder enqueue_order() const {
 #ifndef NDEBUG
@@ -111,29 +131,14 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
     EnqueueOrder enqueue_order_;
   };
 
-  // Represents a time at which a task wants to run. Tasks scheduled for the
-  // same point in time will be ordered by their sequence numbers.
-  struct DelayedWakeUp {
-    base::TimeTicks time;
-    int sequence_num;
-
-    bool operator<=(const DelayedWakeUp& other) const {
-      if (time == other.time) {
-        DCHECK_NE(sequence_num, other.sequence_num);
-        return (sequence_num - other.sequence_num) < 0;
-      }
-      return time < other.time;
-    }
-  };
-
   // TaskQueue implementation.
   void UnregisterTaskQueue() override;
   bool RunsTasksOnCurrentThread() const override;
   bool PostDelayedTask(const tracked_objects::Location& from_here,
-                       const base::Closure& task,
+                       base::OnceClosure task,
                        base::TimeDelta delay) override;
   bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
-                                  const base::Closure& task,
+                                  base::OnceClosure task,
                                   base::TimeDelta delay) override;
   std::unique_ptr<QueueEnabledVoter> CreateQueueEnabledVoter() override;
   bool IsQueueEnabled() const override;
@@ -154,6 +159,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   bool BlockedByFence() const override;
   const char* GetName() const override;
   QueueType GetQueueType() const override;
+  void SetObserver(Observer* observer) override;
 
   // Returns true if a (potentially hypothetical) task with the specified
   // |enqueue_order| could run on the queue. Must be called from the main
@@ -192,18 +198,18 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   }
 
   // Enqueues any delayed tasks which should be run now on the
-  // |delayed_work_queue|. Returns the subsequent wakeup that is required, if
+  // |delayed_work_queue|. Returns the subsequent wake-up that is required, if
   // any. Must be called from the main thread.
   base::Optional<DelayedWakeUp> WakeUpForDelayedWork(LazyNow* lazy_now);
 
-  base::TimeTicks scheduled_time_domain_wakeup() const {
-    return main_thread_only().scheduled_time_domain_wakeup;
+  base::TimeTicks scheduled_time_domain_wake_up() const {
+    return main_thread_only().scheduled_time_domain_wake_up;
   }
 
-  void set_scheduled_time_domain_wakeup(
-      base::TimeTicks scheduled_time_domain_wakeup) {
-    main_thread_only().scheduled_time_domain_wakeup =
-        scheduled_time_domain_wakeup;
+  void set_scheduled_time_domain_wake_up(
+      base::TimeTicks scheduled_time_domain_wake_up) {
+    main_thread_only().scheduled_time_domain_wake_up =
+        scheduled_time_domain_wake_up;
   }
 
   HeapHandle heap_handle() const { return main_thread_only().heap_handle; }
@@ -244,21 +250,16 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
     NON_NESTABLE,
   };
 
-  // We reserve an inline capacity of 8 tasks to try and reduce the load on
-  // PartitionAlloc.
-  using TaskDeque = WTF::Deque<Task, 8>;
-
   struct AnyThread {
     AnyThread(TaskQueueManager* task_queue_manager, TimeDomain* time_domain);
     ~AnyThread();
 
-    // TaskQueueManager and TimeDomain are maintained in two copies:
+    // TaskQueueManager, TimeDomain and Observer are maintained in two copies:
     // inside AnyThread and inside MainThreadOnly. They can be changed only from
     // main thread, so it should be locked before accessing from other threads.
     TaskQueueManager* task_queue_manager;
     TimeDomain* time_domain;
-
-    TaskDeque immediate_incoming_queue;
+    Observer* observer;
   };
 
   struct MainThreadOnly {
@@ -267,10 +268,12 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
                    TimeDomain* time_domain);
     ~MainThreadOnly();
 
-    // Another copy of TaskQueueManager and TimeDomain for lock-free access from
-    // the main thread. See description inside struct AnyThread for details.
+    // Another copy of TaskQueueManager, TimeDomain and Observer
+    // for lock-free access from the main thread.
+    // See description inside struct AnyThread for details.
     TaskQueueManager* task_queue_manager;
     TimeDomain* time_domain;
+    Observer* observer;
 
     std::unique_ptr<WorkQueue> delayed_work_queue;
     std::unique_ptr<WorkQueue> immediate_work_queue;
@@ -282,16 +285,16 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
     int voter_refcount;
     base::trace_event::BlameContext* blame_context;  // Not owned.
     EnqueueOrder current_fence;
-    base::TimeTicks scheduled_time_domain_wakeup;
+    base::TimeTicks scheduled_time_domain_wake_up;
   };
 
   ~TaskQueueImpl() override;
 
   bool PostImmediateTaskImpl(const tracked_objects::Location& from_here,
-                             const base::Closure& task,
+                             base::OnceClosure task,
                              TaskType task_type);
   bool PostDelayedTaskImpl(const tracked_objects::Location& from_here,
-                           const base::Closure& task,
+                           base::OnceClosure task,
                            base::TimeDelta delay,
                            TaskType task_type);
 
@@ -313,16 +316,20 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   // empty.
   void PushOntoImmediateIncomingQueueLocked(
       const tracked_objects::Location& posted_from,
-      const base::Closure& task,
+      base::OnceClosure task,
       base::TimeTicks desired_run_time,
       EnqueueOrder sequence_number,
       bool nestable);
+
+  // We reserve an inline capacity of 8 tasks to try and reduce the load on
+  // PartitionAlloc.
+  using TaskDeque = WTF::Deque<Task, 8>;
 
   // Extracts all the tasks from the immediate incoming queue and clears it.
   // Can be called from any thread.
   TaskDeque TakeImmediateIncomingQueue();
 
-  void TraceQueueSize(bool is_locked) const;
+  void TraceQueueSize() const;
   static void QueueAsValueInto(const TaskDeque& queue,
                                base::trace_event::TracedValue* state);
   static void QueueAsValueInto(const std::priority_queue<Task>& queue,
@@ -333,6 +340,11 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   void RemoveQueueEnabledVoter(const QueueEnabledVoterImpl* voter);
   void OnQueueEnabledVoteChanged(bool enabled);
   void EnableOrDisableWithSelector(bool enable);
+
+  // Schedules delayed work on time domain and calls the observer.
+  void ScheduleDelayedWorkInTimeDomain(base::TimeTicks now);
+
+  void NotifyWakeUpChangedOnMainThread(base::TimeTicks wake_up);
 
   const base::PlatformThreadId thread_id_;
 
@@ -361,6 +373,17 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   const MainThreadOnly& main_thread_only() const {
     DCHECK(main_thread_checker_.CalledOnValidThread());
     return main_thread_only_;
+  }
+
+  mutable base::Lock immediate_incoming_queue_lock_;
+  TaskDeque immediate_incoming_queue_;
+  TaskDeque& immediate_incoming_queue() {
+    immediate_incoming_queue_lock_.AssertAcquired();
+    return immediate_incoming_queue_;
+  }
+  const TaskDeque& immediate_incoming_queue() const {
+    immediate_incoming_queue_lock_.AssertAcquired();
+    return immediate_incoming_queue_;
   }
 
   const bool should_monitor_quiescence_;

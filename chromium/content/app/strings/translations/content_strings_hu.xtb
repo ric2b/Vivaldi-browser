@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">Kérjük, érvényes értéket adjon meg. A legközelebbi érvényes érték <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Elküldés</translation>
 <translation id="2674318244760992338">lábléc</translation>
+<translation id="2709516037105925701">Automatikus kitöltés</translation>
 <translation id="2723001399770238859">audio</translation>
 <translation id="2746543609216772311">Az érték <ph name="MINIMUM_DATE_OR_TIME" /> vagy azt követő kell, hogy legyen.</translation>
 <translation id="2759744352195237655">előugró gomb</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">címtár</translation>
 <translation id="6934078000481955284">bekezdésszintű idézet</translation>
 <translation id="6941933287844615239">médiafájlok letöltése</translation>
+<translation id="6989848892321993519">Legalább <ph name="MIN_CHARACTERS" /> karakter hosszú szöveget adjon meg (jelenleg 1 karaktert használ).</translation>
 <translation id="7057186640035488495">film ideje</translation>
 <translation id="709897737746224366">Kérjük, tartsa magát a kívánt formátumhoz.</translation>
 <translation id="7223624360433298498">eltelt idő</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">Válasszon egy fájlt.</translation>
 <translation id="8461852803063341183">választógomb</translation>
 <translation id="8511325616783751178">legördülő gomb</translation>
+<translation id="8519420564908284378">Lejátszás mindkét képernyőn</translation>
 <translation id="8534579021159131403">Perc</translation>
 <translation id="8541249477527128034">médiavezérlő</translation>
 <translation id="8583702881314752957">definíciós lista</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">távoli lejátszás kezelése</translation>
 <translation id="8750798805984357768">Kérjük, válassza ki az egyik opciót.</translation>
 <translation id="8785498733064193001">lejátszás indítása</translation>
+<translation id="8845239796550121995">Átküldés a tévére folyamatban</translation>
 <translation id="8851136666856101339">fő</translation>
 <translation id="8987927404178983737">hónap</translation>
 <translation id="901493112792887934">jelenlegi idő másodpercben</translation>

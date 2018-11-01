@@ -15,6 +15,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 
@@ -61,8 +62,7 @@ const char* GetLevelOfControl(
                                  : profile->GetPrefs();
   bool from_incognito = false;
   bool* from_incognito_ptr = incognito ? &from_incognito : NULL;
-  const PrefService::Preference* pref =
-      prefs->FindPreference(browser_pref.c_str());
+  const PrefService::Preference* pref = prefs->FindPreference(browser_pref);
   CHECK(pref);
 
   if (!pref->IsExtensionModifiable())

@@ -14,6 +14,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/overlay_transform.h"
 #include "ui/gfx/swap_result.h"
@@ -28,6 +29,7 @@ class VSyncProvider;
 
 namespace ui {
 struct CARendererLayerParams;
+struct DCRendererLayerParams;
 }
 
 namespace gl {
@@ -197,6 +199,10 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   virtual void ScheduleCALayerInUseQuery(
       std::vector<CALayerInUseQuery> queries);
 
+  virtual bool ScheduleDCLayer(const ui::DCRendererLayerParams& params);
+
+  virtual bool SetEnableDCLayers(bool enable);
+
   virtual bool IsSurfaceless() const;
 
   virtual bool FlipsVertically() const;
@@ -205,15 +211,16 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   // the next buffer may be 2 frames old.
   virtual bool BuffersFlipped() const;
 
-  virtual bool SupportsSetDrawRectangle() const;
+  virtual bool SupportsDCLayers() const;
 
   // Set the rectangle that will be drawn into on the surface.
   virtual bool SetDrawRectangle(const gfx::Rect& rect);
 
-  static GLSurface* GetCurrent();
+  // This is the amount by which the scissor and viewport rectangles should be
+  // offset.
+  virtual gfx::Vector2d GetDrawOffset() const;
 
-  // Called when the swap interval for the associated context changes.
-  virtual void OnSetSwapInterval(int interval);
+  static GLSurface* GetCurrent();
 
  protected:
   virtual ~GLSurface();
@@ -277,12 +284,14 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
                             GLImage* image,
                             const gfx::Rect& bounds_rect,
                             const gfx::RectF& crop_rect) override;
+  bool ScheduleDCLayer(const ui::DCRendererLayerParams& params) override;
+  bool SetEnableDCLayers(bool enable) override;
   bool IsSurfaceless() const override;
   bool FlipsVertically() const override;
   bool BuffersFlipped() const override;
-  bool SupportsSetDrawRectangle() const override;
+  bool SupportsDCLayers() const override;
   bool SetDrawRectangle(const gfx::Rect& rect) override;
-  void OnSetSwapInterval(int interval) override;
+  gfx::Vector2d GetDrawOffset() const override;
 
   GLSurface* surface() const { return surface_.get(); }
 

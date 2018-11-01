@@ -34,7 +34,7 @@
 #include "modules/ModulesExport.h"
 #include "modules/mediastream/MediaDevicesRequest.h"
 #include "modules/mediastream/UserMediaRequest.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -45,14 +45,14 @@ class UserMediaClient {
   USING_FAST_MALLOC(UserMediaClient);
 
  public:
-  virtual void requestUserMedia(UserMediaRequest*) = 0;
-  virtual void cancelUserMediaRequest(UserMediaRequest*) = 0;
-  virtual void requestMediaDevices(MediaDevicesRequest*) = 0;
-  virtual void setMediaDeviceChangeObserver(MediaDevices*) = 0;
+  virtual void RequestUserMedia(UserMediaRequest*) = 0;
+  virtual void CancelUserMediaRequest(UserMediaRequest*) = 0;
+  virtual void RequestMediaDevices(MediaDevicesRequest*) = 0;
+  virtual void SetMediaDeviceChangeObserver(MediaDevices*) = 0;
   virtual ~UserMediaClient() {}
 };
 
-MODULES_EXPORT void provideUserMediaTo(LocalFrame&,
+MODULES_EXPORT void ProvideUserMediaTo(LocalFrame&,
                                        std::unique_ptr<UserMediaClient>);
 
 }  // namespace blink

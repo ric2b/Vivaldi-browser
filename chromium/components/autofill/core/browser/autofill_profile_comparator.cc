@@ -9,7 +9,7 @@
 
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/char_iterator.h"
-#include "base/strings/string_piece.h"
+#include "base/i18n/unicodestring.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversion_utils.h"
@@ -128,7 +128,7 @@ base::string16 AutofillProfileComparator::NormalizeForComparison(
 
   icu::UnicodeString value = icu::UnicodeString(result.data(), result.length());
   transliterator_->transliterate(value);
-  return base::string16(value.getBuffer(), value.length());
+  return base::i18n::UnicodeStringToString16(value);
 }
 
 bool AutofillProfileComparator::AreMergeable(const AutofillProfile& p1,
@@ -667,7 +667,7 @@ std::set<base::string16> AutofillProfileComparator::GetNamePartVariants(
     const base::string16& name_part) {
   const size_t kMaxSupportedSubNames = 8;
 
-  std::vector<base::string16> sub_names = base::SplitString(
+  std::vector<base::StringPiece16> sub_names = base::SplitStringPiece(
       name_part, kSpace, base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
   // Limit the number of sub-names we support (to constrain memory usage);
@@ -680,7 +680,7 @@ std::set<base::string16> AutofillProfileComparator::GetNamePartVariants(
   // For each sub-name, add a variant of all the already existing variants that
   // appends this sub-name and one that appends the initial of this sub-name.
   // Duplicates will be discarded when they're added to the variants set.
-  for (const base::string16& sub_name : sub_names) {
+  for (const auto& sub_name : sub_names) {
     if (sub_name.empty())
       continue;
     std::vector<base::string16> new_variants;
@@ -696,7 +696,7 @@ std::set<base::string16> AutofillProfileComparator::GetNamePartVariants(
   // As a common case, also add the variant that just concatenates all of the
   // initials.
   base::string16 initials;
-  for (const base::string16& sub_name : sub_names) {
+  for (const auto& sub_name : sub_names) {
     if (sub_name.empty())
       continue;
     initials.push_back(sub_name[0]);
@@ -720,12 +720,12 @@ bool AutofillProfileComparator::IsNameVariantOf(
       GetNamePartVariants(name_1_parts.given);
   const std::set<base::string16> middle_name_variants =
       GetNamePartVariants(name_1_parts.middle);
-  const base::string16& family_name = name_1_parts.family;
+  base::StringPiece16 family_name = name_1_parts.family;
 
   // Iterate over all full name variants of profile 2 and see if any of them
   // match the full name from profile 1.
-  for (const base::string16& given_name : given_name_variants) {
-    for (const base::string16& middle_name : middle_name_variants) {
+  for (const auto& given_name : given_name_variants) {
+    for (const auto& middle_name : middle_name_variants) {
       base::string16 candidate = base::CollapseWhitespace(
           base::JoinString({given_name, middle_name, family_name}, kSpace),
           true);

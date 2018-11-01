@@ -75,6 +75,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl
   void OnPluginRootNodeUpdated() override;
 
   // RenderFrameObserver implementation.
+  void AccessibilityModeChanged() override;
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // Called when an accessibility notification occurs in Blink.
@@ -125,7 +126,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl
   void OnFatalError();
   void OnReset(int reset_token);
 
-  void OnHitTest(const gfx::Point& point);
+  void OnHitTest(const gfx::Point& point, ui::AXEvent event_to_fire);
   void OnSetAccessibilityFocus(const blink::WebAXObject& obj);
   void OnGetImageData(const blink::WebAXObject& obj, const gfx::Size& max_size);
   void AddPluginTreeToUpdate(AXContentTreeUpdate* update);

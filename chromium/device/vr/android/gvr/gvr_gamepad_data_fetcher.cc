@@ -6,10 +6,9 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-
-#include "device/vr/android/gvr/gvr_delegate.h"
+#include "device/vr/android/gvr/gvr_gamepad_data_provider.h"
+#include "device/vr/vr_types.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
-#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr.h"
 
 namespace device {
 
@@ -30,41 +29,37 @@ void CopyToWebUString(blink::WebUChar* dest,
 
 using namespace blink;
 
-GvrGamepadDataFetcher::Factory::Factory(gvr_context* context,
+GvrGamepadDataFetcher::Factory::Factory(GvrGamepadDataProvider* data_provider,
                                         unsigned int display_id)
-    : context_(context), display_id_(display_id) {}
+    : data_provider_(data_provider), display_id_(display_id) {
+  DVLOG(1) << __FUNCTION__ << "=" << this;
+}
 
-GvrGamepadDataFetcher::Factory::~Factory() {}
+GvrGamepadDataFetcher::Factory::~Factory() {
+  DVLOG(1) << __FUNCTION__ << "=" << this;
+}
 
 std::unique_ptr<GamepadDataFetcher>
 GvrGamepadDataFetcher::Factory::CreateDataFetcher() {
-  return base::MakeUnique<GvrGamepadDataFetcher>(context_, display_id_);
+  return base::MakeUnique<GvrGamepadDataFetcher>(data_provider_, display_id_);
 }
 
 GamepadSource GvrGamepadDataFetcher::Factory::source() {
   return GAMEPAD_SOURCE_GVR;
 }
 
-GvrGamepadDataFetcher::GvrGamepadDataFetcher(gvr_context* context,
-                                             unsigned int display_id)
+GvrGamepadDataFetcher::GvrGamepadDataFetcher(
+    GvrGamepadDataProvider* data_provider,
+    unsigned int display_id)
     : display_id_(display_id) {
-  controller_api_.reset(new gvr::ControllerApi());
-  int32_t options = gvr::ControllerApi::DefaultOptions();
-  options |= GVR_CONTROLLER_ENABLE_GYRO;
-
-  // TODO(mthiesse): Use of the gvr_context on multiple threads isn't guaranteed
-  // to be threadsafe. All gvr context usage should be moved to VR Shell's GL
-  // thread. crbug.com/674594
-  std::unique_ptr<gvr::GvrApi> gvr = gvr::GvrApi::WrapNonOwned(context);
-  // TODO(bajones): Monitor changes to the controller handedness.
-  handedness_ = gvr->GetUserPrefs().GetControllerHandedness();
-
-  bool success = controller_api_->Init(options, context);
-  if (!success)
-    controller_api_.reset(nullptr);
+  // Called on UI thread.
+  DVLOG(1) << __FUNCTION__ << "=" << this;
+  data_provider->RegisterGamepadDataFetcher(this);
 }
 
-GvrGamepadDataFetcher::~GvrGamepadDataFetcher() {}
+GvrGamepadDataFetcher::~GvrGamepadDataFetcher() {
+  DVLOG(1) << __FUNCTION__ << "=" << this;
+}
 
 GamepadSource GvrGamepadDataFetcher::source() {
   return GAMEPAD_SOURCE_GVR;
@@ -74,83 +69,79 @@ void GvrGamepadDataFetcher::OnAddedToProvider() {
   PauseHint(false);
 }
 
+void GvrGamepadDataFetcher::SetGamepadData(GvrGamepadData data) {
+  // Called from UI thread.
+  gamepad_data_ = data;
+}
+
 void GvrGamepadDataFetcher::GetGamepadData(bool devices_changed_hint) {
-  if (!controller_api_)
-    return;
+  // Called from gamepad polling thread.
 
   PadState* state = GetPadState(0);
   if (!state)
     return;
+
+  // Take a snapshot of the asynchronously updated gamepad data.
+  // TODO(bajones): ensure consistency?
+  GvrGamepadData provided_data = gamepad_data_;
 
   WebGamepad& pad = state->data;
   if (state->active_state == GAMEPAD_NEWLY_ACTIVE) {
     // This is the first time we've seen this device, so do some one-time
     // initialization
     pad.connected = true;
-    CopyToWebUString(pad.id, WebGamepad::idLengthCap,
+    CopyToWebUString(pad.id, WebGamepad::kIdLengthCap,
                      base::UTF8ToUTF16("Daydream Controller"));
-    CopyToWebUString(pad.mapping, WebGamepad::mappingLengthCap,
+    CopyToWebUString(pad.mapping, WebGamepad::kMappingLengthCap,
                      base::UTF8ToUTF16(""));
-    pad.buttonsLength = 1;
-    pad.axesLength = 2;
+    pad.buttons_length = 1;
+    pad.axes_length = 2;
 
-    pad.displayId = display_id_;
+    pad.display_id = display_id_;
 
-    pad.hand = (handedness_ == GVR_CONTROLLER_RIGHT_HANDED) ? GamepadHandRight
-                                                            : GamepadHandLeft;
+    pad.hand =
+        provided_data.right_handed ? kGamepadHandRight : kGamepadHandLeft;
   }
 
-  controller_state_.Update(*controller_api_);
+  pad.timestamp = provided_data.timestamp;
 
-  pad.timestamp = controller_state_.GetLastOrientationTimestamp();
-
-  if (controller_state_.IsTouching()) {
-    gvr_vec2f touch_position = controller_state_.GetTouchPos();
-    pad.axes[0] = (touch_position.x * 2.0f) - 1.0f;
-    pad.axes[1] = (touch_position.y * 2.0f) - 1.0f;
+  if (provided_data.is_touching) {
+    gfx::Vector2dF touch_position = provided_data.touch_pos;
+    pad.axes[0] = (touch_position.x() * 2.0f) - 1.0f;
+    pad.axes[1] = (touch_position.y() * 2.0f) - 1.0f;
   } else {
     pad.axes[0] = 0.0f;
     pad.axes[1] = 0.0f;
   }
 
-  pad.buttons[0].touched = controller_state_.IsTouching();
-  pad.buttons[0].pressed =
-      controller_state_.GetButtonState(GVR_CONTROLLER_BUTTON_CLICK);
+  pad.buttons[0].touched = provided_data.is_touching;
+  pad.buttons[0].pressed = provided_data.controller_button_pressed;
   pad.buttons[0].value = pad.buttons[0].pressed ? 1.0f : 0.0f;
 
-  pad.pose.notNull = true;
-  pad.pose.hasOrientation = true;
-  pad.pose.hasPosition = false;
+  pad.pose.not_null = true;
+  pad.pose.has_orientation = true;
+  pad.pose.has_position = false;
 
-  gvr_quatf orientation = controller_state_.GetOrientation();
-  pad.pose.orientation.notNull = true;
+  vr::Quatf orientation = provided_data.orientation;
+  pad.pose.orientation.not_null = true;
   pad.pose.orientation.x = orientation.qx;
   pad.pose.orientation.y = orientation.qy;
   pad.pose.orientation.z = orientation.qz;
   pad.pose.orientation.w = orientation.qw;
 
-  gvr_vec3f accel = controller_state_.GetAccel();
-  pad.pose.linearAcceleration.notNull = true;
-  pad.pose.linearAcceleration.x = accel.x;
-  pad.pose.linearAcceleration.y = accel.y;
-  pad.pose.linearAcceleration.z = accel.z;
+  gfx::Vector3dF accel = provided_data.accel;
+  pad.pose.linear_acceleration.not_null = true;
+  pad.pose.linear_acceleration.x = accel.x();
+  pad.pose.linear_acceleration.y = accel.y();
+  pad.pose.linear_acceleration.z = accel.z();
 
-  gvr_vec3f gyro = controller_state_.GetGyro();
-  pad.pose.angularVelocity.notNull = true;
-  pad.pose.angularVelocity.x = gyro.x;
-  pad.pose.angularVelocity.y = gyro.y;
-  pad.pose.angularVelocity.z = gyro.z;
+  gfx::Vector3dF gyro = provided_data.gyro;
+  pad.pose.angular_velocity.not_null = true;
+  pad.pose.angular_velocity.x = gyro.x();
+  pad.pose.angular_velocity.y = gyro.y();
+  pad.pose.angular_velocity.z = gyro.z();
 }
 
-void GvrGamepadDataFetcher::PauseHint(bool paused) {
-  if (!controller_api_)
-    return;
-
-  if (paused) {
-    controller_api_->Pause();
-  } else {
-    controller_api_->Resume();
-  }
-}
+void GvrGamepadDataFetcher::PauseHint(bool paused) {}
 
 }  // namespace device

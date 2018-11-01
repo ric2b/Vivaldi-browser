@@ -42,9 +42,10 @@ class MockDumpProvider : public base::trace_event::MemoryDumpProvider {
 
 class MemoryTracingTest : public ContentBrowserTest {
  public:
-  void DoRequestGlobalDump(const MemoryDumpType& dump_type,
-                           const MemoryDumpLevelOfDetail& level_of_detail,
-                           const base::trace_event::MemoryDumpCallback& cb) {
+  void DoRequestGlobalDump(
+      const MemoryDumpType& dump_type,
+      const MemoryDumpLevelOfDetail& level_of_detail,
+      const base::trace_event::GlobalMemoryDumpCallback& cb) {
     MemoryDumpManager::GetInstance()->RequestGlobalDump(dump_type,
                                                         level_of_detail, cb);
   }
@@ -78,7 +79,7 @@ class MemoryTracingTest : public ContentBrowserTest {
       const MemoryDumpLevelOfDetail& level_of_detail,
       const base::Closure& closure) {
     uint32_t request_index = next_request_index_++;
-    base::trace_event::MemoryDumpCallback callback = base::Bind(
+    base::trace_event::GlobalMemoryDumpCallback callback = base::Bind(
         &MemoryTracingTest::OnGlobalMemoryDumpDone, base::Unretained(this),
         base::ThreadTaskRunnerHandle::Get(), closure, request_index);
     if (from_renderer_thread) {
@@ -302,7 +303,8 @@ IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest, QueuedDumps) {
 #endif  // !defined(GOOGLE_CHROME_BUILD)
 
 // Non-deterministic races under TSan. crbug.com/529678
-#if defined(THREAD_SANITIZER)
+// Flaky on Linux. crbug.com/709524
+#if defined(THREAD_SANITIZER) || defined(OS_LINUX)
 #define MAYBE_BrowserInitiatedDump DISABLED_BrowserInitiatedDump
 #else
 #define MAYBE_BrowserInitiatedDump BrowserInitiatedDump

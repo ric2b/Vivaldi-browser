@@ -6,7 +6,7 @@
 #define AcceptLanguagesResolver_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 #include <unicode/uscript.h>
 
@@ -16,10 +16,10 @@ class LayoutLocale;
 
 class PLATFORM_EXPORT AcceptLanguagesResolver {
  public:
-  static void acceptLanguagesChanged(const String&);
+  static void AcceptLanguagesChanged(const String&);
 
-  static const LayoutLocale* localeForHan();
-  static const LayoutLocale* localeForHanFromAcceptLanguages(const String&);
+  static const LayoutLocale* LocaleForHan();
+  static const LayoutLocale* LocaleForHanFromAcceptLanguages(const String&);
 };
 
 }  // namespace blink

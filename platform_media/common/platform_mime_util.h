@@ -11,7 +11,7 @@
 #error Should only be built with USE_SYSTEM_PROPRIETARY_CODECS
 #endif
 
-#define TURN_ON_MSE_VIVALDI false
+#define TURN_ON_MSE_VIVALDI true
 // PipelineIntegrationTest.MediaSource_MP3_Icecast
 // PipelineIntegrationTest.MediaSource_ADTS
 // PipelineIntegrationTest.MediaSource_ADTS_TimestampOffset

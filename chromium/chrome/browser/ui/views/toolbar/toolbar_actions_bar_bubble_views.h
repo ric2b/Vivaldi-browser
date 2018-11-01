@@ -8,11 +8,11 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_bar_bubble_delegate.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/link_listener.h"
 
-class ToolbarActionsBarBubbleDelegate;
 class ToolbarActionsBarBubbleViewsTest;
 
 namespace views {
@@ -23,8 +23,12 @@ class Link;
 class ToolbarActionsBarBubbleViews : public views::BubbleDialogDelegateView,
                                      public views::LinkListener {
  public:
+  // Creates the bubble anchored to |anchor_view| or, if that is null, to
+  // |anchor_point| in screen coordinates.
   ToolbarActionsBarBubbleViews(
       views::View* anchor_view,
+      const gfx::Point& anchor_point,
+      bool anchored_to_action,
       std::unique_ptr<ToolbarActionsBarBubbleDelegate> delegate);
   ~ToolbarActionsBarBubbleViews() override;
 
@@ -51,8 +55,10 @@ class ToolbarActionsBarBubbleViews : public views::BubbleDialogDelegateView,
   void LinkClicked(views::Link* source, int event_flags) override;
 
   std::unique_ptr<ToolbarActionsBarBubbleDelegate> delegate_;
+  bool delegate_notified_of_close_;
   views::Label* item_list_;
   views::Link* link_;
+  const bool anchored_to_action_;
 
   DISALLOW_COPY_AND_ASSIGN(ToolbarActionsBarBubbleViews);
 };

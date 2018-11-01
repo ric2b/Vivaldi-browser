@@ -70,7 +70,12 @@ const char* const kValidHttpMethodsForPrerendering[] = {
 };
 
 void ResumeThrottles(
-    std::vector<base::WeakPtr<PrerenderResourceThrottle> > throttles) {
+    std::vector<base::WeakPtr<PrerenderResourceThrottle>> throttles,
+    std::vector<base::WeakPtr<PrerenderResourceThrottle>> idle_resources) {
+  for (auto resource : idle_resources) {
+    if (resource)
+      resource->ResetResourcePriority();
+  }
   for (size_t i = 0; i < throttles.size(); i++) {
     if (throttles[i])
       throttles[i]->ResumeHandler();
@@ -553,8 +558,10 @@ void PrerenderContents::DocumentLoadedInFrame(
 
 void PrerenderContents::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsSamePage())
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsSameDocument()) {
     return;
+  }
 
   if (!CheckURL(navigation_handle->GetURL()))
     return;
@@ -755,10 +762,10 @@ void PrerenderContents::PrepareForUse() {
   NotifyPrerenderStop();
 
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&ResumeThrottles, resource_throttles_));
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&ResumeThrottles, resource_throttles_, idle_resources_));
   resource_throttles_.clear();
+  idle_resources_.clear();
 }
 
 void PrerenderContents::CancelPrerenderForPrinting() {
@@ -774,6 +781,11 @@ void PrerenderContents::OnPrerenderCancelerRequest(
 void PrerenderContents::AddResourceThrottle(
     const base::WeakPtr<PrerenderResourceThrottle>& throttle) {
   resource_throttles_.push_back(throttle);
+}
+
+void PrerenderContents::AddIdleResource(
+    const base::WeakPtr<PrerenderResourceThrottle>& throttle) {
+  idle_resources_.push_back(throttle);
 }
 
 void PrerenderContents::AddNetworkBytes(int64_t bytes) {

@@ -116,7 +116,6 @@ void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
   broker->GetLock().Release();
 }
 
-// static
 base::TerminationStatus ChildProcessLauncherHelper::GetTerminationStatus(
     const ChildProcessLauncherHelper::Process& process,
     bool known_dead,
@@ -142,7 +141,6 @@ void ChildProcessLauncherHelper::ForceNormalProcessTerminationSync(
   base::EnsureProcessTerminated(std::move(process.process));
 }
 
-// static
 void ChildProcessLauncherHelper::SetProcessBackgroundedOnLauncherThread(
       base::Process process, bool background) {
   if (process.CanBackgroundProcesses())
@@ -156,6 +154,9 @@ void ChildProcessLauncherHelper::SetRegisteredFilesForService(
   // No file passing from the manifest on Mac yet.
   DCHECK(required_files.empty());
 }
+
+// static
+void ChildProcessLauncherHelper::ResetRegisteredFilesForTesting() {}
 
 // static
 base::File OpenFileToShare(const base::FilePath& path,

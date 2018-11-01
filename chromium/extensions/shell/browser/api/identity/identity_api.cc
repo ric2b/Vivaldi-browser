@@ -42,8 +42,9 @@ IdentityAPI* IdentityAPI::Get(content::BrowserContext* context) {
 
 // static
 BrowserContextKeyedAPIFactory<IdentityAPI>* IdentityAPI::GetFactoryInstance() {
-  static base::LazyInstance<BrowserContextKeyedAPIFactory<IdentityAPI>>
-      factory = LAZY_INSTANCE_INITIALIZER;
+  static base::LazyInstance<
+      BrowserContextKeyedAPIFactory<IdentityAPI>>::DestructorAtExit factory =
+      LAZY_INSTANCE_INITIALIZER;
   return factory.Pointer();
 }
 
@@ -127,7 +128,7 @@ void IdentityGetAuthTokenFunction::OnGetTokenFailure(
 void IdentityGetAuthTokenFunction::OnMintTokenSuccess(
     const std::string& access_token,
     int time_to_live) {
-  Respond(OneArgument(base::MakeUnique<base::StringValue>(access_token)));
+  Respond(OneArgument(base::MakeUnique<base::Value>(access_token)));
   Release();  // Balanced in Run().
 }
 

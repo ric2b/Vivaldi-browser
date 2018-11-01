@@ -99,28 +99,28 @@ void OnIsochronousTransferOut(
 
 }  // namespace
 
-DeviceImpl::DeviceImpl(scoped_refptr<UsbDevice> device,
-                       DeviceInfoPtr device_info,
-                       base::WeakPtr<PermissionProvider> permission_provider,
-                       DeviceRequest request)
-    : device_(device),
-      device_info_(std::move(device_info)),
-      permission_provider_(permission_provider),
-      observer_(this),
-      binding_(this, std::move(request)),
-      weak_factory_(this) {
-  DCHECK(device_);
-  // This object owns itself and will be destroyed if,
-  //  * the device is disconnected or
-  //  * the message pipe it is bound to is closed or the message loop is
-  //  * destructed.
-  observer_.Add(device_.get());
-  binding_.set_connection_error_handler(
-      base::Bind([](DeviceImpl* self) { delete self; }, this));
+// static
+void DeviceImpl::Create(scoped_refptr<UsbDevice> device,
+                        base::WeakPtr<PermissionProvider> permission_provider,
+                        DeviceRequest request) {
+  auto* device_impl =
+      new DeviceImpl(std::move(device), std::move(permission_provider));
+  device_impl->binding_ = mojo::MakeStrongBinding(base::WrapUnique(device_impl),
+                                                  std::move(request));
 }
 
 DeviceImpl::~DeviceImpl() {
   CloseHandle();
+}
+
+DeviceImpl::DeviceImpl(scoped_refptr<UsbDevice> device,
+                       base::WeakPtr<PermissionProvider> permission_provider)
+    : device_(std::move(device)),
+      permission_provider_(std::move(permission_provider)),
+      observer_(this),
+      weak_factory_(this) {
+  DCHECK(device_);
+  observer_.Add(device_.get());
 }
 
 void DeviceImpl::CloseHandle() {
@@ -172,12 +172,20 @@ bool DeviceImpl::HasControlTransferPermission(
   }
 }
 
-void DeviceImpl::OnOpen(const OpenCallback& callback,
+// static
+void DeviceImpl::OnOpen(base::WeakPtr<DeviceImpl> self,
+                        const OpenCallback& callback,
                         scoped_refptr<UsbDeviceHandle> handle) {
-  device_handle_ = handle;
-  if (device_handle_ && permission_provider_)
-    permission_provider_->IncrementConnectionCount();
-  callback.Run(handle ? OpenDeviceError::OK : OpenDeviceError::ACCESS_DENIED);
+  if (!self) {
+    handle->Close();
+    return;
+  }
+
+  self->device_handle_ = std::move(handle);
+  if (self->device_handle_ && self->permission_provider_)
+    self->permission_provider_->IncrementConnectionCount();
+  callback.Run(self->device_handle_ ? OpenDeviceError::OK
+                                    : OpenDeviceError::ACCESS_DENIED);
 }
 
 void DeviceImpl::OnPermissionGrantedForOpen(const OpenCallback& callback,
@@ -189,12 +197,6 @@ void DeviceImpl::OnPermissionGrantedForOpen(const OpenCallback& callback,
   } else {
     callback.Run(OpenDeviceError::ACCESS_DENIED);
   }
-}
-
-void DeviceImpl::GetDeviceInfo(const GetDeviceInfoCallback& callback) {
-  const UsbConfigDescriptor* config = device_->active_configuration();
-  device_info_->active_configuration = config ? config->configuration_value : 0;
-  callback.Run(device_info_->Clone());
 }
 
 void DeviceImpl::Open(const OpenCallback& callback) {
@@ -434,7 +436,7 @@ void DeviceImpl::IsochronousTransferOut(
 
 void DeviceImpl::OnDeviceRemoved(scoped_refptr<UsbDevice> device) {
   DCHECK_EQ(device_, device);
-  delete this;
+  binding_->Close();
 }
 
 }  // namespace usb

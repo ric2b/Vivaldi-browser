@@ -4,7 +4,7 @@
 
 #include "core/layout/ng/geometry/ng_physical_offset.h"
 
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -33,7 +33,7 @@ bool NGPhysicalOffset::operator==(const NGPhysicalOffset& other) const {
 }
 
 String NGPhysicalOffset::ToString() const {
-  return String::format("%dx%d", left.toInt(), top.toInt());
+  return String::Format("%dx%d", left.ToInt(), top.ToInt());
 }
 
 std::ostream& operator<<(std::ostream& os, const NGPhysicalOffset& value) {

@@ -5,12 +5,12 @@
 #ifndef CompositorScrollOffsetAnimationCurve_h
 #define CompositorScrollOffsetAnimationCurve_h
 
+#include <memory>
 #include "platform/PlatformExport.h"
 #include "platform/animation/CompositorAnimationCurve.h"
 #include "platform/geometry/FloatPoint.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PtrUtil.h"
 
 namespace cc {
 class ScrollOffsetAnimationCurve;
@@ -24,40 +24,40 @@ class PLATFORM_EXPORT CompositorScrollOffsetAnimationCurve
 
  public:
   enum ScrollDurationBehavior {
-    ScrollDurationDeltaBased = 0,
-    ScrollDurationConstant,
-    ScrollDurationInverseDelta
+    kScrollDurationDeltaBased = 0,
+    kScrollDurationConstant,
+    kScrollDurationInverseDelta
   };
 
-  static std::unique_ptr<CompositorScrollOffsetAnimationCurve> create(
-      FloatPoint targetValue,
+  static std::unique_ptr<CompositorScrollOffsetAnimationCurve> Create(
+      FloatPoint target_value,
       CompositorScrollOffsetAnimationCurve::ScrollDurationBehavior
-          durationBehavior) {
-    return WTF::wrapUnique(new CompositorScrollOffsetAnimationCurve(
-        targetValue, durationBehavior));
+          duration_behavior) {
+    return WTF::WrapUnique(new CompositorScrollOffsetAnimationCurve(
+        target_value, duration_behavior));
   }
-  static std::unique_ptr<CompositorScrollOffsetAnimationCurve> create(
+  static std::unique_ptr<CompositorScrollOffsetAnimationCurve> Create(
       cc::ScrollOffsetAnimationCurve* curve) {
-    return WTF::wrapUnique(new CompositorScrollOffsetAnimationCurve(curve));
+    return WTF::WrapUnique(new CompositorScrollOffsetAnimationCurve(curve));
   }
 
   ~CompositorScrollOffsetAnimationCurve() override;
 
-  void setInitialValue(FloatPoint);
-  FloatPoint getValue(double time) const;
-  double duration() const;
-  FloatPoint targetValue() const;
-  void applyAdjustment(IntSize);
-  void updateTarget(double time, FloatPoint newTarget);
+  void SetInitialValue(FloatPoint);
+  FloatPoint GetValue(double time) const;
+  double Duration() const;
+  FloatPoint TargetValue() const;
+  void ApplyAdjustment(IntSize);
+  void UpdateTarget(double time, FloatPoint new_target);
 
   // CompositorAnimationCurve implementation.
-  std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const override;
+  std::unique_ptr<cc::AnimationCurve> CloneToAnimationCurve() const override;
 
  private:
   CompositorScrollOffsetAnimationCurve(FloatPoint, ScrollDurationBehavior);
   CompositorScrollOffsetAnimationCurve(cc::ScrollOffsetAnimationCurve*);
 
-  std::unique_ptr<cc::ScrollOffsetAnimationCurve> m_curve;
+  std::unique_ptr<cc::ScrollOffsetAnimationCurve> curve_;
 };
 
 }  // namespace blink

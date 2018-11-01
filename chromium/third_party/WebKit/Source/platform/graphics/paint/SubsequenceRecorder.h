@@ -8,8 +8,8 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -31,18 +31,18 @@ class PLATFORM_EXPORT SubsequenceRecorder final {
   WTF_MAKE_NONCOPYABLE(SubsequenceRecorder);
 
  public:
-  static bool useCachedSubsequenceIfPossible(GraphicsContext& context,
+  static bool UseCachedSubsequenceIfPossible(GraphicsContext& context,
                                              const DisplayItemClient& client) {
-    return context.getPaintController().useCachedSubsequenceIfPossible(client);
+    return context.GetPaintController().UseCachedSubsequenceIfPossible(client);
   }
 
   SubsequenceRecorder(GraphicsContext&, const DisplayItemClient&);
   ~SubsequenceRecorder();
 
  private:
-  PaintController& m_paintController;
-  const DisplayItemClient& m_client;
-  size_t m_beginSubsequenceIndex;
+  PaintController& paint_controller_;
+  const DisplayItemClient& client_;
+  size_t begin_subsequence_index_;
 };
 
 }  // namespace blink

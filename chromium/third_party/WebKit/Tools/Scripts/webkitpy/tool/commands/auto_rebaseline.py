@@ -19,17 +19,17 @@ import urllib2
 
 from webkitpy.common.net.buildbot import Build, current_build_link
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, BASELINE_SUFFIX_LIST
-from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
+from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand, TestBaselineSet
 
 
 _log = logging.getLogger(__name__)
 
 
 class AutoRebaseline(AbstractParallelRebaselineCommand):
-    name = "auto-rebaseline"
-    help_text = "Rebaselines any NeedsRebaseline lines in TestExpectations that have cycled through all the bots."
-    AUTO_REBASELINE_BRANCH_NAME = "auto-rebaseline-temporary-branch"
-    AUTO_REBASELINE_ALT_BRANCH_NAME = "auto-rebaseline-alt-temporary-branch"
+    name = 'auto-rebaseline'
+    help_text = 'Rebaselines any NeedsRebaseline lines in TestExpectations that have cycled through all the bots.'
+    AUTO_REBASELINE_BRANCH_NAME = 'auto-rebaseline-temporary-branch'
+    AUTO_REBASELINE_ALT_BRANCH_NAME = 'auto-rebaseline-alt-temporary-branch'
 
     # Rietveld uploader stinks. Limit the number of rebaselines in a given patch to keep upload from failing.
     # FIXME: http://crbug.com/263676 Obviously we should fix the uploader here.
@@ -43,8 +43,8 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
             self.no_optimize_option,
             # FIXME: Remove this option.
             self.results_directory_option,
-            optparse.make_option("--auth-refresh-token-json", help="Rietveld auth refresh JSON token."),
-            optparse.make_option("--dry-run", action='store_true', default=False,
+            optparse.make_option('--auth-refresh-token-json', help='Rietveld auth refresh JSON token.'),
+            optparse.make_option('--dry-run', action='store_true', default=False,
                                  help='Run without creating a temporary branch, committing locally, or uploading/landing '
                                  'changes to the remote repository.')
         ])
@@ -70,17 +70,17 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 _log.error("Can't rebaseline because the latest run on %s exited early.", result.builder_name())
                 return []
             revisions.append({
-                "builder": result.builder_name(),
-                "revision": result.chromium_revision(git),
+                'builder': result.builder_name(),
+                'revision': result.chromium_revision(git),
             })
         return revisions
 
     @staticmethod
     def _strip_comments(line):
-        comment_index = line.find("#")
+        comment_index = line.find('#')
         if comment_index == -1:
             comment_index = len(line)
-        return re.sub(r"\s+", " ", line[:comment_index].strip())
+        return re.sub(r"\s+", ' ', line[:comment_index].strip())
 
     def tests_to_rebaseline(self, tool, min_revision, print_revisions):
         port = tool.port_factory.get()
@@ -93,9 +93,9 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
         bugs = set()
         has_any_needs_rebaseline_lines = False
 
-        for line in tool.git().blame(expectations_file_path).split("\n"):
+        for line in tool.git().blame(expectations_file_path).split('\n'):
             line = self._strip_comments(line)
-            if "NeedsRebaseline" not in line:
+            if 'NeedsRebaseline' not in line:
                 continue
 
             has_any_needs_rebaseline_lines = True
@@ -113,7 +113,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
             test = parsed_line.group(3)
             if print_revisions:
-                _log.info("%s is waiting for r%s", test, commit_position)
+                _log.info('%s is waiting for r%s', test, commit_position)
 
             if not commit_position or commit_position > min_revision:
                 continue
@@ -130,7 +130,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
             tests.add(test)
 
             if len(tests) >= self.MAX_LINES_TO_REBASELINE:
-                _log.info("Too many tests to rebaseline in one patch. Doing the first %d.", self.MAX_LINES_TO_REBASELINE)
+                _log.info('Too many tests to rebaseline in one patch. Doing the first %d.', self.MAX_LINES_TO_REBASELINE)
                 break
 
         return tests, revision, commit, author, bugs, has_any_needs_rebaseline_lines
@@ -150,10 +150,8 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
     def link_to_patch(commit):
         return 'https://chromium.googlesource.com/chromium/src/+/' + commit
 
-    def get_test_prefix_list(self, tests):
-        test_prefix_list = {}
-        lines_to_remove = {}
-
+    def _make_test_baseline_set(self, tests):
+        test_baseline_set = TestBaselineSet(self._tool)
         for builder_name in self._release_builders():
             port_name = self._tool.builders.port_name_for_builder_name(builder_name)
             port = self._tool.port_factory.get(port_name)
@@ -161,14 +159,8 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
             for test in expectations.get_needs_rebaseline_failures():
                 if test not in tests:
                     continue
-
-                if test not in test_prefix_list:
-                    lines_to_remove[test] = []
-                    test_prefix_list[test] = {}
-                lines_to_remove[test].append(builder_name)
-                test_prefix_list[test][Build(builder_name)] = BASELINE_SUFFIX_LIST
-
-        return test_prefix_list, lines_to_remove
+                test_baseline_set.add(test, Build(builder_name))
+        return test_baseline_set
 
     def _run_git_cl_command(self, options, command):
         subprocess_command = ['git', 'cl'] + command
@@ -200,36 +192,33 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
     # FIXME: Move this somewhere more general.
     @staticmethod
     def tree_status():
-        blink_tree_status_url = "http://chromium-status.appspot.com/status"
+        blink_tree_status_url = 'http://chromium-status.appspot.com/status'
         status = urllib2.urlopen(blink_tree_status_url).read().lower()
-        if 'closed' in status or status == "0":
+        if 'closed' in status or status == '0':
             return 'closed'
-        elif 'open' in status or status == "1":
+        elif 'open' in status or status == '1':
             return 'open'
         return 'unknown'
 
     def execute(self, options, args, tool):
         self._tool = tool
-        if tool.git().executable_name == "svn":
-            _log.error("Auto rebaseline only works with a git checkout.")
-            return
 
         if not options.dry_run and tool.git().has_working_directory_changes():
-            _log.error("Cannot proceed with working directory changes. Clean working directory first.")
+            _log.error('Cannot proceed with working directory changes. Clean working directory first.')
             return
 
         revision_data = self.bot_revision_data(tool.git())
         if not revision_data:
             return
 
-        min_revision = int(min([item["revision"] for item in revision_data]))
+        min_revision = int(min([item['revision'] for item in revision_data]))
         tests, revision, commit, author, bugs, _ = self.tests_to_rebaseline(
             tool, min_revision, print_revisions=options.verbose)
 
         if options.verbose:
-            _log.info("Min revision across all bots is %s.", min_revision)
+            _log.info('Min revision across all bots is %s.', min_revision)
             for item in revision_data:
-                _log.info("%s: r%s", item["builder"], item["revision"])
+                _log.info('%s: r%s', item['builder'], item['revision'])
 
         if not tests:
             _log.debug('No tests to rebaseline.')
@@ -241,7 +230,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
         _log.info('Rebaselining %s for r%s by %s.', list(tests), revision, author)
 
-        test_prefix_list, _ = self.get_test_prefix_list(tests)
+        test_baseline_set = self._make_test_baseline_set(tests)
 
         did_switch_branches = False
         did_finish = False
@@ -257,8 +246,8 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 tool.git().create_clean_branch(rebaseline_branch_name)
                 did_switch_branches = True
 
-            if test_prefix_list:
-                self.rebaseline(options, test_prefix_list)
+            if test_baseline_set:
+                self.rebaseline(options, test_baseline_set)
 
             if options.dry_run:
                 return

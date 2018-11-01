@@ -52,12 +52,6 @@ namespace content {
 
 // General
 
-void RecordWebBluetoothFunctionCall(UMAWebBluetoothFunction function) {
-  UMA_HISTOGRAM_ENUMERATION("Bluetooth.Web.FunctionCall.Count",
-                            static_cast<int>(function),
-                            static_cast<int>(UMAWebBluetoothFunction::COUNT));
-}
-
 // requestDevice()
 
 void RecordRequestDeviceOutcome(UMARequestDeviceOutcome outcome) {
@@ -67,7 +61,7 @@ void RecordRequestDeviceOutcome(UMARequestDeviceOutcome outcome) {
 }
 
 static void RecordRequestDeviceFilters(
-    const std::vector<blink::mojom::WebBluetoothScanFilterPtr>& filters) {
+    const std::vector<blink::mojom::WebBluetoothLeScanFilterPtr>& filters) {
   UMA_HISTOGRAM_COUNTS_100("Bluetooth.Web.RequestDevice.Filters.Count",
                            filters.size());
   for (const auto& filter : filters) {

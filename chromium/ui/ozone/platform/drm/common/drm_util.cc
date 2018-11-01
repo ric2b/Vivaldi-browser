@@ -17,11 +17,6 @@
 #include "base/memory/ptr_util.h"
 #include "ui/display/util/edid_parser.h"
 
-#if !defined(DRM_FORMAT_YV12)
-// TODO(dcastagna): after libdrm has this definition, remove it.
-#define DRM_FORMAT_YV12 fourcc_code('Y', 'V', '1', '2')
-#endif
-
 namespace ui {
 
 namespace {
@@ -384,7 +379,7 @@ int GetFourCCFormatFromBufferFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::UYVY_422:
       return DRM_FORMAT_UYVY;
     case gfx::BufferFormat::YVU_420:
-      return DRM_FORMAT_YV12;
+      return DRM_FORMAT_YVU420;
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       return DRM_FORMAT_NV12;
     default:
@@ -413,7 +408,7 @@ gfx::BufferFormat GetBufferFormatFromFourCCFormat(int format) {
       return gfx::BufferFormat::UYVY_422;
     case DRM_FORMAT_NV12:
       return gfx::BufferFormat::YUV_420_BIPLANAR;
-    case DRM_FORMAT_YV12:
+    case DRM_FORMAT_YVU420:
       return gfx::BufferFormat::YVU_420;
     default:
       NOTREACHED();
@@ -421,8 +416,10 @@ gfx::BufferFormat GetBufferFormatFromFourCCFormat(int format) {
   }
 }
 
-int GetFourCCFormatForFramebuffer(gfx::BufferFormat format) {
-  // Currently, drm supports 24 bitcolordepth for hardware overlay.
+int GetFourCCFormatForOpaqueFramebuffer(gfx::BufferFormat format) {
+  // DRM atomic interface doesn't currently support specifying an alpha
+  // blending. We can simulate disabling alpha bleding creating an fb
+  // with a format without the alpha channel.
   switch (format) {
     case gfx::BufferFormat::RGBA_8888:
     case gfx::BufferFormat::RGBX_8888:
@@ -434,6 +431,10 @@ int GetFourCCFormatForFramebuffer(gfx::BufferFormat format) {
       return DRM_FORMAT_RGB565;
     case gfx::BufferFormat::UYVY_422:
       return DRM_FORMAT_UYVY;
+    case gfx::BufferFormat::YUV_420_BIPLANAR:
+      return DRM_FORMAT_NV12;
+    case gfx::BufferFormat::YVU_420:
+      return DRM_FORMAT_YVU420;
     default:
       NOTREACHED();
       return 0;

@@ -4,19 +4,19 @@
 
 #include "chrome/browser/ui/ash/multi_user/user_switch_animator_chromeos.h"
 
-#include "ash/common/shelf/shelf_layout_manager.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
-#include "ash/common/wm/mru_window_tracker.h"
-#include "ash/common/wm/window_positioner.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/wallpaper/wallpaper_delegate.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/window_positioner.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
@@ -41,12 +41,12 @@ class UserChangeActionDisabler {
  public:
   UserChangeActionDisabler() {
     ash::WindowPositioner::DisableAutoPositioning(true);
-    ash::WmShell::Get()->mru_window_tracker()->SetIgnoreActivations(true);
+    ash::Shell::Get()->mru_window_tracker()->SetIgnoreActivations(true);
   }
 
   ~UserChangeActionDisabler() {
     ash::WindowPositioner::DisableAutoPositioning(false);
-    ash::WmShell::Get()->mru_window_tracker()->SetIgnoreActivations(false);
+    ash::Shell::Get()->mru_window_tracker()->SetIgnoreActivations(false);
   }
  private:
 
@@ -115,7 +115,7 @@ UserSwitchAnimatorChromeOS::UserSwitchAnimatorChromeOS(
       animation_step_(ANIMATION_STEP_HIDE_OLD_USER),
       screen_cover_(GetScreenCover(NULL)),
       windows_by_account_id_() {
-  ash::WmShell::Get()->DismissAppList();
+  ash::Shell::Get()->DismissAppList();
   BuildUserToWindowsListMap();
   AdvanceUserTransitionAnimation();
 
@@ -191,7 +191,7 @@ void UserSwitchAnimatorChromeOS::TransitionWallpaper(
     AnimationStep animation_step) {
   // Handle the wallpaper switch.
   ash::WallpaperDelegate* wallpaper_delegate =
-      ash::WmShell::Get()->wallpaper_delegate();
+      ash::Shell::Get()->wallpaper_delegate();
   if (animation_step == ANIMATION_STEP_HIDE_OLD_USER) {
     // Set the wallpaper cross dissolve animation duration to our complete
     // animation cycle for a fade in and fade out.
@@ -231,7 +231,7 @@ void UserSwitchAnimatorChromeOS::TransitionUserShelf(
       chrome_launcher_controller->ActiveUserChanged(
           new_account_id_.GetUserEmail());
     // Hide the black rectangle on top of each shelf again.
-    for (ash::WmWindow* window : ash::WmShell::Get()->GetAllRootWindows()) {
+    for (ash::WmWindow* window : ash::ShellPort::Get()->GetAllRootWindows()) {
       ash::ShelfWidget* shelf = ash::WmShelf::ForWindow(window)->shelf_widget();
       shelf->HideShelfBehindBlackBar(false, duration_override);
     }
@@ -246,7 +246,7 @@ void UserSwitchAnimatorChromeOS::TransitionUserShelf(
   // Note: The animation duration override will be set before the old user gets
   // hidden and reset after the animations for the new user got kicked off.
   ash::Shell::RootWindowControllerList controller =
-      ash::Shell::GetInstance()->GetAllRootWindowControllers();
+      ash::Shell::Get()->GetAllRootWindowControllers();
   for (ash::Shell::RootWindowControllerList::iterator iter = controller.begin();
        iter != controller.end(); ++iter) {
     (*iter)->GetShelfLayoutManager()->SetAnimationDurationOverride(
@@ -366,7 +366,7 @@ void UserSwitchAnimatorChromeOS::TransitionWindows(
     case ANIMATION_STEP_FINALIZE: {
       // Reactivate the MRU window of the new user.
       aura::Window::Windows mru_list = ash::WmWindow::ToAuraWindows(
-          ash::WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
+          ash::Shell::Get()->mru_window_tracker()->BuildMruWindowList());
       if (!mru_list.empty()) {
         aura::Window* window = mru_list[0];
         ash::wm::WindowState* window_state = ash::wm::GetWindowState(window);

@@ -143,7 +143,29 @@ void APILastError::ClearError(v8::Local<v8::Context> context,
 
   // This Delete() can fail, but there's nothing to do if it does (the exception
   // will be caught by the TryCatch above).
-  parent->Delete(context, key);
+  parent->Delete(context, key).ToChecked();
+}
+
+bool APILastError::HasError(v8::Local<v8::Context> context) {
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+
+  // See comment in SetError().
+  v8::TryCatch try_catch(isolate);
+  try_catch.SetVerbose(true);
+
+  v8::Local<v8::Object> parent = get_parent_.Run(context);
+  if (parent.IsEmpty())
+    return false;
+  v8::Local<v8::Value> error;
+  if (!parent->Get(context, gin::StringToSymbol(isolate, kLastErrorProperty))
+           .ToLocal(&error)) {
+    return false;
+  }
+
+  LastErrorObject* last_error = nullptr;
+  return gin::Converter<LastErrorObject*>::FromV8(context->GetIsolate(), error,
+                                                  &last_error);
 }
 
 }  // namespace extensions

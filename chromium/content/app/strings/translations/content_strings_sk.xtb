@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">Zadajte platnú hodnotu. Najbližšia platná hodnota je <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Odoslať</translation>
 <translation id="2674318244760992338">päta</translation>
+<translation id="2709516037105925701">Automatické dopĺňanie</translation>
 <translation id="2723001399770238859">zvuk</translation>
 <translation id="2746543609216772311">Hodnota musí byť <ph name="MINIMUM_DATE_OR_TIME" /> alebo neskôr.</translation>
 <translation id="2759744352195237655">kontextové tlačidlo</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">adresár</translation>
 <translation id="6934078000481955284">značka blockquote</translation>
 <translation id="6941933287844615239">stiahnuť médiá</translation>
+<translation id="6989848892321993519">Predĺžte tento text aspoň na <ph name="MIN_CHARACTERS" /> alebo viac znakov (momentálne používate jeden znak).</translation>
 <translation id="7057186640035488495">čas filmu</translation>
 <translation id="709897737746224366">Zadajte hodnotu zodpovedajúcu požadovanému formátu.</translation>
 <translation id="7223624360433298498">uplynutý čas</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">Vyberte súbor.</translation>
 <translation id="8461852803063341183">prepínač</translation>
 <translation id="8511325616783751178">tlačidlo rozbaľovacej ponuky</translation>
+<translation id="8519420564908284378">Prehrať na oboch obrazovkách</translation>
 <translation id="8534579021159131403">Minúty</translation>
 <translation id="8541249477527128034">ovládanie médií</translation>
 <translation id="8583702881314752957">zoznam definícií</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">ovládať vzdialené prehrávanie</translation>
 <translation id="8750798805984357768">Vyberte jednu z týchto možností.</translation>
 <translation id="8785498733064193001">začať prehrávanie</translation>
+<translation id="8845239796550121995">Prenáša sa do televízora</translation>
 <translation id="8851136666856101339">hlavné</translation>
 <translation id="8987927404178983737">Mesiac</translation>
 <translation id="901493112792887934">aktuálny čas v sekundách</translation>

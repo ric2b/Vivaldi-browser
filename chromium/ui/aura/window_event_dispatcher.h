@@ -22,6 +22,7 @@
 #include "ui/events/event_constants.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_targeter.h"
+#include "ui/events/fraction_of_time_without_user_input_recorder.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/events/gestures/gesture_types.h"
 #include "ui/gfx/geometry/point.h"
@@ -38,6 +39,7 @@ namespace aura {
 class MusMouseLocationUpdater;
 class TestScreen;
 class EnvInputStateController;
+class WindowTargeter;
 class WindowTreeHost;
 
 namespace test {
@@ -59,6 +61,9 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
 
   Window* mouse_pressed_handler() { return mouse_pressed_handler_; }
   Window* mouse_moved_handler() { return mouse_moved_handler_; }
+
+  // Overridden from ui::EventProcessor:
+  ui::EventTargeter* GetDefaultEventTargeter() override;
 
   // Repost event for re-processing. Used when exiting context menus.
   // We support the ET_MOUSE_PRESSED, ET_TOUCH_PRESSED and ET_GESTURE_TAP_DOWN
@@ -173,7 +178,7 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   void ReleaseNativeCapture() override;
 
   // Overridden from ui::EventProcessor:
-  ui::EventTarget* GetRootTarget() override;
+  ui::EventTarget* GetRootForEvent(ui::Event* event) override;
   void OnEventProcessingStarted(ui::Event* event) override;
   void OnEventProcessingFinished(ui::Event* event) override;
 
@@ -242,6 +247,9 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   Window* event_dispatch_target_;
   Window* old_dispatch_target_;
 
+  ui::FractionOfTimeWithoutUserInputRecorder
+      fraction_of_time_without_user_input_recorder_;
+
   bool synthesize_mouse_move_;
 
   // How many move holds are outstanding. We try to defer dispatching
@@ -261,6 +269,9 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   std::unique_ptr<EnvInputStateController> env_controller_;
 
   std::unique_ptr<MusMouseLocationUpdater> mus_mouse_location_updater_;
+
+  // The default EventTargeter for WindowEventDispatcher generated events.
+  std::unique_ptr<WindowTargeter> event_targeter_;
 
   // Used to schedule reposting an event.
   base::WeakPtrFactory<WindowEventDispatcher> repost_event_factory_;

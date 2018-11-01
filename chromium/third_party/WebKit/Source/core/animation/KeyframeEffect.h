@@ -40,7 +40,7 @@ namespace blink {
 
 class Element;
 class ExceptionState;
-class KeyframeEffectOptions;
+class UnrestrictedDoubleOrKeyframeEffectOptions;
 
 // Represents the effect of an Animation on an Element's properties.
 // http://w3c.github.io/web-animations/#keyframe-effect
@@ -48,34 +48,28 @@ class CORE_EXPORT KeyframeEffect final : public KeyframeEffectReadOnly {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static KeyframeEffect* create(Element*,
+  static KeyframeEffect* Create(Element*,
                                 EffectModel*,
                                 const Timing&,
                                 KeyframeEffectReadOnly::Priority =
-                                    KeyframeEffectReadOnly::DefaultPriority,
+                                    KeyframeEffectReadOnly::kDefaultPriority,
                                 EventDelegate* = nullptr);
   // Web Animations API Bindings constructors.
-  static KeyframeEffect* create(
+  static KeyframeEffect* Create(
       ExecutionContext*,
       Element*,
-      const DictionarySequenceOrDictionary& effectInput,
-      double duration,
+      const DictionarySequenceOrDictionary& effect_input,
+      const UnrestrictedDoubleOrKeyframeEffectOptions&,
       ExceptionState&);
-  static KeyframeEffect* create(
+  static KeyframeEffect* Create(
       ExecutionContext*,
       Element*,
-      const DictionarySequenceOrDictionary& effectInput,
-      const KeyframeEffectOptions& timingInput,
-      ExceptionState&);
-  static KeyframeEffect* create(
-      ExecutionContext*,
-      Element*,
-      const DictionarySequenceOrDictionary& effectInput,
+      const DictionarySequenceOrDictionary& effect_input,
       ExceptionState&);
 
   ~KeyframeEffect() override;
 
-  bool isKeyframeEffect() const override { return true; }
+  bool IsKeyframeEffect() const override { return true; }
 
   AnimationEffectTiming* timing() override;
 
@@ -90,8 +84,8 @@ class CORE_EXPORT KeyframeEffect final : public KeyframeEffectReadOnly {
 DEFINE_TYPE_CASTS(KeyframeEffect,
                   AnimationEffectReadOnly,
                   animationNode,
-                  animationNode->isKeyframeEffect(),
-                  animationNode.isKeyframeEffect());
+                  animationNode->IsKeyframeEffect(),
+                  animationNode.IsKeyframeEffect());
 
 }  // namespace blink
 

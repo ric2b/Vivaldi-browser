@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/common/shell_observer.h"
-#include "ash/common/wm/workspace/workspace_types.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/shell_observer.h"
+#include "ash/wm/workspace/workspace_types.h"
 #include "base/macros.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -51,7 +51,6 @@ class AnimatingWallpaperWidgetController;
 class AshTouchExplorationManager;
 class AshWindowTreeHost;
 class BootSplashScreen;
-class DockedWindowLayoutManager;
 enum class LoginStatus;
 class PanelLayoutManager;
 class ShelfLayoutManager;
@@ -160,10 +159,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   void set_touch_hud_debug(TouchHudDebug* hud) { touch_hud_debug_ = hud; }
   void set_touch_hud_projection(TouchHudProjection* hud) {
     touch_hud_projection_ = hud;
-  }
-
-  DockedWindowLayoutManager* docked_window_layout_manager() {
-    return docked_window_layout_manager_;
   }
 
   PanelLayoutManager* panel_layout_manager() { return panel_layout_manager_; }
@@ -319,7 +314,7 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   // Disables projection touch HUD.
   void DisableTouchHudProjection();
 
-  // Resets WmShell::GetRootWindowForNewWindows() if appropriate. This is called
+  // Resets Shell::GetRootWindowForNewWindows() if appropriate. This is called
   // during shutdown to make sure GetRootWindowForNewWindows() isn't referencing
   // this.
   void ResetRootForNewWindowsIfNecessary();
@@ -337,7 +332,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   aura::WindowTreeHost* window_tree_host_;
 
   // LayoutManagers are owned by the window they are installed on.
-  DockedWindowLayoutManager* docked_window_layout_manager_ = nullptr;
   PanelLayoutManager* panel_layout_manager_ = nullptr;
   wm::RootWindowLayoutManager* root_window_layout_manager_ = nullptr;
 

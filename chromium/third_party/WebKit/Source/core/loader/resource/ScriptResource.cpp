@@ -29,7 +29,7 @@
 #include "platform/SharedBuffer.h"
 #include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
 #include "platform/instrumentation/tracing/web_process_memory_dump.h"
-#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
@@ -37,76 +37,93 @@
 
 namespace blink {
 
-ScriptResource* ScriptResource::fetch(FetchRequest& request,
+ScriptResource* ScriptResource::Fetch(FetchParameters& params,
                                       ResourceFetcher* fetcher) {
-  DCHECK_EQ(request.resourceRequest().frameType(),
-            WebURLRequest::FrameTypeNone);
-  request.mutableResourceRequest().setRequestContext(
-      WebURLRequest::RequestContextScript);
-  ScriptResource* resource = toScriptResource(
-      fetcher->requestResource(request, ScriptResourceFactory()));
-  if (resource && !request.integrityMetadata().isEmpty())
-    resource->setIntegrityMetadata(request.integrityMetadata());
+  DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
+            WebURLRequest::kFrameTypeNone);
+  params.SetRequestContext(WebURLRequest::kRequestContextScript);
+  ScriptResource* resource = ToScriptResource(
+      fetcher->RequestResource(params, ScriptResourceFactory()));
+  if (resource && !params.IntegrityMetadata().IsEmpty())
+    resource->SetIntegrityMetadata(params.IntegrityMetadata());
   return resource;
 }
 
-ScriptResource::ScriptResource(const ResourceRequest& resourceRequest,
+ScriptResource::ScriptResource(const ResourceRequest& resource_request,
                                const ResourceLoaderOptions& options,
                                const String& charset)
-    : TextResource(resourceRequest,
-                   Script,
+    : TextResource(resource_request,
+                   kScript,
                    options,
                    "application/javascript",
                    charset) {}
 
 ScriptResource::~ScriptResource() {}
 
-void ScriptResource::didAddClient(ResourceClient* client) {
-  DCHECK(ScriptResourceClient::isExpectedType(client));
-  Resource::didAddClient(client);
+void ScriptResource::DidAddClient(ResourceClient* client) {
+  DCHECK(ScriptResourceClient::IsExpectedType(client));
+  Resource::DidAddClient(client);
 }
 
-void ScriptResource::appendData(const char* data, size_t length) {
-  Resource::appendData(data, length);
-  ResourceClientWalker<ScriptResourceClient> walker(clients());
-  while (ScriptResourceClient* client = walker.next())
-    client->notifyAppendData(this);
+void ScriptResource::AppendData(const char* data, size_t length) {
+  Resource::AppendData(data, length);
+  ResourceClientWalker<ScriptResourceClient> walker(Clients());
+  while (ScriptResourceClient* client = walker.Next())
+    client->NotifyAppendData(this);
 }
 
-void ScriptResource::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail,
-                                  WebProcessMemoryDump* memoryDump) const {
-  Resource::onMemoryDump(levelOfDetail, memoryDump);
-  const String name = getMemoryDumpName() + "/decoded_script";
-  auto dump = memoryDump->createMemoryAllocatorDump(name);
-  dump->addScalar("size", "bytes", m_script.charactersSizeInBytes());
-  memoryDump->addSuballocation(
-      dump->guid(), String(WTF::Partitions::kAllocatedObjectPoolName));
+void ScriptResource::OnMemoryDump(WebMemoryDumpLevelOfDetail level_of_detail,
+                                  WebProcessMemoryDump* memory_dump) const {
+  Resource::OnMemoryDump(level_of_detail, memory_dump);
+  const String name = GetMemoryDumpName() + "/decoded_script";
+  auto dump = memory_dump->CreateMemoryAllocatorDump(name);
+  dump->AddScalar("size", "bytes", source_text_.CharactersSizeInBytes());
+  memory_dump->AddSuballocation(
+      dump->Guid(), String(WTF::Partitions::kAllocatedObjectPoolName));
 }
 
-const String& ScriptResource::script() {
-  DCHECK(isLoaded());
+const String& ScriptResource::SourceText() {
+  DCHECK(IsLoaded());
 
-  if (m_script.isNull() && data()) {
-    String script = decodedText();
-    clearData();
-    setDecodedSize(script.charactersSizeInBytes());
-    m_script = AtomicString(script);
+  if (source_text_.IsNull() && Data()) {
+    String source_text = DecodedText();
+    ClearData();
+    SetDecodedSize(source_text.CharactersSizeInBytes());
+    source_text_ = AtomicString(source_text);
   }
 
-  return m_script;
+  return source_text_;
 }
 
-void ScriptResource::destroyDecodedDataForFailedRevalidation() {
-  m_script = AtomicString();
+void ScriptResource::DestroyDecodedDataForFailedRevalidation() {
+  source_text_ = AtomicString();
 }
 
 // static
-bool ScriptResource::mimeTypeAllowedByNosniff(
+bool ScriptResource::MimeTypeAllowedByNosniff(
     const ResourceResponse& response) {
-  return parseContentTypeOptionsHeader(response.httpHeaderField(
-             HTTPNames::X_Content_Type_Options)) != ContentTypeOptionsNosniff ||
-         MIMETypeRegistry::isSupportedJavaScriptMIMEType(
-             response.httpContentType());
+  return ParseContentTypeOptionsHeader(
+             response.HttpHeaderField(HTTPNames::X_Content_Type_Options)) !=
+             kContentTypeOptionsNosniff ||
+         MIMETypeRegistry::IsSupportedJavaScriptMIMEType(
+             response.HttpContentType());
+}
+
+AccessControlStatus ScriptResource::CalculateAccessControlStatus(
+    const SecurityOrigin* security_origin) const {
+  if (GetResponse().WasFetchedViaServiceWorker()) {
+    if (GetResponse().ServiceWorkerResponseType() ==
+        kWebServiceWorkerResponseTypeOpaque) {
+      return kOpaqueResource;
+    }
+
+    return kSharableCrossOrigin;
+  }
+
+  if (PassesAccessControlCheck(security_origin))
+    return kSharableCrossOrigin;
+
+  return kNotSharableCrossOrigin;
 }
 
 }  // namespace blink

@@ -27,38 +27,39 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "core/dom/Document.h"
+#include "core/dom/ExecutionContext.h"
 
 namespace blink {
 
-SpeechGrammarList* SpeechGrammarList::create() {
+SpeechGrammarList* SpeechGrammarList::Create() {
   return new SpeechGrammarList;
 }
 
 SpeechGrammar* SpeechGrammarList::item(unsigned index) const {
-  if (index >= m_grammars.size())
+  if (index >= grammars_.size())
     return nullptr;
 
-  return m_grammars[index];
+  return grammars_[index];
 }
 
-void SpeechGrammarList::addFromUri(ScriptState* scriptState,
+void SpeechGrammarList::addFromUri(ScriptState* script_state,
                                    const String& src,
                                    double weight) {
-  Document* document = toDocument(scriptState->getExecutionContext());
-  m_grammars.push_back(
-      SpeechGrammar::create(document->completeURL(src), weight));
+  Document* document = ToDocument(ExecutionContext::From(script_state));
+  grammars_.push_back(
+      SpeechGrammar::Create(document->CompleteURL(src), weight));
 }
 
 void SpeechGrammarList::addFromString(const String& string, double weight) {
-  String urlString =
-      String("data:application/xml,") + encodeWithURLEscapeSequences(string);
-  m_grammars.push_back(SpeechGrammar::create(KURL(KURL(), urlString), weight));
+  String url_string =
+      String("data:application/xml,") + EncodeWithURLEscapeSequences(string);
+  grammars_.push_back(SpeechGrammar::Create(KURL(KURL(), url_string), weight));
 }
 
 SpeechGrammarList::SpeechGrammarList() {}
 
 DEFINE_TRACE(SpeechGrammarList) {
-  visitor->trace(m_grammars);
+  visitor->Trace(grammars_);
 }
 
 }  // namespace blink

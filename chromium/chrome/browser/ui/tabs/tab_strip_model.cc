@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/defaults.h"
@@ -26,7 +27,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -552,7 +552,16 @@ WebContents* TabStripModel::GetOpenerOfWebContentsAt(int index) {
 void TabStripModel::SetOpenerOfWebContentsAt(int index,
                                              WebContents* opener) {
   DCHECK(ContainsIndex(index));
-  DCHECK(opener);
+  if (opener) {
+    // The TabStripModel only maintains the references to openers that it itself
+    // owns; trying to set an opener to an external WebContents can result in
+    // the opener being used after its freed. See crbug.com/698681.
+    // TODO(devlin): This is a CHECK right now to track down any other cases
+    // where this can happen. If there aren't any, we might be able to downgrade
+    // this to a DCHECK.
+    CHECK_NE(kNoTab, GetIndexOfWebContents(opener))
+        << "Cannot set opener to a web contents not owned by this tab strip.";
+  }
   contents_data_[index]->set_opener(opener);
 }
 
@@ -912,7 +921,7 @@ void TabStripModel::ExecuteContextMenuCommand(
   DCHECK(command_id > CommandFirst && command_id < CommandLast);
   switch (command_id) {
     case CommandNewTab:
-      content::RecordAction(UserMetricsAction("TabContextMenu_NewTab"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_NewTab"));
       UMA_HISTOGRAM_ENUMERATION("Tab.NewTab",
                                 TabStripModel::NEW_TAB_CONTEXT_MENU,
                                 TabStripModel::NEW_TAB_ENUM_COUNT);
@@ -920,7 +929,7 @@ void TabStripModel::ExecuteContextMenuCommand(
       break;
 
     case CommandReload: {
-      content::RecordAction(UserMetricsAction("TabContextMenu_Reload"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_Reload"));
       std::vector<int> indices = GetIndicesForCommand(context_index);
       for (size_t i = 0; i < indices.size(); ++i) {
         WebContents* tab = GetWebContentsAt(indices[i]);
@@ -935,7 +944,7 @@ void TabStripModel::ExecuteContextMenuCommand(
     }
 
     case CommandDuplicate: {
-      content::RecordAction(UserMetricsAction("TabContextMenu_Duplicate"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_Duplicate"));
       std::vector<int> indices = GetIndicesForCommand(context_index);
       // Copy the WebContents off as the indices will change as tabs are
       // duplicated.
@@ -951,37 +960,34 @@ void TabStripModel::ExecuteContextMenuCommand(
     }
 
     case CommandCloseTab: {
-      content::RecordAction(UserMetricsAction("TabContextMenu_CloseTab"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_CloseTab"));
       InternalCloseTabs(GetIndicesForCommand(context_index),
                         CLOSE_CREATE_HISTORICAL_TAB | CLOSE_USER_GESTURE);
       break;
     }
 
     case CommandCloseOtherTabs: {
-      content::RecordAction(
-          UserMetricsAction("TabContextMenu_CloseOtherTabs"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_CloseOtherTabs"));
       InternalCloseTabs(GetIndicesClosedByCommand(context_index, command_id),
                         CLOSE_CREATE_HISTORICAL_TAB);
       break;
     }
 
     case CommandCloseTabsToRight: {
-      content::RecordAction(
-          UserMetricsAction("TabContextMenu_CloseTabsToRight"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_CloseTabsToRight"));
       InternalCloseTabs(GetIndicesClosedByCommand(context_index, command_id),
                         CLOSE_CREATE_HISTORICAL_TAB);
       break;
     }
 
     case CommandRestoreTab: {
-      content::RecordAction(UserMetricsAction("TabContextMenu_RestoreTab"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_RestoreTab"));
       delegate_->RestoreTab();
       break;
     }
 
     case CommandTogglePinned: {
-      content::RecordAction(
-          UserMetricsAction("TabContextMenu_TogglePinned"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_TogglePinned"));
       std::vector<int> indices = GetIndicesForCommand(context_index);
       bool pin = WillContextMenuPin(context_index);
       if (pin) {
@@ -1000,9 +1006,9 @@ void TabStripModel::ExecuteContextMenuCommand(
       const std::vector<int>& indices = GetIndicesForCommand(context_index);
       const bool mute = !chrome::AreAllTabsMuted(*this, indices);
       if (mute)
-        content::RecordAction(UserMetricsAction("TabContextMenu_MuteTabs"));
+        base::RecordAction(UserMetricsAction("TabContextMenu_MuteTabs"));
       else
-        content::RecordAction(UserMetricsAction("TabContextMenu_UnmuteTabs"));
+        base::RecordAction(UserMetricsAction("TabContextMenu_UnmuteTabs"));
       for (std::vector<int>::const_iterator i = indices.begin();
            i != indices.end(); ++i) {
         chrome::SetTabAudioMuted(GetWebContentsAt(*i), mute,
@@ -1012,8 +1018,7 @@ void TabStripModel::ExecuteContextMenuCommand(
     }
 
     case CommandBookmarkAllTabs: {
-      content::RecordAction(
-          UserMetricsAction("TabContextMenu_BookmarkAllTabs"));
+      base::RecordAction(UserMetricsAction("TabContextMenu_BookmarkAllTabs"));
 
       delegate_->BookmarkAllTabs();
       break;

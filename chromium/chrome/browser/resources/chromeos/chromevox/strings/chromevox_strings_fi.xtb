@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Kohdistettu.</translation>
 <translation id="1025074108959230262">Kiinnitetty tila pois käytöstä</translation>
 <translation id="1031961866430398710">sitten</translation>
+<translation id="1038643060055067718">Rivit:</translation>
 <translation id="1038795173450935438">Siirry seuraavaan sivun kohteeseen painamalla haku + oikea nuoli ja edelliseen painamalla haku + vasen nuoli. Siirry seuraavalle riville painamalla haku + ylänuoli ja edelliselle painamalla haku + alanuoli. Klikkaa aktiivista kohdetta painamalla haku + välilyönti.</translation>
 <translation id="1044777062731150180">Ei otsikoita</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,8 @@
 <translation id="2110480898214777136">Rivitä teksti alusta loppuun tai lopusta alkuun sivun, valintaikkunan tai muun säiliön sisällä.</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">pääsyavain: <ph name="KEY" /></translation>
-<translation id="2155457205053847599">Muuta nykyistä kuuden pisteen pistekirjoitustaulukkoa valitsemalla vaihtoehto alla olevasta luettelosta.</translation>
+<translation id="2138345533858834403">Simuloi päivitettävän pistekirjoitusnäytön ulostuloa
+        näytön alalaidan ChromeVox-paneelissa.</translation>
 <translation id="2169714232367507776">Klikkaa nykyistä kohdetta</translation>
 <translation id="2179452035581866348">ChromeVox antaa sinulle tärkeitä tietoja ja lisätietoja äänillä. Näiden äänten avulla voit navigoida nopeammin, kun opit, mitä mikäkin ääni tarkoittaa. Kun alat tottua ääniin, voit poistaa sanalliset kuvaukset käytöstä ja käyttää niitä vain kun tarvitset olennaisia tietoja sivusta. Tässä on täydellinen luettelo äänistä ja siitä, mitä ne tarkoittavat.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{oikea kaarisulje}other{# oikeaa kaarisuljetta}}</translation>
@@ -124,6 +126,7 @@
 <translation id="2344193891939537199">Päivämäärän ja ajan valinta</translation>
 <translation id="2347456970887948350">Linkki</translation>
 <translation id="2359897517538099099">Ei taulukkotilassa.</translation>
+<translation id="2381733276052567791">Vaihtaa puheen päälle tai pois päältä.</translation>
 <translation id="2390264819538553347">Siirry eteenpäin painamalla Enter ja taaksepäin painamalla askelpalautinta.</translation>
 <translation id="241124561063364910">ja sitten</translation>
 <translation id="2416512023405990736">Valitsematon valintaruutu</translation>
@@ -166,6 +169,7 @@
 <translation id="2800204403141299078">Ei muita erilaisia elementtejä.</translation>
 <translation id="2800780099804980316">Ei edellisiä tason 1 otsikoita.</translation>
 <translation id="280499067616661124">ChromeVox-sivulta haku</translation>
+<translation id="2808001342598757276">Poista näytön tummennus</translation>
 <translation id="2811019999044652585">Siirry näytön kohteisiin, esim. työkalupalkkeihin tai ilmaisinalueelle, painamalla Control + eteenpäin. Eteenpäin-näppäin on Chromebookin näppäimistöllä heti numeron kaksi yläpuolella.</translation>
 <translation id="2811204574343810641">Rivi</translation>
 <translation id="2816654101880605877">Ei seuraavia liukusäätimiä.</translation>
@@ -185,11 +189,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{sarkain}other{# sarkainta}}</translation>
 <translation id="2972078295414139404">Ei edellisiä käytyjä linkkejä.</translation>
 <translation id="2972205263822847197">Työkaluvinkki</translation>
-<translation id="2978549349327282388">Sarakkeet:</translation>
 <translation id="2998131015536248178">Edellinen merkki</translation>
 <translation id="2999559350546931576">Vähennä äänenkorkeutta</translation>
 <translation id="2999945368667127852">Ei seuraavaa mediawidgetiä.</translation>
 <translation id="3012414509011670858">Ei edeltävää osiota.</translation>
+<translation id="3014130421870723208">@muok 8pist</translation>
 <translation id="3030432017085518523">Valikkokohde radiopainike</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{heittomerkki}other{# heittomerkkiä}}</translation>
 <translation id="3040901448410802366">Edistymisen osoitin</translation>
@@ -212,6 +216,7 @@
 <translation id="3138767756593758860">Näytä maamerkkiluettelo</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">Seuraava rivi</translation>
+<translation id="3153024374267644603">Puhe päällä</translation>
 <translation id="3155083529632865074">Ei edellisiä painikkeita.</translation>
 <translation id="3163593631834463955">Tyhjä sarakkeen otsikko</translation>
 <translation id="316542773973815724">Liikkuminen</translation>
@@ -224,6 +229,7 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="3229375994964697375">Käyty linkki</translation>
 <translation id="3232388865800379423">Ponnahduspainike</translation>
 <translation id="3241052487511142956">Edellinen käyty linkki</translation>
+<translation id="3241638166094654466">Kunkin rivin solut:</translation>
 <translation id="3286390186030710347">Liukusäädin</translation>
 <translation id="3299925995433437805">Ei seuraavia käytyjä linkkejä.</translation>
 <translation id="3307886118343381874">Siirry taulukon loppuun</translation>
@@ -380,6 +386,7 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="4376316291247992553">Näytä kuva pistekirjoituksena.</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">palauta</translation>
+<translation id="4457472090507035117">Valitse nykyinen ääni:</translation>
 <translation id="4471074325120394300">Ei linkkejä.</translation>
 <translation id="4476183483923481720">uusi rivi</translation>
 <translation id="4482330759234983253">Edellinen taulukko</translation>
@@ -453,7 +460,6 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">Ei edellisiä lomakkeen kenttiä.</translation>
 <translation id="5111640677200759579">Sarakkeen otsikko</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">Ei edellisiä linkkejä.</translation>
 <translation id="513774504516943387">linkki</translation>
 <translation id="517143700877085897">, ei valittu</translation>
@@ -564,10 +570,10 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="5968607524793740041">Näytä kontekstivalikko</translation>
 <translation id="5983179082906765664">Lisää siirtymisen tarkkuutta</translation>
 <translation id="5999630716831179808">Äänet</translation>
-<translation id="6000417740266304866">Muuta nykyistä kahdeksan pisteen pistekirjoitustaulukkoa valitsemalla vaihtoehto alla olevasta luettelosta.</translation>
 <translation id="6006050241733874051">Lomake</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{kenoviiva}other{# kenoviivaa}}</translation>
 <translation id="6037602951055904232">Panoroi eteenpäin</translation>
+<translation id="6044160928851315051">Tummenna näyttö</translation>
 <translation id="6082768461603900813">Siirtymisen perustoiminnot</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Solu päättyi.</translation>
@@ -606,7 +612,6 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="6444046323172968959">Ilmoitusvalintaikkuna</translation>
 <translation id="6459511626086141404">Flat-näppäinkartta</translation>
 <translation id="6468049171101508116">Seuraava-painike</translation>
-<translation id="6491972999578897419">Vaihda ääntä valitsemalla vaihtoehto alla olevasta luettelosta.</translation>
 <translation id="6493991254603208962">Vähennä kirkkautta.</translation>
 <translation id="6508059270146105198">Siirrä pistenäyttö sivun alareunaan</translation>
 <translation id="6536864053412760904">Math ML -tunnus</translation>
@@ -658,6 +663,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">sanojen puhuminen</translation>
 <translation id="713824876195128146">Seuraava estoviittaus</translation>
+<translation id="7143034430156387447">Vaihda 6 ja 8 pisteen pistekirjoituksen välillä</translation>
 <translation id="7161771961008409533">Ponnahduspainike</translation>
 <translation id="7165714724802225287">Tämänhetkinen näyttötyyli on lomittainen.</translation>
 <translation id="7167657087543110">merkkien puhuminen</translation>
@@ -668,6 +674,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">rivi</translation>
 <translation id="7226216518520804442">luett.</translation>
+<translation id="7229749224609077523">Valitse 6 pisteen pistekirjoitustaulukko:</translation>
 <translation id="72393384879519786">Otsikko</translation>
 <translation id="7241683698754534149">Avaa pitkä kuvaus uudessa välilehdessä</translation>
 <translation id="7248671827512403053">Sovellus</translation>
@@ -741,6 +748,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="7974390230414479278">Valikkokohde</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{lainausmerkki}other{# lainausmerkkiä}}</translation>
+<translation id="8017588669690167134">Puhe pois käytöstä</translation>
 <translation id="8033827949643255796">valittu</translation>
 <translation id="8035962149453661158">enintään <ph name="X" /></translation>
 <translation id="8042761080832772327">Muokkaa tekstiä, haku</translation>
@@ -759,7 +767,6 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="820417203470636242">Tyhjä solu.</translation>
 <translation id="8215202828671303819">Monivalinta</translation>
 <translation id="8224171046658870249">ChromeVox Next käytössä</translation>
-<translation id="8259358278692921574">Rivit:</translation>
 <translation id="8276439074553447000">Siirry edelliseen aktivoitavaan kohteeseen</translation>
 <translation id="8278417001922463147">Ei aiempaa artikkelia.</translation>
 <translation id="8283603667300770666">Seuraava lomakekenttä</translation>
@@ -797,7 +804,6 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="8638532244051952400">Kerro nykyiset solukoordinaatit</translation>
 <translation id="8650576015643545550">Ei edellisiä luetteloita.</translation>
 <translation id="8651481478098336970">Mykistä äänenvoimakkuus.</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">Näytä linkkiluettelo</translation>
 <translation id="8664519043722036194">sekuntia</translation>
 <translation id="867187640362843212">Otsikko 5</translation>
@@ -817,6 +823,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="8856538297388979332">Selaa komentoja painamalla ylös tai alas, valitse painamalla enteriä</translation>
 <translation id="8864099967139188018">Ei seuraavia tason 6 otsikoita.</translation>
 <translation id="8882002077197914455">Rivin otsikko</translation>
+<translation id="8883850400338911892">urlmuok 8pist</translation>
 <translation id="8896347895970027998">Ota ChromeVox käyttöön tai poista se käytöstä.</translation>
 <translation id="8898516272131543774">Ota välimerkkien puhuminen käyttöön tai pois käytöstä</translation>
 <translation id="8900148057318340779">Etuliitenäppäin</translation>
@@ -830,6 +837,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="9027462562263121875">Ei taulukoita.</translation>
 <translation id="9040132695316389094">Otsikko 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" /> %</translation>
+<translation id="9061884144798498064">Valitse 8 pisteen pistekirjoitustaulukko:</translation>
 <translation id="9065283790526219006">+ponnahdus</translation>
 <translation id="9077213568694924680">poistettu valinnasta</translation>
 <translation id="9082874451376019682">Ei edellisiä liukusäätimiä.</translation>

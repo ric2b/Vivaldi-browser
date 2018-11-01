@@ -23,6 +23,11 @@ class Profile;
 
 namespace chromeos {
 
+struct QueryResult {
+  bool success;
+  std::vector<::printing::QueueStatus> queues;
+};
+
 class CupsPrintJobManagerImpl : public CupsPrintJobManager,
                                 public content::NotificationObserver {
  public:
@@ -30,7 +35,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
   ~CupsPrintJobManagerImpl() override;
 
   // CupsPrintJobManager overrides:
-  bool CancelPrintJob(CupsPrintJob* job) override;
+  void CancelPrintJob(CupsPrintJob* job) override;
   bool SuspendPrintJob(CupsPrintJob* job) override;
   bool ResumePrintJob(CupsPrintJob* job) override;
 
@@ -52,20 +57,36 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
   // Schedule a query of CUPS for print job status with a delay of |delay|.
   void ScheduleQuery(const base::TimeDelta& delay);
 
-  // Query CUPS for print job status.
-  void QueryCups();
+  // Schedule the CUPS query off the UI thread. Posts results back to UI thread
+  // to UpdateJobs.
+  void PostQuery();
+
+  // Updates the state of a print job based on |printer_status| and |job|.
+  // Returns true if observers need to be notified of an update.
+  bool UpdatePrintJob(const ::printing::PrinterStatus& printer_status,
+                      const ::printing::CupsJob& job,
+                      CupsPrintJob* print_job);
 
   // Process jobs from CUPS and perform notifications.
-  void UpdateJobs(const std::vector<::printing::CupsJob>& jobs);
+  void UpdateJobs(const QueryResult& results);
 
-  // Updates the state and performs the appropriate notifications.
-  void JobStateUpdated(CupsPrintJob* job, CupsPrintJob::State new_state);
+  // Mark remaining jobs as errors and remove active jobs.
+  void PurgeJobs();
+
+  // Cancel the print job on the blocking thread.
+  void CancelJobImpl(const std::string& printer_id, const int job_id);
+
+  // Notify observers that a state update has occured for |job|.
+  void NotifyJobStateUpdate(CupsPrintJob* job);
 
   // Ongoing print jobs.
   std::map<std::string, std::unique_ptr<CupsPrintJob>> jobs_;
 
   // Prevents multiple queries from being scheduled simultaneously.
   bool in_query_ = false;
+
+  // Records the number of consecutive times the GetJobs query has failed.
+  int retry_count_ = 0;
 
   ::printing::CupsConnection cups_connection_;
   content::NotificationRegistrar registrar_;

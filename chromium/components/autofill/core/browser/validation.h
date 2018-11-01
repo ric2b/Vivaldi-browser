@@ -15,6 +15,10 @@ class Time;
 
 namespace autofill {
 
+// Constants for the length of a CVC.
+static const size_t GENERAL_CVC_LENGTH = 3;
+static const size_t AMEX_CVC_LENGTH = 4;
+
 // Returns true if |year| and |month| describe a date later than |now|.
 // |year| must have 4 digits.
 bool IsValidCreditCardExpirationDate(int year,
@@ -45,6 +49,11 @@ bool IsValidEmailAddress(const base::string16& text);
 // insensitive.  Valid for US states only.
 bool IsValidState(const base::string16& text);
 
+// Returns whether the number contained in |text| is valid for the specified
+// |country_code|. Callers should cache the result as the parsing is expensive.
+bool IsValidPhoneNumber(const base::string16& text,
+                        const std::string& country_code);
+
 // Returns true if |text| looks like a valid zip code.
 // Valid for US zip codes only.
 bool IsValidZip(const base::string16& text);
@@ -57,6 +66,13 @@ bool IsSSN(const base::string16& text);
 bool IsValidForType(const base::string16& value,
                     ServerFieldType type,
                     base::string16* error_message);
+
+// Returns the expected CVC length based on the |card_type|.
+size_t GetCvcLengthForCardType(const base::StringPiece card_type);
+
+// Returns true if |value| appears to be a UPI Virtual Payment Address.
+// https://upipayments.co.in/virtual-payment-address-vpa/
+bool IsUPIVirtualPaymentAddress(const base::string16& value);
 
 }  // namespace autofill
 

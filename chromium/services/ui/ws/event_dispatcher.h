@@ -13,7 +13,7 @@
 
 #include "base/macros.h"
 #include "services/ui/common/types.h"
-#include "services/ui/public/interfaces/cursor.mojom.h"
+#include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "services/ui/ws/drag_cursor_updater.h"
 #include "services/ui/ws/modal_window_controller.h"
@@ -66,7 +66,7 @@ class EventDispatcher : public ServerWindowObserver, public DragCursorUpdater {
 
   // Returns the cursor for the current target, or POINTER if the mouse is not
   // over a valid target.
-  ui::mojom::Cursor GetCurrentMouseCursor() const;
+  ui::mojom::CursorType GetCurrentMouseCursor() const;
 
   // |capture_window_| will receive all input. See window_tree.mojom for
   // details.

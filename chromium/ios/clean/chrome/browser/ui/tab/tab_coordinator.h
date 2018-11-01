@@ -2,15 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ======                        New Architecture                         =====
-// =         This code is only used in the new iOS Chrome architecture.       =
-// ============================================================================
-
 #ifndef IOS_CLEAN_CHROME_BROWSER_UI_TAB_TAB_COORDINATOR_H_
 #define IOS_CLEAN_CHROME_BROWSER_UI_TAB_TAB_COORDINATOR_H_
 
 #import <UIKit/UIKit.h>
-#import "ios/clean/chrome/browser/browser_coordinator.h"
+#import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator.h"
 
 namespace web {
 class WebState;

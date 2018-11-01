@@ -5,7 +5,7 @@
 module ash.mojom;
 
 import "components/signin/public/interfaces/account_id.mojom";
-import "skia/public/interfaces/bitmap.mojom";
+import "ui/gfx/image/mojo/image.mojom";
 
 // Matches session_manager::SessionState.
 enum SessionState {
@@ -83,7 +83,7 @@ struct UserSession {
   signin.mojom.AccountId account_id;
   string display_name;
   string display_email;
-  skia.mojom.Bitmap avatar;
+  gfx.mojom.ImageSkia avatar;
 };
 
 // Matches ash::AddUserSessionPolicy.
@@ -134,6 +134,11 @@ interface SessionController {
   // Currently, session manager set a LRU order with the first one being the
   // active user session.
   SetUserSessionOrder(array<uint32> user_session_ids);
+
+  // Runs the pre-unlock animation. Invoked by the screen locker before
+  // dismissing. When the mojo call returns, screen locker takes that as a
+  // signal of finished unlock animation and dismisses itself.
+  RunUnlockAnimation() => ();
 };
 
 // Interface for ash to request session service from its client (e.g. Chrome).

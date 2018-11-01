@@ -24,6 +24,8 @@
 
 namespace device {
 
+// Singleton used to provide the platform's VR devices to VRServiceImpl
+// instances.
 class VRDeviceManager {
  public:
   DEVICE_VR_EXPORT virtual ~VRDeviceManager();
@@ -33,13 +35,17 @@ class VRDeviceManager {
 
   // Adds a listener for device manager events. VRDeviceManager does not own
   // this object.
-  void AddService(VRServiceImpl* service);
+  // Automatically connects all currently available VR devices by querying
+  // the device providers and, for each returned device, calling
+  // VRServiceImpl::ConnectDevice.
+  DEVICE_VR_EXPORT void AddService(VRServiceImpl* service);
   void RemoveService(VRServiceImpl* service);
 
-  DEVICE_VR_EXPORT bool GetVRDevices(VRServiceImpl* service);
   DEVICE_VR_EXPORT unsigned int GetNumberOfConnectedDevices();
 
-  void ListeningForActivateChanged(bool listening);
+  void ListeningForActivateChanged(bool listening, VRServiceImpl* service);
+
+  bool IsMostRecentlyListeningForActivate(VRServiceImpl* service);
 
  private:
   friend class VRDeviceManagerTest;
@@ -73,6 +79,7 @@ class VRDeviceManager {
   bool vr_initialized_;
 
   std::set<VRServiceImpl*> services_;
+  VRServiceImpl* most_recently_listening_for_activate_ = nullptr;
 
   // For testing. If true will not delete self when consumer count reaches 0.
   bool keep_alive_;

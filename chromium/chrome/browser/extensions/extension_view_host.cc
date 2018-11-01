@@ -18,6 +18,7 @@
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -173,33 +174,29 @@ bool ExtensionViewHost::ShouldTransferNavigation(
   return !is_main_frame_navigation;
 }
 
-bool ExtensionViewHost::PreHandleKeyboardEvent(
-    WebContents* source,
-    const NativeWebKeyboardEvent& event,
-    bool* is_keyboard_shortcut) {
+content::KeyboardEventProcessingResult
+ExtensionViewHost::PreHandleKeyboardEvent(WebContents* source,
+                                          const NativeWebKeyboardEvent& event) {
   if (extension_host_type() == VIEW_TYPE_EXTENSION_POPUP &&
-      event.type() == NativeWebKeyboardEvent::RawKeyDown &&
-      event.windowsKeyCode == ui::VKEY_ESCAPE) {
-    DCHECK(is_keyboard_shortcut != NULL);
-    *is_keyboard_shortcut = true;
-    return false;
+      event.GetType() == NativeWebKeyboardEvent::kRawKeyDown &&
+      event.windows_key_code == ui::VKEY_ESCAPE) {
+    return content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT;
   }
 
   // Handle higher priority browser shortcuts such as Ctrl-w.
   Browser* browser = view_->GetBrowser();
   if (browser)
-    return browser->PreHandleKeyboardEvent(source, event, is_keyboard_shortcut);
+    return browser->PreHandleKeyboardEvent(source, event);
 
-  *is_keyboard_shortcut = false;
-  return false;
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 void ExtensionViewHost::HandleKeyboardEvent(
     WebContents* source,
     const NativeWebKeyboardEvent& event) {
   if (extension_host_type() == VIEW_TYPE_EXTENSION_POPUP) {
-    if (event.type() == NativeWebKeyboardEvent::RawKeyDown &&
-        event.windowsKeyCode == ui::VKEY_ESCAPE) {
+    if (event.GetType() == NativeWebKeyboardEvent::kRawKeyDown &&
+        event.windows_key_code == ui::VKEY_ESCAPE) {
       Close();
       return;
     }
@@ -211,9 +208,9 @@ bool ExtensionViewHost::PreHandleGestureEvent(
     content::WebContents* source,
     const blink::WebGestureEvent& event) {
   // Disable pinch zooming.
-  return event.type() == blink::WebGestureEvent::GesturePinchBegin ||
-         event.type() == blink::WebGestureEvent::GesturePinchUpdate ||
-         event.type() == blink::WebGestureEvent::GesturePinchEnd;
+  return event.GetType() == blink::WebGestureEvent::kGesturePinchBegin ||
+         event.GetType() == blink::WebGestureEvent::kGesturePinchUpdate ||
+         event.GetType() == blink::WebGestureEvent::kGesturePinchEnd;
 }
 
 content::ColorChooser* ExtensionViewHost::OpenColorChooser(

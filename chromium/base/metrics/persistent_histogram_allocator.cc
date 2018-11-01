@@ -340,24 +340,49 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
       return nullptr;
     }
 
-    size_t ranges_count = bucket_count + 1;
-    size_t ranges_bytes = ranges_count * sizeof(HistogramBase::Sample);
+    // Since the StasticsRecorder keeps a global collection of BucketRanges
+    // objects for re-use, it would be dangerous for one to hold a reference
+    // from a persistent allocator that is not the global one (which is
+    // permanent once set). If this stops being the case, this check can
+    // become an "if" condition beside "!ranges_ref" below and before
+    // set_persistent_reference() farther down.
+    DCHECK_EQ(this, GlobalHistogramAllocator::Get());
+
+    // Re-use an existing BucketRanges persistent allocation if one is known;
+    // otherwise, create one.
+    PersistentMemoryAllocator::Reference ranges_ref =
+        bucket_ranges->persistent_reference();
+    if (!ranges_ref) {
+      size_t ranges_count = bucket_count + 1;
+      size_t ranges_bytes = ranges_count * sizeof(HistogramBase::Sample);
+      ranges_ref =
+          memory_allocator_->Allocate(ranges_bytes, kTypeIdRangesArray);
+      if (ranges_ref) {
+        HistogramBase::Sample* ranges_data =
+            memory_allocator_->GetAsArray<HistogramBase::Sample>(
+                ranges_ref, kTypeIdRangesArray, ranges_count);
+        if (ranges_data) {
+          for (size_t i = 0; i < bucket_ranges->size(); ++i)
+            ranges_data[i] = bucket_ranges->range(i);
+          bucket_ranges->set_persistent_reference(ranges_ref);
+        } else {
+          // This should never happen but be tolerant if it does.
+          NOTREACHED();
+          ranges_ref = PersistentMemoryAllocator::kReferenceNull;
+        }
+      }
+    } else {
+      DCHECK_EQ(kTypeIdRangesArray, memory_allocator_->GetType(ranges_ref));
+    }
+
     PersistentMemoryAllocator::Reference counts_ref =
         memory_allocator_->Allocate(counts_bytes, kTypeIdCountsArray);
-    PersistentMemoryAllocator::Reference ranges_ref =
-        memory_allocator_->Allocate(ranges_bytes, kTypeIdRangesArray);
-    HistogramBase::Sample* ranges_data =
-        memory_allocator_->GetAsArray<HistogramBase::Sample>(
-            ranges_ref, kTypeIdRangesArray, ranges_count);
 
     // Only continue here if all allocations were successful. If they weren't,
     // there is no way to free the space but that's not really a problem since
     // the allocations only fail because the space is full or corrupt and so
     // any future attempts will also fail.
-    if (counts_ref && ranges_data && histogram_data) {
-      for (size_t i = 0; i < bucket_ranges->size(); ++i)
-        ranges_data[i] = bucket_ranges->range(i);
-
+    if (counts_ref && ranges_ref && histogram_data) {
       histogram_data->minimum = minimum;
       histogram_data->maximum = maximum;
       // |bucket_count| must fit within 32-bits or the allocation of the counts
@@ -785,24 +810,6 @@ void GlobalHistogramAllocator::ConstructFilePaths(const FilePath& dir,
 #endif  // !defined(OS_NACL)
 
 // static
-void GlobalHistogramAllocator::CreateWithSharedMemory(
-    std::unique_ptr<SharedMemory> memory,
-    size_t size,
-    uint64_t id,
-    StringPiece name) {
-  if ((!memory->memory() && !memory->Map(size)) ||
-      !SharedPersistentMemoryAllocator::IsSharedMemoryAcceptable(*memory)) {
-    NOTREACHED();
-    return;
-  }
-
-  DCHECK_LE(memory->mapped_size(), size);
-  Set(WrapUnique(
-      new GlobalHistogramAllocator(MakeUnique<SharedPersistentMemoryAllocator>(
-          std::move(memory), 0, StringPiece(), /*readonly=*/false))));
-}
-
-// static
 void GlobalHistogramAllocator::CreateWithSharedMemoryHandle(
     const SharedMemoryHandle& handle,
     size_t size) {
@@ -905,6 +912,8 @@ bool GlobalHistogramAllocator::WriteToPersistentLocation() {
 }
 
 void GlobalHistogramAllocator::DeletePersistentLocation() {
+  memory_allocator()->SetMemoryState(PersistentMemoryAllocator::MEMORY_DELETED);
+
 #if defined(OS_NACL)
   NOTREACHED();
 #else

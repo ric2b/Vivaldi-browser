@@ -80,5 +80,6 @@ def get_viewer_url(name):
 
 @decorators.Memoize
 def get_logdog_client():
-  logging.debug('Getting logdog client.')
+  logging.info('Getting logdog client.')
   return bootstrap.ButlerBootstrap.probe().stream_client()
+

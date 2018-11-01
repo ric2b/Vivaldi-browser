@@ -33,12 +33,9 @@ a local W3C repository source directory into a destination directory.
 
 import logging
 import mimetypes
-import re
 
 from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.layout_tests.models.test_expectations import TestExpectationParser
-from webkitpy.w3c.test_parser import TestParser
-from webkitpy.w3c.test_converter import convert_for_webkit
 
 _log = logging.getLogger(__name__)
 
@@ -50,8 +47,7 @@ class TestCopier(object):
 
         Args:
             host: An instance of Host.
-            source_repo_path: Path to the local checkout of a
-                web-platform-tests or csswg-test repository.
+            source_repo_path: Path to the local checkout of web-platform-tests.
             dest_dir_name: The name of the directory under the layout tests
                 directory where imported tests should be copied to.
                 TODO(qyearsley): This can be made into a constant.
@@ -73,7 +69,6 @@ class TestCopier(object):
                 self.filesystem.basename(self.source_repo_path)))
         self.import_in_place = (self.source_repo_path == self.destination_directory)
         self.dir_above_repo = self.filesystem.dirname(self.source_repo_path)
-        self.is_wpt = self.filesystem.basename(self.source_repo_path) == 'wpt'
 
         self.import_list = []
 
@@ -82,7 +77,7 @@ class TestCopier(object):
         self._prefixed_properties = {}
 
     def do_import(self):
-        _log.info("Importing %s into %s", self.source_repo_path, self.destination_directory)
+        _log.info('Importing %s into %s', self.source_repo_path, self.destination_directory)
         self.find_importable_tests()
         self.import_tests()
 
@@ -97,17 +92,10 @@ class TestCopier(object):
         for root, dirs, files in self.filesystem.walk(self.source_repo_path):
             cur_dir = root.replace(self.dir_above_repo + '/', '') + '/'
             _log.debug('Scanning %s...', cur_dir)
-            total_tests = 0
-            reftests = 0
-            jstests = 0
 
             # Files in 'tools' are not for browser testing, so we skip them.
             # See: http://web-platform-tests.org/writing-tests/general-guidelines.html#tools
             dirs_to_skip = ('.git', 'test-plan', 'tools')
-
-            # We copy all files in 'support', including HTML without metadata.
-            # See: http://web-platform-tests.org/writing-tests/general-guidelines.html#support-files
-            dirs_to_include = ('resources', 'support')
 
             if dirs:
                 for name in dirs_to_skip:
@@ -139,66 +127,17 @@ class TestCopier(object):
                         continue
                 # FIXME: This block should really be a separate function, but the early-continues make that difficult.
 
-                if filename.startswith('.') or filename.endswith('.pl'):
-                    _log.debug('Skipping: %s', path_full)
-                    _log.debug('  Reason: Hidden files and perl scripts are not necessary.')
-                    continue
                 if filename == 'OWNERS' or filename == 'reftest.list':
                     # See http://crbug.com/584660 and http://crbug.com/582838.
                     _log.debug('Skipping: %s', path_full)
                     _log.debug('  Reason: This file may cause Chromium presubmit to fail.')
                     continue
 
-                mimetype = mimetypes.guess_type(path_full)
-                if ('html' not in str(mimetype[0]) and
-                        'application/xhtml+xml' not in str(mimetype[0]) and
-                        'application/xml' not in str(mimetype[0])):
-                    copy_list.append({'src': path_full, 'dest': filename})
-                    continue
-
-                if self.filesystem.basename(root) in dirs_to_include:
-                    copy_list.append({'src': path_full, 'dest': filename})
-                    continue
-
-                test_parser = TestParser(path_full, self.host)
-                test_info = test_parser.analyze_test()
-                if test_info is None:
-                    copy_list.append({'src': path_full, 'dest': filename})
-                    continue
-
-                if 'reference' in test_info.keys():
-                    ref_path_full = test_info['reference']
-                    if not self.filesystem.exists(ref_path_full):
-                        _log.warning('Skipping: %s', path_full)
-                        _log.warning('  Reason: Ref file "%s" was not found.', ref_path_full)
-                        continue
-
-                    if not self.is_wpt:
-                        # For csswg-test, we still need to add a ref file
-                        # using WebKit naming conventions. See crbug.com/268729.
-                        # FIXME: Remove this when csswg-test is merged into wpt.
-                        test_basename = self.filesystem.basename(test_info['test'])
-                        ref_file = self.filesystem.splitext(test_basename)[0] + '-expected'
-                        ref_file += self.filesystem.splitext(ref_path_full)[1]
-                        copy_list.append({
-                            'src': test_info['reference'],
-                            'dest': ref_file,
-                            'reference_support_info': test_info['reference_support_info'],
-                        })
-
-                    reftests += 1
-                    total_tests += 1
-                    copy_list.append({'src': test_info['test'], 'dest': filename})
-
-                elif 'jstest' in test_info.keys():
-                    jstests += 1
-                    total_tests += 1
-                    copy_list.append({'src': path_full, 'dest': filename, 'is_jstest': True})
+                copy_list.append({'src': path_full, 'dest': filename})
 
             if copy_list:
                 # Only add this directory to the list if there's something to import
-                self.import_list.append({'dirname': root, 'copy_list': copy_list,
-                                         'reftests': reftests, 'jstests': jstests, 'total_tests': total_tests})
+                self.import_list.append({'dirname': root, 'copy_list': copy_list})
 
     def find_paths_to_skip(self):
         paths_to_skip = set()
@@ -210,22 +149,14 @@ class TestCopier(object):
         for line in expectation_lines:
             if 'SKIP' in line.expectations:
                 if line.specifiers:
-                    _log.warning("W3CImportExpectations:%s should not have any specifiers", line.line_numbers)
+                    _log.warning('W3CImportExpectations:%s should not have any specifiers', line.line_numbers)
                     continue
                 paths_to_skip.add(line.name)
         return paths_to_skip
 
     def import_tests(self):
         """Reads |self.import_list|, and converts and copies files to their destination."""
-        total_imported_tests = 0
-        total_imported_reftests = 0
-        total_imported_jstests = 0
-
         for dir_to_copy in self.import_list:
-            total_imported_tests += dir_to_copy['total_tests']
-            total_imported_reftests += dir_to_copy['reftests']
-            total_imported_jstests += dir_to_copy['jstests']
-
             if not dir_to_copy['copy_list']:
                 continue
 
@@ -246,11 +177,6 @@ class TestCopier(object):
 
         _log.info('')
         _log.info('Import complete')
-        _log.info('')
-        _log.info('IMPORTED %d TOTAL TESTS', total_imported_tests)
-        _log.info('Imported %d reftests', total_imported_reftests)
-        _log.info('Imported %d JS tests', total_imported_jstests)
-        _log.info('Imported %d pixel/manual tests', total_imported_tests - total_imported_jstests - total_imported_reftests)
         _log.info('')
 
         if self._prefixed_properties:
@@ -284,8 +210,6 @@ class TestCopier(object):
             _log.error('%s not found. Possible error in the test.', source_path)
             return None
 
-        reference_support_info = file_to_copy.get('reference_support_info') or None
-
         if not self.filesystem.exists(self.filesystem.dirname(dest_path)):
             if not self.import_in_place:
                 self.filesystem.maybe_make_directory(self.filesystem.dirname(dest_path))
@@ -296,35 +220,9 @@ class TestCopier(object):
         # there's no harm in copying the identical thing.
         _log.debug('  copying %s', relpath)
 
-        if self.should_try_to_convert(file_to_copy, source_path, dest_dir):
-            converted_file = convert_for_webkit(
-                dest_dir, filename=source_path,
-                reference_support_info=reference_support_info,
-                host=self.host)
-            for prefixed_property in converted_file[0]:
-                self._prefixed_properties.setdefault(prefixed_property, 0)
-                self._prefixed_properties[prefixed_property] += 1
-
-            self.filesystem.write_text_file(dest_path, converted_file[1])
-        else:
-            if not self.import_in_place:
-                self.filesystem.copyfile(source_path, dest_path)
-                if self.filesystem.read_binary_file(source_path)[:2] == '#!':
-                    self.filesystem.make_executable(dest_path)
+        if not self.import_in_place:
+            self.filesystem.copyfile(source_path, dest_path)
+            if self.filesystem.read_binary_file(source_path)[:2] == '#!':
+                self.filesystem.make_executable(dest_path)
 
         return dest_path.replace(self._webkit_root, '')
-
-    @staticmethod
-    def should_try_to_convert(file_to_copy, source_path, dest_dir):
-        """Checks whether we should try to modify the file when importing."""
-        if file_to_copy.get('is_jstest', False):
-            return False
-
-        # Conversion is not necessary for any tests in wpt now; see http://crbug.com/654081.
-        # Note, we want to move away from converting files, see http://crbug.com/663773.
-        if re.search(r'[/\\]external[/\\]wpt[/\\]', dest_dir):
-            return False
-
-        # Only HTML, XHTML and CSS files should be converted.
-        mimetype, _ = mimetypes.guess_type(source_path)
-        return mimetype in ('text/html', 'application/xhtml+xml', 'text/css')

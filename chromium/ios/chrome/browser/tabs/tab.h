@@ -11,14 +11,15 @@
 #include <vector>
 
 #import "components/signin/ios/browser/manage_accounts_delegate.h"
+#import "ios/chrome/browser/web/sad_tab_tab_helper_delegate.h"
 #include "ios/net/request_tracker.h"
+#include "ios/web/public/user_agent.h"
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
 #include "ui/base/page_transition_types.h"
 
 @class AutofillController;
 @class AutoReloadBridge;
 @class CastController;
-@protocol CRWNativeContentProvider;
 @class CRWWebController;
 @class ExternalAppLauncher;
 @class FormInputAccessoryViewController;
@@ -33,7 +34,6 @@ class GURL;
 @class PasswordController;
 @class SnapshotManager;
 @protocol SnapshotOverlayProvider;
-@protocol StoreKitLauncher;
 @class FormSuggestionController;
 @protocol TabDelegate;
 @protocol TabDialogDelegate;
@@ -41,6 +41,7 @@ class GURL;
 @protocol TabHeadersDelegate;
 @class TabModel;
 @protocol TabSnapshottingDelegate;
+@protocol FindInPageControllerDelegate;
 
 namespace infobars {
 class InfoBarManager;
@@ -59,7 +60,6 @@ namespace web {
 class NavigationItem;
 class NavigationManager;
 class NavigationManagerImpl;
-struct Referrer;
 class WebState;
 }
 
@@ -95,7 +95,8 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // desktop Chrome's TabContents in that it encapsulates rendering. Acts as the
 // delegate for the CRWWebController in order to process info about pages having
 // loaded.
-@interface Tab : NSObject<CRWWebDelegate, ManageAccountsDelegate>
+@interface Tab
+    : NSObject<CRWWebDelegate, ManageAccountsDelegate, SadTabTabHelperDelegate>
 
 // Browser state associated with this Tab.
 @property(nonatomic, readonly) ios::ChromeBrowserState* browserState;
@@ -119,12 +120,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // ID associated with this tab.
 @property(nonatomic, readonly) NSString* tabId;
 
-// ID of the opener of this tab.
-@property(nonatomic, readonly) NSString* openerID;
-
-// NavigationIndex of the opener of this tab.
-@property(nonatomic, readonly) NSInteger openerNavigationIndex;
-
 // |YES| if snapshot overlay should load from the grey image cache.
 @property(nonatomic, assign) BOOL useGreyImageCache;
 
@@ -139,11 +134,12 @@ extern NSString* const kProxyPassthroughHeaderValue;
 @property(nonatomic, assign) id<TabHeadersDelegate> tabHeadersDelegate;
 @property(nonatomic, assign) id<TabSnapshottingDelegate>
     tabSnapshottingDelegate;
+@property(nonatomic, readonly) id<FindInPageControllerDelegate>
+    findInPageControllerDelegate;
 
 // Whether or not desktop user agent is used for the currently visible page.
 @property(nonatomic, readonly) BOOL usesDesktopUserAgent;
 
-@property(nonatomic, assign) id<StoreKitLauncher> storeKitLauncher;
 @property(nonatomic, assign) id<FullScreenControllerDelegate>
     fullScreenControllerDelegate;
 @property(nonatomic, readonly)
@@ -165,42 +161,10 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // |YES| if the tab has finished loading.
 @property(nonatomic, readonly) BOOL loadFinished;
 
-// Creates a new tab with the given state. |opener| is nil unless another tab
-// is conceptually the parent of this tab. |openedByDOM| is YES if the page was
-// opened by DOM. |model| and |browserState| must not be nil.
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-                              opener:(Tab*)opener
-                         openedByDOM:(BOOL)openedByDOM
-                               model:(TabModel*)parentModel;
-
-// Create a new tab with given web state and tab model. All must be non-nil.
-- (instancetype)initWithWebState:(std::unique_ptr<web::WebState>)webState
-                           model:(TabModel*)parentModel;
-
-// Create a new tab with given web state and tab model, optionally attaching
-// the tab helpers (controlled by |attachTabHelpers|). All must be non-nil.
-- (instancetype)initWithWebState:(std::unique_ptr<web::WebState>)webState
-                           model:(TabModel*)parentModel
-                attachTabHelpers:(BOOL)attachTabHelpers
-    NS_DESIGNATED_INITIALIZER;
+// Creates a new Tab with the given WebState.
+- (instancetype)initWithWebState:(web::WebState*)webState;
 
 - (instancetype)init NS_UNAVAILABLE;
-
-// Creates a new Tab instance loading |url| with |transition|, configured
-// with no TabModel. |opener| may be nil, and behaves exactly as for
-// -initWithBrowserState:opener:openedByDOM:model. |configuration| is a block
-// that will be run before |url| starts loading, and is the correct place to set
-// properties and delegates on the tab. Calling code must take ownership of the
-// tab -- this is particularly important with Tab instances, because they will
-// fail a DCHECK if they are deallocated without -close being called.
-+ (Tab*)newPreloadingTabWithBrowserState:(ios::ChromeBrowserState*)browserState
-                                     url:(const GURL&)url
-                                referrer:(const web::Referrer&)referrer
-                              transition:(ui::PageTransition)transition
-                                provider:(id<CRWNativeContentProvider>)provider
-                                  opener:(Tab*)opener
-                        desktopUserAgent:(BOOL)desktopUserAgent
-                           configuration:(void (^)(Tab*))configuration;
 
 // Sets the parent tab model for this tab.  Can only be called if the tab does
 // not already have a parent tab model set.
@@ -209,10 +173,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Replace the content of the tab with the content described by |SessionTab|.
 - (void)loadSessionTab:(const sessions::SessionTab*)sessionTab;
-
-// Stop the page loading.
-// Equivalent to the user pressing 'stop', or a window.stop() command.
-- (void)stopLoading;
 
 // Triggers the asynchronous loading of the tab's favicon. This will be done
 // automatically when a page loads, but this can be used to trigger favicon
@@ -236,15 +196,8 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // after this method completes.
 - (void)terminateNetworkActivity;
 
-// Starts the tab's shutdown sequence.
-- (void)close;
-
 // Dismisses all modals owned by the tab.
 - (void)dismissModals;
-
-// Opens StoreKit modal to download a native application identified with
-// |appId|.
-- (void)openAppStore:(NSString*)appId;
 
 // Returns the NavigationManager for this tab's WebState. Requires WebState to
 // be populated. Can return null.
@@ -261,7 +214,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Navigate forwards or backwards to |item|.
 - (void)goToItem:(const web::NavigationItem*)item;
-- (void)reload;
 
 // Navigates forwards or backwards.
 // TODO(crbug.com/661664): These are passthroughs to CRWWebController. Convert
@@ -289,13 +241,10 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // current content.
 - (void)switchToReaderMode;
 
-// Update internal state to use the desktop user agent. Must call
-// -reloadWebViewAndURL for changes to take effect.
-- (void)enableDesktopUserAgent;
-
-// Remove the UIWebView and reload the current url.  Used by request desktop
-// so the updated user agent is used.
-- (void)reloadForDesktopUserAgent;
+// Loads the original url of the last non-redirect item (including non-history
+// items). Used by request desktop/mobile site so that the updated user agent is
+// used.
+- (void)reloadWithUserAgentType:(web::UserAgentType)userAgentType;
 
 // Ensures the toolbar visibility matches |visible|.
 - (void)updateFullscreenWithToolbarVisible:(BOOL)visible;
@@ -338,9 +287,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Called when the snapshot of the content will be taken.
 - (void)willUpdateSnapshot;
 
-// Enables or disables usage of web views inside the Tab.
-- (void)setWebUsageEnabled:(BOOL)webUsageEnabled;
-
 // Returns the NativeAppNavigationController for this tab.
 - (NativeAppNavigationController*)nativeAppNavigationController;
 
@@ -352,6 +298,10 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Evaluates U2F result.
 - (void)evaluateU2FResultFromURL:(const GURL&)url;
+
+// Cancels prerendering. It is an error to call this on anything except a
+// prerender tab (where |isPrerenderTab| is set to YES).
+- (void)discardPrerender;
 
 @end
 

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es-419">
+<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos los derechos reservados.</translation>
+<translation id="5743878272102782872">Administrador de tareas - Vivaldi</translation>
 <translation id="6119720677647982841"><ph name="BEGIN_BOLD" />Advertencia:<ph name="END_BOLD" /> Vivaldi no puede evitar que las extensiones registren tu historial de búsqueda. Para desactivar la extensión en modo incógnito, desactiva la casilla de esta opción.</translation>
 </translationbundle>

@@ -30,12 +30,15 @@ class MESSAGE_CENTER_EXPORT CustomNotificationView : public MessageView {
   void OnContentFocused();
   void OnContentBlured();
 
-  // Overidden from MessageView:
+  // Overridden from MessageView:
   void SetDrawBackgroundAsActive(bool active) override;
   bool IsCloseButtonFocused() const override;
   void RequestFocusOnCloseButton() override;
   bool IsPinned() const override;
   void UpdateControlButtonsVisibility() override;
+
+  // views::SlideOutController::Delegate:
+  void OnSlideChanged() override;
 
   // Overridden from views::View:
   const char* GetClassName() const override;

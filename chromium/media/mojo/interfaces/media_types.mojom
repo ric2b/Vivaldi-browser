@@ -24,6 +24,10 @@ enum AudioCodec;
 [Native]
 enum ChannelLayout;
 
+// See media/base/output_device_info.h for descriptions.
+[Native]
+enum OutputDeviceStatus;
+
 // See media/base/sample_format.h for descriptions.
 [Native]
 enum SampleFormat;
@@ -61,6 +65,44 @@ struct EncryptionScheme {
   Pattern pattern;
 };
 
+// This defines a mojo transport format for media::VideoColorSpace.
+// See media/base/video_color_space.h for description.
+struct VideoColorSpace {
+  [Native]
+  enum PrimaryID;
+
+  [Native]
+  enum TransferID;
+
+  [Native]
+  enum MatrixID;
+
+  [Native]
+  enum RangeID;
+
+  PrimaryID primaries;
+  TransferID transfer;
+  MatrixID matrix;
+  RangeID range;
+};
+
+// This defines a mojo transport format for media::HDRMetadata.
+// See media/base/hdr_metadata.h for description.
+struct MasteringMetadata {
+  gfx.mojom.PointF primary_r;
+  gfx.mojom.PointF primary_g;
+  gfx.mojom.PointF primary_b;
+  gfx.mojom.PointF white_point;
+  float luminance_max;
+  float luminance_min;
+};
+
+struct HDRMetadata {
+  MasteringMetadata mastering_metadata;
+  uint32 max_content_light_level;
+  uint32 max_frame_average_light_level;
+};
+
 // This defines a mojo transport format for media::AudioDecoderConfig.
 // See media/base/audio_decoder_config.h for descriptions.
 struct AudioDecoderConfig {
@@ -86,6 +128,8 @@ struct VideoDecoderConfig {
   gfx.mojom.Size natural_size;
   array<uint8> extra_data;
   EncryptionScheme encryption_scheme;
+  VideoColorSpace color_space_info;
+  HDRMetadata? hdr_metadata;
 };
 
 // Native struct media::SubsampleEntry;
@@ -126,9 +170,6 @@ struct DecoderBuffer {
   // These fields indicate the amount of data to discard after decoding.
   mojo.common.mojom.TimeDelta front_discard;
   mojo.common.mojom.TimeDelta back_discard;
-
-  // Indicates this buffer is part of a splice around |splice_timestamp|.
-  mojo.common.mojom.TimeDelta splice_timestamp;
 };
 
 // This defines a mojo transport format for media::AudioBuffer.
@@ -178,8 +219,8 @@ struct VideoFrame {
   // Timestamp in microseconds of the associated frame.
   mojo.common.mojom.TimeDelta timestamp;
 
-  // Contents of the video frame.
-  VideoFrameData data;
+  // Contents of the video frame. Will be null for end of stream frames.
+  VideoFrameData? data;
 };
 
 // Possible choices for storing VideoFrame data.

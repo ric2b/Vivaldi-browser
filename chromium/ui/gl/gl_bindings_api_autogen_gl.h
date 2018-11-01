@@ -170,7 +170,10 @@ void glCopyBufferSubDataFn(GLenum readTarget,
                            GLintptr writeOffset,
                            GLsizeiptr size) override;
 void glCopySubTextureCHROMIUMFn(GLuint sourceId,
+                                GLint sourceLevel,
+                                GLenum destTarget,
                                 GLuint destId,
+                                GLint destLevel,
                                 GLint xoffset,
                                 GLint yoffset,
                                 GLint x,
@@ -206,7 +209,10 @@ void glCopyTexSubImage3DFn(GLenum target,
                            GLsizei width,
                            GLsizei height) override;
 void glCopyTextureCHROMIUMFn(GLuint sourceId,
+                             GLint sourceLevel,
+                             GLenum destTarget,
                              GLuint destId,
+                             GLint destLevel,
                              GLint internalFormat,
                              GLenum destType,
                              GLboolean unpackFlipY,
@@ -843,6 +849,8 @@ void glReadnPixelsRobustANGLEFn(GLint x,
                                 GLenum type,
                                 GLsizei bufSize,
                                 GLsizei* length,
+                                GLsizei* columns,
+                                GLsizei* rows,
                                 void* data) override;
 void glReadPixelsFn(GLint x,
                     GLint y,
@@ -859,6 +867,8 @@ void glReadPixelsRobustANGLEFn(GLint x,
                                GLenum type,
                                GLsizei bufSize,
                                GLsizei* length,
+                               GLsizei* columns,
+                               GLsizei* rows,
                                void* pixels) override;
 void glReleaseShaderCompilerFn(void) override;
 void glRenderbufferStorageEXTFn(GLenum target,
@@ -885,6 +895,7 @@ void glRenderbufferStorageMultisampleIMGFn(GLenum target,
                                            GLenum internalformat,
                                            GLsizei width,
                                            GLsizei height) override;
+void glRequestExtensionANGLEFn(const char* name) override;
 void glResumeTransformFeedbackFn(void) override;
 void glSampleCoverageFn(GLclampf value, GLboolean invert) override;
 void glSamplerParameterfFn(GLuint sampler,

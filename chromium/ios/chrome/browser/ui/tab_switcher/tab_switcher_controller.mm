@@ -50,7 +50,6 @@
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -459,7 +458,7 @@ enum class SnapshotViewOption {
   }
 }
 
-- (TabSwitcherTransitionContextContent*)transitionContextContextForTabModel:
+- (TabSwitcherTransitionContextContent*)transitionContextContentForTabModel:
     (TabModel*)tabModel {
   if ([tabModel isOffTheRecord])
     return self.transitionContext.incognitoContent;
@@ -500,7 +499,7 @@ enum class SnapshotViewOption {
   [[self view] setUserInteractionEnabled:NO];
 
   TabSwitcherTransitionContextContent* transitionContextContent =
-      [self transitionContextContextForTabModel:tabModel];
+      [self transitionContextContentForTabModel:tabModel];
   DCHECK(transitionContextContent);
 
   ToolbarController* toolbarController =
@@ -568,16 +567,19 @@ enum class SnapshotViewOption {
   base::WeakNSObject<UIImageView> weakTabScreenshotImageView(
       tabScreenshotImageView.get());
 
-  if (self.transitionContext.initialTabModel != tabModel ||
-      transitionContextContent.initialSelectedTabIndex != selectedTabIndex) {
+  if ([self initialTabModelAndTabIDMatchesTabModel:tabModel
+                                             tabID:selectedTab.tabId]) {
+    tabScreenshotImageView.get().image =
+        self.transitionContext.tabSnapshotImage;
+  } else {
+    // If transitioning to a different tab than the one animated in
+    // from, a new snapshot should be generated instead of using the transition
+    // context
     tabScreenshotImageView.get().image =
         [self updateScreenshotForCellIfNeeded:selectedCell tabModel:tabModel];
     [selectedTab retrieveSnapshot:^(UIImage* snapshot) {
       [weakTabScreenshotImageView setImage:snapshot];
     }];
-  } else {
-    tabScreenshotImageView.get().image =
-        self.transitionContext.tabSnapshotImage;
   }
 
   const CGSize tabScreenshotImageSize = tabScreenshotImageView.get().image.size;
@@ -682,7 +684,7 @@ enum class SnapshotViewOption {
       (transitionType == TransitionType::TRANSITION_DISMISS) ? 0 : 1.0;
 
   base::WeakNSObject<TabSwitcherController> weakSelf(self);
-  void (^completionBlock)(BOOL) = ^(BOOL) {
+  void (^completionBlock)(BOOL) = ^(BOOL finished) {
     base::scoped_nsobject<TabSwitcherController> strongSelf([weakSelf retain]);
 
     [tabStripPlaceholderView removeFromSuperview];
@@ -690,8 +692,12 @@ enum class SnapshotViewOption {
     [selectedCell setHidden:NO];
     [placeholderView removeFromSuperview];
 
-    if (transitionType == TransitionType::TRANSITION_DISMISS)
+    if (transitionType == TransitionType::TRANSITION_DISMISS) {
       [strongSelf restoreWindowBackgroundColor];
+      if (finished) {
+        [strongSelf setTransitionContext:nil];
+      }
+    }
     [[[strongSelf delegate] tabSwitcherTransitionToolbarOwner]
         reparentToolbarController];
     [[strongSelf view] setUserInteractionEnabled:YES];
@@ -714,6 +720,14 @@ enum class SnapshotViewOption {
                       options:UIViewAnimationCurveEaseInOut
                    animations:animationBlock
                    completion:completionBlock];
+}
+
+- (BOOL)initialTabModelAndTabIDMatchesTabModel:(nonnull TabModel*)tabModel
+                                         tabID:(nonnull NSString*)tabID {
+  TabModel* initialTabModel = self.transitionContext.initialTabModel;
+  NSString* initialTabID =
+      [self transitionContextContentForTabModel:initialTabModel].initialTabID;
+  return initialTabModel == tabModel && [initialTabID isEqualToString:tabID];
 }
 
 - (void)updateLocalPanelsCells {
@@ -828,56 +842,25 @@ enum class SnapshotViewOption {
                            atIndex:(NSUInteger)position
                         transition:(ui::PageTransition)transition
                           tabModel:(TabModel*)tabModel {
-  web::NavigationManager::WebLoadParams params(URL);
-  params.referrer = web::Referrer();
-  params.transition_type = transition;
+  NSUInteger tabIndex = position;
+  if (position > tabModel.count)
+    tabIndex = tabModel.count;
 
-  DCHECK(tabModel.browserState);
+  web::NavigationManager::WebLoadParams loadParams(URL);
+  loadParams.transition_type = transition;
 
-  base::scoped_nsobject<Tab> tab([[Tab alloc]
-      initWithBrowserState:tabModel.browserState
-                    opener:nil
-               openedByDOM:NO
-                     model:tabModel]);
-  [tab webController].webUsageEnabled = tabModel.webUsageEnabled;
+  Tab* tab = [tabModel insertTabWithLoadParams:loadParams
+                                        opener:nil
+                                   openedByDOM:NO
+                                       atIndex:tabIndex
+                                  inBackground:NO];
 
-  ProceduralBlock dismissWithNewTab = ^{
-    NSUInteger tabIndex = position;
-    if (position > tabModel.count)
-      tabIndex = tabModel.count;
-    [tabModel insertTab:tab atIndex:tabIndex];
-
-    if (tabModel.tabUsageRecorder)
-      tabModel.tabUsageRecorder->TabCreatedForSelection(tab);
-
-    [[tab webController] loadWithParams:params];
-
-    if (tabModel.webUsageEnabled) {
-      [tab setWebUsageEnabled:tabModel.webUsageEnabled];
-      [[tab webController] triggerPendingLoad];
-    }
-
-    NSDictionary* userInfo = @{
-      kTabModelTabKey : tab,
-      kTabModelOpenInBackgroundKey : @(NO),
-    };
-
-    [[NSNotificationCenter defaultCenter]
-        postNotificationName:kTabModelNewTabWillOpenNotification
-                      object:self
-                    userInfo:userInfo];
-
-    [tabModel setCurrentTab:tab];
-
-    [self
-        tabSwitcherDismissWithModel:tabModel
+  [self tabSwitcherDismissWithModel:tabModel
                            animated:YES
                      withCompletion:^{
                        [self.delegate tabSwitcherDismissTransitionDidEnd:self];
                      }];
-  };
 
-  dismissWithNewTab();
   return tab;
 }
 
@@ -1227,7 +1210,13 @@ enum class SnapshotViewOption {
   DCHECK(tab);
   const TabSwitcherSessionType panelSessionType =
       tabSwitcherPanelController.sessionType;
-  [tab close];
+  TabModel* tabModel =
+      panelSessionType == TabSwitcherSessionType::OFF_THE_RECORD_SESSION
+          ? [_tabSwitcherModel otrTabModel]
+          : [_tabSwitcherModel mainTabModel];
+  DCHECK_NE(NSNotFound, static_cast<NSInteger>([tabModel indexOfTab:tab]));
+  [tabModel closeTab:tab];
+
   if (panelSessionType == TabSwitcherSessionType::OFF_THE_RECORD_SESSION) {
     base::RecordAction(
         base::UserMetricsAction("MobileTabSwitcherCloseIncognitoTab"));

@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/shared_quad_state.h"
@@ -24,15 +24,12 @@
 
 namespace cc {
 
+class AppendQuadsData;
 class DamageTracker;
 class FilterOperations;
 class Occlusion;
-class RenderPassSink;
 class LayerImpl;
-class LayerIterator;
 class LayerTreeImpl;
-
-struct AppendQuadsData;
 
 class CC_EXPORT RenderSurfaceImpl {
  public:
@@ -99,6 +96,14 @@ class CC_EXPORT RenderSurfaceImpl {
     contributes_to_drawn_surface_ = contributes_to_drawn_surface;
   }
 
+  void set_has_contributing_layer_that_escapes_clip(
+      bool contributing_layer_escapes_clip) {
+    has_contributing_layer_that_escapes_clip_ = contributing_layer_escapes_clip;
+  }
+  bool has_contributing_layer_that_escapes_clip() const {
+    return has_contributing_layer_that_escapes_clip_;
+  }
+
   void CalculateContentRectFromAccumulatedContentRect(int max_texture_size);
   void SetContentRectToViewport();
   void SetContentRectForTesting(const gfx::Rect& rect);
@@ -132,7 +137,7 @@ class CC_EXPORT RenderSurfaceImpl {
   const FilterOperations& Filters() const;
   const FilterOperations& BackgroundFilters() const;
   gfx::PointF FiltersOrigin() const;
-  gfx::Transform FiltersTransform() const;
+  gfx::Transform SurfaceScale() const;
 
   bool HasCopyRequest() const;
 
@@ -147,7 +152,7 @@ class CC_EXPORT RenderSurfaceImpl {
 
   int GetRenderPassId();
 
-  void AppendRenderPasses(RenderPassSink* pass_sink);
+  std::unique_ptr<RenderPass> CreateRenderPass();
   void AppendQuads(RenderPass* render_pass, AppendQuadsData* append_quads_data);
 
   int TransformTreeIndex() const;
@@ -156,13 +161,16 @@ class CC_EXPORT RenderSurfaceImpl {
   void set_effect_tree_index(int index) { effect_tree_index_ = index; }
   int EffectTreeIndex() const;
 
+  const EffectNode* OwningEffectNode() const;
+
  private:
   void SetContentRect(const gfx::Rect& content_rect);
   gfx::Rect CalculateClippedAccumulatedContentRect();
   gfx::Rect CalculateExpandedClipForFilters(
       const gfx::Transform& target_to_surface);
-
-  const EffectNode* OwningEffectNode() const;
+  void TileMaskLayer(RenderPass* render_pass,
+                     SharedQuadState* shared_quad_state,
+                     const gfx::Rect& visible_layer_rect);
 
   LayerTreeImpl* layer_tree_impl_;
   int stable_effect_id_;
@@ -196,6 +204,8 @@ class CC_EXPORT RenderSurfaceImpl {
 
   // Is used to calculate the content rect from property trees.
   gfx::Rect accumulated_content_rect_;
+  // Is used to decide if the surface is clipped.
+  bool has_contributing_layer_that_escapes_clip_ : 1;
   bool surface_property_changed_ : 1;
   bool ancestor_property_changed_ : 1;
 
@@ -209,12 +219,6 @@ class CC_EXPORT RenderSurfaceImpl {
   const RenderSurfaceImpl* nearest_occlusion_immune_ancestor_;
 
   std::unique_ptr<DamageTracker> damage_tracker_;
-
-  // For LayerIteratorActions
-  int target_render_surface_layer_index_history_;
-  size_t current_layer_index_history_;
-
-  friend class LayerIterator;
 
   DISALLOW_COPY_AND_ASSIGN(RenderSurfaceImpl);
 };

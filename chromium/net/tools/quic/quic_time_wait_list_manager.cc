@@ -15,15 +15,12 @@
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_packets.h"
-#include "net/quic/core/quic_server_session_base.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/platform/api/quic_clock.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_map_util.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_socket_address.h"
-
-using base::StringPiece;
 
 namespace net {
 

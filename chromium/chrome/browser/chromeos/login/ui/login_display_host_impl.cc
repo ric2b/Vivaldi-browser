@@ -7,12 +7,12 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/wallpaper/wallpaper_controller.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
-#include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/system/tray/system_tray.h"
+#include "ash/wallpaper/wallpaper_controller.h"
+#include "ash/wallpaper/wallpaper_delegate.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -292,6 +292,16 @@ void ResetKeyboardOverscrollOverride() {
       keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_NONE);
 }
 
+void ScheduleCompletionCallbacks(std::vector<base::OnceClosure>&& callbacks) {
+  for (auto& callback : callbacks) {
+    if (callback.is_null())
+      continue;
+
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  std::move(callback));
+  }
+}
+
 }  // namespace
 
 namespace chromeos {
@@ -304,17 +314,17 @@ class LoginDisplayHostImpl::KeyboardDrivenOobeKeyHandler
     : public ui::EventHandler {
  public:
   KeyboardDrivenOobeKeyHandler() {
-    ash::Shell::GetInstance()->AddPreTargetHandler(this);
+    ash::Shell::Get()->AddPreTargetHandler(this);
   }
   ~KeyboardDrivenOobeKeyHandler() override {
-    ash::Shell::GetInstance()->RemovePreTargetHandler(this);
+    ash::Shell::Get()->RemovePreTargetHandler(this);
   }
 
  private:
   // ui::EventHandler
   void OnKeyEvent(ui::KeyEvent* event) override {
     if (event->key_code() == ui::VKEY_F6) {
-      ash::Shell::GetInstance()->GetPrimarySystemTray()->CloseSystemBubble();
+      ash::Shell::Get()->GetPrimarySystemTray()->CloseSystemBubble();
       event->StopPropagation();
     }
   }
@@ -379,7 +389,7 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
   }
 
   if (!ash_util::IsRunningInMash())
-    ash::WmShell::Get()->AddShellObserver(this);
+    ash::Shell::Get()->AddShellObserver(this);
   else
     NOTIMPLEMENTED();
   display::Screen::GetScreen()->AddObserver(this);
@@ -498,7 +508,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
   }
 
   if (!ash_util::IsRunningInMash())
-    ash::WmShell::Get()->RemoveShellObserver(this);
+    ash::Shell::Get()->RemoveShellObserver(this);
   else
     NOTIMPLEMENTED();
   display::Screen::GetScreen()->RemoveObserver(this);
@@ -520,6 +530,8 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
 
   views::FocusManager::set_arrow_key_traversal_enabled(false);
   ResetLoginWindowAndView();
+
+  ScheduleCompletionCallbacks(std::move(completion_callbacks_));
 
   keep_alive_.reset();
 
@@ -554,15 +566,18 @@ void LoginDisplayHostImpl::BeforeSessionStart() {
   session_starting_ = true;
 }
 
-void LoginDisplayHostImpl::Finalize() {
-  DVLOG(1) << "Session starting";
+void LoginDisplayHostImpl::Finalize(base::OnceClosure completion_callback) {
+  DVLOG(1) << "Finalizing LoginDisplayHost. User session starting";
+
   // When adding another user into the session, we defer the wallpaper's
   // animation in order to prevent the flashing of the previous user's windows.
   // See crbug.com/541864.
-  if (ash::WmShell::HasInstance() &&
+  if (ash::ShellPort::HasInstance() &&
       finalize_animation_type_ != ANIMATION_ADD_USER) {
-    ash::WmShell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
+    ash::Shell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
   }
+
+  completion_callbacks_.push_back(std::move(completion_callback));
 
   switch (finalize_animation_type_) {
     case ANIMATION_NONE:
@@ -656,11 +671,11 @@ AppLaunchController* LoginDisplayHostImpl::GetAppLaunchController() {
 }
 
 void LoginDisplayHostImpl::StartUserAdding(
-    const base::Closure& completion_callback) {
+    base::OnceClosure completion_callback) {
   DisableKeyboardOverscroll();
 
   restore_path_ = RESTORE_ADD_USER_INTO_SESSION;
-  completion_callback_ = completion_callback;
+  completion_callbacks_.push_back(std::move(completion_callback));
   // Animation is not supported in Mash
   if (!ash_util::IsRunningInMash())
     finalize_animation_type_ = ANIMATION_ADD_USER;
@@ -685,7 +700,7 @@ void LoginDisplayHostImpl::StartUserAdding(
         ash::kShellWindowId_LockScreenContainersContainer);
     lock_container->layer()->SetOpacity(1.0);
 
-    ash::WmShell::Get()->wallpaper_controller()->MoveToLockedContainer();
+    ash::Shell::Get()->wallpaper_controller()->MoveToLockedContainer();
   } else {
     NOTIMPLEMENTED();
   }
@@ -714,7 +729,7 @@ void LoginDisplayHostImpl::CancelUserAdding() {
   // canceled. Changing to ANIMATION_NONE so that Finalize() shuts down the host
   // immediately.
   finalize_animation_type_ = ANIMATION_NONE;
-  Finalize();
+  Finalize(base::OnceClosure());
 }
 
 void LoginDisplayHostImpl::StartSignInScreen(
@@ -948,7 +963,7 @@ void LoginDisplayHostImpl::Observe(
     if (!ash_util::IsRunningInMash()) {
       // For new user, move wallpaper to lock container so that windows created
       // during the user image picker step are below it.
-      ash::WmShell::Get()->wallpaper_controller()->MoveToLockedContainer();
+      ash::Shell::Get()->wallpaper_controller()->MoveToLockedContainer();
     } else {
       NOTIMPLEMENTED();
     }
@@ -959,7 +974,7 @@ void LoginDisplayHostImpl::Observe(
     VLOG(1) << "Login WebUI >> wp animation done";
     is_wallpaper_loaded_ = true;
     if (!ash_util::IsRunningInMash()) {
-      ash::WmShell::Get()
+      ash::Shell::Get()
           ->wallpaper_delegate()
           ->OnWallpaperBootAnimationFinished();
     } else {
@@ -1024,7 +1039,9 @@ void LoginDisplayHostImpl::OnActiveOutputNodeChanged() {
 ////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostImpl, ash::ShellObserver:
 
-void LoginDisplayHostImpl::OnVirtualKeyboardStateChanged(bool activated) {
+void LoginDisplayHostImpl::OnVirtualKeyboardStateChanged(
+    bool activated,
+    ash::WmWindow* root_window) {
   if (keyboard::KeyboardController::GetInstance()) {
     if (activated) {
       if (!is_observing_keyboard_) {
@@ -1111,14 +1128,10 @@ void LoginDisplayHostImpl::ShutdownDisplayHost(bool post_quit_task) {
   if (post_quit_task)
     base::MessageLoop::current()->QuitWhenIdle();
 
-  if (!completion_callback_.is_null())
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  completion_callback_);
-
   if (ash::Shell::HasInstance() &&
       finalize_animation_type_ == ANIMATION_ADD_USER) {
     if (!ash_util::IsRunningInMash()) {
-      ash::WmShell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
+      ash::Shell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
     } else {
       NOTIMPLEMENTED();
     }
@@ -1130,18 +1143,11 @@ void LoginDisplayHostImpl::ScheduleWorkspaceAnimation() {
     NOTIMPLEMENTED();
     return;
   }
-  if (ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
-                               ash::kShellWindowId_WallpaperContainer)
-          ->children()
-          .empty()) {
-    // If there is no wallpaper window, don't perform any animation on the
-    // default and wallpaper layer because there is nothing behind it.
-    return;
-  }
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableLoginAnimations))
-    ash::Shell::GetInstance()->DoInitialWorkspaceAnimation();
+          switches::kDisableLoginAnimations)) {
+    ash::Shell::Get()->DoInitialWorkspaceAnimation();
+  }
 }
 
 void LoginDisplayHostImpl::ScheduleFadeOutAnimation(int animation_speed_ms) {
@@ -1209,7 +1215,7 @@ void LoginDisplayHostImpl::StartPostponedWebUI() {
       StartSignInScreen(LoginScreenContext());
       break;
     case RESTORE_ADD_USER_INTO_SESSION:
-      StartUserAdding(completion_callback_);
+      StartUserAdding(base::OnceClosure());
       break;
     default:
       NOTREACHED();

@@ -18,6 +18,7 @@
 #include "base/task_scheduler/task_scheduler.h"
 #include "build/build_config.h"
 #include "content/public/common/content_client.h"
+#include "media/base/decode_capabilities.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
@@ -29,7 +30,6 @@ class SkBitmap;
 
 namespace base {
 class FilePath;
-class SchedulerWorkerPoolParams;
 }
 
 namespace blink {
@@ -264,10 +264,21 @@ class CONTENT_EXPORT ContentRendererClient {
   // Allows an embedder to provide a default image decode color space.
   virtual std::unique_ptr<gfx::ICCProfile> GetImageDecodeColorProfile();
 
-  // Gives the embedder a chance to register the key system(s) it supports by
-  // populating |key_systems|.
+  // Allows embedder to register the key system(s) it supports by populating
+  // |key_systems|.
   virtual void AddSupportedKeySystems(
       std::vector<std::unique_ptr<media::KeySystemProperties>>* key_systems);
+
+  // Signal that embedder has changed key systems.
+  // TODO(chcunningham): Refactor this to a proper change "observer" API that is
+  // less fragile (don't assume AddSupportedKeySystems has just one caller).
+  virtual bool IsKeySystemsUpdateNeeded();
+
+  // Allows embedder to describe customized audio capabilities.
+  virtual bool IsSupportedAudioConfig(const media::AudioConfig& config);
+
+  // Allows embedder to describe customized video capabilities.
+  virtual bool IsSupportedVideoConfig(const media::VideoConfig& config);
 
   // Returns true if we should report a detailed message (including a stack
   // trace) for console [logs|errors|exceptions]. |source| is the WebKit-
@@ -319,6 +330,10 @@ class CONTENT_EXPORT ContentRendererClient {
   // This method may invalidate the frame.
   virtual void RunScriptsAtDocumentEnd(RenderFrame* render_frame) {}
 
+  // Notifies that the window.onload event is about to fire.
+  // This method may invalidate the frame.
+  virtual void RunScriptsAtDocumentIdle(RenderFrame* render_frame) {}
+
   // Allows subclasses to enable some runtime features before Blink has
   // started.
   virtual void SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() {}
@@ -355,12 +370,10 @@ class CONTENT_EXPORT ContentRendererClient {
   // An empty URL is returned if the URL is not overriden.
   virtual GURL OverrideFlashEmbedWithHTML(const GURL& url);
 
-  // Provides parameters for initializing the global task scheduler. If
-  // |params_vector| is left empty, default parameters are used.
-  virtual void GetTaskSchedulerInitializationParams(
-      std::vector<base::SchedulerWorkerPoolParams>* params_vector,
-      base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
-          index_to_traits_callback) {}
+  // Provides parameters for initializing the global task scheduler. Default
+  // params are used if this returns nullptr.
+  virtual std::unique_ptr<base::TaskScheduler::InitParams>
+  GetTaskSchedulerInitParams();
 
   // Returns true if the media pipeline can be suspended, or false otherwise.
   virtual bool AllowMediaSuspend();

@@ -15,7 +15,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/renderer/safe_browsing/feature_extractor_clock.h"
 #include "chrome/renderer/safe_browsing/features.h"
@@ -23,6 +22,7 @@
 #include "chrome/renderer/safe_browsing/phishing_term_feature_extractor.h"
 #include "chrome/renderer/safe_browsing/phishing_url_feature_extractor.h"
 #include "chrome/renderer/safe_browsing/scorer.h"
+#include "components/safe_browsing/csd.pb.h"
 #include "content/public/renderer/render_frame.h"
 #include "crypto/sha2.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
@@ -127,15 +127,15 @@ void PhishingClassifier::BeginFeatureExtraction() {
 
   // Check whether the URL is one that we should classify.
   // Currently, we only classify http: URLs that are GET requests.
-  GURL url(frame->document().url());
+  GURL url(frame->GetDocument().Url());
   if (!url.SchemeIs(url::kHttpScheme)) {
     RecordReasonForSkippingClassificationToUMA(SKIP_HTTPS);
     RunFailureCallback();
     return;
   }
 
-  blink::WebDataSource* ds = frame->dataSource();
-  if (!ds || ds->getRequest().httpMethod().ascii() != "GET") {
+  blink::WebDataSource* ds = frame->DataSource();
+  if (!ds || ds->GetRequest().HttpMethod().Ascii() != "GET") {
     if (ds)
       RecordReasonForSkippingClassificationToUMA(SKIP_NONE_GET);
     RunFailureCallback();
@@ -152,7 +152,7 @@ void PhishingClassifier::BeginFeatureExtraction() {
   // DOM feature extraction can take awhile, so it runs asynchronously
   // in several chunks of work and invokes the callback when finished.
   dom_extractor_->ExtractFeatures(
-      frame->document(), features_.get(),
+      frame->GetDocument(), features_.get(),
       base::Bind(&PhishingClassifier::DOMExtractionFinished,
                  base::Unretained(this)));
 }
@@ -192,7 +192,7 @@ void PhishingClassifier::TermExtractionFinished(bool success) {
     FeatureMap hashed_features;
     ClientPhishingRequest verdict;
     verdict.set_model_version(scorer_->model_version());
-    verdict.set_url(main_frame->document().url().string().utf8());
+    verdict.set_url(main_frame->GetDocument().Url().GetString().Utf8());
     for (base::hash_map<std::string, double>::const_iterator it =
              features_->features().begin();
          it != features_->features().end(); ++it) {

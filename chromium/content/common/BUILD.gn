@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("features.gni")
+import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
@@ -11,6 +13,14 @@ import("//sandbox/features.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
+}
+
+# For feature flags internal to content. See content/public/common:features
+# for feature flags that clients of contents need to know about.
+buildflag_header("features") {
+  header = "features.h"
+
+  flags = [ "USE_EXTERNAL_POPUP_MENU=$use_external_popup_menu" ]
 }
 
 source_set("common") {
@@ -23,10 +33,6 @@ source_set("common") {
   sources = [
     "accessibility_messages.h",
     "all_messages.h",
-    "android/address_parser.cc",
-    "android/address_parser.h",
-    "android/address_parser_internal.cc",
-    "android/address_parser_internal.h",
     "android/common_jni_registrar.cc",
     "android/common_jni_registrar.h",
     "android/gin_java_bridge_errors.cc",
@@ -52,6 +58,10 @@ source_set("common") {
     "associated_interface_registry_impl.h",
     "ax_content_node_data.cc",
     "ax_content_node_data.h",
+    "background_fetch/background_fetch_struct_traits.cc",
+    "background_fetch/background_fetch_struct_traits.h",
+    "background_fetch/background_fetch_types.cc",
+    "background_fetch/background_fetch_types.h",
     "bluetooth/web_bluetooth_device_id.cc",
     "bluetooth/web_bluetooth_device_id.h",
     "browser_plugin/browser_plugin_constants.cc",
@@ -86,6 +96,7 @@ source_set("common") {
     "content_security_policy/csp_source.h",
     "content_security_policy/csp_source_list.cc",
     "content_security_policy/csp_source_list.h",
+    "content_security_policy_header.cc",
     "content_security_policy_header.h",
     "content_switches_internal.cc",
     "content_switches_internal.h",
@@ -112,8 +123,6 @@ source_set("common") {
     "drag_traits.h",
     "dwrite_font_proxy_messages.h",
     "edit_command.h",
-    "establish_channel_params.cc",
-    "establish_channel_params.h",
     "feature_policy/feature_policy.cc",
     "feature_policy/feature_policy.h",
     "file_utilities_messages.h",
@@ -137,9 +146,6 @@ source_set("common") {
     "generic_shared_memory_id_generator.cc",
     "generic_shared_memory_id_generator.h",
     "gin_java_bridge_messages.h",
-    "gpu_host_messages.h",
-    "host_shared_bitmap_manager.cc",
-    "host_shared_bitmap_manager.h",
     "in_process_child_thread_params.cc",
     "in_process_child_thread_params.h",
     "indexed_db/indexed_db_constants.h",
@@ -187,7 +193,6 @@ source_set("common") {
     "input/synthetic_web_input_event_builders.h",
     "input/touch_event_stream_validator.cc",
     "input/touch_event_stream_validator.h",
-    "input/web_input_event_queue.h",
     "input/web_touch_event_traits.cc",
     "input/web_touch_event_traits.h",
     "input_messages.h",
@@ -247,6 +252,8 @@ source_set("common") {
     "platform_notification_messages.h",
     "plugin_list.cc",
     "plugin_list.h",
+    "presentation/presentation_struct_traits.cc",
+    "presentation/presentation_struct_traits.h",
     "process_type.cc",
     "quarantine/quarantine.cc",
     "quarantine/quarantine_constants_linux.h",
@@ -294,7 +301,6 @@ source_set("common") {
     "sandbox_win.cc",
     "sandbox_win.h",
     "savable_subframe.h",
-    "screen_orientation_messages.h",
     "send_zygote_child_ping_linux.cc",
     "service_manager/embedded_service_runner.cc",
     "service_manager/embedded_service_runner.h",
@@ -315,10 +321,6 @@ source_set("common") {
     "service_worker/service_worker_types.h",
     "service_worker/service_worker_utils.cc",
     "service_worker/service_worker_utils.h",
-    "set_process_title.cc",
-    "set_process_title.h",
-    "set_process_title_linux.cc",
-    "set_process_title_linux.h",
     "site_isolation_policy.cc",
     "site_isolation_policy.h",
     "speech_recognition_messages.h",
@@ -354,6 +356,7 @@ source_set("common") {
     "//third_party/WebKit/public:blink_headers",
   ]
   deps = [
+    ":features",
     "//base",
     "//base/third_party/dynamic_annotations",
     "//build/util:webkit_version",
@@ -392,7 +395,9 @@ source_set("common") {
     "//ppapi/features",
     "//sandbox",
     "//sandbox:sandbox_features",
+    "//services/resource_coordinator/public/interfaces",
     "//services/service_manager",
+    "//services/service_manager/embedder",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
     "//services/service_manager/runner/common",
@@ -409,7 +414,6 @@ source_set("common") {
     "//ui/base/ime",
     "//ui/display",
     "//ui/events/blink",
-    "//ui/events/ipc",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
@@ -417,6 +421,7 @@ source_set("common") {
     "//ui/gfx/ipc/geometry",
     "//ui/gfx/ipc/skia",
     "//ui/gl",
+    "//ui/latency/ipc",
     "//ui/shell_dialogs",
     "//url",
     "//url/ipc:url_ipc",
@@ -539,7 +544,7 @@ source_set("common") {
     ]
   }
 
-  if (enable_pepper_cdms) {
+  if (enable_cdm_host_verification) {
     sources += [
       "media/cdm_host_file.cc",
       "media/cdm_host_file.h",
@@ -576,13 +581,17 @@ mojom("mojo_bindings") {
 
   sources = [
     "associated_interfaces.mojom",
+    "child.mojom",
     "child_memory_coordinator.mojom",
+    "field_trial_recorder.mojom",
     "frame.mojom",
+    "frame_sink_provider.mojom",
     "host_zoom.mojom",
     "image_downloader/image_downloader.mojom",
     "indexed_db/indexed_db.mojom",
     "leveldb_wrapper.mojom",
     "media/media_devices.mojom",
+    "media/renderer_audio_output_stream_factory.mojom",
     "memory_coordinator.mojom",
     "native_types.mojom",
     "push_messaging.mojom",
@@ -605,7 +614,7 @@ mojom("mojo_bindings") {
 
   public_deps = [
     "//components/leveldb/public/interfaces",
-    "//components/payments/content:payment_app",
+    "//components/payments/content:mojom_payment_app",
     "//content/public/common:interfaces",
 
     # TODO(mcasas): remove the following dep after https://crbug.com/653994

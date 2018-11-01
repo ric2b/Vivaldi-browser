@@ -132,32 +132,6 @@ std::string GetUserClassString(UserClassifier::UserClass user_class) {
 
 }  // namespace
 
-CategoryInfo BuildArticleCategoryInfo(
-    const base::Optional<base::string16>& title) {
-  return CategoryInfo(
-      title.has_value() ? title.value()
-                        : l10n_util::GetStringUTF16(
-                              IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_HEADER),
-      ContentSuggestionsCardLayout::FULL_CARD,
-      /*has_fetch_action=*/true,
-      /*has_view_all_action=*/false,
-      /*show_if_empty=*/true,
-      l10n_util::GetStringUTF16(IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_EMPTY));
-}
-
-CategoryInfo BuildRemoteCategoryInfo(const base::string16& title,
-                                     bool allow_fetching_more_results) {
-  return CategoryInfo(
-      title, ContentSuggestionsCardLayout::FULL_CARD,
-      /*has_fetch_action=*/allow_fetching_more_results,
-      /*has_view_all_action=*/false,
-      /*show_if_empty=*/false,
-      // TODO(tschumann): The message for no-articles is likely wrong
-      // and needs to be added to the stubby protocol if we want to
-      // support it.
-      l10n_util::GetStringUTF16(IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_EMPTY));
-}
-
 JsonRequest::JsonRequest(
     base::Optional<Category> exclusive_category,
     base::Clock* clock,  // Needed until destruction of the request.
@@ -244,9 +218,7 @@ void JsonRequest::OnJsonError(const std::string& error) {
            /*error_details=*/base::StringPrintf(" (error %s)", error.c_str()));
 }
 
-JsonRequest::Builder::Builder()
-    : fetch_api_(CHROME_READER_API),
-      language_model_(nullptr) {}
+JsonRequest::Builder::Builder() : language_model_(nullptr) {}
 JsonRequest::Builder::Builder(JsonRequest::Builder&&) = default;
 JsonRequest::Builder::~Builder() = default;
 
@@ -273,11 +245,6 @@ JsonRequest::Builder& JsonRequest::Builder::SetAuthentication(
     const std::string& auth_header) {
   obfuscated_gaia_id_ = account_id;
   auth_header_ = auth_header;
-  return *this;
-}
-
-JsonRequest::Builder& JsonRequest::Builder::SetFetchAPI(FetchAPI fetch_api) {
-  fetch_api_ = fetch_api;
   return *this;
 }
 
@@ -343,83 +310,42 @@ std::string JsonRequest::Builder::BuildHeaders() const {
 std::string JsonRequest::Builder::BuildBody() const {
   auto request = base::MakeUnique<base::DictionaryValue>();
   std::string user_locale = PosixLocaleFromBCP47Language(params_.language_code);
-  switch (fetch_api_) {
-    case CHROME_READER_API: {
-      auto content_restricts = base::MakeUnique<base::ListValue>();
-      for (const auto* metadata : {"TITLE", "SNIPPET", "THUMBNAIL"}) {
-        auto entry = base::MakeUnique<base::DictionaryValue>();
-        entry->SetString("type", "METADATA");
-        entry->SetString("value", metadata);
-        content_restricts->Append(std::move(entry));
-      }
+  if (!user_locale.empty()) {
+    request->SetString("uiLanguage", user_locale);
+  }
 
-      auto local_scoring_params = base::MakeUnique<base::DictionaryValue>();
-      local_scoring_params->Set("content_restricts",
-                                std::move(content_restricts));
+  request->SetString("priority", params_.interactive_request
+                                     ? "USER_ACTION"
+                                     : "BACKGROUND_PREFETCH");
 
-      auto global_scoring_params = base::MakeUnique<base::DictionaryValue>();
-      global_scoring_params->SetInteger("num_to_return",
-                                        params_.count_to_fetch);
-      global_scoring_params->SetInteger("sort_type", 1);
-
-      auto advanced = base::MakeUnique<base::DictionaryValue>();
-      advanced->Set("local_scoring_params", std::move(local_scoring_params));
-      advanced->Set("global_scoring_params", std::move(global_scoring_params));
-
-      request->SetString("response_detail_level", "STANDARD");
-      request->Set("advanced_options", std::move(advanced));
-      if (!obfuscated_gaia_id_.empty()) {
-        request->SetString("obfuscated_gaia_id", obfuscated_gaia_id_);
-      }
-      if (!user_locale.empty()) {
-        request->SetString("user_locale", user_locale);
-      }
-      break;
-    }
-
-    case CHROME_CONTENT_SUGGESTIONS_API: {
-      if (!user_locale.empty()) {
-        request->SetString("uiLanguage", user_locale);
-      }
-
-      request->SetString("priority", params_.interactive_request
-                                         ? "USER_ACTION"
-                                         : "BACKGROUND_PREFETCH");
-
-      auto excluded = base::MakeUnique<base::ListValue>();
-      for (const auto& id : params_.excluded_ids) {
-        excluded->AppendString(id);
-        if (excluded->GetSize() >= kMaxExcludedIds) {
-          break;
-        }
-      }
-      request->Set("excludedSuggestionIds", std::move(excluded));
-
-      if (!user_class_.empty()) {
-        request->SetString("userActivenessClass", user_class_);
-      }
-
-      translate::LanguageModel::LanguageInfo ui_language;
-      translate::LanguageModel::LanguageInfo other_top_language;
-      PrepareLanguages(&ui_language, &other_top_language);
-
-      if (ui_language.frequency == 0 && other_top_language.frequency == 0) {
-        break;
-      }
-
-      auto language_list = base::MakeUnique<base::ListValue>();
-      if (ui_language.frequency > 0) {
-        AppendLanguageInfoToList(language_list.get(), ui_language);
-      }
-      if (other_top_language.frequency > 0) {
-        AppendLanguageInfoToList(language_list.get(), other_top_language);
-      }
-      request->Set("topLanguages", std::move(language_list));
-
-      // TODO(sfiera): Support count_to_fetch.
+  auto excluded = base::MakeUnique<base::ListValue>();
+  for (const auto& id : params_.excluded_ids) {
+    excluded->AppendString(id);
+    if (excluded->GetSize() >= kMaxExcludedIds) {
       break;
     }
   }
+  request->Set("excludedSuggestionIds", std::move(excluded));
+
+  if (!user_class_.empty()) {
+    request->SetString("userActivenessClass", user_class_);
+  }
+
+  translate::LanguageModel::LanguageInfo ui_language;
+  translate::LanguageModel::LanguageInfo other_top_language;
+  PrepareLanguages(&ui_language, &other_top_language);
+  if (ui_language.frequency != 0 || other_top_language.frequency != 0) {
+    auto language_list = base::MakeUnique<base::ListValue>();
+    if (ui_language.frequency > 0) {
+      AppendLanguageInfoToList(language_list.get(), ui_language);
+    }
+    if (other_top_language.frequency > 0) {
+      AppendLanguageInfoToList(language_list.get(), other_top_language);
+    }
+    request->Set("topLanguages", std::move(language_list));
+  }
+
+  // TODO(sfiera): Support count_to_fetch.
 
   std::string request_json;
   bool success = base::JSONWriter::WriteWithOptions(
@@ -454,10 +380,10 @@ std::unique_ptr<net::URLFetcher> JsonRequest::Builder::BuildURLFetcher(
           setting:
             "This feature cannot be disabled by settings now (but is requested "
             "to be implemented in crbug.com/695129)."
-          policy {
+          chrome_policy {
             NTPContentSuggestionsEnabled {
               policy_options {mode: MANDATORY}
-              value: false
+              NTPContentSuggestionsEnabled: false
             }
           }
         })");

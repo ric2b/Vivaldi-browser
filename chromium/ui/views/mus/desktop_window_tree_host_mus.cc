@@ -14,8 +14,9 @@
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/transient_window_client.h"
-#include "ui/aura/env.h"
+#include "ui/aura/mus/focus_synchronizer.h"
 #include "ui/aura/mus/window_port_mus.h"
+#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
@@ -130,7 +131,7 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
   void SetCursor(gfx::NativeCursor cursor,
                  wm::NativeCursorManagerDelegate* delegate) override {
     aura::WindowPortMus::Get(window_)->SetPredefinedCursor(
-        ui::mojom::Cursor(cursor.native_type()));
+        ui::mojom::CursorType(cursor.native_type()));
     delegate->CommitCursor(cursor);
   }
 
@@ -142,7 +143,7 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
       SetCursor(delegate->GetCursor(), delegate);
     } else {
       aura::WindowPortMus::Get(window_)->SetPredefinedCursor(
-          ui::mojom::Cursor::NONE);
+          ui::mojom::CursorType::NONE);
     }
   }
 
@@ -185,14 +186,17 @@ void OnMoveLoopEnd(bool* out_success,
 DesktopWindowTreeHostMus::DesktopWindowTreeHostMus(
     internal::NativeWidgetDelegate* native_widget_delegate,
     DesktopNativeWidgetAura* desktop_native_widget_aura,
+    const cc::FrameSinkId& frame_sink_id,
     const std::map<std::string, std::vector<uint8_t>>* mus_properties)
     : aura::WindowTreeHostMus(MusClient::Get()->window_tree_client(),
+                              frame_sink_id,
                               mus_properties),
       native_widget_delegate_(native_widget_delegate),
       desktop_native_widget_aura_(desktop_native_widget_aura),
       close_widget_factory_(this) {
-  aura::Env::GetInstance()->AddObserver(this);
   MusClient::Get()->AddObserver(this);
+  MusClient::Get()->window_tree_client()->focus_synchronizer()->AddObserver(
+      this);
   native_widget_delegate_->AsWidget()->AddObserver(this);
   desktop_native_widget_aura_->content_window()->AddObserver(this);
   // DesktopNativeWidgetAura registers the association between |content_window_|
@@ -212,14 +216,9 @@ DesktopWindowTreeHostMus::~DesktopWindowTreeHostMus() {
   desktop_native_widget_aura_->content_window()->RemoveObserver(this);
   native_widget_delegate_->AsWidget()->RemoveObserver(this);
   MusClient::Get()->RemoveObserver(this);
-  aura::Env::GetInstance()->RemoveObserver(this);
+  MusClient::Get()->window_tree_client()->focus_synchronizer()->RemoveObserver(
+      this);
   desktop_native_widget_aura_->OnDesktopWindowTreeHostDestroyed(this);
-}
-
-// TODO(afakhry): Remove Docked Windows in M58.
-bool DesktopWindowTreeHostMus::IsDocked() const {
-  return window()->GetProperty(aura::client::kShowStateKey) ==
-         ui::SHOW_STATE_DOCKED;
 }
 
 void DesktopWindowTreeHostMus::SendClientAreaToServer() {
@@ -276,9 +275,16 @@ bool DesktopWindowTreeHostMus::ShouldSendClientAreaToServer() const {
 
 void DesktopWindowTreeHostMus::Init(aura::Window* content_window,
                                     const Widget::InitParams& params) {
-  // Needed so we don't render over the non-client area the window manager
-  // renders to.
-  content_window->layer()->SetFillsBoundsOpaquely(false);
+  // |TYPE_WINDOW| and |TYPE_PANEL| are forced to transparent as otherwise the
+  // window is opaque and the client decorations drawn by the window manager
+  // would not be seen.
+  const bool transparent =
+      params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW ||
+      params.type == Widget::InitParams::TYPE_WINDOW ||
+      params.type == Widget::InitParams::TYPE_PANEL;
+  content_window->SetTransparent(transparent);
+  window()->SetTransparent(transparent);
+
   if (!params.bounds.IsEmpty())
     SetBoundsInDIP(params.bounds);
 
@@ -300,11 +306,16 @@ void DesktopWindowTreeHostMus::Init(aura::Window* content_window,
   if (!params.accept_events) {
     aura::WindowPortMus::Get(window())->SetEventTargetingPolicy(
         ui::mojom::EventTargetingPolicy::NONE);
+  } else {
+    aura::WindowPortMus::Get(content_window)->SetCanAcceptDrops(true);
   }
 }
 
 void DesktopWindowTreeHostMus::OnNativeWidgetCreated(
     const Widget::InitParams& params) {
+  window()->SetName(params.name);
+  desktop_native_widget_aura_->content_window()->SetName(
+      "DesktopNativeWidgetAura - content window");
   if (params.parent && params.parent->GetHost()) {
     parent_ = static_cast<DesktopWindowTreeHostMus*>(params.parent->GetHost());
     parent_->children_.insert(this);
@@ -383,11 +394,8 @@ aura::WindowTreeHost* DesktopWindowTreeHostMus::AsWindowTreeHost() {
 }
 
 void DesktopWindowTreeHostMus::ShowWindowWithState(ui::WindowShowState state) {
-  // TODO(afakhry): Remove Docked Windows in M58.
-  if (state == ui::SHOW_STATE_MAXIMIZED || state == ui::SHOW_STATE_FULLSCREEN ||
-      state == ui::SHOW_STATE_DOCKED) {
+  if (state == ui::SHOW_STATE_MAXIMIZED || state == ui::SHOW_STATE_FULLSCREEN)
     window()->SetProperty(aura::client::kShowStateKey, state);
-  }
   window()->Show();
   if (compositor())
     compositor()->SetVisible(true);
@@ -489,7 +497,7 @@ gfx::Rect DesktopWindowTreeHostMus::GetClientAreaBoundsInScreen() const {
 
 gfx::Rect DesktopWindowTreeHostMus::GetRestoredBounds() const {
   // Restored bounds should only be relevant if the window is minimized,
-  // maximized, fullscreen or docked. However, in some places the code expects
+  // maximized, or fullscreen. However, in some places the code expects
   // GetRestoredBounds() to return the current window bounds if the window is
   // not in either state.
   if (IsMinimized() || IsMaximized() || IsFullscreen()) {
@@ -499,20 +507,7 @@ gfx::Rect DesktopWindowTreeHostMus::GetRestoredBounds() const {
     if (restore_bounds)
       return *restore_bounds;
   }
-  gfx::Rect bounds = GetWindowBoundsInScreen();
-  if (IsDocked()) {
-    // Restore bounds are in screen coordinates, no need to convert.
-    gfx::Rect* restore_bounds =
-        window()->GetProperty(aura::client::kRestoreBoundsKey);
-    // Use current window horizontal offset origin in order to preserve docked
-    // alignment but preserve restored size and vertical offset for the time
-    // when the |window_| gets undocked.
-    if (restore_bounds) {
-      bounds.set_size(restore_bounds->size());
-      bounds.set_y(restore_bounds->y());
-    }
-  }
-  return bounds;
+  return GetWindowBoundsInScreen();
 }
 
 std::string DesktopWindowTreeHostMus::GetWorkspace() const {
@@ -539,8 +534,10 @@ void DesktopWindowTreeHostMus::Activate() {
   // This should result in OnActiveFocusClientChanged() being called, which
   // triggers a call to DesktopNativeWidgetAura::HandleActivationChanged(),
   // which focuses the right window.
-  aura::Env::GetInstance()->SetActiveFocusClient(
-      aura::client::GetFocusClient(window()), window());
+  MusClient::Get()
+      ->window_tree_client()
+      ->focus_synchronizer()
+      ->SetActiveFocusClient(aura::client::GetFocusClient(window()), window());
   if (is_active_)
     window()->SetProperty(aura::client::kDrawAttentionKey, false);
 }
@@ -745,6 +742,16 @@ void DesktopWindowTreeHostMus::OnWidgetActivationChanged(Widget* widget,
   is_active_ = active;
 }
 
+void DesktopWindowTreeHostMus::OnActiveFocusClientChanged(
+    aura::client::FocusClient* focus_client,
+    aura::Window* focus_client_root) {
+  if (focus_client_root == this->window()) {
+    desktop_native_widget_aura_->HandleActivationChanged(true);
+  } else if (is_active_) {
+    desktop_native_widget_aura_->HandleActivationChanged(false);
+  }
+}
+
 void DesktopWindowTreeHostMus::OnWindowPropertyChanged(aura::Window* window,
                                                        const void* key,
                                                        intptr_t old) {
@@ -794,18 +801,6 @@ void DesktopWindowTreeHostMus::SetBoundsInPixels(
   if (old_bounds_in_pixels.size() != final_bounds_in_pixels.size()) {
     SendClientAreaToServer();
     SendHitTestMaskToServer();
-  }
-}
-
-void DesktopWindowTreeHostMus::OnWindowInitialized(aura::Window* window) {}
-
-void DesktopWindowTreeHostMus::OnActiveFocusClientChanged(
-    aura::client::FocusClient* focus_client,
-    aura::Window* window) {
-  if (window == this->window()) {
-    desktop_native_widget_aura_->HandleActivationChanged(true);
-  } else if (is_active_) {
-    desktop_native_widget_aura_->HandleActivationChanged(false);
   }
 }
 

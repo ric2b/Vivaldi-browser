@@ -53,6 +53,7 @@ buildflag_header("ui_features") {
     "ENABLE_HIDPI=$enable_hidpi",
     "USE_XKBCOMMON=$use_xkbcommon",
     "MAC_VIEWS_BROWSER=$mac_views_browser",
+    "HAS_NATIVE_ACCESSIBILITY=$has_native_accessibility",
   ]
 }
 
@@ -149,6 +150,8 @@ component("base") {
     "cursor/cursor.cc",
     "cursor/cursor.h",
     "cursor/cursor_android.cc",
+    "cursor/cursor_data.cc",
+    "cursor/cursor_data.h",
     "cursor/cursor_loader.h",
     "cursor/cursor_win.cc",
     "default_style.h",
@@ -235,6 +238,7 @@ component("base") {
     "resource/resource_bundle.cc",
     "resource/resource_bundle.h",
     "resource/resource_bundle_android.cc",
+    "resource/resource_bundle_android.h",
     "resource/resource_bundle_auralinux.cc",
     "resource/resource_bundle_ios.mm",
     "resource/resource_bundle_mac.mm",
@@ -477,6 +481,11 @@ component("base") {
 
   if (use_glib) {
     configs += [ "//build/config/linux:glib" ]
+    sources += [
+      "glib/glib_integers.h",
+      "glib/glib_signal.h",
+      "glib/scoped_gobject.h",
+    ]
   }
 
   if (is_linux) {
@@ -639,6 +648,7 @@ static_library("test_support") {
     "test/material_design_controller_test_api.h",
     "test/ui_controls.h",
     "test/ui_controls_aura.cc",
+    "test/ui_controls_aura.h",
     "test/ui_controls_internal_win.cc",
     "test/ui_controls_internal_win.h",
     "test/ui_controls_mac.mm",
@@ -717,7 +727,10 @@ static_library("test_support") {
   }
 
   if (!use_aura) {
-    sources -= [ "test/ui_controls_aura.cc" ]
+    sources -= [
+      "test/ui_controls_aura.cc",
+      "test/ui_controls_aura.h",
+    ]
   } else if (is_win) {
     sources -= [ "test/ui_controls_win.cc" ]
   }
@@ -874,6 +887,8 @@ test("ui_base_unittests") {
 
   if (is_ios) {
     deps += [ "//ui/resources:ui_test_pak_bundle_data" ]
+  } else {
+    deps += [ "//ui/base/accelerators/mojo:unittests" ]
   }
 
   if (is_win) {

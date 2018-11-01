@@ -13,6 +13,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "content/public/browser/web_contents_delegate.h"
 
+class MediaStreamDevicesController;
 class Profile;
 class TabSpecificContentSettings;
 
@@ -28,10 +29,24 @@ namespace policy {
 class MediaStreamDevicesControllerBrowserTest;
 }
 
+namespace test {
+class MediaStreamDevicesControllerTestApi;
+}
+
+namespace internal {
+// Delegate showing permission prompts.
+class PermissionPromptDelegate {
+ public:
+  virtual void ShowPrompt(
+      bool user_gesture,
+      content::WebContents* web_contents,
+      std::unique_ptr<MediaStreamDevicesController> controller) = 0;
+};
+}
+
 class MediaStreamDevicesController : public PermissionRequest {
  public:
   static void RequestPermissions(
-      content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
       const content::MediaResponseCallback& callback);
 
@@ -67,11 +82,21 @@ class MediaStreamDevicesController : public PermissionRequest {
 
  private:
   friend class MediaStreamDevicesControllerTest;
+  friend class test::MediaStreamDevicesControllerTestApi;
   friend class policy::MediaStreamDevicesControllerBrowserTest;
+
+  class MediaPermissionStatus;
+  class PermissionPromptDelegateImpl;
+
+  static void RequestPermissionsWithDelegate(
+      const content::MediaStreamRequest& request,
+      const content::MediaResponseCallback& callback,
+      internal::PermissionPromptDelegate* delegate);
 
   MediaStreamDevicesController(content::WebContents* web_contents,
                                const content::MediaStreamRequest& request,
-                               const content::MediaResponseCallback& callback);
+                               const content::MediaResponseCallback& callback,
+                               const MediaPermissionStatus& initial_permission);
 
   bool IsAllowedForAudio() const;
   bool IsAllowedForVideo() const;
@@ -102,6 +127,8 @@ class MediaStreamDevicesController : public PermissionRequest {
   ContentSetting GetContentSetting(
       ContentSettingsType content_type,
       const content::MediaStreamRequest& request,
+      bool was_requested,
+      bool was_initially_blocked,
       content::MediaStreamRequestResult* denial_reason) const;
 
   // Returns the content setting that should apply given an old content setting
@@ -138,6 +165,8 @@ class MediaStreamDevicesController : public PermissionRequest {
   // The callback that needs to be Run to notify WebRTC of whether access to
   // audio/video devices was granted or not.
   content::MediaResponseCallback callback_;
+
+  std::unique_ptr<internal::PermissionPromptDelegate> delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamDevicesController);
 };

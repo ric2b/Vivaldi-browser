@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -26,7 +27,6 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -195,11 +195,11 @@ SearchEnginesHandler::GetSearchEnginesList() {
 void SearchEnginesHandler::OnModelChanged() {
   AllowJavascript();
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("search-engines-changed"),
+                         base::Value("search-engines-changed"),
                          *GetSearchEnginesList());
   // Google Now availability may have changed.
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("google-now-availability-changed"),
+                         base::Value("google-now-availability-changed"),
                          base::Value(IsGoogleNowAvailable(profile_)));
 }
 
@@ -301,8 +301,7 @@ void SearchEnginesHandler::HandleSetDefaultSearchEngine(
   // Hotword status may have changed.
   SendHotwordInfo();
 
-  content::RecordAction(
-      base::UserMetricsAction("Options_SearchEngineSetDefault"));
+  base::RecordAction(base::UserMetricsAction("Options_SearchEngineSetDefault"));
 }
 
 void SearchEnginesHandler::HandleRemoveSearchEngine(
@@ -317,8 +316,7 @@ void SearchEnginesHandler::HandleRemoveSearchEngine(
 
   if (list_controller_.CanRemove(list_controller_.GetTemplateURL(index))) {
     list_controller_.RemoveTemplateURL(index);
-    content::RecordAction(
-        base::UserMetricsAction("Options_SearchEngineRemoved"));
+    base::RecordAction(base::UserMetricsAction("Options_SearchEngineRemoved"));
   }
 }
 
@@ -518,7 +516,7 @@ void SearchEnginesHandler::HotwordInfoComplete(
     ResolveJavascriptCallback(*callback_id, status);
   } else {
     CallJavascriptFunction("cr.webUIListenerCallback",
-                           base::StringValue("hotword-info-update"), status);
+                           base::Value("hotword-info-update"), status);
   }
 }
 

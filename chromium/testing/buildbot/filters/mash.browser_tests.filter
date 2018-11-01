@@ -1,1 +1,13 @@
-BrowserTest.Title
+BrowserTest.*
+
+# Failing test
+-BrowserTest.FullscreenBookmarkBar
+
+# Flaky tests - crbug.com/707195
+-BrowserTest.CanDuplicateTab
+-BrowserTest.ClearPendingOnFailUnlessNT
+-BrowserTest.DefaultMediaDevices
+-BrowserTest.GetSizeForNewRenderView
+-BrowserTest.JavascriptAlertActivatesTab
+-BrowserTest.Title
+-BrowserTest.AboutVersion

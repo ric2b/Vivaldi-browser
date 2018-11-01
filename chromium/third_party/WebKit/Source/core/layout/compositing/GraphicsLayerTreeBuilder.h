@@ -28,7 +28,7 @@
 #define GraphicsLayerTreeBuilder_h
 
 #include "platform/graphics/GraphicsLayer.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -41,7 +41,7 @@ class GraphicsLayerTreeBuilder {
   GraphicsLayerTreeBuilder();
   ~GraphicsLayerTreeBuilder();
 
-  void rebuild(PaintLayer&, GraphicsLayerVector&);
+  void Rebuild(PaintLayer&, GraphicsLayerVector&);
 };
 
 }  // namespace blink

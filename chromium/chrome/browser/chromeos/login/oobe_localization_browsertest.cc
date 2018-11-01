@@ -94,8 +94,8 @@ class TimedRunLoop {
 class LanguageListWaiter : public NetworkScreen::Observer {
  public:
   LanguageListWaiter()
-      : network_screen_(
-            NetworkScreen::Get(WizardController::default_controller())),
+      : network_screen_(NetworkScreen::Get(
+            WizardController::default_controller()->screen_manager())),
         loop_(base::TimeDelta::FromSeconds(kTimeoutSeconds), "LanguageList") {
     network_screen_->AddObserver(this);
     CheckLanguageList();
@@ -415,7 +415,7 @@ void OobeLocalizationTest::RunLocalizationTest() {
   EXPECT_EQ(expected_keyboard_select, DumpOptions(kKeyboardSelect));
 
   // Shut down the display host.
-  LoginDisplayHost::default_host()->Finalize();
+  LoginDisplayHost::default_host()->Finalize(base::OnceClosure());
   base::RunLoop().RunUntilIdle();
 
   // Clear the locale pref so the statistics provider is pinged next time.

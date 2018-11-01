@@ -5,6 +5,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/base_switches.h"
@@ -24,6 +25,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_util.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace headless {
@@ -32,6 +34,8 @@ namespace {
 const char kDevToolsHttpServerAddress[] = "127.0.0.1";
 // Default file name for screenshot. Can be overriden by "--screenshot" switch.
 const char kDefaultScreenshotFileName[] = "screenshot.png";
+// Default file name for pdf. Can be overriden by "--print-to-pdf" switch.
+const char kDefaultPDFFileName[] = "output.pdf";
 
 bool ParseWindowSize(std::string window_size, gfx::Size* parsed_window_size) {
   int width, height = 0;
@@ -132,8 +136,6 @@ void HeadlessShell::DevToolsTargetReady() {
   devtools_client_->GetInspector()->GetExperimental()->AddObserver(this);
   devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
   devtools_client_->GetPage()->Enable();
-  // Check if the document had already finished loading by the time we
-  // attached.
 
   devtools_client_->GetEmulation()->GetExperimental()->AddObserver(this);
 
@@ -143,6 +145,28 @@ void HeadlessShell::DevToolsTargetReady() {
         headless::page::SetControlNavigationsParams::Builder()
             .SetEnabled(true)
             .Build());
+  }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDefaultBackgroundColor)) {
+    std::string color_hex =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kDefaultBackgroundColor);
+    uint32_t color;
+    CHECK(base::HexStringToUInt(color_hex, &color))
+        << "Expected a hex value for --default-background-color=";
+    auto rgba = headless::dom::RGBA::Builder()
+                    .SetR((color & 0xff000000) >> 24)
+                    .SetG((color & 0x00ff0000) >> 16)
+                    .SetB((color & 0x0000ff00) >> 8)
+                    .SetA(color & 0x000000ff)
+                    .Build();
+    devtools_client_->GetEmulation()
+        ->GetExperimental()
+        ->SetDefaultBackgroundColorOverride(
+            headless::emulation::SetDefaultBackgroundColorOverrideParams::
+                Builder()
+                    .SetColor(std::move(rgba))
+                    .Build());
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -160,6 +184,8 @@ void HeadlessShell::DevToolsTargetReady() {
             .SetBudget(budget_ms)
             .Build());
   } else {
+    // Check if the document had already finished loading by the time we
+    // attached.
     PollReadyState();
   }
 
@@ -255,6 +281,9 @@ void HeadlessShell::OnPageReady() {
   } else if (base::CommandLine::ForCurrentProcess()->HasSwitch(
                  switches::kScreenshot)) {
     CaptureScreenshot();
+  } else if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+                 switches::kPrintToPDF)) {
+    PrintToPDF();
   } else {
     Shutdown();
   }
@@ -312,80 +341,108 @@ void HeadlessShell::OnExpressionResult(
 
 void HeadlessShell::CaptureScreenshot() {
   devtools_client_->GetPage()->GetExperimental()->CaptureScreenshot(
-      page::CaptureScreenshotParams::Builder().Build(),
+      page::CaptureScreenshotParams::Builder().SetFromSurface(true).Build(),
       base::Bind(&HeadlessShell::OnScreenshotCaptured,
                  weak_factory_.GetWeakPtr()));
 }
 
 void HeadlessShell::OnScreenshotCaptured(
     std::unique_ptr<page::CaptureScreenshotResult> result) {
+  if (!result) {
+    LOG(ERROR) << "Capture screenshot failed";
+    Shutdown();
+    return;
+  }
+  WriteFile(switches::kScreenshot, kDefaultScreenshotFileName,
+            result->GetData());
+}
+
+void HeadlessShell::PrintToPDF() {
+  devtools_client_->GetPage()->GetExperimental()->PrintToPDF(
+      page::PrintToPDFParams::Builder().Build(),
+      base::Bind(&HeadlessShell::OnPDFCreated, weak_factory_.GetWeakPtr()));
+}
+
+void HeadlessShell::OnPDFCreated(
+    std::unique_ptr<page::PrintToPDFResult> result) {
+  if (!result) {
+    LOG(ERROR) << "Print to PDF failed";
+    Shutdown();
+    return;
+  }
+  WriteFile(switches::kPrintToPDF, kDefaultPDFFileName, result->GetData());
+}
+
+void HeadlessShell::WriteFile(const std::string& file_path_switch,
+                              const std::string& default_file_name,
+                              const std::string& base64_data) {
   base::FilePath file_name =
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-          switches::kScreenshot);
-  if (file_name.empty()) {
-    file_name = base::FilePath().AppendASCII(kDefaultScreenshotFileName);
-  }
+          file_path_switch);
+  if (file_name.empty())
+    file_name = base::FilePath().AppendASCII(default_file_name);
 
-  screenshot_file_proxy_.reset(
-      new base::FileProxy(browser_->BrowserFileThread().get()));
-  if (!screenshot_file_proxy_->CreateOrOpen(
+  file_proxy_.reset(new base::FileProxy(browser_->BrowserFileThread().get()));
+  if (!file_proxy_->CreateOrOpen(
           file_name, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE,
-          base::Bind(&HeadlessShell::OnScreenshotFileOpened,
-                     weak_factory_.GetWeakPtr(),
-                     base::Passed(std::move(result)), file_name))) {
+          base::Bind(&HeadlessShell::OnFileOpened, weak_factory_.GetWeakPtr(),
+                     base64_data, file_name))) {
     // Operation could not be started.
-    OnScreenshotFileOpened(nullptr, file_name, base::File::FILE_ERROR_FAILED);
+    OnFileOpened(std::string(), file_name, base::File::FILE_ERROR_FAILED);
   }
 }
 
-void HeadlessShell::OnScreenshotFileOpened(
-    std::unique_ptr<page::CaptureScreenshotResult> result,
-    const base::FilePath file_name,
-    base::File::Error error_code) {
-  if (!screenshot_file_proxy_->IsValid()) {
-    LOG(ERROR) << "Writing screenshot to file " << file_name.value()
+void HeadlessShell::OnFileOpened(const std::string& base64_data,
+                                 const base::FilePath file_name,
+                                 base::File::Error error_code) {
+  if (!file_proxy_->IsValid()) {
+    LOG(ERROR) << "Writing to file " << file_name.value()
                << " was unsuccessful, could not open file: "
                << base::File::ErrorToString(error_code);
     return;
   }
 
-  std::string decoded_png;
-  base::Base64Decode(result->GetData(), &decoded_png);
-  scoped_refptr<net::IOBufferWithSize> buf =
-      new net::IOBufferWithSize(decoded_png.size());
-  memcpy(buf->data(), decoded_png.data(), decoded_png.size());
+  std::string decoded_data;
+  if (!base::Base64Decode(base64_data, &decoded_data)) {
+    LOG(ERROR) << "Failed to decode base64 data";
+    OnFileWritten(file_name, base64_data.size(), base::File::FILE_ERROR_FAILED,
+                  0);
+    return;
+  }
 
-  if (!screenshot_file_proxy_->Write(
+  scoped_refptr<net::IOBufferWithSize> buf =
+      new net::IOBufferWithSize(decoded_data.size());
+  memcpy(buf->data(), decoded_data.data(), decoded_data.size());
+
+  if (!file_proxy_->Write(
           0, buf->data(), buf->size(),
-          base::Bind(&HeadlessShell::OnScreenshotFileWritten,
-                     weak_factory_.GetWeakPtr(), file_name, buf->size()))) {
+          base::Bind(&HeadlessShell::OnFileWritten, weak_factory_.GetWeakPtr(),
+                     file_name, buf->size()))) {
     // Operation may have completed successfully or failed.
-    OnScreenshotFileWritten(file_name, buf->size(),
-                            base::File::FILE_ERROR_FAILED, 0);
+    OnFileWritten(file_name, buf->size(), base::File::FILE_ERROR_FAILED, 0);
   }
 }
 
-void HeadlessShell::OnScreenshotFileWritten(const base::FilePath file_name,
-                                            const int length,
-                                            base::File::Error error_code,
-                                            int write_result) {
+void HeadlessShell::OnFileWritten(const base::FilePath file_name,
+                                  const int length,
+                                  base::File::Error error_code,
+                                  int write_result) {
   if (write_result < length) {
     // TODO(eseckler): Support recovering from partial writes.
-    LOG(ERROR) << "Writing screenshot to file " << file_name.value()
-               << " was unsuccessful: " << net::ErrorToString(write_result);
+    LOG(ERROR) << "Writing to file " << file_name.value()
+               << " was unsuccessful: "
+               << base::File::ErrorToString(error_code);
   } else {
-    LOG(INFO) << "Screenshot written to file " << file_name.value() << "."
-              << std::endl;
+    LOG(INFO) << "Written to file " << file_name.value() << ".";
   }
-  if (!screenshot_file_proxy_->Close(
-          base::Bind(&HeadlessShell::OnScreenshotFileClosed,
-                     weak_factory_.GetWeakPtr()))) {
+  if (!file_proxy_->Close(base::Bind(&HeadlessShell::OnFileClosed,
+                                     weak_factory_.GetWeakPtr()))) {
     // Operation could not be started.
-    OnScreenshotFileClosed(base::File::FILE_ERROR_FAILED);
+    OnFileClosed(base::File::FILE_ERROR_FAILED);
   }
 }
 
-void HeadlessShell::OnScreenshotFileClosed(base::File::Error error_code) {
+void HeadlessShell::OnFileClosed(base::File::Error error_code) {
   Shutdown();
 }
 
@@ -403,8 +460,18 @@ bool ValidateCommandLine(const base::CommandLine& command_line) {
                << "remote debug port is set.";
     return false;
   }
+  if (command_line.HasSwitch(switches::kDefaultBackgroundColor)) {
+    LOG(ERROR) << "Setting default background color is disabled "
+               << "when remote debugging is enabled.";
+    return false;
+  }
   if (command_line.HasSwitch(switches::kDumpDom)) {
     LOG(ERROR) << "Dump DOM is disabled when remote debugging is enabled.";
+    return false;
+  }
+  if (command_line.HasSwitch(switches::kPrintToPDF)) {
+    LOG(ERROR) << "Print to PDF is disabled "
+               << "when remote debugging is enabled.";
     return false;
   }
   if (command_line.HasSwitch(switches::kRepl)) {
@@ -517,6 +584,12 @@ int HeadlessShellMain(int argc, const char** argv) {
   if (command_line.HasSwitch(switches::kHideScrollbars)) {
     builder.SetOverrideWebPreferencesCallback(base::Bind([](
         WebPreferences* preferences) { preferences->hide_scrollbars = true; }));
+  }
+
+  if (command_line.HasSwitch(switches::kUserAgent)) {
+    std::string ua = command_line.GetSwitchValueASCII(switches::kUserAgent);
+    if (net::HttpUtil::IsValidHeaderValue(ua))
+      builder.SetUserAgent(ua);
   }
 
   return HeadlessBrowserMain(

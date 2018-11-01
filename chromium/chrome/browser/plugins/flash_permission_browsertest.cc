@@ -8,7 +8,7 @@
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/permissions/permissions_browsertest.h"
-#include "chrome/browser/ui/website_settings/mock_permission_prompt_factory.h"
+#include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/variations/variations_switches.h"
@@ -73,6 +73,10 @@ class FlashPermissionBrowserTest : public PermissionsBrowserTest {
       EXPECT_TRUE(reload_waiter.Wait());
     } else {
       EXPECT_TRUE(RunScriptReturnBool("triggerPrompt();"));
+      // Make a round trip to the renderer to flush any old did stop IPCs,
+      // otherwise they can race with the next navigation and cause it to be
+      // cancelled if it's the same URL.
+      EXPECT_TRUE(ExecuteScript(GetWebContents(), std::string()));
     }
   }
 
@@ -163,7 +167,7 @@ IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest,
   // When the prompt is auto-accepted, the page will be reloaded.
   PageReloadWaiter reload_waiter(GetWebContents());
   content::SimulateMouseClickAt(GetWebContents(), 0 /* modifiers */,
-                                blink::WebMouseEvent::Button::Left,
+                                blink::WebMouseEvent::Button::kLeft,
                                 gfx::Point(50, 50));
   EXPECT_TRUE(reload_waiter.Wait());
 

@@ -7,8 +7,8 @@
 
 #include "platform/graphics/Path.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -23,8 +23,8 @@ class PLATFORM_EXPORT ClipPathRecorder {
   ~ClipPathRecorder();
 
  private:
-  GraphicsContext& m_context;
-  const DisplayItemClient& m_client;
+  GraphicsContext& context_;
+  const DisplayItemClient& client_;
 };
 
 }  // namespace blink

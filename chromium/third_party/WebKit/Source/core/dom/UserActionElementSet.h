@@ -28,7 +28,7 @@
 #define UserActionElementSet_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/HashMap.h"
+#include "platform/wtf/HashMap.h"
 
 namespace blink {
 
@@ -39,58 +39,65 @@ class UserActionElementSet final {
   DISALLOW_NEW();
 
  public:
-  bool isFocused(const Node* node) { return hasFlags(node, IsFocusedFlag); }
-  bool isActive(const Node* node) { return hasFlags(node, IsActiveFlag); }
-  bool isInActiveChain(const Node* node) {
-    return hasFlags(node, InActiveChainFlag);
+  bool IsFocused(const Node* node) { return HasFlags(node, kIsFocusedFlag); }
+  bool HasFocusWithin(const Node* node) {
+    return HasFlags(node, kHasFocusWithinFlag);
   }
-  bool isDragged(const Node* node) { return hasFlags(node, IsDraggedFlag); }
-  bool isHovered(const Node* node) { return hasFlags(node, IsHoveredFlag); }
-  void setFocused(Node* node, bool enable) {
-    setFlags(node, enable, IsFocusedFlag);
+  bool IsActive(const Node* node) { return HasFlags(node, kIsActiveFlag); }
+  bool IsInActiveChain(const Node* node) {
+    return HasFlags(node, kInActiveChainFlag);
   }
-  void setActive(Node* node, bool enable) {
-    setFlags(node, enable, IsActiveFlag);
+  bool IsDragged(const Node* node) { return HasFlags(node, kIsDraggedFlag); }
+  bool IsHovered(const Node* node) { return HasFlags(node, kIsHoveredFlag); }
+  void SetFocused(Node* node, bool enable) {
+    SetFlags(node, enable, kIsFocusedFlag);
   }
-  void setInActiveChain(Node* node, bool enable) {
-    setFlags(node, enable, InActiveChainFlag);
+  void SetHasFocusWithin(Node* node, bool enable) {
+    SetFlags(node, enable, kHasFocusWithinFlag);
   }
-  void setDragged(Node* node, bool enable) {
-    setFlags(node, enable, IsDraggedFlag);
+  void SetActive(Node* node, bool enable) {
+    SetFlags(node, enable, kIsActiveFlag);
   }
-  void setHovered(Node* node, bool enable) {
-    setFlags(node, enable, IsHoveredFlag);
+  void SetInActiveChain(Node* node, bool enable) {
+    SetFlags(node, enable, kInActiveChainFlag);
+  }
+  void SetDragged(Node* node, bool enable) {
+    SetFlags(node, enable, kIsDraggedFlag);
+  }
+  void SetHovered(Node* node, bool enable) {
+    SetFlags(node, enable, kIsHoveredFlag);
   }
 
   UserActionElementSet();
   ~UserActionElementSet();
 
-  void didDetach(Element&);
+  void DidDetach(Element&);
 
   DECLARE_TRACE();
 
  private:
   enum ElementFlags {
-    IsActiveFlag = 1,
-    InActiveChainFlag = 1 << 1,
-    IsHoveredFlag = 1 << 2,
-    IsFocusedFlag = 1 << 3,
-    IsDraggedFlag = 1 << 4,
+    kIsActiveFlag = 1,
+    kInActiveChainFlag = 1 << 1,
+    kIsHoveredFlag = 1 << 2,
+    kIsFocusedFlag = 1 << 3,
+    kIsDraggedFlag = 1 << 4,
+    kHasFocusWithinFlag = 1 << 5,
   };
 
-  void setFlags(Node* node, bool enable, unsigned flags) {
-    enable ? setFlags(node, flags) : clearFlags(node, flags);
+  void SetFlags(Node* node, bool enable, unsigned flags) {
+    enable ? SetFlags(node, flags) : ClearFlags(node, flags);
   }
-  void setFlags(Node*, unsigned);
-  void clearFlags(Node*, unsigned);
-  bool hasFlags(const Node*, unsigned flags) const;
+  void SetFlags(Node*, unsigned);
+  void ClearFlags(Node*, unsigned);
+  bool HasFlags(const Node*, unsigned flags) const;
 
-  void setFlags(Element*, unsigned);
-  void clearFlags(Element*, unsigned);
-  bool hasFlags(const Element*, unsigned flags) const;
+  void SetFlags(Element*, unsigned);
+  void ClearFlags(Element*, unsigned);
+  bool HasFlags(const Element*, unsigned flags) const;
 
   typedef HeapHashMap<Member<Element>, unsigned> ElementFlagMap;
-  ElementFlagMap m_elements;
+  ElementFlagMap elements_;
 };
 
 }  // namespace blink

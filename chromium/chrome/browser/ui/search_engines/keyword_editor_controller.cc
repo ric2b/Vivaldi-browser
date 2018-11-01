@@ -4,21 +4,18 @@
 
 #include "chrome/browser/ui/search_engines/keyword_editor_controller.h"
 
-#include "chrome/browser/favicon/favicon_service_factory.h"
+#include "base/metrics/user_metrics.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/search_engines/template_url_table_model.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
-#include "content/public/browser/user_metrics.h"
 
 using base::UserMetricsAction;
 
 KeywordEditorController::KeywordEditorController(Profile* profile)
     : url_model_(TemplateURLServiceFactory::GetForProfile(profile)) {
-  table_model_.reset(new TemplateURLTableModel(
-      url_model_, FaviconServiceFactory::GetForProfile(
-                      profile, ServiceAccessType::EXPLICIT_ACCESS)));
+  table_model_.reset(new TemplateURLTableModel(url_model_));
 }
 
 KeywordEditorController::~KeywordEditorController() {
@@ -29,7 +26,7 @@ int KeywordEditorController::AddTemplateURL(const base::string16& title,
                                             const std::string& url) {
   DCHECK(!url.empty());
 
-  content::RecordAction(UserMetricsAction("KeywordEditor_AddKeyword"));
+  base::RecordAction(UserMetricsAction("KeywordEditor_AddKeyword"));
 
   const int new_index = table_model_->last_other_engine_index();
   table_model_->Add(new_index, title, keyword, url);
@@ -56,7 +53,7 @@ void KeywordEditorController::ModifyTemplateURL(TemplateURL* template_url,
 
   table_model_->ModifyTemplateURL(index, title, keyword, url);
 
-  content::RecordAction(UserMetricsAction("KeywordEditor_ModifiedKeyword"));
+  base::RecordAction(UserMetricsAction("KeywordEditor_ModifiedKeyword"));
 }
 
 bool KeywordEditorController::CanEdit(const TemplateURL* url) const {
@@ -76,7 +73,7 @@ bool KeywordEditorController::CanRemove(const TemplateURL* url) const {
 
 void KeywordEditorController::RemoveTemplateURL(int index) {
   table_model_->Remove(index);
-  content::RecordAction(UserMetricsAction("KeywordEditor_RemoveKeyword"));
+  base::RecordAction(UserMetricsAction("KeywordEditor_RemoveKeyword"));
 }
 
 TemplateURL* KeywordEditorController::GetDefaultSearchProvider() {

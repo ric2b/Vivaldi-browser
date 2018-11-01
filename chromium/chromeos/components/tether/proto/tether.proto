@@ -70,6 +70,7 @@ message TetherAvailabilityResponse {
     SETUP_NEEDED = 2;
     NO_RECEPTION = 3;
     NO_SIM_CARD = 4;
+    NOTIFICATIONS_DISABLED = 5;
   }
 
   optional ResponseCode response_code = 1;
@@ -85,6 +86,7 @@ message ConnectTetheringResponse {
     UNKNOWN_ERROR = 0;
     SUCCESS = 1;
     PROVISIONING_FAILED = 2;
+    TETHERING_TIMEOUT = 3;
   }
 
   optional ResponseCode response_code = 1;

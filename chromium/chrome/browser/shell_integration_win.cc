@@ -47,16 +47,11 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/shell_handler_win.mojom.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/installer/setup/setup_util.h"
+#include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/browser_distribution.h"
-#include "chrome/installer/util/create_reg_key_work_item.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/scoped_user_protocol_entry.h"
-#include "chrome/installer/util/set_reg_value_work_item.h"
 #include "chrome/installer/util/shell_util.h"
-#include "chrome/installer/util/util_constants.h"
-#include "chrome/installer/util/work_item.h"
-#include "chrome/installer/util/work_item_list.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/utility_process_mojo_client.h"
@@ -122,8 +117,7 @@ base::string16 GetProfileIdFromPath(const base::FilePath& profile_path) {
 
 base::string16 GetAppListAppName() {
   static const base::char16 kAppListAppNameSuffix[] = L"AppList";
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  base::string16 app_name(dist->GetBaseAppId());
+  base::string16 app_name(install_static::GetBaseAppId());
   app_name.append(kAppListAppNameSuffix);
   return app_name;
 }
@@ -168,8 +162,7 @@ base::string16 GetExpectedAppId(const base::CommandLine& command_line,
     app_name = base::UTF8ToUTF16(
       web_app::GenerateApplicationNameFromExtensionId(vivaldi::kVivaldiAppId));
   } else {
-    BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-    app_name = ShellUtil::GetBrowserModelId(dist, is_per_user_install);
+    app_name = ShellUtil::GetBrowserModelId(is_per_user_install);
   }
   DCHECK(!app_name.empty());
 
@@ -580,9 +573,7 @@ bool SetAsDefaultProtocolClient(const std::string& protocol) {
 }
 
 DefaultWebClientSetPermission GetDefaultWebClientSetPermission() {
-  BrowserDistribution* distribution = BrowserDistribution::GetDistribution();
-  if (distribution->GetDefaultBrowserControlPolicy() !=
-          BrowserDistribution::DEFAULT_BROWSER_FULL_CONTROL)
+  if (!install_static::SupportsSetAsDefaultBrowser())
     return SET_DEFAULT_NOT_ALLOWED;
   if (ShellUtil::CanMakeChromeDefaultUnattended())
     return SET_DEFAULT_UNATTENDED;
@@ -751,9 +742,8 @@ base::string16 GetAppModelIdForProfile(const base::string16& app_name,
 
 base::string16 GetChromiumModelIdForProfile(
     const base::FilePath& profile_path) {
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   return GetAppModelIdForProfile(
-      ShellUtil::GetBrowserModelId(dist, InstallUtil::IsPerUserInstall()),
+      ShellUtil::GetBrowserModelId(InstallUtil::IsPerUserInstall()),
       profile_path);
 }
 
@@ -854,9 +844,8 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
     // Clear dual_mode property from any shortcuts that previously had it (it
     // was only ever installed on shortcuts with the
     // |default_chromium_model_id|).
-    BrowserDistribution* dist = BrowserDistribution::GetDistribution();
     base::string16 default_chromium_model_id(
-        ShellUtil::GetBrowserModelId(dist, is_per_user_install));
+        ShellUtil::GetBrowserModelId(is_per_user_install));
     if (expected_app_id == default_chromium_model_id) {
       propvariant.Reset();
       if (property_store->GetValue(PKEY_AppUserModel_IsDualMode,
@@ -871,8 +860,8 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
       }
     }
 
-    persist_file.Release();
-    shell_link.Release();
+    persist_file.Reset();
+    shell_link.Reset();
 
     // Update the shortcut if some of its properties need to be updated.
     if (updated_properties.options &&

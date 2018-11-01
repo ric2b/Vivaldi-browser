@@ -6,7 +6,7 @@
 
 #include "core/layout/ng/geometry/ng_physical_offset.h"
 #include "core/layout/ng/geometry/ng_physical_size.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -46,7 +46,7 @@ NGPhysicalOffset NGLogicalOffset::ConvertToPhysical(
       else
         return NGPhysicalOffset(block_offset, inline_offset);
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return NGPhysicalOffset();
   }
 }
@@ -54,6 +54,10 @@ NGPhysicalOffset NGLogicalOffset::ConvertToPhysical(
 bool NGLogicalOffset::operator==(const NGLogicalOffset& other) const {
   return std::tie(other.inline_offset, other.block_offset) ==
          std::tie(inline_offset, block_offset);
+}
+
+bool NGLogicalOffset::operator!=(const NGLogicalOffset& other) const {
+  return !operator==(other);
 }
 
 NGLogicalOffset NGLogicalOffset::operator+(const NGLogicalOffset& other) const {
@@ -99,7 +103,7 @@ NGLogicalOffset& NGLogicalOffset::operator-=(const NGLogicalOffset& other) {
 }
 
 String NGLogicalOffset::ToString() const {
-  return String::format("%dx%d", inline_offset.toInt(), block_offset.toInt());
+  return String::Format("%dx%d", inline_offset.ToInt(), block_offset.ToInt());
 }
 
 std::ostream& operator<<(std::ostream& os, const NGLogicalOffset& value) {

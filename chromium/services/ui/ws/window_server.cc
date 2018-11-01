@@ -10,7 +10,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
-#include "services/service_manager/public/cpp/connection.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/frame_generator.h"
@@ -45,8 +44,6 @@ struct WindowServer::CurrentDragLoopState {
   WindowTree* initiator;
 };
 
-// TODO(fsamuel): DisplayCompositor should be a mojo interface dispensed by
-// GpuHost.
 WindowServer::WindowServer(WindowServerDelegate* delegate)
     : delegate_(delegate),
       next_client_id_(1),
@@ -56,12 +53,12 @@ WindowServer::WindowServer(WindowServerDelegate* delegate)
       next_wm_change_id_(0),
       gpu_host_(new GpuHost(this)),
       window_manager_window_tree_factory_set_(this, &user_id_tracker_),
-      display_compositor_client_binding_(this) {
+      frame_sink_manager_client_binding_(this) {
   user_id_tracker_.AddObserver(this);
   OnUserIdAdded(user_id_tracker_.active_id());
-  gpu_host_->CreateDisplayCompositor(
-      mojo::MakeRequest(&display_compositor_),
-      display_compositor_client_binding_.CreateInterfacePtrAndBind());
+  gpu_host_->CreateFrameSinkManager(
+      mojo::MakeRequest(&frame_sink_manager_),
+      frame_sink_manager_client_binding_.CreateInterfacePtrAndBind());
 }
 
 WindowServer::~WindowServer() {
@@ -135,7 +132,8 @@ void WindowServer::AddTree(std::unique_ptr<WindowTree> tree_impl_ptr,
 WindowTree* WindowServer::CreateTreeForWindowManager(
     const UserId& user_id,
     mojom::WindowTreeRequest window_tree_request,
-    mojom::WindowTreeClientPtr window_tree_client) {
+    mojom::WindowTreeClientPtr window_tree_client,
+    bool automatically_create_display_roots) {
   std::unique_ptr<WindowTree> window_tree(new WindowTree(
       this, user_id, nullptr, base::WrapUnique(new WindowManagerAccessPolicy)));
   std::unique_ptr<WindowTreeBinding> window_tree_binding =
@@ -149,7 +147,7 @@ WindowTree* WindowServer::CreateTreeForWindowManager(
   }
   WindowTree* window_tree_ptr = window_tree.get();
   AddTree(std::move(window_tree), std::move(window_tree_binding), nullptr);
-  window_tree_ptr->ConfigureWindowManager();
+  window_tree_ptr->ConfigureWindowManager(automatically_create_display_roots);
   return window_tree_ptr;
 }
 
@@ -276,15 +274,17 @@ ServerWindow* WindowServer::GetFocusedWindow() {
   return nullptr;
 }
 
-bool WindowServer::IsActiveUserInHighContrastMode() const {
-  return IsUserInHighContrastMode(user_id_tracker_.active_id());
-}
-
 void WindowServer::SetHighContrastMode(const UserId& user, bool enabled) {
   // TODO(fsamuel): This doesn't really seem like it's a window server concept?
   if (IsUserInHighContrastMode(user) == enabled)
     return;
   high_contrast_mode_[user] = enabled;
+
+  if (user == user_id_tracker_.active_id()) {
+    // Propagate the change to all Displays so that FrameGenerators start
+    // requesting BeginFrames.
+    display_manager_->SetHighContrastMode(enabled);
+  }
 }
 
 uint32_t WindowServer::GenerateWindowManagerChangeId(
@@ -346,12 +346,15 @@ void WindowServer::WindowManagerCreatedTopLevelWindow(
                                              change.client_change_id, window);
 }
 
-void WindowServer::ProcessWindowBoundsChanged(const ServerWindow* window,
-                                              const gfx::Rect& old_bounds,
-                                              const gfx::Rect& new_bounds) {
+void WindowServer::ProcessWindowBoundsChanged(
+    const ServerWindow* window,
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   for (auto& pair : tree_map_) {
     pair.second->ProcessWindowBoundsChanged(window, old_bounds, new_bounds,
-                                            IsOperationSource(pair.first));
+                                            IsOperationSource(pair.first),
+                                            local_surface_id);
   }
 }
 
@@ -415,7 +418,8 @@ void WindowServer::ProcessWindowDeleted(ServerWindow* window) {
 }
 
 void WindowServer::ProcessWillChangeWindowPredefinedCursor(
-    ServerWindow* window, mojom::Cursor cursor_id) {
+    ServerWindow* window,
+    mojom::CursorType cursor_id) {
   for (auto& pair : tree_map_) {
     pair.second->ProcessCursorChanged(window, cursor_id,
                                       IsOperationSource(pair.first));
@@ -529,8 +533,8 @@ WindowManagerState* WindowServer::GetWindowManagerStateForUser(
       user_id);
 }
 
-cc::mojom::DisplayCompositor* WindowServer::GetDisplayCompositor() {
-  return display_compositor_.get();
+cc::mojom::FrameSinkManager* WindowServer::GetFrameSinkManager() {
+  return frame_sink_manager_.get();
 }
 
 bool WindowServer::GetFrameDecorationsForUser(
@@ -632,7 +636,7 @@ void WindowServer::HandleTemporaryReferenceForNewSurface(
     current->GetOrCreateCompositorFrameSinkManager()->ClaimTemporaryReference(
         surface_id);
   } else {
-    display_compositor_->DropTemporaryReference(surface_id);
+    frame_sink_manager_->DropTemporaryReference(surface_id);
   }
 }
 
@@ -669,11 +673,11 @@ void WindowServer::OnWindowHierarchyChanged(ServerWindow* window,
   ProcessWindowHierarchyChanged(window, new_parent, old_parent);
 
   if (old_parent) {
-    display_compositor_->UnregisterFrameSinkHierarchy(
+    frame_sink_manager_->UnregisterFrameSinkHierarchy(
         old_parent->frame_sink_id(), window->frame_sink_id());
   }
   if (new_parent) {
-    display_compositor_->RegisterFrameSinkHierarchy(new_parent->frame_sink_id(),
+    frame_sink_manager_->RegisterFrameSinkHierarchy(new_parent->frame_sink_id(),
                                                     window->frame_sink_id());
   }
 
@@ -686,7 +690,8 @@ void WindowServer::OnWindowBoundsChanged(ServerWindow* window,
   if (in_destructor_)
     return;
 
-  ProcessWindowBoundsChanged(window, old_bounds, new_bounds);
+  ProcessWindowBoundsChanged(window, old_bounds, new_bounds,
+                             window->current_local_surface_id());
   if (!window->parent())
     return;
 
@@ -745,8 +750,9 @@ void WindowServer::OnWindowVisibilityChanged(ServerWindow* window) {
         window);
 }
 
-void WindowServer::OnWindowPredefinedCursorChanged(ServerWindow* window,
-                                                   mojom::Cursor cursor_id) {
+void WindowServer::OnWindowPredefinedCursorChanged(
+    ServerWindow* window,
+    mojom::CursorType cursor_id) {
   if (in_destructor_)
     return;
 
@@ -756,7 +762,7 @@ void WindowServer::OnWindowPredefinedCursorChanged(ServerWindow* window,
 }
 
 void WindowServer::OnWindowNonClientCursorChanged(ServerWindow* window,
-                                                  mojom::Cursor cursor_id) {
+                                                  mojom::CursorType cursor_id) {
   if (in_destructor_)
     return;
 
@@ -810,7 +816,7 @@ void WindowServer::OnSurfaceCreated(const cc::SurfaceInfo& surface_info) {
 
   // If the window doesn't exist then we have nothing to propagate.
   if (!window) {
-    display_compositor_->DropTemporaryReference(surface_info.id());
+    frame_sink_manager_->DropTemporaryReference(surface_info.id());
     return;
   }
 

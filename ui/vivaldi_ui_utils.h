@@ -49,8 +49,9 @@ extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
                                  int target_width,
                                  int target_height);
 
-}  // namespace ui_tools
+Browser* GetBrowserFromWebContents(content::WebContents* web_contents);
 
+}  // namespace ui_tools
 }  // namespace vivaldi
 
 #endif  // UI_VIVALDI_UI_UTILS_H_

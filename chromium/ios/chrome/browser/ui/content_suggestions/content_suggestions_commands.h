@@ -13,15 +13,14 @@ class GURL;
 
 // Opens the Reading List.
 - (void)openReadingList;
-// Opens the first page of the Reading List.
-- (void)openFirstPageOfReadingList;
-// Opens the favicon associated with the cell with the |index|.
-- (void)openFaviconAtIndex:(NSInteger)index;
 // Opens the |URL|.
 - (void)openURL:(const GURL&)URL;
 // Displays a context menu for opening the |articleItem|.
 - (void)displayContextMenuForArticle:(ContentSuggestionsArticleItem*)articleItem
-                             atPoint:(CGPoint)touchLocation;
+                             atPoint:(CGPoint)touchLocation
+                         atIndexPath:(NSIndexPath*)indexPath;
+// Dismisses the context menu if it is displayed.
+- (void)dismissContextMenu;
 
 @end
 

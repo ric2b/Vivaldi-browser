@@ -22,6 +22,8 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_range.h"
 #include "ui/accessibility/ax_text_utils.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/accessibility/platform/ax_platform_node_delegate.h"
 
 // Set PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL if this platform has
 // a platform-specific subclass of BrowserAccessibility and
@@ -64,7 +66,7 @@ class BrowserAccessibilityManager;
 // for tests.
 //
 ////////////////////////////////////////////////////////////////////////////////
-class CONTENT_EXPORT BrowserAccessibility {
+class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
  public:
   // Creates a platform specific BrowserAccessibility. Ownership passes to the
   // caller.
@@ -149,9 +151,6 @@ class CONTENT_EXPORT BrowserAccessibility {
   // page (specifically, the top-left corner of the topmost web contents).
   gfx::Rect GetPageBoundsRect() const;
 
-  // Returns the bounds of this object in screen coordinates.
-  gfx::Rect GetScreenBoundsRect() const;
-
   // Returns the bounds of the given range in coordinates relative to the
   // top-left corner of the overall web area. Only valid when the
   // role is WebAXRoleStaticText.
@@ -164,30 +163,12 @@ class CONTENT_EXPORT BrowserAccessibility {
   // (which is relative to its nearest scrollable ancestor) to
   // absolute bounds, either in page coordinates (when |frameOnly| is
   // false), or in frame coordinates (when |frameOnly| is true).
-  gfx::Rect RelativeToAbsoluteBounds(gfx::RectF bounds, bool frame_only) const;
+  virtual gfx::Rect RelativeToAbsoluteBounds(gfx::RectF bounds,
+                                             bool frame_only) const;
 
   // This is to handle the cases such as ARIA textbox, where the value should
   // be calculated from the object's inner text.
   virtual base::string16 GetValue() const;
-
-  // Starting at the given character offset, locates the start of the next or
-  // previous line and returns its character offset.
-  int GetLineStartBoundary(int start,
-                           ui::TextBoundaryDirection direction,
-                           ui::AXTextAffinity affinity) const;
-
-  // Starting at the given character offset, locates the start of the next or
-  // previous word and returns its character offset.
-  // In case there is no word boundary before or after the given offset, it
-  // returns one past the last character.
-  // If the given offset is already at the start of a word, returns the start
-  // of the next word if the search is forwards, and the given offset if it is
-  // backwards.
-  // If the start offset is equal to -1 and the search is in the forwards
-  // direction, returns the start boundary of the first word.
-  // Start offsets that are not in the range -1 to text length are invalid.
-  int GetWordStartBoundary(int start,
-                           ui::TextBoundaryDirection direction) const;
 
   // This is an approximate hit test that only uses the information in
   // the browser process to compute the correct result. It will not return
@@ -231,11 +212,10 @@ class CONTENT_EXPORT BrowserAccessibility {
   BrowserAccessibility* InternalGetChild(uint32_t child_index) const;
   BrowserAccessibility* InternalGetParent() const;
 
-  BrowserAccessibility* GetParent() const;
+  BrowserAccessibility* PlatformGetParent() const;
   int32_t GetIndexInParent() const;
 
   int32_t GetId() const;
-  const ui::AXNodeData& GetData() const;
   gfx::RectF GetLocation() const;
   ui::AXRole GetRole() const;
   int32_t GetState() const;
@@ -326,6 +306,53 @@ class CONTENT_EXPORT BrowserAccessibility {
 
   base::string16 GetFontFamily() const;
   base::string16 GetLanguage() const;
+
+  // Returns the table or ARIA grid if inside one.
+  BrowserAccessibility* GetTable() const;
+
+  // If inside a table or ARIA grid, returns the cell found at the given index.
+  // Indices are in row major order and each cell is counted once regardless of
+  // its span.
+  BrowserAccessibility* GetTableCell(int index) const;
+
+  // If inside a table or ARIA grid, returns the cell at the given row and
+  // column (0-based). Works correctly with cells that span multiple rows or
+  // columns.
+  BrowserAccessibility* GetTableCell(int row, int column) const;
+
+  // If inside a table or ARIA grid, returns the zero-based index of the cell.
+  // Indices are in row major order and each cell is counted once regardless of
+  // its span. Returns -1 if the cell is not found or if not inside a table.
+  int GetTableCellIndex() const;
+
+  // If inside a table or ARIA grid, returns the physical column number for the
+  // current cell. In contrast to logical columns, physical columns always start
+  // from 0 and have no gaps in their numbering. Logical columns can be set
+  // using aria-colindex.
+  int GetTableColumn() const;
+
+  // If inside a table or ARIA grid, returns the number of physical columns,
+  // otherwise returns 0.
+  int GetTableColumnCount() const;
+
+  // If inside a table or ARIA grid, returns the number of physical columns that
+  // this cell spans. If not a cell, returns 0.
+  int GetTableColumnSpan() const;
+
+  // If inside a table or ARIA grid, returns the physical row number for the
+  // current cell. In contrast to logical rows, physical rows always start from
+  // 0 and have no gaps in their numbering. Logical rows can be set using
+  // aria-rowindex.
+  int GetTableRow() const;
+
+  // If inside a table or ARIA grid, returns the number of physical rows,
+  // otherwise returns 0.
+  int GetTableRowCount() const;
+
+  // If inside a table or ARIA grid, returns the number of physical rows that
+  // this cell spans. If not a cell, returns 0.
+  int GetTableRowSpan() const;
+
   virtual base::string16 GetText() const;
 
   // Returns true if the bit corresponding to the given state enum is 1.
@@ -355,14 +382,25 @@ class CONTENT_EXPORT BrowserAccessibility {
   // to compute a name from its descendants.
   std::string ComputeAccessibleNameFromDescendants();
 
-  // Creates a position rooted at this object.
-  // This is a text position on all platforms except IA2 and ATK, where tree
-  // positions are created for non-text objects representing hypertext offsets.
-  virtual AXPlatformPosition::AXPositionInstance CreatePositionAt(
-      int offset) const;
+  // Creates a text position rooted at this object.
+  AXPlatformPosition::AXPositionInstance CreatePositionAt(
+      int offset,
+      ui::AXTextAffinity affinity = ui::AX_TEXT_AFFINITY_DOWNSTREAM) const;
 
   // Gets the text offsets where new lines start.
   std::vector<int> GetLineStartOffsets() const;
+
+  // AXPlatformNodeDelegate.
+  const ui::AXNodeData& GetData() const override;
+  gfx::NativeWindow GetTopLevelWidget() override;
+  gfx::NativeViewAccessible GetParent() override;
+  int GetChildCount() override;
+  gfx::NativeViewAccessible ChildAtIndex(int index) override;
+  gfx::Rect GetScreenBoundsRect() const override;
+  gfx::NativeViewAccessible HitTestSync(int x, int y) override;
+  gfx::NativeViewAccessible GetFocus() override;
+  gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
+  bool AccessibilityPerformAction(const ui::AXActionData& data) override;
 
  protected:
   using AXPlatformPositionInstance = AXPlatformPosition::AXPositionInstance;
@@ -378,6 +416,13 @@ class CONTENT_EXPORT BrowserAccessibility {
 
   // A unique ID, since node IDs are frame-local.
   int32_t unique_id_;
+
+  // The platform-specific object that implements the accessibility APIs for
+  // this node. Currently some of the platform-specific code is implemented by
+  // subclasses of BrowserAccessibility and some by |platform_node_|, but
+  // eventually we want all of that code to be in AXPlatformNode.  See
+  // http://crbug.com/703369
+  ui::AXPlatformNode* platform_node_;
 
  private:
   // |GetInnerText| recursively includes all the text from descendants such as

@@ -17,7 +17,7 @@ namespace mojo {
 
 template <>
 struct ArrayTraits<base::ListValue> {
-  using Element = std::unique_ptr<base::Value>;
+  using Element = base::Value;
   using ConstIterator = base::ListValue::const_iterator;
 
   static size_t GetSize(const base::ListValue& input) {
@@ -173,7 +173,7 @@ struct UnionTraits<common::mojom::ValueDataView, base::Value> {
   }
 
   static mojo::ConstCArray<uint8_t> binary_value(const base::Value& value) {
-    const base::BinaryValue* binary_value = nullptr;
+    const base::Value* binary_value = nullptr;
     if (!value.GetAsBinary(&binary_value))
       NOTREACHED();
     return mojo::ConstCArray<uint8_t>(

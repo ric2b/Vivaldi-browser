@@ -319,7 +319,7 @@ TEST_F(EmbeddedWorkerInstanceTest, StopWhenDevToolsAttached) {
   EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, worker->status());
 
   // Set devtools_attached to true, and do the same.
-  worker->set_devtools_attached(true);
+  worker->SetDevToolsAttached(true);
 
   EXPECT_EQ(SERVICE_WORKER_OK,
             StartWorker(worker.get(), service_worker_version_id, pattern, url));
@@ -692,11 +692,10 @@ TEST_F(EmbeddedWorkerInstanceTest, FailToSendStartIPC) {
   base::RunLoop().RunUntilIdle();
 
   // Worker should handle the failure of binding as detach.
-  ASSERT_EQ(3u, events_.size());
+  ASSERT_EQ(2u, events_.size());
   EXPECT_EQ(PROCESS_ALLOCATED, events_[0].type);
-  EXPECT_EQ(START_WORKER_MESSAGE_SENT, events_[1].type);
-  EXPECT_EQ(DETACHED, events_[2].type);
-  EXPECT_EQ(EmbeddedWorkerStatus::STARTING, events_[2].status);
+  EXPECT_EQ(DETACHED, events_[1].type);
+  EXPECT_EQ(EmbeddedWorkerStatus::STARTING, events_[1].status);
 }
 
 class FailEmbeddedWorkerInstanceClientImpl
@@ -787,7 +786,7 @@ TEST_F(EmbeddedWorkerInstanceTest, AddMessageToConsole) {
   // Attempt to start the worker and immediate AddMessageToConsole should not
   // cause a crash.
   std::pair<blink::WebConsoleMessage::Level, std::string> test_message =
-      std::make_pair(blink::WebConsoleMessage::LevelVerbose, "");
+      std::make_pair(blink::WebConsoleMessage::kLevelVerbose, "");
   std::unique_ptr<EmbeddedWorkerStartParams> params =
       CreateStartParams(version_id, pattern, url);
   worker->Start(std::move(params), CreateEventDispatcher(),

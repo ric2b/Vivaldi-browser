@@ -21,9 +21,21 @@ SchedulerWorkerPoolParams::SchedulerWorkerPoolParams(
       backward_compatibility_(backward_compatibility) {}
 
 SchedulerWorkerPoolParams::SchedulerWorkerPoolParams(
-    SchedulerWorkerPoolParams&& other) = default;
+    StandbyThreadPolicy standby_thread_policy,
+    int max_threads,
+    TimeDelta suggested_reclaim_time,
+    SchedulerBackwardCompatibility backward_compatibility)
+    : SchedulerWorkerPoolParams(std::string(),
+                                ThreadPriority::NORMAL,
+                                standby_thread_policy,
+                                max_threads,
+                                suggested_reclaim_time,
+                                backward_compatibility) {}
+
+SchedulerWorkerPoolParams::SchedulerWorkerPoolParams(
+    const SchedulerWorkerPoolParams& other) = default;
 
 SchedulerWorkerPoolParams& SchedulerWorkerPoolParams::operator=(
-    SchedulerWorkerPoolParams&& other) = default;
+    const SchedulerWorkerPoolParams& other) = default;
 
 }  // namespace base

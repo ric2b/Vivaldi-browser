@@ -215,7 +215,10 @@ static void GL_BINDING_CALL Mock_glCopyBufferSubData(GLenum readTarget,
                                                      GLsizeiptr size);
 static void GL_BINDING_CALL
 Mock_glCopySubTextureCHROMIUM(GLuint sourceId,
+                              GLint sourceLevel,
+                              GLenum destTarget,
                               GLuint destId,
+                              GLint destLevel,
                               GLint xoffset,
                               GLint yoffset,
                               GLint x,
@@ -252,7 +255,10 @@ static void GL_BINDING_CALL Mock_glCopyTexSubImage3D(GLenum target,
                                                      GLsizei height);
 static void GL_BINDING_CALL
 Mock_glCopyTextureCHROMIUM(GLuint sourceId,
+                           GLint sourceLevel,
+                           GLenum destTarget,
                            GLuint destId,
+                           GLint destLevel,
                            GLint internalFormat,
                            GLenum destType,
                            GLboolean unpackFlipY,
@@ -1171,6 +1177,8 @@ static void GL_BINDING_CALL Mock_glReadPixelsRobustANGLE(GLint x,
                                                          GLenum type,
                                                          GLsizei bufSize,
                                                          GLsizei* length,
+                                                         GLsizei* columns,
+                                                         GLsizei* rows,
                                                          void* pixels);
 static void GL_BINDING_CALL Mock_glReadnPixelsRobustANGLE(GLint x,
                                                           GLint y,
@@ -1180,6 +1188,8 @@ static void GL_BINDING_CALL Mock_glReadnPixelsRobustANGLE(GLint x,
                                                           GLenum type,
                                                           GLsizei bufSize,
                                                           GLsizei* length,
+                                                          GLsizei* columns,
+                                                          GLsizei* rows,
                                                           void* data);
 static void GL_BINDING_CALL Mock_glReleaseShaderCompiler(void);
 static void GL_BINDING_CALL Mock_glRenderbufferStorage(GLenum target,
@@ -1214,6 +1224,7 @@ Mock_glRenderbufferStorageMultisampleIMG(GLenum target,
                                          GLenum internalformat,
                                          GLsizei width,
                                          GLsizei height);
+static void GL_BINDING_CALL Mock_glRequestExtensionANGLE(const char* name);
 static void GL_BINDING_CALL Mock_glResumeTransformFeedback(void);
 static void GL_BINDING_CALL Mock_glSampleCoverage(GLclampf value,
                                                   GLboolean invert);

@@ -6,11 +6,55 @@
 #define CHROME_BROWSER_SUBRESOURCE_FILTER_CHROME_SUBRESOURCE_FILTER_CLIENT_H_
 
 #include "base/macros.h"
-#include "components/subresource_filter/core/browser/subresource_filter_client.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/subresource_filter/content/browser/subresource_filter_client.h"
+
+class GURL;
 
 namespace content {
 class WebContents;
 }  // namespace content
+
+// This enum backs a histogram. Make sure new elements are only added to the
+// end. Keep histograms.xml up to date with any changes.
+enum SubresourceFilterAction {
+  // Main frame navigation to a different document.
+  kActionNavigationStarted = 0,
+
+  // Standard UI shown. On Desktop this is in the omnibox,
+  // On Android, it is an infobar.
+  kActionUIShown,
+
+  // On Desktop, this is a bubble. On Android it is an
+  // expanded infobar.
+  kActionDetailsShown,
+
+  // TODO(csharrison): Log this once the link is in place.
+  kActionClickedLearnMore,
+
+  // Content settings:
+  //
+  // Content setting updated automatically via the standard UI.
+  kActionContentSettingsBlockedFromUI,
+
+  // Content settings which target specific origins (e.g. no wildcards).
+  kActionContentSettingsAllowed,
+  kActionContentSettingsBlocked,
+
+  // Global settings.
+  kActionContentSettingsAllowedGlobal,
+  kActionContentSettingsBlockedGlobal,
+
+  // A wildcard update. The current content settings API makes this a bit
+  // difficult to see whether it is Block or Allow. This should not be a huge
+  // problem because this can only be changed from the settings UI, which is
+  // relatively rare.
+  // TODO(crbug.com/706061): Fix this once content settings API becomes more
+  // flexible.
+  kActionContentSettingsWildcardUpdate,
+
+  kActionLastEntry
+};
 
 // Chrome implementation of SubresourceFilterClient.
 class ChromeSubresourceFilterClient
@@ -21,8 +65,15 @@ class ChromeSubresourceFilterClient
 
   // SubresourceFilterClient:
   void ToggleNotificationVisibility(bool visibility) override;
+  bool IsWhitelistedByContentSettings(const GURL& url) override;
+  void WhitelistByContentSettings(const GURL& url) override;
+  subresource_filter::VerifiedRulesetDealer::Handle* GetRulesetDealer()
+      override;
+
+  static void LogAction(SubresourceFilterAction action);
 
  private:
+  ContentSetting GetContentSettingForUrl(const GURL& url);
   content::WebContents* web_contents_;
   bool shown_for_navigation_;
 

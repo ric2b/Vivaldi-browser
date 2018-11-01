@@ -7,8 +7,8 @@
 
 #include "core/workers/InProcessWorkerBase.h"
 #include "modules/ModulesExport.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -21,13 +21,13 @@ class MODULES_EXPORT CompositorWorker final : public InProcessWorkerBase {
   USING_GARBAGE_COLLECTED_MIXIN(CompositorWorker);
 
  public:
-  static CompositorWorker* create(ExecutionContext*,
+  static CompositorWorker* Create(ExecutionContext*,
                                   const String& url,
                                   ExceptionState&);
   ~CompositorWorker() override;
 
-  const AtomicString& interfaceName() const override;
-  InProcessWorkerMessagingProxy* createInProcessWorkerMessagingProxy(
+  const AtomicString& InterfaceName() const override;
+  InProcessWorkerMessagingProxy* CreateInProcessWorkerMessagingProxy(
       ExecutionContext*) override;
 
  private:

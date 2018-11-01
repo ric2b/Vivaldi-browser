@@ -20,6 +20,7 @@
 #include "notes/notesnode.h"
 #include "prefs/vivaldi_pref_names.h"
 
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
@@ -33,6 +34,7 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/vivaldi_extensions_init.h"
+#include "ui/devtools/devtools_connector.h"
 
 VivaldiBrowserMainExtraParts::VivaldiBrowserMainExtraParts() {}
 
@@ -81,12 +83,14 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
+  extensions::DevtoolsConnectorAPI::GetFactoryInstance();
   extensions::ExtensionActionUtilFactory::GetInstance();
   extensions::ImportDataAPI::GetFactoryInstance();
   extensions::NotesAPI::GetFactoryInstance();
   extensions::TabsPrivateAPI::GetFactoryInstance();
   extensions::ShowMenuAPI::GetFactoryInstance();
   extensions::SyncAPI::GetFactoryInstance();
+  extensions::VivaldiDataSourcesAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
   extensions::VivaldiSettingsApiNotificationFactory::GetInstance();

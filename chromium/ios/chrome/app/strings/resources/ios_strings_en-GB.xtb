@@ -77,7 +77,6 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="2381405137052800939">Basics</translation>
 <translation id="2386793615875593361">1 selected</translation>
 <translation id="2435457462613246316">Show password</translation>
-<translation id="2467815441875554965">Contextual Search</translation>
 <translation id="2572712655377361602">A device policy blocked access to your photos</translation>
 <translation id="2584132361465095047">Add Account…</translation>
 <translation id="2593774076813182497">This page cannot be printed.</translation>
@@ -101,6 +100,7 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="2871695793448672541">Hidden Password</translation>
 <translation id="2898963176829412617">New Folder…</translation>
 <translation id="2903493209154104877">Addresses</translation>
+<translation id="2909437209446960244">Recent tabs</translation>
 <translation id="291754862089661335">Position QR code or bar code in this frame</translation>
 <translation id="2921219216347069551">Cannot Share Page</translation>
 <translation id="292639812446257861">Mark Unread</translation>
@@ -129,6 +129,7 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="3414292259312108062">Chrome will store this in your <ph name="BEGIN_LINK" />Google saved passwords<ph name="END_LINK" /> and autofill it for you so that you don't have to remember it yourself.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> min</translation>
 <translation id="3448016392200048164">Split View</translation>
+<translation id="3474624961160222204">Continue as <ph name="NAME" /></translation>
 <translation id="3474649192738347024">Forms filled.</translation>
 <translation id="3478058380795961209">Month of Expiry</translation>
 <translation id="3482959374254649722">Syncing your tabs...</translation>
@@ -145,9 +146,9 @@ For example, some websites may respond to this request by showing you ads that a
 To adjust your search term, long press to select. To refine your search, slide the panel all the way up and touch the search box.</translation>
 <translation id="3607167657931203000">Autofill Data</translation>
 <translation id="3608436266458100337">Reader mode</translation>
+<translation id="3628119975092896051">Your reading list is available offline. To add a page to your reading list, tap <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Pre-load Web Pages</translation>
 <translation id="3691593122358196899">Bookmarked to <ph name="FOLDER_TITLE" /></translation>
-<translation id="3692781555820666866">When enabled, the omnibox will include suggestions for web pages broadcast by devices near you.</translation>
 <translation id="3738139272394829648">Touch to Search</translation>
 <translation id="3771033907050503522">Incognito Tabs</translation>
 <translation id="3783017676699494206">Save Image</translation>
@@ -174,7 +175,6 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="4359125752503270327">This page will open in another application.</translation>
 <translation id="4378154925671717803">Phone</translation>
 <translation id="441868831736628555">Privacy Notice</translation>
-<translation id="4473991315115669931">Enter incognito mode</translation>
 <translation id="4526249700380860531">View and manage saved passwords at <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Try signing in again.</translation>
 <translation id="4620246317052452550">Pages That You've Read</translation>
@@ -187,6 +187,7 @@ Your data is encrypted with your sync passphrase. Enter it to start sync.</trans
 <translation id="4750394297954878236">Suggestions</translation>
 <translation id="4773461607542755386">Open this page in the <ph name="APP_NAME" /> app?</translation>
 <translation id="481968316161811770">Cookies, Site Data</translation>
+<translation id="4860895144060829044">Call</translation>
 <translation id="4875622588773761625">Do you want <ph name="PASSWORD_MANAGER_BRAND" /> to update your password for this site?</translation>
 <translation id="4881695831933465202">Open</translation>
 <translation id="4904877109095351937">Mark Read</translation>
@@ -248,7 +249,6 @@ Handoff must also be enabled in the General section of Settings, and your device
 <translation id="6042308850641462728">More</translation>
 <translation id="605721222689873409">YY</translation>
 <translation id="6066301408025741299">Tap to cancel.</translation>
-<translation id="60851516108411750">Your reading list is available offline. To add a page to your reading list, tap<ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="6122191549521593678">Online</translation>
 <translation id="6127379762771434464">Item removed</translation>
 <translation id="6136914049981179737">Seconds ago</translation>
@@ -267,6 +267,7 @@ Handoff must also be enabled in the General section of Settings, and your device
 <translation id="6324669097367352121">Sign in settings</translation>
 <translation id="6337234675334993532">Encryption</translation>
 <translation id="633809752005859102">Something went really wrong. We'll work on that.</translation>
+<translation id="6342069812937806050">Just now</translation>
 <translation id="6344783595350022745">Clear Text</translation>
 <translation id="6362362396625799311">No Incognito Tabs</translation>
 <translation id="6380866119319257197">If you forget your passphrase or want to change this setting, <ph name="BEGIN_LINK" />reset sync<ph name="END_LINK" /></translation>
@@ -307,16 +308,17 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="7131892264600713844">Showing history from this device. <ph name="BEGIN_LINK" />Find out more.<ph name="END_LINK" /></translation>
 <translation id="7133798577887235672">Full Name</translation>
 <translation id="7136892417564438900">Camera is unavailable</translation>
+<translation id="7159472599653637159">Request Mobile Site</translation>
 <translation id="7167621057293532233">Data Types</translation>
 <translation id="7189598951263744875">Share...</translation>
 <translation id="7203585745079012652">Speak Answers Back</translation>
 <translation id="722055596168483966">Personalise Google services</translation>
-<translation id="7222245588540287464">Whether or not Contextual Search is enabled.</translation>
 <translation id="7336264872878993241"><ph name="PERCENT" /> percent downloaded</translation>
 <translation id="7346909386216857016">OK, got it</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7419187830569376338">Search <ph name="SEARCH_ENGINE" /> For This Image</translation>
 <translation id="7425346204213733349">Changes to your bookmarks, history, passwords and other settings will no longer be synced to your Google Account. However, your existing data will remain stored in your Google Account.</translation>
+<translation id="744343212394640790">Not <ph name="EMAIL" /></translation>
 <translation id="7454057999980797137">State / County</translation>
 <translation id="7456847797759667638">Open Location...</translation>
 <translation id="7464701184726199289">This clears synced data from all devices. Saved site settings will not be deleted and may reflect your browsing habits. <ph name="BEGIN_LINK" />Find out more<ph name="END_LINK" /></translation>
@@ -383,7 +385,6 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="8741995161408053644">Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="8775144690796719618">Invalid URL</translation>
 <translation id="8820817407110198400">Bookmarks</translation>
-<translation id="882482397944455431">Leave incognito mode</translation>
 <translation id="8840513115188359703">You won't be signed out of your Google Account.</translation>
 <translation id="8904976895050290827">Chrome Sync</translation>
 <translation id="895541991026785598">Report an Issue</translation>

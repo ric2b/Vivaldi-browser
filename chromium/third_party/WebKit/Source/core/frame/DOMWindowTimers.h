@@ -33,8 +33,8 @@
 #ifndef DOMWindowTimers_h
 #define DOMWindowTimers_h
 
-#include "wtf/Forward.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -63,8 +63,8 @@ int setInterval(ScriptState*,
                 const String& handler,
                 int timeout,
                 const Vector<ScriptValue>&);
-void clearTimeout(EventTarget&, int timeoutId);
-void clearInterval(EventTarget&, int timeoutId);
+void clearTimeout(EventTarget&, int timeout_id);
+void clearInterval(EventTarget&, int timeout_id);
 }
 
 }  // namespace blink

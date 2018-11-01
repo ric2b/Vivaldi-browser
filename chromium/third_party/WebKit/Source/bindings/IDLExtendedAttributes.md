@@ -811,12 +811,12 @@ interface XXX {
 You can write custom bindings as V8XXX::namedPropertyQuery(...) and V8XXX::namedPropertyEnumerator(...) in Source/bindings/v8/custom/V8XXXCustom.cpp:
 
 ```c++
-v8::Handle<v8::Integer> V8XXX::namedPropertyQuery(v8::Local<v8::String> name, const v8::AccessorInfo& info)
+v8::Local<v8::Integer> V8XXX::namedPropertyQuery(v8::Local<v8::String> name, const v8::AccessorInfo& info)
 {
     ...;
 }
 
-v8::Handle<v8::Array> V8XXX::namedPropertyEnumerator(const v8::AccessorInfo& info)
+v8::Local<v8::Array> V8XXX::namedPropertyEnumerator(const v8::AccessorInfo& info)
 {
     ...;
 }
@@ -841,7 +841,7 @@ If you want to write custom bindings for XXX.call(...), you can use `[Custom=Leg
 You can write custom `V8XXX::callAsFunctionCallback(...)` in Source/bindings/v8/custom/V8XXXCustom.cpp:
 
 ```c++
-v8::Handle<v8::Value> V8XXX::callAsFunctionCallback(const v8::Arguments& args)
+v8::Local<v8::Value> V8XXX::callAsFunctionCallback(const v8::Arguments& args)
 {
     ...;
 }
@@ -929,49 +929,6 @@ The deprecation message show on the console can be specified via the [UseCounter
 Summary: Does not generate a test for `[NewObject]` in the binding layer.
 
 When specified, does not generate a test for `[NewObject]`. Some implementation creates a new DOM object and its wrapper before passing through the binding layer. In that case, the generated test doesn't make sense. See Text.splitText() for example.
-
-### [Iterable] _(i)_
-
-Summary: Installs a @@iterator method.
-
-*** note
-In most cases, interfaces should use the standard `iterator<valuetype>`, `iterator<keytype,valuetype>`, `setlike<type>`, or `maplike<keytype, valuetype>` IDL declarations instead. `[Iterable]` should only be necessary for the implementation of iterators themselves.
-***
-
-When the attribute is set on an interface, the code generator installs iterator C++ method into [Symbol.iterator] slot.
-
-```webidl
-[ Iterable ] interface IterableInterface { };
-```
-
-C++ implementation:
-
-```c++
-class IterableInterface : public ScriptWrappable {
-...
-public:
-...
-    // This is called when |obj[Symbol.iterator]| is called.
-    Iterator* iterator(ScriptState*, ExceptionState&);
-};
-```
-
-JavaScript usage:
-
-```js
-var obj = ...; // obj is an IterableInterface object.
-var iter = obj[Symbol.iterator](); // IterableInterface::iterator is called.
-for (var value of obj) {
-    // Iterates over |obj|.
-}
-for (var value of iter) {
-    // Same as above.
-}
-```
-
-*** note
-Currently the code generator doesn't take care of the name conflict. Namely, it is not allowed to have "iterator" method in an iterable interface.
-***
 
 ### [Measure] _(i, m, a, c)_
 
@@ -1454,7 +1411,7 @@ Consider the following example:
 Then you can write custom bindings in Source/bindings/v8/custom/V8XXXConstructorCustom.cpp:
 
 ```c++
-v8::Handle<v8::Value> V8XXX::constructorCallback(const v8::Arguments& args)
+v8::Local<v8::Value> V8XXX::constructorCallback(const v8::Arguments& args)
 {
    ...;
 }

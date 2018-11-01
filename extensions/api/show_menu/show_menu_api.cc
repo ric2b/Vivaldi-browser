@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "apps/app_load_service.h"
 #include "base/base64.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
@@ -20,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/apps/app_load_service.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -262,8 +262,8 @@ void ShowMenuAPI::OnUrlHighlighted(const std::string& url) {
   }
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<ShowMenuAPI>>
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<ShowMenuAPI>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<ShowMenuAPI>* ShowMenuAPI::GetFactoryInstance() {
@@ -341,8 +341,12 @@ void VivaldiMenuController::MenuWillShow(ui::SimpleMenuModel* source) {
 
 void VivaldiMenuController::MenuClosed(ui::SimpleMenuModel* source) {
   source->SetMenuModelDelegate(nullptr);
-  if (source == &menu_model_)
+  if (source == &menu_model_) {
+    if (delegate_) {
+      delegate_->OnMenuCanceled();
+    }
     delete this;
+  }
 }
 
 bool VivaldiMenuController::HasDeveloperTools() {
@@ -563,10 +567,14 @@ void VivaldiMenuController::CommandIdHighlighted(int command_id) {
 
 void VivaldiMenuController::ExecuteCommand(int command_id, int event_flags) {
   if (IsDeveloperTools(command_id)) {
+    // These are the commands we only get when running with npm.
+    // For JS, this menu has been canceled since we handle the actions here.
     HandleDeveloperToolsCommand(command_id);
+    delegate_->OnMenuCanceled();
   } else {
-    delegate_->OnMenuItemActivated(command_id, event_flags);
+    delegate_->OnMenuActivated(command_id, event_flags);
   }
+  delegate_ = nullptr;
 }
 
 const show_menu::MenuItem* VivaldiMenuController::getItemByCommandId(
@@ -577,17 +585,19 @@ const show_menu::MenuItem* VivaldiMenuController::getItemByCommandId(
 namespace Create = vivaldi::show_menu::Create;
 
 bool ShowMenuCreateFunction::RunAsync() {
-  std::unique_ptr<Create::Params> params(Create::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  params_ = Create::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params_.get());
 
-  if (params->create_properties.mode == "context") {
+  if (params_->create_properties.mode == "context") {
     content::ContextMenuParams menu_params;
-    menu_params.x = params->create_properties.left;
-    menu_params.y = params->create_properties.top;
+    menu_params.x = params_->create_properties.left;
+    menu_params.y = params_->create_properties.top;
 
+    // Balanced in OnMenuActivated / OnMenuClosed
+    AddRef();
     // Menu is deallocated when main menu model is closed.
     VivaldiMenuController* menu =
-        new VivaldiMenuController(this, &params->create_properties.items);
+        new VivaldiMenuController(this, &params_->create_properties.items);
     menu->Show(GetAssociatedWebContents(), menu_params);
 #if defined(OS_MACOSX)
   } else {
@@ -599,15 +609,15 @@ bool ShowMenuCreateFunction::RunAsync() {
           GetAssociatedWebContents()->GetBrowserContext();
       profile = Profile::FromBrowserContext(browser_context);
     }
-    ::vivaldi::CreateVivaldiMainMenu(profile, &params->create_properties.items,
-                                     params->create_properties.mode);
+    ::vivaldi::CreateVivaldiMainMenu(profile, &params_->create_properties.items,
+                                     params_->create_properties.mode);
 #endif
   }
+  AddRef();
   return true;
 }
 
-void ShowMenuCreateFunction::OnMenuItemActivated(int command_id,
-                                                 int event_flags) {
+void ShowMenuCreateFunction::OnMenuActivated(int command_id, int event_flags) {
   int id = TranslateCommandIdToMenuId(command_id);
 
   show_menu::Response response;
@@ -619,21 +629,23 @@ void ShowMenuCreateFunction::OnMenuItemActivated(int command_id,
   response.left = event_flags & ui::EF_LEFT_MOUSE_BUTTON ? true : false;
   response.right = event_flags & ui::EF_RIGHT_MOUSE_BUTTON ? true : false;
   response.center = event_flags & ui::EF_MIDDLE_MOUSE_BUTTON ? true : false;
-  results_ = vivaldi::show_menu::Create::Results::Create(response);
-  menu_cancelled_ = false;
+  Respond(ArgumentList(vivaldi::show_menu::Create::Results::Create(response)));
+  Release();
 }
 
-ShowMenuCreateFunction::ShowMenuCreateFunction() : menu_cancelled_(true) {}
+void ShowMenuCreateFunction::OnMenuCanceled() {
+  show_menu::Response response;
+  response.id = -1;
+  response.ctrl = response.shift = response.alt = response.command = false;
+  response.left = response.right = response.center = false;
+  Respond(ArgumentList(vivaldi::show_menu::Create::Results::Create(response)));
+  Release();
+}
+
+ShowMenuCreateFunction::ShowMenuCreateFunction() {
+}
 
 ShowMenuCreateFunction::~ShowMenuCreateFunction() {
-  if (menu_cancelled_) {
-    show_menu::Response response;
-    response.id = -1;
-    response.ctrl = response.shift = response.alt = response.command = false;
-    response.left = response.right = response.center = false;
-    results_ = vivaldi::show_menu::Create::Results::Create(response);
-  }
-  Respond(ArgumentList(std::move(results_)));
 }
 
 }  // namespace extensions

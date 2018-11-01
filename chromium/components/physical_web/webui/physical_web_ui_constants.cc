@@ -9,19 +9,21 @@ namespace physical_web_ui {
 // Resource paths.
 const char kPhysicalWebJS[] = "physical_web.js";
 const char kPhysicalWebCSS[] = "physical_web.css";
+const char kPhysicalWebLinkIcon[] = "ic_link_grey600_36dp.png";
 
 // Message handlers.
-const char kRequestNearbyUrls[] = "requestNearbyURLs";
+const char kPhysicalWebPageLoaded[] = "physicalWebPageLoaded";
 const char kPhysicalWebItemClicked[] = "physicalWebItemClicked";
 
 // Strings.
 const char kTitle[] = "title";
+const char kEmptyMessage[] = "emptyMessage";
 const char kPageInfoDescription[] = "pageInfoDescription";
 const char kPageInfoIcon[] = "pageInfoIcon";
 const char kPageInfoTitle[] = "pageInfoTitle";
 const char kResolvedUrl[] = "resolvedUrl";
 const char kIndex[] = "index";
-const char kReturnNearbyUrls[] = "returnNearbyURLs";
+const char kPushNearbyUrls[] = "pushNearbyURLs";
 const char kMetadata[] = "metadata";
 
 }  // namespace physical_web_ui

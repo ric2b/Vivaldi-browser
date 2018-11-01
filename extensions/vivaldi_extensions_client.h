@@ -28,7 +28,7 @@ class VivaldiExtensionsClient : public ChromeExtensionsClient {
   static void RegisterVivaldiExtensionsClient();
 
  private:
-  friend struct base::DefaultLazyInstanceTraits<VivaldiExtensionsClient>;
+  friend struct base::LazyInstanceTraitsBase<VivaldiExtensionsClient>;
 
   const VivaldiAPIPermissions vivaldi_api_permissions_;
 

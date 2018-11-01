@@ -298,13 +298,54 @@ class IdlUnionType(IdlTypeBase):
         self.member_types = state['member_types']
 
     @property
+    def flattened_member_types(self):
+        """Returns the set of the union's flattened member types.
+
+        https://heycam.github.io/webidl/#dfn-flattened-union-member-types
+        """
+        # We cannot use a set directly because each member is an IdlTypeBase-derived class, and
+        # comparing two objects of the same type is not the same as comparing their names. In
+        # other words:
+        #   x = IdlType('ByteString')
+        #   y = IdlType('ByteString')
+        #   x == y  # False
+        #   x.name == y.name  # True
+        # |flattened_members|'s keys are type names, the values are type |objects.
+        # We assume we can use two IDL objects of the same type interchangeably.
+        flattened_members = {}
+        for member in self.member_types:
+            if member.is_nullable:
+                member = member.inner_type
+            if member.is_union_type:
+                for inner_member in member.flattened_member_types:
+                    flattened_members[inner_member.name] = inner_member
+            else:
+                flattened_members[member.name] = member
+        return set(flattened_members.values())
+
+    @property
+    def number_of_nullable_member_types(self):
+        """Returns the union's number of nullable types.
+
+        http://heycam.github.io/webidl/#dfn-number-of-nullable-member-types
+        """
+        count = 0
+        for member in self.member_types:
+            if member.is_nullable:
+                count += 1
+                member = member.inner_type
+            if member.is_union_type:
+                count += member.number_of_nullable_member_types
+        return count
+
+    @property
     def is_union_type(self):
         return True
 
     def single_matching_member_type(self, predicate):
-        matching_types = filter(predicate, self.member_types)
+        matching_types = filter(predicate, self.flattened_member_types)
         if len(matching_types) > 1:
-            raise "%s is ambigious." % self.name
+            raise ValueError('%s is ambiguous.' % self.name)
         return matching_types[0] if matching_types else None
 
     @property
@@ -338,7 +379,7 @@ class IdlUnionType(IdlTypeBase):
 
     def resolve_typedefs(self, typedefs):
         self.member_types = [
-            typedefs.get(member_type, member_type)
+            member_type.resolve_typedefs(typedefs)
             for member_type in self.member_types]
         return self
 

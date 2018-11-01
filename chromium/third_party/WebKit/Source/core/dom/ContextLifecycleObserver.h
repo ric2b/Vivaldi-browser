@@ -42,10 +42,13 @@ class LocalFrame;
 // - getExecutionContext() returns null after the context is detached.
 // - frame() is a syntax sugar for getExecutionContext()->frame(). It returns
 //   null after the context is detached or the context is not a Document.
+//
+// Both can safely be used up until destruction; i.e., unsafe to
+// call upon in a destructor.
 class CORE_EXPORT ContextClient : public GarbageCollectedMixin {
  public:
-  ExecutionContext* getExecutionContext() const;
-  LocalFrame* frame() const;
+  ExecutionContext* GetExecutionContext() const;
+  LocalFrame* GetFrame() const;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -54,7 +57,7 @@ class CORE_EXPORT ContextClient : public GarbageCollectedMixin {
   explicit ContextClient(LocalFrame*);
 
  private:
-  WeakMember<ExecutionContext> m_executionContext;
+  WeakMember<ExecutionContext> execution_context_;
 };
 
 // ContextLifecycleObserver provides an additional contextDestroyed() hook
@@ -63,25 +66,25 @@ class CORE_EXPORT ContextClient : public GarbageCollectedMixin {
 class CORE_EXPORT ContextLifecycleObserver
     : public LifecycleObserver<ExecutionContext, ContextLifecycleObserver> {
  public:
-  virtual void contextDestroyed(ExecutionContext*) {}
+  virtual void ContextDestroyed(ExecutionContext*) {}
 
-  ExecutionContext* getExecutionContext() const { return lifecycleContext(); }
-  LocalFrame* frame() const;
+  ExecutionContext* GetExecutionContext() const { return LifecycleContext(); }
+  LocalFrame* GetFrame() const;
 
   enum Type {
-    GenericType,
-    SuspendableObjectType,
+    kGenericType,
+    kSuspendableObjectType,
   };
 
-  Type observerType() const { return m_observerType; }
+  Type ObserverType() const { return observer_type_; }
 
  protected:
-  explicit ContextLifecycleObserver(ExecutionContext* executionContext,
-                                    Type type = GenericType)
-      : LifecycleObserver(executionContext), m_observerType(type) {}
+  explicit ContextLifecycleObserver(ExecutionContext* execution_context,
+                                    Type type = kGenericType)
+      : LifecycleObserver(execution_context), observer_type_(type) {}
 
  private:
-  Type m_observerType;
+  Type observer_type_;
 };
 
 // DOMWindowClient is a helper to associate an object with a LocalDOMWindow.
@@ -89,6 +92,9 @@ class CORE_EXPORT ContextLifecycleObserver
 // - domWindow() returns null after the window is detached.
 // - frame() is a syntax sugar for domWindow()->frame(). It returns
 //   null after the window is detached.
+//
+// Both can safely be used up until destruction; i.e., unsafe to
+// call upon in a destructor.
 //
 // If the object is a per-ExecutionContext thing, use ContextClient/
 // ContextLifecycleObserver. If the object is a per-DOMWindow thing, use
@@ -105,8 +111,8 @@ class CORE_EXPORT ContextLifecycleObserver
 // returns null while DOMWindowClient::domWindow() keeps returning the window.
 class CORE_EXPORT DOMWindowClient : public GarbageCollectedMixin {
  public:
-  LocalDOMWindow* domWindow() const;
-  LocalFrame* frame() const;
+  LocalDOMWindow* DomWindow() const;
+  LocalFrame* GetFrame() const;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -115,7 +121,7 @@ class CORE_EXPORT DOMWindowClient : public GarbageCollectedMixin {
   explicit DOMWindowClient(LocalFrame*);
 
  private:
-  WeakMember<LocalDOMWindow> m_domWindow;
+  WeakMember<LocalDOMWindow> dom_window_;
 };
 
 }  // namespace blink

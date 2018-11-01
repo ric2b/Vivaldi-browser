@@ -161,6 +161,15 @@
     "label": "//ui/aura:aura_unittests",
     "type": "windowed_test_launcher",
   },
+  "motopho_latency_test": {
+    "label": "//chrome/test/vr/perf/latency/:motopho_latency_test",
+    "type": "script",
+    "script": "//chrome/test/vr/perf/latency/run_latency_test.py",
+    "args": [
+      "--output-dir=${ISOLATED_OUTDIR}",
+      "-v",
+    ],
+  },
   "base_junit_tests": {
     "label": "//base:base_junit_tests",
     "type": "junit_test",
@@ -421,6 +430,10 @@
     "label": "//services/ui/display:display_service_unittests",
     "type": "console_test_launcher",
   },
+  "dump_syms" : {
+    "label": "//breakpad:dump_syms",
+    "type": "additional_compile_target",
+  },
   "events_unittests": {
     "label": "//ui/events:events_unittests",
     "type": "windowed_test_launcher",
@@ -532,6 +545,11 @@
     "type": "raw",
     "args": [],
   },
+  "ios_chrome_reading_list_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_reading_list_egtests",
+    "type": "raw",
+    "args": [],
+  },
   "ios_chrome_settings_egtests": {
     "label": "//ios/chrome/test/earl_grey:ios_chrome_settings_egtests",
     "type": "raw",
@@ -605,6 +623,10 @@
   # See http://crbug.com/585151
   "libaddressinput_unittests": {
     "label": "//third_party/libaddressinput:libaddressinput_unittests",
+    "type": "console_test_launcher",
+  },
+  "libjingle_xmpp_unittests": {
+    "label": "//third_party/libjingle_xmpp:libjingle_xmpp_unittests",
     "type": "console_test_launcher",
   },
   # See http://crbug.com/585151
@@ -1091,7 +1113,7 @@
     "type": "windowed_test_launcher",
   },
   "wtf_unittests": {
-    "label": "//third_party/WebKit/Source/wtf:wtf_unittests",
+    "label": "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
     "type": "console_test_launcher",
   },
 }

@@ -9,9 +9,10 @@
 
 #include "ash/ash_export.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "ui/aura/window_observer.h"
 #include "ui/events/event_handler.h"
-#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace base {
 class Timer;
@@ -53,7 +54,7 @@ class ASH_EXPORT LaserPointerController : public ui::EventHandler,
   // needed. Also adds the latest point at |event_location| and stops
   // propagation of |event|.
   void UpdateLaserPointerView(aura::Window* current_window,
-                              const gfx::Point& event_location,
+                              const gfx::PointF& event_location,
                               ui::Event* event);
 
   // Destroys |laser_pointer_view_|, if it exists.
@@ -66,6 +67,9 @@ class ASH_EXPORT LaserPointerController : public ui::EventHandler,
   std::unique_ptr<base::Timer> stationary_timer_;
   int stationary_timer_repeat_count_ = 0;
 
+  // The presentation delay used for prediction by the laser pointer view.
+  base::TimeDelta presentation_delay_;
+
   bool enabled_ = false;
 
   // |is_fading_away_| determines whether the laser pointer view should accept
@@ -75,7 +79,7 @@ class ASH_EXPORT LaserPointerController : public ui::EventHandler,
   bool is_fading_away_ = false;
 
   // The last seen stylus location in screen coordinates.
-  gfx::Point current_stylus_location_;
+  gfx::PointF current_stylus_location_;
 
   // |laser_pointer_view_| will only hold an instance when the laser pointer is
   // enabled and activated (pressed or dragged).

@@ -49,10 +49,10 @@ PluginPowerSaverHelper::~PluginPowerSaverHelper() {
 
 void PluginPowerSaverHelper::DidCommitProvisionalLoad(
     bool is_new_navigation,
-    bool is_same_page_navigation) {
+    bool is_same_document_navigation) {
   blink::WebFrame* frame = render_frame()->GetWebFrame();
   // Only apply to top-level and new page navigation.
-  if (frame->parent() || is_same_page_navigation)
+  if (frame->Parent() || is_same_document_navigation)
     return;  // Not a top-level navigation.
 
   origin_whitelist_.clear();
@@ -112,9 +112,7 @@ PluginPowerSaverHelper::GetPeripheralContentStatus(
   auto status = PeripheralContentHeuristic::GetPeripheralStatus(
       origin_whitelist_, main_frame_origin, content_origin, unobscured_size);
 
-  // Never record UNKNOWN_SIZE. Wait for retest after size is known.
-  if (record_decision == RenderFrame::RECORD_DECISION &&
-      status != RenderFrame::CONTENT_STATUS_UNKNOWN_SIZE) {
+  if (record_decision == RenderFrame::RECORD_DECISION) {
     UMA_HISTOGRAM_ENUMERATION(kPeripheralHeuristicHistogram, status,
                               RenderFrame::CONTENT_STATUS_NUM_ITEMS);
   }

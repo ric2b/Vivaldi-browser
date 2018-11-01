@@ -91,7 +91,7 @@ enum RTCIceConnectionState {
     attribute EventHandler onicecandidate;
     attribute EventHandler onsignalingstatechange;
     attribute EventHandler oniceconnectionstatechange;
-    // attribute EventHandler onicegatheringstatechange;
+    attribute EventHandler onicegatheringstatechange;
 
     // https://w3c.github.io/webrtc-pc/#legacy-interface-extensions
     // These methods return Promise<void> because having Promise-based versions requires that all overloads return Promises.
@@ -111,6 +111,9 @@ enum RTCIceConnectionState {
     // supported yet. There is a discussion about what to do with it (clarify
     // spec, remove it or change it?): https://github.com/w3c/webrtc-stats/issues/116
     [CallWith=ScriptState] Promise<RTCStatsReport> getStats();
+
+    // https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-getreceivers
+    sequence<RTCRtpReceiver> getReceivers();
 
     // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api
     // TODO(guidou): The label argument should have [TreatNullAs=EmptyString]

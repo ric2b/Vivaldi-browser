@@ -22,8 +22,8 @@
 
 #include "core/layout/svg/SVGCharacterData.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Allocator.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -47,16 +47,16 @@ class SVGTextLayoutAttributesBuilder {
  public:
   explicit SVGTextLayoutAttributesBuilder(LayoutSVGText&);
 
-  void buildLayoutAttributes();
+  void BuildLayoutAttributes();
 
   struct TextPosition {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
    public:
-    TextPosition(SVGTextPositioningElement* newElement = nullptr,
-                 unsigned newStart = 0,
-                 unsigned newLength = 0)
-        : element(newElement), start(newStart), length(newLength) {}
+    TextPosition(SVGTextPositioningElement* new_element = nullptr,
+                 unsigned new_start = 0,
+                 unsigned new_length = 0)
+        : element(new_element), start(new_start), length(new_length) {}
 
     DECLARE_TRACE();
 
@@ -66,15 +66,15 @@ class SVGTextLayoutAttributesBuilder {
   };
 
  private:
-  void buildCharacterDataMap(LayoutSVGText&);
-  void buildLayoutAttributes(LayoutSVGText&) const;
-  void collectTextPositioningElements(LayoutBoxModelObject&);
-  void fillCharacterDataMap(const TextPosition&);
+  void BuildCharacterDataMap(LayoutSVGText&);
+  void BuildLayoutAttributes(LayoutSVGText&) const;
+  void CollectTextPositioningElements(LayoutBoxModelObject&);
+  void FillCharacterDataMap(const TextPosition&);
 
-  LayoutSVGText& m_textRoot;
-  unsigned m_characterCount;
-  HeapVector<TextPosition> m_textPositions;
-  SVGCharacterDataMap m_characterDataMap;
+  LayoutSVGText& text_root_;
+  unsigned character_count_;
+  HeapVector<TextPosition> text_positions_;
+  SVGCharacterDataMap character_data_map_;
 };
 
 }  // namespace blink

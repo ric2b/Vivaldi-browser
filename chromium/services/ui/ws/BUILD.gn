@@ -9,6 +9,10 @@ import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
 import("//services/service_manager/public/tools/test/service_test.gni")
 
+# In external window mode, top-level windows are native platform windows i.e.
+# not children of a Chrome OS window manager's root window.
+is_external_mode = use_ozone && !is_chromeos
+
 static_library("lib") {
   sources = [
     "accelerator.cc",
@@ -25,6 +29,8 @@ static_library("lib") {
     "display.h",
     "display_binding.cc",
     "display_binding.h",
+    "display_client_compositor_frame_sink.cc",
+    "display_client_compositor_frame_sink.h",
     "display_manager.cc",
     "display_manager.h",
     "drag_controller.cc",
@@ -43,6 +49,8 @@ static_library("lib") {
     "focus_controller_observer.h",
     "frame_generator.cc",
     "frame_generator.h",
+    "gpu_client.cc",
+    "gpu_client.h",
     "gpu_host.cc",
     "gpu_host.h",
     "gpu_host_delegate.h",
@@ -56,8 +64,6 @@ static_library("lib") {
     "platform_display_default.h",
     "platform_display_delegate.h",
     "platform_display_factory.h",
-    "platform_display_init_params.cc",
-    "platform_display_init_params.h",
     "server_window.cc",
     "server_window.h",
     "server_window_compositor_frame_sink_manager.cc",
@@ -147,6 +153,18 @@ static_library("lib") {
   if (use_ozone) {
     public_deps += [ "//ui/ozone:ozone" ]
   }
+  if (is_chromeos) {
+    public_deps += [ "//ui/chromeos/events" ]
+  }
+
+  # ui service should not depend on below components.
+  assert_no_deps = [
+    "//ash",
+    "//content/public/browser",
+    "//content/public/common",
+    "//ui/aura",
+    "//ui/views",
+  ]
 }
 
 static_library("test_interface") {
@@ -171,9 +189,17 @@ static_library("test_support") {
     "test_change_tracker.h",
     "window_server_service_test_base.cc",
     "window_server_service_test_base.h",
-    "window_server_test_base.cc",
-    "window_server_test_base.h",
   ]
+
+  if (!is_external_mode) {
+    # WindowServerTestBase assumes an initial display (and root) is provided
+    # at startup, which is not the case on platforms running external window
+    # mode.
+    sources += [
+      "window_server_test_base.cc",
+      "window_server_test_base.h",
+    ]
+  }
 
   deps = [
     "//base",
@@ -213,6 +239,8 @@ service_test("mus_ws_unittests") {
     "event_dispatcher_unittest.cc",
     "event_matcher_unittest.cc",
     "focus_controller_unittest.cc",
+    "frame_generator_unittest.cc",
+    "gpu_host_unittest.cc",
     "server_window_drawn_tracker_unittest.cc",
     "test_server_window_delegate.cc",
     "test_server_window_delegate.h",
@@ -223,11 +251,22 @@ service_test("mus_ws_unittests") {
     "user_display_manager_unittest.cc",
     "window_coordinate_conversions_unittest.cc",
     "window_finder_unittest.cc",
-    "window_manager_client_unittest.cc",
     "window_manager_state_unittest.cc",
     "window_tree_client_unittest.cc",
     "window_tree_unittest.cc",
   ]
+
+  if (!is_external_mode) {
+    # A window manager client is not needed on platforms running external
+    # window mode, since the host system is always the window manager.
+    sources += [ "window_manager_client_unittest.cc" ]
+  }
+
+  # TODO(jamescook): Run this test on non-ozone platforms. This will require
+  # initializing all the platform-specific windowing support.
+  if (use_ozone) {
+    sources += [ "platform_display_default_unittest.cc" ]
+  }
 
   catalog = ":mus_ws_unittests_catalog"
 
@@ -238,6 +277,7 @@ service_test("mus_ws_unittests") {
     "//base/test:test_config",
     "//base/test:test_support",
     "//cc:cc",
+    "//cc:test_support",
     "//gpu/ipc/client",
     "//mojo/public/cpp/bindings:bindings",
     "//services/service_manager/public/cpp:service_test_support",
@@ -245,6 +285,7 @@ service_test("mus_ws_unittests") {
     "//services/service_manager/public/interfaces",
     "//services/ui/common:mus_common",
     "//services/ui/common:task_runner_test_base",
+    "//services/ui/gpu:gpu",
     "//services/ui/public/cpp",
     "//services/ui/public/interfaces",
     "//testing/gtest",

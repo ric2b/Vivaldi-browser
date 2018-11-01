@@ -8,7 +8,7 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "platform/Length.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -18,14 +18,14 @@ class LengthPropertyFunctions {
   STATIC_ONLY(LengthPropertyFunctions);
 
  public:
-  static ValueRange getValueRange(CSSPropertyID);
-  static bool isZoomedLength(CSSPropertyID);
-  static bool getPixelsForKeyword(CSSPropertyID,
+  static ValueRange GetValueRange(CSSPropertyID);
+  static bool IsZoomedLength(CSSPropertyID);
+  static bool GetPixelsForKeyword(CSSPropertyID,
                                   CSSValueID,
-                                  double& resultPixels);
-  static bool getInitialLength(CSSPropertyID, Length& result);
-  static bool getLength(CSSPropertyID, const ComputedStyle&, Length& result);
-  static bool setLength(CSSPropertyID, ComputedStyle&, const Length&);
+                                  double& result_pixels);
+  static bool GetInitialLength(CSSPropertyID, Length& result);
+  static bool GetLength(CSSPropertyID, const ComputedStyle&, Length& result);
+  static bool SetLength(CSSPropertyID, ComputedStyle&, const Length&);
 };
 
 }  // namespace blink

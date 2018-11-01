@@ -40,7 +40,6 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -230,9 +229,11 @@ bool UtilityProcessHostImpl::Start() {
   return StartProcess();
 }
 
-service_manager::InterfaceProvider*
-UtilityProcessHostImpl::GetRemoteInterfaces() {
-  return process_->child_connection()->GetRemoteInterfaces();
+void UtilityProcessHostImpl::BindInterface(
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  process_->child_connection()->BindInterface(interface_name,
+                                              std::move(interface_pipe));
 }
 
 void UtilityProcessHostImpl::SetName(const base::string16& name) {
@@ -325,6 +326,7 @@ bool UtilityProcessHostImpl::StartProcess() {
 
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
+      switches::kEnableNetworkService,
       switches::kNoSandbox,
       switches::kProfilerTiming,
 #if defined(OS_MACOSX)

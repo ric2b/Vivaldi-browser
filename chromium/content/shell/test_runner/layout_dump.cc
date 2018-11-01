@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "content/public/test/test_runner_support.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -23,26 +24,26 @@ using blink::WebSize;
 
 namespace {
 
-std::string DumpFrameHeaderIfNeeded(WebFrame* frame) {
+std::string DumpFrameHeaderIfNeeded(WebLocalFrame* frame) {
   std::string result;
 
   // Add header for all but the main frame. Skip empty frames.
-  if (frame->parent() && !frame->document().documentElement().isNull()) {
+  if (frame->Parent() && !frame->GetDocument().DocumentElement().IsNull()) {
     result.append("\n--------\nFrame: '");
-    result.append(frame->uniqueName().utf8());
+    result.append(content::GetUniqueNameForFrame(frame));
     result.append("'\n--------\n");
   }
 
   return result;
 }
 
-std::string DumpFrameScrollPosition(WebFrame* frame) {
+std::string DumpFrameScrollPosition(WebLocalFrame* frame) {
   std::string result;
-  WebSize offset = frame->getScrollOffset();
+  WebSize offset = frame->GetScrollOffset();
   if (offset.width > 0 || offset.height > 0) {
-    if (frame->parent()) {
+    if (frame->Parent()) {
       result =
-          std::string("frame '") + frame->uniqueName().utf8().data() + "' ";
+          std::string("frame '") + content::GetUniqueNameForFrame(frame) + "' ";
     }
     base::StringAppendF(&result, "scrolled to %d,%d\n", offset.width,
                         offset.height);
@@ -60,28 +61,28 @@ std::string DumpLayout(WebLocalFrame* frame,
 
   if (flags.dump_as_text()) {
     result = DumpFrameHeaderIfNeeded(frame);
-    if (flags.is_printing() && frame->document().isHTMLDocument()) {
-      result += WebFrameContentDumper::dumpLayoutTreeAsText(
-                    frame, WebFrameContentDumper::LayoutAsTextPrinting)
-                    .utf8();
+    if (flags.is_printing() && frame->GetDocument().IsHTMLDocument()) {
+      result += WebFrameContentDumper::DumpLayoutTreeAsText(
+                    frame, WebFrameContentDumper::kLayoutAsTextPrinting)
+                    .Utf8();
     } else {
-      result += frame->document().contentAsTextForTesting().utf8();
+      result += frame->GetDocument().ContentAsTextForTesting().Utf8();
     }
     result += "\n";
   } else if (flags.dump_as_markup()) {
     DCHECK(!flags.is_printing());
     result = DumpFrameHeaderIfNeeded(frame);
-    result += WebFrameContentDumper::dumpAsMarkup(frame).utf8();
+    result += WebFrameContentDumper::DumpAsMarkup(frame).Utf8();
     result += "\n";
   } else {
-    if (frame->parent() == nullptr) {
+    if (frame->Parent() == nullptr) {
       WebFrameContentDumper::LayoutAsTextControls layout_text_behavior =
-          WebFrameContentDumper::LayoutAsTextNormal;
+          WebFrameContentDumper::kLayoutAsTextNormal;
       if (flags.is_printing())
-        layout_text_behavior |= WebFrameContentDumper::LayoutAsTextPrinting;
-      result = WebFrameContentDumper::dumpLayoutTreeAsText(frame,
+        layout_text_behavior |= WebFrameContentDumper::kLayoutAsTextPrinting;
+      result = WebFrameContentDumper::DumpLayoutTreeAsText(frame,
                                                            layout_text_behavior)
-                   .utf8();
+                   .Utf8();
     }
     result += DumpFrameScrollPosition(frame);
   }

@@ -36,7 +36,7 @@
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -50,8 +50,8 @@ class CORE_EXPORT AbstractWorker : public EventTargetWithInlineData,
 
  public:
   // EventTarget APIs
-  ExecutionContext* getExecutionContext() const final {
-    return ContextLifecycleObserver::getExecutionContext();
+  ExecutionContext* GetExecutionContext() const final {
+    return ContextLifecycleObserver::GetExecutionContext();
   }
 
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(error);
@@ -64,7 +64,7 @@ class CORE_EXPORT AbstractWorker : public EventTargetWithInlineData,
  protected:
   // Helper function that converts a URL to an absolute URL and checks the
   // result for validity.
-  KURL resolveURL(const String& url,
+  KURL ResolveURL(const String& url,
                   ExceptionState&,
                   WebURLRequest::RequestContext);
 };

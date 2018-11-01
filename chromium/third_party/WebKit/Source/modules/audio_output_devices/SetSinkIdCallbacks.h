@@ -7,10 +7,10 @@
 
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebSetSinkIdCallbacks.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -27,16 +27,16 @@ class SetSinkIdCallbacks final : public WebSetSinkIdCallbacks {
  public:
   SetSinkIdCallbacks(ScriptPromiseResolver*,
                      HTMLMediaElement&,
-                     const String& sinkId);
+                     const String& sink_id);
   ~SetSinkIdCallbacks() override;
 
-  void onSuccess() override;
-  void onError(WebSetSinkIdError) override;
+  void OnSuccess() override;
+  void OnError(WebSetSinkIdError) override;
 
  private:
-  Persistent<ScriptPromiseResolver> m_resolver;
-  Persistent<HTMLMediaElement> m_element;
-  String m_sinkId;
+  Persistent<ScriptPromiseResolver> resolver_;
+  Persistent<HTMLMediaElement> element_;
+  String sink_id_;
 };
 
 }  // namespace blink

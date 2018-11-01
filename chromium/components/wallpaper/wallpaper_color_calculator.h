@@ -10,7 +10,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
-#include "components/wallpaper/wallpaper_color_calculator_observer.h"
 #include "components/wallpaper/wallpaper_export.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_analysis.h"
@@ -23,7 +22,7 @@ class TaskRunner;
 namespace wallpaper {
 class WallpaperColorCalculatorObserver;
 
-// Asynchronously calculates colors based on a wallpaper image.
+// Calculates colors based on a wallpaper image.
 class WALLPAPER_EXPORT WallpaperColorCalculator {
  public:
   // |image|, |luma| and |saturation| are the input parameters to the color
@@ -39,7 +38,8 @@ class WALLPAPER_EXPORT WallpaperColorCalculator {
   void RemoveObserver(WallpaperColorCalculatorObserver* observer);
 
   // Initiates the calculation and returns false if the calculation fails to be
-  // initiated.  Callers should be aware that this will make |image_| read-only.
+  // initiated. Observers may be notified synchronously or asynchronously.
+  // Callers should be aware that this will make |image_| read-only.
   bool StartCalculation() WARN_UNUSED_RESULT;
 
   SkColor prominent_color() const { return prominent_color_; }
@@ -52,6 +52,11 @@ class WALLPAPER_EXPORT WallpaperColorCalculator {
   void SetTaskRunnerForTest(scoped_refptr<base::TaskRunner> task_runner);
 
  private:
+  // Handles asynchronous calculation results. |async_start_time| is used to
+  // record duration metrics.
+  void OnAsyncCalculationComplete(base::TimeTicks async_start_time,
+                                  SkColor prominent_color);
+
   // Notifies observers that a color calulation has completed. Called on the
   // same thread that constructed |this|.
   void NotifyCalculationComplete(SkColor prominent_color);
@@ -70,10 +75,6 @@ class WALLPAPER_EXPORT WallpaperColorCalculator {
 
   // The task runner to run the calculation on.
   scoped_refptr<base::TaskRunner> task_runner_;
-
-  // The time that StartCalculation() was last called. Used for recording
-  // timing metrics.
-  base::Time start_calculation_time_;
 
   base::ObserverList<WallpaperColorCalculatorObserver> observers_;
 

@@ -4,6 +4,7 @@
 
 #include "tools/json_schema_compiler/test/simple_api.h"
 
+#include "base/memory/ptr_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using namespace test::api::simple_api;
@@ -14,7 +15,7 @@ static std::unique_ptr<base::DictionaryValue> CreateTestTypeDictionary() {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   value->SetWithoutPathExpansion("number", new base::Value(1.1));
   value->SetWithoutPathExpansion("integer", new base::Value(4));
-  value->SetWithoutPathExpansion("string", new base::StringValue("bling"));
+  value->SetWithoutPathExpansion("string", new base::Value("bling"));
   value->SetWithoutPathExpansion("boolean", new base::Value(true));
   return value;
 }
@@ -77,7 +78,7 @@ TEST(JsonSchemaCompilerSimpleTest, OptionalStringParamsCreate) {
 TEST(JsonSchemaCompilerSimpleTest, OptionalParamsTakingNull) {
   {
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(base::Value::CreateNullValue());
+    params_value->Append(base::MakeUnique<base::Value>());
     std::unique_ptr<OptionalString::Params> params(
         OptionalString::Params::Create(*params_value));
     EXPECT_TRUE(params.get());
@@ -98,7 +99,7 @@ TEST(JsonSchemaCompilerSimpleTest, OptionalStringParamsWrongType) {
 TEST(JsonSchemaCompilerSimpleTest, OptionalBeforeRequired) {
   {
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(base::Value::CreateNullValue());
+    params_value->Append(base::MakeUnique<base::Value>());
     params_value->AppendString("asdf");
     std::unique_ptr<OptionalBeforeRequired::Params> params(
         OptionalBeforeRequired::Params::Create(*params_value));

@@ -22,6 +22,8 @@
 
 #include "core/style/ContentData.h"
 
+#include <memory>
+#include "core/dom/PseudoElement.h"
 #include "core/layout/LayoutCounter.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutImageResource.h"
@@ -29,84 +31,84 @@
 #include "core/layout/LayoutQuote.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/style/ComputedStyle.h"
-#include <memory>
 
 namespace blink {
 
-ContentData* ContentData::create(StyleImage* image) {
+ContentData* ContentData::Create(StyleImage* image) {
   return new ImageContentData(image);
 }
 
-ContentData* ContentData::create(const String& text) {
+ContentData* ContentData::Create(const String& text) {
   return new TextContentData(text);
 }
 
-ContentData* ContentData::create(std::unique_ptr<CounterContent> counter) {
+ContentData* ContentData::Create(std::unique_ptr<CounterContent> counter) {
   return new CounterContentData(std::move(counter));
 }
 
-ContentData* ContentData::create(QuoteType quote) {
+ContentData* ContentData::Create(QuoteType quote) {
   return new QuoteContentData(quote);
 }
 
-ContentData* ContentData::clone() const {
-  ContentData* result = cloneInternal();
+ContentData* ContentData::Clone() const {
+  ContentData* result = CloneInternal();
 
-  ContentData* lastNewData = result;
-  for (const ContentData* contentData = next(); contentData;
-       contentData = contentData->next()) {
-    ContentData* newData = contentData->cloneInternal();
-    lastNewData->setNext(newData);
-    lastNewData = lastNewData->next();
+  ContentData* last_new_data = result;
+  for (const ContentData* content_data = Next(); content_data;
+       content_data = content_data->Next()) {
+    ContentData* new_data = content_data->CloneInternal();
+    last_new_data->SetNext(new_data);
+    last_new_data = last_new_data->Next();
   }
 
   return result;
 }
 
 DEFINE_TRACE(ContentData) {
-  visitor->trace(m_next);
+  visitor->Trace(next_);
 }
 
-LayoutObject* ImageContentData::createLayoutObject(
-    Document& doc,
-    ComputedStyle& pseudoStyle) const {
-  LayoutImage* image = LayoutImage::createAnonymous(&doc);
-  image->setPseudoStyle(&pseudoStyle);
-  if (m_image)
-    image->setImageResource(
-        LayoutImageResourceStyleImage::create(m_image.get()));
+LayoutObject* ImageContentData::CreateLayoutObject(
+    PseudoElement& pseudo,
+    ComputedStyle& pseudo_style) const {
+  LayoutImage* image = LayoutImage::CreateAnonymous(pseudo);
+  image->SetPseudoStyle(&pseudo_style);
+  if (image_)
+    image->SetImageResource(
+        LayoutImageResourceStyleImage::Create(image_.Get()));
   else
-    image->setImageResource(LayoutImageResource::create());
+    image->SetImageResource(LayoutImageResource::Create());
   return image;
 }
 
 DEFINE_TRACE(ImageContentData) {
-  visitor->trace(m_image);
-  ContentData::trace(visitor);
+  visitor->Trace(image_);
+  ContentData::Trace(visitor);
 }
 
-LayoutObject* TextContentData::createLayoutObject(
-    Document& doc,
-    ComputedStyle& pseudoStyle) const {
-  LayoutObject* layoutObject = new LayoutTextFragment(&doc, m_text.impl());
-  layoutObject->setPseudoStyle(&pseudoStyle);
-  return layoutObject;
+LayoutObject* TextContentData::CreateLayoutObject(
+    PseudoElement& pseudo,
+    ComputedStyle& pseudo_style) const {
+  LayoutObject* layout_object =
+      LayoutTextFragment::CreateAnonymous(pseudo, text_.Impl());
+  layout_object->SetPseudoStyle(&pseudo_style);
+  return layout_object;
 }
 
-LayoutObject* CounterContentData::createLayoutObject(
-    Document& doc,
-    ComputedStyle& pseudoStyle) const {
-  LayoutObject* layoutObject = new LayoutCounter(&doc, *m_counter);
-  layoutObject->setPseudoStyle(&pseudoStyle);
-  return layoutObject;
+LayoutObject* CounterContentData::CreateLayoutObject(
+    PseudoElement& pseudo,
+    ComputedStyle& pseudo_style) const {
+  LayoutObject* layout_object = new LayoutCounter(pseudo, *counter_);
+  layout_object->SetPseudoStyle(&pseudo_style);
+  return layout_object;
 }
 
-LayoutObject* QuoteContentData::createLayoutObject(
-    Document& doc,
-    ComputedStyle& pseudoStyle) const {
-  LayoutObject* layoutObject = new LayoutQuote(&doc, m_quote);
-  layoutObject->setPseudoStyle(&pseudoStyle);
-  return layoutObject;
+LayoutObject* QuoteContentData::CreateLayoutObject(
+    PseudoElement& pseudo,
+    ComputedStyle& pseudo_style) const {
+  LayoutObject* layout_object = new LayoutQuote(pseudo, quote_);
+  layout_object->SetPseudoStyle(&pseudo_style);
+  return layout_object;
 }
 
 }  // namespace blink

@@ -7,10 +7,11 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/common/wm_shell.h"
+#include "ash/session/session_controller.h"
+#include "ash/shell.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
+#include "ash/shell_port.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/i18n/case_conversion.h"
@@ -111,7 +112,7 @@ class WindowTypeShelfItem : public app_list::AppListItem {
         break;
       }
       case LOCK_SCREEN: {
-        WmShell::Get()->GetSessionStateDelegate()->LockScreen();
+        Shell::Get()->session_controller()->LockScreen();
         break;
       }
       case WIDGETS_WINDOW: {
@@ -219,14 +220,6 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
   }
 
   // Overridden from app_list::AppListViewDelegate:
-  bool ForceNativeDesktop() const override { return false; }
-
-  void SetProfileByPath(const base::FilePath& profile_path) override {
-    // Nothing needs to be done.
-  }
-
-  const Users& GetUsers() const override { return users_; }
-
   app_list::AppListModel* GetModel() override { return model_.get(); }
 
   app_list::SpeechUIModel* GetSpeechUI() override { return &speech_ui_; }
@@ -281,28 +274,16 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
   }
 
   void Dismiss() override {
-    DCHECK(WmShell::HasInstance());
-    WmShell::Get()->DismissAppList();
+    DCHECK(ShellPort::HasInstance());
+    Shell::Get()->DismissAppList();
   }
 
   void ViewClosing() override {
     // Nothing needs to be done.
   }
 
-  void OpenHelp() override {
-    // Nothing needs to be done.
-  }
-
-  void OpenFeedback() override {
-    // Nothing needs to be done.
-  }
-
   void StartSpeechRecognition() override { NOTIMPLEMENTED(); }
   void StopSpeechRecognition() override { NOTIMPLEMENTED(); }
-
-  void ShowForProfileByPath(const base::FilePath& profile_path) override {
-    // Nothing needs to be done.
-  }
 
   views::View* CreateStartPageWebView(const gfx::Size& size) override {
     return NULL;
@@ -321,7 +302,6 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
 
   std::unique_ptr<app_list::AppListModel> model_;
   app_list::SpeechUIModel speech_ui_;
-  Users users_;
 
   DISALLOW_COPY_AND_ASSIGN(ExampleAppListViewDelegate);
 };

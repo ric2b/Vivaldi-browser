@@ -24,17 +24,15 @@ const APPLICATION_DESCRIPTORS = [
 const MODULES_TO_REMOVE = [];
 
 const JS_FILES_MAPPING = [
-  {file: 'components/CustomPreviewComponent.js', new: 'object_ui'},
-  {file: 'components/ObjectPopoverHelper.js', new: 'object_ui'},
-  {file: 'components/ObjectPropertiesSection.js', new: 'object_ui'},
-  {file: 'components/JavaScriptAutocomplete.js', new: 'object_ui'},
-  {file: 'components/RemoteObjectPreviewFormatter.js', new: 'object_ui'},
+  {file: 'common/Text.js', new: 'text_utils'},
+  {file: 'common/TextUtils.js', new: 'text_utils'},
+  {file: 'common/TextRange.js', new: 'text_utils'},
 ];
 
 const MODULE_MAPPING = {
-  object_ui: {
-    dependencies: ['ui', 'sdk', 'components'],
-    dependents: ['console', 'sources', 'extensions', 'event_listeners', 'resources', 'profiler', 'network'],
+  text_utils: {
+    dependencies: [],
+    dependents: ['common'],
     applications: ['inspector.json'],
     autostart: true,  // set to autostart because of extensions
   },

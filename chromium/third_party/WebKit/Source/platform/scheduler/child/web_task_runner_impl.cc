@@ -4,6 +4,8 @@
 
 #include "platform/scheduler/child/web_task_runner_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -14,29 +16,29 @@
 namespace blink {
 namespace scheduler {
 
-RefPtr<WebTaskRunnerImpl> WebTaskRunnerImpl::create(
+RefPtr<WebTaskRunnerImpl> WebTaskRunnerImpl::Create(
     scoped_refptr<TaskQueue> task_queue) {
-  return adoptRef(new WebTaskRunnerImpl(std::move(task_queue)));
+  return AdoptRef(new WebTaskRunnerImpl(std::move(task_queue)));
 }
 
-void WebTaskRunnerImpl::postDelayedTask(const WebTraceLocation& location,
-                                        const base::Closure& task,
-                                        double delayMs) {
-  DCHECK_GE(delayMs, 0.0) << location.function_name() << " "
-                          << location.file_name();
-  task_queue_->PostDelayedTask(location, task,
-                               base::TimeDelta::FromMillisecondsD(delayMs));
+void WebTaskRunnerImpl::PostDelayedTask(const WebTraceLocation& location,
+                                        base::OnceClosure task,
+                                        double delay_ms) {
+  DCHECK_GE(delay_ms, 0.0) << location.function_name() << " "
+                           << location.file_name();
+  task_queue_->PostDelayedTask(location, std::move(task),
+                               base::TimeDelta::FromMillisecondsD(delay_ms));
 }
 
-bool WebTaskRunnerImpl::runsTasksOnCurrentThread() {
+bool WebTaskRunnerImpl::RunsTasksOnCurrentThread() {
   return task_queue_->RunsTasksOnCurrentThread();
 }
 
-double WebTaskRunnerImpl::virtualTimeSeconds() const {
+double WebTaskRunnerImpl::VirtualTimeSeconds() const {
   return (Now() - base::TimeTicks::UnixEpoch()).InSecondsF();
 }
 
-double WebTaskRunnerImpl::monotonicallyIncreasingVirtualTimeSeconds() const {
+double WebTaskRunnerImpl::MonotonicallyIncreasingVirtualTimeSeconds() const {
   return Now().ToInternalValue() /
          static_cast<double>(base::Time::kMicrosecondsPerSecond);
 }
@@ -55,7 +57,7 @@ base::TimeTicks WebTaskRunnerImpl::Now() const {
   return time_domain->Now();
 }
 
-base::SingleThreadTaskRunner* WebTaskRunnerImpl::toSingleThreadTaskRunner() {
+base::SingleThreadTaskRunner* WebTaskRunnerImpl::ToSingleThreadTaskRunner() {
   return task_queue_.get();
 }
 

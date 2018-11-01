@@ -147,7 +147,7 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
   // GLib type system initialization is needed for gconf.
   g_type_init();
 #endif
-#endif // defined(OS_LINUX) || defined(OS_OPENBSD)
+#endif  // defined(OS_LINUX) || defined(OS_OPENBSD)
   main_message_loop_ = message_loop;
   service_process_state_.reset(state);
   network_change_notifier_.reset(net::NetworkChangeNotifier::Create());
@@ -163,20 +163,34 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
   }
 
   // Initialize TaskScheduler and redirect SequencedWorkerPool tasks to it.
-  constexpr int kMaxTaskSchedulerThreads = 3;
-  std::vector<base::SchedulerWorkerPoolParams> worker_pool_params_vector;
-  worker_pool_params_vector.emplace_back(
-      "CloudPrintServiceProcess", base::ThreadPriority::NORMAL,
-      base::SchedulerWorkerPoolParams::StandbyThreadPolicy::LAZY,
-      kMaxTaskSchedulerThreads, base::TimeDelta::FromSeconds(30),
-      base::SchedulerBackwardCompatibility::INIT_COM_STA);
+  using StandbyThreadPolicy =
+      base::SchedulerWorkerPoolParams::StandbyThreadPolicy;
+  constexpr int kMaxBackgroundThreads = 1;
+  constexpr int kMaxBackgroundBlockingThreads = 1;
+  constexpr int kMaxForegroundThreads = 3;
+  constexpr int kMaxForegroundBlockingThreads = 3;
+  constexpr base::TimeDelta kSuggestedReclaimTime =
+      base::TimeDelta::FromSeconds(30);
+
   base::TaskScheduler::CreateAndSetDefaultTaskScheduler(
-      worker_pool_params_vector,
-      base::Bind([](const base::TaskTraits&) -> size_t { return 0; }));
+      "CloudPrintServiceProcess",
+      {{StandbyThreadPolicy::LAZY, kMaxBackgroundThreads,
+        kSuggestedReclaimTime},
+       {StandbyThreadPolicy::LAZY, kMaxBackgroundBlockingThreads,
+        kSuggestedReclaimTime},
+       {StandbyThreadPolicy::LAZY, kMaxForegroundThreads,
+        kSuggestedReclaimTime},
+       {StandbyThreadPolicy::LAZY, kMaxForegroundBlockingThreads,
+        kSuggestedReclaimTime,
+        base::SchedulerBackwardCompatibility::INIT_COM_STA}});
+
   base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
 
+  // Since SequencedWorkerPool is redirected to TaskScheduler, the value of
+  // |kMaxBlockingPoolThreads| is ignored.
+  constexpr int kMaxBlockingPoolThreads = 3;
   blocking_pool_ =
-      new base::SequencedWorkerPool(kMaxTaskSchedulerThreads, "ServiceBlocking",
+      new base::SequencedWorkerPool(kMaxBlockingPoolThreads, "ServiceBlocking",
                                     base::TaskPriority::USER_VISIBLE);
 
   // Initialize Mojo early so things can use it.

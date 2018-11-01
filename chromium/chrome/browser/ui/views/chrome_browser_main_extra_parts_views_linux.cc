@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/libgtkui/gtk_ui.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/theme_profile_key.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/env.h"
@@ -34,7 +33,8 @@ ui::NativeTheme* GetNativeThemeForWindow(aura::Window* window) {
   if (!window)
     return nullptr;
 
-  Profile* profile = GetThemeProfileForWindow(window);
+  Profile* profile = reinterpret_cast<Profile*>(
+      window->GetNativeWindowProperty(Profile::kProfileKey));
 
   // If using the system (GTK) theme, don't use an Aura NativeTheme at all.
   // NB: ThemeService::UsingSystemTheme() might lag behind this pref. See
@@ -62,7 +62,8 @@ ChromeBrowserMainExtraPartsViewsLinux::ChromeBrowserMainExtraPartsViewsLinux() {
 
 ChromeBrowserMainExtraPartsViewsLinux::
     ~ChromeBrowserMainExtraPartsViewsLinux() {
-  views::X11DesktopHandler::get()->RemoveObserver(this);
+  if (views::X11DesktopHandler::get_dont_create())
+    views::X11DesktopHandler::get_dont_create()->RemoveObserver(this);
 }
 
 void ChromeBrowserMainExtraPartsViewsLinux::PreEarlyInitialization() {

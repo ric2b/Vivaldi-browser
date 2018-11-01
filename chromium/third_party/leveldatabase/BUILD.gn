@@ -106,6 +106,7 @@ static_library("leveldatabase") {
     "src/util/crc32c.cc",
     "src/util/crc32c.h",
     "src/util/env.cc",
+    "src/util/env.h",
     "src/util/filter_policy.cc",
     "src/util/hash.cc",
     "src/util/hash.h",
@@ -131,6 +132,8 @@ static_library("leveldatabase") {
   ]
 
   if (is_win) {
+    # leveldb compiles with a limited set of warnings enabled, and is not
+    # likely to accept fixes for other warnings. See crbug.com/698013
     cflags = [ "/wd4018" ]  # Signed/unsigned mismatch in comparison.
 
     if (is_official_build) {
@@ -140,7 +143,7 @@ static_library("leveldatabase") {
   }
 }
 
-if (!is_android) {
+if (!is_ios && !is_android) {
   test("env_chromium_unittests") {
     sources = [
       "env_chromium_unittest.cc",
@@ -205,8 +208,6 @@ if (!is_android) {
       ":leveldb_testutil",
     ]
 
-    # TODO(crbug.com/698013): Fix leveldb to remove the need for suppressing
-    #                         warnings.
     if (is_win) {
       # util\cache_test.cc(167): warning C4018: '<': signed/unsigned mismatch
       # util\cache_test.cc(171): warning C4018: '<': signed/unsigned mismatch
@@ -299,6 +300,17 @@ if (!is_android) {
     configs += [ "//build/config/compiler:no_chromium_code" ]
     deps = [
       ":leveldb_testutil",
+    ]
+  }
+
+  executable("leveldb_leveldbutil") {
+    sources = [
+      "src/db/leveldbutil.cc",
+    ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    deps = [
+      ":leveldatabase",
     ]
   }
 

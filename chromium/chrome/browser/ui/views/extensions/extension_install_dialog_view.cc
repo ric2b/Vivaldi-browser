@@ -25,7 +25,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
-#include "chrome/browser/ui/views/harmony/layout_delegate.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -49,8 +50,8 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/dialog_client_view.h"
 
 using content::OpenURLParams;
 using content::Referrer;
@@ -59,25 +60,39 @@ using extensions::ExperienceSamplingEvent;
 namespace {
 
 // Width of the bullet column in BulletedView.
-const int kBulletWidth = 20;
+constexpr int kBulletWidth = 20;
 
 // Size of extension icon in top left of dialog.
-const int kIconSize = 64;
+constexpr int kIconSize = 64;
 
 // The maximum height of the scroll view before it will show a scrollbar.
-const int kScrollViewMaxHeight = 250;
+constexpr int kScrollViewMaxHeight = 250;
 
 // Width of the left column of the dialog when the extension requests
 // permissions.
-const int kPermissionsLeftColumnWidth = 250;
+constexpr int kPermissionsLeftColumnWidth = 250;
 
 // Width of the left column of the dialog when the extension requests no
 // permissions.
-const int kNoPermissionsLeftColumnWidth = 200;
+constexpr int kNoPermissionsLeftColumnWidth = 200;
 
 // Width of the left column for external install prompts. The text is long in
 // this case, so make it wider than normal.
-const int kExternalInstallLeftColumnWidth = 350;
+constexpr int kExternalInstallLeftColumnWidth = 350;
+
+// Get the appropriate indentation for an item if its parent is using bullet
+// points. If the parent is using bullets for its items, then a padding of one
+// unit will make the child item (which has no bullet) look like a sibling of
+// its parent. Therefore increase the indentation by one more unit to show that
+// it is in fact a child item (with no missing bullet) and not a sibling.
+int GetLeftPaddingForBulletedItems(bool parent_bulleted) {
+  return ChromeLayoutProvider::Get()->GetDistanceMetric(
+             views::DISTANCE_RELATED_CONTROL_HORIZONTAL) *
+         (parent_bulleted ? 2 : 1);
+}
+
+// Time delay before the install button is enabled after initial display.
+int g_install_delay_in_ms = 500;
 
 void AddResourceIcon(const gfx::ImageSkia* skia_image, void* data) {
   views::View* parent = static_cast<views::View*>(data);
@@ -170,7 +185,8 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
       prompt_(std::move(prompt)),
       container_(NULL),
       scroll_view_(NULL),
-      handled_result_(false) {
+      handled_result_(false),
+      install_button_enabled_(false) {
   InitView();
 }
 
@@ -220,6 +236,7 @@ void ExtensionInstallDialogView::InitView() {
 
   int column_set_id = 0;
   views::GridLayout* layout = CreateLayout(left_column_width, column_set_id);
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
 
@@ -231,33 +248,40 @@ void ExtensionInstallDialogView::InitView() {
     layout->AddView(rating);
     prompt_->AppendRatingStars(AddResourceIcon, rating);
 
-    const gfx::FontList& small_font_list =
-        rb.GetFontList(ui::ResourceBundle::SmallFont);
+    int rating_text_context, user_count_text_context;
+    if (provider->IsHarmonyMode()) {
+      rating_text_context = CONTEXT_BODY_TEXT_LARGE;
+      user_count_text_context = CONTEXT_BODY_TEXT_SMALL;
+    } else {
+      rating_text_context = user_count_text_context = CONTEXT_DEPRECATED_SMALL;
+    }
     views::Label* rating_count =
-        new views::Label(prompt_->GetRatingCount(), small_font_list);
+        new views::Label(prompt_->GetRatingCount(), rating_text_context,
+                         views::style::STYLE_PRIMARY);
     // Add some space between the stars and the rating count.
     rating_count->SetBorder(views::CreateEmptyBorder(0, 2, 0, 0));
     rating->AddChildView(rating_count);
 
     layout->StartRow(0, column_set_id);
-    views::Label* user_count =
-        new views::Label(prompt_->GetUserCount(), small_font_list);
+    views::Label* user_count = new views::Label(
+        prompt_->GetUserCount(), user_count_text_context, STYLE_SECONDARY);
     user_count->SetAutoColorReadabilityEnabled(false);
     user_count->SetEnabledColor(SK_ColorGRAY);
     layout->AddView(user_count);
   }
 
+  const int vertical_padding =
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
   if (prompt_->ShouldShowPermissions()) {
-    layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+    layout->AddPaddingRow(0, vertical_padding);
     layout->StartRow(0, column_set_id);
     layout->AddView(new views::Separator(), 3, 1, views::GridLayout::FILL,
                     views::GridLayout::FILL);
   }
 
-  const int content_width = left_column_width +
-                            LayoutDelegate::Get()->GetMetric(
-                                LayoutDelegate::Metric::PANEL_CONTENT_MARGIN) +
-                            kIconSize;
+  const int content_width =
+      left_column_width +
+      provider->GetDistanceMetric(DISTANCE_PANEL_CONTENT_MARGIN) + kIconSize;
 
   // Create the scrollable view which will contain the permissions and retained
   // files/devices. It will span the full content width.
@@ -274,7 +298,9 @@ void ExtensionInstallDialogView::InitView() {
       views::GridLayout::USE_PREF, content_width, content_width);
 
   // Pad to the very right of the dialog, so the scrollbar will be on the edge.
-  scrollable_column_set->AddPaddingColumn(0, views::kButtonHEdgeMarginNew);
+  const int button_margin =
+      provider->GetDistanceMetric(DISTANCE_DIALOG_BUTTON_MARGIN);
+  scrollable_column_set->AddPaddingColumn(0, button_margin);
 
   layout->StartRow(0, column_set_id);
   scroll_view_ = new views::ScrollView();
@@ -294,7 +320,7 @@ void ExtensionInstallDialogView::InitView() {
           scroll_layout, rb, column_set_id, content_width,
           ExtensionInstallPrompt::PermissionsType::WITHHELD_PERMISSIONS);
     } else {
-      scroll_layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+      scroll_layout->AddPaddingRow(0, vertical_padding);
       scroll_layout->StartRow(0, column_set_id);
       views::Label* permission_label = new views::Label(
           l10n_util::GetStringUTF16(IDS_EXTENSION_NO_SPECIAL_PERMISSIONS));
@@ -306,7 +332,7 @@ void ExtensionInstallDialogView::InitView() {
   }
 
   if (prompt_->GetRetainedFileCount()) {
-    scroll_layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+    scroll_layout->AddPaddingRow(0, vertical_padding);
 
     scroll_layout->StartRow(0, column_set_id);
     views::Label* retained_files_header =
@@ -327,7 +353,7 @@ void ExtensionInstallDialogView::InitView() {
   }
 
   if (prompt_->GetRetainedDeviceCount()) {
-    scroll_layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+    scroll_layout->AddPaddingRow(0, vertical_padding);
 
     scroll_layout->StartRow(0, column_set_id);
     views::Label* retained_devices_header =
@@ -356,9 +382,8 @@ void ExtensionInstallDialogView::InitView() {
       0,
       std::min(kScrollViewMaxHeight, scrollable->GetPreferredSize().height()));
 
-  dialog_size_ = gfx::Size(
-      content_width + 2 * views::kButtonHEdgeMarginNew,
-      container_->GetPreferredSize().height());
+  dialog_size_ = gfx::Size(content_width + 2 * button_margin,
+                           container_->GetPreferredSize().height());
 
   std::string event_name = ExperienceSamplingEvent::kExtensionInstallDialog;
   event_name.append(
@@ -375,7 +400,9 @@ bool ExtensionInstallDialogView::AddPermissions(
   if (prompt_->GetPermissionCount(perm_type) == 0)
     return false;
 
-  layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+  const int vertical_padding = ChromeLayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_RELATED_CONTROL_VERTICAL);
+  layout->AddPaddingRow(0, vertical_padding);
 
   layout->StartRow(0, column_set_id);
   views::Label* permissions_header =
@@ -386,7 +413,7 @@ bool ExtensionInstallDialogView::AddPermissions(
   layout->AddView(permissions_header);
 
   for (size_t i = 0; i < prompt_->GetPermissionCount(perm_type); ++i) {
-    layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+    layout->AddPaddingRow(0, vertical_padding);
     layout->StartRow(0, column_set_id);
     views::Label* permission_label =
         new views::Label(prompt_->GetPermission(i, perm_type));
@@ -414,12 +441,20 @@ views::GridLayout* ExtensionInstallDialogView::CreateLayout(
     int left_column_width,
     int column_set_id) {
   container_ = new views::View();
-  // This is basically views::GridLayout::CreatePanel, but without a top or
-  // right margin (we effectively get a top margin anyway from the empty dialog
-  // title, and we add an explicit padding column as a right margin below).
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  const int horizontal_margin =
+      provider->GetDistanceMetric(DISTANCE_DIALOG_BUTTON_MARGIN);
+  const int bottom_margin =
+      provider->GetDistanceMetric(DISTANCE_PANEL_CONTENT_MARGIN);
+
+  // This is views::GridLayout::CreatePanel(), but without a top or right
+  // margin. The empty dialog title will then become the top margin, and a
+  // padding column will be manually added to handle a right margin. This is
+  // done so that the extension icon can be shown on the right of the dialog
+  // title, but on the same y-axis, and the scroll view used to contain other
+  // content can have its scrollbar aligned with the right edge of the dialog.
   views::GridLayout* layout = new views::GridLayout(container_);
-  layout->SetInsets(0, views::kButtonHEdgeMarginNew, views::kPanelVertMargin,
-                    0);
+  layout->SetInsets(0, horizontal_margin, bottom_margin, 0);
   container_->SetLayoutManager(layout);
   AddChildView(container_);
 
@@ -430,20 +465,17 @@ views::GridLayout* ExtensionInstallDialogView::CreateLayout(
                         0,  // no fixed width
                         left_column_width);
   column_set->AddPaddingColumn(
-      0, LayoutDelegate::Get()->GetMetric(
-             LayoutDelegate::Metric::PANEL_CONTENT_MARGIN));
+      0, provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_HORIZONTAL));
   column_set->AddColumn(views::GridLayout::TRAILING, views::GridLayout::LEADING,
                         0,  // no resizing
                         views::GridLayout::USE_PREF,
                         0,  // no fixed width
                         kIconSize);
-  column_set->AddPaddingColumn(0, views::kButtonHEdgeMarginNew);
+  column_set->AddPaddingColumn(0, horizontal_margin);
 
   layout->StartRow(0, column_set_id);
-  views::Label* title =
-      new views::Label(prompt_->GetDialogTitle(),
-                       ui::ResourceBundle::GetSharedInstance().GetFontList(
-                           ui::ResourceBundle::MediumFont));
+  views::Label* title = new views::Label(prompt_->GetDialogTitle(),
+                                         views::style::CONTEXT_DIALOG_TITLE);
   title->SetMultiLine(true);
   title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title->SizeToFit(left_column_width);
@@ -566,6 +598,35 @@ views::View* ExtensionInstallDialogView::CreateExtraView() {
   return store_link;
 }
 
+bool ExtensionInstallDialogView::IsDialogButtonEnabled(
+    ui::DialogButton button) const {
+  if (button == ui::DIALOG_BUTTON_OK)
+    return install_button_enabled_;
+  return true;
+}
+
+void ExtensionInstallDialogView::SetInstallButtonDelayForTesting(
+    int delay_in_ms) {
+  g_install_delay_in_ms = delay_in_ms;
+}
+
+void ExtensionInstallDialogView::VisibilityChanged(views::View* starting_from,
+                                                   bool is_visible) {
+  if (is_visible && !install_button_enabled_) {
+    // This base::Unretained is safe because the task is owned by the timer,
+    // which is in turn owned by this object.
+    timer_.Start(FROM_HERE,
+                 base::TimeDelta::FromMilliseconds(g_install_delay_in_ms),
+                 base::Bind(&ExtensionInstallDialogView::EnableInstallButton,
+                            base::Unretained(this)));
+  }
+}
+
+void ExtensionInstallDialogView::EnableInstallButton() {
+  install_button_enabled_ = true;
+  GetDialogClientView()->UpdateDialogButtons();
+}
+
 void ExtensionInstallDialogView::UpdateInstallResultHistogram(bool accepted)
     const {
   if (prompt_->type() == ExtensionInstallPrompt::INSTALL_PROMPT)
@@ -580,25 +641,18 @@ ExpandableContainerView::DetailsView::DetailsView(int horizontal_space,
       state_(0) {
   SetLayoutManager(layout_);
   views::ColumnSet* column_set = layout_->AddColumnSet(0);
-  // If the parent is using bullets for its items, then a padding of one unit
-  // will make the child item (which has no bullet) look like a sibling of its
-  // parent. Therefore increase the indentation by one more unit to show that it
-  // is in fact a child item (with no missing bullet) and not a sibling.
-  int padding =
-      views::kRelatedControlHorizontalSpacing * (parent_bulleted ? 2 : 1);
+  const int padding = GetLeftPaddingForBulletedItems(parent_bulleted);
   column_set->AddPaddingColumn(0, padding);
-  column_set->AddColumn(views::GridLayout::LEADING,
-                        views::GridLayout::LEADING,
-                        0,
-                        views::GridLayout::FIXED,
-                        horizontal_space - padding,
+  column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
+                        0, views::GridLayout::FIXED, horizontal_space - padding,
                         0);
 }
 
 void ExpandableContainerView::DetailsView::AddDetail(
     const base::string16& detail) {
-  layout_->StartRowWithPadding(0, 0,
-                               0, views::kRelatedControlSmallVerticalSpacing);
+  layout_->StartRowWithPadding(0, 0, 0,
+                               ChromeLayoutProvider::Get()->GetDistanceMetric(
+                                   DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
   views::Label* detail_label =
       new views::Label(PrepareForDisplay(detail, false));
   detail_label->SetMultiLine(true);
@@ -647,8 +701,7 @@ ExpandableContainerView::ExpandableContainerView(
     details_view_->AddDetail(details[i]);
 
   // Make sure the link width column is as wide as needed for both Show and
-  // Hide details, so that the arrow doesn't shift horizontally when we
-  // toggle.
+  // Hide details, so that the arrow doesn't shift horizontally when we toggle.
   views::Link* link = new views::Link(
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_HIDE_DETAILS));
   int link_col_width = link->GetPreferredSize().width();
@@ -656,13 +709,9 @@ ExpandableContainerView::ExpandableContainerView(
   link_col_width = std::max(link_col_width, link->GetPreferredSize().width());
 
   column_set = layout->AddColumnSet(++column_set_id);
-  // Padding to the left of the More Details column. If the parent is using
-  // bullets for its items, then a padding of one unit will make the child
-  // item (which has no bullet) look like a sibling of its parent. Therefore
-  // increase the indentation by one more unit to show that it is in fact a
-  // child item (with no missing bullet) and not a sibling.
-  column_set->AddPaddingColumn(
-      0, views::kRelatedControlHorizontalSpacing * (parent_bulleted ? 2 : 1));
+  // Padding to the left of the More Details column.
+  column_set->AddPaddingColumn(0,
+                               GetLeftPaddingForBulletedItems(parent_bulleted));
   // The More Details column.
   column_set->AddColumn(views::GridLayout::LEADING,
                         views::GridLayout::LEADING,

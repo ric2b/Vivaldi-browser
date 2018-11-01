@@ -15,7 +15,7 @@
 #include "ui/base/test/material_design_controller_test_api.h"
 #include "ui/compositor/test/context_factories_for_test.h"
 #include "ui/events/event_dispatcher.h"
-#include "ui/events/event_processor.h"
+#include "ui/events/event_sink.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 
 namespace aura {
@@ -134,8 +134,7 @@ void AuraTestBase::ParentWindow(Window* window) {
 }
 
 bool AuraTestBase::DispatchEventUsingWindowDispatcher(ui::Event* event) {
-  ui::EventDispatchDetails details =
-      event_processor()->OnEventFromSource(event);
+  ui::EventDispatchDetails details = event_sink()->OnEventFromSource(event);
   CHECK(!details.dispatcher_destroyed);
   return event->handled();
 }
@@ -158,9 +157,7 @@ void AuraTestBase::OnPointerEventObserved(const ui::PointerEvent& event,
 
 void AuraTestBase::SetWindowManagerClient(WindowManagerClient* client) {}
 
-bool AuraTestBase::OnWmSetBounds(Window* window, gfx::Rect* bounds) {
-  return true;
-}
+void AuraTestBase::OnWmSetBounds(Window* window, const gfx::Rect& bounds) {}
 
 bool AuraTestBase::OnWmSetProperty(
     Window* window,
@@ -168,6 +165,8 @@ bool AuraTestBase::OnWmSetProperty(
     std::unique_ptr<std::vector<uint8_t>>* new_data) {
   return true;
 }
+
+void AuraTestBase::OnWmSetModalType(Window* window, ui::ModalType type) {}
 
 void AuraTestBase::OnWmSetCanFocus(Window* window, bool can_focus) {}
 
@@ -206,8 +205,10 @@ void AuraTestBase::OnWmDisplayRemoved(WindowTreeHostMus* window_tree_host) {
 
 void AuraTestBase::OnWmDisplayModified(const display::Display& display) {}
 
-ui::mojom::EventResult AuraTestBase::OnAccelerator(uint32_t id,
-                                                   const ui::Event& event) {
+ui::mojom::EventResult AuraTestBase::OnAccelerator(
+    uint32_t id,
+    const ui::Event& event,
+    std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
   return ui::mojom::EventResult::HANDLED;
 }
 

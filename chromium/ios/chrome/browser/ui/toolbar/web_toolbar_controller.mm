@@ -17,13 +17,13 @@
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/reading_list/core/reading_list_switches.h"
 #include "components/search_engines/util.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/toolbar/toolbar_model.h"
@@ -42,6 +42,7 @@
 #import "ios/chrome/browser/ui/history/tab_history_popup_controller.h"
 #import "ios/chrome/browser/ui/image_util.h"
 #import "ios/chrome/browser/ui/keyboard/hardware_keyboard_watcher.h"
+#include "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
@@ -59,6 +60,8 @@
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/images/branded_image_provider.h"
 #import "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
+#include "ios/shared/chrome/browser/ui/omnibox/location_bar_controller.h"
+#include "ios/shared/chrome/browser/ui/omnibox/location_bar_delegate.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/ProgressView/src/MaterialProgressView.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
@@ -257,7 +260,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   base::scoped_nsobject<UIImageView> _incognitoIcon;
   base::scoped_nsobject<UIView> _clippingView;
 
-  std::unique_ptr<LocationBarViewIOS> _locationBar;
+  std::unique_ptr<LocationBarController> _locationBar;
   BOOL _initialLayoutComplete;
   // If |YES|, toolbar is incognito.
   BOOL _incognito;
@@ -386,10 +389,8 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   if (!self)
     return nil;
 
-  if (reading_list::switches::IsReadingListEnabled()) {
-    self.readingListModel =
-        ReadingListModelFactory::GetForBrowserState(browserState);
-  }
+  self.readingListModel =
+      ReadingListModelFactory::GetForBrowserState(browserState);
 
   InterfaceIdiom idiom = IsIPadIdiom() ? IPAD_IDIOM : IPHONE_IDIOM;
   // Note that |_webToolbar| gets its frame set to -specificControlArea later in
@@ -598,8 +599,8 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   [_webToolbar setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                    UIViewAutoresizingFlexibleBottomMargin];
   [_webToolbar setFrame:[self specificControlsArea]];
-  _locationBar.reset(
-      new LocationBarViewIOS(_omniBox, _browserState, preloader, self, self));
+  _locationBar = base::MakeUnique<LocationBarControllerImpl>(
+      _omniBox, _browserState, preloader, self, self);
 
   // Create the determinate progress bar (phone only).
   if (idiom == IPHONE_IDIOM) {
@@ -805,7 +806,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 }
 
 - (void)showTabHistoryPopupInView:(UIView*)view
-               withSessionEntries:(NSArray*)sessionEntries
+                        withItems:(const web::NavigationItemList&)items
                    forBackHistory:(BOOL)isBackHistory {
   if (_tabHistoryPopupController)
     return;
@@ -826,9 +827,15 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   _tabHistoryPopupController.reset([[TabHistoryPopupController alloc]
       initWithOrigin:convertedOrigin
           parentView:view
-             entries:sessionEntries]);
+               items:items]);
   [_tabHistoryPopupController setDelegate:self];
 
+  // Fade in the popup and notify observers.
+  CGRect containerFrame = [[_tabHistoryPopupController popupContainer] frame];
+  CGPoint destination = CGPointMake(CGRectGetLeadingEdge(containerFrame),
+                                    CGRectGetMinY(containerFrame));
+  [_tabHistoryPopupController fadeInPopupFromSource:convertedOrigin
+                                      toDestination:destination];
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kTabHistoryPopupWillShowNotification
                     object:nil];
@@ -1970,10 +1977,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 // disabled.  Hides the voice search button but takes no other action.
 - (void)ignoreVoiceSearch:(id)sender {
   [_keyboardVoiceSearchButton setHidden:YES];
-}
-
-- (LocationBarViewIOS*)locationBar {
-  return _locationBar.get();
 }
 
 - (CGFloat)omniboxLeading {

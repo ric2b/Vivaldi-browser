@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <list>
 #include <memory>
-#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -24,6 +23,7 @@
 #include "net/http/http_response_info.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_with_source.h"
+#include "net/spdy/platform/api/spdy_string.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/spdy/spdy_protocol.h"
@@ -34,10 +34,12 @@ namespace net {
 const size_t SpdyHttpStream::kRequestBodyBufferSize = 1 << 14;  // 16KB
 
 SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
-                               bool direct)
+                               bool direct,
+                               NetLogSource source_dependency)
     : MultiplexedHttpStream(MultiplexedSessionHandle(spdy_session)),
       spdy_session_(spdy_session),
       is_reused_(spdy_session_->IsReused()),
+      source_dependency_(source_dependency),
       stream_(nullptr),
       stream_closed_(false),
       closed_stream_status_(ERR_FAILED),
@@ -187,6 +189,11 @@ int64_t SpdyHttpStream::GetTotalSentBytes() const {
     return 0;
 
   return stream_->raw_sent_bytes();
+}
+
+bool SpdyHttpStream::GetAlternativeService(
+    AlternativeService* alternative_service) const {
+  return false;
 }
 
 bool SpdyHttpStream::GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const {
@@ -395,6 +402,10 @@ void SpdyHttpStream::OnClose(int status) {
   }
 }
 
+NetLogSource SpdyHttpStream::source_dependency() const {
+  return source_dependency_;
+}
+
 bool SpdyHttpStream::HasUploadData() const {
   CHECK(request_info_);
   return
@@ -439,7 +450,7 @@ void SpdyHttpStream::InitializeStreamHelper() {
 
 void SpdyHttpStream::ResetStreamInternal() {
   spdy_session_->ResetStream(stream()->stream_id(), ERROR_CODE_INTERNAL_ERROR,
-                             std::string());
+                             SpdyString());
 }
 
 void SpdyHttpStream::OnRequestBodyReadCompleted(int status) {

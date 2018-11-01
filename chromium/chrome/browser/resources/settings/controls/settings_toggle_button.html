@@ -28,29 +28,27 @@
         min-height: var(--settings-row-min-height);
       }
 
-      paper-toggle-button,
+      #labelWrapper,
+      ::content .more-actions,
       cr-policy-pref-indicator {
-        -webkit-margin-start: var(--checkbox-spacing);
-      }
-
-      ::content .more-actions {
-        -webkit-margin-end: 10px;
+        -webkit-margin-end: var(--settings-control-spacing);
       }
     </style>
     <div id="outerRow" noSubLabel$="[[!subLabel]]">
-      <div class="flex" on-tap="onLabelWrapperTap_"
-          actionable$="[[!controlDisabled_(disabled, pref.*)]]">
-        <div id="label" class="label">
-          [[label]]
-        </div>
-        <div class="secondary label">[[subLabel]]</div>
+      <div class="flex" id="labelWrapper" on-tap="onLabelWrapperTap_"
+          actionable$="[[!controlDisabled_(disabled, pref.*)]]"
+          hidden="[[!label]]">
+        <div id="label" class="label">[[label]]</div>
+        <div id="subLabel" class="secondary label">[[subLabel]]</div>
       </div>
       <content select=".more-actions"></content>
-      <template is="dom-if" if="[[pref.controlledBy]]" restamp>
-        <cr-policy-pref-indicator pref="[[pref]]"></cr-policy-pref-indicator>
+      <template is="dom-if" if="[[hasPrefPolicyIndicator(pref.*)]]">
+        <cr-policy-pref-indicator pref="[[pref]]" icon-aria-label="[[label]]">
+        </cr-policy-pref-indicator>
       </template>
       <paper-toggle-button id="control" checked="{{checked}}"
           on-change="notifyChangedByUserInteraction" aria-labelledby="label"
+          aria-describedby="subLabel"
           disabled="[[controlDisabled_(disabled, pref)]]">
       </paper-toggle-button>
     </div>

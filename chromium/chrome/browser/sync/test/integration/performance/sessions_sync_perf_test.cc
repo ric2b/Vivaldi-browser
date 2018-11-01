@@ -68,8 +68,9 @@ void SessionsSyncPerfTest::UpdateTabs(int profile) {
     chrome::SelectNumberedTab(browser, i);
     url = NextURL();
     browser->OpenURL(OpenURLParams(
-        url, content::Referrer(GURL("http://localhost"),
-                               blink::WebReferrerPolicyDefault),
+        url,
+        content::Referrer(GURL("http://localhost"),
+                          blink::kWebReferrerPolicyDefault),
         WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_LINK, false));
     urls.push_back(url);
   }
@@ -98,7 +99,7 @@ int SessionsSyncPerfTest::GetTabCount(int profile) {
   sessions.push_back(local_session);
   for (auto* session : sessions)
     for (const auto& win_pair : session->windows)
-      tab_count += win_pair.second->tabs.size();
+      tab_count += win_pair.second->wrapped_window.tabs.size();
 
   return tab_count;
 }

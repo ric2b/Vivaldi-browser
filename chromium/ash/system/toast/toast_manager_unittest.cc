@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/shelf/shelf_constants.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/system/toast/toast_manager.h"
-#include "ash/common/wm/wm_screen_util.h"
-#include "ash/common/wm_shell.h"
+#include "ash/system/toast/toast_manager.h"
+
+#include "ash/public/cpp/config.h"
+#include "ash/shelf/shelf_constants.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm/wm_screen_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -34,7 +35,7 @@ class ToastManagerTest : public test::AshTestBase {
   void SetUp() override {
     test::AshTestBase::SetUp();
 
-    manager_ = WmShell::Get()->toast_manager();
+    manager_ = Shell::Get()->toast_manager();
 
     manager_->ResetSerialForTesting();
     EXPECT_EQ(0, GetToastSerial());
@@ -128,6 +129,10 @@ TEST_F(ToastManagerTest, ShowAndCloseManually) {
 }
 
 TEST_F(ToastManagerTest, ShowAndCloseManuallyDuringAnimation) {
+  // TODO: gets wedged running animator. http://crbug.com/698016.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   ui::ScopedAnimationDurationScaleMode slow_animation_duration(
       ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
 
@@ -255,6 +260,10 @@ TEST_F(ToastManagerTest, PositionWithVisibleLeftShelf) {
 }
 
 TEST_F(ToastManagerTest, PositionWithUnifiedDesktop) {
+  // TODO: needs unified mode. http://crbug.com/698024.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   display_manager()->SetUnifiedDesktopEnabled(true);
   UpdateDisplay("1000x500,0+600-100x500");
 

@@ -3,12 +3,43 @@
 // found in the LICENSE file.
 
 #include "core/layout/ng/ng_layout_opportunity_iterator.h"
-
-#include "core/layout/ng/ng_units.h"
-#include "wtf/NonCopyingSort.h"
+#include "core/layout/ng/ng_constraint_space.h"
+#include "core/layout/ng/ng_exclusion.h"
+#include "platform/wtf/NonCopyingSort.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 namespace {
+
+void AppendNodeToString(const NGLayoutOpportunityTreeNode* node,
+                        StringBuilder* string_builder,
+                        unsigned indent = 0) {
+  DCHECK(string_builder);
+  if (!node) {
+    string_builder->Append("'null'\n");
+    return;
+  }
+
+  string_builder->Append(node->ToString());
+  string_builder->Append("\n");
+
+  StringBuilder indent_builder;
+  for (unsigned i = 0; i < indent; i++)
+    indent_builder.Append("\t");
+
+  if (node->IsLeafNode())
+    return;
+
+  string_builder->Append(indent_builder.ToString());
+  string_builder->Append("Left:\t");
+  AppendNodeToString(node->left.get(), string_builder, indent + 2);
+  string_builder->Append(indent_builder.ToString());
+  string_builder->Append("Right:\t");
+  AppendNodeToString(node->right.get(), string_builder, indent + 2);
+  string_builder->Append(indent_builder.ToString());
+  string_builder->Append("Bottom:\t");
+  AppendNodeToString(node->bottom.get(), string_builder, indent + 2);
+}
 
 // Collects all opportunities from leaves of Layout Opportunity spatial tree.
 void CollectAllOpportunities(const NGLayoutOpportunityTreeNode* node,
@@ -17,24 +48,22 @@ void CollectAllOpportunities(const NGLayoutOpportunityTreeNode* node,
     return;
   if (node->IsLeafNode())
     opportunities.push_back(node->opportunity);
-  CollectAllOpportunities(node->left, opportunities);
-  CollectAllOpportunities(node->bottom, opportunities);
-  CollectAllOpportunities(node->right, opportunities);
+  CollectAllOpportunities(node->left.get(), opportunities);
+  CollectAllOpportunities(node->bottom.get(), opportunities);
+  CollectAllOpportunities(node->right.get(), opportunities);
 }
 
 // Creates layout opportunity from the provided space and the origin point.
 NGLayoutOpportunity CreateLayoutOpportunityFromConstraintSpace(
-    const NGConstraintSpace& space,
+    const NGLogicalSize& size,
     const NGLogicalOffset& origin_point) {
   NGLayoutOpportunity opportunity;
   // TODO(glebl): Perhaps fix other methods (e.g IsContained) instead of using
   // INT_MAX here.
-  opportunity.size.block_size = space.AvailableSize().block_size >= 0
-                                    ? space.AvailableSize().block_size
-                                    : LayoutUnit(INT_MAX);
-  opportunity.size.inline_size = space.AvailableSize().inline_size >= 0
-                                     ? space.AvailableSize().inline_size
-                                     : LayoutUnit(INT_MAX);
+  opportunity.size.block_size =
+      size.block_size >= 0 ? size.block_size : LayoutUnit(INT_MAX);
+  opportunity.size.inline_size =
+      size.inline_size >= 0 ? size.inline_size : LayoutUnit(INT_MAX);
 
   // adjust to the origin_point.
   opportunity.offset += origin_point;
@@ -128,6 +157,13 @@ NGLayoutOpportunityTreeNode* CreateRightNGLayoutOpportunityTreeNode(
   return nullptr;
 }
 
+void SplitNGLayoutOpportunityTreeNode(const NGLogicalRect& rect,
+                                      NGLayoutOpportunityTreeNode* node) {
+  node->left.reset(CreateLeftNGLayoutOpportunityTreeNode(node, rect));
+  node->right.reset(CreateRightNGLayoutOpportunityTreeNode(node, rect));
+  node->bottom.reset(CreateBottomNGLayoutOpportunityTreeNode(node, rect));
+}
+
 // Gets/Creates the "TOP" positioned constraint space by splitting
 // the parent node with the exclusion.
 //
@@ -165,24 +201,29 @@ void InsertExclusion(NGLayoutOpportunityTreeNode* node,
   if (!exclusion->rect.IsContained(node->opportunity))
     return;
 
-  if (node->exclusion) {
-    InsertExclusion(node->left, exclusion, opportunities);
-    InsertExclusion(node->bottom, exclusion, opportunities);
-    InsertExclusion(node->right, exclusion, opportunities);
+  if (node->exclusions.IsEmpty()) {
+    SplitNGLayoutOpportunityTreeNode(exclusion->rect, node);
+
+    NGLayoutOpportunity top_layout_opp =
+        GetTopSpace(node->opportunity, exclusion->rect);
+    if (!top_layout_opp.IsEmpty())
+      opportunities.push_back(top_layout_opp);
+
+    node->exclusions.push_back(exclusion);
+    node->combined_exclusion = WTF::MakeUnique<NGExclusion>(*exclusion);
     return;
   }
 
-  // Split the current node.
-  node->left = CreateLeftNGLayoutOpportunityTreeNode(node, exclusion->rect);
-  node->right = CreateRightNGLayoutOpportunityTreeNode(node, exclusion->rect);
-  node->bottom = CreateBottomNGLayoutOpportunityTreeNode(node, exclusion->rect);
+  DCHECK(!node->exclusions.IsEmpty());
 
-  NGLayoutOpportunity top_layout_opp =
-      GetTopSpace(node->opportunity, exclusion->rect);
-  if (!top_layout_opp.IsEmpty())
-    opportunities.push_back(top_layout_opp);
-
-  node->exclusion = exclusion;
+  if (node->combined_exclusion->MaybeCombineWith(*exclusion)) {
+    SplitNGLayoutOpportunityTreeNode(node->combined_exclusion->rect, node);
+    node->exclusions.push_back(exclusion);
+  } else {
+    InsertExclusion(node->left.get(), exclusion, opportunities);
+    InsertExclusion(node->bottom.get(), exclusion, opportunities);
+    InsertExclusion(node->right.get(), exclusion, opportunities);
+  }
 }
 
 // Compares exclusions by their top position.
@@ -233,25 +274,25 @@ NGExclusion ToLeaderExclusion(const NGLogicalOffset& origin_point,
 
 NGLayoutOpportunityIterator::NGLayoutOpportunityIterator(
     const NGConstraintSpace* space,
-    const WTF::Optional<NGLogicalOffset>& opt_origin_point,
+    const NGLogicalSize& available_size,
+    const WTF::Optional<NGLogicalOffset>& opt_offset,
     const WTF::Optional<NGLogicalOffset>& opt_leader_point)
-    : constraint_space_(space) {
+    : constraint_space_(space),
+      offset_(opt_offset ? opt_offset.value() : space->BfcOffset()) {
   // TODO(chrome-layout-team): Combine exclusions that shadow each other.
   auto& exclusions = constraint_space_->Exclusions();
   DCHECK(std::is_sorted(exclusions->storage.begin(), exclusions->storage.end(),
                         &CompareNGExclusionsByTopAsc))
       << "Exclusions are expected to be sorted by TOP";
 
-  NGLogicalOffset origin_point =
-      opt_origin_point ? opt_origin_point.value() : NGLogicalOffset();
   NGLayoutOpportunity initial_opportunity =
-      CreateLayoutOpportunityFromConstraintSpace(*constraint_space_,
-                                                 origin_point);
-  opportunity_tree_root_ = new NGLayoutOpportunityTreeNode(initial_opportunity);
+      CreateLayoutOpportunityFromConstraintSpace(available_size, Offset());
+  opportunity_tree_root_.reset(
+      new NGLayoutOpportunityTreeNode(initial_opportunity));
 
   if (opt_leader_point) {
     const NGExclusion leader_exclusion =
-        ToLeaderExclusion(origin_point, opt_leader_point.value());
+        ToLeaderExclusion(Offset(), opt_leader_point.value());
     InsertExclusion(MutableOpportunityTreeRoot(), &leader_exclusion,
                     opportunities_);
   }
@@ -274,5 +315,14 @@ const NGLayoutOpportunity NGLayoutOpportunityIterator::Next() {
   opportunity_iter_++;
   return NGLayoutOpportunity(*opportunity);
 }
+
+#ifndef NDEBUG
+void NGLayoutOpportunityIterator::ShowLayoutOpportunityTree() const {
+  StringBuilder string_builder;
+  string_builder.Append("\n.:: LayoutOpportunity Tree ::.\n\nRoot Node: ");
+  AppendNodeToString(opportunity_tree_root_.get(), &string_builder);
+  fprintf(stderr, "%s\n", string_builder.ToString().Utf8().Data());
+}
+#endif
 
 }  // namespace blink

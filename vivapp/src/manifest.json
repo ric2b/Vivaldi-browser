@@ -38,11 +38,13 @@
     "contextMenus",
     "cookies",
     "declarativeWebRequest",
+    "devtoolsPrivate",
     "downloads",
     "downloads.open",
     "downloads.shelf",
     "editcommand",
     "extensionActionUtils",
+    "fileSystem",
     "fontSettings",
     "geolocation",
     "history",
@@ -92,7 +94,7 @@
           "defaultsPlatformSpecific.js",
           "defaults.js",
           "bundle.js",
-          "popup.html"
+          "devtools.html"
         ]
       }
     ]

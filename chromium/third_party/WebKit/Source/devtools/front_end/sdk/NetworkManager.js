@@ -60,14 +60,6 @@ SDK.NetworkManager = class extends SDK.SDKModel {
   }
 
   /**
-   * @param {!SDK.Target} target
-   * @return {?SDK.NetworkManager}
-   */
-  static fromTarget(target) {
-    return target.model(SDK.NetworkManager);
-  }
-
-  /**
    * @param {!SDK.NetworkManager.Conditions} conditions
    * @return {!Protocol.Network.ConnectionType}
    * TODO(allada): this belongs to NetworkConditionsSelector, which should hardcode/guess it.
@@ -121,7 +113,7 @@ SDK.NetworkManager = class extends SDK.SDKModel {
   }
 };
 
-SDK.SDKModel.register(SDK.NetworkManager, SDK.Target.Capability.Network);
+SDK.SDKModel.register(SDK.NetworkManager, SDK.Target.Capability.Network, true);
 
 /** @enum {symbol} */
 SDK.NetworkManager.Events = {
@@ -129,18 +121,13 @@ SDK.NetworkManager.Events = {
   RequestUpdated: Symbol('RequestUpdated'),
   RequestFinished: Symbol('RequestFinished'),
   RequestUpdateDropped: Symbol('RequestUpdateDropped'),
-  ResponseReceived: Symbol('ResponseReceived')
+  ResponseReceived: Symbol('ResponseReceived'),
+  WarningGenerated: Symbol('WarningGenerated'),
+  RequestRedirected: Symbol('RequestRedirected'),
 };
 
-/** @implements {Common.Emittable} */
-SDK.NetworkManager.RequestRedirectEvent = class {
-  /**
-   * @param {!SDK.NetworkRequest} request
-   */
-  constructor(request) {
-    this.request = request;
-  }
-};
+/** @typedef {{message: string, requestId: string}} */
+SDK.NetworkManager.Warning;
 
 SDK.NetworkManager._MIMETypes = {
   'text/html': {'document': true},
@@ -170,6 +157,8 @@ SDK.NetworkManager.OfflineConditions = {
   upload: 0,
   latency: 0
 };
+/** @typedef {{url: string, enabled: boolean}} */
+SDK.NetworkManager.BlockedPattern;
 
 
 /**
@@ -249,13 +238,11 @@ SDK.NetworkDispatcher = class {
     networkRequest.setSecurityState(response.securityState);
 
     if (!this._mimeTypeIsConsistentWithType(networkRequest)) {
-      var consoleModel = this._manager.target().model(SDK.ConsoleModel);
-      consoleModel.addMessage(new SDK.ConsoleMessage(
-          consoleModel.target(), SDK.ConsoleMessage.MessageSource.Network, SDK.ConsoleMessage.MessageLevel.Info,
-          Common.UIString(
-              'Resource interpreted as %s but transferred with MIME type %s: "%s".',
-              networkRequest.resourceType().title(), networkRequest.mimeType, networkRequest.url()),
-          undefined, undefined, undefined, undefined, networkRequest.requestId()));
+      var message = Common.UIString(
+          'Resource interpreted as %s but transferred with MIME type %s: "%s".', networkRequest.resourceType().title(),
+          networkRequest.mimeType, networkRequest.url());
+      this._manager.dispatchEventToListeners(
+          SDK.NetworkManager.Events.WarningGenerated, {message: message, requestId: networkRequest.requestId()});
     }
 
     if (response.securityDetails)
@@ -334,7 +321,7 @@ SDK.NetworkDispatcher = class {
         return;
       this.responseReceived(requestId, frameId, loaderId, time, Protocol.Page.ResourceType.Other, redirectResponse);
       networkRequest = this._appendRedirect(requestId, time, request.url);
-      this._manager.emit(new SDK.NetworkManager.RequestRedirectEvent(networkRequest));
+      this._manager.dispatchEventToListeners(SDK.NetworkManager.Events.RequestRedirected, networkRequest);
     } else {
       networkRequest = this._createNetworkRequest(requestId, frameId, loaderId, request.url, documentURL, initiator);
     }
@@ -389,14 +376,11 @@ SDK.NetworkDispatcher = class {
 
     // net::ParsedCookie::kMaxCookieSize = 4096 (net/cookies/parsed_cookie.h)
     if ('Set-Cookie' in response.headers && response.headers['Set-Cookie'].length > 4096) {
-      var consoleModel = this._manager.target().model(SDK.ConsoleModel);
-      consoleModel.addMessage(
-          new SDK.ConsoleMessage(
-              consoleModel.target(), SDK.ConsoleMessage.MessageSource.Network, SDK.ConsoleMessage.MessageLevel.Warning,
-              Common.UIString(
-                  'Set-Cookie header is ignored in response from url: %s. Cookie length should be less then or equal to 4096 characters.',
-                  response.url)),
-          undefined, undefined, undefined, undefined, requestId);
+      var message = Common.UIString(
+          'Set-Cookie header is ignored in response from url: %s. Cookie length should be less than or equal to 4096 characters.',
+          response.url);
+      this._manager.dispatchEventToListeners(
+          SDK.NetworkManager.Events.WarningGenerated, {message: message, requestId: requestId});
     }
 
     this._updateNetworkRequestWithResponse(networkRequest, response);
@@ -458,11 +442,9 @@ SDK.NetworkDispatcher = class {
     if (blockedReason) {
       networkRequest.setBlockedReason(blockedReason);
       if (blockedReason === Protocol.Network.BlockedReason.Inspector) {
-        var consoleModel = this._manager.target().model(SDK.ConsoleModel);
-        consoleModel.addMessage(new SDK.ConsoleMessage(
-            consoleModel.target(), SDK.ConsoleMessage.MessageSource.Network, SDK.ConsoleMessage.MessageLevel.Warning,
-            Common.UIString('Request was blocked by DevTools: "%s".', networkRequest.url()), undefined, undefined,
-            undefined, undefined, requestId));
+        var message = Common.UIString('Request was blocked by DevTools: "%s".', networkRequest.url());
+        this._manager.dispatchEventToListeners(
+            SDK.NetworkManager.Events.WarningGenerated, {message: message, requestId: requestId});
       }
     }
     networkRequest.localizedFailDescription = localizedDescription;
@@ -476,8 +458,7 @@ SDK.NetworkDispatcher = class {
    * @param {!Protocol.Network.Initiator=} initiator
    */
   webSocketCreated(requestId, requestURL, initiator) {
-    var networkRequest =
-        new SDK.NetworkRequest(this._manager.target(), requestId, requestURL, '', '', '', initiator || null);
+    var networkRequest = new SDK.NetworkRequest(this._manager, requestId, requestURL, '', '', '', initiator || null);
     networkRequest.setResourceType(Common.resourceTypes.WebSocket);
     this._startNetworkRequest(networkRequest);
   }
@@ -631,14 +612,14 @@ SDK.NetworkDispatcher = class {
   _startNetworkRequest(networkRequest) {
     this._inflightRequestsById[networkRequest.requestId()] = networkRequest;
     this._inflightRequestsByURL[networkRequest.url()] = networkRequest;
-    this._dispatchEventToListeners(SDK.NetworkManager.Events.RequestStarted, networkRequest);
+    this._manager.dispatchEventToListeners(SDK.NetworkManager.Events.RequestStarted, networkRequest);
   }
 
   /**
    * @param {!SDK.NetworkRequest} networkRequest
    */
   _updateNetworkRequest(networkRequest) {
-    this._dispatchEventToListeners(SDK.NetworkManager.Events.RequestUpdated, networkRequest);
+    this._manager.dispatchEventToListeners(SDK.NetworkManager.Events.RequestUpdated, networkRequest);
   }
 
   /**
@@ -651,17 +632,9 @@ SDK.NetworkDispatcher = class {
     networkRequest.finished = true;
     if (encodedDataLength >= 0)
       networkRequest.setTransferSize(encodedDataLength);
-    this._dispatchEventToListeners(SDK.NetworkManager.Events.RequestFinished, networkRequest);
+    this._manager.dispatchEventToListeners(SDK.NetworkManager.Events.RequestFinished, networkRequest);
     delete this._inflightRequestsById[networkRequest.requestId()];
     delete this._inflightRequestsByURL[networkRequest.url()];
-  }
-
-  /**
-   * @param {string} eventType
-   * @param {!SDK.NetworkRequest} networkRequest
-   */
-  _dispatchEventToListeners(eventType, networkRequest) {
-    this._manager.dispatchEventToListeners(eventType, networkRequest);
   }
 
   /**
@@ -673,7 +646,7 @@ SDK.NetworkDispatcher = class {
    * @param {?Protocol.Network.Initiator} initiator
    */
   _createNetworkRequest(requestId, frameId, loaderId, url, documentURL, initiator) {
-    return new SDK.NetworkRequest(this._manager.target(), requestId, url, documentURL, frameId, loaderId, initiator);
+    return new SDK.NetworkRequest(this._manager, requestId, url, documentURL, frameId, loaderId, initiator);
   }
 };
 
@@ -684,19 +657,16 @@ SDK.NetworkDispatcher = class {
 SDK.MultitargetNetworkManager = class extends Common.Object {
   constructor() {
     super();
-
-    /** @type {!Set<string>} */
-    this._blockedURLs = new Set();
-    this._blockedSetting = Common.moduleSetting('networkBlockedURLs');
-    this._blockedSetting.addChangeListener(this._updateBlockedURLs, this);
-    this._blockedSetting.set([]);
-    this._updateBlockedURLs();
-
     this._userAgentOverride = '';
     /** @type {!Set<!Protocol.NetworkAgent>} */
     this._agents = new Set();
     /** @type {!SDK.NetworkManager.Conditions} */
     this._networkConditions = SDK.NetworkManager.NoThrottlingConditions;
+
+    this._blockingEnabledSetting = Common.moduleSetting('requestBlockingEnabled');
+    this._blockedPatternsSetting = Common.settings.createSetting('networkBlockedPatterns', []);
+    this._effectiveBlockedURLs = [];
+    this._updateBlockedPatterns();
 
     SDK.targetManager.observeTargets(this, SDK.Target.Capability.Network);
   }
@@ -724,8 +694,8 @@ SDK.MultitargetNetworkManager = class extends Common.Object {
       networkAgent.setExtraHTTPHeaders(this._extraHeaders);
     if (this._currentUserAgent())
       networkAgent.setUserAgentOverride(this._currentUserAgent());
-    for (var url of this._blockedURLs)
-      networkAgent.addBlockedURL(url);
+    if (this._effectiveBlockedURLs.length)
+      networkAgent.setBlockedURLs(this._effectiveBlockedURLs);
     this._agents.add(networkAgent);
     if (this.isThrottling())
       this._updateNetworkConditions(networkAgent);
@@ -835,34 +805,61 @@ SDK.MultitargetNetworkManager = class extends Common.Object {
     this._updateUserAgentOverride();
   }
 
-  _updateBlockedURLs() {
-    var blocked = this._blockedSetting.get();
-    for (var url of blocked) {
-      if (!this._blockedURLs.has(url))
-        this._addBlockedURL(url);
-    }
-    for (var url of this._blockedURLs) {
-      if (blocked.indexOf(url) === -1)
-        this._removeBlockedURL(url);
-    }
+  /**
+   * @return {!Array<!SDK.NetworkManager.BlockedPattern>}
+   */
+  blockedPatterns() {
+    return this._blockedPatternsSetting.get().slice();
   }
 
   /**
-   * @param {string} url
+   * @return {boolean}
    */
-  _addBlockedURL(url) {
-    this._blockedURLs.add(url);
-    for (var agent of this._agents)
-      agent.addBlockedURL(url);
+  blockingEnabled() {
+    return this._blockingEnabledSetting.get();
   }
 
   /**
-   * @param {string} url
+   * @return {boolean}
    */
-  _removeBlockedURL(url) {
-    this._blockedURLs.delete(url);
+  isBlocking() {
+    return !!this._effectiveBlockedURLs.length;
+  }
+
+  /**
+   * @param {!Array<!SDK.NetworkManager.BlockedPattern>} patterns
+   */
+  setBlockedPatterns(patterns) {
+    this._blockedPatternsSetting.set(patterns);
+    this._updateBlockedPatterns();
+    this.dispatchEventToListeners(SDK.MultitargetNetworkManager.Events.BlockedPatternsChanged);
+  }
+
+  /**
+   * @param {boolean} enabled
+   */
+  setBlockingEnabled(enabled) {
+    if (this._blockingEnabledSetting.get() === enabled)
+      return;
+    this._blockingEnabledSetting.set(enabled);
+    this._updateBlockedPatterns();
+    this.dispatchEventToListeners(SDK.MultitargetNetworkManager.Events.BlockedPatternsChanged);
+  }
+
+  _updateBlockedPatterns() {
+    var urls = [];
+    if (this._blockingEnabledSetting.get()) {
+      for (var pattern of this._blockedPatternsSetting.get()) {
+        if (pattern.enabled)
+          urls.push(pattern.url);
+      }
+    }
+
+    if (!urls.length && !this._effectiveBlockedURLs.length)
+      return;
+    this._effectiveBlockedURLs = urls;
     for (var agent of this._agents)
-      agent.removeBlockedURL(url);
+      agent.setBlockedURLs(this._effectiveBlockedURLs);
   }
 
   clearBrowserCache() {
@@ -912,10 +909,10 @@ SDK.MultitargetNetworkManager = class extends Common.Object {
 
 /** @enum {symbol} */
 SDK.MultitargetNetworkManager.Events = {
+  BlockedPatternsChanged: Symbol('BlockedPatternsChanged'),
   ConditionsChanged: Symbol('ConditionsChanged'),
   UserAgentChanged: Symbol('UserAgentChanged')
 };
-
 
 /**
  * @type {!SDK.MultitargetNetworkManager}

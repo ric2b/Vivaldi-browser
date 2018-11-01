@@ -132,6 +132,15 @@ class CONTENT_EXPORT ChildProcessLauncher : public base::NonThreadSafe {
       const std::string& service_name,
       catalog::RequiredFileMap required_files);
 
+  // Resets all files registered by |SetRegisteredFilesForService|. Used to
+  // support multiple shell context creation in unit_tests.
+  static void ResetRegisteredFilesForTesting();
+
+#if defined(OS_ANDROID)
+  // Temporary until crbug.com/693484 is fixed.
+  static size_t GetNumberOfRendererSlots();
+#endif  // OS_ANDROID
+
  private:
   friend class internal::ChildProcessLauncherHelper;
 

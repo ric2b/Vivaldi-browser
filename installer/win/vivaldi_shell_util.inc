@@ -19,7 +19,7 @@ void RemoveDelegateExecuteForVivaldi(BrowserDistribution* dist,
   // <root>\Software\Classes\Vivaldi<.suffix>\.exe\shell\open\command
   base::string16 delegate_exe_key(ShellUtil::kRegClasses);
   delegate_exe_key.push_back(base::FilePath::kSeparators[0]);
-  delegate_exe_key.append(dist->GetBaseAppId() + suffix);
+  delegate_exe_key.append(install_static::GetBaseAppId() + suffix);
   delegate_exe_key.append(ShellUtil::kRegExePath);
   delegate_exe_key.append(ShellUtil::kRegShellOpen);
   InstallUtil::DeleteRegistryValue(root_key, delegate_exe_key,
@@ -29,7 +29,7 @@ void RemoveDelegateExecuteForVivaldi(BrowserDistribution* dist,
   // <root>\Software\Classes\Vivaldi<.suffix>\.exe\shell\opennewwindow\command
   delegate_exe_key = ShellUtil::kRegClasses;
   delegate_exe_key.push_back(base::FilePath::kSeparators[0]);
-  delegate_exe_key.append(dist->GetBaseAppId() + suffix);
+  delegate_exe_key.append(install_static::GetBaseAppId() + suffix);
   delegate_exe_key.append(ShellUtil::kRegExePath);
   delegate_exe_key.append(kRegShellOpenNewWindow);
   InstallUtil::DeleteRegistryValue(root_key, delegate_exe_key,

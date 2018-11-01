@@ -32,6 +32,8 @@ static_library("apis") {
     "auto_update/auto_update_api.h",
     "bookmarks/bookmarks_private_api.cc",
     "bookmarks/bookmarks_private_api.h",
+    "devtools/devtools_private_api.cc",
+    "devtools/devtools_private_api.h",
     "editcommand/editcommand_api.cc",
     "editcommand/editcommand_api.h",
     "extension_action_utils/extension_action_utils_api.cc",

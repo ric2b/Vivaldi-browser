@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <limits>
 
+#include "ui/gfx/geometry/rect_conversions.h"
+
 namespace ash {
 
 LaserPointerPoints::LaserPointerPoints(base::TimeDelta life_duration)
@@ -14,15 +16,24 @@ LaserPointerPoints::LaserPointerPoints(base::TimeDelta life_duration)
 
 LaserPointerPoints::~LaserPointerPoints() {}
 
-void LaserPointerPoints::AddPoint(const gfx::Point& point) {
-  MoveForwardToTime(base::Time::Now());
+void LaserPointerPoints::AddPoint(const gfx::PointF& point,
+                                  const base::TimeTicks& time) {
+  // Move forward in time if needed.
+  if (time > collection_latest_time_)
+    MoveForwardToTime(time);
 
   LaserPoint new_point;
   new_point.location = point;
+  new_point.time = time;
+  new_point.age = std::min((collection_latest_time_ - time).InMillisecondsF() /
+                               life_duration_.InMillisecondsF(),
+                           1.0);
   points_.push_back(new_point);
 }
 
-void LaserPointerPoints::MoveForwardToTime(const base::Time& latest_time) {
+void LaserPointerPoints::MoveForwardToTime(const base::TimeTicks& latest_time) {
+  DCHECK_GE(latest_time, collection_latest_time_);
+
   if (!points_.empty()) {
     DCHECK(!collection_latest_time_.is_null());
 
@@ -50,13 +61,13 @@ gfx::Rect LaserPointerPoints::GetBoundingBox() {
   if (IsEmpty())
     return gfx::Rect();
 
-  gfx::Point min_point = GetOldest().location;
-  gfx::Point max_point = GetOldest().location;
+  gfx::PointF min_point = GetOldest().location;
+  gfx::PointF max_point = GetOldest().location;
   for (const LaserPoint& point : points_) {
     min_point.SetToMin(point.location);
     max_point.SetToMax(point.location);
   }
-  return gfx::BoundingRect(min_point, max_point);
+  return gfx::ToEnclosingRect(gfx::BoundingRect(min_point, max_point));
 }
 
 LaserPointerPoints::LaserPoint LaserPointerPoints::GetOldest() const {
@@ -78,7 +89,7 @@ int LaserPointerPoints::GetNumberOfPoints() const {
 }
 
 const std::deque<LaserPointerPoints::LaserPoint>&
-LaserPointerPoints::laser_points() {
+LaserPointerPoints::laser_points() const {
   return points_;
 }
 }  // namespace ash

@@ -101,48 +101,61 @@ static_assert(
             content::mojom::PushRegistrationStatus::SENDER_ID_MISMATCH),
     "PushRegistrationStatus enums must match, SENDER_ID_MISMATCH");
 
+static_assert(
+    content::PushRegistrationStatus::PUSH_REGISTRATION_STATUS_STORAGE_CORRUPT ==
+        static_cast<content::PushRegistrationStatus>(
+            content::mojom::PushRegistrationStatus::STORAGE_CORRUPT),
+    "PushRegistrationStatus enums must match, STORAGE_CORRUPT");
+
+static_assert(
+    content::PushRegistrationStatus::
+            PUSH_REGISTRATION_STATUS_RENDERER_SHUTDOWN ==
+        static_cast<content::PushRegistrationStatus>(
+            content::mojom::PushRegistrationStatus::RENDERER_SHUTDOWN),
+    "PushRegistrationStatus enums must match, RENDERER_SHUTDOWN");
+
 static_assert(content::PushRegistrationStatus::PUSH_REGISTRATION_STATUS_LAST ==
                   static_cast<content::PushRegistrationStatus>(
                       content::mojom::PushRegistrationStatus::LAST),
               "PushRegistrationStatus enums must match, LAST");
 
 // PushErrorType
-static_assert(blink::WebPushError::ErrorType::ErrorTypeAbort ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeAbort ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::ABORT),
               "PushErrorType enums must match, ABORT");
 
-static_assert(blink::WebPushError::ErrorType::ErrorTypeNetwork ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeNetwork ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::NETWORK),
               "PushErrorType enums must match, NETWORK");
 
-static_assert(blink::WebPushError::ErrorType::ErrorTypeNone ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeNone ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::NONE),
               "PushErrorType enums must match, NONE");
 
-static_assert(blink::WebPushError::ErrorType::ErrorTypeNotAllowed ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeNotAllowed ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::NOT_ALLOWED),
               "PushErrorType enums must match, NOT_ALLOWED");
 
-static_assert(blink::WebPushError::ErrorType::ErrorTypeNotFound ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeNotFound ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::NOT_FOUND),
               "PushErrorType enums must match, NOT_FOUND");
 
-static_assert(blink::WebPushError::ErrorType::ErrorTypeNotSupported ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeNotSupported ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::NOT_SUPPORTED),
               "PushErrorType enums must match, NOT_SUPPORTED");
 
-static_assert(blink::WebPushError::ErrorType::ErrorTypeInvalidState ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeInvalidState ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::INVALID_STATE),
               "PushErrorType enums must match, INVALID_STATE");
 
-static_assert(blink::WebPushError::ErrorType::ErrorTypeLast ==
+static_assert(blink::WebPushError::ErrorType::kErrorTypeLast ==
                   static_cast<blink::WebPushError::ErrorType>(
                       content::mojom::PushErrorType::LAST),
               "PushErrorType enums must match, LAST");
@@ -185,10 +198,17 @@ static_assert(
 
 static_assert(
     content::PushGetRegistrationStatus::
-            PUSH_GETREGISTRATION_STATUS_PUBLIC_KEY_UNAVAILABLE ==
+            PUSH_GETREGISTRATION_STATUS_STORAGE_CORRUPT ==
         static_cast<content::PushGetRegistrationStatus>(
-            content::mojom::PushGetRegistrationStatus::PUBLIC_KEY_UNAVAILABLE),
-    "PushGetRegistrationStatus enums must match, PUBLIC_KEY_UNAVAILABLE");
+            content::mojom::PushGetRegistrationStatus::STORAGE_CORRUPT),
+    "PushGetRegistrationStatus enums must match, STORAGE_CORRUPT");
+
+static_assert(
+    content::PushGetRegistrationStatus::
+            PUSH_GETREGISTRATION_STATUS_RENDERER_SHUTDOWN ==
+        static_cast<content::PushGetRegistrationStatus>(
+            content::mojom::PushGetRegistrationStatus::RENDERER_SHUTDOWN),
+    "PushGetRegistrationStatus enums must match, RENDERER_SHUTDOWN");
 
 static_assert(
     content::PushGetRegistrationStatus::PUSH_GETREGISTRATION_STATUS_LAST ==
@@ -197,22 +217,22 @@ static_assert(
     "PushGetRegistrationStatus enums must match, LAST");
 
 // PushPermissionStatus
-static_assert(blink::WebPushPermissionStatus::WebPushPermissionStatusGranted ==
+static_assert(blink::WebPushPermissionStatus::kWebPushPermissionStatusGranted ==
                   static_cast<blink::WebPushPermissionStatus>(
                       content::mojom::PushPermissionStatus::GRANTED),
               "PushPermissionStatus enums must match, GRANTED");
 
-static_assert(blink::WebPushPermissionStatus::WebPushPermissionStatusDenied ==
+static_assert(blink::WebPushPermissionStatus::kWebPushPermissionStatusDenied ==
                   static_cast<blink::WebPushPermissionStatus>(
                       content::mojom::PushPermissionStatus::DENIED),
               "PushPermissionStatus enums must match, DENIED");
 
-static_assert(blink::WebPushPermissionStatus::WebPushPermissionStatusPrompt ==
+static_assert(blink::WebPushPermissionStatus::kWebPushPermissionStatusPrompt ==
                   static_cast<blink::WebPushPermissionStatus>(
                       content::mojom::PushPermissionStatus::PROMPT),
               "PushPermissionStatus enums must match, PROMPT");
 
-static_assert(blink::WebPushPermissionStatus::WebPushPermissionStatusLast ==
+static_assert(blink::WebPushPermissionStatus::kWebPushPermissionStatusLast ==
                   static_cast<blink::WebPushPermissionStatus>(
                       content::mojom::PushPermissionStatus::LAST),
               "PushPermissionStatus enums must match, LAST");
@@ -264,8 +284,8 @@ bool EnumTraits<content::mojom::PushRegistrationStatus,
 content::mojom::PushErrorType
 EnumTraits<content::mojom::PushErrorType, blink::WebPushError::ErrorType>::
     ToMojom(blink::WebPushError::ErrorType input) {
-  if (input >= blink::WebPushError::ErrorType::ErrorTypeAbort &&
-      input <= blink::WebPushError::ErrorType::ErrorTypeInvalidState) {
+  if (input >= blink::WebPushError::ErrorType::kErrorTypeAbort &&
+      input <= blink::WebPushError::ErrorType::kErrorTypeInvalidState) {
     return static_cast<content::mojom::PushErrorType>(input);
   }
 
@@ -323,8 +343,9 @@ content::mojom::PushPermissionStatus EnumTraits<
     content::mojom::PushPermissionStatus,
     blink::WebPushPermissionStatus>::ToMojom(blink::WebPushPermissionStatus
                                                  input) {
-  if (input >= blink::WebPushPermissionStatus::WebPushPermissionStatusGranted &&
-      input <= blink::WebPushPermissionStatus::WebPushPermissionStatusLast) {
+  if (input >=
+          blink::WebPushPermissionStatus::kWebPushPermissionStatusGranted &&
+      input <= blink::WebPushPermissionStatus::kWebPushPermissionStatusLast) {
     return static_cast<content::mojom::PushPermissionStatus>(input);
   }
 

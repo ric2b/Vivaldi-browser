@@ -39,7 +39,7 @@ namespace {
 // HTTP/1.1 resources are. Disabling this appears to have negative performance
 // impact, see https://crbug.com/655585.
 const base::Feature kPrioritySupportedRequestsDelayable{
-    "PrioritySupportedRequestsDelayable", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PrioritySupportedRequestsDelayable", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // In the event that many resource requests are started quickly, this feature
 // will periodically yield (e.g., delaying starting of requests) by posting a
@@ -237,8 +237,9 @@ class ResourceScheduler::ScheduledResourceRequest : public ResourceThrottle {
   }
 
   static ScheduledResourceRequest* ForRequest(net::URLRequest* request) {
-    return static_cast<UnownedPointer*>(request->GetUserData(kUserDataKey))
-        ->get();
+    UnownedPointer* pointer =
+        static_cast<UnownedPointer*>(request->GetUserData(kUserDataKey));
+    return pointer ? pointer->get() : nullptr;
   }
 
   // Starts the request. If |start_mode| is START_ASYNC, the request will not
@@ -1078,6 +1079,17 @@ void ResourceScheduler::ReprioritizeRequest(net::URLRequest* request,
   Client* client = client_it->second;
   client->ReprioritizeRequest(scheduled_resource_request, old_priority_params,
                               new_priority_params);
+}
+
+void ResourceScheduler::ReprioritizeRequest(net::URLRequest* request,
+                                            net::RequestPriority new_priority) {
+  int current_intra_priority = 0;
+  auto* existing_request = ScheduledResourceRequest::ForRequest(request);
+  if (existing_request) {
+    current_intra_priority =
+        existing_request->get_request_priority_params().intra_priority;
+  }
+  ReprioritizeRequest(request, new_priority, current_intra_priority);
 }
 
 ResourceScheduler::ClientId ResourceScheduler::MakeClientId(

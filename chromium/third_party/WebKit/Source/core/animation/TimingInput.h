@@ -7,7 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/animation/Timing.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -15,33 +15,38 @@ class Document;
 class ExceptionState;
 class KeyframeEffectOptions;
 class UnrestrictedDoubleOrString;
+class UnrestrictedDoubleOrKeyframeEffectOptions;
 
 class CORE_EXPORT TimingInput {
   STATIC_ONLY(TimingInput);
 
  public:
-  static bool convert(const KeyframeEffectOptions& timingInput,
-                      Timing& timingOutput,
+  static bool Convert(const UnrestrictedDoubleOrKeyframeEffectOptions&,
+                      Timing& timing_output,
                       Document*,
                       ExceptionState&);
-  static bool convert(double duration, Timing& timingOutput, ExceptionState&);
+  static bool Convert(const KeyframeEffectOptions& timing_input,
+                      Timing& timing_output,
+                      Document*,
+                      ExceptionState&);
+  static bool Convert(double duration, Timing& timing_output, ExceptionState&);
 
-  static void setStartDelay(Timing&, double startDelay);
-  static void setEndDelay(Timing&, double endDelay);
-  static void setFillMode(Timing&, const String& fillMode);
-  static bool setIterationStart(Timing&,
-                                double iterationStart,
+  static void SetStartDelay(Timing&, double start_delay);
+  static void SetEndDelay(Timing&, double end_delay);
+  static void SetFillMode(Timing&, const String& fill_mode);
+  static bool SetIterationStart(Timing&,
+                                double iteration_start,
                                 ExceptionState&);
-  static bool setIterationCount(Timing&,
-                                double iterationCount,
+  static bool SetIterationCount(Timing&,
+                                double iteration_count,
                                 ExceptionState&);
-  static bool setIterationDuration(Timing&,
+  static bool SetIterationDuration(Timing&,
                                    const UnrestrictedDoubleOrString&,
                                    ExceptionState&);
-  static void setPlaybackRate(Timing&, double playbackRate);
-  static void setPlaybackDirection(Timing&, const String& direction);
-  static bool setTimingFunction(Timing&,
-                                const String& timingFunctionString,
+  static void SetPlaybackRate(Timing&, double playback_rate);
+  static void SetPlaybackDirection(Timing&, const String& direction);
+  static bool SetTimingFunction(Timing&,
+                                const String& timing_function_string,
                                 Document*,
                                 ExceptionState&);
 };

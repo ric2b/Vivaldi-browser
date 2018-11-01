@@ -31,9 +31,9 @@
 #include "gpu/ipc/common/gpu_stream_constants.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_listener.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gpu_preference.h"
+#include "ui/latency/latency_info.h"
 
 struct GPUCommandBufferConsoleMessage;
 struct GPUCreateCommandBufferConfig;
@@ -125,7 +125,8 @@ class GPU_EXPORT CommandBufferProxyImpl
   bool IsFenceSyncReleased(uint64_t release) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        const base::Closure& callback) override;
-  bool CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) override;
+  void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
+  bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
 
   void TakeFrontBuffer(const gpu::Mailbox& mailbox);
   void ReturnFrontBuffer(const gpu::Mailbox& mailbox,
@@ -139,7 +140,7 @@ class GPU_EXPORT CommandBufferProxyImpl
 
   void SetOnConsoleMessageCallback(const GpuConsoleMessageCallback& callback);
 
-  void SetLatencyInfo(const std::vector<ui::LatencyInfo>& latency_info);
+  void AddLatencyInfo(const std::vector<ui::LatencyInfo>& latency_info);
   using SwapBuffersCompletionCallback = base::Callback<void(
       const std::vector<ui::LatencyInfo>& latency_info,
       gfx::SwapResult result,
@@ -260,26 +261,28 @@ class GPU_EXPORT CommandBufferProxyImpl
   const gpu::CommandBufferId command_buffer_id_;
   const int32_t route_id_;
   const int32_t stream_id_;
-  uint32_t flush_count_;
-  int32_t last_put_offset_;
-  int32_t last_barrier_put_offset_;
+  uint32_t flush_count_ = 0;
+  int32_t last_put_offset_ = -1;
+  int32_t last_barrier_put_offset_ = -1;
 
   // Next generated fence sync.
-  uint64_t next_fence_sync_release_;
+  uint64_t next_fence_sync_release_ = 1;
+
+  std::vector<SyncToken> pending_sync_token_fences_;
 
   // Unverified flushed fence syncs with their corresponding flush id.
   std::queue<std::pair<uint64_t, uint32_t>> flushed_release_flush_id_;
 
   // Last flushed fence sync release, same as last item in queue if not empty.
-  uint64_t flushed_fence_sync_release_;
+  uint64_t flushed_fence_sync_release_ = 0;
 
   // Last verified fence sync.
-  uint64_t verified_fence_sync_release_;
+  uint64_t verified_fence_sync_release_ = 0;
 
   GpuConsoleMessageCallback console_message_callback_;
 
   // Tasks to be invoked in SignalSyncPoint responses.
-  uint32_t next_signal_id_;
+  uint32_t next_signal_id_ = 0;
   SignalTaskMap signal_tasks_;
 
   gpu::Capabilities capabilities_;

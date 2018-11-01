@@ -62,11 +62,6 @@ void GetCallback(const base::Closure& callback,
 
 void NoOpGet(bool success, const std::vector<uint8_t>& value) {}
 
-std::vector<uint8_t> String16ToUint8Vector(const base::string16& input) {
-  const uint8_t* data = reinterpret_cast<const uint8_t*>(input.data());
-  return std::vector<uint8_t>(data, data + input.size() * sizeof(base::char16));
-}
-
 class TestLevelDBObserver : public mojom::LevelDBObserver {
  public:
   struct Observation {
@@ -602,11 +597,11 @@ TEST_F(LocalStorageContextMojoTest, Migration) {
   bool success = false;
   std::vector<uint8_t> result;
   wrapper->Get(
-      String16ToUint8Vector(key),
+      LocalStorageContextMojo::MigrateString(key),
       base::Bind(&GetCallback, run_loop.QuitClosure(), &success, &result));
   run_loop.Run();
   EXPECT_TRUE(success);
-  EXPECT_EQ(String16ToUint8Vector(value), result);
+  EXPECT_EQ(LocalStorageContextMojo::MigrateString(value), result);
 
   // Origin1 should no longer exist in old storage.
   area = local->OpenStorageArea(origin1.GetURL());
@@ -622,14 +617,17 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
                               service_manager::mojom::ServiceFactory> {
  public:
   explicit ServiceTestClient(service_manager::test::ServiceTest* test)
-      : service_manager::test::ServiceTestClient(test) {}
+      : service_manager::test::ServiceTestClient(test) {
+    registry_.AddInterface<service_manager::mojom::ServiceFactory>(this);
+  }
   ~ServiceTestClient() override {}
 
  protected:
-  bool OnConnect(const service_manager::ServiceInfo& remote_info,
-                 service_manager::InterfaceRegistry* registry) override {
-    registry->AddInterface<service_manager::mojom::ServiceFactory>(this);
-    return true;
+  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle interface_pipe) override {
+    registry_.BindInterface(source_info.identity, interface_name,
+                            std::move(interface_pipe));
   }
 
   void CreateService(service_manager::mojom::ServiceRequest request,
@@ -649,6 +647,7 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
   }
 
  private:
+  service_manager::BinderRegistry registry_;
   mojo::BindingSet<service_manager::mojom::ServiceFactory>
       service_factory_bindings_;
   std::unique_ptr<service_manager::ServiceContext> file_service_context_;

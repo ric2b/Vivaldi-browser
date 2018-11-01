@@ -163,35 +163,6 @@ bool DisassemblerElf32::ParseHeader() {
   return Good();
 }
 
-bool DisassemblerElf32::Disassemble(AssemblyProgram* program) {
-  if (!ok())
-    return false;
-
-  if (!ParseAbs32Relocs())
-    return false;
-
-  if (!ParseRel32RelocsFromSections())  // Does not sort rel32 locations.
-    return false;
-
-  PrecomputeLabels(program);
-  RemoveUnusedRel32Locations(program);
-
-  if (!program->GenerateInstructions(
-          base::Bind(&DisassemblerElf32::ParseFile, base::Unretained(this)))) {
-    return false;
-  }
-
-  // Finally sort rel32 locations.
-  std::sort(rel32_locations_.begin(),
-            rel32_locations_.end(),
-            TypedRVA::IsLessThanByRVA);
-  DCHECK(rel32_locations_.empty() ||
-         rel32_locations_.back()->rva() != kUnassignedRVA);
-
-  program->DefaultAssignIndexes();
-  return true;
-}
-
 CheckBool DisassemblerElf32::IsValidTargetRVA(RVA rva) const {
   if (rva == kUnassignedRVA)
     return false;
@@ -323,7 +294,7 @@ CheckBool DisassemblerElf32::RVAsToFileOffsets(
   return true;
 }
 
-CheckBool DisassemblerElf32::ParseAbs32Relocs() {
+bool DisassemblerElf32::ExtractAbs32Locations() {
   abs32_locations_.clear();
 
   // Loop through sections for relocation sections
@@ -357,7 +328,7 @@ CheckBool DisassemblerElf32::ParseAbs32Relocs() {
   return true;
 }
 
-CheckBool DisassemblerElf32::ParseRel32RelocsFromSections() {
+bool DisassemblerElf32::ExtractRel32Locations() {
   rel32_locations_.clear();
   bool found_rel32 = false;
 
@@ -383,6 +354,11 @@ CheckBool DisassemblerElf32::ParseRel32RelocsFromSections() {
   }
   if (!found_rel32)
     VLOG(1) << "Warning: Found no rel32 addresses. Missing .text section?";
+
+  std::sort(rel32_locations_.begin(), rel32_locations_.end(),
+            TypedRVA::IsLessThanByRVA);
+  DCHECK(rel32_locations_.empty() ||
+         rel32_locations_.back()->rva() != kUnassignedRVA);
 
   return true;
 }
@@ -413,20 +389,29 @@ void DisassemblerElf32::RemoveUnusedRel32Locations(AssemblyProgram* program) {
   rel32_locations_.resize(std::distance(rel32_locations_.begin(), tail_it));
 }
 
+InstructionGenerator DisassemblerElf32::GetInstructionGenerator(
+    AssemblyProgram* program) {
+  return base::Bind(&DisassemblerElf32::ParseFile, base::Unretained(this),
+                    program);
+}
+
 CheckBool DisassemblerElf32::ParseFile(AssemblyProgram* program,
                                        InstructionReceptor* receptor) const {
   // Walk all the bytes in the file, whether or not in a section.
   FileOffset file_offset = 0;
 
-  std::vector<FileOffset> abs_offsets;
-
   // File parsing follows file offset order, and we visit abs32 and rel32
   // locations in lockstep. Therefore we need to extract and sort file offsets
-  // of all abs32 and rel32 locations.
+  // of all abs32 and rel32 locations. For abs32, we copy the offsets to a new
+  // array.
+  std::vector<FileOffset> abs_offsets;
   if (!RVAsToFileOffsets(abs32_locations_, &abs_offsets))
     return false;
-  std::sort(abs32_locations_.begin(), abs32_locations_.end());
+  std::sort(abs_offsets.begin(), abs_offsets.end());
 
+  // For rel32, TypedRVA (rather than raw offset) is stored, so sort-by-offset
+  // is performed in place to save memory. At the end of function we will
+  // sort-by-RVA.
   if (!RVAsToFileOffsets(&rel32_locations_))
     return false;
   std::sort(rel32_locations_.begin(),
@@ -495,6 +480,10 @@ CheckBool DisassemblerElf32::ParseFile(AssemblyProgram* program,
   // Rest of the file past the last section
   if (!ParseSimpleRegion(file_offset, length(), receptor))
     return false;
+
+  // Restore original rel32 location order and sort by RVA order.
+  std::sort(rel32_locations_.begin(), rel32_locations_.end(),
+            TypedRVA::IsLessThanByRVA);
 
   // Make certain we consume all of the relocations as expected
   return (current_abs_offset == end_abs_offset);

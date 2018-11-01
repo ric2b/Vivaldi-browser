@@ -11,10 +11,11 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
-#include "cc/paint/paint_surface.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/text_constants.h"
@@ -74,9 +75,6 @@ class GFX_EXPORT Canvas {
     // when rendering text onto a fully- or partially-transparent background
     // that will later be blended with another image.
     NO_SUBPIXEL_RENDERING = 1 << 9,
-
-    // Draw text with 1px border.
-    HALO_EFFECT = 1 << 10,
   };
 
   // Creates an empty canvas with image_scale of 1x.
@@ -149,29 +147,8 @@ class GFX_EXPORT Canvas {
   // Canvas::TEXT_ALIGN_RIGHT.
   static int DefaultCanvasTextAlignment();
 
-  // Draws text with a 1-pixel halo around it of the given color.
-  // On Windows, it allows ClearType to be drawn to an otherwise transparent
-  //   bitmap for drag images. Drag images have only 1-bit of transparency, so
-  //   we don't do any fancy blurring.
-  // On Linux, text with halo is created by stroking it with 2px |halo_color|
-  //   then filling it with |text_color|.
-  // On Mac, NOTIMPLEMENTED.
-  //   TODO(dhollowa): Skia-native implementation is underway.  Cut over to
-  //   that when ready.  http::/crbug.com/109946
-  void DrawStringRectWithHalo(const base::string16& text,
-                              const FontList& font_list,
-                              SkColor text_color,
-                              SkColor halo_color,
-                              const Rect& display_rect,
-                              int flags);
-
   // Extracts an ImageSkiaRep from the contents of this canvas.
   ImageSkiaRep ExtractImageRep() const;
-
-  // Draws a dashed rectangle of the specified color.
-  // DEPRECATED in favor of the RectF version below.
-  // TODO(funkysidd): Remove this (http://crbug.com/553726)
-  void DrawDashedRect(const Rect& rect, SkColor color);
 
   // Draws a dashed rectangle of the specified color.
   void DrawDashedRect(const RectF& rect, SkColor color);
@@ -191,6 +168,10 @@ class GFX_EXPORT Canvas {
   // transform.
   void SaveLayerAlpha(uint8_t alpha);
   void SaveLayerAlpha(uint8_t alpha, const Rect& layer_bounds);
+
+  // Like SaveLayerAlpha but draws the layer with an arbitrary set of
+  // PaintFlags once Restore() is called.
+  void SaveLayerWithFlags(const cc::PaintFlags& flags);
 
   // Restores the drawing state after a call to Save*(). It is an error to
   // call Restore() more times than Save*().
@@ -234,23 +215,7 @@ class GFX_EXPORT Canvas {
   // color, using a transfer mode of SkBlendMode::kSrcOver.
   //
   // NOTE: if you need a single pixel line, use DrawLine.
-  // DEPRECATED in favor of the RectF version below.
-  // TODO(funkysidd): Remove this (http://crbug.com/553726)
-  void DrawRect(const Rect& rect, SkColor color);
-
-  // Draws a single pixel rect in the specified region with the specified
-  // color, using a transfer mode of SkBlendMode::kSrcOver.
-  //
-  // NOTE: if you need a single pixel line, use DrawLine.
   void DrawRect(const RectF& rect, SkColor color);
-
-  // Draws a single pixel rect in the specified region with the specified
-  // color and transfer mode.
-  //
-  // NOTE: if you need a single pixel line, use DrawLine.
-  // DEPRECATED in favor of the RectF version below.
-  // TODO(funkysidd): Remove this (http://crbug.com/553726)
-  void DrawRect(const Rect& rect, SkColor color, SkBlendMode mode);
 
   // Draws a single pixel rect in the specified region with the specified
   // color and transfer mode.
@@ -438,16 +403,9 @@ class GFX_EXPORT Canvas {
                     int dest_x,
                     int dest_y,
                     int w,
-                    int h);
-  void TileImageInt(const ImageSkia& image,
-                    int src_x,
-                    int src_y,
-                    float tile_scale_x,
-                    float tile_scale_y,
-                    int dest_x,
-                    int dest_y,
-                    int w,
-                    int h);
+                    int h,
+                    float tile_scale = 1.0f,
+                    cc::PaintFlags* flags = nullptr);
 
   // Helper for TileImageInt().  Initializes |flags| for tiling |image| with the
   // given parameters.  Returns false if the provided image does not have a
@@ -471,7 +429,8 @@ class GFX_EXPORT Canvas {
                        const Rect& display_rect,
                        int flags);
 
-  SkBitmap ToBitmap();
+  // Note that writing to this bitmap will modify pixels stored in this canvas.
+  SkBitmap GetBitmap() const;
 
   // TODO(enne): rename sk_canvas members and interface.
   cc::PaintCanvas* sk_canvas() { return canvas_; }
@@ -496,6 +455,7 @@ class GFX_EXPORT Canvas {
                           bool filter,
                           const cc::PaintFlags& flags,
                           bool remove_image_scale);
+  cc::PaintCanvas* CreateOwnedCanvas(const Size& size, bool is_opaque);
 
   // The device scale factor at which drawing on this canvas occurs.
   // An additional scale can be applied via Canvas::Scale(). However,
@@ -503,10 +463,11 @@ class GFX_EXPORT Canvas {
   float image_scale_;
 
   // canvas_ is our active canvas object. Sometimes we are also the owner,
-  // in which case surface_ will be set. Other times we are just
-  // borrowing someone else's canvas, in which case canvas_ will point there
-  // but surface_ will be null.
-  sk_sp<cc::PaintSurface> surface_;
+  // in which case bitmap_ and owned_canvas_ will be set. Other times we are
+  // just borrowing someone else's canvas, in which case canvas_ will point
+  // there but bitmap_ and owned_canvas_ will not exist.
+  base::Optional<SkBitmap> bitmap_;
+  base::Optional<cc::SkiaPaintCanvas> owned_canvas_;
   cc::PaintCanvas* canvas_;
 
   DISALLOW_COPY_AND_ASSIGN(Canvas);

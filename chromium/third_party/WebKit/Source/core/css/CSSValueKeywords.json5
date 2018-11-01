@@ -256,7 +256,7 @@
     "-webkit-baseline-middle",
     //
     // text-align
-    // The order of this enum must match the order found in CSSParserFastPaths::isValidKeywordPropertyAndValue().
+    // The order of this enum must match the order found in CSSParserFastPaths::IsValidKeywordPropertyAndValue().
     //
     "-webkit-auto",
     "left",
@@ -282,7 +282,7 @@
     "inside",
     //
     // list-style-type
-    // The order of this enum must match the order found in CSSParserFastPaths::isValidKeywordPropertyAndValue().
+    // The order of this enum must match the order found in CSSParserFastPaths::IsValidKeywordPropertyAndValue().
     //
     "disc",
     "circle",
@@ -342,7 +342,7 @@
     //none
     //
     // display
-    // The order of this enum must match the order found in CSSParserFastPaths::isValidKeywordPropertyAndValue().
+    // The order of this enum must match the order found in CSSParserFastPaths::IsValidKeywordPropertyAndValue().
     //
     "inline",
     "block",
@@ -371,7 +371,7 @@
     "-webkit-inline-flex",
     //
     // cursor
-    // The order of this enum must match the order found in CSSPropertyParser::consumeCursor().
+    // The order of this enum must match the order found in CSSPropertyParser::ConsumeCursor().
     //
     "auto",
     "crosshair",
@@ -533,6 +533,8 @@
     // flex-end
     // center
     // baseline
+    // last baseline,
+    // first baseline,
     // stretch
 
     // justify-content
@@ -646,8 +648,6 @@
     "listitem",
     "media-enter-fullscreen-button",
     "media-exit-fullscreen-button",
-    "media-fullscreen-volume-slider",
-    "media-fullscreen-volume-slider-thumb",
     "media-mute-button",
     "media-play-button",
     "media-overlay-play-button",
@@ -668,6 +668,7 @@
     "-internal-media-subtitles-icon",
     "-internal-media-overflow-button",
     "-internal-media-download-button",
+    "-internal-media-remoting-cast-icon",
     "menulist",
     "menulist-button",
     "menulist-text",
@@ -750,6 +751,13 @@
     //
     "flat",
     "preserve-3d",
+
+    //
+    // transform-box
+    //
+    // border-box
+    "fill-box",
+    "view-box",
 
     //
     // transition-timing-function
@@ -982,6 +990,9 @@
     // stretch
     // baseline
     "last-baseline",
+    "first-baseline",
+    "first",
+    "last",
     // center
     // start
     // end
@@ -1013,8 +1024,10 @@
     // background-image, etc.
     "linear-gradient",
     "radial-gradient",
+    "conic-gradient",
     "repeating-linear-gradient",
     "repeating-radial-gradient",
+    "repeating-conic-gradient",
     "paint",
     "-webkit-cross-fade",
     "-webkit-gradient",

@@ -20,11 +20,11 @@
 #include "chrome/browser/safe_browsing/client_side_detection_host.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
-#include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/safe_browsing/csd.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/test_database_manager.h"
 #include "content/public/browser/navigation_controller.h"
@@ -129,7 +129,7 @@ class BrowserFeatureExtractorTest : public ChromeRenderViewHostTestHarness {
                          const GURL& referrer,
                          ui::PageTransition type) {
     web_contents()->GetController().LoadURL(
-        url, content::Referrer(referrer, blink::WebReferrerPolicyDefault),
+        url, content::Referrer(referrer, blink::kWebReferrerPolicyDefault),
         type, std::string());
     int pending_id =
         web_contents()->GetController().GetPendingEntry()->GetUniqueID();
@@ -140,9 +140,11 @@ class BrowserFeatureExtractorTest : public ChromeRenderViewHostTestHarness {
       rfh = web_contents()->GetMainFrame();
     }
     WebContentsTester::For(web_contents())->ProceedWithCrossSiteNavigation();
-    WebContentsTester::For(web_contents())->TestDidNavigateWithReferrer(
-        rfh, pending_id, true, url,
-        content::Referrer(referrer, blink::WebReferrerPolicyDefault), type);
+    WebContentsTester::For(web_contents())
+        ->TestDidNavigateWithReferrer(
+            rfh, pending_id, true, url,
+            content::Referrer(referrer, blink::kWebReferrerPolicyDefault),
+            type);
   }
 
   bool ExtractFeatures(ClientPhishingRequest* request) {

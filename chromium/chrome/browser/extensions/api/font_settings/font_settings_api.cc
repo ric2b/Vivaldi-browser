@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -186,7 +187,7 @@ void FontSettingsEventRouter::OnFontPrefChanged(
 
   base::ListValue args;
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->Set(key, pref->GetValue()->DeepCopy());
+  dict->Set(key, pref->GetValue()->CreateDeepCopy());
   args.Append(std::move(dict));
 
   extensions::preference_helpers::DispatchEventToExtensions(
@@ -201,8 +202,8 @@ FontSettingsAPI::FontSettingsAPI(content::BrowserContext* context)
 FontSettingsAPI::~FontSettingsAPI() {
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<FontSettingsAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<FontSettingsAPI>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<FontSettingsAPI>*
@@ -278,7 +279,7 @@ ExtensionFunction::ResponseAction FontSettingsSetFontFunction::Run() {
 
   PreferenceAPI::Get(profile)->SetExtensionControlledPref(
       extension_id(), pref_path, kExtensionPrefsScopeRegular,
-      new base::StringValue(params->details.font_id));
+      new base::Value(params->details.font_id));
   return RespondNow(NoArguments());
 }
 
@@ -300,7 +301,7 @@ bool FontSettingsGetFontListFunction::CopyFontsToResult(
   for (base::ListValue::iterator it = fonts->begin();
        it != fonts->end(); ++it) {
     base::ListValue* font_list_value;
-    if (!(*it)->GetAsList(&font_list_value)) {
+    if (!it->GetAsList(&font_list_value)) {
       NOTREACHED();
       return false;
     }
@@ -319,8 +320,9 @@ bool FontSettingsGetFontListFunction::CopyFontsToResult(
 
     std::unique_ptr<base::DictionaryValue> font_name(
         new base::DictionaryValue());
-    font_name->Set(kFontIdKey, new base::StringValue(name));
-    font_name->Set(kDisplayNameKey, new base::StringValue(localized_name));
+    font_name->Set(kFontIdKey, base::MakeUnique<base::Value>(name));
+    font_name->Set(kDisplayNameKey,
+                   base::MakeUnique<base::Value>(localized_name));
     result->Append(std::move(font_name));
   }
 
@@ -353,7 +355,7 @@ ExtensionFunction::ResponseAction GetFontPrefExtensionFunction::Run() {
           profile, extension_id(), GetPrefName(), kIncognito);
 
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  result->Set(GetKey(), pref->GetValue()->DeepCopy());
+  result->Set(GetKey(), pref->GetValue()->CreateDeepCopy());
   result->SetString(kLevelOfControlKey, level_of_control);
   return RespondNow(OneArgument(std::move(result)));
 }

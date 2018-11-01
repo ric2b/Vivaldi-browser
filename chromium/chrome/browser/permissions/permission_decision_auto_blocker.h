@@ -85,12 +85,22 @@ class PermissionDecisionAutoBlocker : public KeyedService {
 
   // Records that a dismissal of a prompt for |permission| was made. If the
   // total number of dismissals exceeds a threshhold and
-  // features::kBlockPromptsIfDismissedOften is enabled it will place |url|
+  // features::kBlockPromptsIfDismissedOften is enabled, it will place |url|
   // under embargo for |permission|.
   bool RecordDismissAndEmbargo(const GURL& url, ContentSettingsType permission);
 
-  // Records that an ignore of a prompt for |permission| was made.
-  int RecordIgnore(const GURL& url, ContentSettingsType permission);
+  // Records that an ignore of a prompt for |permission| was made. If the total
+  // number of ignores exceeds a threshold and
+  // features::kBlockPromptsIfIgnoredOften is enabled, it will place |url| under
+  // embargo for |permission|.
+  bool RecordIgnoreAndEmbargo(const GURL& url, ContentSettingsType permission);
+
+  // Clears any existing embargo status for |url|, |permission|. For permissions
+  // embargoed under repeated dismissals, this means a prompt will be shown to
+  // the user on next permission request. On blacklisted permissions, the next
+  // permission request will re-embargo the permission only if it is still
+  // blacklisted. This is a NO-OP for non-embargoed |url|, |permission| pairs.
+  void RemoveEmbargoByUrl(const GURL& url, ContentSettingsType permission);
 
   // Removes any recorded counts for urls which match |filter|.
   void RemoveCountsByUrl(base::Callback<bool(const GURL& url)> filter);
@@ -123,6 +133,7 @@ class PermissionDecisionAutoBlocker : public KeyedService {
   static const char kPromptDismissCountKey[];
   static const char kPromptIgnoreCountKey[];
   static const char kPermissionDismissalEmbargoKey[];
+  static const char kPermissionIgnoreEmbargoKey[];
   static const char kPermissionBlacklistEmbargoKey[];
 
   Profile* profile_;

@@ -6,27 +6,30 @@
 #define UI_EVENTS_EVENT_PROCESSOR_H_
 
 #include "ui/events/event_dispatcher.h"
+#include "ui/events/event_sink.h"
 #include "ui/events/event_source.h"
 
 namespace ui {
 
-// EventProcessor receives an event from an EventSource and dispatches it to a
-// tree of EventTargets.
-class EVENTS_EXPORT EventProcessor : public EventDispatcherDelegate {
+class EventTargeter;
+
+// EventProcessor inherits EventSink to receive an event from an EventSource
+// and dispatches it to a tree of EventTargets.
+class EVENTS_EXPORT EventProcessor : public EventDispatcherDelegate,
+                                     public EventSink {
  public:
   ~EventProcessor() override {}
 
-  // Returns the root of the tree this event processor owns.
-  virtual EventTarget* GetRootTarget() = 0;
+  // EventSink overrides:
+  EventDispatchDetails OnEventFromSource(Event* event) override;
 
-  // Dispatches an event received from the EventSource to the tree of
-  // EventTargets (whose root is returned by GetRootTarget()).  The co-ordinate
-  // space of the source must be the same as the root target, except that the
-  // target may have a high-dpi scale applied.
-  // TODO(tdanderson|sadrul): This is only virtual for testing purposes. It
-  //                          should not be virtual at all.
-  virtual EventDispatchDetails OnEventFromSource(Event* event)
-      WARN_UNUSED_RESULT;
+  // Returns the EventTarget with the right EventTargeter that we should use for
+  // dispatching this |event|.
+  virtual EventTarget* GetRootForEvent(Event* event) = 0;
+
+  // If the root target returned by GetRootForEvent() does not have a
+  // targeter set, then the default targeter is used to find the target.
+  virtual EventTargeter* GetDefaultEventTargeter() = 0;
 
  protected:
   // Invoked at the start of processing, before an EventTargeter is used to

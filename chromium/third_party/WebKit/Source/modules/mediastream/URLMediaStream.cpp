@@ -30,23 +30,25 @@
 
 #include "modules/mediastream/URLMediaStream.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMURL.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/frame/UseCounter.h"
 #include "modules/mediastream/MediaStream.h"
 
 namespace blink {
 
-String URLMediaStream::createObjectURL(ScriptState* scriptState,
+String URLMediaStream::createObjectURL(ScriptState* script_state,
                                        MediaStream* stream) {
   // Since WebWorkers cannot obtain Stream objects, we should be on the main
   // thread.
-  DCHECK(isMainThread());
-  ExecutionContext* executionContext = scriptState->getExecutionContext();
-  DCHECK(executionContext);
+  DCHECK(IsMainThread());
+  ExecutionContext* execution_context = ExecutionContext::From(script_state);
+  DCHECK(execution_context);
   DCHECK(stream);
 
-  UseCounter::count(executionContext, UseCounter::CreateObjectURLMediaStream);
-  return DOMURL::createPublicURL(executionContext, stream);
+  UseCounter::Count(execution_context, UseCounter::kCreateObjectURLMediaStream);
+  return DOMURL::CreatePublicURL(execution_context, stream);
 }
 
 }  // namespace blink

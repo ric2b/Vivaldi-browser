@@ -78,7 +78,7 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
   if (!event.IsTouchEvent()) {
     if (event.IsKeyEvent()) {
       const ui::KeyEvent& key_event = static_cast<const ui::KeyEvent&>(event);
-      VLOG(1) << "\nKeyboard event: " << key_event.name()
+      VLOG(1) << "\nKeyboard event: " << key_event.GetName()
               << "\n Key code: " << key_event.key_code()
               << ", Flags: " << key_event.flags()
               << ", Is char: " << key_event.is_char();
@@ -158,7 +158,7 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
 
     touch_locations_[*it] = location;
   } else {
-    NOTREACHED() << "Unexpected event type received: " << event.name();
+    NOTREACHED() << "Unexpected event type received: " << event.GetName();
     return ui::EVENT_REWRITE_CONTINUE;
   }
   VLOG_EVENT(touch_event);
@@ -261,7 +261,7 @@ ui::EventRewriteStatus TouchExplorationController::InNoFingersDown(
     std::unique_ptr<ui::Event>* rewritten_event) {
   const ui::EventType type = event.type();
   if (type != ui::ET_TOUCH_PRESSED) {
-    NOTREACHED() << "Unexpected event type received: " << event.name();
+    NOTREACHED() << "Unexpected event type received: " << event.GetName();
     return ui::EVENT_REWRITE_CONTINUE;
   }
 
@@ -523,7 +523,7 @@ ui::EventRewriteStatus TouchExplorationController::InCornerPassthrough(
   }
 
   std::unique_ptr<ui::TouchEvent> new_event(new ui::TouchEvent(
-      type, gfx::Point(), event.pointer_details().id, event.time_stamp()));
+      type, gfx::Point(), event.time_stamp(), event.pointer_details()));
   new_event->set_location_f(event.location_f());
   new_event->set_root_location_f(event.location_f());
   new_event->set_flags(event.flags());
@@ -544,9 +544,8 @@ ui::EventRewriteStatus TouchExplorationController::InOneFingerPassthrough(
     }
     return ui::EVENT_REWRITE_DISCARD;
   }
-  std::unique_ptr<ui::TouchEvent> new_event(
-      new ui::TouchEvent(event.type(), gfx::Point(), event.pointer_details().id,
-                         event.time_stamp()));
+  std::unique_ptr<ui::TouchEvent> new_event(new ui::TouchEvent(
+      event.type(), gfx::Point(), event.time_stamp(), event.pointer_details()));
   new_event->set_location_f(event.location_f() - passthrough_offset_);
   new_event->set_root_location_f(event.location_f() - passthrough_offset_);
   new_event->set_flags(event.flags());
@@ -567,8 +566,8 @@ ui::EventRewriteStatus TouchExplorationController::InTouchExploreSecondPress(
     // a press dispatched when split tap began, the touch needs to be
     // cancelled.
     std::unique_ptr<ui::TouchEvent> new_event(new ui::TouchEvent(
-        ui::ET_TOUCH_CANCELLED, gfx::Point(),
-        initial_press_->pointer_details().id, event.time_stamp()));
+        ui::ET_TOUCH_CANCELLED, gfx::Point(), event.time_stamp(),
+        initial_press_->pointer_details()));
     // TODO(dmazzoni): fix for multiple displays. http://crbug.com/616793
     new_event->set_location_f(anchor_point_);
     new_event->set_root_location_f(anchor_point_);
@@ -652,16 +651,16 @@ void TouchExplorationController::SendSimulatedClick() {
   // Otherwise send a simulated press/release at the anchor point.
   std::unique_ptr<ui::TouchEvent> touch_press;
   touch_press.reset(new ui::TouchEvent(ui::ET_TOUCH_PRESSED, gfx::Point(),
-                                       initial_press_->pointer_details().id,
-                                       Now()));
+                                       Now(),
+                                       initial_press_->pointer_details()));
   touch_press->set_location_f(anchor_point_);
   touch_press->set_root_location_f(anchor_point_);
   DispatchEvent(touch_press.get());
 
   std::unique_ptr<ui::TouchEvent> touch_release;
   touch_release.reset(new ui::TouchEvent(ui::ET_TOUCH_RELEASED, gfx::Point(),
-                                         initial_press_->pointer_details().id,
-                                         Now()));
+                                         Now(),
+                                         initial_press_->pointer_details()));
   touch_release->set_location_f(anchor_point_);
   touch_release->set_root_location_f(anchor_point_);
   DispatchEvent(touch_release.get());
@@ -777,9 +776,9 @@ void TouchExplorationController::OnTapTimerFired() {
       SET_STATE(ONE_FINGER_PASSTHROUGH);
       passthrough_offset_ =
           last_unused_finger_event_->location_f() - anchor_point_;
-      std::unique_ptr<ui::TouchEvent> passthrough_press(new ui::TouchEvent(
-          ui::ET_TOUCH_PRESSED, gfx::Point(),
-          last_unused_finger_event_->pointer_details().id, Now()));
+      std::unique_ptr<ui::TouchEvent> passthrough_press(
+          new ui::TouchEvent(ui::ET_TOUCH_PRESSED, gfx::Point(), Now(),
+                             last_unused_finger_event_->pointer_details()));
       passthrough_press->set_location_f(anchor_point_);
       passthrough_press->set_root_location_f(anchor_point_);
       DispatchEvent(passthrough_press.get());
@@ -1151,7 +1150,7 @@ void TouchExplorationController::VlogEvent(const ui::TouchEvent& touch_event,
     return;
   }
 
-  const std::string& type = touch_event.name();
+  const std::string& type = touch_event.GetName();
   const gfx::PointF& location = touch_event.location_f();
   const int touch_id = touch_event.pointer_details().id;
 

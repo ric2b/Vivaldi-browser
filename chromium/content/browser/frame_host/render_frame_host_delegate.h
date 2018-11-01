@@ -26,6 +26,10 @@
 #include "ui/gfx/native_widget_types.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "base/android/scoped_java_ref.h"
+#endif
+
 class GURL;
 
 namespace IPC {
@@ -34,7 +38,10 @@ class Message;
 
 namespace device {
 class GeolocationServiceContext;
-class WakeLockServiceContext;
+
+namespace mojom {
+class WakeLockContext;
+}
 }
 
 namespace gfx {
@@ -172,7 +179,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // Called when accessibility events or location changes are received
   // from a render frame, when the accessibility mode has the
-  // ACCESSIBILITY_MODE_FLAG_WEB_CONTENTS flag set.
+  // AccessibilityMode::kWebContents flag set.
   virtual void AccessibilityEventReceived(
       const std::vector<AXEventNotificationDetails>& details) {}
   virtual void AccessibilityLocationChangesReceived(
@@ -188,7 +195,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual device::GeolocationServiceContext* GetGeolocationServiceContext();
 
   // Gets the WakeLockServiceContext associated with this delegate.
-  virtual device::WakeLockServiceContext* GetWakeLockServiceContext();
+  virtual device::mojom::WakeLockContext* GetWakeLockServiceContext();
 
   // Notification that the frame wants to go into fullscreen mode.
   // |origin| represents the origin of the frame that requests fullscreen.
@@ -289,6 +296,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                                  bool allowed_per_prefs,
                                                  const url::Origin& origin,
                                                  const GURL& resource_url);
+
+#if defined(OS_ANDROID)
+  virtual base::android::ScopedJavaLocalRef<jobject>
+  GetJavaRenderFrameHostDelegate();
+#endif
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

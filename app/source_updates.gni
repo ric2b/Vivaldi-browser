@@ -16,6 +16,12 @@ post_process_target("//base:base_static") {
     "//vivaldi/app/vivaldi_constants.cc",
     "//vivaldi/app/vivaldi_constants.h",
   ]
+  if (is_win) {
+    sources += [
+      "//vivaldi/update_notifier/update_notifier_switches.cc",
+      "//vivaldi/update_notifier/update_notifier_switches.h",
+    ]
+  }
 }
 
 post_process_target("//chrome:chrome_resources") {

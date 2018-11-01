@@ -31,6 +31,7 @@
 #include "ui/display/win/dpi.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_code_conversion_win.h"
 #include "ui/events/win/system_event_state_lookup.h"
@@ -311,8 +312,9 @@ class HWNDMessageHandler::ScopedRedrawLock {
 };
 
 // static HWNDMessageHandler member initialization.
-base::LazyInstance<HWNDMessageHandler::FullscreenWindowMonitorMap>
-    HWNDMessageHandler::fullscreen_monitor_map_ = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<HWNDMessageHandler::FullscreenWindowMonitorMap>::
+    DestructorAtExit HWNDMessageHandler::fullscreen_monitor_map_ =
+        LAZY_INSTANCE_INITIALIZER;
 
 ////////////////////////////////////////////////////////////////////////////////
 // HWNDMessageHandler, public:
@@ -526,7 +528,7 @@ void HWNDMessageHandler::SetBounds(const gfx::Rect& bounds_in_pixels,
 
 void HWNDMessageHandler::SetDwmFrameExtension(DwmFrameState state) {
   if (!delegate_->HasFrame() && ui::win::IsAeroGlassEnabled() &&
-      (window_ex_style() & WS_EX_COMPOSITED) == 0) {
+      !is_translucent_) {
     MARGINS m = {0, 0, 0, 0};
     if (state == DwmFrameState::ON)
       m = {0, 0, 1, 0};
@@ -851,10 +853,9 @@ void HWNDMessageHandler::SizeConstraintsChanged() {
   if (style & (WS_POPUP | WS_CHILD))
     return;
 
-  LONG exstyle = GetWindowLong(hwnd(), GWL_EXSTYLE);
-  // Windows cannot have WS_THICKFRAME set if WS_EX_COMPOSITED is set.
+  // Windows cannot have WS_THICKFRAME set if translucent.
   // See CalculateWindowStylesFromInitParams().
-  if (delegate_->CanResize() && (exstyle & WS_EX_COMPOSITED) == 0) {
+  if (delegate_->CanResize() && !is_translucent_) {
     style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
     if (!delegate_->CanMaximize())
       style &= ~WS_MAXIMIZEBOX;
@@ -969,6 +970,16 @@ LRESULT HWNDMessageHandler::HandleTouchMessage(unsigned int message,
                                                bool* handled) {
   base::WeakPtr<HWNDMessageHandler> ref(weak_factory_.GetWeakPtr());
   LRESULT ret = OnTouchEvent(message, w_param, l_param);
+  *handled = IsMsgHandled();
+  return ret;
+}
+
+LRESULT HWNDMessageHandler::HandlePointerMessage(unsigned int message,
+                                                 WPARAM w_param,
+                                                 LPARAM l_param,
+                                                 bool* handled) {
+  base::WeakPtr<HWNDMessageHandler> ref(weak_factory_.GetWeakPtr());
+  LRESULT ret = OnPointerEvent(message, w_param, l_param);
   *handled = IsMsgHandled();
   return ret;
 }
@@ -1169,12 +1180,11 @@ bool HWNDMessageHandler::GetClientAreaInsets(gfx::Insets* insets) const {
 void HWNDMessageHandler::ResetWindowRegion(bool force, bool redraw) {
   // A native frame uses the native window region, and we don't want to mess
   // with it.
-  // WS_EX_COMPOSITED is used instead of WS_EX_LAYERED under aura. WS_EX_LAYERED
-  // automatically makes clicks on transparent pixels fall through, that isn't
-  // the case with WS_EX_COMPOSITED. So, we route WS_EX_COMPOSITED through to
-  // the delegate to allow for a custom hit mask.
-  if ((window_ex_style() & WS_EX_COMPOSITED) == 0 &&
-      !custom_window_region_.is_valid() &&
+  // WS_EX_LAYERED automatically makes clicks on transparent pixels fall
+  // through, but that isn't the case when using Direct3D to draw transparent
+  // windows. So we route translucent windows throught to the delegate to
+  // allow for a custom hit mask.
+  if (!is_translucent_ && !custom_window_region_.is_valid() &&
       (IsFrameSystemDrawn() || !delegate_->HasNonClientView())) {
     if (force)
       SetWindowRgn(hwnd(), NULL, redraw);
@@ -1333,11 +1343,13 @@ void HWNDMessageHandler::OnCommand(UINT notification_code,
 }
 
 LRESULT HWNDMessageHandler::OnCreate(CREATESTRUCT* create_struct) {
-  if (window_ex_style() &  WS_EX_COMPOSITED) {
+  if (is_translucent_) {
     // This is part of the magic to emulate layered windows with Aura
-    // see the explanation elsewere when we set WS_EX_COMPOSITED style.
+    // see the explanation elsewere when we set is_translucent_.
     MARGINS margins = {-1, -1, -1, -1};
     DwmExtendFrameIntoClientArea(hwnd(), &margins);
+
+    ::SetProp(hwnd(), ui::kWindowTranslucent, reinterpret_cast<HANDLE>(1));
   }
 
   fullscreen_handler_->set_hwnd(hwnd());
@@ -1379,6 +1391,7 @@ LRESULT HWNDMessageHandler::OnCreate(CREATESTRUCT* create_struct) {
 }
 
 void HWNDMessageHandler::OnDestroy() {
+  ::RemoveProp(hwnd(), ui::kWindowTranslucent);
   windows_session_change_observer_.reset(nullptr);
   delegate_->HandleDestroying();
   // If the window going away is a fullscreen window then remove its references
@@ -1643,6 +1656,119 @@ LRESULT HWNDMessageHandler::OnPointerActivate(UINT message,
     return PA_NOACTIVATE;
   SetMsgHandled(FALSE);
   return -1;
+}
+
+LRESULT HWNDMessageHandler::OnPointerEvent(UINT message,
+                                           WPARAM w_param,
+                                           LPARAM l_param) {
+  // WM_POINTER is not supported on Windows 7 or lower.
+  if (base::win::GetVersion() <= base::win::VERSION_WIN7) {
+    SetMsgHandled(FALSE);
+    return -1;
+  }
+
+  UINT32 pointer_id = GET_POINTERID_WPARAM(w_param);
+  using GetPointerTypeFn = BOOL(WINAPI*)(UINT32, POINTER_INPUT_TYPE*);
+  POINTER_INPUT_TYPE pointer_type;
+  static GetPointerTypeFn get_pointer_type = reinterpret_cast<GetPointerTypeFn>(
+      GetProcAddress(GetModuleHandleA("user32.dll"), "GetPointerType"));
+  // If the WM_POINTER messages are not sent from a stylus device, then we do
+  // not handle them to make sure we do not change the current behavior of
+  // touch and mouse inputs.
+  if (!get_pointer_type || !get_pointer_type(pointer_id, &pointer_type) ||
+      pointer_type != PT_PEN) {
+    SetMsgHandled(FALSE);
+    return -1;
+  }
+
+  using GetPointerPenInfoFn = BOOL(WINAPI*)(UINT32, POINTER_PEN_INFO*);
+  POINTER_PEN_INFO pointer_pen_info;
+  static GetPointerPenInfoFn get_pointer_pen_info =
+      reinterpret_cast<GetPointerPenInfoFn>(
+          GetProcAddress(GetModuleHandleA("user32.dll"), "GetPointerPenInfo"));
+  if (!get_pointer_pen_info ||
+      !get_pointer_pen_info(pointer_id, &pointer_pen_info)) {
+    SetMsgHandled(FALSE);
+    return -1;
+  }
+
+  // We are now creating a fake mouse event with pointer type of pen from
+  // the WM_POINTER message and then setting up an associated pointer
+  // details in the MouseEvent which contains the pen's information.
+  ui::EventPointerType input_type = ui::EventPointerType::POINTER_TYPE_PEN;
+  // TODO(lanwei): penFlags of PEN_FLAG_INVERTED may also indicate we are using
+  // an eraser, but it is under debate. Please see
+  // https://github.com/w3c/pointerevents/issues/134/.
+  if (pointer_pen_info.penFlags & PEN_FLAG_ERASER)
+    input_type = ui::EventPointerType::POINTER_TYPE_ERASER;
+
+  float pressure = static_cast<float>(pointer_pen_info.pressure) / 1024;
+  float rotation = pointer_pen_info.rotation;
+  int tilt_x = pointer_pen_info.tiltX;
+  int tilt_y = pointer_pen_info.tiltY;
+  POINT client_point = pointer_pen_info.pointerInfo.ptPixelLocationRaw;
+  ScreenToClient(hwnd(), &client_point);
+  gfx::Point point = gfx::Point(client_point.x, client_point.y);
+  ui::EventType event_type = ui::ET_MOUSE_MOVED;
+  int flag = 0;
+  int click_count = 0;
+  switch (message) {
+    case WM_POINTERDOWN:
+      event_type = ui::ET_MOUSE_PRESSED;
+      if (pointer_pen_info.pointerInfo.ButtonChangeType ==
+          POINTER_CHANGE_SECONDBUTTON_DOWN) {
+        flag = ui::EF_RIGHT_MOUSE_BUTTON;
+      } else {
+        flag = ui::EF_LEFT_MOUSE_BUTTON;
+      }
+      click_count = 1;
+      break;
+    case WM_POINTERUP:
+      event_type = ui::ET_MOUSE_RELEASED;
+      if (pointer_pen_info.pointerInfo.ButtonChangeType ==
+          POINTER_CHANGE_SECONDBUTTON_UP) {
+        flag = ui::EF_RIGHT_MOUSE_BUTTON;
+      } else {
+        flag = ui::EF_LEFT_MOUSE_BUTTON;
+      }
+      click_count = 1;
+      break;
+    case WM_POINTERUPDATE:
+      event_type = ui::ET_MOUSE_DRAGGED;
+      if (pointer_pen_info.pointerInfo.pointerFlags &
+          POINTER_FLAG_FIRSTBUTTON) {
+        flag = ui::EF_LEFT_MOUSE_BUTTON;
+      } else if (pointer_pen_info.pointerInfo.pointerFlags &
+                 POINTER_FLAG_SECONDBUTTON) {
+        flag = ui::EF_RIGHT_MOUSE_BUTTON;
+      } else {
+        event_type = ui::ET_MOUSE_MOVED;
+      }
+      break;
+    case WM_POINTERENTER:
+      event_type = ui::ET_MOUSE_ENTERED;
+      break;
+    case WM_POINTERLEAVE:
+      event_type = ui::ET_MOUSE_EXITED;
+      break;
+    default:
+      NOTREACHED();
+  }
+  ui::PointerDetails pointer_details(
+      input_type, pointer_id, /* radius_x */ 0.0f, /* radius_y */ 0.0f,
+      pressure, tilt_x, tilt_y, /* tangential_pressure */ 0.0f, rotation);
+  ui::MouseEvent event(event_type, point, point, base::TimeTicks::Now(), flag,
+                       flag, pointer_details);
+  event.SetClickCount(click_count);
+
+  // There are cases where the code handling the message destroys the
+  // window, so use the weak ptr to check if destruction occured or not.
+  base::WeakPtr<HWNDMessageHandler> ref(weak_factory_.GetWeakPtr());
+  bool handled = delegate_->HandleMouseEvent(event);
+
+  if (ref)
+    SetMsgHandled(handled);
+  return 0;
 }
 
 void HWNDMessageHandler::OnMove(const gfx::Point& point) {
@@ -2637,7 +2763,9 @@ void HWNDMessageHandler::GenerateTouchEvent(ui::EventType event_type,
                                             unsigned int id,
                                             base::TimeTicks time_stamp,
                                             TouchEvents* touch_events) {
-  ui::TouchEvent event(event_type, point, id, time_stamp);
+  ui::TouchEvent event(
+      event_type, point, time_stamp,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, id));
 
   event.set_flags(ui::GetModifiersFromKeyState());
 

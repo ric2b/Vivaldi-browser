@@ -7,13 +7,13 @@
 #include <memory>
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/renderer/safe_browsing/features.h"
 #include "chrome/renderer/safe_browsing/phishing_classifier.h"
 #include "chrome/renderer/safe_browsing/scorer.h"
 #include "chrome/test/base/chrome_render_view_test.h"
 #include "chrome/test/base/chrome_unit_test_suite.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
+#include "components/safe_browsing/csd.pb.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -183,10 +183,10 @@ TEST_F(PhishingClassifierDelegateTest, Navigation) {
   PageCaptured(&page_text, false, url);
   Mock::VerifyAndClearExpectations(classifier_);
 
-  // Navigating within page works similarly to a subframe navigation, but
-  // see the TODO in PhishingClassifierDelegate::DidCommitProvisionalLoad.
+  // Same document navigation works similarly to a subframe navigation, but see
+  // the TODO in PhishingClassifierDelegate::DidCommitProvisionalLoad.
   EXPECT_CALL(*classifier_, CancelPendingClassification());
-  DidNavigateWithinPage(GetMainFrame(), true, true);
+  OnSameDocumentNavigation(GetMainFrame(), true, true);
   Mock::VerifyAndClearExpectations(classifier_);
 
   OnStartPhishingDetection(url);
@@ -250,8 +250,8 @@ TEST_F(PhishingClassifierDelegateTest, Navigation) {
   Mock::VerifyAndClearExpectations(classifier_);
 
   EXPECT_CALL(*classifier_, CancelPendingClassification());
-  // In-page navigation.
-  DidNavigateWithinPage(GetMainFrame(), true, true);
+  // Same document navigation.
+  OnSameDocumentNavigation(GetMainFrame(), true, true);
   Mock::VerifyAndClearExpectations(classifier_);
 
   OnStartPhishingDetection(url);

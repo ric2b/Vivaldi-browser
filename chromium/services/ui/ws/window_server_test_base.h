@@ -9,6 +9,7 @@
 #include <set>
 
 #include "base/macros.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/window_server_service_test_base.h"
@@ -74,8 +75,9 @@ class WindowServerTestBase
   void TearDown() override;
 
   // WindowServerServiceTestBase:
-  bool OnConnect(const service_manager::Identity& remote_identity,
-                 service_manager::InterfaceRegistry* registry) override;
+  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle interface_pipe) override;
 
   // WindowTreeClientDelegate:
   void OnEmbed(
@@ -88,24 +90,34 @@ class WindowServerTestBase
 
   // WindowManagerDelegate:
   void SetWindowManagerClient(aura::WindowManagerClient* client) override;
-  bool OnWmSetBounds(aura::Window* window, gfx::Rect* bounds) override;
+  void OnWmSetBounds(aura::Window* window, const gfx::Rect& bounds) override;
   bool OnWmSetProperty(
       aura::Window* window,
       const std::string& name,
       std::unique_ptr<std::vector<uint8_t>>* new_data) override;
+  void OnWmSetModalType(aura::Window* window, ui::ModalType type) override;
   void OnWmSetCanFocus(aura::Window* window, bool can_focus) override;
   aura::Window* OnWmCreateTopLevelWindow(
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override;
   void OnWmClientJankinessChanged(const std::set<aura::Window*>& client_windows,
                                   bool not_responding) override;
+  void OnWmBuildDragImage(const gfx::Point& screen_location,
+                          const SkBitmap& drag_image,
+                          const gfx::Vector2d& drag_image_offset,
+                          ui::mojom::PointerKind source) override {}
+  void OnWmMoveDragImage(const gfx::Point& screen_location) override {}
+  void OnWmDestroyDragImage() override {}
   void OnWmWillCreateDisplay(const display::Display& display) override;
   void OnWmNewDisplay(std::unique_ptr<aura::WindowTreeHostMus> window_tree_host,
                       const display::Display& display) override;
   void OnWmDisplayRemoved(aura::WindowTreeHostMus* window_tree_host) override;
   void OnWmDisplayModified(const display::Display& display) override;
-  mojom::EventResult OnAccelerator(uint32_t accelerator_id,
-                                   const ui::Event& event) override;
+  mojom::EventResult OnAccelerator(
+      uint32_t accelerator_id,
+      const ui::Event& event,
+      std::unordered_map<std::string, std::vector<uint8_t>>* properties)
+      override;
   void OnWmPerformMoveLoop(aura::Window* window,
                            mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,
@@ -148,6 +160,8 @@ class WindowServerTestBase
   aura::WindowManagerClient* window_manager_client_ = nullptr;
 
   bool window_tree_client_lost_connection_ = false;
+
+  service_manager::BinderRegistry registry_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServerTestBase);
 };

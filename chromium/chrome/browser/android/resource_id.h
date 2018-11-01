@@ -42,10 +42,10 @@ DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_PREVIEWS,
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_PROTECTED_MEDIA_IDENTIFIER,
                     R.drawable.infobar_protected_media_identifier)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SUBRESOURCE_FILTERING,
-                    R.drawable.infobar_subresource_filtering)
+                    R.drawable.infobar_chrome)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_WARNING, R.drawable.infobar_warning)
 
-// WebsiteSettingsUI images, used in ConnectionInfoPopup
+// PageInfoUI images, used in ConnectionInfoPopup
 // Good:
 LINK_RESOURCE_ID(IDR_PAGEINFO_GOOD, R.drawable.pageinfo_good)
 // Warnings:

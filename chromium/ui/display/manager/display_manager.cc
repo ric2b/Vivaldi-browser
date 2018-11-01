@@ -27,6 +27,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
+#include "ui/display/display_finder.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/manager/display_layout_store.h"
@@ -264,16 +265,21 @@ void DisplayManager::SetLayoutForCurrentDisplays(
     delegate_->PostDisplayConfigurationChange(false);
 }
 
-const Display& DisplayManager::GetDisplayForId(int64_t id) const {
-  Display* display = const_cast<DisplayManager*>(this)->FindDisplayForId(id);
+const Display& DisplayManager::GetDisplayForId(int64_t display_id) const {
+  Display* display =
+      const_cast<DisplayManager*>(this)->FindDisplayForId(display_id);
   return display ? *display : GetInvalidDisplay();
+}
+
+bool DisplayManager::IsDisplayIdValid(int64_t display_id) const {
+  return GetDisplayForId(display_id).is_valid();
 }
 
 const Display& DisplayManager::FindDisplayContainingPoint(
     const gfx::Point& point_in_screen) const {
-  int index =
-      FindDisplayIndexContainingPoint(active_display_list_, point_in_screen);
-  return index < 0 ? GetInvalidDisplay() : active_display_list_[index];
+  auto iter = display::FindDisplayContainingPoint(active_display_list_,
+                                                  point_in_screen);
+  return iter == active_display_list_.end() ? GetInvalidDisplay() : *iter;
 }
 
 bool DisplayManager::UpdateWorkAreaOfDisplay(int64_t display_id,
@@ -371,27 +377,37 @@ bool DisplayManager::SetDisplayMode(
         display_property_changed = true;
       } else {
         display_modes_[display_id] = *iter;
-        if (info.bounds_in_native().size() != display_mode->size())
+        if (info.bounds_in_native().size() != display_mode->size()) {
+          // If resolution changes, then we can break right here. No need to
+          // continue to fill |display_info_list|, since we won't be
+          // synchronously updating the displays here.
           resolution_changed = true;
+          break;
+        }
         if (info.device_scale_factor() != display_mode->device_scale_factor()) {
           info.set_device_scale_factor(display_mode->device_scale_factor());
           display_property_changed = true;
         }
       }
     }
-    display_info_list.push_back(info);
+    display_info_list.emplace_back(info);
   }
-  if (display_property_changed) {
+
+  if (display_property_changed && !resolution_changed) {
+    // We shouldn't synchronously update the displays here if the resolution
+    // changed. This should happen asynchronously when configuration is
+    // triggered.
     AddMirrorDisplayInfoIfAny(&display_info_list);
     UpdateDisplaysWith(display_info_list);
   }
-  if (resolution_changed && IsInUnifiedMode()) {
+
+  if (resolution_changed && IsInUnifiedMode())
     ReconfigureDisplays();
 #if defined(OS_CHROMEOS)
-  } else if (resolution_changed && configure_displays_) {
+  else if (resolution_changed && configure_displays_)
     delegate_->display_configurator()->OnConfigurationChanged();
-#endif
-  }
+#endif  // defined(OS_CHROMEOS)
+
   return resolution_changed || display_property_changed;
 }
 
@@ -479,6 +495,21 @@ scoped_refptr<ManagedDisplayMode> DisplayManager::GetSelectedModeForDisplayId(
   if (iter == display_modes_.end())
     return scoped_refptr<ManagedDisplayMode>();
   return iter->second;
+}
+
+void DisplayManager::SetSelectedModeForDisplayId(
+    int64_t display_id,
+    const scoped_refptr<ManagedDisplayMode>& display_mode) {
+  ManagedDisplayInfo info = GetDisplayInfo(display_id);
+  auto iter = FindDisplayMode(info, display_mode);
+  if (iter == info.display_modes().end()) {
+    LOG(WARNING) << "Unsupported display mode was requested:"
+                 << "size=" << display_mode->size().ToString()
+                 << ", ui scale=" << display_mode->ui_scale()
+                 << ", scale factor=" << display_mode->device_scale_factor();
+  }
+
+  display_modes_[display_id] = *iter;
 }
 
 bool DisplayManager::IsDisplayUIScalingEnabled() const {
@@ -816,22 +847,31 @@ void DisplayManager::UpdateDisplaysWith(
     NotifyMetricsChanged(updated_display, metrics);
   }
 
+  uint32_t primary_metrics = 0;
+
   if (notify_primary_change) {
     // This happens when a primary display has moved to anther display without
     // bounds change.
     const Display& primary = screen_->GetPrimaryDisplay();
     if (primary.id() != old_primary.id()) {
-      uint32_t metrics = DisplayObserver::DISPLAY_METRIC_PRIMARY;
+      primary_metrics = DisplayObserver::DISPLAY_METRIC_PRIMARY;
       if (primary.size() != old_primary.size()) {
-        metrics |= (DisplayObserver::DISPLAY_METRIC_BOUNDS |
-                    DisplayObserver::DISPLAY_METRIC_WORK_AREA);
+        primary_metrics |= (DisplayObserver::DISPLAY_METRIC_BOUNDS |
+                            DisplayObserver::DISPLAY_METRIC_WORK_AREA);
       }
       if (primary.device_scale_factor() != old_primary.device_scale_factor())
-        metrics |= DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR;
-
-      NotifyMetricsChanged(primary, metrics);
+        primary_metrics |= DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR;
     }
   }
+
+  bool mirror_mode = IsInMirrorMode();
+  if (mirror_mode != mirror_mode_for_metrics_) {
+    primary_metrics |= DisplayObserver::DISPLAY_METRIC_MIRROR_STATE;
+    mirror_mode_for_metrics_ = mirror_mode;
+  }
+
+  if (delegate_ && primary_metrics)
+    NotifyMetricsChanged(screen_->GetPrimaryDisplay(), primary_metrics);
 
   bool must_clear_window = false;
 #if defined(USE_X11) && defined(OS_CHROMEOS)

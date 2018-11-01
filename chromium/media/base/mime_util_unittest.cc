@@ -7,7 +7,10 @@
 #include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_command_line.h"
 #include "build/build_config.h"
+#include "media/base/media.h"
+#include "media/base/media_switches.h"
 #include "media/base/mime_util.h"
 #include "media/base/mime_util_internal.h"
 #include "media/media_features.h"
@@ -69,15 +72,17 @@ static void RunCodecSupportTest(const MimeUtil::PlatformInfo& states_to_vary,
 
   MimeUtil::PlatformInfo info;
 
-#define RUN_TEST_VECTOR(name)                   \
-  size_t name##_index = 0;                      \
-  for (info.name = name##_states[name##_index]; \
-       name##_index < name##_states.size(); ++name##_index)
+#define RUN_TEST_VECTOR_BEGIN(name)             \
+  for (size_t name##_index = 0;                 \
+       name##_index < name##_states.size();     \
+       ++name##_index) {                        \
+    info.name = name##_states[name##_index];
+#define RUN_TEST_VECTOR_END() }
 
-  RUN_TEST_VECTOR(has_platform_decoders) {
-    RUN_TEST_VECTOR(has_platform_vp8_decoder) {
-      RUN_TEST_VECTOR(has_platform_vp9_decoder) {
-        RUN_TEST_VECTOR(supports_opus) {
+  RUN_TEST_VECTOR_BEGIN(has_platform_decoders)
+    RUN_TEST_VECTOR_BEGIN(has_platform_vp8_decoder)
+      RUN_TEST_VECTOR_BEGIN(has_platform_vp9_decoder)
+        RUN_TEST_VECTOR_BEGIN(supports_opus)
           for (int codec = MimeUtil::INVALID_CODEC;
                codec <= MimeUtil::LAST_CODEC; ++codec) {
             SCOPED_TRACE(base::StringPrintf(
@@ -89,11 +94,13 @@ static void RunCodecSupportTest(const MimeUtil::PlatformInfo& states_to_vary,
                 info.supports_opus, info.has_platform_vp9_decoder, codec));
             test_func(info, static_cast<MimeUtil::Codec>(codec));
           }
-        }
-      }
-    }
-  }
-#undef RUN_TEST_VECTOR
+        RUN_TEST_VECTOR_END()
+      RUN_TEST_VECTOR_END()
+    RUN_TEST_VECTOR_END()
+  RUN_TEST_VECTOR_END()
+
+#undef RUN_TEST_VECTOR_BEGIN
+#undef RUN_TEST_VECTOR_END
 }
 
 // Helper method for generating the |states_to_vary| value used by
@@ -261,6 +268,18 @@ TEST(MimeUtilTest, SplitCodecsToVector) {
   EXPECT_EQ("mp4a.40.2", codecs_out[1]);
 }
 
+// See deeper string parsing testing in video_codecs_unittests.cc.
+TEST(MimeUtilTest, ExperimentalMultiPartVp9) {
+  base::test::ScopedCommandLine scoped_command_line;
+
+  // Multi-part VP9 string not enabled by default.
+  EXPECT_FALSE(IsSupportedMediaFormat("video/webm", {"vp09.00.10.08"}));
+
+  // Should work if enabled.
+  EnableNewVp9CodecStringSupport();
+  EXPECT_TRUE(IsSupportedMediaFormat("video/webm", {"vp09.00.10.08"}));
+}
+
 TEST(IsCodecSupportedOnAndroidTest, EncryptedCodecsFailWithoutPlatformSupport) {
   // Vary all parameters except |has_platform_decoders|.
   MimeUtil::PlatformInfo states_to_vary = VaryAllFields();
@@ -360,6 +379,7 @@ TEST(IsCodecSupportedOnAndroidTest, ClearCodecBehavior) {
 
           // These codecs are always supported with the unified pipeline.
           case MimeUtil::FLAC:
+          case MimeUtil::H264:
           case MimeUtil::PCM:
           case MimeUtil::MPEG2_AAC:
           case MimeUtil::MP3:
@@ -372,10 +392,6 @@ TEST(IsCodecSupportedOnAndroidTest, ClearCodecBehavior) {
             break;
 
           // These codecs are only supported if platform decoders are supported.
-          case MimeUtil::H264:
-            EXPECT_EQ(info.has_platform_decoders, result);
-            break;
-
           case MimeUtil::HEVC:
             EXPECT_EQ(HasHevcSupport() && info.has_platform_decoders, result);
             break;

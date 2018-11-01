@@ -16,7 +16,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/grit/components_resources.h"
 #include "components/history/core/browser/top_sites.h"
-#include "components/image_fetcher/image_fetcher_impl.h"
+#include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/ntp_tiles/field_trial.h"
 #include "components/ntp_tiles/icon_cacher.h"
 #include "components/ntp_tiles/most_visited_sites.h"
@@ -42,7 +42,7 @@ class ChromeNTPTilesInternalsMessageHandlerClient
 
   // ntp_tiles::NTPTilesInternalsMessageHandlerClient
   bool SupportsNTPTiles() override;
-  bool DoesSourceExist(ntp_tiles::NTPTileSource source) override;
+  bool DoesSourceExist(ntp_tiles::TileSource source) override;
   std::unique_ptr<ntp_tiles::MostVisitedSites> MakeMostVisitedSites() override;
   PrefService* GetPrefs() override;
   void RegisterMessageCallback(
@@ -67,13 +67,13 @@ bool ChromeNTPTilesInternalsMessageHandlerClient::SupportsNTPTiles() {
 }
 
 bool ChromeNTPTilesInternalsMessageHandlerClient::DoesSourceExist(
-    ntp_tiles::NTPTileSource source) {
+    ntp_tiles::TileSource source) {
   switch (source) {
-    case ntp_tiles::NTPTileSource::TOP_SITES:
-    case ntp_tiles::NTPTileSource::SUGGESTIONS_SERVICE:
-    case ntp_tiles::NTPTileSource::WHITELIST:
+    case ntp_tiles::TileSource::TOP_SITES:
+    case ntp_tiles::TileSource::SUGGESTIONS_SERVICE:
+    case ntp_tiles::TileSource::WHITELIST:
       return true;
-    case ntp_tiles::NTPTileSource::POPULAR:
+    case ntp_tiles::TileSource::POPULAR:
 #if defined(OS_ANDROID)
       return true;
 #else

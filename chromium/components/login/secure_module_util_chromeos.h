@@ -18,7 +18,7 @@ enum class SecureModuleUsed {
 
 // Receives one argument which contains the type of secure module we are using.
 using GetSecureModuleUsedCallback =
-    base::Callback<void(SecureModuleUsed secure_module)>;
+    base::OnceCallback<void(SecureModuleUsed secure_module)>;
 
 // Gets the secure module by checking for certain files on the filesystem or in
 // the cache. |callback| is called with type of secure module we are using.

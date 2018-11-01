@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/app_list/search/extension_app_result.h"
 
+#include "base/metrics/user_metrics.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
@@ -11,7 +12,6 @@
 #include "chrome/browser/ui/app_list/search/search_util.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/common/extensions/extension_metrics.h"
-#include "content/public/browser/user_metrics.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -23,10 +23,7 @@
 #include "ui/events/event_constants.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image_skia_operations.h"
-
-#if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/extensions/gfx_utils.h"
-#endif
 
 namespace app_list {
 
@@ -88,8 +85,7 @@ void ExtensionAppResult::Open(int event_flags) {
 
   if (display_type() != DISPLAY_RECOMMENDATION) {
     extensions::RecordAppListSearchLaunch(extension);
-    content::RecordAction(
-        base::UserMetricsAction("AppList_ClickOnAppFromSearch"));
+    base::RecordAction(base::UserMetricsAction("AppList_ClickOnAppFromSearch"));
   }
 
   controller()->ActivateApp(
@@ -151,9 +147,7 @@ bool ExtensionAppResult::RunExtensionEnableFlow() {
 void ExtensionAppResult::UpdateIcon() {
   gfx::ImageSkia icon = icon_->image_skia();
 
-#if defined(OS_CHROMEOS)
   extensions::util::MaybeApplyChromeBadge(profile(), app_id(), &icon);
-#endif
 
   if (!extensions::util::IsAppLaunchable(app_id(), profile())) {
     const color_utils::HSL shift = {-1, 0, 0.6};

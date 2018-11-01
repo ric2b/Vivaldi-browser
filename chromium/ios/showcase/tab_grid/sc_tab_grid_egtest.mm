@@ -4,8 +4,8 @@
 
 #import <EarlGrey/EarlGrey.h>
 
+#import "ios/showcase/test/showcase_eg_utils.h"
 #import "ios/showcase/test/showcase_test_case.h"
-#import "ios/testing/earl_grey/disabled_test_macros.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -18,21 +18,17 @@
 @implementation SCTabGridTestCase
 
 // Tests launching TabGridViewController and tapping a cell.
-- (void)testLaunchAndTappingCell {
-// TODO(crbug.com/687865): enable the test. It was flaky on device.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(
-      @"Disabled for devices because it is flaky on iPhone");
-#endif
-  [[EarlGrey selectElementWithMatcher:grey_text(@"TabGridViewController")]
-      performAction:grey_tap()];
+// TODO(crbug.com/710662): re-enable this test.
+- (void)FLAKY_testLaunchAndTappingCell {
+  showcase_utils::Open(@"TabGridViewController");
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Tab 0_button")]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:grey_text(@"TabCommands")]
+  [[EarlGrey selectElementWithMatcher:grey_text(@"TabGridCommands")]
       assertWithMatcher:grey_notNil()];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
                                           @"protocol_alerter_done")]
       performAction:grey_tap()];
+  showcase_utils::Close();
 }
 
 @end

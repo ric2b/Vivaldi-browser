@@ -14,6 +14,7 @@
 #include "base/time/default_clock.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/suggestions/image_decoder_impl.h"
@@ -23,11 +24,12 @@
 #include "chrome/browser/translate/language_model_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/browser_sync/profile_sync_service.h"
-#include "components/image_fetcher/image_decoder.h"
-#include "components/image_fetcher/image_fetcher.h"
-#include "components/image_fetcher/image_fetcher_impl.h"
+#include "components/image_fetcher/core/image_decoder.h"
+#include "components/image_fetcher/core/image_fetcher.h"
+#include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/ntp_snippets/bookmarks/bookmark_suggestions_provider.h"
@@ -39,10 +41,11 @@
 #include "components/ntp_snippets/remote/remote_suggestions_database.h"
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
+#include "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
 #include "components/ntp_snippets/remote/remote_suggestions_status_service.h"
-#include "components/ntp_snippets/remote/scheduling_remote_suggestions_provider.h"
 #include "components/ntp_snippets/sessions/foreign_sessions_suggestions_provider.h"
 #include "components/ntp_snippets/sessions/tab_delegate_sync_adapter.h"
+#include "components/ntp_snippets/user_classifier.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_json/safe_json_parser.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -95,9 +98,10 @@ using ntp_snippets::PersistentScheduler;
 using ntp_snippets::RemoteSuggestionsDatabase;
 using ntp_snippets::RemoteSuggestionsFetcher;
 using ntp_snippets::RemoteSuggestionsProviderImpl;
+using ntp_snippets::RemoteSuggestionsSchedulerImpl;
 using ntp_snippets::RemoteSuggestionsStatusService;
-using ntp_snippets::SchedulingRemoteSuggestionsProvider;
 using ntp_snippets::TabDelegateSyncAdapter;
+using ntp_snippets::UserClassifier;
 using suggestions::ImageDecoderImpl;
 using syncer::SyncService;
 using translate::LanguageModel;
@@ -115,6 +119,14 @@ using translate::LanguageModel;
 #if CONTENT_SUGGESTIONS_ENABLED
 
 namespace {
+
+bool IsChromeHomeEnabled() {
+#if defined(OS_ANDROID)
+  return base::FeatureList::IsEnabled(chrome::android::kChromeHomeFeature);
+#else
+  return false;
+#endif
+}
 
 #if defined(OS_ANDROID)
 
@@ -181,6 +193,7 @@ void RegisterArticleProvider(SigninManagerBase* signin_manager,
                              OAuth2TokenService* token_service,
                              ContentSuggestionsService* service,
                              LanguageModel* language_model,
+                             UserClassifier* user_classifier,
                              PrefService* pref_service,
                              Profile* profile) {
   scoped_refptr<net::URLRequestContextGetter> request_context =
@@ -194,39 +207,41 @@ void RegisterArticleProvider(SigninManagerBase* signin_manager,
           ->GetSequencedTaskRunnerWithShutdownBehavior(
               base::SequencedWorkerPool::GetSequenceToken(),
               base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
-  bool is_stable_channel =
-      chrome::GetChannel() == version_info::Channel::STABLE;
+  std::string api_key;
+  // The API is private. If we don't have the official API key, don't even try.
+  if (google_apis::IsGoogleChromeAPIKeyUsed()) {
+    bool is_stable_channel =
+        chrome::GetChannel() == version_info::Channel::STABLE;
+    api_key = is_stable_channel ? google_apis::GetAPIKey()
+                                : google_apis::GetNonStableAPIKey();
+  }
+
+  // Pass the pref name associated to the search suggest toggle, and use it to
+  // also guard the remote suggestions feature.
+  // TODO(https://crbug.com/710636): Cleanup this clunky dependency once the
+  // preference design is stable.
+  std::string additional_toggle_pref;
+  if (base::FeatureList::IsEnabled(
+          chrome::android::kContentSuggestionsSettings)) {
+    additional_toggle_pref = prefs::kSearchSuggestEnabled;
+  }
   auto suggestions_fetcher = base::MakeUnique<RemoteSuggestionsFetcher>(
       signin_manager, token_service, request_context, pref_service,
       language_model, base::Bind(&safe_json::SafeJsonParser::Parse),
-      GetFetchEndpoint(chrome::GetChannel()),
-      is_stable_channel ? google_apis::GetAPIKey()
-                        : google_apis::GetNonStableAPIKey(),
-      service->user_classifier());
+      GetFetchEndpoint(chrome::GetChannel()), api_key, user_classifier);
   auto provider = base::MakeUnique<RemoteSuggestionsProviderImpl>(
       service, pref_service, g_browser_process->GetApplicationLocale(),
-      service->category_ranker(), std::move(suggestions_fetcher),
+      service->category_ranker(), service->remote_suggestions_scheduler(),
+      std::move(suggestions_fetcher),
       base::MakeUnique<ImageFetcherImpl>(base::MakeUnique<ImageDecoderImpl>(),
                                          request_context.get()),
-      base::MakeUnique<ImageDecoderImpl>(),
       base::MakeUnique<RemoteSuggestionsDatabase>(database_dir, task_runner),
-      base::MakeUnique<RemoteSuggestionsStatusService>(signin_manager,
-                                                       pref_service));
+      base::MakeUnique<RemoteSuggestionsStatusService>(
+          signin_manager, pref_service, additional_toggle_pref));
 
-  PersistentScheduler* scheduler = nullptr;
-#if defined(OS_ANDROID)
-  scheduler = NTPSnippetsLauncher::Get();
-#endif  // OS_ANDROID
-
-  RemoteSuggestionsProviderImpl* provider_raw = provider.get();
-  auto scheduling_provider =
-      base::MakeUnique<SchedulingRemoteSuggestionsProvider>(
-          service, std::move(provider), scheduler, service->user_classifier(),
-          pref_service, base::MakeUnique<base::DefaultClock>());
-  provider_raw->SetRemoteSuggestionsScheduler(scheduling_provider.get());
-  service->set_remote_suggestions_provider(scheduling_provider.get());
-  service->set_remote_suggestions_scheduler(scheduling_provider.get());
-  service->RegisterProvider(std::move(scheduling_provider));
+  service->remote_suggestions_scheduler()->SetProvider(provider.get());
+  service->set_remote_suggestions_provider(provider.get());
+  service->RegisterProvider(std::move(provider));
 }
 
 void RegisterForeignSessionsProvider(SyncService* sync_service,
@@ -269,6 +284,7 @@ ContentSuggestionsServiceFactory::ContentSuggestionsServiceFactory()
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(BookmarkModelFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(LargeIconServiceFactory::GetInstance());
 #if defined(OS_ANDROID)
   DependsOn(OfflinePageModelFactory::GetInstance());
 #endif  // OS_ANDROID
@@ -286,19 +302,35 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
   using State = ContentSuggestionsService::State;
   Profile* profile = Profile::FromBrowserContext(context);
   DCHECK(!profile->IsOffTheRecord());
+  PrefService* pref_service = profile->GetPrefs();
+
+  auto user_classifier = base::MakeUnique<UserClassifier>(
+      pref_service, base::MakeUnique<base::DefaultClock>());
+  auto* user_classifier_raw = user_classifier.get();
+
+  // Create the RemoteSuggestionsScheduler.
+  PersistentScheduler* persistent_scheduler = nullptr;
+#if defined(OS_ANDROID)
+  persistent_scheduler = NTPSnippetsLauncher::Get();
+#endif  // OS_ANDROID
+  auto scheduler = base::MakeUnique<RemoteSuggestionsSchedulerImpl>(
+      persistent_scheduler, user_classifier_raw, pref_service,
+      g_browser_process->local_state(), base::MakeUnique<base::DefaultClock>());
 
   // Create the ContentSuggestionsService.
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfile(profile);
   HistoryService* history_service = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
-  PrefService* pref_service = profile->GetPrefs();
+  favicon::LargeIconService* large_icon_service =
+      LargeIconServiceFactory::GetForBrowserContext(profile);
   std::unique_ptr<CategoryRanker> category_ranker =
       ntp_snippets::BuildSelectedCategoryRanker(
           pref_service, base::MakeUnique<base::DefaultClock>());
-  auto* service =
-      new ContentSuggestionsService(State::ENABLED, signin_manager,
-          history_service, pref_service, std::move(category_ranker));
+  auto* service = new ContentSuggestionsService(
+      State::ENABLED, signin_manager, history_service, large_icon_service,
+      pref_service, std::move(category_ranker), std::move(user_classifier),
+      std::move(scheduler));
 
 #if defined(OS_ANDROID)
   OfflinePageModel* offline_page_model =
@@ -329,9 +361,12 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
   }
 
   bool show_asset_downloads =
+      !IsChromeHomeEnabled() &&
       base::FeatureList::IsEnabled(features::kAssetDownloadSuggestionsFeature);
-  bool show_offline_page_downloads = base::FeatureList::IsEnabled(
-      features::kOfflinePageDownloadSuggestionsFeature);
+  bool show_offline_page_downloads =
+      !IsChromeHomeEnabled() &&
+      base::FeatureList::IsEnabled(
+          features::kOfflinePageDownloadSuggestionsFeature);
   if (show_asset_downloads || show_offline_page_downloads) {
     RegisterDownloadsProvider(
         show_offline_page_downloads ? offline_page_model : nullptr,
@@ -342,7 +377,7 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
 
   // |bookmark_model| can be null in tests.
   if (base::FeatureList::IsEnabled(ntp_snippets::kBookmarkSuggestionsFeature) &&
-      bookmark_model) {
+      bookmark_model && !IsChromeHomeEnabled()) {
     RegisterBookmarkProvider(bookmark_model, service, pref_service);
   }
 
@@ -355,7 +390,8 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
 
   if (base::FeatureList::IsEnabled(ntp_snippets::kArticleSuggestionsFeature)) {
     RegisterArticleProvider(signin_manager, token_service, service,
-                            language_model, pref_service, profile);
+                            language_model, user_classifier_raw, pref_service,
+                            profile);
   }
 
   if (base::FeatureList::IsEnabled(

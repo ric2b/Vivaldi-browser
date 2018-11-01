@@ -4,11 +4,12 @@
 
 #include "ash/mus/test/ash_test_impl_mus.h"
 
-#include "ash/common/test/ash_test.h"
-#include "ash/common/wm_window.h"
+#include "ash/test/ash_test.h"
+#include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "ui/aura/window.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -54,10 +55,10 @@ std::unique_ptr<WindowOwner> AshTestImplMus::CreateTestWindow(
     const gfx::Rect& bounds_in_screen,
     ui::wm::WindowType type,
     int shell_window_id) {
-  WmWindow* window =
-      WmWindow::Get(wm_test_base_->CreateTestWindow(bounds_in_screen, type));
-  window->SetShellWindowId(shell_window_id);
-  return base::MakeUnique<WindowOwner>(window);
+  aura::Window* window =
+      wm_test_base_->CreateTestWindow(bounds_in_screen, type);
+  window->set_id(shell_window_id);
+  return base::MakeUnique<WindowOwner>(WmWindow::Get(window));
 }
 
 std::unique_ptr<WindowOwner> AshTestImplMus::CreateToplevelTestWindow(
@@ -97,10 +98,4 @@ void AshTestImplMus::AddTransientChild(WmWindow* parent, WmWindow* window) {
 }
 
 }  // namespace mus
-
-// static
-std::unique_ptr<AshTestImpl> AshTestImpl::Create() {
-  return base::MakeUnique<mus::AshTestImplMus>();
-}
-
 }  // namespace ash

@@ -79,6 +79,10 @@ source_set("lib") {
     "media_service_factory.h",
     "mojo_audio_decoder_service.cc",
     "mojo_audio_decoder_service.h",
+    "mojo_audio_output_stream.cc",
+    "mojo_audio_output_stream.h",
+    "mojo_audio_output_stream_provider.cc",
+    "mojo_audio_output_stream_provider.h",
     "mojo_cdm_allocator.cc",
     "mojo_cdm_allocator.h",
     "mojo_cdm_promise.cc",
@@ -131,6 +135,8 @@ source_set("lib") {
     sources += [
       "android_mojo_media_client.cc",
       "android_mojo_media_client.h",
+      "mojo_media_drm_storage.cc",
+      "mojo_media_drm_storage.h",
     ]
   }
 }

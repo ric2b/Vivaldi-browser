@@ -7,7 +7,7 @@
 
 #include "core/html/HTMLCanvasElement.h"
 #include "modules/ModulesExport.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -30,7 +30,7 @@ class MODULES_EXPORT HTMLCanvasElementModule {
                                                      ExceptionState&);
 
  private:
-  static OffscreenCanvas* transferControlToOffscreenInternal(HTMLCanvasElement&,
+  static OffscreenCanvas* TransferControlToOffscreenInternal(HTMLCanvasElement&,
                                                              ExceptionState&);
 };
 }

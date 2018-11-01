@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "ash/common/palette_delegate.h"
+#include "ash/palette_delegate.h"
 #include "base/callback_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -18,6 +18,10 @@
 
 class PrefChangeRegistrar;
 class Profile;
+
+namespace ash {
+class ScreenshotDelegate;
+}
 
 namespace chromeos {
 
@@ -64,6 +68,9 @@ class PaletteDelegateChromeOS
   std::unique_ptr<user_manager::ScopedUserSessionStateObserver>
       session_state_observer_;
   content::NotificationRegistrar registrar_;
+
+  std::unique_ptr<ash::ScreenshotDelegate>
+      voice_interaction_screenshot_delegate_;
 
   base::WeakPtrFactory<PaletteDelegateChromeOS> weak_factory_;
 

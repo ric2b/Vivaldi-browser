@@ -16,6 +16,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/flags_ui/flags_ui_switches.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/config/gpu_crash_keys.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/common/chrome_switches.h"
@@ -35,20 +36,6 @@ const char kNumExtensionsCount[] = "num-extensions";
 const char kShutdownType[] = "shutdown-type";
 const char kBrowserUnpinTrace[] = "browser-unpin-trace";
 
-#if !defined(OS_ANDROID)
-const char kGPUVendorID[] = "gpu-venid";
-const char kGPUDeviceID[] = "gpu-devid";
-#endif
-const char kGPUDriverVersion[] = "gpu-driver";
-const char kGPUPixelShaderVersion[] = "gpu-psver";
-const char kGPUVertexShaderVersion[] = "gpu-vsver";
-#if defined(OS_MACOSX)
-const char kGPUGLVersion[] = "gpu-glver";
-#elif defined(OS_POSIX)
-const char kGPUVendor[] = "gpu-gl-vendor";
-const char kGPURenderer[] = "gpu-gl-renderer";
-#endif
-
 #if defined(OS_WIN)
 const char kHungRendererOutstandingAckCount[] = "hung-outstanding-acks";
 const char kHungRendererOutstandingEventType[] = "hung-outstanding-event-type";
@@ -59,6 +46,11 @@ const char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
 const char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
 
 const char kIsEnterpriseManaged[] = "is-enterprise-managed";
+
+// Registry values used to determine Chrome's update channel; see
+// https://crbug.com/579504.
+const char kApValue[] = "ap";
+const char kCohortName[] = "cohort-name";
 #endif
 
 const char kInputEventFilterSendFailure[] = "input-event-filter-send-failure";
@@ -103,7 +95,8 @@ size_t RegisterChromeCrashKeys() {
   // If you're adding keys here, please also add them to the following lists:
   // chrome/app/chrome_crash_reporter_client_win.cc::RegisterCrashKeysHelper(),
   // android_webview/common/crash_reporter/crash_keys.cc::
-  //     RegisterWebViewCrashKeys().
+  //     RegisterWebViewCrashKeys(),
+  // chromecast/crash/cast_crash_keys.cc::RegisterCastCrashKeys().
   base::debug::CrashKey fixed_keys[] = {
 #if defined(OS_MACOSX) || defined(OS_WIN)
     {kMetricsClientId, kSmallSize},
@@ -117,18 +110,22 @@ size_t RegisterChromeCrashKeys() {
     {kNumExtensionsCount, kSmallSize},
     {kShutdownType, kSmallSize},
     {kBrowserUnpinTrace, kMediumSize},
+#if defined(OS_WIN)
+    {kApValue, kSmallSize},
+    {kCohortName, kSmallSize},
+#endif  // defined(OS_WIN)
 #if !defined(OS_ANDROID)
-    {kGPUVendorID, kSmallSize},
-    {kGPUDeviceID, kSmallSize},
+    {gpu::crash_keys::kGPUVendorID, kSmallSize},
+    {gpu::crash_keys::kGPUDeviceID, kSmallSize},
 #endif
-    {kGPUDriverVersion, kSmallSize},
-    {kGPUPixelShaderVersion, kSmallSize},
-    {kGPUVertexShaderVersion, kSmallSize},
+    {gpu::crash_keys::kGPUDriverVersion, kSmallSize},
+    {gpu::crash_keys::kGPUPixelShaderVersion, kSmallSize},
+    {gpu::crash_keys::kGPUVertexShaderVersion, kSmallSize},
 #if defined(OS_MACOSX)
-    {kGPUGLVersion, kSmallSize},
+    {gpu::crash_keys::kGPUGLVersion, kSmallSize},
 #elif defined(OS_POSIX)
-    {kGPUVendor, kSmallSize},
-    {kGPURenderer, kSmallSize},
+    {gpu::crash_keys::kGPUVendor, kSmallSize},
+    {gpu::crash_keys::kGPURenderer, kSmallSize},
 #endif
 
     // content/:
@@ -158,6 +155,7 @@ size_t RegisterChromeCrashKeys() {
     {"mmap_params", kSmallSize},
     {"buffer_size", kSmallSize},
     {"errno", kSmallSize},
+    {"number_of_fds", kSmallSize},
 #endif
 #if defined(OS_MACOSX)
     {mac::kFirstNSException, kMediumSize},
@@ -190,27 +188,6 @@ size_t RegisterChromeCrashKeys() {
 #if defined(OS_LINUX)
     {"seccomp-sigsys", kMediumSize},
 #endif
-
-    // Temporary for http://crbug.com/575245.
-    {"swapout_frame_id", kSmallSize},
-    {"swapout_proxy_id", kSmallSize},
-    {"swapout_view_id", kSmallSize},
-    {"commit_frame_id", kSmallSize},
-    {"commit_proxy_id", kSmallSize},
-    {"commit_view_id", kSmallSize},
-    {"commit_main_render_frame_id", kSmallSize},
-    {"newproxy_proxy_id", kSmallSize},
-    {"newproxy_view_id", kSmallSize},
-    {"newproxy_opener_id", kSmallSize},
-    {"newproxy_parent_id", kSmallSize},
-    {"rvinit_view_id", kSmallSize},
-    {"rvinit_proxy_id", kSmallSize},
-    {"rvinit_main_frame_id", kSmallSize},
-    {"initrf_frame_id", kSmallSize},
-    {"initrf_proxy_id", kSmallSize},
-    {"initrf_view_id", kSmallSize},
-    {"initrf_main_frame_id", kSmallSize},
-    {"initrf_view_is_live", kSmallSize},
 
     // Temporary for https://crbug.com/591478.
     {"initrf_parent_proxy_exists", kSmallSize},
@@ -247,6 +224,11 @@ size_t RegisterChromeCrashKeys() {
     {"swdh_set_hosted_version_host_pid", crash_keys::kSmallSize},
     {"swdh_set_hosted_version_is_new_process", crash_keys::kSmallSize},
     {"swdh_set_hosted_version_restart_count", crash_keys::kSmallSize},
+
+    // Temporary for https://crbug.com/697745.
+    {"engine_params", crash_keys::kMediumSize},
+    {"engine1_params", crash_keys::kMediumSize},
+    {"engine2_params", crash_keys::kMediumSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

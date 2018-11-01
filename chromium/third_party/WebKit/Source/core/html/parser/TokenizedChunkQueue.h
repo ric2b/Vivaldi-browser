@@ -5,13 +5,13 @@
 #ifndef TokenizedChunkQueue_h
 #define TokenizedChunkQueue_h
 
-#include "core/html/parser/HTMLDocumentParser.h"
-#include "wtf/Deque.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/ThreadSafeRefCounted.h"
-#include "wtf/ThreadingPrimitives.h"
-#include "wtf/Vector.h"
 #include <memory>
+#include "core/html/parser/HTMLDocumentParser.h"
+#include "platform/wtf/Deque.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/ThreadSafeRefCounted.h"
+#include "platform/wtf/ThreadingPrimitives.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -25,26 +25,26 @@ namespace blink {
 // thread kicks a consumer task on Blink main thread.
 class TokenizedChunkQueue : public ThreadSafeRefCounted<TokenizedChunkQueue> {
  public:
-  static PassRefPtr<TokenizedChunkQueue> create() {
-    return adoptRef(new TokenizedChunkQueue);
+  static PassRefPtr<TokenizedChunkQueue> Create() {
+    return AdoptRef(new TokenizedChunkQueue);
   }
 
   ~TokenizedChunkQueue();
 
-  bool enqueue(std::unique_ptr<HTMLDocumentParser::TokenizedChunk>);
-  void clear();
+  bool Enqueue(std::unique_ptr<HTMLDocumentParser::TokenizedChunk>);
+  void Clear();
 
-  void takeAll(Vector<std::unique_ptr<HTMLDocumentParser::TokenizedChunk>>&);
-  size_t peakPendingChunkCount();
-  size_t peakPendingTokenCount();
+  void TakeAll(Vector<std::unique_ptr<HTMLDocumentParser::TokenizedChunk>>&);
+  size_t PeakPendingChunkCount();
+  size_t PeakPendingTokenCount();
 
  private:
   TokenizedChunkQueue();
 
-  Vector<std::unique_ptr<HTMLDocumentParser::TokenizedChunk>> m_pendingChunks;
-  size_t m_peakPendingChunkCount = 0;
-  size_t m_peakPendingTokenCount = 0;
-  size_t m_pendingTokenCount = 0;
+  Vector<std::unique_ptr<HTMLDocumentParser::TokenizedChunk>> pending_chunks_;
+  size_t peak_pending_chunk_count_ = 0;
+  size_t peak_pending_token_count_ = 0;
+  size_t pending_token_count_ = 0;
 };
 
 }  // namespace blink

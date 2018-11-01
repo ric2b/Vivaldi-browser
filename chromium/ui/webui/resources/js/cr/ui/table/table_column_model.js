@@ -61,7 +61,7 @@ cr.define('cr.ui.table', function() {
      * @param {string} name Column name.
      */
     setName: function(index, name) {
-      if (index < 0 || index >= this.columns_.size - 1)
+      if (index < 0 || index >= this.columns_.length)
         return;
       if (name != this.columns_[index].name)
         return;
@@ -94,7 +94,7 @@ cr.define('cr.ui.table', function() {
      * @param {number} width Column width.
      */
     setWidth: function(index, width) {
-      if (index < 0 || index >= this.columns_.size - 1)
+      if (index < 0 || index >= this.columns_.length)
         return;
 
       var column = this.columns_[index];
@@ -112,7 +112,7 @@ cr.define('cr.ui.table', function() {
     /**
      * Returns render function for the column at the given index.
      * @param {number} index The index of the column.
-     * @return {function(*, string, cr.ui.Table): HTMLElement} Render function.
+     * @return {function(*, string, Element): HTMLElement} Render function.
      */
     getRenderFunction: function(index) {
       return this.columns_[index].renderFunction;
@@ -121,11 +121,11 @@ cr.define('cr.ui.table', function() {
     /**
      * Sets render function for the column at the given index.
      * @param {number} index The index of the column.
-     * @param {function(*, string, cr.ui.Table): HTMLElement} renderFunction
+     * @param {function(*, string, Element): HTMLElement} renderFunction
      *     Render function.
      */
     setRenderFunction: function(index, renderFunction) {
-      if (index < 0 || index >= this.columns_.size - 1)
+      if (index < 0 || index >= this.columns_.length)
         return;
       if (renderFunction !== this.columns_[index].renderFunction)
         return;
@@ -137,7 +137,7 @@ cr.define('cr.ui.table', function() {
     /**
      * Render the column header.
      * @param {number} index The index of the column.
-     * @param {cr.ui.Table} table Owner table.
+     * @param {Element} table Owner table.
      */
     renderHeader: function(index, table) {
       var c = this.columns_[index];
@@ -194,7 +194,7 @@ cr.define('cr.ui.table', function() {
      * @param {boolean} visible The column visibility.
      */
     setVisible: function(index, visible) {
-      if (index < 0 || index > this.columns_.size - 1)
+      if (index < 0 || index >= this.columns_.length)
         return;
 
       var column = this.columns_[index];

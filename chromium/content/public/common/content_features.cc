@@ -9,10 +9,22 @@ namespace features {
 
 // All features in alphabetical order.
 
+// Enables the Accessibility Object Model.
+// Explainer: https://github.com/WICG/aom/blob/master/explainer.md
+// Spec: https://wicg.github.io/aom/spec/
+const base::Feature kAccessibilityObjectModel(
+    "AccessibilityObjectModel",
+    base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables asm.js to WebAssembly V8 backend.
 // http://asmjs.org/spec/latest/
 const base::Feature kAsmJsToWebAssembly{"AsmJsToWebAssembly",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Block subresource requests whose URLs contain embedded credentials (e.g.
+// `https://user:pass@example.com/resource`).
+const base::Feature kBlockCredentialedSubresources{
+    "BlockCredentialedSubresources", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables brotli "Accept-Encoding" advertising and "Content-Encoding" support.
 // Brotli format specification: http://www.ietf.org/id/draft-alakuijala-brotli
@@ -54,11 +66,6 @@ const base::Feature kDocumentWriteEvaluator{"DocumentWriteEvaluator",
 const base::Feature kExpensiveBackgroundTimerThrottling{
     "ExpensiveBackgroundTimerThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables faster location.reload() to use a reload mode that revalidates only
-// main resource forcibly. https://crbug.com/670237.
-const base::Feature kFasterLocationReload{"FasterLocationReload",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enables the Feature Policy framework for granting and removing access to
 // other features through HTTP headers.
 const base::Feature kFeaturePolicy{"FeaturePolicy",
@@ -84,11 +91,6 @@ const base::Feature kFramebustingNeedsSameOriginOrUserGesture{
 const base::Feature kGamepadExtensions{"GamepadExtensions",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables sensors based on Generic Sensor API:
-// https://w3c.github.io/sensors/
-const base::Feature kGenericSensor{"GenericSensor",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Causes the implementations of guests (inner WebContents) to use
 // out-of-process iframes.
 const base::Feature kGuestViewCrossProcessFrames{
@@ -106,12 +108,21 @@ const base::Feature kLazyParseCSS{"LazyParseCSS",
 const base::Feature kLoadingWithMojo{"LoadingWithMojo",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Experimental feature to trigger hard-reload on Location.reload().
+// crbug.com/716339
+const base::Feature kLocationHardReload{"LocationHardReload",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
 // FeatureList definition for trials to enable the download button on
 // MediaDocument.
 const base::Feature kMediaDocumentDownloadButton{
     "MediaDocumentDownloadButton",
     base::FEATURE_DISABLED_BY_DEFAULT
 };
+
+// Enables the old algorithm for processing video constraints in getUserMedia().
+const base::Feature kMediaStreamOldVideoConstraints{
+    "MediaStreamOldVideoConstraints", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the memory coordinator.
 // WARNING:
@@ -129,11 +140,9 @@ const base::Feature kNotificationContentImage{"NotificationContentImage",
 const base::Feature kMainThreadBusyScrollIntervention{
     "MainThreadBusyScrollIntervention", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// An experiment to optimize resource loading IPC for small resources.
-// http://crbug.com/580928
-const base::Feature kOptimizeLoadingIPCForSmallResources{
-    "OptimizeLoadingIPCForSmallResources",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+// Experimental resource fetch optimizations for workers. See crbug.com/443374
+const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Origin Trials for controlling access to feature/API experiments.
 const base::Feature kOriginTrials{"OriginTrials",
@@ -156,9 +165,19 @@ const base::Feature kPassiveEventListenersDueToFling{
 const base::Feature kPointerEvents{"PointerEvent",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables purge and suspend.
-const base::Feature kPurgeAndSuspend{"PurgeAndSuspend",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables Purge+Throttle on platforms except Android and MacOS.
+// (Android) Purge+Throttle depends on TabManager, but TabManager doesn't
+// support Android. Enable after Android is supported.
+// (MacOS X) Enable after Purge+Throttle handles memory pressure signals
+// send by OS correctly.
+const base::Feature kPurgeAndSuspend {
+  "PurgeAndSuspend",
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // RAF aligned mouse input events support.
 const base::Feature kRafAlignedMouseInputEvents{
@@ -166,7 +185,7 @@ const base::Feature kRafAlignedMouseInputEvents{
 
 // RAF aligned touch input events support.
 const base::Feature kRafAlignedTouchInputEvents{
-    "RafAlignedTouchInput", base::FEATURE_DISABLED_BY_DEFAULT};
+    "RafAlignedTouchInput", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If Pepper 3D Image Chromium is allowed, this feature controls whether it is
 // enabled.
@@ -188,10 +207,6 @@ const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Navigation preload feature of service workers.
-// Enables this base::Feature by default for Origin-Trial, but enables the
-// corresponding blink::WebRuntimeFeatures only when '--enable-features' command
-// line flag is given. See the comments in runtime_features.cc and
-// service_worker_version.h for the details.
 const base::Feature kServiceWorkerNavigationPreload{
     "ServiceWorkerNavigationPreload", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -201,17 +216,7 @@ const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
 
 // Paint invalidation based on slimming paint. See https://goo.gl/eQczQW
 const base::Feature kSlimmingPaintInvalidation{
-    "SlimmingPaintInvalidation", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Speculatively launches Service Workers on mouse/touch events.
-const base::Feature kSpeculativeLaunchServiceWorker{
-    "SpeculativeLaunchServiceWorker", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables implementation of the Cache-Control: stale-while-revalidate directive
-// which permits servers to allow the use of stale resources while revalidation
-// proceeds in the background. See http://crbug.com/348877
-const base::Feature kStaleWhileRevalidate{"StaleWhileRevalidate2",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+    "SlimmingPaintInvalidation", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Throttle Blink timers in out-of-view cross origin frames.
 const base::Feature kTimerThrottlingForHiddenFrames{
@@ -225,6 +230,10 @@ const base::Feature kTokenBinding{"token-binding",
 // Enables touchpad and wheel scroll latching.
 const base::Feature kTouchpadAndWheelScrollLatching{
     "TouchpadAndWheelScrollLatching", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether vibrate requires user gesture.
+const base::Feature kVibrateRequiresUserGesture{
+    "VibrateRequiresUserGesture", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables VR UI.
 const base::Feature kVrShell{"VrShell", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -273,13 +282,18 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
+// Autofill Accessibility in Android.
+// crbug.com/627860
+const base::Feature kAndroidAutofillAccessibility{
+    "AndroidAutofillAccessibility", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // A browsing history manager implementation for Android.
 const base::Feature kNativeAndroidHistoryManager{
   "AndroidHistoryManager", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // FeatureList definition for the Seccomp field trial.
 const base::Feature kSeccompSandboxAndroid{"SeccompSandboxAndroid",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Service worker based payment apps as defined by w3c here:
 // https://w3c.github.io/webpayments-payment-apps-api/

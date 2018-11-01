@@ -6,7 +6,7 @@
 
 #include <type_traits>
 
-#include "ash/common/accessibility_types.h"
+#include "ash/accessibility_types.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
@@ -42,6 +42,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/events/event_sink.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/keyboard/keyboard_controller.h"
 
@@ -57,7 +58,7 @@ namespace chromeos {
 // OOBE UI is not visible by default.
 CoreOobeHandler::CoreOobeHandler(OobeUI* oobe_ui,
                                  JSCallsContainer* js_calls_container)
-    : BaseScreenHandler(js_calls_container),
+    : BaseWebUIHandler(js_calls_container),
       oobe_ui_(oobe_ui),
       version_info_updater_(this) {
   DCHECK(js_calls_container);
@@ -74,10 +75,6 @@ CoreOobeHandler::CoreOobeHandler(OobeUI* oobe_ui,
 }
 
 CoreOobeHandler::~CoreOobeHandler() {
-}
-
-void CoreOobeHandler::SetDelegate(Delegate* delegate) {
-  delegate_ = delegate;
 }
 
 void CoreOobeHandler::DeclareLocalizedValues(
@@ -287,8 +284,7 @@ void CoreOobeHandler::HandleSkipUpdateEnrollAfterEula() {
 void CoreOobeHandler::HandleUpdateCurrentScreen(
     const std::string& screen_name) {
   const OobeScreen screen = GetOobeScreenFromName(screen_name);
-  if (delegate_)
-    delegate_->OnCurrentScreenChanged(screen);
+  oobe_ui_->CurrentScreenChanged(screen);
   // TODO(mash): Support EventRewriterController; see crbug.com/647781
   if (!ash_util::IsRunningInMash()) {
     KeyboardDrivenEventRewriter::GetInstance()->SetArrowToTabRewritingEnabled(
@@ -424,8 +420,8 @@ void CoreOobeHandler::OnEnterpriseInfoUpdated(
   CallJSOrDefer("setEnterpriseInfo", message_text, asset_id);
 }
 
-ui::EventProcessor* CoreOobeHandler::GetEventProcessor() {
-  return ash::Shell::GetPrimaryRootWindow()->GetHost()->event_processor();
+ui::EventSink* CoreOobeHandler::GetEventSink() {
+  return ash::Shell::GetPrimaryRootWindow()->GetHost()->event_sink();
 }
 
 void CoreOobeHandler::UpdateLabel(const std::string& id,
@@ -487,7 +483,7 @@ void CoreOobeHandler::HandleRaiseTabKeyEvent(bool reverse) {
   ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_NONE);
   if (reverse)
     event.set_flags(ui::EF_SHIFT_DOWN);
-  SendEventToProcessor(&event);
+  SendEventToSink(&event);
 }
 
 void CoreOobeHandler::HandleSetOobeBootstrappingSlave() {

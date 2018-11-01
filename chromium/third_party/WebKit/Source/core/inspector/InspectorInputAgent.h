@@ -45,24 +45,25 @@ class CORE_EXPORT InspectorInputAgent final
   WTF_MAKE_NONCOPYABLE(InspectorInputAgent);
 
  public:
-  static InspectorInputAgent* create(InspectedFrames* inspectedFrames) {
-    return new InspectorInputAgent(inspectedFrames);
+  static InspectorInputAgent* Create(InspectedFrames* inspected_frames) {
+    return new InspectorInputAgent(inspected_frames);
   }
 
   ~InspectorInputAgent() override;
   DECLARE_VIRTUAL_TRACE();
 
   // Methods called from the frontend for simulating input.
-  Response dispatchTouchEvent(
+  protocol::Response dispatchTouchEvent(
       const String& type,
-      std::unique_ptr<protocol::Array<protocol::Input::TouchPoint>> touchPoints,
-      Maybe<int> modifiers,
-      Maybe<double> timestamp) override;
+      std::unique_ptr<protocol::Array<protocol::Input::TouchPoint>>
+          touch_points,
+      protocol::Maybe<int> modifiers,
+      protocol::Maybe<double> timestamp) override;
 
  private:
   explicit InspectorInputAgent(InspectedFrames*);
 
-  Member<InspectedFrames> m_inspectedFrames;
+  Member<InspectedFrames> inspected_frames_;
 };
 
 }  // namespace blink

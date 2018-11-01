@@ -10,7 +10,6 @@
 
 #include <deque>
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "base/macros.h"
@@ -19,9 +18,11 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
+#include "net/log/net_log_source.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/spdy/platform/api/spdy_string.h"
 #include "net/spdy/spdy_buffer.h"
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_header_block.h"
@@ -101,6 +102,8 @@ class NET_EXPORT_PRIVATE SpdyStream {
     // TODO(akalin): Allow this function to re-close the stream and
     // handle it gracefully.
     virtual void OnClose(int status) = 0;
+
+    virtual NetLogSource source_dependency() const = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -286,7 +289,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
   void OnClose(int status);
 
   // Called by the SpdySession to log stream related errors.
-  void LogStreamError(int status, const std::string& description);
+  void LogStreamError(int status, const SpdyString& description);
 
   // If this stream is active, reset it, and close it otherwise. In
   // either case the stream is deleted.
@@ -432,7 +435,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // OnHeadersReceived() on the delegate if attached.
   void SaveResponseHeaders(const SpdyHeaderBlock& response_headers);
 
-  static std::string DescribeState(State state);
+  static SpdyString DescribeState(State state);
 
   const SpdyStreamType type_;
 

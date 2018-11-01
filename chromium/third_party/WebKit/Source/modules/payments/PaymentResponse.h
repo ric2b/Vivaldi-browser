@@ -12,8 +12,8 @@
 #include "modules/ModulesExport.h"
 #include "modules/payments/PaymentCurrencyAmount.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -35,27 +35,27 @@ class MODULES_EXPORT PaymentResponse final
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
-  const String& methodName() const { return m_methodName; }
+  const String& methodName() const { return method_name_; }
   ScriptValue details(ScriptState*, ExceptionState&) const;
-  PaymentAddress* shippingAddress() const { return m_shippingAddress.get(); }
-  const String& shippingOption() const { return m_shippingOption; }
-  const String& payerName() const { return m_payerName; }
-  const String& payerEmail() const { return m_payerEmail; }
-  const String& payerPhone() const { return m_payerPhone; }
+  PaymentAddress* shippingAddress() const { return shipping_address_.Get(); }
+  const String& shippingOption() const { return shipping_option_; }
+  const String& payerName() const { return payer_name_; }
+  const String& payerEmail() const { return payer_email_; }
+  const String& payerPhone() const { return payer_phone_; }
 
   ScriptPromise complete(ScriptState*, const String& result = "");
 
   DECLARE_TRACE();
 
  private:
-  String m_methodName;
-  String m_stringifiedDetails;
-  Member<PaymentAddress> m_shippingAddress;
-  String m_shippingOption;
-  String m_payerName;
-  String m_payerEmail;
-  String m_payerPhone;
-  Member<PaymentCompleter> m_paymentCompleter;
+  String method_name_;
+  String stringified_details_;
+  Member<PaymentAddress> shipping_address_;
+  String shipping_option_;
+  String payer_name_;
+  String payer_email_;
+  String payer_phone_;
+  Member<PaymentCompleter> payment_completer_;
 };
 
 }  // namespace blink

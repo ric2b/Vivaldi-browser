@@ -7,6 +7,8 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -16,6 +18,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/test/url_request/url_request_failed_job.h"
 #include "ui/base/page_transition_types.h"
 #include "url/url_constants.h"
 
@@ -46,7 +49,7 @@ class NavigationHandleObserver : public WebContentsObserver {
     is_main_frame_ = navigation_handle->IsInMainFrame();
     is_parent_main_frame_ = navigation_handle->IsParentMainFrame();
     is_renderer_initiated_ = navigation_handle->IsRendererInitiated();
-    is_same_page_ = navigation_handle->IsSamePage();
+    is_same_document_ = navigation_handle->IsSameDocument();
     was_redirected_ = navigation_handle->WasServerRedirect();
     frame_tree_node_id_ = navigation_handle->GetFrameTreeNodeId();
   }
@@ -57,7 +60,7 @@ class NavigationHandleObserver : public WebContentsObserver {
 
     DCHECK_EQ(is_main_frame_, navigation_handle->IsInMainFrame());
     DCHECK_EQ(is_parent_main_frame_, navigation_handle->IsParentMainFrame());
-    DCHECK_EQ(is_same_page_, navigation_handle->IsSamePage());
+    DCHECK_EQ(is_same_document_, navigation_handle->IsSameDocument());
     DCHECK_EQ(is_renderer_initiated_, navigation_handle->IsRendererInitiated());
     DCHECK_EQ(frame_tree_node_id_, navigation_handle->GetFrameTreeNodeId());
 
@@ -85,7 +88,7 @@ class NavigationHandleObserver : public WebContentsObserver {
   bool is_main_frame() { return is_main_frame_; }
   bool is_parent_main_frame() { return is_parent_main_frame_; }
   bool is_renderer_initiated() { return is_renderer_initiated_; }
-  bool is_same_page() { return is_same_page_; }
+  bool is_same_document() { return is_same_document_; }
   bool was_redirected() { return was_redirected_; }
   int frame_tree_node_id() { return frame_tree_node_id_; }
 
@@ -105,7 +108,7 @@ class NavigationHandleObserver : public WebContentsObserver {
   bool is_main_frame_ = false;
   bool is_parent_main_frame_ = false;
   bool is_renderer_initiated_ = true;
-  bool is_same_page_ = false;
+  bool is_same_document_ = false;
   bool was_redirected_ = false;
   int frame_tree_node_id_ = -1;
   ui::PageTransition page_transition_ = ui::PAGE_TRANSITION_LINK;
@@ -515,8 +518,9 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySrcdoc) {
   EXPECT_EQ(GURL(kAboutSrcDocURL), observer.last_committed_url());
 }
 
-// Ensure that the IsSamePage() method on NavigationHandle behaves correctly.
-IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySamePage) {
+// Ensure that the IsSameDocument() method on NavigationHandle behaves
+// correctly.
+IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySameDocument) {
   GURL url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(a())"));
   EXPECT_TRUE(NavigateToURL(shell(), url));
@@ -533,7 +537,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySamePage) {
 
     EXPECT_TRUE(observer.has_committed());
     EXPECT_FALSE(observer.is_error());
-    EXPECT_TRUE(observer.is_same_page());
+    EXPECT_TRUE(observer.is_same_document());
   }
   {
     NavigationHandleObserver observer(
@@ -544,7 +548,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySamePage) {
 
     EXPECT_TRUE(observer.has_committed());
     EXPECT_FALSE(observer.is_error());
-    EXPECT_TRUE(observer.is_same_page());
+    EXPECT_TRUE(observer.is_same_document());
   }
   {
     NavigationHandleObserver observer(
@@ -555,7 +559,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySamePage) {
 
     EXPECT_TRUE(observer.has_committed());
     EXPECT_FALSE(observer.is_error());
-    EXPECT_TRUE(observer.is_same_page());
+    EXPECT_TRUE(observer.is_same_document());
   }
 
   GURL about_blank_url(url::kAboutBlankURL);
@@ -566,7 +570,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySamePage) {
 
     EXPECT_TRUE(observer.has_committed());
     EXPECT_FALSE(observer.is_error());
-    EXPECT_FALSE(observer.is_same_page());
+    EXPECT_FALSE(observer.is_same_document());
     EXPECT_EQ(about_blank_url, observer.last_committed_url());
   }
   {
@@ -575,7 +579,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, VerifySamePage) {
 
     EXPECT_TRUE(observer.has_committed());
     EXPECT_FALSE(observer.is_error());
-    EXPECT_FALSE(observer.is_same_page());
+    EXPECT_FALSE(observer.is_same_document());
     EXPECT_EQ(about_blank_url, observer.last_committed_url());
   }
 }
@@ -901,6 +905,21 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
     EXPECT_FALSE(NavigateToURL(shell(), kUrl));
     EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, observer.net_error_code());
   }
+
+  // Using BLOCK_REQUEST on redirect is available only with PlzNavigate.
+  if (IsBrowserSideNavigationEnabled()) {
+    // Set up a NavigationThrottle that will block the navigation in
+    // WillRedirectRequest.
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::BLOCK_REQUEST, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), kRedirectingUrl);
+
+    // Try to navigate to the url. The navigation should be canceled and the
+    // NavigationHandle should have the right error code.
+    EXPECT_FALSE(NavigateToURL(shell(), kRedirectingUrl));
+    EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, observer.net_error_code());
+  }
 }
 
 // Specialized test that verifies the NavigationHandle gets the HTTPS upgraded
@@ -969,7 +988,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplHttpsUpgradeBrowserTest,
 // Ensure that browser-initiated same-document navigations are detected and
 // don't issue network requests.  See crbug.com/663777.
 IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
-                       SamePageBrowserInitiatedNoReload) {
+                       SameDocumentBrowserInitiatedNoReload) {
   GURL url(embedded_test_server()->GetURL("/title1.html"));
   GURL url_fragment_1(embedded_test_server()->GetURL("/title1.html#id_1"));
   GURL url_fragment_2(embedded_test_server()->GetURL("/title1.html#id_2"));
@@ -983,7 +1002,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
     EXPECT_TRUE(NavigateToURL(shell(), url));
     EXPECT_EQ(1, installer.will_start_called());
     EXPECT_EQ(1, installer.will_process_called());
-    EXPECT_FALSE(observer.is_same_page());
+    EXPECT_FALSE(observer.is_same_document());
   }
 
   // 2) Perform a same-document navigation by adding a fragment.
@@ -995,7 +1014,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
     EXPECT_TRUE(NavigateToURL(shell(), url_fragment_1));
     EXPECT_EQ(0, installer.will_start_called());
     EXPECT_EQ(0, installer.will_process_called());
-    EXPECT_TRUE(observer.is_same_page());
+    EXPECT_TRUE(observer.is_same_document());
   }
 
   // 3) Perform a same-document navigation by modifying the fragment.
@@ -1007,7 +1026,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
     EXPECT_TRUE(NavigateToURL(shell(), url_fragment_2));
     EXPECT_EQ(0, installer.will_start_called());
     EXPECT_EQ(0, installer.will_process_called());
-    EXPECT_TRUE(observer.is_same_page());
+    EXPECT_TRUE(observer.is_same_document());
   }
 
   // 4) Redo the last navigation, but this time it should trigger a reload.
@@ -1019,7 +1038,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
     EXPECT_TRUE(NavigateToURL(shell(), url_fragment_2));
     EXPECT_EQ(1, installer.will_start_called());
     EXPECT_EQ(1, installer.will_process_called());
-    EXPECT_FALSE(observer.is_same_page());
+    EXPECT_FALSE(observer.is_same_document());
   }
 
   // 5) Perform a new-document navigation by removing the fragment.
@@ -1031,7 +1050,171 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
     EXPECT_TRUE(NavigateToURL(shell(), url));
     EXPECT_EQ(1, installer.will_start_called());
     EXPECT_EQ(1, installer.will_process_called());
-    EXPECT_FALSE(observer.is_same_page());
+    EXPECT_FALSE(observer.is_same_document());
+  }
+}
+
+// Record and list the navigations that are started and finished.
+class NavigationLogger : public WebContentsObserver {
+ public:
+  NavigationLogger(WebContents* web_contents)
+      : WebContentsObserver(web_contents) {}
+
+  void DidStartNavigation(NavigationHandle* navigation_handle) override {
+    started_navigation_urls_.push_back(navigation_handle->GetURL());
+  }
+
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+    finished_navigation_urls_.push_back(navigation_handle->GetURL());
+  }
+
+  const std::vector<GURL>& started_navigation_urls() const {
+    return started_navigation_urls_;
+  }
+  const std::vector<GURL>& finished_navigation_urls() const {
+    return finished_navigation_urls_;
+  }
+
+ private:
+  std::vector<GURL> started_navigation_urls_;
+  std::vector<GURL> finished_navigation_urls_;
+};
+
+// There was a bug without PlzNavigate that happened when a navigation was
+// blocked after a redirect. Blink didn't know about the redirect and tried
+// to commit an error page to the pre-redirect URL. The result was that the
+// NavigationHandle was not found on the browser-side and a new NavigationHandle
+// created for committing the error page. This test makes sure that only one
+// NavigationHandle is used for committing the error page.
+// See https://crbug.com/695421
+IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, BlockedOnRedirect) {
+  // Returning BLOCK_REQUEST is not supported yet without PlzNavigate. It will
+  // call a CHECK(false).
+  // TODO(arthursonzogni) Provide support for BLOCK_REQUEST without PlzNavigate
+  // once https://crbug.com/695421 is fixed.
+  if (!IsBrowserSideNavigationEnabled())
+    return;
+
+  const GURL kUrl = embedded_test_server()->GetURL("/title1.html");
+  const GURL kRedirectingUrl =
+      embedded_test_server()->GetURL("/server-redirect?" + kUrl.spec());
+
+  // Set up a NavigationThrottle that will block the navigation in
+  // WillRedirectRequest.
+  TestNavigationThrottleInstaller installer(
+      shell()->web_contents(), NavigationThrottle::PROCEED,
+      NavigationThrottle::BLOCK_REQUEST, NavigationThrottle::PROCEED);
+  NavigationHandleObserver observer(shell()->web_contents(), kRedirectingUrl);
+  NavigationLogger logger(shell()->web_contents());
+
+  // Try to navigate to the url. The navigation should be canceled and the
+  // NavigationHandle should have the right error code.
+  EXPECT_FALSE(NavigateToURL(shell(), kRedirectingUrl));
+  // EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, observer.net_error_code());
+
+  // Only one navigation is expected to happen.
+  std::vector<GURL> started_navigation = {kRedirectingUrl};
+  EXPECT_EQ(started_navigation, logger.started_navigation_urls());
+
+  std::vector<GURL> finished_navigation = {kUrl};
+  EXPECT_EQ(finished_navigation, logger.finished_navigation_urls());
+}
+
+// Tests that when a navigation starts while there's an existing one, the first
+// one has the right error code set on its navigation handle.
+IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, ErrorCodeOnCancel) {
+  GURL slow_url = embedded_test_server()->GetURL("/slow?60");
+  NavigationHandleObserver observer(shell()->web_contents(), slow_url);
+  shell()->LoadURL(slow_url);
+
+  GURL url2(embedded_test_server()->GetURL("/title1.html"));
+  TestNavigationObserver same_tab_observer(
+      shell()->web_contents(), 1);
+  shell()->LoadURL(url2);
+  same_tab_observer.Wait();
+
+  EXPECT_EQ(net::ERR_ABORTED, observer.net_error_code());
+}
+
+// This class allows running tests with PlzNavigate enabled, regardless of
+// default test configuration.
+class PlzNavigateNavigationHandleImplBrowserTest : public ContentBrowserTest {
+ public:
+  PlzNavigateNavigationHandleImplBrowserTest() {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(switches::kEnableBrowserSideNavigation);
+  }
+};
+
+// Test to verify that error pages caused by NavigationThrottle blocking a
+// request from being made are properly committed in the original process
+// that requested the navigation.
+IN_PROC_BROWSER_TEST_F(PlzNavigateNavigationHandleImplBrowserTest,
+                       ErrorPageBlockedNavigation) {
+  host_resolver()->AddRule("*", "127.0.0.1");
+  SetupCrossSiteRedirector(embedded_test_server());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL start_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  GURL blocked_url(embedded_test_server()->GetURL("bar.com", "/title2.html"));
+
+  {
+    NavigationHandleObserver observer(shell()->web_contents(), start_url);
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+    EXPECT_TRUE(observer.has_committed());
+    EXPECT_FALSE(observer.is_error());
+  }
+
+  scoped_refptr<SiteInstance> site_instance =
+      shell()->web_contents()->GetMainFrame()->GetSiteInstance();
+
+  TestNavigationThrottleInstaller installer(
+      shell()->web_contents(), NavigationThrottle::BLOCK_REQUEST,
+      NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+
+  {
+    NavigationHandleObserver observer(shell()->web_contents(), blocked_url);
+    EXPECT_FALSE(NavigateToURL(shell(), blocked_url));
+    EXPECT_TRUE(observer.has_committed());
+    EXPECT_TRUE(observer.is_error());
+    EXPECT_EQ(site_instance,
+              shell()->web_contents()->GetMainFrame()->GetSiteInstance());
+  }
+}
+
+// Test to verify that error pages caused by network error or other
+// recoverable error are properly committed in the process for the
+// destination URL.
+IN_PROC_BROWSER_TEST_F(PlzNavigateNavigationHandleImplBrowserTest,
+                       ErrorPageNetworkError) {
+  host_resolver()->AddRule("*", "127.0.0.1");
+  SetupCrossSiteRedirector(embedded_test_server());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL start_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  GURL error_url(
+      net::URLRequestFailedJob::GetMockHttpUrl(net::ERR_CONNECTION_RESET));
+  EXPECT_NE(start_url.host(), error_url.host());
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::Bind(&net::URLRequestFailedJob::AddUrlHandler));
+
+  {
+    NavigationHandleObserver observer(shell()->web_contents(), start_url);
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+    EXPECT_TRUE(observer.has_committed());
+    EXPECT_FALSE(observer.is_error());
+  }
+
+  scoped_refptr<SiteInstance> site_instance =
+      shell()->web_contents()->GetMainFrame()->GetSiteInstance();
+  {
+    NavigationHandleObserver observer(shell()->web_contents(), error_url);
+    EXPECT_FALSE(NavigateToURL(shell(), error_url));
+    EXPECT_TRUE(observer.has_committed());
+    EXPECT_TRUE(observer.is_error());
+    EXPECT_NE(site_instance,
+              shell()->web_contents()->GetMainFrame()->GetSiteInstance());
   }
 }
 

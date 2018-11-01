@@ -10,7 +10,7 @@
 
 namespace blink {
 
-class MediaConfiguration;
+class MediaDecodingConfiguration;
 class ScriptPromise;
 class ScriptState;
 
@@ -22,7 +22,7 @@ class MediaCapabilities final
  public:
   MediaCapabilities();
 
-  ScriptPromise query(ScriptState*, const MediaConfiguration&);
+  ScriptPromise decodingInfo(ScriptState*, const MediaDecodingConfiguration&);
 
   DECLARE_VIRTUAL_TRACE();
 };

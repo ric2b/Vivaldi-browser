@@ -6,7 +6,6 @@
 #define SERVICES_UI_WS_WINDOW_SERVER_SERVICE_TEST_BASE_H_
 
 #include "base/macros.h"
-#include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/service_test.h"
 
 namespace ui {
@@ -17,8 +16,10 @@ class WindowServerServiceTestBase : public service_manager::test::ServiceTest {
   WindowServerServiceTestBase();
   ~WindowServerServiceTestBase() override;
 
-  virtual bool OnConnect(const service_manager::Identity& remote_identity,
-                         service_manager::InterfaceRegistry* registry) = 0;
+  virtual void OnBindInterface(
+      const service_manager::ServiceInfo& source_info,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle interface_pipe) = 0;
 
  private:
   // service_manager::test::ServiceTest:

@@ -13,6 +13,7 @@
 #include "build/build_config.h"
 #include "components/history/core/browser/download_database.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/history/core/browser/typed_url_sync_metadata_database.h"
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/visit_database.h"
 #include "components/history/core/browser/visitsegment_database.h"
@@ -47,6 +48,7 @@ class HistoryDatabase : public DownloadDatabase,
                         public AndroidURLsDatabase,
                         public AndroidCacheDatabase,
 #endif
+                        public TypedURLSyncMetadataDatabase,
                         public URLDatabase,
                         public VisitDatabase,
                         public VisitSegmentDatabase,
@@ -172,8 +174,12 @@ class HistoryDatabase : public DownloadDatabase,
 #endif
   friend class ::InMemoryURLIndexTest;
 
-  // Overridden from URLDatabase:
+  // Overridden from URLDatabase, DownloadDatabase, VisitDatabase,
+  // VisitSegmentDatabase and TypedURLSyncMetadataDatabase.
   sql::Connection& GetDB() override;
+
+  // Overridden from TypedURLSyncMetadataDatabase.
+  sql::MetaTable& GetMetaTable() override;
 
   // Migration -----------------------------------------------------------------
 

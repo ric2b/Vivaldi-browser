@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "headless/public/util/managed_dispatch_url_request_job.h"
 #include "headless/public/util/url_fetcher.h"
 #include "net/base/net_errors.h"
@@ -24,9 +25,92 @@ class HttpResponseHeaders;
 class IOBuffer;
 }  // namespace net
 
+namespace content {
+class ResourceRequestInfo;
+}  // namespace content
+
 namespace headless {
 
 class URLRequestDispatcher;
+
+// Wrapper around net::URLRequest with helpers to access select metadata.
+class Request {
+ public:
+  virtual const net::URLRequest* GetURLRequest() const = 0;
+
+  // The frame from which the request came from.
+  virtual int GetFrameTreeNodeId() const = 0;
+
+  // The devtools agent host id for the page where the request came from.
+  virtual std::string GetDevToolsAgentHostId() const = 0;
+
+  enum class ResourceType {
+    MAIN_FRAME = 0,
+    SUB_FRAME = 1,
+    STYLESHEET = 2,
+    SCRIPT = 3,
+    IMAGE = 4,
+    FONT_RESOURCE = 5,
+    SUB_RESOURCE = 6,
+    OBJECT = 7,
+    MEDIA = 8,
+    WORKER = 9,
+    SHARED_WORKER = 10,
+    PREFETCH = 11,
+    FAVICON = 12,
+    XHR = 13,
+    PING = 14,
+    SERVICE_WORKER = 15,
+    CSP_REPORT = 16,
+    PLUGIN_RESOURCE = 17,
+    LAST_TYPE
+  };
+
+  virtual ResourceType GetResourceType() const = 0;
+
+ protected:
+  Request() {}
+  virtual ~Request() {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(Request);
+};
+
+// Details of a pending request received by GenericURLRequestJob which must be
+// either Allowed, Blocked, Modified or have it's response Mocked.
+class PendingRequest {
+ public:
+  virtual const Request* GetRequest() const = 0;
+
+  // Allows the request to proceed as normal.
+  virtual void AllowRequest() = 0;
+
+  // Causes the request to fail with the specified |error|.
+  virtual void BlockRequest(net::Error error) = 0;
+
+  // Allows the request to be completely re-written.
+  virtual void ModifyRequest(
+      const GURL& url,
+      const std::string& method,
+      const std::string& post_data,
+      const net::HttpRequestHeaders& request_headers) = 0;
+
+  struct MockResponseData {
+    int http_response_code = 0;
+    std::string response_data;
+  };
+
+  // Instead of fetching the request, |mock_response| is returned instead.
+  virtual void MockResponse(
+      std::unique_ptr<MockResponseData> mock_response) = 0;
+
+ protected:
+  PendingRequest() {}
+  virtual ~PendingRequest() {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PendingRequest);
+};
 
 // Intended for use in a protocol handler, this ManagedDispatchURLRequestJob has
 // the following features:
@@ -34,62 +118,32 @@ class URLRequestDispatcher;
 // 1. The delegate can extension observe / cancel and redirect requests
 // 2. The delegate can optionally provide the results, otherwise the specifed
 //    fetcher is invoked.
-class GenericURLRequestJob : public ManagedDispatchURLRequestJob,
-                             public URLFetcher::ResultListener {
+class HEADLESS_EXPORT GenericURLRequestJob
+    : public ManagedDispatchURLRequestJob,
+      public URLFetcher::ResultListener,
+      public PendingRequest,
+      public Request {
  public:
-  enum class RewriteResult { kAllow, kDeny, kFailure };
-  using RewriteCallback = std::function<
-      void(RewriteResult result, const GURL& url, const std::string& method)>;
-
-  struct HttpResponse {
-    GURL final_url;
-    int http_response_code;
-
-    // The HTTP headers and response body. Note the lifetime of |response_data|
-    // is expected to outlive the GenericURLRequestJob.
-    const char* response_data;  // NOT OWNED
-    size_t response_data_size;
-  };
-
   class Delegate {
    public:
-    // Allows the delegate to rewrite the URL for a given request. Return true
-    // to signal that the rewrite is in progress and |callback| will be called
-    // with the result, or false to indicate that no rewriting is necessary.
-    // Called on an arbitrary thread.
-    virtual bool BlockOrRewriteRequest(const GURL& url,
-                                       const std::string& devtools_id,
-                                       const std::string& method,
-                                       const std::string& referrer,
-                                       RewriteCallback callback);
-    // TODO(alexclarke): Make the above pure virtual and remove this.
-    virtual bool BlockOrRewriteRequest(const GURL& url,
-                                       const std::string& method,
-                                       const std::string& referrer,
-                                       RewriteCallback callback);
+    // Notifies the delegate of an PendingRequest which must either be
+    // allowed, blocked, modifed or it's response mocked. Called on an arbitrary
+    // thread.
+    virtual void OnPendingRequest(PendingRequest* pending_request) = 0;
 
-    // Allows the delegate to synchronously fulfill a request with a reply.
-    // Called on an arbitrary thread.
-    virtual const HttpResponse* MaybeMatchResource(
-        const GURL& url,
-        const std::string& devtools_id,
-        const std::string& method,
-        const net::HttpRequestHeaders& request_headers);
-    // TODO(alexclarke): Make the above pure virtual and remove this.
-    virtual const HttpResponse* MaybeMatchResource(
-        const GURL& url,
-        const std::string& method,
-        const net::HttpRequestHeaders& request_headers);
+    // Notifies the delegate of any fetch failure. Called on an arbitrary
+    // thread.
+    virtual void OnResourceLoadFailed(const Request* request,
+                                      net::Error error) = 0;
 
     // Signals that a resource load has finished. Called on an arbitrary thread.
-    virtual void OnResourceLoadComplete(const GURL& final_url,
-                                        const std::string& devtools_id,
-                                        const std::string& mime_type,
-                                        int http_response_code);
-    // TODO(alexclarke): Make the above pure virtual and remove this.
-    virtual void OnResourceLoadComplete(const GURL& final_url,
-                                        const std::string& mime_type,
-                                        int http_response_code) {}
+    virtual void OnResourceLoadComplete(
+        const Request* request,
+        const GURL& final_url,
+        int http_response_code,
+        scoped_refptr<net::HttpResponseHeaders> response_headers,
+        const char* body,
+        size_t body_size) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -122,20 +176,40 @@ class GenericURLRequestJob : public ManagedDispatchURLRequestJob,
                        const char* body,
                        size_t body_size) override;
 
+ protected:
+  // Request implementation:
+  const net::URLRequest* GetURLRequest() const override;
+  int GetFrameTreeNodeId() const override;
+  std::string GetDevToolsAgentHostId() const override;
+  ResourceType GetResourceType() const override;
+
+  // PendingRequest implementation:
+  const Request* GetRequest() const override;
+  void AllowRequest() override;
+  void BlockRequest(net::Error error) override;
+  void ModifyRequest(const GURL& url,
+                     const std::string& method,
+                     const std::string& post_data,
+                     const net::HttpRequestHeaders& request_headers) override;
+  void MockResponse(std::unique_ptr<MockResponseData> mock_response) override;
+
  private:
   void PrepareCookies(const GURL& rewritten_url,
                       const std::string& method,
-                      const url::Origin& site_for_cookies);
-
+                      const url::Origin& site_for_cookies,
+                      const base::Closure& done_callback);
   void OnCookiesAvailable(const GURL& rewritten_url,
                           const std::string& method,
+                          const base::Closure& done_callback,
                           const net::CookieList& cookie_list);
 
   std::unique_ptr<URLFetcher> url_fetcher_;
   net::HttpRequestHeaders extra_request_headers_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
-  std::string devtools_request_id_;
+  scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner_;
+  std::unique_ptr<MockResponseData> mock_response_;
   Delegate* delegate_;          // Not owned.
+  const content::ResourceRequestInfo* request_resource_info_;  // Not owned.
   const char* body_ = nullptr;  // Not owned.
   int http_response_code_ = 0;
   size_t body_size_ = 0;

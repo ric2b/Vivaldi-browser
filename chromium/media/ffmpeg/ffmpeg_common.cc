@@ -540,6 +540,15 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
   config->Initialize(codec, profile, format, color_space, coded_size,
                      visible_rect, natural_size, extra_data,
                      GetEncryptionScheme(stream));
+
+  const AVCodecParameters* codec_parameters = stream->codecpar;
+  config->set_color_space_info(VideoColorSpace(
+      codec_parameters->color_primaries, codec_parameters->color_trc,
+      codec_parameters->color_space,
+      codec_parameters->color_range == AVCOL_RANGE_JPEG
+          ? gfx::ColorSpace::RangeID::FULL
+          : gfx::ColorSpace::RangeID::LIMITED));
+
   return true;
 }
 
@@ -733,6 +742,12 @@ ColorSpace AVColorSpaceToColorSpace(AVColorSpace color_space,
       DVLOG(1) << "Unknown AVColorSpace: " << color_space;
   }
   return COLOR_SPACE_UNSPECIFIED;
+}
+
+std::string AVErrorToString(int errnum) {
+  char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+  av_strerror(errnum, errbuf, AV_ERROR_MAX_STRING_SIZE);
+  return std::string(errbuf);
 }
 
 int32_t HashCodecName(const char* codec_name) {

@@ -6,17 +6,17 @@
 #define PresentationConnectionCallbacks_h
 
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebCallbacks.h"
 #include "public/platform/modules/presentation/WebPresentationConnectionCallbacks.h"
-#include "wtf/Noncopyable.h"
 
 namespace blink {
 
 class PresentationConnection;
 class PresentationRequest;
 class ScriptPromiseResolver;
-struct WebPresentationSessionInfo;
 struct WebPresentationError;
+struct WebPresentationInfo;
 
 // PresentationConnectionCallbacks extends WebCallbacks to resolve the
 // underlying promise depending on the result passed to the callback. It takes
@@ -29,16 +29,16 @@ class PresentationConnectionCallbacks final
   ~PresentationConnectionCallbacks() override = default;
 
   // WebCallbacks implementation
-  void onSuccess(const WebPresentationSessionInfo&) override;
-  void onError(const WebPresentationError&) override;
+  void OnSuccess(const WebPresentationInfo&) override;
+  void OnError(const WebPresentationError&) override;
 
   // WebPresentationConnectionCallbacks implementation
-  WebPresentationConnection* getConnection() override;
+  WebPresentationConnection* GetConnection() override;
 
  private:
-  Persistent<ScriptPromiseResolver> m_resolver;
-  Persistent<PresentationRequest> m_request;
-  WeakPersistent<PresentationConnection> m_connection;
+  Persistent<ScriptPromiseResolver> resolver_;
+  Persistent<PresentationRequest> request_;
+  WeakPersistent<PresentationConnection> connection_;
 
   WTF_MAKE_NONCOPYABLE(PresentationConnectionCallbacks);
 };

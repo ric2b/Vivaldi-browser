@@ -383,11 +383,20 @@ AutomationNodeImpl.prototype = {
                           maxHeight: maxHeight });
   },
 
+  hitTest: function(x, y, eventToFire) {
+    // Convert from global to tree-relative coordinates.
+    var location = GetLocation(this.treeID, GetRootID(this.treeID));
+    this.performAction_('hitTest',
+                        { x: x - location.left,
+                          y: y - location.top,
+                          eventToFire: eventToFire });
+  },
+
   makeVisible: function() {
     this.performAction_('makeVisible');
   },
 
-    resumeMedia: function() {
+  resumeMedia: function() {
     this.performAction_('resumeMedia');
   },
 
@@ -728,6 +737,7 @@ var intAttributes = [
 
 var nodeRefAttributes = [
     ['activedescendantId', 'activeDescendant'],
+    ['inPageLinkTargetId', 'inPageLinkTarget'],
     ['nextOnLineId', 'nextOnLine'],
     ['previousOnLineId', 'previousOnLine'],
     ['tableColumnHeaderId', 'tableColumnHeader'],
@@ -1078,6 +1088,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'findAll',
     'focus',
     'getImageData',
+    'hitTest',
     'makeVisible',
     'matches',
     'resumeMedia',

@@ -3,11 +3,15 @@
 // found in the LICENSE file.
 
 #include "cc/tiles/image_controller.h"
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/thread_checker_impl.h"
 #include "cc/test/skia_common.h"
 #include "cc/tiles/image_decode_cache.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,7 +26,7 @@ class TestWorkerThread : public base::SimpleThread {
 
   void Run() override {
     for (;;) {
-      base::Closure task;
+      base::OnceClosure task;
       {
         base::AutoLock hold(lock_);
         if (shutdown_)
@@ -33,10 +37,10 @@ class TestWorkerThread : public base::SimpleThread {
           continue;
         }
 
-        task = queue_.front();
+        task = std::move(queue_.front());
         queue_.erase(queue_.begin());
       }
-      task.Run();
+      std::move(task).Run();
     }
   }
 
@@ -46,16 +50,16 @@ class TestWorkerThread : public base::SimpleThread {
     condition_.Signal();
   }
 
-  void PostTask(const base::Closure& task) {
+  void PostTask(base::OnceClosure task) {
     base::AutoLock hold(lock_);
-    queue_.push_back(task);
+    queue_.push_back(std::move(task));
     condition_.Signal();
   }
 
  private:
   base::Lock lock_;
   base::ConditionVariable condition_;
-  std::vector<base::Closure> queue_;
+  std::vector<base::OnceClosure> queue_;
   bool shutdown_ = false;
 };
 
@@ -64,15 +68,15 @@ class WorkerTaskRunner : public base::SequencedTaskRunner {
   WorkerTaskRunner() { thread_.Start(); }
 
   bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
-                                  const base::Closure& task,
+                                  base::OnceClosure task,
                                   base::TimeDelta delay) override {
-    return PostDelayedTask(from_here, task, delay);
+    return PostDelayedTask(from_here, std::move(task), delay);
   }
 
   bool PostDelayedTask(const tracked_objects::Location& from_here,
-                       const base::Closure& task,
+                       base::OnceClosure task,
                        base::TimeDelta delay) override {
-    thread_.PostTask(task);
+    thread_.PostTask(std::move(task));
     return true;
   }
 
@@ -124,6 +128,7 @@ class TestableCache : public ImageDecodeCache {
   void ReduceCacheUsage() override {}
   void SetShouldAggressivelyFreeResources(
       bool aggressively_free_resources) override {}
+  void ClearCache() override {}
 
   int number_of_refs() const { return number_of_refs_; }
   void SetTaskToUse(scoped_refptr<TileTask> task) { task_to_use_ = task; }
@@ -137,12 +142,12 @@ class TestableCache : public ImageDecodeCache {
 class DecodeClient {
  public:
   DecodeClient() {}
-  void Callback(const base::Closure& quit_closure,
+  void Callback(base::OnceClosure quit_closure,
                 ImageController::ImageDecodeRequestId id,
                 ImageController::ImageDecodeResult result) {
     id_ = id;
     result_ = result;
-    quit_closure.Run();
+    std::move(quit_closure).Run();
   }
 
   ImageController::ImageDecodeRequestId id() { return id_; }
@@ -212,7 +217,8 @@ class BlockingTask : public TileTask {
  private:
   ~BlockingTask() override = default;
 
-  base::ThreadChecker thread_checker_;
+  // Use ThreadCheckerImpl, so that release builds also get correct behavior.
+  base::ThreadCheckerImpl thread_checker_;
   bool has_run_ = false;
   base::Lock lock_;
   base::ConditionVariable run_cv_;
@@ -222,8 +228,7 @@ class BlockingTask : public TileTask {
 };
 
 // For tests that exercise image controller's thread, this is the timeout value
-// to
-// allow the worker thread to do its work.
+// to allow the worker thread to do its work.
 int kDefaultTimeoutSeconds = 10;
 
 class ImageControllerTest : public testing::Test {
@@ -261,7 +266,8 @@ class ImageControllerTest : public testing::Test {
   void RunOrTimeout(base::RunLoop* run_loop) {
     task_runner_->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&ImageControllerTest::Timeout, base::Unretained(run_loop)),
+        base::BindOnce(&ImageControllerTest::Timeout,
+                       base::Unretained(run_loop)),
         base::TimeDelta::FromSeconds(kDefaultTimeoutSeconds));
     run_loop->Run();
   }

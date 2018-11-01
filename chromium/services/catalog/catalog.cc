@@ -24,8 +24,7 @@
 #include "services/catalog/constants.h"
 #include "services/catalog/entry_cache.h"
 #include "services/catalog/instance.h"
-#include "services/service_manager/public/cpp/connection.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
 
 namespace catalog {
@@ -37,8 +36,8 @@ const char kCatalogServiceEmbeddedKey[] = "embedded";
 const char kCatalogServiceExecutableKey[] = "executable";
 const char kCatalogServiceManifestKey[] = "manifest";
 
-base::LazyInstance<std::unique_ptr<base::Value>> g_default_static_manifest =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<std::unique_ptr<base::Value>>::DestructorAtExit
+    g_default_static_manifest = LAZY_INSTANCE_INITIALIZER;
 
 void LoadCatalogManifestIntoCache(const base::Value* root, EntryCache* cache) {
   DCHECK(root);
@@ -112,20 +111,24 @@ void LoadCatalogManifestIntoCache(const base::Value* root, EntryCache* cache) {
 
 class Catalog::ServiceImpl : public service_manager::Service {
  public:
-  explicit ServiceImpl(Catalog* catalog) : catalog_(catalog) {}
+  explicit ServiceImpl(Catalog* catalog) : catalog_(catalog) {
+    registry_.AddInterface<mojom::Catalog>(catalog_);
+    registry_.AddInterface<filesystem::mojom::Directory>(catalog_);
+    registry_.AddInterface<service_manager::mojom::Resolver>(catalog_);
+  }
   ~ServiceImpl() override {}
 
   // service_manager::Service:
-  bool OnConnect(const service_manager::ServiceInfo& remote_info,
-                 service_manager::InterfaceRegistry* registry) override {
-    registry->AddInterface<mojom::Catalog>(catalog_);
-    registry->AddInterface<filesystem::mojom::Directory>(catalog_);
-    registry->AddInterface<service_manager::mojom::Resolver>(catalog_);
-    return true;
+  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle interface_pipe) override {
+    registry_.BindInterface(source_info.identity, interface_name,
+                            std::move(interface_pipe));
   }
 
  private:
   Catalog* const catalog_;
+  service_manager::BinderRegistry registry_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceImpl);
 };

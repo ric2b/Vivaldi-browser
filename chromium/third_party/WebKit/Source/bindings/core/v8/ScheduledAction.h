@@ -32,12 +32,11 @@
 #define ScheduledAction_h
 
 #include "bindings/core/v8/ScopedPersistent.h"
-#include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8PersistentValueVector.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Forward.h"
 #include "v8/include/v8.h"
-#include "wtf/Forward.h"
 
 namespace blink {
 
@@ -50,20 +49,20 @@ class ScheduledAction final
   WTF_MAKE_NONCOPYABLE(ScheduledAction);
 
  public:
-  static ScheduledAction* create(ScriptState*,
+  static ScheduledAction* Create(ScriptState*,
                                  ExecutionContext* target,
                                  const ScriptValue& handler,
                                  const Vector<ScriptValue>& arguments);
-  static ScheduledAction* create(ScriptState*,
+  static ScheduledAction* Create(ScriptState*,
                                  ExecutionContext* target,
                                  const String& handler);
 
   ~ScheduledAction();
-  void dispose();
+  void Dispose();
 
-  DECLARE_TRACE();
+  DEFINE_INLINE_TRACE() {}
 
-  void execute(ExecutionContext*);
+  void Execute(ExecutionContext*);
 
  private:
   ScheduledAction(ScriptState*,
@@ -71,14 +70,17 @@ class ScheduledAction final
                   const Vector<ScriptValue>& arguments);
   ScheduledAction(ScriptState*, const String& handler);
 
-  void execute(LocalFrame*);
-  void execute(WorkerGlobalScope*);
-  void createLocalHandlesForArgs(Vector<v8::Local<v8::Value>>* handles);
+  // Creates an empty ScheduledAction.
+  explicit ScheduledAction(ScriptState*);
 
-  ScriptStateProtectingContext m_scriptState;
-  ScopedPersistent<v8::Function> m_function;
-  V8PersistentValueVector<v8::Value> m_info;
-  ScriptSourceCode m_code;
+  void Execute(LocalFrame*);
+  void Execute(WorkerGlobalScope*);
+  void CreateLocalHandlesForArgs(Vector<v8::Local<v8::Value>>* handles);
+
+  ScriptStateProtectingContext script_state_;
+  ScopedPersistent<v8::Function> function_;
+  V8PersistentValueVector<v8::Value> info_;
+  String code_;
 };
 
 }  // namespace blink

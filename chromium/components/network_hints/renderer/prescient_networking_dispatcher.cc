@@ -5,10 +5,6 @@
 #include "components/network_hints/renderer/prescient_networking_dispatcher.h"
 
 #include "base/logging.h"
-#include "components/network_hints/common/network_hints_messages.h"
-#include "content/public/renderer/render_thread.h"
-
-using content::RenderThread;
 
 namespace network_hints {
 
@@ -18,28 +14,20 @@ PrescientNetworkingDispatcher::PrescientNetworkingDispatcher() {
 PrescientNetworkingDispatcher::~PrescientNetworkingDispatcher() {
 }
 
-void PrescientNetworkingDispatcher::prefetchDNS(
+void PrescientNetworkingDispatcher::PrefetchDNS(
     const blink::WebString& hostname) {
-  VLOG(2) << "Prefetch DNS: " << hostname.utf8();
-  if (hostname.isEmpty())
+  VLOG(2) << "Prefetch DNS: " << hostname.Utf8();
+  if (hostname.IsEmpty())
     return;
 
-  std::string hostname_utf8 = hostname.utf8();
+  std::string hostname_utf8 = hostname.Utf8();
   dns_prefetch_.Resolve(hostname_utf8.data(), hostname_utf8.length());
 }
 
-void PrescientNetworkingDispatcher::preconnect(const blink::WebURL& url,
+void PrescientNetworkingDispatcher::Preconnect(const blink::WebURL& url,
                                                bool allow_credentials) {
-  VLOG(2) << "Preconnect: " << url.string().utf8();
+  VLOG(2) << "Preconnect: " << url.GetString().Utf8();
   preconnect_.Preconnect(url, allow_credentials);
-}
-
-void PrescientNetworkingDispatcher::sendNavigationHint(
-    const blink::WebURL& url,
-    blink::WebNavigationHintType type) {
-  if (!url.isValid())
-    return;
-  RenderThread::Get()->Send(new NetworkHintsMsg_NavigationHint(url, type));
 }
 
 }  // namespace network_hints

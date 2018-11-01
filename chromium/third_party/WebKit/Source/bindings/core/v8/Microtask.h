@@ -33,9 +33,9 @@
 
 #include "core/CoreExport.h"
 #include "platform/WebTaskRunner.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Functional.h"
 #include "v8/include/v8.h"
-#include "wtf/Allocator.h"
-#include "wtf/Functional.h"
 
 namespace blink {
 
@@ -65,12 +65,12 @@ class CORE_EXPORT Microtask {
   STATIC_ONLY(Microtask);
 
  public:
-  static void performCheckpoint(v8::Isolate*);
+  static void PerformCheckpoint(v8::Isolate*);
 
   // TODO(jochen): Make all microtasks pass in the ScriptState they want to be
   // executed in. Until then, all microtasks have to keep track of their
   // ScriptState themselves.
-  static void enqueueMicrotask(std::unique_ptr<WTF::Closure>);
+  static void EnqueueMicrotask(std::unique_ptr<WTF::Closure>);
 };
 
 }  // namespace blink

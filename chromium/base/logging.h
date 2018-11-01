@@ -642,7 +642,7 @@ inline typename std::enable_if<
         std::is_enum<T>::value,
     void>::type
 MakeCheckOpValueString(std::ostream* os, const T& v) {
-  (*os) << static_cast<typename base::underlying_type<T>::type>(v);
+  (*os) << static_cast<typename std::underlying_type<T>::type>(v);
 }
 
 // We need an explicit overload for std::nullptr_t.
@@ -746,13 +746,6 @@ DEFINE_CHECK_OP_IMPL(GT, > )
 #define DVPLOG_IF(verboselevel, condition) EAT_STREAM_PARAMETERS
 
 #endif  // DCHECK_IS_ON()
-
-// DEBUG_MODE is for runtime uses like
-//   if (DEBUG_MODE) foo.CheckThatFoo();
-// We tie its state to DCHECK_IS_ON().
-//
-// For compile-time checks, #if DCHECK_IS_ON() can be used.
-enum { DEBUG_MODE = DCHECK_IS_ON() };
 
 #define DLOG(severity)                                          \
   LAZY_STREAM(LOG_STREAM(severity), DLOG_IS_ON(severity))

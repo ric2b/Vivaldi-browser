@@ -10,6 +10,16 @@
 #include <netdb.h>
 #endif
 
+#if defined(OS_POSIX)
+#include <netinet/in.h>
+#if !defined(OS_NACL)
+#include <net/if.h>
+#if !defined(OS_ANDROID)
+#include <ifaddrs.h>
+#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_NACL)
+#endif  // defined(OS_POSIX)
+
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -67,6 +77,10 @@
 
 #if defined(OS_WIN)
 #include "net/base/winsock_init.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "net/android/network_library.h"
 #endif
 
 namespace net {
@@ -217,39 +231,6 @@ bool ResemblesMulticastDNSName(const std::string& hostname) {
                         kSuffix, kSuffixLenTrimmed);
 }
 
-// Attempts to connect a UDP socket to |dest|:53.
-bool IsGloballyReachable(const IPAddress& dest,
-                         const NetLogWithSource& net_log) {
-  // TODO(eroman): Remove ScopedTracker below once crbug.com/455942 is fixed.
-  tracked_objects::ScopedTracker tracking_profile_1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("455942 IsGloballyReachable"));
-
-  std::unique_ptr<DatagramClientSocket> socket(
-      ClientSocketFactory::GetDefaultFactory()->CreateDatagramClientSocket(
-          DatagramSocket::DEFAULT_BIND, RandIntCallback(), net_log.net_log(),
-          net_log.source()));
-  int rv = socket->Connect(IPEndPoint(dest, 53));
-  if (rv != OK)
-    return false;
-  IPEndPoint endpoint;
-  rv = socket->GetLocalAddress(&endpoint);
-  if (rv != OK)
-    return false;
-  DCHECK_EQ(ADDRESS_FAMILY_IPV6, endpoint.GetFamily());
-  const IPAddress& address = endpoint.address();
-
-  bool is_link_local =
-      (address.bytes()[0] == 0xFE) && ((address.bytes()[1] & 0xC0) == 0x80);
-  if (is_link_local)
-    return false;
-
-  const uint8_t kTeredoPrefix[] = {0x20, 0x01, 0, 0};
-  if (IPAddressStartsWith(address, kTeredoPrefix))
-    return false;
-
-  return true;
-}
-
 // Provide a common macro to simplify code and readability. We must use a
 // macro as the underlying HISTOGRAM macro creates static variables.
 #define DNS_HISTOGRAM(name, time) UMA_HISTOGRAM_CUSTOM_TIMES(name, time, \
@@ -335,6 +316,60 @@ bool IsAllIPv4Loopback(const AddressList& addresses) {
     }
   }
   return true;
+}
+
+// Returns true if it can determine that only loopback addresses are configured.
+// i.e. if only 127.0.0.1 and ::1 are routable.
+// Also returns false if it cannot determine this.
+bool HaveOnlyLoopbackAddresses() {
+#if defined(OS_ANDROID)
+  return android::HaveOnlyLoopbackAddresses();
+#elif defined(OS_NACL)
+  NOTIMPLEMENTED();
+  return false;
+#elif defined(OS_POSIX)
+  struct ifaddrs* interface_addr = NULL;
+  int rv = getifaddrs(&interface_addr);
+  if (rv != 0) {
+    DVLOG(1) << "getifaddrs() failed with errno = " << errno;
+    return false;
+  }
+
+  bool result = true;
+  for (struct ifaddrs* interface = interface_addr;
+       interface != NULL;
+       interface = interface->ifa_next) {
+    if (!(IFF_UP & interface->ifa_flags))
+      continue;
+    if (IFF_LOOPBACK & interface->ifa_flags)
+      continue;
+    const struct sockaddr* addr = interface->ifa_addr;
+    if (!addr)
+      continue;
+    if (addr->sa_family == AF_INET6) {
+      // Safe cast since this is AF_INET6.
+      const struct sockaddr_in6* addr_in6 =
+          reinterpret_cast<const struct sockaddr_in6*>(addr);
+      const struct in6_addr* sin6_addr = &addr_in6->sin6_addr;
+      if (IN6_IS_ADDR_LOOPBACK(sin6_addr) || IN6_IS_ADDR_LINKLOCAL(sin6_addr))
+        continue;
+    }
+    if (addr->sa_family != AF_INET6 && addr->sa_family != AF_INET)
+      continue;
+
+    result = false;
+    break;
+  }
+  freeifaddrs(interface_addr);
+  return result;
+#elif defined(OS_WIN)
+  // TODO(wtc): implement with the GetAdaptersAddresses function.
+  NOTIMPLEMENTED();
+  return false;
+#else
+  NOTIMPLEMENTED();
+  return false;
+#endif  // defined(various platforms)
 }
 
 // Creates NetLog parameters when the resolve failed.
@@ -2011,7 +2046,7 @@ HostResolverImpl::HostResolverImpl(
       net_log_(net_log),
       received_dns_config_(false),
       num_dns_failures_(0),
-      default_address_family_(ADDRESS_FAMILY_UNSPECIFIED),
+      assume_ipv6_failure_on_wifi_(false),
       use_local_ipv6_(false),
       last_ipv6_probe_result_(true),
       resolved_known_ipv6_hostname_(false),
@@ -2088,7 +2123,8 @@ int HostResolverImpl::ResolveHelper(const Key& key,
   }
   if (ServeFromCache(key, info, &net_error, addresses, allow_stale,
                      stale_info)) {
-    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_CACHE_HIT);
+    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_CACHE_HIT,
+                            addresses->CreateNetLogCallback());
     // |ServeFromCache()| will set |*stale_info| as needed.
     RunCacheHitCallbacks(key, info);
     return net_error;
@@ -2096,7 +2132,8 @@ int HostResolverImpl::ResolveHelper(const Key& key,
   // TODO(szym): Do not do this if nsswitch.conf instructs not to.
   // http://crbug.com/117655
   if (ServeFromHosts(key, info, addresses)) {
-    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_HOSTS_HIT);
+    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_HOSTS_HIT,
+                            addresses->CreateNetLogCallback());
     MakeNotStale(stale_info);
     return OK;
   }
@@ -2185,13 +2222,13 @@ int HostResolverImpl::ResolveStaleFromCache(
   return rv;
 }
 
-void HostResolverImpl::SetDefaultAddressFamily(AddressFamily address_family) {
+void HostResolverImpl::SetNoIPv6OnWifi(bool no_ipv6_on_wifi) {
   DCHECK(CalledOnValidThread());
-  default_address_family_ = address_family;
+  assume_ipv6_failure_on_wifi_ = no_ipv6_on_wifi;
 }
 
-AddressFamily HostResolverImpl::GetDefaultAddressFamily() const {
-  return default_address_family_;
+bool HostResolverImpl::GetNoIPv6OnWifi() {
+  return assume_ipv6_failure_on_wifi_;
 }
 
 bool HostResolverImpl::ResolveAsIP(const Key& key,
@@ -2206,11 +2243,6 @@ bool HostResolverImpl::ResolveAsIP(const Key& key,
 
   *net_error = OK;
   AddressFamily family = GetAddressFamily(*ip_address);
-  if (family == ADDRESS_FAMILY_IPV6 &&
-      default_address_family_ == ADDRESS_FAMILY_IPV4) {
-    // Don't return IPv6 addresses if default address family is set to IPv4.
-    *net_error = ERR_NAME_NOT_RESOLVED;
-  }
   if (key.address_family != ADDRESS_FAMILY_UNSPECIFIED &&
       key.address_family != family) {
     // Don't return IPv6 addresses for IPv4 queries, and vice versa.
@@ -2353,9 +2385,6 @@ HostResolverImpl::Key HostResolverImpl::GetEffectiveKeyForRequest(
       info.host_resolver_flags() | additional_resolver_flags_;
   AddressFamily effective_address_family = info.address_family();
 
-  if (info.address_family() == ADDRESS_FAMILY_UNSPECIFIED)
-    effective_address_family = default_address_family_;
-
   if (effective_address_family == ADDRESS_FAMILY_UNSPECIFIED &&
       // When resolving IPv4 literals, there's no need to probe for IPv6.
       // When resolving IPv6 literals, there's no benefit to artificially
@@ -2372,6 +2401,14 @@ HostResolverImpl::Key HostResolverImpl::GetEffectiveKeyForRequest(
 }
 
 bool HostResolverImpl::IsIPv6Reachable(const NetLogWithSource& net_log) {
+  // Don't bother checking if the device is on WiFi and IPv6 is assumed to not
+  // work on WiFi.
+  if (assume_ipv6_failure_on_wifi_ &&
+      NetworkChangeNotifier::GetConnectionType() ==
+          NetworkChangeNotifier::CONNECTION_WIFI) {
+    return false;
+  }
+
   // Cache the result for kIPv6ProbePeriodMs (measured from after
   // IsGloballyReachable() completes).
   bool cached = true;
@@ -2386,6 +2423,38 @@ bool HostResolverImpl::IsIPv6Reachable(const NetLogWithSource& net_log) {
                    base::Bind(&NetLogIPv6AvailableCallback,
                               last_ipv6_probe_result_, cached));
   return last_ipv6_probe_result_;
+}
+
+bool HostResolverImpl::IsGloballyReachable(const IPAddress& dest,
+                                           const NetLogWithSource& net_log) {
+  // TODO(eroman): Remove ScopedTracker below once crbug.com/455942 is fixed.
+  tracked_objects::ScopedTracker tracking_profile_1(
+      FROM_HERE_WITH_EXPLICIT_FUNCTION("455942 IsGloballyReachable"));
+
+  std::unique_ptr<DatagramClientSocket> socket(
+      ClientSocketFactory::GetDefaultFactory()->CreateDatagramClientSocket(
+          DatagramSocket::DEFAULT_BIND, RandIntCallback(), net_log.net_log(),
+          net_log.source()));
+  int rv = socket->Connect(IPEndPoint(dest, 53));
+  if (rv != OK)
+    return false;
+  IPEndPoint endpoint;
+  rv = socket->GetLocalAddress(&endpoint);
+  if (rv != OK)
+    return false;
+  DCHECK_EQ(ADDRESS_FAMILY_IPV6, endpoint.GetFamily());
+  const IPAddress& address = endpoint.address();
+
+  bool is_link_local =
+      (address.bytes()[0] == 0xFE) && ((address.bytes()[1] & 0xC0) == 0x80);
+  if (is_link_local)
+    return false;
+
+  const uint8_t kTeredoPrefix[] = {0x20, 0x01, 0, 0};
+  if (IPAddressStartsWith(address, kTeredoPrefix))
+    return false;
+
+  return true;
 }
 
 void HostResolverImpl::RunLoopbackProbeJob() {
@@ -2523,11 +2592,11 @@ void HostResolverImpl::UpdateDNSConfig(bool config_changed) {
 
   if (config_changed) {
     // If the DNS server has changed, existing cached info could be wrong so we
-    // have to drop our internal cache :( Note that OS level DNS caches, such
+    // have to expire our internal cache :( Note that OS level DNS caches, such
     // as NSCD's cache should be dropped automatically by the OS when
     // resolv.conf changes so we don't need to do anything to clear that cache.
     if (cache_.get()) {
-      cache_->clear();
+      cache_->OnNetworkChange();
       cache_hit_callbacks_.clear();
     }
 

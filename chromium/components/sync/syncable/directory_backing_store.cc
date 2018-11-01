@@ -9,6 +9,7 @@
 #include <limits>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/location.h"
@@ -17,6 +18,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -38,7 +40,7 @@ namespace syncer {
 namespace syncable {
 
 // Increment this version whenever updating DB tables.
-const int32_t kCurrentDBVersion = 90;
+const int32_t kCurrentDBVersion = 91;
 
 // The current database page size in Kilobytes.
 const int32_t kCurrentPageSizeKB = 32768;
@@ -576,6 +578,11 @@ bool DirectoryBackingStore::InitializeTables() {
       version_on_disk = 90;
   }
 
+  if (version_on_disk == 90) {
+    if (MigrateVersion90To91())
+      version_on_disk = 91;
+  }
+
   int vivaldi_version_on_disk = GetVivaldiVersion();
   if (version_on_disk && vivaldi_version_on_disk == 0){
     MigrateVivaldiVersion0To1();
@@ -720,13 +727,11 @@ bool DirectoryBackingStore::LoadDeleteJournals(JournalIndex* delete_journals) {
 
   while (s.Step()) {
     int total_entry_copies;
-    std::unique_ptr<EntryKernel> kernel_ptr =
-        UnpackEntry(&s, &total_entry_copies);
+    std::unique_ptr<EntryKernel> kernel = UnpackEntry(&s, &total_entry_copies);
     // A null kernel is evidence of external data corruption.
-    if (!kernel_ptr)
+    if (!kernel)
       return false;
-    EntryKernel* kernel = kernel_ptr.get();
-    (*delete_journals)[kernel] = std::move(kernel_ptr);
+    DeleteJournal::AddEntryToJournalIndex(delete_journals, std::move(kernel));
   }
   return s.Succeeded();
 }
@@ -1503,6 +1508,42 @@ bool DirectoryBackingStore::MigrateVersion89To90() {
   // No data migration is necessary, but we should do a column refresh.
   SetVersion(90);
   needs_share_info_column_refresh_ = true;
+  return true;
+}
+
+bool DirectoryBackingStore::MigrateVersion90To91() {
+  // This change cleared the parent_id field for non-hierarchy datatypes.
+  // These datatypes have implicit roots, so storing the parent is a waste of
+  // storage and memory space. There was no schema change, just a cleanup.
+  sql::Statement get(
+      db_->GetUniqueStatement("SELECT "
+                              "  metahandle, "
+                              "  specifics, "
+                              "  is_dir "
+                              "FROM metas WHERE parent_id IS NOT NULL"));
+
+  sql::Statement clear_parent_id(db_->GetUniqueStatement(
+      "UPDATE metas SET parent_id = NULL WHERE metahandle = ?"));
+
+  while (get.Step()) {
+    sync_pb::EntitySpecifics specifics;
+    specifics.ParseFromArray(get.ColumnBlob(1), get.ColumnByteLength(1));
+
+    ModelType model_type =
+        ModelIdToModelTypeEnum(get.ColumnBlob(1), get.ColumnByteLength(1));
+    bool is_dir = get.ColumnBool(2);
+
+    if (model_type != UNSPECIFIED && !TypeSupportsHierarchy(model_type) &&
+        !is_dir) {
+      clear_parent_id.BindInt64(0, get.ColumnInt64(0));
+
+      if (!clear_parent_id.Run())
+        return false;
+      clear_parent_id.Reset(true);
+    }
+  }
+
+  SetVersion(91);
   return true;
 }
 

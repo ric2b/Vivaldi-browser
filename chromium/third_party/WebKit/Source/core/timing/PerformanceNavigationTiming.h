@@ -6,44 +6,40 @@
 #define PerformanceNavigationTiming_h
 
 #include "core/CoreExport.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMHighResTimeStamp.h"
+#include "core/loader/FrameLoaderTypes.h"
 #include "core/timing/PerformanceResourceTiming.h"
 
 namespace blink {
 
+class Document;
+class DocumentTiming;
+class DocumentLoader;
+class DocumentLoadTiming;
+class LocalFrame;
+class ExecutionContext;
+class ResourceTimingInfo;
+class ResourceLoadTiming;
+
 class CORE_EXPORT PerformanceNavigationTiming final
-    : public PerformanceResourceTiming {
+    : public PerformanceResourceTiming,
+      public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(PerformanceNavigationTiming);
+  friend class PerformanceNavigationTimingTest;
 
  public:
-  enum class NavigationType { Navigate, Reload, BackForward, Prerender };
+  PerformanceNavigationTiming(LocalFrame*,
+                              ResourceTimingInfo*,
+                              double time_origin);
 
-  PerformanceNavigationTiming(double timeOrigin,
-                              const String& requestedUrl,
-                              double unloadEventStart,
-                              double unloadEventEnd,
-                              double loadEventStart,
-                              double loadEventEnd,
-                              unsigned short redirectCount,
-                              double domInteractive,
-                              double domContentLoadedEventStart,
-                              double domContentLoadedEventEnd,
-                              double domComplete,
-                              NavigationType,
-                              double redirectStart,
-                              double redirectEnd,
-                              double fetchStart,
-                              double responseEnd,
-                              bool allowRedirectDetails,
-                              bool hasSameOriginAsPreviousDocument,
-                              ResourceLoadTiming*,
-                              double lastRedirectEndTime,
-                              double finishTime,
-                              unsigned long long transferSize,
-                              unsigned long long encodedBodyLength,
-                              unsigned long long decodedBodyLength,
-                              bool didReuseConnection);
+  // Attributes inheritted from PerformanceEntry.
+  DOMHighResTimeStamp duration() const override;
 
+  AtomicString initiatorType() const override;
+
+  // PerformanceNavigationTiming's unique attributes.
   DOMHighResTimeStamp unloadEventStart() const;
   DOMHighResTimeStamp unloadEventEnd() const;
   DOMHighResTimeStamp domInteractive() const;
@@ -61,29 +57,31 @@ class CORE_EXPORT PerformanceNavigationTiming final
   DOMHighResTimeStamp redirectEnd() const override;
   DOMHighResTimeStamp responseEnd() const override;
 
+  DECLARE_VIRTUAL_TRACE();
+
  protected:
-  void buildJSONValue(V8ObjectBuilder&) const override;
+  void BuildJSONValue(V8ObjectBuilder&) const override;
 
  private:
   ~PerformanceNavigationTiming() override;
 
-  double m_timeOrigin;
-  double m_unloadEventStart;
-  double m_unloadEventEnd;
-  double m_loadEventStart;
-  double m_loadEventEnd;
-  unsigned short m_redirectCount;
-  double m_domInteractive;
-  double m_domContentLoadedEventStart;
-  double m_domContentLoadedEventEnd;
-  double m_domComplete;
-  NavigationType m_type;
-  double m_redirectStart;
-  double m_redirectEnd;
-  double m_fetchStart;
-  double m_responseEnd;
-  bool m_allowRedirectDetails;
-  bool m_hasSameOriginAsPreviousDocument;
+  static AtomicString GetNavigationType(NavigationType, const Document*);
+
+  const DocumentTiming* GetDocumentTiming() const;
+  DocumentLoader* GetDocumentLoader() const;
+  DocumentLoadTiming* GetDocumentLoadTiming() const;
+
+  virtual ResourceLoadTiming* GetResourceLoadTiming() const;
+  virtual bool AllowTimingDetails() const;
+  virtual bool DidReuseConnection() const;
+  virtual unsigned long long GetTransferSize() const;
+  virtual unsigned long long GetEncodedBodySize() const;
+  virtual unsigned long long GetDecodedBodySize() const;
+
+  bool GetAllowRedirectDetails() const;
+
+  double time_origin_;
+  RefPtr<ResourceTimingInfo> resource_timing_info_;
 };
 }  // namespace blink
 

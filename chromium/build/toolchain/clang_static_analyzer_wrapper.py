@@ -1,61 +1,77 @@
 #!/usr/bin/env python
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Invokes the Clang static analysis command using arguments provided on the
-command line.
+"""Adds an analysis build step to invocations of the Clang C/C++ compiler.
+
+Usage: clang_static_analyzer_wrapper.py <compiler> [args...]
 """
 
 import argparse
 import fnmatch
+import itertools
 import os
-import shutil
 import sys
-import tempfile
-
 import wrapper_utils
+
+# Flags used to enable analysis for Clang invocations.
+analyzer_enable_flags = [
+    '--analyze',
+]
+
+# Flags used to configure the analyzer's behavior.
+analyzer_option_flags = [
+    '-fdiagnostics-show-option',
+    '-analyzer-checker=cplusplus',
+    '-analyzer-opt-analyze-nested-blocks',
+    '-analyzer-eagerly-assume',
+    '-analyzer-output=text',
+    '-analyzer-config',
+    'suppress-c++-stdlib=true',
+
+# List of checkers to execute.
+# The full list of checkers can be found at
+# https://clang-analyzer.llvm.org/available_checks.html.
+    '-analyzer-checker=core',
+    '-analyzer-checker=unix',
+    '-analyzer-checker=deadcode',
+]
+
+
+# Prepends every element of a list |args| with |token|.
+# e.g. ['-analyzer-foo', '-analyzer-bar'] => ['-Xanalyzer', '-analyzer-foo',
+#                                             '-Xanalyzer', '-analyzer-bar']
+def interleave_args(args, token):
+  return list(sum(zip([token] * len(args), args), ()))
 
 
 def main():
-  parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument('--clang-cc-path',
-                      help='Path to the clang compiler.',
-                      metavar='PATH')
-  parser.add_argument('--clang-cxx-path',
-                      help='Path to the clang++ compiler',
-                      metavar='PATH')
-  parser.add_argument('--analyzer',
-                      help='Path to the language-specific Clang analysis tool.',
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--mode',
+                      choices=['clang', 'cl'],
                       required=True,
-                      metavar='PATH')
-  args, compile_args = parser.parse_known_args()
+                      help='Specifies the compiler argument convention to use.')
+  parser.add_argument('args', nargs=argparse.REMAINDER)
+  parsed_args = parser.parse_args()
 
-  # Check that only one of --clang-cc-path or --clang-cxx-path are set.
-  assert ((args.clang_cc_path != None) != (args.clang_cxx_path != None))
+  prefix = '-Xclang' if parsed_args.mode == 'cl' else '-Xanalyzer'
+  cmd = parsed_args.args + analyzer_enable_flags + \
+        interleave_args(analyzer_option_flags, prefix)
+  returncode, stderr = wrapper_utils.CaptureCommandStderr(
+      wrapper_utils.CommandToRun(cmd))
+  sys.stderr.write(stderr)
+  if returncode != 0:
+    sys.stderr.write(
+        """WARNING! The Clang static analyzer exited with error code %d.
+         Please share the error details in crbug.com/695243 if this looks like
+         a new regression.\n""" % (returncode))
 
-  is_cxx = args.clang_cxx_path != None
-  env = os.environ
-  env['CCC_ANALYZER_FORCE_ANALYZE_DEBUG_CODE'] = '0'
-  env['CCC_ANALYZER_OUTPUT_FORMAT'] = 'text'
-  clang_path = args.clang_cxx_path or args.clang_cc_path
-  if is_cxx:
-    env['CCC_CXX'] = clang_path
-    env['CLANG_CXX'] = clang_path
-  else:
-    env['CCC_CC'] = clang_path
-    env['CLANG'] = clang_path
+  returncode, stderr = wrapper_utils.CaptureCommandStderr(
+    wrapper_utils.CommandToRun(parsed_args.args))
+  sys.stderr.write(stderr)
 
-  # TODO(kmarshall): Place the summarized output in a useful directory.
-  temp_dir = tempfile.mkdtemp()
-  try:
-    env['CCC_ANALYZER_HTML'] = temp_dir
-    returncode, stderr = wrapper_utils.CaptureCommandStderr(
-        wrapper_utils.CommandToRun([args.analyzer] + compile_args), env)
-    sys.stderr.write(stderr)
-    return returncode
-  finally:
-    shutil.rmtree(temp_dir)
+  return returncode
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   sys.exit(main())

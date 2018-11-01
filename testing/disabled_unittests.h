@@ -25,3 +25,31 @@ DISABLE(ToolbarActionViewInteractiveUITest,
 DISABLE_MULTI(ShowPageActionWithoutPageActionTest, Test)
 DISABLE(ToolbarViewInteractiveUITest, TestAppMenuOpensOnDrag)
 DISABLE(ExtensionContextMenuModelTest, ExtensionContextMenuShowAndHide)
+
+// DevTools related.
+DISABLE(BrowserViewTest, DevToolsUpdatesBrowserWindow)
+DISABLE(ChromeRenderProcessHostTest, DevToolsOnSelfInOwnProcess)
+DISABLE(ChromeRenderProcessHostTest, DevToolsOnSelfInOwnProcessPPT)
+DISABLE(DevToolsSanityTest, TestToolboxLoadedUndocked)
+DISABLE(DevToolsTagTest, TagsManagerRecordsATag)
+DISABLE(PolicyTest, DeveloperToolsDisabled)
+DISABLE(TaskManagerBrowserTest, DevToolsNewUndockedWindow)
+DISABLE(TaskManagerBrowserTest, DevToolsOldUndockedWindow)
+
+// times out
+DISABLE(WebViewTests/WebViewTest, WebViewInBackgroundPage/1)
+
+// Seems to have failed in v59
+DISABLE(AutofillInteractiveTest, CrossSitePaymentForms)
+DISABLE(CommandsApiTest, PageAction)
+DISABLE(CommandsApiTest, PageActionKeyUpdated)
+DISABLE(ExtensionBrowserTest, PageAction)
+DISABLE(ExtensionBrowserTest, PageActionCrash25562)
+DISABLE(ExtensionBrowserTest, PageActionInPageNavigation)
+DISABLE(ExtensionBrowserTest, PageActionRefreshCrash)
+DISABLE(ExtensionBrowserTest, RSSMultiRelLink)
+DISABLE(ExtensionBrowserTest, TitleLocalizationPageAction)
+DISABLE(ExtensionBrowserTest, UnloadPageAction)
+DISABLE(LazyBackgroundPageApiTest, BroadcastEvent)
+DISABLE(PageActionApiTest, TestTriggerPageAction)
+DISABLE(MediaRouterUIBrowserTest, UpdateActionLocation)

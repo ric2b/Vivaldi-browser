@@ -8,14 +8,14 @@
 #include <string>
 #include <utility>
 
+#include "ash/accessibility_delegate.h"
 #include "ash/cancel_mode.h"
-#include "ash/common/accessibility_delegate.h"
-#include "ash/common/shell_delegate.h"
-#include "ash/common/shutdown_controller.h"
-#include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/interfaces/shutdown.mojom.h"
 #include "ash/shell.h"
+#include "ash/shell_delegate.h"
+#include "ash/shell_port.h"
+#include "ash/shutdown_controller.h"
 #include "ash/wm/session_state_animator.h"
 #include "ash/wm/session_state_animator_impl.h"
 #include "base/bind.h"
@@ -66,7 +66,6 @@ const int LockStateController::kShutdownRequestDelayMs = 50;
 LockStateController::LockStateController(
     ShutdownController* shutdown_controller)
     : animator_(new SessionStateAnimatorImpl()),
-      login_status_(LoginStatus::NOT_LOGGED_IN),
       system_is_locked_(false),
       shutting_down_(false),
       shutdown_after_lock_(false),
@@ -161,7 +160,7 @@ void LockStateController::RequestShutdown() {
 
   shutting_down_ = true;
 
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   // TODO(derat): Remove these null checks once mash instantiates a
   // CursorManager.
   if (shell->cursor_manager()) {
@@ -176,8 +175,7 @@ void LockStateController::RequestShutdown() {
   StartRealShutdownTimer(true);
 }
 
-void LockStateController::OnLockScreenHide(
-    base::Callback<void(void)>& callback) {
+void LockStateController::OnLockScreenHide(base::Closure callback) {
   StartUnlockAnimationBeforeUIDestroyed(callback);
 }
 
@@ -188,13 +186,7 @@ void LockStateController::SetLockScreenDisplayedCallback(
 
 void LockStateController::OnHostCloseRequested(
     const aura::WindowTreeHost* host) {
-  WmShell::Get()->delegate()->Exit();
-}
-
-void LockStateController::OnLoginStateChanged(LoginStatus status) {
-  if (status != LoginStatus::LOCKED)
-    login_status_ = status;
-  system_is_locked_ = (status == LoginStatus::LOCKED);
+  Shell::Get()->shell_delegate()->Exit();
 }
 
 void LockStateController::OnAppTerminating() {
@@ -203,7 +195,7 @@ void LockStateController::OnAppTerminating() {
   // This is also the case when the user signs off.
   if (!shutting_down_) {
     shutting_down_ = true;
-    Shell* shell = Shell::GetInstance();
+    Shell* shell = Shell::Get();
     if (shell->cursor_manager()) {
       shell->cursor_manager()->HideCursor();
       shell->cursor_manager()->LockCursor();
@@ -276,7 +268,7 @@ void LockStateController::OnPreShutdownAnimationTimeout() {
   VLOG(1) << "OnPreShutdownAnimationTimeout";
   shutting_down_ = true;
 
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   if (shell->cursor_manager())
     shell->cursor_manager()->HideCursor();
 
@@ -292,7 +284,7 @@ void LockStateController::StartRealShutdownTimer(bool with_animation_time) {
   }
 
   base::TimeDelta sound_duration =
-      WmShell::Get()->accessibility_delegate()->PlayShutdownSound();
+      Shell::Get()->accessibility_delegate()->PlayShutdownSound();
   sound_duration =
       std::min(sound_duration,
                base::TimeDelta::FromMilliseconds(kMaxShutdownSoundDurationMs));
@@ -306,13 +298,13 @@ void LockStateController::StartRealShutdownTimer(bool with_animation_time) {
 void LockStateController::OnRealPowerTimeout() {
   VLOG(1) << "OnRealPowerTimeout";
   DCHECK(shutting_down_);
-  WmShell::Get()->RecordUserMetricsAction(UMA_ACCEL_SHUT_DOWN_POWER_BUTTON);
+  ShellPort::Get()->RecordUserMetricsAction(UMA_ACCEL_SHUT_DOWN_POWER_BUTTON);
   // Shut down or reboot based on device policy.
   shutdown_controller_->ShutDownOrReboot();
 }
 
 void LockStateController::StartCancellableShutdownAnimation() {
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   // Hide cursor, but let it reappear if the mouse moves.
   if (shell->cursor_manager())
     shell->cursor_manager()->HideCursor();
@@ -353,7 +345,7 @@ void LockStateController::StartImmediatePreLockAnimation(
   animation_sequence->EndSequence();
 
   DispatchCancelMode();
-  WmShell::Get()->OnLockStateEvent(
+  ShellPort::Get()->OnLockStateEvent(
       LockStateObserver::EVENT_LOCK_ANIMATION_STARTED);
 }
 
@@ -382,7 +374,7 @@ void LockStateController::StartCancellablePreLockAnimation() {
       SessionStateAnimator::ANIMATION_SPEED_UNDOABLE, animation_sequence);
 
   DispatchCancelMode();
-  WmShell::Get()->OnLockStateEvent(
+  ShellPort::Get()->OnLockStateEvent(
       LockStateObserver::EVENT_PRELOCK_ANIMATION_STARTED);
   animation_sequence->EndSequence();
 }
@@ -471,7 +463,7 @@ void LockStateController::PreLockAnimationFinished(bool request_lock) {
   }
 
   if (request_lock) {
-    WmShell::Get()->RecordUserMetricsAction(
+    ShellPort::Get()->RecordUserMetricsAction(
         shutdown_after_lock_ ? UMA_ACCEL_LOCK_SCREEN_POWER_BUTTON
                              : UMA_ACCEL_LOCK_SCREEN_LOCK_BUTTON);
     chromeos::DBusThreadManager::Get()
@@ -501,7 +493,7 @@ void LockStateController::PreLockAnimationFinished(bool request_lock) {
 void LockStateController::PostLockAnimationFinished() {
   animating_lock_ = false;
   VLOG(1) << "PostLockAnimationFinished";
-  WmShell::Get()->OnLockStateEvent(
+  ShellPort::Get()->OnLockStateEvent(
       LockStateObserver::EVENT_LOCK_ANIMATION_FINISHED);
   if (!lock_screen_displayed_callback_.is_null()) {
     lock_screen_displayed_callback_.Run();

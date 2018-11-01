@@ -190,11 +190,11 @@ void VivaldiSigninClient::DelayNetworkCall(const base::Closure& callback) {
   }
 }
 
-GaiaAuthFetcher* VivaldiSigninClient::CreateGaiaAuthFetcher(
+std::unique_ptr<GaiaAuthFetcher> VivaldiSigninClient::CreateGaiaAuthFetcher(
     GaiaAuthConsumer* consumer,
     const std::string& source,
     net::URLRequestContextGetter* getter) {
-  return new GaiaAuthFetcher(consumer, source, getter);
+  return base::MakeUnique<GaiaAuthFetcher>(consumer, source, getter);
 }
 
 void VivaldiSigninClient::AddContentSettingsObserver(

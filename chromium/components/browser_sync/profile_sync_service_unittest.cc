@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -128,14 +129,12 @@ class FakeSyncEngineCollectDeleteDirParam : public FakeSyncEngine {
 // called.
 class SyncEngineCaptureClearServerData : public FakeSyncEngine {
  public:
-  using ClearServerDataCalled =
-      base::Callback<void(const syncer::SyncManager::ClearServerDataCallback&)>;
+  using ClearServerDataCalled = base::Callback<void(const base::Closure&)>;
   explicit SyncEngineCaptureClearServerData(
       const ClearServerDataCalled& clear_server_data_called)
       : clear_server_data_called_(clear_server_data_called) {}
 
-  void ClearServerData(
-      const syncer::SyncManager::ClearServerDataCallback& callback) override {
+  void ClearServerData(const base::Closure& callback) override {
     clear_server_data_called_.Run(callback);
   }
 
@@ -155,9 +154,8 @@ ACTION_P(ReturnNewMockHostCollectDeleteDirParam, delete_dir_param) {
   return new FakeSyncEngineCollectDeleteDirParam(delete_dir_param);
 }
 
-void OnClearServerDataCalled(
-    syncer::SyncManager::ClearServerDataCallback* captured_callback,
-    const syncer::SyncManager::ClearServerDataCallback& callback) {
+void OnClearServerDataCalled(base::Closure* captured_callback,
+                             const base::Closure& callback) {
   *captured_callback = callback;
 }
 
@@ -305,7 +303,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
   }
 
   void ExpectSyncEngineCreationCaptureClearServerData(
-      syncer::SyncManager::ClearServerDataCallback* captured_callback) {
+      base::Closure* captured_callback) {
     EXPECT_CALL(*component_factory_, CreateSyncEngine(_, _, _, _))
         .Times(1)
         .WillOnce(ReturnNewMockHostCaptureClearServerData(captured_callback));
@@ -353,7 +351,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
   }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   ProfileSyncServiceBundle profile_sync_service_bundle_;
   std::unique_ptr<ProfileSyncService> service_;
 
@@ -373,7 +371,8 @@ TEST_F(ProfileSyncServiceTest, InitialState) {
 
 // Verify a successful initialization.
 TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(false));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
+                          base::MakeUnique<base::Value>(false));
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
@@ -385,7 +384,8 @@ TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
 
 // Verify a successful initialization.
 TEST_F(ProfileSyncServiceTest, SuccessfulLocalBackendInitialization) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(false));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
+                          base::MakeUnique<base::Value>(false));
   IssueTestTokens();
   CreateServiceWithLocalSyncBackend();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
@@ -398,7 +398,8 @@ TEST_F(ProfileSyncServiceTest, SuccessfulLocalBackendInitialization) {
 // Verify that an initialization where first setup is not complete does not
 // start up the backend.
 TEST_F(ProfileSyncServiceTest, NeedsConfirmation) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(false));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
+                          base::MakeUnique<base::Value>(false));
   IssueTestTokens();
   CreateService(ProfileSyncService::MANUAL_START);
   syncer::SyncPrefs sync_prefs(prefs());
@@ -433,7 +434,8 @@ TEST_F(ProfileSyncServiceTest, SetupInProgress) {
 
 // Verify that disable by enterprise policy works.
 TEST_F(ProfileSyncServiceTest, DisabledByPolicyBeforeInit) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(true));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
+                          base::MakeUnique<base::Value>(true));
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
   InitializeForNthSync();
@@ -453,7 +455,8 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
   EXPECT_FALSE(service()->IsManaged());
   EXPECT_TRUE(service()->IsSyncActive());
 
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(true));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
+                          base::MakeUnique<base::Value>(true));
 
   EXPECT_TRUE(service()->IsManaged());
   EXPECT_FALSE(service()->IsSyncActive());
@@ -705,7 +708,7 @@ TEST_F(ProfileSyncServiceTest, OnLocalSetPassphraseEncryption) {
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
 
-  syncer::SyncManager::ClearServerDataCallback captured_callback;
+  base::Closure captured_callback;
   syncer::ConfigureReason configure_reason = syncer::CONFIGURE_REASON_UNKNOWN;
 
   // Initialize sync, ensure that both DataTypeManager and SyncEngine are
@@ -778,7 +781,7 @@ TEST_F(ProfileSyncServiceTest,
 
   // Simulate browser restart. First configuration is a regular one.
   service()->Shutdown();
-  syncer::SyncManager::ClearServerDataCallback captured_callback;
+  base::Closure captured_callback;
   ExpectSyncEngineCreationCaptureClearServerData(&captured_callback);
   ExpectDataTypeManagerCreation(
       1, GetRecordingConfigureCalledCallback(&configure_reason));
@@ -811,7 +814,7 @@ TEST_F(ProfileSyncServiceTest,
 // interrupted, transition again from catch up sync cycle after browser restart.
 TEST_F(ProfileSyncServiceTest,
        OnLocalSetPassphraseEncryption_RestartDuringClearServerData) {
-  syncer::SyncManager::ClearServerDataCallback captured_callback;
+  base::Closure captured_callback;
   syncer::ConfigureReason configure_reason = syncer::CONFIGURE_REASON_UNKNOWN;
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(

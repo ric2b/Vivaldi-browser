@@ -19,6 +19,8 @@ var ContentSettingProvider = {
 };
 
 /**
+ * The site exception information passed form the C++ handler.
+ * See also: SiteException.
  * @typedef {{embeddingOrigin: string,
  *            embeddingDisplayName: string,
  *            incognito: boolean,
@@ -26,6 +28,21 @@ var ContentSettingProvider = {
  *            displayName: string,
  *            setting: string,
  *            source: string}}
+ */
+var RawSiteException;
+
+/**
+ * The site exception after it has been converted/filtered for UI use.
+ * See also: RawSiteException.
+ * @typedef {{category: !settings.ContentSettingsTypes,
+ *            embeddingOrigin: string,
+ *            embeddingDisplayName: string,
+ *            incognito: boolean,
+ *            origin: string,
+ *            displayName: string,
+ *            setting: string,
+ *            enforcement: string,
+ *            controlledBy: string}}
  */
 var SiteException;
 
@@ -40,18 +57,6 @@ var CategoryDefaultsPref;
  *            source: ContentSettingProvider}}
  */
 var DefaultContentSetting;
-
-/**
- * @typedef {{location: Array<SiteException>,
- *            notifications: Array<SiteException>}}
- */
-var ExceptionListPref;
-
-/**
- * @typedef {{defaults: CategoryDefaultsPref,
- *            exceptions: ExceptionListPref}}
- */
-var SiteSettingsPref;
 
 /**
  * @typedef {{name: string,
@@ -120,14 +125,14 @@ cr.define('settings', function() {
     /**
      * Gets the exceptions (site list) for a particular category.
      * @param {string} contentType The name of the category to query.
-     * @return {!Promise<!Array<!SiteException>>}
+     * @return {!Promise<!Array<!RawSiteException>>}
      */
     getExceptionList: function(contentType) {},
 
     /**
      * Gets the exception details for a particular site.
      * @param {string} site The name of the site.
-     * @return {!Promise<!SiteException>}
+     * @return {!Promise<!RawSiteException>}
      */
     getSiteDetails: function(site) {},
 
@@ -321,15 +326,20 @@ cr.define('settings', function() {
     /** @override */
     resetCategoryPermissionForOrigin: function(
         primaryPattern, secondaryPattern, contentType, incognito) {
-      chrome.send('resetCategoryPermissionForOrigin',
+      chrome.send(
+          'resetCategoryPermissionForOrigin',
           [primaryPattern, secondaryPattern, contentType, incognito]);
     },
 
     /** @override */
     setCategoryPermissionForOrigin: function(
         primaryPattern, secondaryPattern, contentType, value, incognito) {
-      chrome.send('setCategoryPermissionForOrigin',
-          [primaryPattern, secondaryPattern, contentType, value, incognito]);
+      // TODO(dschuyler): It may be incorrect for JS to send the embeddingOrigin
+      // pattern. Look into removing this parameter from site_settings_handler.
+      // Ignoring the |secondaryPattern| and using '' instead is a quick-fix.
+      chrome.send(
+          'setCategoryPermissionForOrigin',
+          [primaryPattern, '', contentType, value, incognito]);
     },
 
     /** @override */

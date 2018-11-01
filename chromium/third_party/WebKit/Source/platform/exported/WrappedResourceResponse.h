@@ -31,8 +31,8 @@
 #ifndef WrappedResourceResponse_h
 #define WrappedResourceResponse_h
 
+#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebURLResponse.h"
-#include "wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -44,12 +44,12 @@ class WrappedResourceResponse : public WebURLResponse {
  public:
   ~WrappedResourceResponse() {}
 
-  explicit WrappedResourceResponse(ResourceResponse& resourceResponse)
-      : WebURLResponse(resourceResponse) {}
+  explicit WrappedResourceResponse(ResourceResponse& resource_response)
+      : WebURLResponse(resource_response) {}
 
-  explicit WrappedResourceResponse(const ResourceResponse& resourceResponse)
+  explicit WrappedResourceResponse(const ResourceResponse& resource_response)
       : WrappedResourceResponse(
-            const_cast<ResourceResponse&>(resourceResponse)) {}
+            const_cast<ResourceResponse&>(resource_response)) {}
 };
 
 }  // namespace blink

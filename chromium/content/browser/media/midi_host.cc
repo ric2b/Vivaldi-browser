@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "base/process/process.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/bad_message.h"
@@ -13,7 +14,6 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/common/media/midi_messages.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/user_metrics.h"
 #include "media/midi/message_util.h"
 #include "media/midi/midi_message_queue.h"
 #include "media/midi/midi_service.h"
@@ -181,7 +181,8 @@ void MidiHost::ReceiveMidiData(uint32_t port,
 
   // Lazy initialization
   if (received_messages_queues_[port] == nullptr)
-    received_messages_queues_[port] = new midi::MidiMessageQueue(true);
+    received_messages_queues_[port] =
+        base::MakeUnique<midi::MidiMessageQueue>(true);
 
   received_messages_queues_[port]->Add(data, length);
   std::vector<uint8_t> message;

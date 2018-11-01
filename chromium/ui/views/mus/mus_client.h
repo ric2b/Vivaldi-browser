@@ -13,9 +13,9 @@
 
 #include "base/macros.h"
 #include "services/service_manager/public/cpp/identity.h"
+#include "services/ui/public/interfaces/window_server_test.mojom.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/mus/window_tree_client_delegate.h"
-#include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/views/mus/mus_export.h"
 #include "ui/views/mus/screen_mus_delegate.h"
 #include "ui/views/widget/widget.h"
@@ -31,10 +31,6 @@ class SingleThreadTaskRunner;
 class Thread;
 }
 
-namespace discardable_memory {
-class ClientDiscardableSharedMemoryManager;
-}
-
 namespace service_manager {
 class Connector;
 }
@@ -45,6 +41,7 @@ class WMState;
 
 namespace views {
 
+class DesktopNativeWidgetAura;
 class MusClientObserver;
 class MusPropertyMirror;
 class PointerWatcherEventRouter;
@@ -58,13 +55,13 @@ namespace test {
 class MusClientTestApi;
 }
 
+enum MusClientTestingState { NO_TESTING, CREATE_TESTING_STATE };
+
 // MusClient establishes a connection to mus and sets up necessary state so that
 // aura and views target mus. This class is useful for typical clients, not the
 // WindowManager. Most clients don't create this directly, rather use AuraInit.
-class VIEWS_MUS_EXPORT MusClient
-    : public aura::WindowTreeClientDelegate,
-      public ScreenMusDelegate,
-      public ui::OSExchangeDataProviderFactory::Factory {
+class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
+                                   public ScreenMusDelegate {
  public:
   // Most clients should use AuraInit, which creates a MusClient.
   // |create_wm_state| indicates whether MusClient should create a wm::WMState.
@@ -72,7 +69,8 @@ class VIEWS_MUS_EXPORT MusClient
       service_manager::Connector* connector,
       const service_manager::Identity& identity,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr,
-      bool create_wm_state = true);
+      bool create_wm_state = true,
+      MusClientTestingState testing_state = MusClientTestingState::NO_TESTING);
   ~MusClient() override;
 
   static MusClient* Get() { return instance_; }
@@ -101,7 +99,6 @@ class VIEWS_MUS_EXPORT MusClient
   //  NativeWidget has not been explicitly set.
   NativeWidget* CreateNativeWidget(const Widget::InitParams& init_params,
                                    internal::NativeWidgetDelegate* delegate);
-
   // Called when the capture client has been set for a window to notify
   // PointerWatcherEventRouter and CaptureSynchronizer.
   void OnCaptureClientSet(aura::client::CaptureClient* capture_client);
@@ -118,9 +115,21 @@ class VIEWS_MUS_EXPORT MusClient
     return mus_property_mirror_.get();
   }
 
+  // Returns an interface to directly control mus. Only available when created
+  // with MusClientTestingState::CREATE_TESTING_STATE.
+  ui::mojom::WindowServerTest* GetTestingInterface() const;
+
  private:
   friend class AuraInit;
   friend class test::MusClientTestApi;
+
+  // Creates a DesktopWindowTreeHostMus. This is set as the factory function
+  // ViewsDelegate such that if DesktopNativeWidgetAura is created without a
+  // DesktopWindowTreeHost this is created.
+  std::unique_ptr<DesktopWindowTreeHost> CreateDesktopWindowTreeHost(
+      const Widget::InitParams& init_params,
+      internal::NativeWidgetDelegate* delegate,
+      DesktopNativeWidgetAura* desktop_native_widget_aura);
 
   // aura::WindowTreeClientDelegate:
   void OnEmbed(
@@ -134,9 +143,6 @@ class VIEWS_MUS_EXPORT MusClient
   // ScreenMusDelegate:
   void OnWindowManagerFrameValuesChanged() override;
   aura::Window* GetWindowAtScreenPoint(const gfx::Point& point) override;
-
-  // ui:OSExchangeDataProviderFactory::Factory:
-  std::unique_ptr<OSExchangeData::Provider> BuildProvider() override;
 
   static MusClient* instance_;
 
@@ -159,8 +165,7 @@ class VIEWS_MUS_EXPORT MusClient
 
   std::unique_ptr<PointerWatcherEventRouter> pointer_watcher_event_router_;
 
-  std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
-      discardable_shared_memory_manager_;
+  ui::mojom::WindowServerTestPtr server_test_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(MusClient);
 };

@@ -33,20 +33,20 @@
 
 #include "bindings/modules/v8/DictionaryOrString.h"
 #include "modules/ModulesExport.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/Compiler.h"
+#include "platform/wtf/Forward.h"
 #include "public/platform/WebCrypto.h"
 #include "public/platform/WebCryptoAlgorithm.h"
 #include "public/platform/WebString.h"
-#include "wtf/Allocator.h"
-#include "wtf/Assertions.h"
-#include "wtf/Compiler.h"
-#include "wtf/Forward.h"
 
 namespace blink {
 
 struct AlgorithmError {
   STACK_ALLOCATED();
-  WebCryptoErrorType errorType;
-  WebString errorDetails;
+  WebCryptoErrorType error_type;
+  WebString error_details;
 };
 
 typedef DictionaryOrString AlgorithmIdentifier;
@@ -62,7 +62,7 @@ typedef DictionaryOrString AlgorithmIdentifier;
 // a error type and a (non-localized) debug string.
 //
 // [1] http://www.w3.org/TR/WebCryptoAPI/#algorithm-normalizing-rules
-MODULES_EXPORT WARN_UNUSED_RESULT bool normalizeAlgorithm(
+MODULES_EXPORT WARN_UNUSED_RESULT bool NormalizeAlgorithm(
     const AlgorithmIdentifier&,
     WebCryptoOperation,
     WebCryptoAlgorithm&,

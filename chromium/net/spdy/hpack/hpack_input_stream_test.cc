@@ -5,11 +5,9 @@
 #include "net/spdy/hpack/hpack_input_stream.h"
 
 #include <bitset>
-#include <string>
 #include <vector>
 
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/spdy_test_utils.h"
 #include "net/test/gtest_util.h"
@@ -19,8 +17,6 @@ namespace net {
 
 namespace test {
 
-using base::StringPiece;
-using std::string;
 using test::a2b_hex;
 
 // Hex representation of encoded length and Huffman string.
@@ -50,7 +46,7 @@ class HpackInputStreamPeer {
 
 // Utility function to decode an assumed-valid uint32_t with an N-bit
 // prefix.
-uint32_t DecodeValidUint32(uint8_t N, StringPiece str) {
+uint32_t DecodeValidUint32(uint8_t N, SpdyStringPiece str) {
   EXPECT_GT(N, 0);
   EXPECT_LE(N, 8);
   HpackInputStream input_stream(str);
@@ -65,7 +61,7 @@ uint32_t DecodeValidUint32(uint8_t N, StringPiece str) {
 
 // Utility function to decode an assumed-invalid uint32_t with an N-bit
 // prefix.
-void ExpectDecodeUint32Invalid(uint8_t N, StringPiece str) {
+void ExpectDecodeUint32Invalid(uint8_t N, SpdyStringPiece str) {
   EXPECT_GT(N, 0);
   EXPECT_LE(N, 8);
   HpackInputStream input_stream(str);
@@ -75,7 +71,7 @@ void ExpectDecodeUint32Invalid(uint8_t N, StringPiece str) {
   EXPECT_FALSE(input_stream.DecodeNextUint32(&I));
 }
 
-uint32_t bits32(const string& bitstring) {
+uint32_t bits32(const SpdyString& bitstring) {
   return std::bitset<32>(bitstring).to_ulong();
 }
 
@@ -85,7 +81,7 @@ uint32_t bits32(const string& bitstring) {
 
 TEST(HpackInputStreamTest, OneByteIntegersEightBitPrefix) {
   // Minimum.
-  EXPECT_EQ(0x00u, DecodeValidUint32(8, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(8, SpdyString("\x00", 1)));
   EXPECT_EQ(0x7fu, DecodeValidUint32(8, "\x7f"));
   // Maximum.
   EXPECT_EQ(0xfeu, DecodeValidUint32(8, "\xfe"));
@@ -95,7 +91,7 @@ TEST(HpackInputStreamTest, OneByteIntegersEightBitPrefix) {
 
 TEST(HpackInputStreamTest, TwoByteIntegersEightBitPrefix) {
   // Minimum.
-  EXPECT_EQ(0xffu, DecodeValidUint32(8, string("\xff\x00", 2)));
+  EXPECT_EQ(0xffu, DecodeValidUint32(8, SpdyString("\xff\x00", 2)));
   EXPECT_EQ(0x0100u, DecodeValidUint32(8, "\xff\x01"));
   // Maximum.
   EXPECT_EQ(0x017eu, DecodeValidUint32(8, "\xff\x7f"));
@@ -168,19 +164,19 @@ TEST(HpackInputStreamTest, SevenByteIntegersEightBitPrefix) {
 
 TEST(HpackInputStreamTest, OneByteIntegersOneToSevenBitPrefixes) {
   // Minimums.
-  EXPECT_EQ(0x00u, DecodeValidUint32(7, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(7, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(7, "\x80"));
-  EXPECT_EQ(0x00u, DecodeValidUint32(6, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(6, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(6, "\xc0"));
-  EXPECT_EQ(0x00u, DecodeValidUint32(5, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(5, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(5, "\xe0"));
-  EXPECT_EQ(0x00u, DecodeValidUint32(4, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(4, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(4, "\xf0"));
-  EXPECT_EQ(0x00u, DecodeValidUint32(3, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(3, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(3, "\xf8"));
-  EXPECT_EQ(0x00u, DecodeValidUint32(2, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(2, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(2, "\xfc"));
-  EXPECT_EQ(0x00u, DecodeValidUint32(1, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(1, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(1, "\xfe"));
 
   // Maximums.
@@ -196,7 +192,7 @@ TEST(HpackInputStreamTest, OneByteIntegersOneToSevenBitPrefixes) {
   EXPECT_EQ(0x06u, DecodeValidUint32(3, "\xfe"));
   EXPECT_EQ(0x02u, DecodeValidUint32(2, "\x02"));
   EXPECT_EQ(0x02u, DecodeValidUint32(2, "\xfe"));
-  EXPECT_EQ(0x00u, DecodeValidUint32(1, string("\x00", 1)));
+  EXPECT_EQ(0x00u, DecodeValidUint32(1, SpdyString("\x00", 1)));
   EXPECT_EQ(0x00u, DecodeValidUint32(1, "\xfe"));
 
   // Invalid.
@@ -218,20 +214,20 @@ TEST(HpackInputStreamTest, OneByteIntegersOneToSevenBitPrefixes) {
 
 TEST(HpackInputStreamTest, TwoByteIntegersOneToSevenBitPrefixes) {
   // Minimums.
-  EXPECT_EQ(0x7fu, DecodeValidUint32(7, string("\x7f\x00", 2)));
-  EXPECT_EQ(0x7fu, DecodeValidUint32(7, string("\xff\x00", 2)));
-  EXPECT_EQ(0x3fu, DecodeValidUint32(6, string("\x3f\x00", 2)));
-  EXPECT_EQ(0x3fu, DecodeValidUint32(6, string("\xff\x00", 2)));
-  EXPECT_EQ(0x1fu, DecodeValidUint32(5, string("\x1f\x00", 2)));
-  EXPECT_EQ(0x1fu, DecodeValidUint32(5, string("\xff\x00", 2)));
-  EXPECT_EQ(0x0fu, DecodeValidUint32(4, string("\x0f\x00", 2)));
-  EXPECT_EQ(0x0fu, DecodeValidUint32(4, string("\xff\x00", 2)));
-  EXPECT_EQ(0x07u, DecodeValidUint32(3, string("\x07\x00", 2)));
-  EXPECT_EQ(0x07u, DecodeValidUint32(3, string("\xff\x00", 2)));
-  EXPECT_EQ(0x03u, DecodeValidUint32(2, string("\x03\x00", 2)));
-  EXPECT_EQ(0x03u, DecodeValidUint32(2, string("\xff\x00", 2)));
-  EXPECT_EQ(0x01u, DecodeValidUint32(1, string("\x01\x00", 2)));
-  EXPECT_EQ(0x01u, DecodeValidUint32(1, string("\xff\x00", 2)));
+  EXPECT_EQ(0x7fu, DecodeValidUint32(7, SpdyString("\x7f\x00", 2)));
+  EXPECT_EQ(0x7fu, DecodeValidUint32(7, SpdyString("\xff\x00", 2)));
+  EXPECT_EQ(0x3fu, DecodeValidUint32(6, SpdyString("\x3f\x00", 2)));
+  EXPECT_EQ(0x3fu, DecodeValidUint32(6, SpdyString("\xff\x00", 2)));
+  EXPECT_EQ(0x1fu, DecodeValidUint32(5, SpdyString("\x1f\x00", 2)));
+  EXPECT_EQ(0x1fu, DecodeValidUint32(5, SpdyString("\xff\x00", 2)));
+  EXPECT_EQ(0x0fu, DecodeValidUint32(4, SpdyString("\x0f\x00", 2)));
+  EXPECT_EQ(0x0fu, DecodeValidUint32(4, SpdyString("\xff\x00", 2)));
+  EXPECT_EQ(0x07u, DecodeValidUint32(3, SpdyString("\x07\x00", 2)));
+  EXPECT_EQ(0x07u, DecodeValidUint32(3, SpdyString("\xff\x00", 2)));
+  EXPECT_EQ(0x03u, DecodeValidUint32(2, SpdyString("\x03\x00", 2)));
+  EXPECT_EQ(0x03u, DecodeValidUint32(2, SpdyString("\xff\x00", 2)));
+  EXPECT_EQ(0x01u, DecodeValidUint32(1, SpdyString("\x01\x00", 2)));
+  EXPECT_EQ(0x01u, DecodeValidUint32(1, SpdyString("\xff\x00", 2)));
 
   // Maximums.
   EXPECT_EQ(0xfeu, DecodeValidUint32(7, "\x7f\x7f"));
@@ -498,7 +494,7 @@ TEST(HpackInputStreamTest, DecodeNextIdentityString) {
   HpackInputStreamPeer input_stream_peer(&input_stream);
 
   EXPECT_TRUE(input_stream.HasMoreData());
-  StringPiece string_piece;
+  SpdyStringPiece string_piece;
   EXPECT_TRUE(input_stream.DecodeNextIdentityString(&string_piece));
   EXPECT_EQ("string literal", string_piece);
   EXPECT_FALSE(input_stream.HasMoreData());
@@ -513,13 +509,13 @@ TEST(HpackInputStreamTest, DecodeNextIdentityStringNotEnoughInput) {
   HpackInputStream input_stream("\x0fstring literal");
 
   EXPECT_TRUE(input_stream.HasMoreData());
-  StringPiece string_piece;
+  SpdyStringPiece string_piece;
   EXPECT_FALSE(input_stream.DecodeNextIdentityString(&string_piece));
   EXPECT_TRUE(input_stream.NeedMoreData());
 }
 
 TEST(HpackInputStreamTest, DecodeNextHuffmanString) {
-  string output, input(a2b_hex(kEncodedHuffmanFixture));
+  SpdyString output, input(a2b_hex(kEncodedHuffmanFixture));
   HpackInputStream input_stream(input);
   HpackInputStreamPeer input_stream_peer(&input_stream);
 
@@ -532,7 +528,7 @@ TEST(HpackInputStreamTest, DecodeNextHuffmanString) {
 }
 
 TEST(HpackInputStreamTest, DecodeNextHuffmanStringNotEnoughInput) {
-  string output, input(a2b_hex(kEncodedHuffmanFixture));
+  SpdyString output, input(a2b_hex(kEncodedHuffmanFixture));
   input[0]++;  // Input prefix is one byte larger than available input.
   HpackInputStream input_stream(input);
 
@@ -748,7 +744,7 @@ TEST(HpackInputStreamTest, IncompleteHeaderDecodeNextUint32) {
 TEST(HpackInputStreamTest, IncompleteHeaderDecodeNextIdentityString) {
   HpackInputStream input_stream1("\x0estring litera");
   HpackInputStreamPeer input_stream1_peer(&input_stream1);
-  StringPiece string_piece;
+  SpdyStringPiece string_piece;
   EXPECT_FALSE(input_stream1.DecodeNextIdentityString(&string_piece));
   // Only parsed first byte.
   EXPECT_EQ(1u, input_stream1_peer.ParsedBytesCurrent());
@@ -763,7 +759,7 @@ TEST(HpackInputStreamTest, IncompleteHeaderDecodeNextIdentityString) {
 }
 
 TEST(HpackInputStreamTest, IncompleteHeaderDecodeNextHuffmanString) {
-  string output, input(a2b_hex(kEncodedHuffmanFixture));
+  SpdyString output, input(a2b_hex(kEncodedHuffmanFixture));
   input.resize(input.size() - 1);  // Remove last byte.
   HpackInputStream input_stream1(input);
   HpackInputStreamPeer input_stream1_peer(&input_stream1);

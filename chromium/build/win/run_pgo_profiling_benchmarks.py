@@ -33,27 +33,27 @@ _BENCHMARKS_TO_RUN = {
   'blink_perf.paint',
   'blink_perf.svg',
   'blink_style.top_25',
-  'dromaeo.cssqueryjquery',
-  'dromaeo.domcoreattr',
-  'dromaeo.domcoremodify',
-  'dromaeo.domcorequery',
-  'dromaeo.domcoretraverse',
-  'dromaeo.jslibattrprototype',
-  'dromaeo.jslibeventprototype',
-  'dromaeo.jslibmodifyprototype',
-  'dromaeo.jslibstyleprototype',
-  'dromaeo.jslibtraversejquery',
-  'dromaeo.jslibtraverseprototype',
-  'indexeddb_perf',
+#  'dromaeo.cssqueryjquery',
+#  'dromaeo.domcoreattr',
+#  'dromaeo.domcoremodify',
+#  'dromaeo.domcorequery',
+#  'dromaeo.domcoretraverse',
+#  'dromaeo.jslibattrprototype',
+#  'dromaeo.jslibeventprototype',
+#  'dromaeo.jslibmodifyprototype',
+#  'dromaeo.jslibstyleprototype',
+#  'dromaeo.jslibtraversejquery',
+#  'dromaeo.jslibtraverseprototype',
   'media.tough_video_cases',
-  'octane',
+#  'octane',
   'smoothness.top_25_smooth',
   'speedometer',
+  'storage.indexeddb_endure_tracing',
   'sunspider',
 }
 
 
-def FindPgosweep(target_cpu):
+def FindPgosweep(target_cpu, build_dir):
   """Find the directory containing pgosweep.exe.
 
   Note: |target_cpu| should be x86 or x64.
@@ -62,6 +62,11 @@ def FindPgosweep(target_cpu):
     raise Exception('target_cpu should be x86 or x64.')
   win_toolchain_json_file = os.path.join(_CHROME_BUILD_DIR,
                                          'win_toolchain.json')
+  if not os.path.exists(win_toolchain_json_file):
+    win_toolchain_json_file = os.path.join(_CHROME_SRC_DIR, "..", "out",
+                                          os.path.basename(build_dir),
+                                         'win_toolchain.json')
+
   if not os.path.exists(win_toolchain_json_file):
     raise Exception('The toolchain JSON file (%s) is missing.' %
                     win_toolchain_json_file)
@@ -84,7 +89,7 @@ def FindPgosweep(target_cpu):
 def RunBenchmarks(options):
   """Run the benchmarks."""
   # Starts by finding the directory containing pgosweep.exe
-  pgo_sweep_dir = FindPgosweep(options.target_cpu)
+  pgo_sweep_dir = FindPgosweep(options.target_cpu, options.build_dir)
 
   # Find the run_benchmark script.
   chrome_run_benchmark_script = os.path.join(_CHROME_SRC_DIR, 'tools',

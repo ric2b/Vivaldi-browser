@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/surfaces/surface_id.h"
@@ -50,7 +50,8 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
   SurfaceDrawQuad* CreateSurfaceDrawQuad(
       RenderPass* render_pass,
       SurfaceDrawQuadType surface_draw_quad_type,
-      const SurfaceInfo& surface_info);
+      const SurfaceInfo& surface_info,
+      std::vector<SurfaceId>* embedded_surfaces);
 
   void GetDebugBorderProperties(SkColor* color, float* width) const override;
   void AppendRainbowDebugBorder(RenderPass* render_pass);

@@ -26,6 +26,7 @@
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/invalidation/ios_chrome_profile_invalidation_provider_factory.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/services/gcm/ios_chrome_gcm_profile_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
@@ -34,6 +35,7 @@
 #include "ios/chrome/browser/signin/signin_client_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_sync_client.h"
+#include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/web_thread.h"
@@ -99,15 +101,18 @@ IOSChromeProfileSyncServiceFactory::IOSChromeProfileSyncServiceFactory()
   DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
   DependsOn(ios::AboutSigninInternalsFactory::GetInstance());
   DependsOn(ios::BookmarkModelFactory::GetInstance());
-  DependsOn(SigninClientFactory::GetInstance());
+  DependsOn(ios::BookmarkUndoServiceFactory::GetInstance());
+  DependsOn(ios::FaviconServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
-  DependsOn(IOSChromeProfileInvalidationProviderFactory::GetInstance());
-  DependsOn(OAuth2TokenServiceFactory::GetInstance());
-  DependsOn(IOSChromePasswordStoreFactory::GetInstance());
   DependsOn(ios::SigninManagerFactory::GetInstance());
   DependsOn(ios::TemplateURLServiceFactory::GetInstance());
   DependsOn(ios::WebDataServiceFactory::GetInstance());
-  DependsOn(ios::FaviconServiceFactory::GetInstance());
+  DependsOn(IOSChromeGCMProfileServiceFactory::GetInstance());
+  DependsOn(IOSChromePasswordStoreFactory::GetInstance());
+  DependsOn(IOSChromeProfileInvalidationProviderFactory::GetInstance());
+  DependsOn(OAuth2TokenServiceFactory::GetInstance());
+  DependsOn(ReadingListModelFactory::GetInstance());
+  DependsOn(SigninClientFactory::GetInstance());
 }
 
 IOSChromeProfileSyncServiceFactory::~IOSChromeProfileSyncServiceFactory() {}
@@ -142,15 +147,11 @@ IOSChromeProfileSyncServiceFactory::BuildServiceInstanceFor(
   init_params.url_request_context = browser_state->GetRequestContext();
   init_params.debug_identifier = browser_state->GetDebugName();
   init_params.channel = ::GetChannel();
-  base::SequencedWorkerPool* blocking_pool = web::WebThread::GetBlockingPool();
-  init_params.blocking_task_runner =
-      blocking_pool->GetSequencedTaskRunnerWithShutdownBehavior(
-          blocking_pool->GetSequenceToken(),
-          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
 
   auto pss = base::MakeUnique<ProfileSyncService>(std::move(init_params));
 
   // Will also initialize the sync client.
   pss->Initialize();
+  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
   return std::move(pss);
 }

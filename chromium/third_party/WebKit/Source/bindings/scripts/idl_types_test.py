@@ -8,9 +8,11 @@
 
 import unittest
 
+from idl_types import IdlNullableType
 from idl_types import IdlRecordType
 from idl_types import IdlSequenceType
 from idl_types import IdlType
+from idl_types import IdlUnionType
 
 
 class IdlTypeTest(unittest.TestCase):
@@ -76,3 +78,97 @@ class IdlRecordTypeTest(unittest.TestCase):
                                  IdlRecordType(IdlType('ByteString'),
                                                IdlSequenceType(IdlType('unsigned short'))))
         self.assertEqual(idl_type.name, 'StringByteStringUnsignedShortSequenceRecordRecord')
+
+
+class IdlUnionTypeTest(unittest.TestCase):
+
+    def test_flattened_member_types(self):
+        # We are only testing the algorithm here, so we do create some ambiguous union types.
+
+        def compare_flattened_members(actual, expected):
+            """Compare a set of IDL types by name, as the objects are different"""
+            actual_names = set([member.name for member in actual])
+            expected_names = set([member.name for member in expected])
+            self.assertEqual(actual_names, expected_names)
+
+        idl_type = IdlUnionType([IdlType('long'), IdlType('SomeInterface')])
+        compare_flattened_members(
+            idl_type.flattened_member_types,
+            set([IdlType('long'), IdlType('SomeInterface')]))
+
+        idl_type = IdlUnionType([IdlUnionType([IdlType('ByteString'), IdlType('float')]),
+                                 IdlType('boolean')])
+        compare_flattened_members(
+            idl_type.flattened_member_types,
+            set([IdlType('float'), IdlType('boolean'), IdlType('ByteString')]))
+
+        idl_type = IdlUnionType([IdlUnionType([IdlType('ByteString'), IdlType('DOMString')]),
+                                 IdlType('DOMString')])
+        compare_flattened_members(
+            idl_type.flattened_member_types,
+            set([IdlType('DOMString'), IdlType('ByteString')]))
+
+        idl_type = IdlUnionType(
+            [IdlNullableType(IdlType('ByteString')), IdlType('byte')])
+        compare_flattened_members(
+            idl_type.flattened_member_types,
+            set([IdlType('ByteString'), IdlType('byte')]))
+
+        idl_type = IdlUnionType(
+            [IdlNullableType(IdlType('ByteString')), IdlType('byte'),
+             IdlUnionType([IdlType('ByteString'), IdlType('float')])])
+        self.assertEqual(len(idl_type.flattened_member_types), 3)
+        compare_flattened_members(
+            idl_type.flattened_member_types,
+            set([IdlType('ByteString'), IdlType('byte'), IdlType('float')]))
+
+        # From the example in the spec: "the flattened member types of the union type (Node or (sequence<long> or Event) or
+        # (XMLHttpRequest or DOMString)? or sequence<(sequence<double> or NodeList)>) are the six types Node, sequence<long>,
+        # Event, XMLHttpRequest, DOMString and sequence<(sequence<double> or NodeList)>"
+        idl_type = IdlUnionType(
+            [IdlType('Node'),
+             IdlUnionType([IdlSequenceType(IdlType('long')), IdlType('Event')]),
+             IdlNullableType(IdlUnionType([IdlType('XMLHttpRequest'), IdlType('DOMString')])),
+             IdlSequenceType(IdlUnionType([IdlSequenceType(IdlType('double')), IdlType('NodeList')]))])
+        self.assertEqual(len(idl_type.flattened_member_types), 6)
+        compare_flattened_members(
+            idl_type.flattened_member_types,
+            set([IdlType('Node'), IdlSequenceType(IdlType('long')), IdlType('Event'),
+                 IdlType('XMLHttpRequest'), IdlType('DOMString'),
+                 IdlSequenceType(IdlUnionType([IdlSequenceType(IdlType('double')), IdlType('NodeList')]))]))
+
+    def test_resolve_typedefs(self):
+        # This is a simplification of the typedef mechanism to avoid having to
+        # use idl_definitions and use actual nodes from //tools/idl_parser.
+        typedefs = {
+            'Foo': IdlType('unsigned short'),
+            'MyBooleanType': IdlType('boolean'),
+            'SomeInterfaceT': IdlType('MyInterface'),
+        }
+
+        # (long long or MyBooleanType)
+        union = IdlUnionType([IdlType('long long'), IdlType('MyBooleanType')]).resolve_typedefs(typedefs)
+        self.assertEqual(union.name, 'LongLongOrBoolean')
+        self.assertEqual(union.member_types[0].name, 'LongLong')
+        self.assertEqual(union.member_types[1].name, 'Boolean')
+
+        # (Foo or SomeInterfaceT)
+        union = IdlUnionType([IdlType('Foo'), IdlType('SomeInterfaceT')]).resolve_typedefs(typedefs)
+        self.assertEqual(union.name, 'UnsignedShortOrMyInterface')
+        self.assertEqual(union.member_types[0].name, 'UnsignedShort')
+        self.assertEqual(union.member_types[1].name, 'MyInterface')
+
+        # (Foo or sequence<(MyBooleanType or double)>)
+        union = IdlUnionType([
+            IdlType('Foo'),
+            IdlSequenceType(IdlUnionType([IdlType('MyBooleanType'),
+                                          IdlType('double')]))]).resolve_typedefs(typedefs)
+        self.assertEqual(union.name, 'UnsignedShortOrBooleanOrDoubleSequence')
+        self.assertEqual(union.member_types[0].name, 'UnsignedShort')
+        self.assertEqual(union.member_types[1].name, 'BooleanOrDoubleSequence')
+        self.assertEqual(union.member_types[1].element_type.name, 'BooleanOrDouble')
+        self.assertEqual(union.member_types[1].element_type.member_types[0].name,
+                         'Boolean')
+        self.assertEqual(union.member_types[1].element_type.member_types[1].name,
+                         'Double')
+        self.assertEqual(2, len(union.flattened_member_types))

@@ -27,26 +27,28 @@ class WebViewTestClient : public blink::WebViewClient {
   // Caller has to ensure |web_view_test_proxy_base| lives longer than |this|.
   WebViewTestClient(WebViewTestProxyBase* web_view_test_proxy_base);
 
-  virtual ~WebViewTestClient();
+  ~WebViewTestClient() override;
 
   // WebViewClient overrides needed by WebViewTestProxy.
-  void showValidationMessage(const blink::WebRect& anchor_in_root_view,
+  void ShowValidationMessage(const blink::WebRect& anchor_in_root_view,
                              const blink::WebString& main_message,
                              blink::WebTextDirection main_message_hint,
                              const blink::WebString& sub_message,
                              blink::WebTextDirection sub_message_hint) override;
-  void didChangeContents() override;
-  blink::WebView* createView(blink::WebLocalFrame* creator,
+  void DidChangeContents() override;
+  blink::WebView* CreateView(blink::WebLocalFrame* creator,
                              const blink::WebURLRequest& request,
                              const blink::WebWindowFeatures& features,
                              const blink::WebString& frame_name,
                              blink::WebNavigationPolicy policy,
                              bool suppress_opener) override;
-  void setStatusText(const blink::WebString& text) override;
-  void printPage(blink::WebLocalFrame* frame) override;
-  blink::WebSpeechRecognizer* speechRecognizer() override;
-  blink::WebString acceptLanguages() override;
-  void didFocus() override;
+  void SetStatusText(const blink::WebString& text) override;
+  void PrintPage(blink::WebLocalFrame* frame) override;
+  blink::WebSpeechRecognizer* SpeechRecognizer() override;
+  blink::WebString AcceptLanguages() override;
+  void DidFocus() override;
+  bool CanHandleGestureEvent() override;
+  bool CanUpdateLayout() override;
 
  private:
   WebTestDelegate* delegate();

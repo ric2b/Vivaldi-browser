@@ -12,6 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/url_request/url_request.h"
@@ -69,10 +70,6 @@ class CallbacksJobFactory : public net::URLRequestJobFactory {
     return scheme == "content";
   }
 
-  bool IsHandledURL(const GURL& url) const override {
-    return IsHandledProtocol(url.scheme());
-  }
-
   bool IsSafeRedirectTarget(const GURL& location) const override {
     return false;
   }
@@ -120,7 +117,7 @@ class URLRequestContentJobTest : public testing::Test {
   // retrieved.
   void RunRequest(const Range* range);
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   JobObserverImpl observer_;
   net::TestURLRequestContext context_;
   net::TestDelegate delegate_;

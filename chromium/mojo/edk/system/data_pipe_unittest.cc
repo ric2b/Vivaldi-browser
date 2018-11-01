@@ -16,12 +16,11 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/system/test_utils.h"
-#include "mojo/edk/system/waiter.h"
 #include "mojo/edk/test/mojo_test_base.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/functions.h"
 #include "mojo/public/c/system/message_pipe.h"
-#include "mojo/public/cpp/system/watcher.h"
+#include "mojo/public/cpp/system/simple_watcher.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -41,6 +40,9 @@ const size_t kMaxPoll = 100;
 const size_t kMultiprocessCapacity = 37;
 const char kMultiprocessTestData[] = "hello i'm a string that is 36 bytes";
 const int kMultiprocessMaxIter = 5;
+
+// TODO(rockot): There are many uses of ASSERT where EXPECT would be more
+// appropriate. Fix this.
 
 class DataPipeTest : public test::MojoTestBase {
  public:
@@ -159,9 +161,9 @@ TEST_F(DataPipeTest, Basic) {
   // Now wait for the other side to become readable.
   MojoHandleSignalsState state;
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &state));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, state.satisfied_signals);
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &state));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            state.satisfied_signals);
 
   elements[0] = -1;
   elements[1] = -1;
@@ -245,10 +247,11 @@ TEST_F(DataPipeTest, SimpleReadWrite) {
 
   // Wait.
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Query.
@@ -331,18 +334,11 @@ TEST_F(DataPipeTest, BasicProducerWaiting) {
   Create(&options);
   MojoHandleSignalsState hss;
 
-  // Never readable.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_FAILED_PRECONDITION,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_READABLE, 0, &hss));
+  // Never readable. Already writable.
+  hss = GetSignalsState(producer_);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfiable_signals);
-
-  // Already writable.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_WRITABLE, 0, &hss));
 
   // Write two elements.
   int32_t elements[2] = {123, 456};
@@ -352,10 +348,11 @@ TEST_F(DataPipeTest, BasicProducerWaiting) {
 
   // Wait for data to become available to the consumer.
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Peek one element.
@@ -411,11 +408,7 @@ TEST_F(DataPipeTest, BasicProducerWaiting) {
   // It should now be never-writable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_FAILED_PRECONDITION,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_WRITABLE, 0, &hss));
+            WaitForSignals(producer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfiable_signals);
 }
@@ -436,8 +429,7 @@ TEST_F(DataPipeTest, PeerClosedProducerWaiting) {
   // It should be signaled.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
+            WaitForSignals(producer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfiable_signals);
 }
@@ -458,8 +450,7 @@ TEST_F(DataPipeTest, PeerClosedConsumerWaiting) {
   // It should be signaled.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfiable_signals);
 }
@@ -477,10 +468,10 @@ TEST_F(DataPipeTest, BasicConsumerWaiting) {
   // Never writable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_FAILED_PRECONDITION,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_WRITABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(0u, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_WRITABLE, &hss));
+  EXPECT_EQ(0u, hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Write two elements.
@@ -491,10 +482,11 @@ TEST_F(DataPipeTest, BasicConsumerWaiting) {
   // Wait for readability.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Discard one element.
@@ -505,10 +497,10 @@ TEST_F(DataPipeTest, BasicConsumerWaiting) {
   // Should still be readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Peek one element.
@@ -522,10 +514,10 @@ TEST_F(DataPipeTest, BasicConsumerWaiting) {
   // Should still be readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Read one element.
@@ -546,10 +538,11 @@ TEST_F(DataPipeTest, BasicConsumerWaiting) {
   // Waiting should now succeed.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Close the producer.
@@ -558,19 +551,22 @@ TEST_F(DataPipeTest, BasicConsumerWaiting) {
   // Should still be readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_TRUE((hss.satisfied_signals & MOJO_HANDLE_SIGNAL_READABLE) != 0);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_TRUE(hss.satisfied_signals & (MOJO_HANDLE_SIGNAL_READABLE |
+                                       MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Wait for the peer closed signal.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_TRUE((hss.satisfied_signals & MOJO_HANDLE_SIGNAL_PEER_CLOSED) != 0);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE |
+                MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Read one element.
@@ -585,10 +581,61 @@ TEST_F(DataPipeTest, BasicConsumerWaiting) {
   // Should be never-readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_FAILED_PRECONDITION,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfiable_signals);
+}
+
+TEST_F(DataPipeTest, ConsumerNewDataReadable) {
+  const MojoCreateDataPipeOptions options = {
+      kSizeOfOptions,                           // |struct_size|.
+      MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE,  // |flags|.
+      static_cast<uint32_t>(sizeof(int32_t)),   // |element_num_bytes|.
+      1000 * sizeof(int32_t)                    // |capacity_num_bytes|.
+  };
+  EXPECT_EQ(MOJO_RESULT_OK, Create(&options));
+
+  int32_t elements[2] = {123, 456};
+  uint32_t num_bytes = static_cast<uint32_t>(2u * sizeof(elements[0]));
+  EXPECT_EQ(MOJO_RESULT_OK, WriteData(elements, &num_bytes, true));
+
+  // The consumer handle should appear to be readable and have new data.
+  EXPECT_EQ(MOJO_RESULT_OK,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE));
+  EXPECT_TRUE(GetSignalsState(consumer_).satisfied_signals &
+              MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE);
+
+  // Now try to read a minimum of 6 elements.
+  int32_t read_elements[6];
+  uint32_t num_read_bytes = sizeof(read_elements);
+  EXPECT_EQ(MOJO_RESULT_OUT_OF_RANGE,
+            MojoReadData(consumer_, read_elements, &num_read_bytes,
+                         MOJO_READ_DATA_FLAG_ALL_OR_NONE));
+
+  // The consumer should still appear to be readable but not with new data.
+  EXPECT_TRUE(GetSignalsState(consumer_).satisfied_signals &
+              MOJO_HANDLE_SIGNAL_READABLE);
+  EXPECT_FALSE(GetSignalsState(consumer_).satisfied_signals &
+               MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE);
+
+  // Write four more elements.
+  EXPECT_EQ(MOJO_RESULT_OK, WriteData(elements, &num_bytes, true));
+  EXPECT_EQ(MOJO_RESULT_OK, WriteData(elements, &num_bytes, true));
+
+  // The consumer handle should once again appear to be readable.
+  EXPECT_EQ(MOJO_RESULT_OK,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE));
+
+  // Try again to read a minimum of 6 elements. Should succeed this time.
+  EXPECT_EQ(MOJO_RESULT_OK,
+            MojoReadData(consumer_, read_elements, &num_read_bytes,
+                         MOJO_READ_DATA_FLAG_ALL_OR_NONE));
+
+  // And now the consumer is unreadable.
+  EXPECT_FALSE(GetSignalsState(consumer_).satisfied_signals &
+               MOJO_HANDLE_SIGNAL_READABLE);
+  EXPECT_FALSE(GetSignalsState(consumer_).satisfied_signals &
+               MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE);
 }
 
 // Test with two-phase APIs and also closing the producer with an active
@@ -608,7 +655,7 @@ TEST_F(DataPipeTest, ConsumerWaitingTwoPhase) {
   void* buffer = nullptr;
   // Request room for three (but we'll only write two).
   uint32_t num_bytes = static_cast<uint32_t>(3u * sizeof(elements[0]));
-  ASSERT_EQ(MOJO_RESULT_OK, BeginWriteData(&buffer, &num_bytes, true));
+  ASSERT_EQ(MOJO_RESULT_OK, BeginWriteData(&buffer, &num_bytes, false));
   EXPECT_TRUE(buffer);
   EXPECT_GE(num_bytes, static_cast<uint32_t>(3u * sizeof(elements[0])));
   elements = static_cast<int32_t*>(buffer);
@@ -619,10 +666,11 @@ TEST_F(DataPipeTest, ConsumerWaitingTwoPhase) {
   // Wait for readability.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Read one element.
@@ -639,10 +687,10 @@ TEST_F(DataPipeTest, ConsumerWaitingTwoPhase) {
   // Should still be readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Read one element.
@@ -662,8 +710,7 @@ TEST_F(DataPipeTest, ConsumerWaitingTwoPhase) {
   // Should be never-readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_FAILED_PRECONDITION,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfiable_signals);
 }
@@ -680,9 +727,7 @@ TEST_F(DataPipeTest, BasicTwoPhaseWaiting) {
   MojoHandleSignalsState hss;
 
   // It should be writable.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_WRITABLE, 0, &hss));
+  hss = GetSignalsState(producer_);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfiable_signals);
@@ -694,28 +739,23 @@ TEST_F(DataPipeTest, BasicTwoPhaseWaiting) {
   EXPECT_GE(num_bytes, static_cast<uint32_t>(1u * sizeof(int32_t)));
 
   // At this point, it shouldn't be writable.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_DEADLINE_EXCEEDED,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_WRITABLE, 0, &hss));
+  hss = GetSignalsState(producer_);
   ASSERT_EQ(0u, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfiable_signals);
 
   // It shouldn't be readable yet either (we'll wait later).
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_DEADLINE_EXCEEDED,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE, 0, &hss));
+  hss = GetSignalsState(consumer_);
   ASSERT_EQ(0u, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   static_cast<int32_t*>(write_ptr)[0] = 123;
   ASSERT_EQ(MOJO_RESULT_OK, EndWriteData(1u * sizeof(int32_t)));
 
   // It should immediately be writable again.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_WRITABLE, 0, &hss));
+  hss = GetSignalsState(producer_);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfiable_signals);
@@ -723,10 +763,11 @@ TEST_F(DataPipeTest, BasicTwoPhaseWaiting) {
   // It should become readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Start another two-phase write and check that it's readable even in the
@@ -740,10 +781,11 @@ TEST_F(DataPipeTest, BasicTwoPhaseWaiting) {
   // It should be readable.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // End the two-phase write without writing anything.
@@ -757,30 +799,26 @@ TEST_F(DataPipeTest, BasicTwoPhaseWaiting) {
   ASSERT_EQ(static_cast<uint32_t>(1u * sizeof(int32_t)), num_bytes);
 
   // At this point, it should still be writable.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_WRITABLE, 0, &hss));
+  hss = GetSignalsState(producer_);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfiable_signals);
 
   // But not readable.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_DEADLINE_EXCEEDED,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE, 0, &hss));
+  hss = GetSignalsState(consumer_);
   ASSERT_EQ(0u, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // End the two-phase read without reading anything.
   ASSERT_EQ(MOJO_RESULT_OK, EndReadData(0u));
 
   // It should be readable again.
-  hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE, 0, &hss));
+  hss = GetSignalsState(consumer_);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 }
 
@@ -823,10 +861,11 @@ TEST_F(DataPipeTest, AllOrNone) {
   // of data to become available.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE |
+                MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfiable_signals);
 
   // Half full.
@@ -912,11 +951,10 @@ TEST_F(DataPipeTest, AllOrNone) {
   // Wait.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
             hss.satisfiable_signals);
 
   // Try reading too much; "failed precondition" since the producer is closed.
@@ -977,10 +1015,10 @@ TEST_F(DataPipeTest, WrapAround) {
 
   // Wait for data.
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_TRUE((hss.satisfied_signals & MOJO_HANDLE_SIGNAL_READABLE) != 0);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_TRUE(hss.satisfied_signals & MOJO_HANDLE_SIGNAL_READABLE);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Read 10 bytes.
@@ -1004,8 +1042,7 @@ TEST_F(DataPipeTest, WrapAround) {
   while (total_num_bytes < 90) {
     // Wait to write.
     ASSERT_EQ(MOJO_RESULT_OK,
-              MojoWait(producer_, MOJO_HANDLE_SIGNAL_WRITABLE,
-                       MOJO_DEADLINE_INDEFINITE, &hss));
+              WaitForSignals(producer_, MOJO_HANDLE_SIGNAL_WRITABLE, &hss));
     ASSERT_EQ(hss.satisfied_signals, MOJO_HANDLE_SIGNAL_WRITABLE);
     ASSERT_EQ(hss.satisfiable_signals,
               MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED);
@@ -1140,10 +1177,11 @@ TEST_F(DataPipeTest, TwoPhaseWriteReadCloseConsumer) {
   // TODO(vtl): (See corresponding TODO in AllOrNone.)
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Start two-phase read.
@@ -1159,8 +1197,7 @@ TEST_F(DataPipeTest, TwoPhaseWriteReadCloseConsumer) {
   // Wait for producer to know that the consumer is closed.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(producer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
+            WaitForSignals(producer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfiable_signals);
 
@@ -1230,11 +1267,12 @@ TEST_F(DataPipeTest, WriteCloseProducerReadNoData) {
   // must also know about all the data that was sent.)
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Peek that data.
@@ -1289,10 +1327,11 @@ TEST_F(DataPipeTest, TwoPhaseReadMemoryStable) {
   // Wait for the data.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Begin a two-phase read.
@@ -1314,10 +1353,10 @@ TEST_F(DataPipeTest, TwoPhaseReadMemoryStable) {
   // must also have received the extra data).
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Read the two phase memory to check it's still valid.
@@ -1401,10 +1440,11 @@ TEST_F(DataPipeTest, TwoPhaseMoreInvalidArguments) {
   // TODO(vtl): (See corresponding TODO in AllOrNone.)
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // One element available.
@@ -1469,10 +1509,11 @@ TEST_F(DataPipeTest, SendProducer) {
   // Wait for the data.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Check the data.
@@ -1492,8 +1533,8 @@ TEST_F(DataPipeTest, SendProducer) {
             MojoWriteMessage(pipe0, nullptr, 0, &producer_, 1,
                              MOJO_WRITE_MESSAGE_FLAG_NONE));
   producer_ = MOJO_HANDLE_INVALID;
-  ASSERT_EQ(MOJO_RESULT_OK, MojoWait(pipe1, MOJO_HANDLE_SIGNAL_READABLE,
-                                     MOJO_DEADLINE_INDEFINITE, &hss));
+  ASSERT_EQ(MOJO_RESULT_OK,
+            WaitForSignals(pipe1, MOJO_HANDLE_SIGNAL_READABLE, &hss));
   uint32_t num_handles = 1;
   ASSERT_EQ(MOJO_RESULT_OK,
             MojoReadMessage(pipe1, nullptr, 0, &producer_, &num_handles,
@@ -1510,10 +1551,11 @@ TEST_F(DataPipeTest, SendProducer) {
   // Wait for it.
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_READABLE,
-                     MOJO_DEADLINE_INDEFINITE, &hss));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE, hss.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_READABLE, &hss));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
+            hss.satisfied_signals);
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             hss.satisfiable_signals);
 
   // Check the second write.
@@ -1549,11 +1591,12 @@ TEST_F(DataPipeTest, ConsumerWithClosedProducerSent) {
   // Now wait for the other side to become readable and to see the peer closed.
   MojoHandleSignalsState state;
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &state));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &state));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             state.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             state.satisfiable_signals);
 
   // Now send the consumer over a MP so that it's serialized.
@@ -1565,8 +1608,8 @@ TEST_F(DataPipeTest, ConsumerWithClosedProducerSent) {
             MojoWriteMessage(pipe0, nullptr, 0, &consumer_, 1,
                              MOJO_WRITE_MESSAGE_FLAG_NONE));
   consumer_ = MOJO_HANDLE_INVALID;
-  ASSERT_EQ(MOJO_RESULT_OK, MojoWait(pipe1, MOJO_HANDLE_SIGNAL_READABLE,
-                                     MOJO_DEADLINE_INDEFINITE, &state));
+  ASSERT_EQ(MOJO_RESULT_OK,
+            WaitForSignals(pipe1, MOJO_HANDLE_SIGNAL_READABLE, &state));
   uint32_t num_handles = 1;
   ASSERT_EQ(MOJO_RESULT_OK,
             MojoReadMessage(pipe1, nullptr, 0, &consumer_, &num_handles,
@@ -1574,11 +1617,12 @@ TEST_F(DataPipeTest, ConsumerWithClosedProducerSent) {
   ASSERT_EQ(num_handles, 1u);
 
   ASSERT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, &state));
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+            WaitForSignals(consumer_, MOJO_HANDLE_SIGNAL_PEER_CLOSED, &state));
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             state.satisfied_signals);
-  ASSERT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+  EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED |
+                MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
             state.satisfiable_signals);
 
   int32_t read_data;
@@ -1608,8 +1652,8 @@ bool WriteAllData(MojoHandle producer,
     }
 
     MojoHandleSignalsState hss = MojoHandleSignalsState();
-    EXPECT_EQ(MOJO_RESULT_OK, MojoWait(producer, MOJO_HANDLE_SIGNAL_WRITABLE,
-                                       MOJO_DEADLINE_INDEFINITE, &hss));
+    EXPECT_EQ(MOJO_RESULT_OK, test::MojoTestBase::WaitForSignals(
+                                  producer, MOJO_HANDLE_SIGNAL_WRITABLE, &hss));
     EXPECT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE, hss.satisfied_signals);
     EXPECT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
               hss.satisfiable_signals);
@@ -1646,12 +1690,12 @@ bool ReadAllData(MojoHandle consumer,
     }
 
     MojoHandleSignalsState hss = MojoHandleSignalsState();
-    EXPECT_EQ(MOJO_RESULT_OK, MojoWait(consumer, MOJO_HANDLE_SIGNAL_READABLE,
-                                       MOJO_DEADLINE_INDEFINITE, &hss));
+    EXPECT_EQ(MOJO_RESULT_OK, test::MojoTestBase::WaitForSignals(
+                                  consumer, MOJO_HANDLE_SIGNAL_READABLE, &hss));
     // Peer could have become closed while we're still waiting for data.
     EXPECT_TRUE(MOJO_HANDLE_SIGNAL_READABLE & hss.satisfied_signals);
-    EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-              hss.satisfiable_signals);
+    EXPECT_TRUE(hss.satisfiable_signals & MOJO_HANDLE_SIGNAL_READABLE);
+    EXPECT_TRUE(hss.satisfiable_signals & MOJO_HANDLE_SIGNAL_PEER_CLOSED);
   }
 
   return num_bytes == 0;
@@ -1706,8 +1750,8 @@ TEST_F(DataPipeTest, Multiprocess) {
     // Receive the consumer from the other side.
     producer_ = MOJO_HANDLE_INVALID;
     MojoHandleSignalsState hss = MojoHandleSignalsState();
-    ASSERT_EQ(MOJO_RESULT_OK, MojoWait(server_mp, MOJO_HANDLE_SIGNAL_READABLE,
-                                       MOJO_DEADLINE_INDEFINITE, &hss));
+    ASSERT_EQ(MOJO_RESULT_OK,
+              WaitForSignals(server_mp, MOJO_HANDLE_SIGNAL_READABLE, &hss));
     MojoHandle handles[2];
     uint32_t num_handles = arraysize(handles);
     ASSERT_EQ(MOJO_RESULT_OK,
@@ -1736,8 +1780,8 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(MultiprocessClient, DataPipeTest, client_mp) {
   // Receive the data pipe from the other side.
   MojoHandle consumer = MOJO_HANDLE_INVALID;
   MojoHandleSignalsState hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_OK, MojoWait(client_mp, MOJO_HANDLE_SIGNAL_READABLE,
-                                     MOJO_DEADLINE_INDEFINITE, &hss));
+  ASSERT_EQ(MOJO_RESULT_OK,
+            WaitForSignals(client_mp, MOJO_HANDLE_SIGNAL_READABLE, &hss));
   MojoHandle handles[2];
   uint32_t num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
@@ -1772,8 +1816,8 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(MultiprocessClient, DataPipeTest, client_mp) {
   // Receive the producer from the other side.
   MojoHandle producer = MOJO_HANDLE_INVALID;
   hss = MojoHandleSignalsState();
-  ASSERT_EQ(MOJO_RESULT_OK, MojoWait(client_mp, MOJO_HANDLE_SIGNAL_READABLE,
-                                     MOJO_DEADLINE_INDEFINITE, &hss));
+  ASSERT_EQ(MOJO_RESULT_OK,
+            WaitForSignals(client_mp, MOJO_HANDLE_SIGNAL_READABLE, &hss));
   num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             MojoReadMessage(client_mp, nullptr, 0, handles, &num_handles,
@@ -1813,8 +1857,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReadAndCloseConsumer, DataPipeTest, h) {
   std::string expected_message = ReadMessageWithHandles(h, &c, 1);
 
   // Wait for the consumer to become readable.
-  EXPECT_EQ(MOJO_RESULT_OK, MojoWait(c, MOJO_HANDLE_SIGNAL_READABLE,
-                                     MOJO_DEADLINE_INDEFINITE, nullptr));
+  EXPECT_EQ(MOJO_RESULT_OK, WaitForSignals(c, MOJO_HANDLE_SIGNAL_READABLE));
 
   // Drain the consumer and expect to find the given message.
   uint32_t num_bytes = static_cast<uint32_t>(expected_message.size());
@@ -1881,8 +1924,7 @@ TEST_F(DataPipeTest, CreateInChild) {
     std::string expected_message = ReadMessageWithHandles(child, &c, 1);
 
     // Wait for the consumer to become readable.
-    EXPECT_EQ(MOJO_RESULT_OK, MojoWait(c, MOJO_HANDLE_SIGNAL_READABLE,
-                                       MOJO_DEADLINE_INDEFINITE, nullptr));
+    EXPECT_EQ(MOJO_RESULT_OK, WaitForSignals(c, MOJO_HANDLE_SIGNAL_READABLE));
 
     // Drain the consumer and expect to find the given message.
     uint32_t num_bytes = static_cast<uint32_t>(expected_message.size());
@@ -1909,19 +1951,17 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(DataPipeStatusChangeInTransitClient,
   MojoHandle* producers = &handles[0];
   MojoHandle* consumers = &handles[3];
 
-  // Wait on producer 0 using MojoWait.
+  // Wait on producer 0
   EXPECT_EQ(MOJO_RESULT_OK,
-            MojoWait(producers[0], MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, nullptr));
+            WaitForSignals(producers[0], MOJO_HANDLE_SIGNAL_PEER_CLOSED));
 
-  // Wait on consumer 0 using MojoWait.
+  // Wait on consumer 0
   EXPECT_EQ(MOJO_RESULT_OK,
-            MojoWait(consumers[0], MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                     MOJO_DEADLINE_INDEFINITE, nullptr));
+            WaitForSignals(consumers[0], MOJO_HANDLE_SIGNAL_PEER_CLOSED));
 
   base::MessageLoop message_loop;
 
-  // Wait on producer 1 and consumer 1 using Watchers.
+  // Wait on producer 1 and consumer 1 using SimpleWatchers.
   {
     base::RunLoop run_loop;
     int count = 0;
@@ -1932,12 +1972,16 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(DataPipeStatusChangeInTransitClient,
             loop->Quit();
         },
         &run_loop, &count);
-    Watcher producer_watcher(FROM_HERE), consumer_watcher(FROM_HERE);
-    producer_watcher.Start(
-        Handle(producers[1]), MOJO_HANDLE_SIGNAL_PEER_CLOSED, callback);
-    consumer_watcher.Start(
-        Handle(consumers[1]), MOJO_HANDLE_SIGNAL_PEER_CLOSED, callback);
+    SimpleWatcher producer_watcher(FROM_HERE,
+                                   SimpleWatcher::ArmingPolicy::AUTOMATIC);
+    SimpleWatcher consumer_watcher(FROM_HERE,
+                                   SimpleWatcher::ArmingPolicy::AUTOMATIC);
+    producer_watcher.Watch(Handle(producers[1]), MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+                           callback);
+    consumer_watcher.Watch(Handle(consumers[1]), MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+                           callback);
     run_loop.Run();
+    EXPECT_EQ(2, count);
   }
 
   // Wait on producer 2 by polling with MojoWriteData.

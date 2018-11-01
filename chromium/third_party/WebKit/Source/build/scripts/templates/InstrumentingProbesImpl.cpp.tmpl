@@ -1,0 +1,105 @@
+// This file is generated from {{input_file}}
+
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+
+{% set sink_class = (name | to_singular) + "Sink" %}
+{% for file in files %}
+#include "{{file.name}}Inl.h"
+{% endfor %}
+#include "{{sink_class}}.h"
+{% for agent in agents %}
+#include "{{agent | agent_name_to_include}}"
+{% endfor %}
+
+namespace blink {
+
+{{sink_class}}::{{sink_class}}() {}
+
+{% for agent in agents %}
+{% set class_name = agent | agent_name_to_class %}
+{% set getter_name = class_name | to_lower_case %}
+void {{sink_class}}::add{{class_name}}({{class_name}}* agent) {
+  m_{{getter_name}}s.insert(agent);
+  m_has{{class_name}}s = true;
+}
+
+void {{sink_class}}::remove{{class_name}}({{class_name}}* agent) {
+  m_{{getter_name}}s.erase(agent);
+  m_has{{class_name}}s = !m_{{getter_name}}s.IsEmpty();
+}
+
+{% endfor -%}
+
+DEFINE_TRACE({{sink_class}})
+{
+{% for agent in agents %}
+{% set getter_name = agent | agent_name_to_class | to_lower_case %}
+  visitor->Trace(m_{{getter_name}}s);
+{% endfor %}
+}
+
+namespace probe {
+{% macro params_list(probe) -%}
+{%- for param in probe.params %}
+{{param.type}} {{param.name}}
+{%- if not loop.last %}, {% endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+{% macro probe_body(probe, common_name) %}
+{% set agent_probe_name = method_name(common_name or probe.name) %}
+  {{sink_class}}* sink = To{{sink_class}}({{probe.params[0].name}});
+  if (!sink)
+    return;
+{% for param in probe.params %}
+{% if param.is_prp %}
+  RefPtr<{{param.inner_type}}> {{param.value}} = {{param.name}};
+{% endif %}
+{% endfor %}
+{% for agent in probe.agents %}
+{% set class_name = agent | agent_name_to_class %}
+  if (sink->has{{class_name}}s()) {
+    for ({{class_name}}* agent : sink->{{ class_name | to_lower_case }}s())
+      agent->{{agent_probe_name}}({{caller()}});
+  }
+{% endfor %}
+{% endmacro -%}
+
+{% for file in files %}
+{% for probe in file.declarations %}
+{% if probe.is_scoped %}
+{{probe.name}}::{{probe.name}}({{ params_list(probe) }}) :
+{% for param in probe.params %}
+    {{param.name}}({{param.name}})
+{%- if not loop.last %},
+{% endif %}
+{% endfor %} {
+{% call probe_body(probe, "Will") %}*this{% endcall %}
+}
+
+{{probe.name}}::~{{probe.name}}() {
+{% call probe_body(probe, "Did") %}*this{% endcall %}
+}
+
+{% else -%}
+
+CORE_EXPORT void {{probe.name}}({{ params_list(probe) }}) {
+{% call probe_body(probe, "") %}
+{%- for param in probe.params %}
+{%- if not loop.first or "Keep" in param.options -%}
+{{param.value}}
+{%- if not loop.last %}, {% endif -%}
+{%- endif -%}
+{%- endfor %}
+{%- endcall %}
+}
+
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+} // namespace probe
+} // namespace blink

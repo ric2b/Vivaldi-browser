@@ -21,8 +21,8 @@
 #define ScopedPageSuspender_h
 
 #include "core/CoreExport.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -39,8 +39,8 @@ class CORE_EXPORT ScopedPageSuspender final {
  private:
   friend class Page;
 
-  static void setSuspended(bool);
-  static bool isActive();
+  static void SetSuspended(bool);
+  static bool IsActive();
 };
 
 }  // namespace blink

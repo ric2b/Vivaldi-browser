@@ -4,15 +4,20 @@
     "service_manager:connector": {
       "provides": {
         "browser": [
+          "chrome::mojom::DialDeviceDescriptionParser",
           "chrome::mojom::FilePatcher",
           "chrome::mojom::ProfileImport",
           "chrome::mojom::ResourceUsageReporter",
+          "chrome::mojom::SafeArchiveAnalyzer",
           "chrome::mojom::ShellHandler",
           "chrome::mojom::ZipFileCreator",
+          "extensions::mojom::ExtensionUnpacker",
+          "extensions::mojom::ManifestParser",
           "extensions::mojom::MediaParser",
           "extensions::mojom::RemovableStorageWriter",
           "extensions::mojom::WiFiCredentialsGetter",
           "net::interfaces::ProxyResolverFactory",
+          "payments::mojom::PaymentManifestParser",
           "safe_json::mojom::SafeJsonParser"
         ]
       }

@@ -18,7 +18,6 @@ if (enable_pdf) {
 
 grit("resources") {
   source = "common_resources.grd"
-  use_qualified_include = true
   defines = chrome_grit_defines
   output_dir = "$root_gen_dir/chrome"
   output_name = "common_resources"
@@ -38,12 +37,12 @@ buildflag_header("features") {
     "ENABLE_GOOGLE_NOW=$enable_google_now",
     "ENABLE_HANGOUT_SERVICES_EXTENSION=$enable_hangout_services_extension",
     "ENABLE_ONE_CLICK_SIGNIN=$enable_one_click_signin",
+    "ENABLE_NATIVE_NOTIFICATIONS=$enable_native_notifications",
     "ENABLE_PACKAGE_MASH_SERVICES=$enable_package_mash_services",
-    "ENABLE_PLUGIN_INSTALLATION=$enable_plugin_installation",
     "ENABLE_SERVICE_DISCOVERY=$enable_service_discovery",
     "ENABLE_SESSION_SERVICE=$enable_session_service",
     "ENABLE_SUPERVISED_USERS=$enable_supervised_users",
-    "ENABLE_XPC_NOTIFICATIONS=$enable_xpc_notifications",
+    "ENABLE_WAYLAND_SERVER=$enable_wayland_server",
     "PGO_BUILD=$pgo_build",
     "USE_VULCANIZE=$use_vulcanize",
   ]
@@ -69,8 +68,6 @@ static_library("common") {
     "chrome_content_client.cc",
     "chrome_content_client.h",
     "chrome_content_client_constants.cc",
-    "chrome_media_client_android.cc",
-    "chrome_media_client_android.h",
     "chrome_result_codes.h",
     "chrome_utility_messages.h",
     "common_message_generator.cc",
@@ -118,6 +115,7 @@ static_library("common") {
     "page_load_metrics/page_track_decider.h",
     "partial_circular_buffer.cc",
     "partial_circular_buffer.h",
+    "pause_tabs_field_trial.h",
     "pref_names_util.cc",
     "pref_names_util.h",
     "prerender_types.h",
@@ -197,6 +195,7 @@ static_library("common") {
     "//components/policy:generated",
     "//components/policy/core/common",
     "//components/prefs",
+    "//components/safe_browsing:csd_proto",
     "//components/signin/core/common",
     "//components/strings",
     "//components/translate/content/common",
@@ -212,6 +211,7 @@ static_library("common") {
     "//google_apis",
     "//gpu/command_buffer/service",
     "//gpu/config",
+    "//gpu/config:crash_keys",
     "//ipc",
     "//media",
     "//mojo/edk/system",
@@ -253,8 +253,6 @@ static_library("common") {
       "extensions/api/notifications/notification_style.h",
       "extensions/api/omnibox/omnibox_handler.cc",
       "extensions/api/omnibox/omnibox_handler.h",
-      "extensions/api/plugins/plugins_handler.cc",
-      "extensions/api/plugins/plugins_handler.h",
       "extensions/api/speech/tts_engine_manifest_handler.cc",
       "extensions/api/speech/tts_engine_manifest_handler.h",
       "extensions/api/spellcheck/spellcheck_handler.cc",
@@ -405,6 +403,10 @@ static_library("common") {
       "channel_info_posix.cc",
       "media_galleries/metadata_types.h",
     ]
+    sources += [
+      "media/chrome_media_drm_bridge_client.cc",
+      "media/chrome_media_drm_bridge_client.h",
+    ]
   } else {
     # Non-Android.
     sources += [
@@ -518,6 +520,12 @@ static_library("common") {
         "safe_browsing/zip_analyzer_results.cc",
         "safe_browsing/zip_analyzer_results.h",
       ]
+
+      public_deps += [ "//ipc" ]
+
+      # safe_archive_analyzer.mojom has a [Native] trait that depends on
+      # the protobuf headers in the sources list above.
+      allow_circular_includes_from = [ ":mojo_bindings" ]
     }
   }
 
@@ -527,12 +535,16 @@ static_library("common") {
     ]
   }
 
-  if (enable_pepper_cdms) {
+  if (enable_cdm_host_verification) {
     sources += [
       "media/cdm_host_file_path.cc",
       "media/cdm_host_file_path.h",
     ]
     public_deps += [ "//chrome/common:version_header" ]
+  }
+
+  if (enable_media_router) {
+    public_deps += [ "//chrome/common/media_router:interfaces" ]
   }
 }
 
@@ -557,7 +569,6 @@ static_library("constants") {
     "chrome_constants.h",
     "chrome_features.cc",
     "chrome_features.h",
-    "chrome_icon_resources_win.cc",
     "chrome_icon_resources_win.h",
     "chrome_paths.cc",
     "chrome_paths.h",
@@ -609,6 +620,10 @@ static_library("constants") {
     # implemented in //ui/base, so we need that dependency.
     deps += [ "//ui/base" ]
   }
+
+  if (is_win) {
+    deps += [ "//chrome/install_static:install_static_util" ]
+  }
 }
 
 if (is_win) {
@@ -620,7 +635,7 @@ if (is_win) {
 
     deps = [
       "//base",
-      "//chrome/installer/util:with_no_strings",
+      "//chrome/install_static:install_static_util",
     ]
   }
 }
@@ -683,24 +698,31 @@ source_set("app_mode_app_support") {
 mojom("mojo_bindings") {
   sources = [
     "conflicts/module_event_sink_win.mojom",
-    "field_trial_recorder.mojom",
     "file_patcher.mojom",
+    "image_context_menu_renderer.mojom",
     "insecure_content_renderer.mojom",
     "net_benchmarking.mojom",
     "network_diagnostics.mojom",
+    "open_search_description_document_handler.mojom",
     "prerender.mojom",
     "renderer_configuration.mojom",
     "resource_usage_reporter.mojom",
     "shell_handler_win.mojom",
+    "thumbnail_capturer.mojom",
   ]
 
   if (is_chromeos) {
     sources += [ "zip_file_creator.mojom" ]
   }
 
+  if (safe_browsing_mode == 1) {
+    sources += [ "safe_archive_analyzer.mojom" ]
+  }
+
   public_deps = [
     "//components/content_settings/core/common:mojo_bindings",
     "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
   ]
 }

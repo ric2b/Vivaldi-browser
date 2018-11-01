@@ -28,15 +28,31 @@ var LOG_TYPE = {
 
 /**
  * The different sources that an NTP tile can have.
- * Note: Keep in sync with components/ntp_tiles/ntp_tile_source.h
+ * Note: Keep in sync with components/ntp_tiles/tile_source.h
  * @enum {number}
  * @const
  */
-var NTPTileSource = {
+var TileSource = {
   TOP_SITES: 0,
   SUGGESTIONS_SERVICE: 1,
   POPULAR: 3,
   WHITELIST: 4,
+};
+
+
+/**
+ * The different (visual) types that an NTP tile can have.
+ * Note: Keep in sync with components/ntp_tiles/tile_visual_type.h
+ * @enum {number}
+ * @const
+ */
+var TileVisualType = {
+  NONE: 0,
+  ICON_REAL: 1,
+  ICON_COLOR: 2,
+  ICON_DEFAULT: 3,
+  THUMBNAIL: 7,
+  THUMBNAIL_FAILED: 8,
 };
 
 
@@ -96,21 +112,25 @@ var logEvent = function(eventType) {
 /**
  * Log impression of an NTP tile.
  * @param {number} tileIndex Position of the tile, >= 0 and < NUMBER_OF_TILES.
- * @param {number} tileSource The source from NTPTileSource.
+ * @param {number} tileSource The source from TileSource.
+ * @param {number} tileType The type from TileVisualType.
  */
-function logMostVisitedImpression(tileIndex, tileSource) {
+function logMostVisitedImpression(tileIndex, tileSource, tileType) {
   chrome.embeddedSearch.newTabPage.logMostVisitedImpression(tileIndex,
-                                                            tileSource);
+                                                            tileSource,
+                                                            tileType);
 }
 
 /**
  * Log click on an NTP tile.
  * @param {number} tileIndex Position of the tile, >= 0 and < NUMBER_OF_TILES.
- * @param {number} tileSource The source from NTPTileSource.
+ * @param {number} tileSource The source from TileSource.
+ * @param {number} tileType The type from TileVisualType.
  */
-function logMostVisitedNavigation(tileIndex, tileSource) {
+function logMostVisitedNavigation(tileIndex, tileSource, tileType) {
   chrome.embeddedSearch.newTabPage.logMostVisitedNavigation(tileIndex,
-                                                            tileSource);
+                                                            tileSource,
+                                                            tileType);
 }
 
 /**
@@ -317,7 +337,7 @@ var addTile = function(args) {
     tiles.appendChild(renderTile(data));
   } else if (args.url) {
     // If a URL is passed: a server-side suggestion.
-    args.tileSource = NTPTileSource.SUGGESTIONS_SERVICE;
+    args.tileSource = TileSource.SUGGESTIONS_SERVICE;
     // check sanity of the arguments
     if (/^javascript:/i.test(args.url) ||
         /^javascript:/i.test(args.thumbnailUrl))
@@ -371,7 +391,9 @@ var renderTile = function(data) {
 
   // The tile will be appended to tiles.
   var position = tiles.children.length;
-  logMostVisitedImpression(position, data.tileSource);
+
+  // This is set in the load/error event for the thumbnail image.
+  var tileType = TileVisualType.NONE;
 
   tile.className = 'mv-tile';
   tile.setAttribute('data-tid', data.tid);
@@ -389,7 +411,7 @@ var renderTile = function(data) {
   tile.title = data.title;
 
   tile.addEventListener('click', function(ev) {
-    logMostVisitedNavigation(position, data.tileSource);
+    logMostVisitedNavigation(position, data.tileSource, tileType);
   });
 
   tile.addEventListener('keydown', function(event) {
@@ -441,87 +463,30 @@ var renderTile = function(data) {
     title.classList.add('multiline');
   }
 
-  // We keep track of the outcome of loading possible thumbnails for this
-  // tile. Possible values:
-  //   - null: waiting for load/error
-  //   - false: error
-  //   - a string: URL that loaded correctly.
-  // This is populated by imageLoaded/imageLoadFailed, and selectBestImage
-  // selects the best one to display.
-  var results = [];
   var thumb = tile.querySelector('.mv-thumb');
   var img = document.createElement('img');
-  var loaded = false;
-
-  var selectBestImage = function() {
-    if (loaded) {
-      return;
-    }
-    // |results| is ordered from best candidate to worst.
-    for (var i = 0; i < results.length; ++i) {
-      if (results[i] === null) {
-        // A better candidate is still waiting to be loaded; defer.
-        return;
-      }
-      if (results[i] != false) {
-        // This is the best (non-failed) candidate. Use it!
-        img.src = results[i];
-        loaded = true;
-        return;
-      }
-    }
-    // If we get here, then all candidates failed to load.
-    thumb.classList.add('failed-img');
-    thumb.removeChild(img);
-    // Usually we count the load once the img element gets either a 'load' or
-    // an 'error' event. Since we have removed the img element, instead count
-    // the load here.
-    countLoad();
-  };
-
-  var imageLoaded = function(idx, url) {
-    return function(ev) {
-      results[idx] = url;
-      selectBestImage();
-    };
-  };
-
-  var imageLoadFailed = function(idx) {
-    return function(ev) {
-      results[idx] = false;
-      selectBestImage();
-    };
-  };
-
   img.title = data.title;
+  img.src = data.thumbnailUrl;
   loadedCounter += 1;
-  img.addEventListener('load', countLoad);
-  img.addEventListener('error', countLoad);
+  img.addEventListener('load', function(ev) {
+    // Store the type for a potential later navigation.
+    tileType = TileVisualType.THUMBNAIL;
+    logMostVisitedImpression(position, data.tileSource, tileType);
+    // Note: It's important to call countLoad last, because that might emit the
+    // NTP_ALL_TILES_LOADED event, which must happen after the impression log.
+    countLoad();
+  });
   img.addEventListener('error', function(ev) {
     thumb.classList.add('failed-img');
     thumb.removeChild(img);
+    // Store the type for a potential later navigation.
+    tileType = TileVisualType.THUMBNAIL_FAILED;
+    logMostVisitedImpression(position, data.tileSource, tileType);
+    // Note: It's important to call countLoad last, because that might emit the
+    // NTP_ALL_TILES_LOADED event, which must happen after the impression log.
+    countLoad();
   });
   thumb.appendChild(img);
-
-  if (data.thumbnailUrl) {
-    img.src = data.thumbnailUrl;
-  } else {
-    // Get all thumbnailUrls for the tile.
-    // They are ordered from best one to be used to worst.
-    for (var i = 0; i < data.thumbnailUrls.length; ++i) {
-      results.push(null);
-    }
-    for (var i = 0; i < data.thumbnailUrls.length; ++i) {
-      if (data.thumbnailUrls[i]) {
-        var image = new Image();
-        image.src = data.thumbnailUrls[i];
-        image.onload = imageLoaded(i, data.thumbnailUrls[i]);
-        image.onerror = imageLoadFailed(i);
-      } else {
-        imageLoadFailed(i)(/*ev=*/null);
-      }
-    }
-  }
 
   var favicon = tile.querySelector('.mv-favicon');
   if (data.faviconUrl) {

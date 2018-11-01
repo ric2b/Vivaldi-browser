@@ -6,7 +6,7 @@
 #define PagePool_h
 
 #include "platform/heap/ThreadState.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -26,8 +26,8 @@ class PagePool {
  public:
   PagePool();
   ~PagePool();
-  void add(int, PageMemory*);
-  PageMemory* take(int);
+  void Add(int, PageMemory*);
+  PageMemory* Take(int);
 
  private:
   class PoolEntry {
@@ -40,7 +40,7 @@ class PagePool {
     PoolEntry* next;
   };
 
-  PoolEntry* m_pool[BlinkGC::NumberOfArenas];
+  PoolEntry* pool_[BlinkGC::kNumberOfArenas];
 };
 
 }  // namespace blink

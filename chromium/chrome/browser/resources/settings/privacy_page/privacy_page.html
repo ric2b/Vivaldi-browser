@@ -1,4 +1,5 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_vars_css.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
@@ -41,7 +42,8 @@
           on-close="onDialogClosed_">
       </settings-clear-browsing-data-dialog>
     </template>
-    <settings-animated-pages id="pages" section="privacy">
+    <settings-animated-pages id="pages" section="privacy"
+        focus-config="[[focusConfig_]]">
       <neon-animatable route-path="default">
         <div class="settings-box first">
           <p class="privacy-explanation">$i18nRaw{improveBrowsingExperience}</p>
@@ -109,9 +111,28 @@
 </if><!-- not chromeos -->
 </if><!-- _google_chrome -->
         <div class="settings-box">
-          <settings-toggle-button class="start"
-              pref="{{prefs.enable_do_not_track}}"
-              label="$i18n{doNotTrack}">
+          <template id="doNotTrackDialogIf" is="dom-if"
+              if="[[showDoNotTrackDialog_]]" notify-dom-change>
+            <dialog is="cr-dialog" id="confirmDoNotTrackDialog"
+                close-text="$i18n{close}" on-cancel="onDoNotTrackDialogCancel_">
+              <div class="title">$i18n{doNotTrackDialogTitle}</div>
+              <div class="body">$i18nRaw{doNotTrackDialogMessage}</div>
+              <div class="button-container">
+                <paper-button class="cancel-button"
+                    on-tap="onDoNotTrackDialogCancel_">
+                  $i18n{cancel}
+                </paper-button>
+                <paper-button class="action-button"
+                    on-tap="onDoNotTrackDialogConfirm_">
+                  $i18n{confirm}
+                </paper-button>
+              </div>
+            </dialog>
+          </template>
+          <settings-toggle-button id="doNotTrack" class="start"
+              pref="{{prefs.enable_do_not_track}}" label="$i18n{doNotTrack}"
+              on-settings-boolean-control-change="onDoNotTrackChange_"
+              no-set-pref>
           </settings-toggle-button>
         </div>
 <if expr="chromeos">
@@ -179,8 +200,8 @@
               $i18n{clearBrowsingDataDescription}
             </div>
           </div>
-          <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label="$i18n{clearBrowsingData}"
+          <button is="paper-icon-button-light" id="clearBrowsingDataTrigger"
+              class="subpage-arrow" aria-label="$i18n{clearBrowsingData}"
               aria-describedby="clearBrowsingDataSecondary"></button>
         </div>
       </neon-animatable>
@@ -200,7 +221,8 @@
             id="site-settings"
             page-title="[[siteSettingsPageTitle_()]]"
             learn-more-url="$i18n{exceptionsLearnMoreURL}">
-          <settings-site-settings-page></settings-site-settings-page>
+          <settings-site-settings-page focus-config="[[focusConfig_]]">
+          </settings-site-settings-page>
         </settings-subpage>
       </template>
 
@@ -236,14 +258,15 @@
       </template>
       <template is="dom-if" route-path="/content/camera" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryCamera}">
-          <media-picker type="camera"></media-picker>
+          <media-picker label="$i18n{siteSettingsCameraLabel}" type="camera">
+          </media-picker>
           <category-default-setting category="{{ContentSettingsTypes.CAMERA}}"
               toggle-off-label="$i18n{siteSettingsBlocked}"
               toggle-on-label=
                   "$i18n{siteSettingsAskBeforeAccessingRecommended}">
           </category-default-setting>
           <category-setting-exceptions
-              category="{{ContentSettingsTypes.CAMERA}}">
+              category="{{ContentSettingsTypes.CAMERA}}" read-only-list>
           </category-setting-exceptions>
         </settings-subpage>
       </template>
@@ -252,10 +275,9 @@
           <category-default-setting category="{{ContentSettingsTypes.COOKIES}}"
               toggle-off-label="$i18n{siteSettingsBlocked}"
               toggle-on-label="$i18n{siteSettingsCookiesAllowedRecommended}"
-              sub-option-label="$i18n{deleteDataPostSession}"
-              sub-option-secondary=""><!-- To work with :empty. -->
+              sub-option-label="$i18n{deleteDataPostSession}">
           </category-default-setting>
-          <div class="settings-box">
+          <div class="settings-box two-line">
             <settings-toggle-button class="start"
                 pref="{{prefs.profile.block_third_party_cookies}}"
                 label="$i18n{thirdPartyCookie}"
@@ -265,7 +287,7 @@
           <category-setting-exceptions
               category="{{ContentSettingsTypes.COOKIES}}">
           </category-setting-exceptions>
-          <site-data></site-data>
+          <site-data focus-config="[[focusConfig_]]"></site-data>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/images" no-search>
@@ -287,7 +309,7 @@
               category="{{ContentSettingsTypes.GEOLOCATION}}">
           </category-default-setting>
           <category-setting-exceptions
-              category="{{ContentSettingsTypes.GEOLOCATION}}">
+              category="{{ContentSettingsTypes.GEOLOCATION}}" read-only-list>
           </category-setting-exceptions>
         </settings-subpage>
       </template>
@@ -323,13 +345,15 @@
       </template>
       <template is="dom-if" route-path="/content/microphone" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryMicrophone}">
-          <media-picker type="mic"></media-picker>
+          <media-picker label="$i18n{siteSettingsMicrophoneLabel}" type="mic">
+          </media-picker>
           <category-default-setting category="{{ContentSettingsTypes.MIC}}"
               toggle-off-label="$i18n{siteSettingsBlocked}"
               toggle-on-label=
                   "$i18n{siteSettingsAskBeforeAccessingRecommended}">
           </category-default-setting>
-          <category-setting-exceptions category="{{ContentSettingsTypes.MIC}}">
+          <category-setting-exceptions
+              category="{{ContentSettingsTypes.MIC}}" read-only-list>
           </category-setting-exceptions>
         </settings-subpage>
       </template>
@@ -377,7 +401,20 @@
           </category-setting-exceptions>
         </settings-subpage>
       </template>
-      <template is="dom-if" route-path="/content/unsandboxedPlugins" no-search>
+      <template is="dom-if" if="[[enableSafeBrowsingSubresourceFilter_]]"
+        route-path="/content/subresourceFilter" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsSubresourceFilter}">
+          <category-default-setting
+              category="{{ContentSettingsTypes.SUBRESOURCE_FILTER}}"
+              toggle-off-label="$i18n{siteSettingsSubresourceFilterAllow}"
+              toggle-on-label="$i18n{siteSettingsSubresourceFilterBlock}">
+          </category-default-setting>
+          <category-setting-exceptions
+              category="{{ContentSettingsTypes.SUBRESOURCE_FITER}}">
+          </category-setting-exceptions>
+        </settings-subpage>
+     </template>
+     <template is="dom-if" route-path="/content/unsandboxedPlugins" no-search>
         <settings-subpage page-title="$i18n{siteSettingsUnsandboxedPlugins}">
           <category-default-setting
               toggle-off-label="$i18n{siteSettingsUnsandboxedPluginsBlock}"
@@ -399,7 +436,7 @@
               category="{{ContentSettingsTypes.MIDI_DEVICES}}">
           </category-default-setting>
           <category-setting-exceptions
-              category="{{ContentSettingsTypes.MIDI_DEVICES}}">
+              category="{{ContentSettingsTypes.MIDI_DEVICES}}" read-only-list>
           </category-setting-exceptions>
         </settings-subpage>
       </template>
@@ -415,7 +452,7 @@
       </template>
       <template is="dom-if" route-path="/cookies/detail" no-search>
         <settings-subpage page-title="[[pageTitle]]">
-          <paper-button class="subpage-title-extra"
+          <paper-button class="subpage-title-extra secondary-button"
               on-tap="onRemoveAllCookiesFromSite_">
             $i18n{siteSettingsCookieRemoveAll}
           </paper-button>

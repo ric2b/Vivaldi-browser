@@ -22,7 +22,6 @@
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "components/guest_view/common/guest_view_constants.h"
@@ -85,8 +84,8 @@ MessageService::PolicyPermission MessageService::IsNativeMessagingHostAllowed(
     return allow_result;
 
   // Check if the name or the wildcard is in the blacklist.
-  base::StringValue name_value(native_host_name);
-  base::StringValue wildcard_value("*");
+  base::Value name_value(native_host_name);
+  base::Value wildcard_value("*");
   if (blacklist->Find(name_value) == blacklist->end() &&
       blacklist->Find(wildcard_value) == blacklist->end()) {
     return allow_result;
@@ -199,8 +198,9 @@ MessageService::~MessageService() {
   channels_.clear();
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<MessageService> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<MessageService>>::DestructorAtExit g_factory =
+    LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<MessageService>*
@@ -329,7 +329,7 @@ void MessageService::OpenChannelToExtension(
       !util::IsIncognitoEnabled(target_extension_id, context)) {
     // Give the user a chance to accept an incognito connection from the web if
     // they haven't already, with the conditions:
-    // - Only for spanning-mode incognito. We don't want the complication of
+    // - Only for non-split mode incognito. We don't want the complication of
     //   spinning up an additional process here which might need to do some
     //   setup that we're not expecting.
     // - Only for extensions that can't normally be enabled in incognito, since
@@ -561,8 +561,8 @@ void MessageService::OpenChannelImpl(BrowserContext* browser_context,
   std::unique_ptr<MessageChannel> channel_ptr =
       base::MakeUnique<MessageChannel>();
   MessageChannel* channel = channel_ptr.get();
-  channel->opener.reset(opener.release());
-  channel->receiver.reset(params->receiver.release());
+  channel->opener = std::move(opener);
+  channel->receiver = std::move(params->receiver);
   AddChannel(std::move(channel_ptr), params->receiver_port_id);
 
   int guest_process_id = content::ChildProcessHost::kInvalidUniqueID;

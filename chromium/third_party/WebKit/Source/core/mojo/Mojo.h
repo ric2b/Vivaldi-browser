@@ -10,7 +10,10 @@
 
 namespace blink {
 
+class MojoCreateDataPipeOptions;
+class MojoCreateDataPipeResult;
 class MojoCreateMessagePipeResult;
+class MojoCreateSharedBufferResult;
 
 class Mojo final : public GarbageCollected<Mojo>, public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
@@ -41,6 +44,10 @@ class Mojo final : public GarbageCollected<Mojo>, public ScriptWrappable {
   static const MojoResult kResultShouldWait = MOJO_RESULT_SHOULD_WAIT;
 
   static void createMessagePipe(MojoCreateMessagePipeResult&);
+  static void createDataPipe(const MojoCreateDataPipeOptions&,
+                             MojoCreateDataPipeResult&);
+  static void createSharedBuffer(unsigned num_bytes,
+                                 MojoCreateSharedBufferResult&);
 
   DEFINE_INLINE_TRACE() {}
 };

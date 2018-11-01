@@ -16,16 +16,13 @@ namespace switches {
 // All switches in alphabetical order. The switches should be documented
 // alongside the definition of their values in the .cc file.
 extern const char kClearTokenService[];
-extern const char kDisableAccountConsistency[];
-extern const char kDisableNewProfileManagement[];
+extern const char kDisableSigninPromo[];
 extern const char kDisableSigninScopedDeviceId[];
 extern const char kEnableAccountConsistency[];
-extern const char kEnableNewProfileManagement[];
 extern const char kEnableRefreshTokenAnnotationRequest[];
+extern const char kEnableSigninPromo[];
 extern const char kExtensionsMultiAccount[];
-extern const char kGoogleProfileInfo[];
 
-extern const base::Feature kMaterialDesignUserMenu;
 extern const base::Feature kUsePasswordSeparatedSigninFlow;
 
 }  // namespace switches

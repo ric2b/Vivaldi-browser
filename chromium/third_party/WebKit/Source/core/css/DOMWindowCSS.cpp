@@ -33,42 +33,42 @@
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
-#include "wtf/text/StringBuilder.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/StringBuilder.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 bool DOMWindowCSS::supports(const String& property, const String& value) {
-  CSSPropertyID unresolvedProperty = unresolvedCSSPropertyID(property);
-  if (unresolvedProperty == CSSPropertyInvalid)
+  CSSPropertyID unresolved_property = unresolvedCSSPropertyID(property);
+  if (unresolved_property == CSSPropertyInvalid)
     return false;
-  if (unresolvedProperty == CSSPropertyVariable) {
-    MutableStylePropertySet* dummyStyle =
-        MutableStylePropertySet::create(HTMLStandardMode);
-    bool isAnimationTainted = false;
-    return CSSParser::parseValueForCustomProperty(dummyStyle, "--valid",
+  if (unresolved_property == CSSPropertyVariable) {
+    MutableStylePropertySet* dummy_style =
+        MutableStylePropertySet::Create(kHTMLStandardMode);
+    bool is_animation_tainted = false;
+    return CSSParser::ParseValueForCustomProperty(dummy_style, "--valid",
                                                   nullptr, value, false,
-                                                  nullptr, isAnimationTainted)
-        .didParse;
+                                                  nullptr, is_animation_tainted)
+        .did_parse;
   }
 
-  ASSERT(CSSPropertyMetadata::isEnabledProperty(unresolvedProperty));
+  DCHECK(CSSPropertyMetadata::IsEnabledProperty(unresolved_property));
 
   // This will return false when !important is present
-  MutableStylePropertySet* dummyStyle =
-      MutableStylePropertySet::create(HTMLStandardMode);
-  return CSSParser::parseValue(dummyStyle, unresolvedProperty, value, false)
-      .didParse;
+  MutableStylePropertySet* dummy_style =
+      MutableStylePropertySet::Create(kHTMLStandardMode);
+  return CSSParser::ParseValue(dummy_style, unresolved_property, value, false)
+      .did_parse;
 }
 
-bool DOMWindowCSS::supports(const String& conditionText) {
-  return CSSParser::parseSupportsCondition(conditionText);
+bool DOMWindowCSS::supports(const String& condition_text) {
+  return CSSParser::ParseSupportsCondition(condition_text);
 }
 
 String DOMWindowCSS::escape(const String& ident) {
   StringBuilder builder;
-  serializeIdentifier(ident, builder);
-  return builder.toString();
+  SerializeIdentifier(ident, builder);
+  return builder.ToString();
 }
 
 }  // namespace blink

@@ -21,7 +21,7 @@ using vivaldi::NotesModelFactory;
 NotesSubMenuObserver::NotesSubMenuObserver(
     RenderViewContextMenuProxy* proxy,
     ui::SimpleMenuModel::Delegate* delegate)
-    : proxy_(proxy), submenu_model_(delegate) {
+    : proxy_(proxy), submenu_model_(delegate), delegate_(delegate) {
   DCHECK(proxy_);
 }
 
@@ -34,14 +34,19 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
 
   Profile* profile = Profile::FromBrowserContext(browser_context);
   vivaldi::Notes_Model* model = NotesModelFactory::GetForProfile(profile);
-  AddMenuItems(model->main_node());
+
+  vivaldi::Notes_Node* node = model->main_node();
+  for (int i = 0; i < node->child_count(); i++) {
+    this->AddMenuItems(node->GetChild(i), &submenu_model_);
+  }
 
   proxy_->AddSubMenu(IDC_VIV_CONTENT_INSERT_NOTE,
                      l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
                      &submenu_model_);
 }
 
-void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node) {
+void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node,
+    ui::SimpleMenuModel* menu_model) {
   if (node->is_trash()) {
     return;
   }
@@ -54,22 +59,28 @@ void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node) {
     max_notes_id_ = node->id();
   }
 
-  int number_of_notes = node->child_count();
-  if (node->GetContent().length() > 0) {
-    const int kMaxMenuStringLength = 40;
-    base::string16 data = node->GetTitle();
-    if (data.length() == 0) {
-      data = node->GetContent();
-    }
-    base::string16 content = data.length() > kMaxMenuStringLength
-                                 ? data.substr(0, kMaxMenuStringLength - 3) +
-                                       base::UTF8ToUTF16("...")
-                                 : data;
-    submenu_model_.AddItem(node->id(), content);
+  const int kMaxMenuStringLength = 40;
+  base::string16 data = node->GetTitle();
+  if (data.length() == 0) {
+    data = node->GetContent();
   }
-
-  for (int i = 0; i < number_of_notes; i++) {
-    AddMenuItems(node->GetChild(i));
+  // Remove newlines inside string
+  base::string16 title = base::CollapseWhitespace(data, false);
+  // Remove spaces at start and end
+  base::TrimWhitespace(title, base::TRIM_ALL, &title);
+  // Truncate string if it is too long
+  if (title.length() > kMaxMenuStringLength) {
+    title = title.substr(0, kMaxMenuStringLength - 3) +
+        base::UTF8ToUTF16("...");
+  }
+  if (node->is_folder()) {
+    ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(delegate_);
+    menu_model->AddSubMenu(node->id(), title, child_menu_model);
+    for (int i = 0; i < node->child_count(); i++) {
+      this->AddMenuItems(node->GetChild(i), child_menu_model);
+    }
+  } else {
+    menu_model->AddItem(node->id(), title);
   }
 }
 

@@ -7,8 +7,8 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
-#include "wtf/Allocator.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -16,15 +16,16 @@ class CORE_EXPORT CSSPropertyMetadata {
   STATIC_ONLY(CSSPropertyMetadata);
 
  public:
-  static bool isEnabledProperty(CSSPropertyID);
-  static bool isInterpolableProperty(CSSPropertyID);
-  static bool isInheritedProperty(CSSPropertyID);
-  static bool propertySupportsPercentage(CSSPropertyID);
-  static bool propertyIsRepeated(CSSPropertyID);
-  static char repetitionSeparator(CSSPropertyID);
-  static bool isDescriptorOnly(CSSPropertyID);
+  static bool IsEnabledProperty(CSSPropertyID unresolved_property);
+  static bool IsInterpolableProperty(CSSPropertyID unresolved_property);
+  static bool IsInheritedProperty(CSSPropertyID unresolved_property);
+  static bool PropertySupportsPercentage(CSSPropertyID unresolved_property);
+  static bool PropertyIsRepeated(CSSPropertyID unresolved_property);
+  static char RepetitionSeparator(CSSPropertyID unresolved_property);
+  static bool IsDescriptor(CSSPropertyID unresolved_property);
+  static bool IsProperty(CSSPropertyID unresolved_property);
 
-  static void filterEnabledCSSPropertiesIntoVector(const CSSPropertyID*,
+  static void FilterEnabledCSSPropertiesIntoVector(const CSSPropertyID*,
                                                    size_t length,
                                                    Vector<CSSPropertyID>&);
 };

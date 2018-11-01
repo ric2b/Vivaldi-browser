@@ -4,15 +4,15 @@
 
 #include "modules/fetch/Headers.h"
 
-#include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8IteratorResultValue.h"
+#include "bindings/modules/v8/ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders.h"
 #include "core/dom/Iterator.h"
 #include "platform/loader/fetch/FetchUtils.h"
-#include "wtf/NotFound.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/NotFound.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -22,309 +22,279 @@ class HeadersIterationSource final
     : public PairIterable<String, String>::IterationSource {
  public:
   explicit HeadersIterationSource(const FetchHeaderList* headers)
-      : m_headers(headers->clone()), m_current(0) {
-    m_headers->sortAndCombine();
+      : headers_(headers->Clone()), current_(0) {
+    headers_->SortAndCombine();
   }
 
-  bool next(ScriptState* scriptState,
+  bool Next(ScriptState* script_state,
             String& key,
             String& value,
             ExceptionState& exception) override {
     // This simply advances an index and returns the next value if any; the
     // iterated list is not exposed to script so it will never be mutated
     // during iteration.
-    if (m_current >= m_headers->size())
+    if (current_ >= headers_->size())
       return false;
 
-    const FetchHeaderList::Header& header = m_headers->entry(m_current++);
+    const FetchHeaderList::Header& header = headers_->Entry(current_++);
     key = header.first;
     value = header.second;
     return true;
   }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(m_headers);
-    PairIterable<String, String>::IterationSource::trace(visitor);
+    visitor->Trace(headers_);
+    PairIterable<String, String>::IterationSource::Trace(visitor);
   }
 
  private:
-  const Member<FetchHeaderList> m_headers;
-  size_t m_current;
+  const Member<FetchHeaderList> headers_;
+  size_t current_;
 };
 
 }  // namespace
 
-Headers* Headers::create() {
+Headers* Headers::Create(ExceptionState&) {
   return new Headers;
 }
 
-Headers* Headers::create(ExceptionState&) {
-  return create();
-}
-
-Headers* Headers::create(const Headers* init, ExceptionState& exceptionState) {
+Headers* Headers::Create(
+    const ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders& init,
+    ExceptionState& exception_state) {
   // "The Headers(|init|) constructor, when invoked, must run these steps:"
-  // "1. Let |headers| be a new Headers object."
-  Headers* headers = create();
+  // "1. Let |headers| be a new Headers object whose guard is "none".
+  Headers* headers = Create(exception_state);
   // "2. If |init| is given, fill headers with |init|. Rethrow any exception."
-  headers->fillWith(init, exceptionState);
+  if (init.isByteStringSequenceSequence()) {
+    headers->FillWith(init.getAsByteStringSequenceSequence(), exception_state);
+  } else if (init.isByteStringByteStringRecord()) {
+    headers->FillWith(init.getAsByteStringByteStringRecord(), exception_state);
+  } else if (init.isHeaders()) {
+    // This branch will not be necessary once http://crbug.com/690428 is fixed.
+    headers->FillWith(init.getAsHeaders(), exception_state);
+  } else {
+    NOTREACHED();
+  }
   // "3. Return |headers|."
   return headers;
 }
 
-Headers* Headers::create(const Vector<Vector<String>>& init,
-                         ExceptionState& exceptionState) {
-  // The same steps as above.
-  Headers* headers = create();
-  headers->fillWith(init, exceptionState);
-  return headers;
+Headers* Headers::Create(FetchHeaderList* header_list) {
+  return new Headers(header_list);
 }
 
-Headers* Headers::create(const Dictionary& init,
-                         ExceptionState& exceptionState) {
-  // "The Headers(|init|) constructor, when invoked, must run these steps:"
-  // "1. Let |headers| be a new Headers object."
-  Headers* headers = create();
-  // "2. If |init| is given, fill headers with |init|. Rethrow any exception."
-  headers->fillWith(init, exceptionState);
-  // "3. Return |headers|."
-  return headers;
-}
-
-Headers* Headers::create(FetchHeaderList* headerList) {
-  return new Headers(headerList);
-}
-
-Headers* Headers::clone() const {
-  FetchHeaderList* headerList = m_headerList->clone();
-  Headers* headers = create(headerList);
-  headers->m_guard = m_guard;
+Headers* Headers::Clone() const {
+  FetchHeaderList* header_list = header_list_->Clone();
+  Headers* headers = Create(header_list);
+  headers->guard_ = guard_;
   return headers;
 }
 
 void Headers::append(const String& name,
                      const String& value,
-                     ExceptionState& exceptionState) {
+                     ExceptionState& exception_state) {
   // "To append a name/value (|name|/|value|) pair to a Headers object
   // (|headers|), run these steps:"
   // "1. If |name| is not a name or |value| is not a value, throw a
   //     TypeError."
-  if (!FetchHeaderList::isValidHeaderName(name)) {
-    exceptionState.throwTypeError("Invalid name");
+  if (!FetchHeaderList::IsValidHeaderName(name)) {
+    exception_state.ThrowTypeError("Invalid name");
     return;
   }
-  if (!FetchHeaderList::isValidHeaderValue(value)) {
-    exceptionState.throwTypeError("Invalid value");
+  if (!FetchHeaderList::IsValidHeaderValue(value)) {
+    exception_state.ThrowTypeError("Invalid value");
     return;
   }
   // "2. If guard is |request|, throw a TypeError."
-  if (m_guard == ImmutableGuard) {
-    exceptionState.throwTypeError("Headers are immutable");
+  if (guard_ == kImmutableGuard) {
+    exception_state.ThrowTypeError("Headers are immutable");
     return;
   }
   // "3. Otherwise, if guard is |request| and |name| is a forbidden header
   //     name, return."
-  if (m_guard == RequestGuard && FetchUtils::isForbiddenHeaderName(name))
+  if (guard_ == kRequestGuard && FetchUtils::IsForbiddenHeaderName(name))
     return;
   // "4. Otherwise, if guard is |request-no-CORS| and |name|/|value| is not a
   //     simple header, return."
-  if (m_guard == RequestNoCORSGuard &&
-      !FetchUtils::isSimpleHeader(AtomicString(name), AtomicString(value)))
+  if (guard_ == kRequestNoCORSGuard &&
+      !FetchUtils::IsSimpleHeader(AtomicString(name), AtomicString(value)))
     return;
   // "5. Otherwise, if guard is |response| and |name| is a forbidden response
   //     header name, return."
-  if (m_guard == ResponseGuard &&
-      FetchUtils::isForbiddenResponseHeaderName(name))
+  if (guard_ == kResponseGuard &&
+      FetchUtils::IsForbiddenResponseHeaderName(name))
     return;
   // "6. Append |name|/|value| to header list."
-  m_headerList->append(name, value);
+  header_list_->Append(name, value);
 }
 
-void Headers::remove(const String& name, ExceptionState& exceptionState) {
+void Headers::remove(const String& name, ExceptionState& exception_state) {
   // "The delete(|name|) method, when invoked, must run these steps:"
   // "1. If name is not a name, throw a TypeError."
-  if (!FetchHeaderList::isValidHeaderName(name)) {
-    exceptionState.throwTypeError("Invalid name");
+  if (!FetchHeaderList::IsValidHeaderName(name)) {
+    exception_state.ThrowTypeError("Invalid name");
     return;
   }
   // "2. If guard is |immutable|, throw a TypeError."
-  if (m_guard == ImmutableGuard) {
-    exceptionState.throwTypeError("Headers are immutable");
+  if (guard_ == kImmutableGuard) {
+    exception_state.ThrowTypeError("Headers are immutable");
     return;
   }
   // "3. Otherwise, if guard is |request| and |name| is a forbidden header
   //     name, return."
-  if (m_guard == RequestGuard && FetchUtils::isForbiddenHeaderName(name))
+  if (guard_ == kRequestGuard && FetchUtils::IsForbiddenHeaderName(name))
     return;
   // "4. Otherwise, if guard is |request-no-CORS| and |name|/`invalid` is not
   //     a simple header, return."
-  if (m_guard == RequestNoCORSGuard &&
-      !FetchUtils::isSimpleHeader(AtomicString(name), "invalid"))
+  if (guard_ == kRequestNoCORSGuard &&
+      !FetchUtils::IsSimpleHeader(AtomicString(name), "invalid"))
     return;
   // "5. Otherwise, if guard is |response| and |name| is a forbidden response
   //     header name, return."
-  if (m_guard == ResponseGuard &&
-      FetchUtils::isForbiddenResponseHeaderName(name))
+  if (guard_ == kResponseGuard &&
+      FetchUtils::IsForbiddenResponseHeaderName(name))
     return;
   // "6. Delete |name| from header list."
-  m_headerList->remove(name);
+  header_list_->Remove(name);
 }
 
-String Headers::get(const String& name, ExceptionState& exceptionState) {
+String Headers::get(const String& name, ExceptionState& exception_state) {
   // "The get(|name|) method, when invoked, must run these steps:"
   // "1. If |name| is not a name, throw a TypeError."
-  if (!FetchHeaderList::isValidHeaderName(name)) {
-    exceptionState.throwTypeError("Invalid name");
+  if (!FetchHeaderList::IsValidHeaderName(name)) {
+    exception_state.ThrowTypeError("Invalid name");
     return String();
   }
   // "2. If there is no header in header list whose name is |name|,
   //     return null."
   // "3. Return the combined value given |name| and header list."
   String result;
-  m_headerList->get(name, result);
+  header_list_->Get(name, result);
   return result;
 }
 
 Vector<String> Headers::getAll(const String& name,
-                               ExceptionState& exceptionState) {
+                               ExceptionState& exception_state) {
   // "The getAll(|name|) method, when invoked, must run these steps:"
   // "1. If |name| is not a name, throw a TypeError."
-  if (!FetchHeaderList::isValidHeaderName(name)) {
-    exceptionState.throwTypeError("Invalid name");
+  if (!FetchHeaderList::IsValidHeaderName(name)) {
+    exception_state.ThrowTypeError("Invalid name");
     return Vector<String>();
   }
   // "2. Return the values of all headers in header list whose name is |name|,
   //     in list order, and the empty sequence otherwise."
   Vector<String> result;
-  m_headerList->getAll(name, result);
+  header_list_->GetAll(name, result);
   return result;
 }
 
-bool Headers::has(const String& name, ExceptionState& exceptionState) {
+bool Headers::has(const String& name, ExceptionState& exception_state) {
   // "The has(|name|) method, when invoked, must run these steps:"
   // "1. If |name| is not a name, throw a TypeError."
-  if (!FetchHeaderList::isValidHeaderName(name)) {
-    exceptionState.throwTypeError("Invalid name");
+  if (!FetchHeaderList::IsValidHeaderName(name)) {
+    exception_state.ThrowTypeError("Invalid name");
     return false;
   }
   // "2. Return true if there is a header in header list whose name is |name|,
   //     and false otherwise."
-  return m_headerList->has(name);
+  return header_list_->Has(name);
 }
 
 void Headers::set(const String& name,
                   const String& value,
-                  ExceptionState& exceptionState) {
+                  ExceptionState& exception_state) {
   // "The set(|name|, |value|) method, when invoked, must run these steps:"
   // "1. If |name| is not a name or |value| is not a value, throw a
   //     TypeError."
-  if (!FetchHeaderList::isValidHeaderName(name)) {
-    exceptionState.throwTypeError("Invalid name");
+  if (!FetchHeaderList::IsValidHeaderName(name)) {
+    exception_state.ThrowTypeError("Invalid name");
     return;
   }
-  if (!FetchHeaderList::isValidHeaderValue(value)) {
-    exceptionState.throwTypeError("Invalid value");
+  if (!FetchHeaderList::IsValidHeaderValue(value)) {
+    exception_state.ThrowTypeError("Invalid value");
     return;
   }
   // "2. If guard is |immutable|, throw a TypeError."
-  if (m_guard == ImmutableGuard) {
-    exceptionState.throwTypeError("Headers are immutable");
+  if (guard_ == kImmutableGuard) {
+    exception_state.ThrowTypeError("Headers are immutable");
     return;
   }
   // "3. Otherwise, if guard is |request| and |name| is a forbidden header
   //     name, return."
-  if (m_guard == RequestGuard && FetchUtils::isForbiddenHeaderName(name))
+  if (guard_ == kRequestGuard && FetchUtils::IsForbiddenHeaderName(name))
     return;
   // "4. Otherwise, if guard is |request-no-CORS| and |name|/|value| is not a
   //     simple header, return."
-  if (m_guard == RequestNoCORSGuard &&
-      !FetchUtils::isSimpleHeader(AtomicString(name), AtomicString(value)))
+  if (guard_ == kRequestNoCORSGuard &&
+      !FetchUtils::IsSimpleHeader(AtomicString(name), AtomicString(value)))
     return;
   // "5. Otherwise, if guard is |response| and |name| is a forbidden response
   //     header name, return."
-  if (m_guard == ResponseGuard &&
-      FetchUtils::isForbiddenResponseHeaderName(name))
+  if (guard_ == kResponseGuard &&
+      FetchUtils::IsForbiddenResponseHeaderName(name))
     return;
   // "6. Set |name|/|value| in header list."
-  m_headerList->set(name, value);
+  header_list_->Set(name, value);
 }
 
-void Headers::fillWith(const Headers* object, ExceptionState& exceptionState) {
-  ASSERT(m_headerList->size() == 0);
-  // "To fill a Headers object (|this|) with a given object (|object|), run
-  // these steps:"
-  // "1. If |object| is a Headers object, copy its header list as
-  //     |headerListCopy| and then for each |header| in |headerListCopy|,
-  //     retaining order, append header's |name|/|header|'s value to
-  //     |headers|. Rethrow any exception."
-  for (size_t i = 0; i < object->m_headerList->list().size(); ++i) {
-    append(object->m_headerList->list()[i]->first,
-           object->m_headerList->list()[i]->second, exceptionState);
-    if (exceptionState.hadException())
+void Headers::FillWith(const Headers* object, ExceptionState& exception_state) {
+  ASSERT(header_list_->size() == 0);
+  // There used to be specific steps describing filling a Headers object with
+  // another Headers object, but it has since been removed because it should be
+  // handled like a sequence (http://crbug.com/690428).
+  for (size_t i = 0; i < object->header_list_->List().size(); ++i) {
+    append(object->header_list_->List()[i]->first,
+           object->header_list_->List()[i]->second, exception_state);
+    if (exception_state.HadException())
       return;
   }
 }
 
-void Headers::fillWith(const Vector<Vector<String>>& object,
-                       ExceptionState& exceptionState) {
-  ASSERT(!m_headerList->size());
-  // "2. Otherwise, if |object| is a sequence, then for each |header| in
-  //     |object|, run these substeps:
-  //    1. If |header| does not contain exactly two items, throw a
-  //       TypeError.
-  //    2. Append |header|'s first item/|header|'s second item to
-  //       |headers|. Rethrow any exception."
+void Headers::FillWith(const Vector<Vector<String>>& object,
+                       ExceptionState& exception_state) {
+  ASSERT(!header_list_->size());
+  // "1. If |object| is a sequence, then for each |header| in |object|, run
+  //     these substeps:
+  //     1. If |header| does not contain exactly two items, then throw a
+  //        TypeError.
+  //     2. Append |header|’s first item/|header|’s second item to |headers|.
+  //        Rethrow any exception."
   for (size_t i = 0; i < object.size(); ++i) {
     if (object[i].size() != 2) {
-      exceptionState.throwTypeError("Invalid value");
+      exception_state.ThrowTypeError("Invalid value");
       return;
     }
-    append(object[i][0], object[i][1], exceptionState);
-    if (exceptionState.hadException())
+    append(object[i][0], object[i][1], exception_state);
+    if (exception_state.HadException())
       return;
   }
 }
 
-void Headers::fillWith(const Dictionary& object,
-                       ExceptionState& exceptionState) {
-  ASSERT(!m_headerList->size());
-  const Vector<String>& keys = object.getPropertyNames(exceptionState);
-  if (exceptionState.hadException() || !keys.size())
-    return;
+void Headers::FillWith(const Vector<std::pair<String, String>>& object,
+                       ExceptionState& exception_state) {
+  ASSERT(!header_list_->size());
 
-  // "3. Otherwise, if |object| is an open-ended dictionary, then for each
-  //    |header| in object, run these substeps:
-  //    1. Set |header|'s key to |header|'s key, converted to ByteString.
-  //       Rethrow any exception.
-  //    2. Append |header|'s key/|header|'s value to |headers|. Rethrow any
-  //       exception."
-  // FIXME: Support OpenEndedDictionary<ByteString>.
-  for (size_t i = 0; i < keys.size(); ++i) {
-    String value;
-    if (!DictionaryHelper::get(object, keys[i], value)) {
-      exceptionState.throwTypeError("Invalid value");
-      return;
-    }
-    append(keys[i], value, exceptionState);
-    if (exceptionState.hadException())
+  for (const auto& item : object) {
+    append(item.first, item.second, exception_state);
+    if (exception_state.HadException())
       return;
   }
 }
 
 Headers::Headers()
-    : m_headerList(FetchHeaderList::create()), m_guard(NoneGuard) {}
+    : header_list_(FetchHeaderList::Create()), guard_(kNoneGuard) {}
 
-Headers::Headers(FetchHeaderList* headerList)
-    : m_headerList(headerList), m_guard(NoneGuard) {}
+Headers::Headers(FetchHeaderList* header_list)
+    : header_list_(header_list), guard_(kNoneGuard) {}
 
 DEFINE_TRACE(Headers) {
-  visitor->trace(m_headerList);
+  visitor->Trace(header_list_);
 }
 
-PairIterable<String, String>::IterationSource* Headers::startIteration(
+PairIterable<String, String>::IterationSource* Headers::StartIteration(
     ScriptState*,
     ExceptionState&) {
-  return new HeadersIterationSource(m_headerList);
+  return new HeadersIterationSource(header_list_);
 }
 
 }  // namespace blink

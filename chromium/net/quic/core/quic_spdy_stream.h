@@ -16,7 +16,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/base/iovec.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_header_list.h"
@@ -66,8 +65,6 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream : public QuicStream {
 
   QuicSpdyStream(QuicStreamId id, QuicSpdySession* spdy_session);
   ~QuicSpdyStream() override;
-
-  void StopReading() override;
 
   // QuicStream implementation
   void OnClose() override;

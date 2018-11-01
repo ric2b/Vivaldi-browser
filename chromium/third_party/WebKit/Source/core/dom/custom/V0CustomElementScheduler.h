@@ -34,8 +34,8 @@
 #include "core/dom/custom/V0CustomElementCallbackQueue.h"
 #include "core/dom/custom/V0CustomElementLifecycleCallbacks.h"
 #include "platform/heap/Handle.h"
-#include "wtf/HashMap.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -48,30 +48,30 @@ class HTMLImportChild;
 class V0CustomElementScheduler final
     : public GarbageCollected<V0CustomElementScheduler> {
  public:
-  static void scheduleCallback(V0CustomElementLifecycleCallbacks*,
+  static void ScheduleCallback(V0CustomElementLifecycleCallbacks*,
                                Element*,
                                V0CustomElementLifecycleCallbacks::CallbackType);
-  static void scheduleAttributeChangedCallback(
+  static void ScheduleAttributeChangedCallback(
       V0CustomElementLifecycleCallbacks*,
       Element*,
       const AtomicString& name,
-      const AtomicString& oldValue,
-      const AtomicString& newValue);
+      const AtomicString& old_value,
+      const AtomicString& new_value);
 
-  static void resolveOrScheduleResolution(V0CustomElementRegistrationContext*,
+  static void ResolveOrScheduleResolution(V0CustomElementRegistrationContext*,
                                           Element*,
                                           const V0CustomElementDescriptor&);
-  static V0CustomElementMicrotaskImportStep* scheduleImport(HTMLImportChild*);
+  static V0CustomElementMicrotaskImportStep* ScheduleImport(HTMLImportChild*);
 
-  static void microtaskDispatcherDidFinish();
-  static void callbackDispatcherDidFinish();
+  static void MicrotaskDispatcherDidFinish();
+  static void CallbackDispatcherDidFinish();
 
  private:
   V0CustomElementScheduler() {}
 
-  static void enqueueMicrotaskStep(Document&,
+  static void EnqueueMicrotaskStep(Document&,
                                    V0CustomElementMicrotaskStep*,
-                                   bool importIsSync = true);
+                                   bool import_is_sync = true);
 };
 
 }  // namespace blink

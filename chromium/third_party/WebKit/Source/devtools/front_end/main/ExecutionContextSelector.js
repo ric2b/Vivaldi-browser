@@ -89,7 +89,8 @@ Main.ExecutionContextSelector = class {
     if (!newTarget || (currentContext && currentContext.target() === newTarget))
       return;
 
-    var executionContexts = newTarget.runtimeModel.executionContexts();
+    var runtimeModel = newTarget.model(SDK.RuntimeModel);
+    var executionContexts = runtimeModel ? runtimeModel.executionContexts() : [];
     if (!executionContexts.length)
       return;
 
@@ -128,7 +129,7 @@ Main.ExecutionContextSelector = class {
       return false;
     if (executionContext.target().parentTarget())
       return false;
-    var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(executionContext.target());
+    var resourceTreeModel = executionContext.target().model(SDK.ResourceTreeModel);
     var frame = resourceTreeModel && resourceTreeModel.frameForId(executionContext.frameId);
     if (frame && frame.isMainFrame())
       return true;
@@ -178,10 +179,10 @@ Main.ExecutionContextSelector = class {
   }
 
   _currentExecutionContextGone() {
-    var targets = this._targetManager.targets(SDK.Target.Capability.JS);
+    var runtimeModels = this._targetManager.models(SDK.RuntimeModel);
     var newContext = null;
-    for (var i = 0; i < targets.length && !newContext; ++i) {
-      var executionContexts = targets[i].runtimeModel.executionContexts();
+    for (var i = 0; i < runtimeModels.length && !newContext; ++i) {
+      var executionContexts = runtimeModels[i].executionContexts();
       for (var executionContext of executionContexts) {
         if (this._isDefaultContext(executionContext)) {
           newContext = executionContext;
@@ -190,8 +191,8 @@ Main.ExecutionContextSelector = class {
       }
     }
     if (!newContext) {
-      for (var i = 0; i < targets.length && !newContext; ++i) {
-        var executionContexts = targets[i].runtimeModel.executionContexts();
+      for (var i = 0; i < runtimeModels.length && !newContext; ++i) {
+        var executionContexts = runtimeModels[i].executionContexts();
         if (executionContexts.length) {
           newContext = executionContexts[0];
           break;

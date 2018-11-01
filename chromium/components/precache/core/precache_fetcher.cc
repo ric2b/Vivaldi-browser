@@ -28,6 +28,7 @@
 #include "base/task_runner_util.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/precache/core/precache_database.h"
+#include "components/precache/core/precache_manifest_util.h"
 #include "components/precache/core/precache_switches.h"
 #include "components/precache/core/proto/quota.pb.h"
 #include "components/precache/core/proto/unfinished_work.pb.h"
@@ -123,41 +124,6 @@ bool ParseProtoFromFetchResponse(const net::URLFetcher& source,
     return false;
   }
   return true;
-}
-
-// Returns the resource selection bitset from the |manifest| for the given
-// |experiment_id|. If the experiment group is not found, then this returns
-// nullopt, in which case all resources should be selected.
-base::Optional<std::vector<bool>> GetResourceBitset(
-    const PrecacheManifest& manifest,
-    uint32_t experiment_id) {
-  base::Optional<std::vector<bool>> ret;
-  if (manifest.has_experiments()) {
-    const auto& resource_bitset_map =
-        manifest.experiments().resources_by_experiment_group();
-    const auto& it = resource_bitset_map.find(experiment_id);
-    if (it != resource_bitset_map.end()) {
-      if (it->second.has_bitset()) {
-        const std::string& bitset = it->second.bitset();
-        ret.emplace(bitset.size() * 8);
-        for (size_t i = 0; i < bitset.size(); ++i) {
-          for (size_t j = 0; j < 8; ++j) {
-            if ((1 << j) & bitset[i])
-              ret.value()[i * 8 + j] = true;
-          }
-        }
-      } else if (it->second.has_deprecated_bitset()) {
-        uint64_t bitset = it->second.deprecated_bitset();
-        ret.emplace(64);
-        for (int i = 0; i < 64; ++i) {
-          if ((0x1ULL << i) & bitset)
-            ret.value()[i] = true;
-        }
-      }
-    }
-  }
-  // Only return one variable to ensure RVO triggers.
-  return ret;
 }
 
 // URLFetcherResponseWriter that ignores the response body, in order to avoid
@@ -315,8 +281,40 @@ PrecacheFetcher::Fetcher::~Fetcher() {}
 
 void PrecacheFetcher::Fetcher::LoadFromCache() {
   fetch_stage_ = FetchStage::CACHE;
-  cache_url_fetcher_ =
-      net::URLFetcher::Create(url_, net::URLFetcher::GET, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("wifi_prefetch_from_cache", R"(
+        semantics {
+          sender: "Wifi Prefetch"
+          description:
+            "Speeds up mobile web page loads by downloading some common static "
+            "assets (such as JS and CSS) for sites that the user browses "
+            "frequently, in advance of the browser needing them. Only applies "
+            "to users with tab sync enabled."
+          trigger:
+            "Background service that runs when the device is plugged into "
+            "power, on unmetered wifi, and Chromium is not in the foreground."
+          data:
+            "Local cache fetches; no data is sent over the network."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "Users can disable this feature by several settings: Disabling tab "
+            "sync via unchecking 'Open tabs' in Chromium settings under "
+            "'Advanced sync settings'; Disabling predicting required downloads "
+            "via unchecking 'Use a prediction service to load pages more "
+            "quickly' in Chromium settings under Privacy; Enabling 'Data "
+            "Saver' in Chromium settings on Android."
+          chrome_policy {
+            NetworkPredictionOptions {
+              policy_options {mode: MANDATORY}
+              NetworkPredictionOptions: 2
+            }
+          }
+        })");
+  cache_url_fetcher_ = net::URLFetcher::Create(url_, net::URLFetcher::GET, this,
+                                               traffic_annotation);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       cache_url_fetcher_.get(),
       data_use_measurement::DataUseUserData::PRECACHE);
@@ -331,8 +329,80 @@ void PrecacheFetcher::Fetcher::LoadFromCache() {
 
 void PrecacheFetcher::Fetcher::LoadFromNetwork() {
   fetch_stage_ = FetchStage::NETWORK;
-  network_url_fetcher_ =
-      net::URLFetcher::Create(url_, net::URLFetcher::GET, this);
+  if (is_resource_request_) {
+    net::NetworkTrafficAnnotationTag traffic_annotation =
+        net::DefineNetworkTrafficAnnotation(
+            "wifi_prefetch_resource_from_network", R"(
+            semantics {
+              sender: "Wifi Prefetch"
+              description:
+                "Speeds up mobile web page loads by downloading common static "
+                "assets (such as JS and CSS) for sites that the user browses "
+                "frequently, in advance of the browser needing them. Only "
+                "applies to users with tab sync enabled."
+              trigger:
+                "Background service that runs when the device is plugged into "
+                "power, on unmetered wifi, and Chromium is not in the "
+                "foreground."
+              data: "Link to the requested resrouce."
+              destination: WEBSITE
+            }
+            policy {
+              cookies_allowed: false
+              setting:
+                "Users can disable this feature by several settings: Disabling "
+                "tab sync via unchecking 'Open tabs' in Chromium settings "
+                "under 'Advanced sync settings'; Disabling predicting required "
+                "downloads via unchecking 'Use a prediction service to load "
+                "pages more quickly' in Chromium settings under Privacy; "
+                "Enabling 'Data Saver' in Chromium settings on Android."
+              chrome_policy {
+                NetworkPredictionOptions {
+                  policy_options {mode: MANDATORY}
+                  NetworkPredictionOptions: 2
+                }
+              }
+            })");
+    network_url_fetcher_ = net::URLFetcher::Create(url_, net::URLFetcher::GET,
+                                                   this, traffic_annotation);
+  } else {
+    net::NetworkTrafficAnnotationTag traffic_annotation =
+        net::DefineNetworkTrafficAnnotation("wifi_prefetch_sites_from_network",
+                                            R"(
+          semantics {
+            sender: "Wifi Prefetch"
+            description:
+              "Speeds up mobile web page loads by downloading common static "
+              "assets (such as JS and CSS) for sites that the user browses "
+              "frequently, in advance of the browser needing them. The first "
+              "step is to download the list of common static assets from "
+              "Google. Only applies to users with tab sync enabled."
+            trigger:
+              "Background service that runs when the device is plugged into "
+              "power, on unmetered wifi, and Chromium is not in the foreground."
+            data: "A list of the top hosts that the user visits."
+            destination: GOOGLE_OWNED_SERVICE
+          }
+          policy {
+            cookies_allowed: false
+            setting:
+              "Users can disable this feature by several settings: Disabling "
+              "tab sync via unchecking 'Open tabs' in Chromium settings under "
+              "'Advanced sync settings'; Disabling predicting required "
+              "downloads via unchecking 'Use a prediction service to load "
+              "pages more quickly' in Chromium settings under Privacy; "
+              "Enabling 'Data Saver' in Chromium settings on Android."
+            chrome_policy {
+              NetworkPredictionOptions {
+                policy_options {mode: MANDATORY}
+                NetworkPredictionOptions: 2
+              }
+            }
+          })");
+    network_url_fetcher_ = net::URLFetcher::Create(url_, net::URLFetcher::GET,
+                                                   this, traffic_annotation);
+  }
+
   data_use_measurement::DataUseUserData::AttachToFetcher(
       network_url_fetcher_.get(),
       data_use_measurement::DataUseUserData::PRECACHE);
@@ -778,6 +848,7 @@ void PrecacheFetcher::OnManifestFetchComplete(int64_t host_visits,
     PrecacheManifest manifest;
 
     if (ParseProtoFromFetchResponse(*source.network_url_fetcher(), &manifest)) {
+      precache_delegate_->OnManifestFetched(source.referrer(), manifest);
       const base::Optional<std::vector<bool>> resource_bitset =
           GetResourceBitset(manifest, experiment_id_);
       const int32_t included_resources_max =

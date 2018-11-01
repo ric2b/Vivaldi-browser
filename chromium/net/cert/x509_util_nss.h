@@ -28,14 +28,13 @@ namespace net {
 
 namespace x509_util {
 
-#if defined(USE_NSS_CERTS)
 // Parses the Principal attribute from |name| and outputs the result in
-// |principal|.
-void ParsePrincipal(CERTName* name,
-                    CertPrincipal* principal);
+// |principal|. Returns true on success.
+bool ParsePrincipal(CERTName* name, CertPrincipal* principal);
 
 // Parses the date from |der_date| and outputs the result in |result|.
-void ParseDate(const SECItem* der_date, base::Time* result);
+// Returns true on success.
+bool ParseDate(const SECItem* der_date, base::Time* result);
 
 // Parses the serial number from |certificate|.
 std::string ParseSerialNumber(const CERTCertificate* certificate);
@@ -127,7 +126,6 @@ bool IsCertificateIssuedBy(const std::vector<CERTCertificate*>& cert_chain,
 std::string GetUniqueNicknameForSlot(const std::string& nickname,
                                      const SECItem* subject,
                                      PK11SlotInfo* slot);
-#endif  // defined(USE_NSS_CERTS)
 
 } // namespace x509_util
 

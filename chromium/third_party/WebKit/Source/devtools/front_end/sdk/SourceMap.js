@@ -83,6 +83,17 @@ SDK.SourceMapEntry = class {
     this.sourceColumnNumber = sourceColumnNumber;
     this.name = name;
   }
+
+  /**
+   * @param {!SDK.SourceMapEntry} entry1
+   * @param {!SDK.SourceMapEntry} entry2
+   * @return {number}
+   */
+  static compare(entry1, entry2) {
+    if (entry1.lineNumber !== entry2.lineNumber)
+      return entry1.lineNumber - entry2.lineNumber;
+    return entry1.columnNumber - entry2.columnNumber;
+  }
 };
 
 /**
@@ -132,7 +143,7 @@ SDK.SourceMap.prototype = {
   editable() {},
 
   /**
-   * @param {!Array<!Common.TextRange>} ranges
+   * @param {!Array<!TextUtils.TextRange>} ranges
    * @param {!Array<string>} texts
    * @return {!Promise<?SDK.SourceMap.EditResult>}
    */
@@ -145,7 +156,7 @@ SDK.SourceMap.prototype = {
 SDK.SourceMap.EditResult = class {
   /**
    * @param {!SDK.SourceMap} map
-   * @param {!Array<!Common.SourceEdit>} compiledEdits
+   * @param {!Array<!TextUtils.SourceEdit>} compiledEdits
    * @param {!Map<string, string>} newSources
    */
   constructor(map, compiledEdits, newSources) {
@@ -294,7 +305,7 @@ SDK.TextSourceMap = class {
 
   /**
    * @override
-   * @param {!Array<!Common.TextRange>} ranges
+   * @param {!Array<!TextUtils.TextRange>} ranges
    * @param {!Array<string>} texts
    * @return {!Promise<?SDK.SourceMap.EditResult>}
    */
@@ -481,6 +492,9 @@ SDK.TextSourceMap = class {
       this._mappings.push(new SDK.SourceMapEntry(
           lineNumber, columnNumber, sourceURL, sourceLineNumber, sourceColumnNumber, names[nameIndex]));
     }
+
+    // As per spec, mappings are not necessarily sorted.
+    this._mappings.stableSort(SDK.SourceMapEntry.compare);
   }
 
   /**
@@ -513,8 +527,8 @@ SDK.TextSourceMap = class {
 
   /**
    * @param {string} url
-   * @param {!Common.TextRange} textRange
-   * @return {!Common.TextRange}
+   * @param {!TextUtils.TextRange} textRange
+   * @return {!TextUtils.TextRange}
    */
   reverseMapTextRange(url, textRange) {
     /**
@@ -536,7 +550,7 @@ SDK.TextSourceMap = class {
 
     var startMapping = mappings[startIndex];
     var endMapping = mappings[endIndex];
-    return new Common.TextRange(
+    return new TextUtils.TextRange(
         startMapping.lineNumber, startMapping.columnNumber, endMapping.lineNumber, endMapping.columnNumber);
   }
 };

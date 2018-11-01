@@ -12,6 +12,7 @@ component("generic_sensor") {
   output_name = "generic_sensor"
   sources = [
     "generic_sensor_consts.h",
+    "generic_sensor_export.h",
     "linux/sensor_data_linux.cc",
     "linux/sensor_data_linux.h",
     "platform_sensor.cc",
@@ -65,7 +66,7 @@ component("generic_sensor") {
   }
 
   if (is_mac) {
-    deps += [ "//device/sensors/public/cpp" ]
+    deps += [ "//device/sensors/public/cpp:full" ]
     libs = [ "IOKit.framework" ]
   }
 

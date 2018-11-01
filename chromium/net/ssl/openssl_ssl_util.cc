@@ -61,8 +61,13 @@ int OpenSSLNetErrorLib() {
 int MapOpenSSLErrorSSL(uint32_t error_code) {
   DCHECK_EQ(ERR_LIB_SSL, ERR_GET_LIB(error_code));
 
+#if DCHECK_IS_ON()
+  char buf[ERR_ERROR_STRING_BUF_LEN];
+  ERR_error_string_n(error_code, buf, sizeof(buf));
   DVLOG(1) << "OpenSSL SSL error, reason: " << ERR_GET_REASON(error_code)
-           << ", name: " << ERR_error_string(error_code, NULL);
+           << ", name: " << buf;
+#endif
+
   switch (ERR_GET_REASON(error_code)) {
     case SSL_R_READ_TIMEOUT_EXPIRED:
       return ERR_TIMED_OUT;
@@ -96,9 +101,7 @@ int MapOpenSSLErrorSSL(uint32_t error_code) {
       return ERR_SSL_UNRECOGNIZED_NAME_ALERT;
     case SSL_R_BAD_DH_P_LENGTH:
       return ERR_SSL_WEAK_SERVER_EPHEMERAL_DH_KEY;
-    case SSL_R_CERTIFICATE_VERIFY_FAILED:
-      // The only way that the certificate verify callback can fail is if
-      // the leaf certificate changed during a renegotiation.
+    case SSL_R_SERVER_CERT_CHANGED:
       return ERR_SSL_SERVER_CERT_CHANGED;
     // SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE may be returned from the server after
     // receiving ClientHello if there's no common supported cipher. Map that
@@ -224,15 +227,17 @@ int GetNetSSLVersion(SSL* ssl) {
 
 bssl::UniquePtr<X509> OSCertHandleToOpenSSL(
     X509Certificate::OSCertHandle os_handle) {
-#if defined(USE_OPENSSL_CERTS)
+#if BUILDFLAG(USE_BYTE_CERTS)
+  return bssl::UniquePtr<X509>(X509_parse_from_buffer(os_handle));
+#elif defined(USE_OPENSSL_CERTS)
   return bssl::UniquePtr<X509>(X509Certificate::DupOSCertHandle(os_handle));
-#else   // !defined(USE_OPENSSL_CERTS)
+#else   // !defined(USE_OPENSSL_CERTS) && !BUILDFLAG(USE_BYTE_CERTS)
   std::string der_encoded;
   if (!X509Certificate::GetDEREncoded(os_handle, &der_encoded))
     return bssl::UniquePtr<X509>();
   const uint8_t* bytes = reinterpret_cast<const uint8_t*>(der_encoded.data());
   return bssl::UniquePtr<X509>(d2i_X509(NULL, &bytes, der_encoded.size()));
-#endif  // defined(USE_OPENSSL_CERTS)
+#endif  // defined(USE_OPENSSL_CERTS) && BUILDFLAG(USE_BYTE_CERTS)
 }
 
 bssl::UniquePtr<STACK_OF(X509)> OSCertHandlesToOpenSSL(

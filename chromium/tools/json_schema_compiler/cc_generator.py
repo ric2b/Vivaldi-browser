@@ -46,6 +46,7 @@ class _Generator(object):
       .Append('#include "base/memory/ptr_util.h"')
       .Append('#include "base/strings/string_number_conversions.h"')
       .Append('#include "base/strings/utf_string_conversions.h"')
+      .Append('#include "base/values.h"')
       .Append('#include "%s/%s.h"' %
               (self._namespace.source_file_dir, self._namespace.short_filename))
       .Append('#include <set>')
@@ -567,7 +568,7 @@ class _Generator(object):
 
     var: variable or variable*
 
-    E.g for std::string, generate new base::StringValue(var)
+    E.g for std::string, generate new base::Value(var)
     """
     c = Code()
     underlying_type = self._type_helper.FollowRef(type_)
@@ -631,14 +632,14 @@ class _Generator(object):
       maybe_namespace = ''
       if type_.property_type == PropertyType.REF:
         maybe_namespace = '%s::' % underlying_type.namespace.unix_name
-      return 'base::MakeUnique<base::StringValue>(%sToString(%s))' % (
+      return 'base::MakeUnique<base::Value>(%sToString(%s))' % (
           maybe_namespace, var)
     elif underlying_type.property_type == PropertyType.BINARY:
       if is_ptr:
         vardot = var + '->'
       else:
         vardot = var + '.'
-      return ('base::BinaryValue::CreateWithCopiedBuffer('
+      return ('base::Value::CreateWithCopiedBuffer('
               '%sdata(), %ssize())' % (vardot, vardot))
     elif underlying_type.property_type == PropertyType.ARRAY:
       return '%s' % self._util_cc_helper.CreateValueFromArray(
@@ -648,7 +649,7 @@ class _Generator(object):
       if is_ptr:
         var = '*%s' % var
       if underlying_type.property_type == PropertyType.STRING:
-        return 'base::MakeUnique<base::StringValue>(%s)' % var
+        return 'base::MakeUnique<base::Value>(%s)' % var
       else:
         return 'base::MakeUnique<base::Value>(%s)' % var
     else:
@@ -887,7 +888,7 @@ class _Generator(object):
                                                     dst_var,
                                                     failure_value))
     elif underlying_type.property_type == PropertyType.BINARY:
-      (c.Append('const base::BinaryValue* binary_value = NULL;')
+      (c.Append('const base::Value* binary_value = NULL;')
         .Sblock('if (!%(src_var)s->IsType(base::Value::Type::BINARY)) {')
         .Concat(self._GenerateError(
           '"\'%%(key)s\': expected binary, got " + ' +
@@ -898,7 +899,7 @@ class _Generator(object):
       (c.Eblock('}')
         .Sblock('else {')
         .Append(' binary_value =')
-        .Append('   static_cast<const base::BinaryValue*>(%(src_var)s);')
+        .Append('   static_cast<const base::Value*>(%(src_var)s);')
       )
       if is_ptr:
         (c.Append('%(dst_var)s.reset(new std::vector<char>(')
@@ -946,7 +947,8 @@ class _Generator(object):
       .Concat(self._GenerateStringToEnumConversion(item_type,
                                                    '(it)',
                                                    'tmp',
-                                                   failure_value))
+                                                   failure_value,
+                                                   is_ptr=False))
       .Append('%s%spush_back(tmp);' % (dst_var, accessor))
       .Eblock('}')
     )
@@ -956,7 +958,8 @@ class _Generator(object):
                                       type_,
                                       src_var,
                                       dst_var,
-                                      failure_value):
+                                      failure_value,
+                                      is_ptr=True):
     """Returns Code that converts a string type in |src_var| to an enum with
     type |type_| in |dst_var|. In the generated code, if |src_var| is not
     a valid enum name then the function will return |failure_value|.
@@ -968,11 +971,14 @@ class _Generator(object):
     cpp_type_namespace = ''
     if type_.namespace != self._namespace:
       cpp_type_namespace = '%s::' % type_.namespace.unix_name
+    accessor = '->' if is_ptr else '.'
     (c.Append('std::string %s;' % enum_as_string)
-      .Sblock('if (!%s->GetAsString(&%s)) {' % (src_var, enum_as_string))
+      .Sblock('if (!%s%sGetAsString(&%s)) {' % (src_var,
+                                                accessor,
+                                                enum_as_string))
       .Concat(self._GenerateError(
         '"\'%%(key)s\': expected string, got " + ' +
-        self._util_cc_helper.GetValueTypeString('%%(src_var)s', True)))
+        self._util_cc_helper.GetValueTypeString('%%(src_var)s', is_ptr)))
       .Append('return %s;' % failure_value)
       .Eblock('}')
       .Append('%s = %sParse%s(%s);' % (dst_var,

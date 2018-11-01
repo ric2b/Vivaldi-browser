@@ -8,15 +8,16 @@
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/V8DOMException.h"
 #include "components/payments/content/payment_request.mojom-blink.h"
-#include "modules/payments/PaymentDetails.h"
+#include "modules/payments/PaymentDetailsInit.h"
+#include "modules/payments/PaymentDetailsUpdate.h"
 #include "modules/payments/PaymentItem.h"
 #include "modules/payments/PaymentShippingOption.h"
 #include "platform/heap/HeapAllocator.h"
 #include "platform/heap/Persistent.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/WTFString.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "wtf/Allocator.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -26,60 +27,66 @@ class ScriptState;
 class ScriptValue;
 
 enum PaymentTestDetailToChange {
-  PaymentTestDetailNone,
-  PaymentTestDetailTotal,
-  PaymentTestDetailItem,
-  PaymentTestDetailShippingOption,
-  PaymentTestDetailModifierTotal,
-  PaymentTestDetailModifierItem,
-  PaymentTestDetailError
+  kPaymentTestDetailNone,
+  kPaymentTestDetailTotal,
+  kPaymentTestDetailItem,
+  kPaymentTestDetailShippingOption,
+  kPaymentTestDetailModifierTotal,
+  kPaymentTestDetailModifierItem,
+  kPaymentTestDetailError
 };
 
 enum PaymentTestDataToChange {
-  PaymentTestDataNone,
-  PaymentTestDataId,
-  PaymentTestDataLabel,
-  PaymentTestDataAmount,
-  PaymentTestDataCurrencyCode,
-  PaymentTestDataCurrencySystem,
-  PaymentTestDataValue,
+  kPaymentTestDataNone,
+  kPaymentTestDataId,
+  kPaymentTestDataLabel,
+  kPaymentTestDataAmount,
+  kPaymentTestDataCurrencyCode,
+  kPaymentTestDataCurrencySystem,
+  kPaymentTestDataValue,
 };
 
 enum PaymentTestModificationType {
-  PaymentTestOverwriteValue,
-  PaymentTestRemoveKey
+  kPaymentTestOverwriteValue,
+  kPaymentTestRemoveKey
 };
 
-PaymentItem buildPaymentItemForTest(
-    PaymentTestDataToChange = PaymentTestDataNone,
-    PaymentTestModificationType = PaymentTestOverwriteValue,
-    const String& valueToUse = String());
+PaymentItem BuildPaymentItemForTest(
+    PaymentTestDataToChange = kPaymentTestDataNone,
+    PaymentTestModificationType = kPaymentTestOverwriteValue,
+    const String& value_to_use = String());
 
-PaymentShippingOption buildShippingOptionForTest(
-    PaymentTestDataToChange = PaymentTestDataNone,
-    PaymentTestModificationType = PaymentTestOverwriteValue,
-    const String& valueToUse = String());
+PaymentShippingOption BuildShippingOptionForTest(
+    PaymentTestDataToChange = kPaymentTestDataNone,
+    PaymentTestModificationType = kPaymentTestOverwriteValue,
+    const String& value_to_use = String());
 
-PaymentDetailsModifier buildPaymentDetailsModifierForTest(
-    PaymentTestDetailToChange = PaymentTestDetailNone,
-    PaymentTestDataToChange = PaymentTestDataNone,
-    PaymentTestModificationType = PaymentTestOverwriteValue,
-    const String& valueToUse = String());
+PaymentDetailsModifier BuildPaymentDetailsModifierForTest(
+    PaymentTestDetailToChange = kPaymentTestDetailNone,
+    PaymentTestDataToChange = kPaymentTestDataNone,
+    PaymentTestModificationType = kPaymentTestOverwriteValue,
+    const String& value_to_use = String());
 
-PaymentDetails buildPaymentDetailsForTest(
-    PaymentTestDetailToChange = PaymentTestDetailNone,
-    PaymentTestDataToChange = PaymentTestDataNone,
-    PaymentTestModificationType = PaymentTestOverwriteValue,
-    const String& valueToUse = String());
+PaymentDetailsInit BuildPaymentDetailsInitForTest(
+    PaymentTestDetailToChange = kPaymentTestDetailNone,
+    PaymentTestDataToChange = kPaymentTestDataNone,
+    PaymentTestModificationType = kPaymentTestOverwriteValue,
+    const String& value_to_use = String());
 
-PaymentDetails buildPaymentDetailsErrorMsgForTest(
-    const String& valueToUse = String());
+PaymentDetailsUpdate BuildPaymentDetailsUpdateForTest(
+    PaymentTestDetailToChange = kPaymentTestDetailNone,
+    PaymentTestDataToChange = kPaymentTestDataNone,
+    PaymentTestModificationType = kPaymentTestOverwriteValue,
+    const String& value_to_use = String());
 
-HeapVector<PaymentMethodData> buildPaymentMethodDataForTest();
+PaymentDetailsUpdate BuildPaymentDetailsErrorMsgForTest(
+    const String& value_to_use = String());
 
-payments::mojom::blink::PaymentResponsePtr buildPaymentResponseForTest();
+HeapVector<PaymentMethodData> BuildPaymentMethodDataForTest();
 
-void makePaymentRequestOriginSecure(Document&);
+payments::mojom::blink::PaymentResponsePtr BuildPaymentResponseForTest();
+
+void MakePaymentRequestOriginSecure(Document&);
 
 class PaymentRequestMockFunctionScope {
   STACK_ALLOCATED();
@@ -88,22 +95,22 @@ class PaymentRequestMockFunctionScope {
   explicit PaymentRequestMockFunctionScope(ScriptState*);
   ~PaymentRequestMockFunctionScope();
 
-  v8::Local<v8::Function> expectCall();
-  v8::Local<v8::Function> expectCall(String* captor);
-  v8::Local<v8::Function> expectNoCall();
+  v8::Local<v8::Function> ExpectCall();
+  v8::Local<v8::Function> ExpectCall(String* captor);
+  v8::Local<v8::Function> ExpectNoCall();
 
  private:
   class MockFunction : public ScriptFunction {
    public:
     explicit MockFunction(ScriptState*);
     MockFunction(ScriptState*, String* captor);
-    v8::Local<v8::Function> bind();
-    MOCK_METHOD1(call, ScriptValue(ScriptValue));
-    String* m_value;
+    v8::Local<v8::Function> Bind();
+    MOCK_METHOD1(Call, ScriptValue(ScriptValue));
+    String* value_;
   };
 
-  ScriptState* m_scriptState;
-  Vector<Persistent<MockFunction>> m_mockFunctions;
+  ScriptState* script_state_;
+  Vector<Persistent<MockFunction>> mock_functions_;
 };
 
 }  // namespace blink

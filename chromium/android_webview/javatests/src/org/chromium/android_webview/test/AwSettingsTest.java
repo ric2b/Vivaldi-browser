@@ -23,6 +23,7 @@ import android.webkit.WebSettings.LayoutAlgorithm;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.AwWebResourceResponse;
+import org.chromium.android_webview.test.TestAwContentsClient.DoUpdateVisitedHistoryHelper;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.ImagePageGenerator;
 import org.chromium.android_webview.test.util.JSUtils;
@@ -36,8 +37,8 @@ import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.HistoryUtils;
-import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.ui.display.DisplayAndroid;
@@ -1184,10 +1185,14 @@ public class AwSettingsTest extends AwTestBase {
             return "<html><head>"
                     + "<script>"
                     + "    function tryOpenWindow() {"
-                    + "        var newWindow = window.open("
-                    + "           'data:text/html;charset=utf-8,"
-                    + "           <html><head><title>" + POPUP_ENABLED + "</title></head></html>');"
-                    + "        if (!newWindow) document.title = '" + POPUP_BLOCKED + "';"
+                    + "        var newWindow = window.open('about:blank');"
+                    + "        if (newWindow) {"
+                    + "          newWindow.document.write("
+                    + "             '<html><head><title>" + POPUP_ENABLED
+                    + "</title></head></html>');"
+                    + "        } else {"
+                    + "          document.title = '" + POPUP_BLOCKED + "';"
+                    + "        }"
                     + "    }"
                     + "</script></head>"
                     + "<body onload='tryOpenWindow()'></body></html>";
@@ -1881,6 +1886,7 @@ public class AwSettingsTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @RetryOnFailure
     public void testFileUrlAccessWithTwoViews() throws Throwable {
         ViewPair views = createViews();
         runPerViewSettingsTest(
@@ -2874,14 +2880,13 @@ public class AwSettingsTest extends AwTestBase {
                     }
             );
 
-            TestCallbackHelperContainer.OnPageFinishedHelper onPageFinishedHelper =
-                    contentClient.getOnPageFinishedHelper();
-            int initialCallCount = onPageFinishedHelper.getCallCount();
-            loadUrlSync(awContents, onPageFinishedHelper, url);
-            // loadUrlSync only waits for a single onPageFinished, now wait for another one.
-            onPageFinishedHelper.waitForCallback(initialCallCount + 1, 1, WAIT_TIMEOUT_MS,
-                    TimeUnit.MILLISECONDS);
-            assertEquals(url, onPageFinishedHelper.getUrl());
+            DoUpdateVisitedHistoryHelper doUpdateVisitedHistoryHelper =
+                    contentClient.getDoUpdateVisitedHistoryHelper();
+            int callCount = doUpdateVisitedHistoryHelper.getCallCount();
+            loadUrlAsync(awContents, url);
+            doUpdateVisitedHistoryHelper.waitForCallback(callCount);
+            assertEquals(url, doUpdateVisitedHistoryHelper.getUrl());
+            assertEquals(true, doUpdateVisitedHistoryHelper.getIsReload());
         } finally {
             if (httpServer != null) {
                 httpServer.shutdown();
@@ -2931,7 +2936,8 @@ public class AwSettingsTest extends AwTestBase {
         JSUtils.executeJavaScriptAndWaitForResult(this, awContents,
                 client.getOnEvaluateJavaScriptResultHelper(),
                 "window.emptyDocumentPersistenceTest = true;");
-        loadUrlSync(awContents, client.getOnPageFinishedHelper(), "about:blank");
+        loadUrlSync(awContents, client.getOnPageFinishedHelper(),
+                ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
         String result = JSUtils.executeJavaScriptAndWaitForResult(this, awContents,
                 client.getOnEvaluateJavaScriptResultHelper(),
                 "window.emptyDocumentPersistenceTest ? 'set' : 'not set';");

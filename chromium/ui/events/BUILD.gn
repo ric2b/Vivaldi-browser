@@ -50,6 +50,8 @@ component("events_base") {
     "event_switches.cc",
     "event_switches.h",
     "events_base_export.h",
+    "fraction_of_time_without_user_input_recorder.cc",
+    "fraction_of_time_without_user_input_recorder.h",
     "gesture_curve.h",
     "gesture_event_details.cc",
     "gesture_event_details.h",
@@ -65,8 +67,6 @@ component("events_base") {
     "keycodes/keyboard_code_conversion_win.cc",
     "keycodes/keyboard_code_conversion_win.h",
     "keycodes/keyboard_codes.h",
-    "latency_info.cc",
-    "latency_info.h",
   ]
 
   defines = [ "EVENTS_BASE_IMPLEMENTATION" ]
@@ -113,6 +113,7 @@ component("events") {
     "event_processor.cc",
     "event_processor.h",
     "event_rewriter.h",
+    "event_sink.h",
     "event_source.cc",
     "event_source.h",
     "event_target.cc",
@@ -140,6 +141,7 @@ component("events") {
 
   public_deps = [
     ":events_base",
+    "//ui/latency",
   ]
   deps = [
     ":dom_keycode_converter",
@@ -360,6 +362,7 @@ if (!is_ios) {
       "event_processor_unittest.cc",
       "event_rewriter_unittest.cc",
       "event_unittest.cc",
+      "fraction_of_time_without_user_input_recorder_unittest.cc",
       "gesture_detection/bitset_32_unittest.cc",
       "gesture_detection/filtered_gesture_provider_unittest.cc",
       "gesture_detection/gesture_event_data_packet_unittest.cc",
@@ -373,7 +376,6 @@ if (!is_ios) {
       "keycodes/dom/keycode_converter_unittest.cc",
       "keycodes/keyboard_code_conversion_unittest.cc",
       "keycodes/platform_key_map_win_unittest.cc",
-      "latency_info_unittest.cc",
       "platform/platform_event_source_unittest.cc",
       "scoped_target_handler_unittest.cc",
       "win/event_utils_win_unittest.cc",
@@ -405,7 +407,6 @@ if (!is_ios) {
         "blink/web_input_event_unittest.cc",
         "devices/mojo/device_struct_traits_unittest.cc",
         "gestures/blink/web_gesture_curve_impl_unittest.cc",
-        "ipc/latency_info_param_traits_unittest.cc",
         "mojo/struct_traits_unittest.cc",
       ]
       deps += [
@@ -417,7 +418,6 @@ if (!is_ios) {
         "//ui/events/blink",
         "//ui/events/devices/mojo:test_interfaces",
         "//ui/events/gestures/blink",
-        "//ui/events/ipc",
         "//ui/events/mojo:test_interfaces",
         "//ui/gfx/ipc/geometry",
       ]
@@ -447,8 +447,10 @@ if (!is_ios) {
         "ozone/chromeos/cursor_controller_unittest.cc",
         "ozone/evdev/event_converter_evdev_impl_unittest.cc",
         "ozone/evdev/event_converter_test_util.cc",
+        "ozone/evdev/event_converter_test_util.h",
         "ozone/evdev/event_device_info_unittest.cc",
         "ozone/evdev/event_device_test_util.cc",
+        "ozone/evdev/event_device_test_util.h",
         "ozone/evdev/input_injector_evdev_unittest.cc",
         "ozone/evdev/tablet_event_converter_evdev_unittest.cc",
         "ozone/evdev/touch_event_converter_evdev_unittest.cc",

@@ -2,8 +2,6 @@
 
 #include "sync/vivaldi_syncmanager.h"
 
-#include <memory>
-#include <string>
 #include <utility>
 
 #include "app/vivaldi_apptools.h"
@@ -19,7 +17,6 @@
 #include "sync/vivaldi_invalidation_service.h"
 #include "sync/vivaldi_profile_oauth2_token_service.h"
 #include "sync/vivaldi_profile_oauth2_token_service_factory.h"
-#include "sync/vivaldi_sync_model.h"
 #include "sync/vivaldi_sync_urls.h"
 
 using syncer::ModelType;
@@ -28,47 +25,53 @@ using syncer::JsBackend;
 using syncer::SyncCredentials;
 using syncer::WeakHandle;
 
+namespace {
+// TODO(julienp): We need to switch away from polling and use notifications as
+// our primary way of refreshing sync data. When that is done, we might still
+// want to do some occasional polling, but it won't be on a fixed interval.
+const int kPollingInterval = 5;  // minutes
+}  // anonymous namespace
+
 namespace vivaldi {
 
 VivaldiSyncManager::VivaldiSyncManager(
     ProfileSyncService::InitParams* init_params,
     std::shared_ptr<VivaldiInvalidationService> invalidation_service)
     : ProfileSyncService(std::move(*init_params)),
-      model_(NULL),
       polling_posted_(false),
       invalidation_service_(invalidation_service),
       weak_factory_(this) {}
 
 VivaldiSyncManager::~VivaldiSyncManager() {
-  if (model_) {
-    model_ = NULL;
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnDeletingSyncManager();
   }
 }
 
-void VivaldiSyncManager::Init(VivaldiSyncModel* model) {
-  DCHECK(model);
-  model_ = model;
+void VivaldiSyncManager::AddVivaldiObserver(
+    VivaldiSyncManagerObserver* observer) {
+  vivaldi_observers_.AddObserver(observer);
 }
 
-void VivaldiSyncManager::HandleLoggedInMessage(
-    const base::DictionaryValue& args) {
-  CHECK(!args.empty());
-  DCHECK(model_);
-
-  SetToken(args, true);
+void VivaldiSyncManager::RemoveVivaldiObserver(
+    VivaldiSyncManagerObserver* observer) {
+  vivaldi_observers_.RemoveObserver(observer);
 }
 
-void VivaldiSyncManager::HandleRefreshToken(const base::DictionaryValue& args) {
-  CHECK(!args.empty());
-  DCHECK(model_);
-
-  SetToken(args);
+void VivaldiSyncManager::ClearSyncData(base::Closure callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  data_type_manager_->Stop();
+  engine_->StartConfiguration();
+  engine_->ClearServerData(base::Bind(&VivaldiSyncManager::OnSyncDataCleared,
+                                      weak_factory_.GetWeakPtr(), callback));
 }
 
-void VivaldiSyncManager::HandleLogOutMessage(
-    const base::DictionaryValue& args) {
-  DCHECK(model_);
+void VivaldiSyncManager::OnSyncDataCleared(base::Closure callback) {
+  Logout();
+  callback.Run();
+}
 
+void VivaldiSyncManager::Logout() {
   signin()->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
                     signin_metrics::SignoutDelete::IGNORE_METRIC);
   sync_client_->GetPrefService()->ClearPref(prefs::kGoogleServicesAccountId);
@@ -78,26 +81,16 @@ void VivaldiSyncManager::HandleLogOutMessage(
   RequestStop(CLEAR_DATA);
 }
 
-void VivaldiSyncManager::HandleConfigureSyncMessage(
-    const base::DictionaryValue& args) {
-  DVLOG(1) << "Setting preferred types for non-blocking DTM"
-           << ModelTypeSetToString(syncer::ProtocolTypes());
+void VivaldiSyncManager::ConfigureTypes(bool sync_everything,
+                                        syncer::ModelTypeSet chosen_types) {
+  OnUserChoseDatatypes(sync_everything, chosen_types);
 
-  SignalSyncConfigured();
-}
+  if (!IsFirstSetupComplete()) {
+    SetFirstSetupComplete();
+    sync_blocker_.reset();
+  }
 
-void VivaldiSyncManager::HandleConfigurePollingMessage(
-    const base::DictionaryValue& args) {
-  std::string interval_seconds_str;
-  if (!args.GetString("polling_interval_seconds", &interval_seconds_str))
-    return;
-
-  uint32_t interval_seconds;
-
-  if (!base::StringToUint(interval_seconds_str, &interval_seconds))
-    return;
-
-  polling_interval_ = base::TimeDelta::FromSeconds(interval_seconds);
+  NotifySyncConfigured();
 }
 
 void VivaldiSyncManager::StartPollingServer() {
@@ -108,7 +101,7 @@ void VivaldiSyncManager::StartPollingServer() {
       FROM_HERE,
       base::Bind(&VivaldiSyncManager::PerformPollServer,
                  weak_factory_.GetWeakPtr()),
-      polling_interval_);
+      base::TimeDelta::FromMinutes(kPollingInterval));
 
   polling_posted_ = true;
 }
@@ -116,64 +109,68 @@ void VivaldiSyncManager::StartPollingServer() {
 void VivaldiSyncManager::PerformPollServer() {
   polling_posted_ = false;
 
-  base::DictionaryValue dummy;
-  HandlePollServerMessage(dummy);
+  PollServer();
   StartPollingServer();
 }
 
-void VivaldiSyncManager::HandlePollServerMessage(
-    const base::DictionaryValue& args) {
-  CHECK(model_);
+void VivaldiSyncManager::PollServer() {
   if (engine_) {
     syncer::ObjectIdInvalidationMap invalidation_map =
         syncer::ObjectIdInvalidationMap::InvalidateAll(
             syncer::ModelTypeSetToObjectIdSet(syncer::ProtocolTypes()));
     invalidation_service_->PerformInvalidation(invalidation_map);
-    // SignalSyncStarted();
+    NotifySyncStarted();
   }
 }
 
-void VivaldiSyncManager::HandleStartSyncMessage(
-    const base::DictionaryValue& args) {
-  StartSyncingWithServer();
-  SignalSyncStarted();
+void VivaldiSyncManager::NotifyLoginDone() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnLoginDone();
+  }
 }
 
-void VivaldiSyncManager::SignalSyncEngineStarted() {
-  base::DictionaryValue dummy;
-  HandleConfigureSyncMessage(dummy);
-  onNewMessage(std::string("Starting Sync engine"), std::string());
+void VivaldiSyncManager::NotifySyncConfigured() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnSyncConfigured();
+  }
 }
 
-void VivaldiSyncManager::SignalSyncConfigured() {
-  base::DictionaryValue dummy;
-  HandleStartSyncMessage(dummy);
-
-  onNewMessage(std::string("Sync Initialized"), std::string());
+void VivaldiSyncManager::NotifySyncStarted() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnBeginSyncing();
+  }
 }
 
-void VivaldiSyncManager::SignalSyncStarted() {
-  onNewMessage(std::string("SignalSyncStarted"),
-               std::string("SignalSyncStarted"));
+void VivaldiSyncManager::NotifySyncCompleted() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnEndSyncing();
+  }
 }
 
-void VivaldiSyncManager::SignalSyncCompleted() {
-  onNewMessage(std::string("SignalSyncCompleted"),
-               std::string("SignalSyncCompleted"));
-  current_types_ = GetActiveDataTypes();
-  StartPollingServer();
+void VivaldiSyncManager::NotifySyncEngineInitFailed() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnSyncEngineInitFailed();
+  }
+}
+
+void VivaldiSyncManager::NotifyAccessTokenRequested() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnAccessTokenRequested();
+  }
+}
+
+void VivaldiSyncManager::NotifyEncryptionPasswordRequested() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnEncryptionPasswordRequested();
+  }
 }
 
 void VivaldiSyncManager::OnSyncCycleCompleted(
     const syncer::SyncCycleSnapshot& snapshot) {
   ProfileSyncService::OnSyncCycleCompleted(snapshot);
-  SignalSyncCompleted();
-}
+  NotifySyncCompleted();
 
-void VivaldiSyncManager::onNewMessage(const std::string& param1,
-                                      const std::string& param2) {
-  if (model_)
-    model_->newMessage(param1, param2);
+  StartPollingServer();
 }
 
 void VivaldiSyncManager::VivaldiTokenSuccess() {
@@ -195,7 +192,7 @@ SyncCredentials VivaldiSyncManager::GetCredentials() {
 
 void VivaldiSyncManager::RequestAccessToken() {
   if (!vivaldi::ForcedVivaldiRunning())
-    onNewMessage(std::string("RequestAccessToken"), std::string());
+    NotifyAccessTokenRequested();
   else
     ProfileSyncService::RequestAccessToken();
 }
@@ -204,24 +201,14 @@ bool VivaldiSyncManager::DisableNotifications() const {
   return !vivaldi::ForcedVivaldiRunning();
 }
 
-void VivaldiSyncManager::SetToken(const base::DictionaryValue& args,
-                                  bool full_login) {
-  CHECK(!args.empty());
-
-  std::string token;
-  std::string account_id;
-  std::string username;
-  std::string password;
-  std::string expire;
-  if (!(args.GetString("token", &token) && args.GetString("expire", &expire) &&
-        args.GetString("account_id", &account_id) &&
-        (!full_login || (args.GetString("username", &username) &&
-                         args.GetString("password", &password))))) {
-    return;
-  }
-
+void VivaldiSyncManager::SetToken(bool has_login_details,
+                                  std::string username,
+                                  std::string password,
+                                  std::string token,
+                                  std::string expire,
+                                  std::string account_id) {
   if (token.empty()) {
-    HandleLogOutMessage(args);
+    Logout();
     return;
   }
 
@@ -238,9 +225,8 @@ void VivaldiSyncManager::SetToken(const base::DictionaryValue& args,
       VivaldiProfileOAuth2TokenServiceFactory::GetForProfile(
           sync_client_->GetProfile());
   token_service->SetConsumer(this);
-  sync_tracker_.reset(new SyncStartupTracker(sync_client_->GetProfile(), this));
 
-  if (full_login) {
+  if (has_login_details) {
     signin()->SetAuthenticatedAccountInfo(account_id, username);
   }
 
@@ -249,35 +235,29 @@ void VivaldiSyncManager::SetToken(const base::DictionaryValue& args,
     RequestStart();
   }
 
-  if (full_login) {
-    password_ = password;
+  sync_startup_tracker_.reset(
+      new SyncStartupTracker(sync_client_->GetProfile(), this));
+
+  if (has_login_details) {
     GoogleSigninSucceeded(account_id, username, password);
   }
 
   token_service->UpdateCredentials(account_id, token);
 }
 
-void VivaldiSyncManager::ChangePreferredDataTypes(
-    syncer::ModelTypeSet preferred_types) {
-  ProfileSyncService::ChangePreferredDataTypes(preferred_types);
-  current_types_ = GetActiveDataTypes();
-}
-
-void VivaldiSyncManager::OnEngineInitialized(
-    syncer::ModelTypeSet initial_types,
-    const syncer::WeakHandle<syncer::JsBackend>& js_backend,
-    const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
-        debug_info_listener,
-    const std::string& cache_guid,
-    bool success) {
-  ProfileSyncService::OnEngineInitialized(
-      initial_types, js_backend, debug_info_listener, cache_guid, success);
-  if (!success) {
-    onNewMessage(std::string("Sync Initialization Failed"), std::string());
-    return;
+bool VivaldiSyncManager::SetEncryptionPassword(const std::string& password) {
+  if (!IsEngineInitialized()) {
+    password_ = password;
+    return true;
   }
 
-  SignalSyncEngineStarted();
+  if (IsPassphraseRequired()) {
+    return SetDecryptionPassphrase(password_);
+  } else if (!IsUsingSecondaryPassphrase()) {
+    SetEncryptionPassphrase(password_, ProfileSyncService::EXPLICIT);
+    return true;
+  }
+  return false;
 }
 
 void VivaldiSyncManager::SyncStartupCompleted() {
@@ -287,27 +267,32 @@ void VivaldiSyncManager::SyncStartupCompleted() {
         base::Bind(&VivaldiSyncManager::SetupConfiguration,
                    weak_factory_.GetWeakPtr()));
   }
-  sync_tracker_.reset();
+  sync_startup_tracker_.reset();
 }
 
-void VivaldiSyncManager::SyncStartupFailed() {}
+void VivaldiSyncManager::SyncStartupFailed() {
+  NotifySyncEngineInitFailed();
+}
 
 void VivaldiSyncManager::SetupConfiguration() {
-  OnUserChoseDatatypes(true, syncer::UserSelectableTypes());
   EnableEncryptEverything();
-  if (IsPassphraseRequired()) {
-    // TODO(yngve): ask for password again
-    ignore_result(SetDecryptionPassphrase(password_));
+
+  if (!password_.empty()) {
+    if (!SetEncryptionPassword(password_) && IsPassphraseRequired())
+      NotifyEncryptionPasswordRequested();
+    password_.empty();
   } else {
-    if (!IsUsingSecondaryPassphrase())
-      SetEncryptionPassphrase(password_, ProfileSyncService::EXPLICIT);
+    if (IsPassphraseRequired())
+      NotifyEncryptionPasswordRequested();
   }
-  OnUserChoseDatatypes(true, syncer::UserSelectableTypes());
-  sync_blocker_.reset();
-  if (!IsFirstSetupComplete())
+
+  NotifyLoginDone();
+
+  if (IsSyncActive())
     SetFirstSetupComplete();
 
-  sync_tracker_.reset(new SyncStartupTracker(sync_client_->GetProfile(), this));
+  if (IsFirstSetupComplete())
+    sync_blocker_.reset();
 }
 
 }  // namespace vivaldi

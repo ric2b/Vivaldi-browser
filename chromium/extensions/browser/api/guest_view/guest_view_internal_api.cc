@@ -95,12 +95,6 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
     extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
                                              &browser, &tab_strip, &contents,
                                              &tab_index);
-  } else if (create_params->GetString("guestcontent_id", &guest_id_str)) {
-    int guest_id = atoi(guest_id_str.c_str());
-    int ownerprocessid = render_frame_host()->GetProcess()->GetID();
-    contents = GuestViewManager::FromBrowserContext(browser_context())
-                   ->GetGuestByInstanceIDSafely(guest_id, ownerprocessid);
-    TabSpecificContentSettings::CreateForWebContents(contents);
   }
 
   GuestViewBase* guest = nullptr;
@@ -163,7 +157,7 @@ bool GuestViewInternalDestroyGuestFunction::RunAsync() {
 
   if (!guest)
     return false;
-  guest->Destroy();
+  guest->Destroy(true);
   SendResponse(true);
   return true;
 }

@@ -4,12 +4,11 @@
 
 #include "ash/wm/video_detector.h"
 
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
+#include "ash/wm_window.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -84,11 +83,11 @@ VideoDetector::VideoDetector()
       window_observer_manager_(this),
       is_shutting_down_(false) {
   aura::Env::GetInstance()->AddObserver(this);
-  WmShell::Get()->AddShellObserver(this);
+  Shell::Get()->AddShellObserver(this);
 }
 
 VideoDetector::~VideoDetector() {
-  WmShell::Get()->RemoveShellObserver(this);
+  Shell::Get()->RemoveShellObserver(this);
   aura::Env::GetInstance()->RemoveObserver(this);
 }
 

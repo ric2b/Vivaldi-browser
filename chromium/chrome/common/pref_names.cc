@@ -18,6 +18,11 @@ namespace prefs {
 // These are attached to the user profile
 
 #if defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_APP_LIST)
+// Stores the user id received from DM Server when enrolling a Play user on an
+// Active Directory managed device. Used to report to DM Server that the account
+// is still used.
+const char kArcActiveDirectoryPlayUserId[] =
+    "arc.active_directory_play_user_id";
 // A preference to keep list of Android apps and their state.
 const char kArcApps[] = "arc.apps";
 // A preference to store backup and restore state for Android apps.
@@ -31,6 +36,9 @@ const char kArcDataRemoveRequested[] = "arc.data.remove_requested";
 // utility methods (IsArcPlayStoreEnabledForProfile() and
 // SetArcPlayStoreEnabledForProfile()) in chrome/browser/chromeos/arc/arc_util.
 const char kArcEnabled[] = "arc.enabled";
+// A preference that indicated whether Android reported it's compliance status
+// with provided policies. This is used only as a signal to start Android kiosk.
+const char kArcPolicyComplianceReported[] = "arc.policy_compliance_reported";
 // A preference that indicates that user accepted PlayStore terms.
 const char kArcTermsAccepted[] = "arc.terms.accepted";
 // A preference to keep user's consent to use location service.
@@ -44,7 +52,7 @@ const char kArcSetNotificationsEnabledDeferred[] =
 const char kArcSignedIn[] = "arc.signedin";
 // A preference that indicates an ARC comaptible filesystem was chosen for
 // the user directory (i.e., the user finished required migration.)
-const char kArcCompatibleFilesystemChosen[] =
+extern const char kArcCompatibleFilesystemChosen[] =
     "arc.compatible_filesystem.chosen";
 #endif
 
@@ -564,26 +572,6 @@ const char kLanguageImeMenuActivated[] = "settings.language.ime_menu_activated";
 const char kLanguageShouldMergeInputMethods[] =
     "settings.language.merge_input_methods";
 
-// Integer prefs which determine how we remap modifier keys (e.g. swap Alt and
-// Control.) Possible values for these prefs are 0-6. See ModifierKey enum in
-// src/chrome/browser/chromeos/input_method/xkeyboard.h
-const char kLanguageRemapSearchKeyTo[] =
-    // Note: we no longer use XKB for remapping these keys, but we can't change
-    // the pref names since the names are already synced with the cloud.
-    "settings.language.xkb_remap_search_key_to";
-const char kLanguageRemapControlKeyTo[] =
-    "settings.language.xkb_remap_control_key_to";
-const char kLanguageRemapAltKeyTo[] =
-    "settings.language.xkb_remap_alt_key_to";
-const char kLanguageRemapCapsLockKeyTo[] =
-    "settings.language.remap_caps_lock_key_to";
-const char kLanguageRemapEscapeKeyTo[] =
-    "settings.language.remap_escape_key_to";
-const char kLanguageRemapBackspaceKeyTo[] =
-    "settings.language.remap_backspace_key_to";
-const char kLanguageRemapDiamondKeyTo[] =
-    "settings.language.remap_diamond_key_to";
-
 // A boolean pref that causes top-row keys to be interpreted as function keys
 // instead of as media keys.
 const char kLanguageSendFunctionKeys[] =
@@ -937,8 +925,12 @@ const char kHatsDeviceIsSelected[] = "hats_device_is_selected";
 
 // A boolean pref. Indicates if we've already shown a notification to inform the
 // current user about the quick unlock feature.
-const char kQuickUnlockFeatureNotificationShown[] =
-    "quick_unlock_feature_notification_shown";
+const char kPinUnlockFeatureNotificationShown[] =
+    "pin_unlock_feature_notification_shown";
+// A boolean pref. Indicates if we've already shown a notification to inform the
+// current user about the fingerprint unlock feature.
+const char kFingerprintUnlockFeatureNotificationShown[] =
+    "fingerprint_unlock_feature_notification_shown";
 
 // The salt and hash for the pin quick unlock mechanism.
 const char kQuickUnlockPinSalt[] = "quick_unlock.pin.salt";
@@ -1074,7 +1066,7 @@ const char kPluginsAllowOutdated[] = "plugins.allow_outdated";
 // be always allowed or not.
 const char kPluginsAlwaysAuthorize[] = "plugins.always_authorize";
 
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // Dictionary holding plugins metadata.
 const char kPluginsMetadata[] = "plugins.metadata";
 
@@ -1178,6 +1170,14 @@ const char kImportSavedPasswords[] = "import_saved_passwords";
 // browser on first run.
 const char kImportSearchEngine[] = "import_search_engine";
 
+// Prefs used to remember selections in the "Import data" dialog on the settings
+// page (chrome://settings/importData).
+const char kImportDialogAutofillFormData[] = "import_dialog_autofill_form_data";
+const char kImportDialogBookmarks[] = "import_dialog_bookmarks";
+const char kImportDialogHistory[] = "import_dialog_history";
+const char kImportDialogSavedPasswords[] = "import_dialog_saved_passwords";
+const char kImportDialogSearchEngine[] = "import_dialog_search_engine";
+
 // Profile avatar and name
 const char kProfileAvatarIndex[] = "profile.avatar_index";
 const char kProfileName[] = "profile.name";
@@ -1204,11 +1204,6 @@ const char kProfileGAIAInfoPictureURL[] = "profile.gaia_info_picture_url";
 // tutorial card in the avatar menu bubble.
 const char kProfileAvatarTutorialShown[] =
     "profile.avatar_bubble_tutorial_shown";
-
-// Boolean that specifies if the user has already dismissed the right-click user
-// switching tutorial.
-const char kProfileAvatarRightClickTutorialDismissed[] =
-    "profile.avatar_bubble_right_click_tutorial_dismissed";
 
 // Indicates if we've already shown a notification that high contrast
 // mode is on, recommending high-contrast extensions and themes.
@@ -1572,6 +1567,10 @@ const char kNtpCollapsedSnapshotDocument[] = "ntp.collapsed_snapshot_document";
 // Keeps track of sync promo collapsed state in the Other Devices menu.
 const char kNtpCollapsedSyncPromo[] = "ntp.collapsed_sync_promo";
 
+// Tracks whether we should show notifications related to content suggestions.
+const char kContentSuggestionsNotificationsEnabled[] =
+    "ntp.content_suggestions.notifications.enabled";
+
 // Tracks how many notifications the user has ignored, so we can tell when we
 // should stop showing them.
 const char kContentSuggestionsConsecutiveIgnoredPrefName[] =
@@ -1875,9 +1874,10 @@ const char kDeviceDMToken[] = "device_dm_token";
 // How many times HID detection OOBE dialog was shown.
 const char kTimesHIDDialogShown[] = "HIDDialog.shown_how_many_times";
 
-// Dictionary of per-user Least Recently Used input method (used at login
-// screen).
-const char kUsersLRUInputMethod[] = "UsersLRUInputMethod";
+// Dictionary of per-user last input method (used at login screen). Note that
+// the pref name is UsersLRUInputMethods for compatibility with previous
+// versions.
+const char kUsersLastInputMethod[] = "UsersLRUInputMethod";
 
 // A dictionary pref of the echo offer check flag. It sets offer info when
 // an offer is checked.
@@ -2207,12 +2207,6 @@ const char kAppListEnableTime[] = "app_list.when_enabled";
 // Keeps local state of app list while sync service is not available.
 const char kAppListLocalState[] = "app_list.local_state";
 
-#if defined(OS_MACOSX)
-// Integer representing the version of the app launcher shortcut installed on
-// the system. Incremented, e.g., when embedded icons change.
-const char kAppLauncherShortcutVersion[] = "apps.app_launcher.shortcut_version";
-#endif
-
 // A boolean identifying if we should show the app launcher promo or not.
 const char kShowAppLauncherPromo[] = "app_launcher.show_promo";
 
@@ -2388,6 +2382,25 @@ const char kComponentUpdatesEnabled[] =
     "component_updates.component_updates_enabled";
 
 #if defined(OS_ANDROID)
+// The current level of backoff for showing the location settings dialog for the
+// default search engine.
+const char kLocationSettingsBackoffLevelDSE[] =
+    "location_settings_backoff_level_dse";
+
+// The current level of backoff for showing the location settings dialog for
+// sites other than the default search engine.
+const char kLocationSettingsBackoffLevelDefault[] =
+    "location_settings_backoff_level_default";
+
+// The next time the location settings dialog can be shown for the default
+// search engine.
+const char kLocationSettingsNextShowDSE[] = "location_settings_next_show_dse";
+
+// The next time the location settings dialog can be shown for sites other than
+// the default search engine.
+const char kLocationSettingsNextShowDefault[] =
+    "location_settings_next_show_default";
+
 // Whether the search geolocation disclosure has been dismissed by the user.
 const char kSearchGeolocationDisclosureDismissed[] =
     "search_geolocation_disclosure.dismissed";
@@ -2518,5 +2531,12 @@ const char kSettingsResetPromptLastTriggeredForStartupUrls[] =
 // current prompt wave asking the user if they want to restore their homepage.
 const char kSettingsResetPromptLastTriggeredForHomepage[] =
     "settings_reset_prompt.last_triggered_for_homepage";
+
+#if defined(OS_ANDROID)
+// Timestamp of the clipboard's last modified time, stored in base::Time's
+// internal format (int64) in local store.  (I.e., this is not a per-profile
+// pref.)
+const char kClipboardLastModifiedTime[] = "ui.clipboard.last_modified_time";
+#endif
 
 }  // namespace prefs

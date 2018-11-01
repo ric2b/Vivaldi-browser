@@ -25,6 +25,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
+#include "base/vivaldi_switches.h"
 #include "base/win/message_window.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
@@ -37,6 +38,7 @@
 #include "ui/base/l10n/l10n_util_win.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
+#include "update_notifier/update_notifier_switches.h"
 #include "update_notifier/update_notifier_window.h"
 
 namespace ui {
@@ -53,11 +55,30 @@ const size_t kInitialSizeOfProcessIdList = 50;
 const base::FilePath::StringType kVivaldiExecutable =
     FILE_PATH_LITERAL("vivaldi.exe");
 
-const wchar_t kRestartEventName[] = L"Global\\Vivaldi/Update_notifier/Restart/";
-const wchar_t kQuitEventName[] = L"Global\\Vivaldi/Update_notifier/Quit/";
+const wchar_t kGlobalRestartEventName[] =
+    L"Global\\Vivaldi/Update_notifier/Restart/";
+const wchar_t kGlobalQuitEventName[] =
+    L"Global\\Vivaldi/Update_notifier/Quit/";
+
+const wchar_t kQuitEventName[] = L"Local\\Vivaldi/Update_notifier/Quit/";
+const wchar_t kCheckForUpdatesEventName[] =
+    L"Local\\Vivaldi/Update_notifier/Check_for_updates/";
 
 const int kRestartEventActiveSleepInterval = 100;  // ms
-const int kQuitAllEventInterval = 1000;            // ms
+
+
+base::string16 MakeEventName(const base::string16& event_name_base,
+                             const base::FilePath& exe_dir) {
+  base::string16 event_name(event_name_base);
+  base::string16 normalized_path =
+      exe_dir.NormalizePathSeparatorsTo(L'/').value();
+  // See
+  // https://web.archive.org/web/20130528052217/http://blogs.msdn.com/b/michkap/archive/2005/10/17/481600.aspx
+  CharUpper(&normalized_path[0]);
+  event_name += normalized_path;
+
+  return event_name;
+}
 
 base::FilePath AddVersionToPathIfNeeded(const base::FilePath& path) {
   if (base::PathExists(path))
@@ -109,49 +130,6 @@ class ResourceBundleDelegate : public ui::ResourceBundle::Delegate {
     return false;
   }
 };
-
-bool IsVivaldiRunning() {
-  base::FilePath vivaldi_path;
-  base::PathService::Get(base::DIR_EXE, &vivaldi_path);
-  vivaldi_path = vivaldi_path.Append(kVivaldiExecutable);
-
-  size_t list_size = kInitialSizeOfProcessIdList;
-  size_t size_used = list_size;
-  std::vector<DWORD> process_ids;
-  while (list_size == size_used) {
-    list_size *= 2;  // Try a list twice as big.
-    process_ids.resize(list_size);
-    DWORD bytes_used;
-    if (!EnumProcesses(process_ids.data(),
-                       base::checked_cast<DWORD>(process_ids.size() *
-                                                 sizeof(process_ids[0])),
-                       &bytes_used))
-      return false;
-    size_used = bytes_used / sizeof(process_ids[0]);
-  }
-
-  for (size_t i = 0; i < size_used; ++i) {
-    base::win::ScopedHandle process_handle(
-        OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, process_ids[i]));
-
-    if (!process_handle.IsValid())
-      continue;
-
-    wchar_t process_exe_path[MAX_PATH];
-    DWORD process_eze_path_length = arraysize(process_exe_path);
-    QueryFullProcessImageName(process_handle.Get(), 0, process_exe_path,
-                              &process_eze_path_length);
-    if (base::FilePath::CompareEqualIgnoreCase(vivaldi_path.value(),
-                                               process_exe_path))
-      return true;
-  }
-
-  return false;
-}
-
-bool IsVivaldiNotRunning() {
-  return !IsVivaldiRunning();
-}
 
 bool SafeGetTokenInformation(HANDLE token,
                              TOKEN_INFORMATION_CLASS token_information_class,
@@ -261,7 +239,7 @@ bool MakeEventSecurityDescriptor(std::vector<uint8_t>* owner_buffer,
   return true;
 }
 
-base::WaitableEvent* MakeEvent(const base::string16& event_name) {
+base::WaitableEvent* MakeEvent(const base::string16& event_name_base) {
   SECURITY_ATTRIBUTES security_attributes;
   security_attributes.bInheritHandle = FALSE;
   security_attributes.nLength = sizeof(security_attributes);
@@ -298,23 +276,17 @@ base::WaitableEvent* MakeEvent(const base::string16& event_name) {
     security_attributes.lpSecurityDescriptor = NULL;
   }
 
-  base::string16 restart_event_name(event_name);
-  base::string16 normalized_path =
-      exe_dir.NormalizePathSeparatorsTo(L'/').value();
-  // See
-  // https://web.archive.org/web/20130528052217/http://blogs.msdn.com/b/michkap/archive/2005/10/17/481600.aspx
-  CharUpper(&normalized_path[0]);
-  restart_event_name += normalized_path;
+  base::string16 event_name = MakeEventName(event_name_base, exe_dir);
 
   base::win::ScopedHandle event_handle;
   for (int i = 0; i < 3; i++) {
     if (event_handle.IsValid())
       break;
     event_handle.Set(CreateEvent(&security_attributes, TRUE, FALSE,
-                                 restart_event_name.c_str()));
+                                 event_name.c_str()));
     if (event_handle.IsValid())
       break;
-    event_handle.Set(OpenEvent(SYNCHRONIZE, FALSE, restart_event_name.c_str()));
+    event_handle.Set(OpenEvent(SYNCHRONIZE, FALSE, event_name.c_str()));
   }
 
   if (event_handle.IsValid())
@@ -328,49 +300,64 @@ UpdateNotifierManager* UpdateNotifierManager::GetInstance() {
   return base::Singleton<UpdateNotifierManager>::get();
 }
 
-UpdateNotifierManager::UpdateNotifierManager() : notification_accepted_(false) {
-  restart_event_.reset(MakeEvent(kRestartEventName));
-  if (restart_event_.get()) {
+UpdateNotifierManager::UpdateNotifierManager() {
+  global_restart_event_.reset(MakeEvent(kGlobalRestartEventName));
+  if (global_restart_event_.get()) {
     // If the restart event is active at this point, it is probably because it
     // was set, then we restarted and it hasn't been unset yet. Let's just wait
     // it out.
-    while (restart_event_->IsSignaled())
+    while (global_restart_event_->IsSignaled())
       Sleep(kRestartEventActiveSleepInterval);
 
-    restart_event_watch_.StartWatching(
-        restart_event_.get(),
+    global_restart_event_watch_.StartWatching(
+        global_restart_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
                    base::Unretained(this)));
   }
 
-  quit_event_.reset(MakeEvent(kQuitEventName));
-  if (quit_event_.get()) {
-    quit_event_watch_.StartWatching(
-        quit_event_.get(), base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                                      base::Unretained(this)));
+  global_quit_event_.reset(MakeEvent(kGlobalQuitEventName));
+  if (global_quit_event_.get()) {
+    global_quit_event_watch_.StartWatching(
+        global_quit_event_.get(),
+        base::Bind(&UpdateNotifierManager::OnEventTriggered,
+                   base::Unretained(this)));
   }
 
-  // Best effort attempt to ensure that only one update notifier is running for
-  // a given user, using a local event
-  base::win::ScopedHandle quit_all_event_handle;
-  quit_all_event_handle.Set(CreateEvent(
-      NULL, TRUE, FALSE, vivaldi::kQuitAllUpdateNotifiersEventName));
-  if (quit_all_event_handle.IsValid()) {
-    quit_all_event_.reset(
-        new base::WaitableEvent(std::move(quit_all_event_handle)));
+  base::FilePath exe_dir;
+  base::PathService::Get(base::DIR_EXE, &exe_dir);
 
-    quit_all_event_->Signal();
-    Sleep(kQuitAllEventInterval);
-    quit_all_event_->Reset();
+  base::win::ScopedHandle quit_event_handle;
+  quit_event_handle.Set(CreateEvent(
+      NULL, TRUE, FALSE, MakeEventName(kQuitEventName, exe_dir).c_str()));
+  if (quit_event_handle.IsValid()) {
+    quit_event_.reset(
+        new base::WaitableEvent(std::move(quit_event_handle)));
 
-    quit_all_event_watch_.StartWatching(
-        quit_all_event_.get(),
+    quit_event_watch_.StartWatching(
+        quit_event_.get(),
+        base::Bind(&UpdateNotifierManager::OnEventTriggered,
+                   base::Unretained(this)));
+  }
+
+  base::win::ScopedHandle check_for_updates_event_handle;
+  check_for_updates_event_handle.Set(CreateEvent(
+      NULL, TRUE, FALSE, MakeEventName(
+          kCheckForUpdatesEventName, exe_dir).c_str()));
+  if (check_for_updates_event_handle.IsValid()) {
+    check_for_updates_event_.reset(
+        new base::WaitableEvent(std::move(check_for_updates_event_handle)));
+
+    check_for_updates_event_watch_.StartWatching(
+        check_for_updates_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
                    base::Unretained(this)));
   }
 }
 
-UpdateNotifierManager::~UpdateNotifierManager() {}
+UpdateNotifierManager::~UpdateNotifierManager() {
+  if (already_exists_ != NULL)
+    ::CloseHandle(already_exists_);
+}
 
 /*static*/
 bool UpdateNotifierManager::OnUpdateAvailable(const char* version) {
@@ -393,15 +380,37 @@ bool UpdateNotifierManager::OnUpdateAvailable(const char* version) {
   return false;
 }
 
+/*static*/
+void UpdateNotifierManager::OnShutdownRequested() {
+  if (!(GetInstance()->IsNotifierEnabled()))
+    GetInstance()->Quit();
+}
+
 void UpdateNotifierManager::OnEventTriggered(
     base::WaitableEvent* waitable_event) {
-  if (waitable_event == restart_event_.get()) {
+  if (waitable_event == global_restart_event_.get()) {
     PostQuitMessage(0);
-    base::LaunchProcess(*base::CommandLine::ForCurrentProcess(),
-                        base::LaunchOptions());
+
+    // restart only if the update notifier is enabled
+    if (IsNotifierEnabled()) {
+      base::FilePath exe_path =
+          base::CommandLine::ForCurrentProcess()->GetProgram();
+
+      // we don't want to inherit command line options for the notifier,
+      // so generate a new cmd line
+      base::CommandLine cmd_line(exe_path);
+      base::LaunchProcess(cmd_line, base::LaunchOptions());
+    }
   } else if (waitable_event == quit_event_.get() ||
-             waitable_event == quit_all_event_.get()) {
+             waitable_event == global_quit_event_.get()) {
     PostQuitMessage(0);
+  } else if (waitable_event == check_for_updates_event_.get()) {
+    check_for_updates_event_->Reset();
+    check_for_updates_event_watch_.StartWatching(
+        check_for_updates_event_.get(), base::Bind(
+            &UpdateNotifierManager::OnEventTriggered,
+            base::Unretained(this)));
+    TriggerUpdate(true);
   } else {
     NOTREACHED();
   }
@@ -427,10 +436,63 @@ void RegisterPathProvider() {
   PathService::RegisterProvider(PathProvider, ui::PATH_START, ui::PATH_END);
 }
 
+bool UpdateNotifierManager::IsNotifierAlreadyRunning() {
+  base::FilePath exe_path;
+  PathService::Get(base::FILE_EXE, &exe_path);
+
+  base::string16 event_name = MakeEventName(L"Global\\", exe_path);
+
+  if (already_exists_ != NULL)
+    ::CloseHandle(already_exists_);
+  already_exists_ = ::CreateEvent(NULL, TRUE, TRUE, event_name.c_str());
+  int error = ::GetLastError();
+  return (error == ERROR_ALREADY_EXISTS || error == ERROR_ACCESS_DENIED);
+}
+
+bool UpdateNotifierManager::IsNotifierEnabled() {
+  base::FilePath update_notifier_path =
+      base::CommandLine::ForCurrentProcess()->GetProgram();
+  base::string16 cmd;
+  bool enabled =
+      base::win::ReadCommandFromAutoRun(
+          HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName, &cmd) &&
+      base::FilePath::CompareEqualIgnoreCase(cmd,
+                                             update_notifier_path.value());
+  return enabled;
+}
+
+void UpdateNotifierManager::CheckForUpdates() const{
+  if (check_for_updates_event_.get())
+    check_for_updates_event_->Signal();
+}
+
+void UpdateNotifierManager::Quit() const {
+  if (quit_event_.get())
+    quit_event_->Signal();
+}
+
 bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
+  base::CommandLine::Init(0, nullptr);
+
+  bool check_for_updates = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      ::vivaldi_update_notifier::kCheckForUpdates);
+
+  if (IsNotifierAlreadyRunning()) {
+    // NOTE(jarle@vivaldi.com): These events will be sent to another running
+    // instance of the update notifier, then our process will exit.
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(::vivaldi_update_notifier::kQuit))
+      Quit();
+    else if (check_for_updates)
+      CheckForUpdates();
+
+    return true;
+  }
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(::vivaldi_update_notifier::kQuit))
+    return true;
+
   instance_ = instance;
 
-  base::CommandLine::Init(0, nullptr);
   ui_thread_loop_ = base::MessageLoop::current();
   base::RunLoop run_loop;
 
@@ -466,13 +528,20 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
 
   win_sparkle_set_did_find_update_callback(
       &UpdateNotifierManager::OnUpdateAvailable);
+
+  win_sparkle_set_shutdown_request_callback(
+      &UpdateNotifierManager::OnShutdownRequested);
+
   vivaldi::InitializeSparkle(*base::CommandLine::ForCurrentProcess(),
-                             base::Bind(&IsVivaldiNotRunning));
+                             base::Callback<bool ()>::Callback());
 
   update_notifier_window_.reset(new UpdateNotifierWindow());
 
   if (!update_notifier_window_->Init())
     return false;
+
+  if (check_for_updates)
+    TriggerUpdate(true);
 
   run_loop.Run();
 
@@ -481,9 +550,13 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   return true;
 }
 
-void UpdateNotifierManager::TriggerUpdate() {
+void UpdateNotifierManager::TriggerUpdate(bool with_ui) {
   notification_accepted_ = true;
-  win_sparkle_check_update_without_ui();
+  if (with_ui) {
+    win_sparkle_check_update_with_ui();
+  } else {
+    win_sparkle_check_update_without_ui();
+  }
 }
 
 void UpdateNotifierManager::Disable() {

@@ -19,7 +19,7 @@ source_set("native") {
     "//components/web_contents_delegate_android:web_contents_delegate_android",
     "//content/public/common",
     "//device/battery:mojo_bindings",
-    "//media/base/android:android",
+    "//media",
     "//net",
     "//skia",
     "//storage/browser",
@@ -36,6 +36,10 @@ source_set("native") {
   ]
 
   sources = [
+    "address_parser.cc",
+    "address_parser.h",
+    "address_parser_internal.cc",
+    "address_parser_internal.h",
     "android_protocol_handler.cc",
     "android_protocol_handler.h",
     "android_webview_jni_registrar.cc",
@@ -68,6 +72,8 @@ source_set("native") {
     "aw_locale_manager_impl.h",
     "aw_media_url_interceptor.cc",
     "aw_media_url_interceptor.h",
+    "aw_metrics_log_uploader.cc",
+    "aw_metrics_log_uploader.h",
     "aw_metrics_service_client_impl.cc",
     "aw_metrics_service_client_impl.h",
     "aw_pdf_exporter.cc",
@@ -139,6 +145,7 @@ generate_jni("native_jni") {
     "../java/src/org/chromium/android_webview/AwFormDatabase.java",
     "../java/src/org/chromium/android_webview/AwGLFunctor.java",
     "../java/src/org/chromium/android_webview/AwHttpAuthHandler.java",
+    "../java/src/org/chromium/android_webview/AwMetricsLogUploader.java",
     "../java/src/org/chromium/android_webview/AwMetricsServiceClient.java",
     "../java/src/org/chromium/android_webview/AwPdfExporter.java",
     "../java/src/org/chromium/android_webview/AwPicture.java",

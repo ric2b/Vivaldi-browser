@@ -146,7 +146,7 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
     const gfx::NativeView native_view = view->GetNativeView();
     display::Screen* const screen = display::Screen::GetScreen();
     const float scale =
-        screen->GetDisplayNearestWindow(native_view).device_scale_factor();
+        screen->GetDisplayNearestView(native_view).device_scale_factor();
     if (scale > 1.0f)
       bitmap_size = gfx::ScaleToCeiledSize(bitmap_size, scale);
 
@@ -215,7 +215,7 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     if (!bitmap.empty() && !bitmap.isNull()) {
       scw.WriteImage(bitmap);
     }
-    SetResult(base::MakeUnique<base::StringValue>(return_data));
+    SetResult(base::MakeUnique<base::Value>(return_data));
     SendResponse(true);
     return;
   }
@@ -260,7 +260,7 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     file_path_ = path;
     base::WriteFile(path, reinterpret_cast<const char*>(&data[0]), data.size());
   }
-  SetResult(base::MakeUnique<base::StringValue>(return_data));
+  SetResult(base::MakeUnique<base::Value>(return_data));
   SendResponse(true);
 
   if (show_file_in_path_) {

@@ -63,7 +63,8 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
     else:
       shutil.copy2(os.path.join(gn_releasedir, gn_name), gn_path)
   if full_bootstrap:
-    if subprocess.call(["python",
+    def do_full_bootstrap():
+      return subprocess.call(["python",
         os.path.join(sourcedir, "chromium", "tools", "gn",
                      "bootstrap", "bootstrap.py"),
         "--output", gn_path,
@@ -74,7 +75,10 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
         env = bootstrap_env,
         shell = is_windows,
         **extra_subprocess_flags
-      ) != 0:
+      )
+    if do_full_bootstrap() != 0:
+      shutil.rmtree(gn_workdir, ignore_errors=True)
+      if do_full_bootstrap() != 0:
         sys.exit(1)
   stop_time = datetime.datetime.now()
   print "Refreshed GN parser in", (stop_time-start_time).total_seconds(), "seconds"

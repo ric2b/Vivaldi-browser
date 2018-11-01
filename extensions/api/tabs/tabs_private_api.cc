@@ -73,8 +73,8 @@ void TabsPrivateAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<TabsPrivateAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<TabsPrivateAPI> >::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<TabsPrivateAPI>*
@@ -135,14 +135,14 @@ blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragEnd(
   DispatchEvent(extensions::events::VIVALDI_EXTENSION_EVENT,
                 vivaldi::tabs_private::OnDragEnd::kEventName, std::move(args));
 
-  return outside ? blink::WebDragOperationNone : ops;
+  return outside ? blink::kWebDragOperationNone : ops;
 }
 
 blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragCursorUpdating(
     int screen_x,
     int screen_y,
     blink::WebDragOperationsMask ops) {
-  return blink::WebDragOperationsMask::WebDragOperationMove;
+  return blink::WebDragOperationsMask::kWebDragOperationMove;
 }
 
 TabsPrivateEventRouter::TabsPrivateEventRouter(Profile* profile)
@@ -195,6 +195,23 @@ void VivaldiPrivateTabObserver::WebContentsDestroyed() {
       favicon::ContentFaviconDriver::FromWebContents(web_contents()));
 }
 
+void VivaldiPrivateTabObserver::BroadcastTabInfo() {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+
+  tabs_private::UpdateTabInfo info;
+  info.show_images.reset(new bool(show_images()));
+  info.load_from_cache_only.reset(new bool(load_from_cache_only()));
+  info.enable_plugins.reset(new bool(enable_plugins()));
+  int id = SessionTabHelper::IdForTab(web_contents());
+
+  std::unique_ptr<base::ListValue> args =
+      tabs_private::OnTabUpdated::Create(id, info);
+  BroadcastEvent(tabs_private::OnTabUpdated::kEventName, std::move(args),
+                 profile);
+}
+
+
 const int kThemeColorBufferSize = 8;
 
 void VivaldiPrivateTabObserver::DidChangeThemeColor(SkColor theme_color) {
@@ -211,10 +228,10 @@ void VivaldiPrivateTabObserver::DidChangeThemeColor(SkColor theme_color) {
                  profile);
 }
 
-base::StringValue DictionaryToJSONString(const base::DictionaryValue& dict) {
+base::Value DictionaryToJSONString(const base::DictionaryValue& dict) {
   std::string json_string;
   base::JSONWriter::WriteWithOptions(dict, 0, &json_string);
-  return base::StringValue(json_string);
+  return base::Value(json_string);
 }
 
 void VivaldiPrivateTabObserver::RenderViewCreated(
@@ -259,7 +276,7 @@ void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
   if (json && json->GetAsDictionary(&dict)) {
     if (dict) {
       dict->SetDouble("vivaldi_tab_zoom", zoom_level);
-      base::StringValue st = DictionaryToJSONString(*dict);
+      base::Value st = DictionaryToJSONString(*dict);
       web_contents()->SetExtData(st.GetString());
     }
   }
@@ -420,6 +437,7 @@ bool TabsPrivateUpdateFunction::RunAsync() {
         tab_api->SetEnablePlugins(*info->enable_plugins.get());
       }
       tab_api->CommitSettings();
+      tab_api->BroadcastTabInfo();
     }
   }
   SendResponse(true);
@@ -570,7 +588,7 @@ bool TabsPrivateStartDragFunction::RunAsync() {
 
   blink::WebDragOperationsMask allowed_ops =
       static_cast<blink::WebDragOperationsMask>(
-          blink::WebDragOperation::WebDragOperationMove);
+          blink::WebDragOperation::kWebDragOperationMove);
 
   gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, 1));
   content::DragEventSourceInfo event_info;

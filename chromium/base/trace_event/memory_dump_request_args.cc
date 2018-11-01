@@ -60,5 +60,12 @@ MemoryDumpLevelOfDetail StringToMemoryDumpLevelOfDetail(
   return MemoryDumpLevelOfDetail::LAST;
 }
 
+MemoryDumpCallbackResult::MemoryDumpCallbackResult() {}
+
+MemoryDumpCallbackResult::MemoryDumpCallbackResult(
+    const MemoryDumpCallbackResult&) = default;
+
+MemoryDumpCallbackResult::~MemoryDumpCallbackResult() {}
+
 }  // namespace trace_event
 }  // namespace base

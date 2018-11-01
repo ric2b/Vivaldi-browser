@@ -31,13 +31,14 @@
 #ifndef TextEncoder_h
 #define TextEncoder_h
 
+#include <memory>
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/DOMTypedArray.h"
+#include "core/dom/NotShared.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/TextCodec.h"
-#include "wtf/text/TextEncoding.h"
-#include "wtf/text/WTFString.h"
-#include <memory>
+#include "platform/wtf/text/TextCodec.h"
+#include "platform/wtf/text/TextEncoding.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -49,20 +50,20 @@ class TextEncoder final : public GarbageCollectedFinalized<TextEncoder>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static TextEncoder* create(ExecutionContext*, ExceptionState&);
+  static TextEncoder* Create(ExecutionContext*, ExceptionState&);
   ~TextEncoder();
 
   // Implement the IDL
   String encoding() const;
-  DOMUint8Array* encode(const String&);
+  NotShared<DOMUint8Array> encode(const String&);
 
   DEFINE_INLINE_TRACE() {}
 
  private:
   TextEncoder(const WTF::TextEncoding&);
 
-  WTF::TextEncoding m_encoding;
-  std::unique_ptr<WTF::TextCodec> m_codec;
+  WTF::TextEncoding encoding_;
+  std::unique_ptr<WTF::TextCodec> codec_;
 };
 
 }  // namespace blink

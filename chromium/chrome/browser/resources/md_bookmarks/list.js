@@ -5,18 +5,45 @@
 Polymer({
   is: 'bookmarks-list',
 
+  behaviors: [
+    bookmarks.StoreClient,
+  ],
+
   properties: {
-    /** @type {BookmarkTreeNode} */
+    /** @type {BookmarkNode} */
     menuItem_: Object,
 
-    /** @type {Array<BookmarkTreeNode>} */
-    displayedList: Array,
+    /** @private {Array<string>} */
+    displayedList_: {
+      type: Array,
+      value: function() {
+        // Use an empty list during initialization so that the databinding to
+        // hide #bookmarksCard takes effect.
+        return [];
+      },
+    },
 
-    searchTerm: String,
+    /** @private */
+    searchTerm_: String,
   },
 
   listeners: {
+    'click': 'deselectItems_',
     'open-item-menu': 'onOpenItemMenu_',
+  },
+
+  attached: function() {
+    this.watch('displayedList_', function(state) {
+      return bookmarks.util.getDisplayedList(state);
+    });
+    this.watch('searchTerm_', function(state) {
+      return state.search.term;
+    });
+    this.updateFromStore();
+  },
+
+  getDropTarget: function() {
+    return this.$.message;
   },
 
   /**
@@ -33,7 +60,8 @@ Polymer({
   /** @private */
   onEditTap_: function() {
     this.closeDropdownMenu_();
-    this.$.editBookmark.showModal();
+    /** @type {BookmarksEditDialogElement} */ (this.$.editDialog.get())
+        .showEditDialog(this.menuItem_);
   },
 
   /** @private */
@@ -60,21 +88,6 @@ Polymer({
   },
 
   /** @private */
-  onSaveEditTap_: function() {
-    var edit = {'title': this.menuItem_.title};
-    if (this.menuItem_.url)
-      edit['url'] = this.menuItem_.url;
-
-    chrome.bookmarks.update(this.menuItem_.id, edit);
-    this.$.editBookmark.close();
-  },
-
-  /** @private */
-  onCancelEditTap_: function() {
-    this.$.editBookmark.cancel();
-  },
-
-  /** @private */
   closeDropdownMenu_: function() {
     var menu = /** @type {!CrActionMenuElement} */ (
         this.$.dropdown);
@@ -88,19 +101,18 @@ Polymer({
   },
 
   /** @private */
-  getEditorTitle_: function() {
-    var title = this.menuItem_.url ? 'editBookmarkTitle' : 'renameFolderTitle';
-    return loadTimeData.getString(title);
-  },
-
-  /** @private */
   emptyListMessage_: function() {
-    var emptyListMessage = this.searchTerm ? 'noSearchResults' : 'emptyList';
+    var emptyListMessage = this.searchTerm_ ? 'noSearchResults' : 'emptyList';
     return loadTimeData.getString(emptyListMessage);
   },
 
   /** @private */
   isEmptyList_: function() {
-    return this.displayedList.length == 0;
+    return this.displayedList_.length == 0;
+  },
+
+  /** @private */
+  deselectItems_: function() {
+    this.dispatch(bookmarks.actions.deselectItems());
   },
 });

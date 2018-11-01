@@ -28,8 +28,8 @@
         font-size: inherit;
         font-weight: 500;
         margin: 0;
-        padding-top: 24px;
         padding-bottom: 12px;
+        padding-top: 24px;
       }
 
       iron-icon[icon='cr:check'],
@@ -38,9 +38,8 @@
       }
 
       paper-button {
-        height: 32px;
+        height: 36px;
         margin: 0;
-        border-radius: 4px;
       }
 
       paper-button[toggles][active] {
@@ -86,6 +85,15 @@
         };
       }
 
+      .primary-toggle {
+        color: var(--paper-grey-600);
+        font-weight: 500;
+      }
+
+      .primary-toggle[checked] {
+        color: var(--google-blue-500);
+      }
+
       /* See notes in .primary-button. */
       .secondary-button {
         --paper-button: {
@@ -118,15 +126,19 @@
 
       paper-checkbox {
         --paper-checkbox-checked-color: var(--google-blue-500);
-        --paper-checkbox-label-spacing: var(--checkbox-spacing);
+        --paper-checkbox-label-spacing: var(--settings-control-spacing);
         --paper-checkbox-size: var(--checkbox-size);
         --paper-checkbox-unchecked-color: var(--paper-grey-600);
         -webkit-margin-start: var(--checkbox-margin-start);
       }
 
+      controlled-radio-button,
       paper-radio-button {
         --paper-radio-button-checked-color: var(--google-blue-500);
-        --paper-radio-button-label-spacing: 18px;
+        --paper-radio-button-label-spacing: 22px;
+        --paper-radio-button-radio-container: {
+          flex-shrink: 0;
+        };
         --paper-radio-button-unchecked-color: var(--paper-grey-600);
         -webkit-margin-start: 2px;
         align-items: center;
@@ -170,7 +182,7 @@
       }
 
       /* A list-item is intended to be contained within a list-frame. The list
-       * frame will setup the initial start margin. */
+       * frame will set up the initial start margin. */
       .list-item {
         align-items: center;
         display: flex;
@@ -208,11 +220,17 @@
 
       /* This button has no ink ripple. */
       .list-button[is='action-link'] {
-        min-height: inherit;
-        display: flex;
         align-items: center;
+        display: flex;
         flex: 1;
         font-weight: 500;
+        min-height: inherit;
+      }
+
+      .fixed-height-list {
+        max-height: calc((var(--settings-row-min-height) +
+                          var(--settings-separator-height)) * 6);
+        overflow-y: auto;
       }
 
       /* A row with two lines of text. Often the lower line will be .secondary.
@@ -295,6 +313,12 @@
         flex: auto;
       }
 
+      .no-outline,
+      [scrollable] .no-outline {
+        background: none;
+        outline: none;
+      }
+
       /* The secondary-action wraps a clickable sub-area of a .settings-box.
        * An example is the |sign out| button on the People settings.
        * Here is an example with and without a secondary action box:
@@ -323,7 +347,7 @@
         -webkit-margin-start: calc(
             var(--checkbox-margin-start) +
             var(--checkbox-size) +
-            var(--checkbox-spacing));
+            var(--settings-control-spacing));
       }
 
       .favicon-image {
@@ -366,6 +390,11 @@
         bottom: -5px;
         top: auto;
         transform: rotate(-135deg);
+      }
+
+      .column-header {
+        color: var(--paper-grey-600);
+        font-weight: 500;
       }
     </style>
   </template>

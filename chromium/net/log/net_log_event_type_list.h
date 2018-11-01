@@ -64,9 +64,17 @@ EVENT_TYPE(HOST_RESOLVER_IMPL_REQUEST)
 EVENT_TYPE(HOST_RESOLVER_IMPL_IPV6_REACHABILITY_CHECK)
 
 // This event is logged when a request is handled by a cache entry.
+// It contains the following parameter:
+//   {
+//     "address_list": <The resolved addresses>,
+//   }
 EVENT_TYPE(HOST_RESOLVER_IMPL_CACHE_HIT)
 
 // This event is logged when a request is handled by a HOSTS entry.
+// It contains the following parameter:
+//   {
+//     "address_list": <The resolved addresses>,
+//   }
 EVENT_TYPE(HOST_RESOLVER_IMPL_HOSTS_HIT)
 
 // This event is created when a new HostResolverImpl::Job is about to be created
@@ -554,6 +562,15 @@ EVENT_TYPE(SSL_VERSION_FALLBACK)
 //     "net_error": <Net integer error code>,
 //   }
 EVENT_TYPE(SSL_CIPHER_FALLBACK)
+
+// An SSL connection needs to be retried with a lower protocol version to detect
+// if the error was due to a middlebox interfering with the protocol version we
+// offered.
+// The following parameters are attached to the event:
+//   {
+//     "net_error": <Net integer error code which triggered the probe>,
+//   }
+EVENT_TYPE(SSL_VERSION_INTERFERENCE_PROBE)
 
 // We found that our prediction of the server's certificates was correct and
 // we merged the verification with the SSLHostInfo. (Note: now obsolete.)
@@ -1076,12 +1093,24 @@ EVENT_TYPE(HTTP_STREAM_REQUEST_STARTED_JOB)
 //   }
 EVENT_TYPE(HTTP_STREAM_JOB_PROXY_SERVER_RESOLVED)
 
+// Emitted when a job is asked to initialize a connection.
+EVENT_TYPE(HTTP_STREAM_JOB_INIT_CONNECTION)
+
 // Identifies the NetLogSource() for the Job that fulfilled the Request.
 // The event parameters are:
 //   {
 //      "source_dependency": <Source identifier for Job we acquired>,
 //   }
 EVENT_TYPE(HTTP_STREAM_REQUEST_BOUND_TO_JOB)
+
+// Identifies the NetLogSource() for the QuicStreamFactory::Job that the
+// HttpStreamFactoryImpl::Job was attached to.
+// The event parameters are:
+//  {
+//      "source_dependency": <Source identifier for the QuicStreamFactory::Job
+//                            to which we were attached>,
+//  }
+EVENT_TYPE(HTTP_STREAM_JOB_BOUND_TO_QUIC_STREAM_FACTORY_JOB)
 
 // Identifies the NetLogSource() for the Request that the Job was attached to.
 // The event parameters are:
@@ -1619,6 +1648,38 @@ EVENT_TYPE(HTTP2_PROXY_CLIENT_SESSION)
 //   {
 //     "source_dependency":  <Source identifier for the underlying session>,
 //   }
+
+// ------------------------------------------------------------------------
+// QuicStreamFactory::Job
+// ------------------------------------------------------------------------
+
+// Measures the time taken to execute the QuicStreamFactory::Job.
+// The event parameters are:
+//   {
+//     "server_id": <The QuicServerId that the Job serves>,
+//   }
+EVENT_TYPE(QUIC_STREAM_FACTORY_JOB)
+
+// Identifies the NetLogSource() for the HttpStreamFactoryImpl::Job that the
+// Job was attached to.
+// The event parameters are:
+//  {
+//     "source_dependency": <Source identifier for the
+//                           HttpStreamFactoryImpl::Job to which we were
+//                           attached>,
+//  }
+EVENT_TYPE(QUIC_STREAM_FACTORY_JOB_BOUND_TO_HTTP_STREAM_JOB)
+
+// Measures the time taken to load server information.
+EVENT_TYPE(QUIC_STREAM_FACTORY_JOB_LOAD_SERVER_INFO)
+
+// Measures the time taken to establish a QUIC connection.
+// The event parameters are:
+//  {
+//     "require_confirmation": <True if we require handshake confirmation
+//                              in the connection>
+//  }
+EVENT_TYPE(QUIC_STREAM_FACTORY_JOB_CONNECT)
 
 // ------------------------------------------------------------------------
 // QuicSession
@@ -2170,6 +2231,9 @@ EVENT_TYPE(SERVICE_WORKER_FETCH_EVENT)
 //   "error": The error reason as a string.
 // }
 EVENT_TYPE(SERVICE_WORKER_SCRIPT_LOAD_UNHANDLED_REQUEST_ERROR)
+
+// This event is emitted when a navigation preload request is created.
+EVENT_TYPE(SERVICE_WORKER_NAVIGATION_PRELOAD_REQUEST)
 
 // ------------------------------------------------------------------------
 // Global events

@@ -16,12 +16,12 @@
 #include "build/build_config.h"
 #include "cc/blink/web_compositor_support_impl.h"
 #include "content/child/blink_platform_impl.h"
-#include "content/child/child_shared_bitmap_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/url_loader_factory.mojom.h"
 #include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
 #include "content/renderer/top_level_blame_context.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
+#include "services/ui/public/cpp/bitmap/child_shared_bitmap_manager.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBFactory.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 
@@ -34,8 +34,6 @@ namespace scheduler {
 class RendererScheduler;
 }
 class WebCanvasCaptureHandler;
-class WebDeviceMotionData;
-class WebDeviceOrientationData;
 class WebGraphicsContext3DProvider;
 class WebMediaPlayer;
 class WebMediaRecorderHandler;
@@ -44,8 +42,13 @@ class WebSecurityOrigin;
 class WebServiceWorkerCacheStorage;
 }
 
+namespace device {
+class MotionData;
+class OrientationData;
+}
+
 namespace service_manager {
-class InterfaceProvider;
+class Connector;
 }
 
 namespace content {
@@ -62,7 +65,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
  public:
   RendererBlinkPlatformImpl(
       blink::scheduler::RendererScheduler* renderer_scheduler,
-      base::WeakPtr<service_manager::InterfaceProvider> remote_interfaces);
+      base::WeakPtr<service_manager::Connector> connector);
   ~RendererBlinkPlatformImpl() override;
 
   // Shutdown must be called just prior to shutting down blink.
@@ -72,71 +75,72 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
     plugin_refresh_allowed_ = plugin_refresh_allowed;
   }
   // Platform methods:
-  blink::WebClipboard* clipboard() override;
-  blink::WebFileUtilities* fileUtilities() override;
-  blink::WebSandboxSupport* sandboxSupport() override;
-  blink::WebCookieJar* cookieJar() override;
-  blink::WebThemeEngine* themeEngine() override;
-  blink::WebSpeechSynthesizer* createSpeechSynthesizer(
+  blink::WebClipboard* Clipboard() override;
+  blink::WebFileUtilities* GetFileUtilities() override;
+  blink::WebSandboxSupport* GetSandboxSupport() override;
+  blink::WebCookieJar* CookieJar() override;
+  blink::WebThemeEngine* ThemeEngine() override;
+  blink::WebSpeechSynthesizer* CreateSpeechSynthesizer(
       blink::WebSpeechSynthesizerClient* client) override;
   virtual bool sandboxEnabled();
-  unsigned long long visitedLinkHash(const char* canonicalURL,
+  unsigned long long VisitedLinkHash(const char* canonicalURL,
                                      size_t length) override;
-  bool isLinkVisited(unsigned long long linkHash) override;
-  void createMessageChannel(blink::WebMessagePortChannel** channel1,
-                            blink::WebMessagePortChannel** channel2) override;
-  blink::WebPrescientNetworking* prescientNetworking() override;
-  void cacheMetadata(const blink::WebURL&,
+  bool IsLinkVisited(unsigned long long linkHash) override;
+  void CreateMessageChannel(
+      std::unique_ptr<blink::WebMessagePortChannel>* channel1,
+      std::unique_ptr<blink::WebMessagePortChannel>* channel2) override;
+  blink::WebPrescientNetworking* PrescientNetworking() override;
+  void CacheMetadata(const blink::WebURL&,
                      int64_t,
                      const char*,
                      size_t) override;
-  void cacheMetadataInCacheStorage(
+  void CacheMetadataInCacheStorage(
       const blink::WebURL&,
       int64_t,
       const char*,
       size_t,
       const blink::WebSecurityOrigin& cacheStorageOrigin,
       const blink::WebString& cacheStorageCacheName) override;
-  blink::WebString defaultLocale() override;
-  void suddenTerminationChanged(bool enabled) override;
-  blink::WebStorageNamespace* createLocalStorageNamespace() override;
-  blink::Platform::FileHandle databaseOpenFile(
+  blink::WebString DefaultLocale() override;
+  void SuddenTerminationChanged(bool enabled) override;
+  blink::WebStorageNamespace* CreateLocalStorageNamespace() override;
+  blink::Platform::FileHandle DatabaseOpenFile(
       const blink::WebString& vfs_file_name,
       int desired_flags) override;
-  int databaseDeleteFile(const blink::WebString& vfs_file_name,
+  int DatabaseDeleteFile(const blink::WebString& vfs_file_name,
                          bool sync_dir) override;
-  long databaseGetFileAttributes(
+  long DatabaseGetFileAttributes(
       const blink::WebString& vfs_file_name) override;
-  long long databaseGetFileSize(const blink::WebString& vfs_file_name) override;
-  long long databaseGetSpaceAvailableForOrigin(
+  long long DatabaseGetFileSize(const blink::WebString& vfs_file_name) override;
+  long long DatabaseGetSpaceAvailableForOrigin(
       const blink::WebSecurityOrigin& origin) override;
-  bool databaseSetFileSize(const blink::WebString& vfs_file_name,
+  bool DatabaseSetFileSize(const blink::WebString& vfs_file_name,
                            long long size) override;
-  blink::WebString databaseCreateOriginIdentifier(
+  blink::WebString DatabaseCreateOriginIdentifier(
       const blink::WebSecurityOrigin& origin) override;
-  cc::FrameSinkId generateFrameSinkId() override;
+  cc::FrameSinkId GenerateFrameSinkId() override;
 
-  void getPluginList(bool refresh,
+  void GetPluginList(bool refresh,
                      const blink::WebSecurityOrigin& mainFrameOrigin,
                      blink::WebPluginListBuilder* builder) override;
-  blink::WebPublicSuffixList* publicSuffixList() override;
-  blink::WebScrollbarBehavior* scrollbarBehavior() override;
-  blink::WebIDBFactory* idbFactory() override;
-  blink::WebServiceWorkerCacheStorage* cacheStorage(
+  blink::WebPublicSuffixList* PublicSuffixList() override;
+  blink::WebScrollbarBehavior* ScrollbarBehavior() override;
+  blink::WebIDBFactory* IdbFactory() override;
+  blink::WebServiceWorkerCacheStorage* CacheStorage(
       const blink::WebSecurityOrigin& security_origin) override;
-  blink::WebFileSystem* fileSystem() override;
-  blink::WebString fileSystemCreateOriginIdentifier(
+  blink::WebFileSystem* FileSystem() override;
+  blink::WebString FileSystemCreateOriginIdentifier(
       const blink::WebSecurityOrigin& origin) override;
 
-  bool isThreadedCompositingEnabled() override;
-  bool isThreadedAnimationEnabled() override;
-  bool isGPUCompositingEnabled() override;
-  double audioHardwareSampleRate() override;
-  size_t audioHardwareBufferSize() override;
-  unsigned audioHardwareOutputChannels() override;
-  blink::WebDatabaseObserver* databaseObserver() override;
+  bool IsThreadedCompositingEnabled() override;
+  bool IsThreadedAnimationEnabled() override;
+  bool IsGPUCompositingEnabled() override;
+  double AudioHardwareSampleRate() override;
+  size_t AudioHardwareBufferSize() override;
+  unsigned AudioHardwareOutputChannels() override;
+  blink::WebDatabaseObserver* DatabaseObserver() override;
 
-  blink::WebAudioDevice* createAudioDevice(
+  blink::WebAudioDevice* CreateAudioDevice(
       unsigned input_channels,
       unsigned channels,
       const blink::WebAudioLatencyHint& latency_hint,
@@ -144,59 +148,60 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebString& input_device_id,
       const blink::WebSecurityOrigin& security_origin) override;
 
-  bool loadAudioResource(blink::WebAudioBus* destination_bus,
+  bool LoadAudioResource(blink::WebAudioBus* destination_bus,
                          const char* audio_file_data,
                          size_t data_size) override;
 
-  blink::WebMIDIAccessor* createMIDIAccessor(
+  blink::WebMIDIAccessor* CreateMIDIAccessor(
       blink::WebMIDIAccessorClient* client) override;
 
-  blink::WebBlobRegistry* getBlobRegistry() override;
-  void sampleGamepads(blink::WebGamepads&) override;
-  blink::WebRTCPeerConnectionHandler* createRTCPeerConnectionHandler(
+  blink::WebBlobRegistry* GetBlobRegistry() override;
+  void SampleGamepads(blink::WebGamepads&) override;
+  blink::WebRTCPeerConnectionHandler* CreateRTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client) override;
-  blink::WebRTCCertificateGenerator* createRTCCertificateGenerator() override;
-  blink::WebMediaRecorderHandler* createMediaRecorderHandler() override;
-  blink::WebMediaStreamCenter* createMediaStreamCenter(
+  blink::WebRTCCertificateGenerator* CreateRTCCertificateGenerator() override;
+  blink::WebMediaRecorderHandler* CreateMediaRecorderHandler() override;
+  blink::WebMediaStreamCenter* CreateMediaStreamCenter(
       blink::WebMediaStreamCenterClient* client) override;
-  blink::WebCanvasCaptureHandler* createCanvasCaptureHandler(
+  blink::WebCanvasCaptureHandler* CreateCanvasCaptureHandler(
       const blink::WebSize& size,
       double frame_rate,
       blink::WebMediaStreamTrack* track) override;
-  void createHTMLVideoElementCapturer(
+  void CreateHTMLVideoElementCapturer(
       blink::WebMediaStream* web_media_stream,
       blink::WebMediaPlayer* web_media_player) override;
-  void createHTMLAudioElementCapturer(
+  void CreateHTMLAudioElementCapturer(
       blink::WebMediaStream* web_media_stream,
       blink::WebMediaPlayer* web_media_player) override;
-  blink::WebImageCaptureFrameGrabber* createImageCaptureFrameGrabber() override;
-  blink::WebGraphicsContext3DProvider* createOffscreenGraphicsContext3DProvider(
+  blink::WebImageCaptureFrameGrabber* CreateImageCaptureFrameGrabber() override;
+  blink::WebGraphicsContext3DProvider* CreateOffscreenGraphicsContext3DProvider(
       const blink::Platform::ContextAttributes& attributes,
       const blink::WebURL& top_document_web_url,
       blink::WebGraphicsContext3DProvider* share_provider,
       blink::Platform::GraphicsInfo* gl_info) override;
   blink::WebGraphicsContext3DProvider*
-  createSharedOffscreenGraphicsContext3DProvider() override;
-  gpu::GpuMemoryBufferManager* getGpuMemoryBufferManager() override;
-  std::unique_ptr<cc::SharedBitmap> allocateSharedBitmap(
+  CreateSharedOffscreenGraphicsContext3DProvider() override;
+  gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
+  std::unique_ptr<cc::SharedBitmap> AllocateSharedBitmap(
       const blink::WebSize& size) override;
-  blink::WebCompositorSupport* compositorSupport() override;
-  blink::WebString convertIDNToUnicode(const blink::WebString& host) override;
-  blink::InterfaceProvider* interfaceProvider() override;
-  void startListening(blink::WebPlatformEventType,
+  blink::WebCompositorSupport* CompositorSupport() override;
+  blink::WebString ConvertIDNToUnicode(const blink::WebString& host) override;
+  service_manager::Connector* GetConnector() override;
+  blink::InterfaceProvider* GetInterfaceProvider() override;
+  void StartListening(blink::WebPlatformEventType,
                       blink::WebPlatformEventListener*) override;
-  void stopListening(blink::WebPlatformEventType) override;
-  void queryStorageUsageAndQuota(const blink::WebURL& storage_partition,
+  void StopListening(blink::WebPlatformEventType) override;
+  void QueryStorageUsageAndQuota(const blink::WebURL& storage_partition,
                                  blink::WebStorageQuotaType,
                                  blink::WebStorageQuotaCallbacks) override;
-  blink::WebThread* currentThread() override;
-  blink::BlameContext* topLevelBlameContext() override;
-  void recordRappor(const char* metric,
+  blink::WebThread* CurrentThread() override;
+  blink::BlameContext* GetTopLevelBlameContext() override;
+  void RecordRappor(const char* metric,
                     const blink::WebString& sample) override;
-  void recordRapporURL(const char* metric, const blink::WebURL& url) override;
+  void RecordRapporURL(const char* metric, const blink::WebURL& url) override;
 
-  blink::WebTrialTokenValidator* trialTokenValidator() override;
-  void workerContextCreated(const v8::Local<v8::Context>& worker) override;
+  blink::WebTrialTokenValidator* TrialTokenValidator() override;
+  void WorkerContextCreated(const v8::Local<v8::Context>& worker) override;
 
   // Set the PlatformEventObserverBase in |platform_event_observers_| associated
   // with |type| to |observer|. If there was already an observer associated to
@@ -217,21 +222,20 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   //  Set a double to return when setDeviceLightListener is invoked.
   static void SetMockDeviceLightDataForTesting(double data);
-  // Set WebDeviceMotionData to return when setDeviceMotionListener is invoked.
-  static void SetMockDeviceMotionDataForTesting(
-      const blink::WebDeviceMotionData& data);
-  // Set WebDeviceOrientationData to return when setDeviceOrientationListener
+  // Set MotionData to return when setDeviceMotionListener is invoked.
+  static void SetMockDeviceMotionDataForTesting(const device::MotionData& data);
+  // Set OrientationData to return when setDeviceOrientationListener
   // is invoked.
   static void SetMockDeviceOrientationDataForTesting(
-      const blink::WebDeviceOrientationData& data);
+      const device::OrientationData& data);
 
   WebDatabaseObserverImpl* web_database_observer_impl() {
     return web_database_observer_impl_.get();
   }
 
-  blink::WebURLLoader* createURLLoader() override;
+  blink::WebURLLoader* CreateURLLoader() override;
 
-  void requestPurgeMemory() override;
+  void RequestPurgeMemory() override;
 
  private:
   bool CheckPreparsedJsCachingEnabled() const;
@@ -246,6 +250,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void SendFakeDeviceEventDataForTesting(blink::WebPlatformEventType type);
 
   std::unique_ptr<blink::WebThread> main_thread_;
+  std::unique_ptr<service_manager::Connector> connector_;
 
   std::unique_ptr<RendererClipboardDelegate> clipboard_delegate_;
   std::unique_ptr<WebClipboardImpl> clipboard_;
@@ -278,7 +283,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;
-  ChildSharedBitmapManager* shared_bitmap_manager_;
+  ui::ChildSharedBitmapManager* shared_bitmap_manager_;
 
   std::unique_ptr<WebDatabaseObserverImpl> web_database_observer_impl_;
 
@@ -298,6 +303,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
 
   mojom::URLLoaderFactoryAssociatedPtr url_loader_factory_;
+
+  // Only used when network service is enabled.
+  mojom::URLLoaderFactoryPtr network_service_url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererBlinkPlatformImpl);
 };

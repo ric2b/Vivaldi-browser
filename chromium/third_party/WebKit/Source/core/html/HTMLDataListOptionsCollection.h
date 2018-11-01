@@ -12,37 +12,34 @@ namespace blink {
 
 class HTMLDataListOptionsCollection : public HTMLCollection {
  public:
-  static HTMLDataListOptionsCollection* create(ContainerNode& ownerNode,
+  static HTMLDataListOptionsCollection* Create(ContainerNode& owner_node,
                                                CollectionType type) {
-    DCHECK_EQ(type, DataListOptions);
-    return new HTMLDataListOptionsCollection(ownerNode);
+    DCHECK_EQ(type, kDataListOptions);
+    return new HTMLDataListOptionsCollection(owner_node);
   }
 
-  HTMLOptionElement* item(unsigned offset) const {
+  HTMLOptionElement* Item(unsigned offset) const {
     return toHTMLOptionElement(HTMLCollection::item(offset));
   }
 
-  bool elementMatches(const HTMLElement&) const;
+  bool ElementMatches(const HTMLElement&) const;
 
  private:
-  explicit HTMLDataListOptionsCollection(ContainerNode& ownerNode)
-      : HTMLCollection(ownerNode, DataListOptions, DoesNotOverrideItemAfter) {}
+  explicit HTMLDataListOptionsCollection(ContainerNode& owner_node)
+      : HTMLCollection(owner_node,
+                       kDataListOptions,
+                       kDoesNotOverrideItemAfter) {}
 };
 
 DEFINE_TYPE_CASTS(HTMLDataListOptionsCollection,
                   LiveNodeListBase,
                   collection,
-                  collection->type() == DataListOptions,
-                  collection.type() == DataListOptions);
+                  collection->GetType() == kDataListOptions,
+                  collection.GetType() == kDataListOptions);
 
-inline bool HTMLDataListOptionsCollection::elementMatches(
+inline bool HTMLDataListOptionsCollection::ElementMatches(
     const HTMLElement& element) const {
-  if (isHTMLOptionElement(element)) {
-    const HTMLOptionElement& option = toHTMLOptionElement(element);
-    if (!option.isDisabledFormControl() && !option.value().isEmpty())
-      return true;
-  }
-  return false;
+  return isHTMLOptionElement(element);
 }
 
 }  // namespace blink

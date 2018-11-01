@@ -12,7 +12,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/system/devicemode.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/ui/display/output_protection.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/display/manager/chromeos/display_change_observer.h"
@@ -32,26 +32,6 @@ namespace {
 
 // Needed for DisplayConfigurator::ForceInitialConfigure.
 const SkColor kChromeOsBootColor = SkColorSetRGB(0xfe, 0xfe, 0xfe);
-
-// Recursively swaps the displays in a DisplayLayout to change the primary
-// display but keep the same relative display layout.
-// TODO(kylechar): This is copied from WindowTreeHostManager. The concept of
-// getting the same relative display layout with a different primary display id
-// should become a function on DisplayLayout itself to avoid reimplementing it
-// here.
-void SwapRecursive(const std::map<int64_t, DisplayPlacement*>& id_to_placement,
-                   int64_t current_primary_id,
-                   int64_t display_id) {
-  if (display_id == current_primary_id)
-    return;
-
-  DCHECK(id_to_placement.count(display_id));
-  DisplayPlacement* placement = id_to_placement.at(display_id);
-  DCHECK(placement);
-  SwapRecursive(id_to_placement, current_primary_id,
-                placement->parent_display_id);
-  placement->Swap();
-}
 
 }  // namespace
 
@@ -108,21 +88,8 @@ void ScreenManagerOzoneInternal::SetPrimaryDisplayId(int64_t display_id) {
   // when the primary id is set after new displays are connected.
   // Only update the layout if it is requested to swap primary display.
   if (layout.primary_id != new_primary_display.id()) {
-    std::unique_ptr<DisplayLayout> swapped_layout(layout.Copy());
-
-    std::map<int64_t, DisplayPlacement*> id_to_placement;
-    for (auto& placement : swapped_layout->placement_list)
-      id_to_placement[placement.display_id] = &placement;
-    SwapRecursive(id_to_placement, primary_display_id_,
-                  new_primary_display.id());
-
-    std::sort(swapped_layout->placement_list.begin(),
-              swapped_layout->placement_list.end(),
-              [](const DisplayPlacement& d1, const DisplayPlacement& d2) {
-                return d1.display_id < d2.display_id;
-              });
-
-    swapped_layout->primary_id = new_primary_display.id();
+    std::unique_ptr<display::DisplayLayout> swapped_layout = layout.Copy();
+    swapped_layout->SwapPrimaryDisplay(new_primary_display.id());
     DisplayIdList list = display_manager_->GetCurrentDisplayIdList();
     display_manager_->layout_store()->RegisterLayoutForDisplayIdList(
         list, std::move(swapped_layout));
@@ -143,7 +110,7 @@ void ScreenManagerOzoneInternal::SetPrimaryDisplayId(int64_t display_id) {
 }
 
 void ScreenManagerOzoneInternal::AddInterfaces(
-    service_manager::InterfaceRegistry* registry) {
+    service_manager::BinderRegistry* registry) {
   registry->AddInterface<mojom::DisplayController>(this);
   registry->AddInterface<mojom::OutputProtection>(this);
   registry->AddInterface<mojom::TestDisplayController>(this);
@@ -308,7 +275,7 @@ void ScreenManagerOzoneInternal::OnDisplayAdded(const Display& display) {
   DVLOG(1) << "OnDisplayAdded: " << display.ToString() << "\n  "
            << metrics.ToString();
   screen_->display_list().AddDisplay(display, DisplayList::Type::NOT_PRIMARY);
-  delegate_->OnDisplayAdded(display.id(), metrics);
+  delegate_->OnDisplayAdded(display, metrics);
 }
 
 void ScreenManagerOzoneInternal::OnDisplayRemoved(const Display& display) {
@@ -327,7 +294,7 @@ void ScreenManagerOzoneInternal::OnDisplayMetricsChanged(
   DVLOG(1) << "OnDisplayModified: " << display.ToString() << "\n  "
            << metrics.ToString();
   screen_->display_list().UpdateDisplay(display);
-  delegate_->OnDisplayModified(display.id(), metrics);
+  delegate_->OnDisplayModified(display, metrics);
 }
 
 ViewportMetrics ScreenManagerOzoneInternal::GetViewportMetricsForDisplay(
@@ -336,11 +303,9 @@ ViewportMetrics ScreenManagerOzoneInternal::GetViewportMetricsForDisplay(
       display_manager_->GetDisplayInfo(display.id());
 
   ViewportMetrics metrics;
-  metrics.bounds = display.bounds();
-  metrics.work_area = display.work_area();
-  metrics.pixel_size = managed_info.bounds_in_native().size();
-  metrics.rotation = display.rotation();
-  metrics.touch_support = display.touch_support();
+  // TODO(kylechar): The origin of |metrics.bounds_in_pixels| should be updated
+  // so that PlatformWindows appear next to one another for multiple displays.
+  metrics.bounds_in_pixels = managed_info.bounds_in_native();
   metrics.device_scale_factor = display.device_scale_factor();
   metrics.ui_scale_factor = managed_info.configured_ui_scale();
 

@@ -5,33 +5,33 @@
 #ifndef V8EventListenerInfo_h
 #define V8EventListenerInfo_h
 
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/AtomicString.h"
 #include "v8/include/v8.h"
-#include "wtf/Vector.h"
-#include "wtf/text/AtomicString.h"
 
 namespace blink {
 
 class V8EventListenerInfo {
  public:
-  V8EventListenerInfo(AtomicString eventType,
-                      bool useCapture,
+  V8EventListenerInfo(AtomicString event_type,
+                      bool use_capture,
                       bool passive,
                       bool once,
                       v8::Local<v8::Object> handler,
-                      int backendNodeId)
-      : eventType(eventType),
-        useCapture(useCapture),
+                      int backend_node_id)
+      : event_type(event_type),
+        use_capture(use_capture),
         passive(passive),
         once(once),
         handler(handler),
-        backendNodeId(backendNodeId) {}
+        backend_node_id(backend_node_id) {}
 
-  AtomicString eventType;
-  bool useCapture;
+  AtomicString event_type;
+  bool use_capture;
   bool passive;
   bool once;
   v8::Local<v8::Object> handler;
-  int backendNodeId;
+  int backend_node_id;
 };
 
 using V8EventListenerInfoList = Vector<V8EventListenerInfo>;

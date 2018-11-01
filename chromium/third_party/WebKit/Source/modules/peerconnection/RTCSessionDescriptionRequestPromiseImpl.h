@@ -6,7 +6,7 @@
 #define RTCSessionDescriptionRequestPromiseImpl_h
 
 #include "platform/peerconnection/RTCSessionDescriptionRequest.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -17,14 +17,14 @@ class WebRTCSessionDescription;
 class RTCSessionDescriptionRequestPromiseImpl final
     : public RTCSessionDescriptionRequest {
  public:
-  static RTCSessionDescriptionRequestPromiseImpl* create(
+  static RTCSessionDescriptionRequestPromiseImpl* Create(
       RTCPeerConnection*,
       ScriptPromiseResolver*);
   ~RTCSessionDescriptionRequestPromiseImpl() override;
 
   // RTCSessionDescriptionRequest
-  void requestSucceeded(const WebRTCSessionDescription&) override;
-  void requestFailed(const String& error) override;
+  void RequestSucceeded(const WebRTCSessionDescription&) override;
+  void RequestFailed(const String& error) override;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -32,10 +32,10 @@ class RTCSessionDescriptionRequestPromiseImpl final
   RTCSessionDescriptionRequestPromiseImpl(RTCPeerConnection*,
                                           ScriptPromiseResolver*);
 
-  void clear();
+  void Clear();
 
-  Member<RTCPeerConnection> m_requester;
-  Member<ScriptPromiseResolver> m_resolver;
+  Member<RTCPeerConnection> requester_;
+  Member<ScriptPromiseResolver> resolver_;
 };
 
 }  // namespace blink

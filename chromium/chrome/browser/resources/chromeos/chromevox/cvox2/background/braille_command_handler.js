@@ -134,6 +134,16 @@ BrailleCommandHandler.init_ = function() {
 
   // Question.
   map([1, 4, 5, 6], 'toggleKeyboardHelp');
+
+  // All cells (with 7 as mod).
+  map([1, 2, 3, 4, 5, 6, 7], 'darkenScreen');
+  map([1, 2, 3, 4, 5, 6], 'undarkenScreen');
+
+  // s.
+  map([2, 3, 4], 'toggleSpeechOnOrOff');
+
+  // g.
+  map([1, 2, 4, 5], 'toggleBrailleTable');
 };
 
 BrailleCommandHandler.init_();

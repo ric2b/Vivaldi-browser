@@ -12,12 +12,14 @@
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/smhasher/src/MurmurHash2.h"
-#include "url/gurl.h"
 
 namespace {
 
 // The seed to use when taking the murmur2 hash of the icon.
 const uint64_t kMurmur2HashSeed = 0;
+
+// The default number of milliseconds to wait for the icon download to complete.
+const int kDownloadTimeoutInMilliseconds = 60000;
 
 // Computes Murmur2 hash of |raw_image_data|.
 std::string ComputeMurmur2Hash(const std::string& raw_image_data) {
@@ -32,14 +34,17 @@ std::string ComputeMurmur2Hash(const std::string& raw_image_data) {
 
 }  // anonymous namespace
 
-WebApkIconHasher::WebApkIconHasher() {}
-
-WebApkIconHasher::~WebApkIconHasher() {}
-
+// static
 void WebApkIconHasher::DownloadAndComputeMurmur2Hash(
     net::URLRequestContextGetter* request_context_getter,
     const GURL& icon_url,
     const Murmur2HashCallback& callback) {
+  if (!icon_url.is_valid()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  base::Bind(callback, ""));
+    return;
+  }
+
   if (icon_url.SchemeIs(url::kDataScheme)) {
     std::string mime_type, char_set, data;
     std::string hash;
@@ -52,16 +57,34 @@ void WebApkIconHasher::DownloadAndComputeMurmur2Hash(
     return;
   }
 
-  callback_ = callback;
+  // The icon hasher will delete itself when it is done.
+  new WebApkIconHasher(request_context_getter, icon_url, callback);
+}
+
+WebApkIconHasher::WebApkIconHasher(
+    net::URLRequestContextGetter* url_request_context_getter,
+    const GURL& icon_url,
+    const Murmur2HashCallback& callback)
+    : callback_(callback) {
+  download_timeout_timer_.Start(
+      FROM_HERE,
+      base::TimeDelta::FromMilliseconds(kDownloadTimeoutInMilliseconds),
+      base::Bind(&WebApkIconHasher::OnDownloadTimedOut,
+                 base::Unretained(this)));
+
   url_fetcher_ = net::URLFetcher::Create(icon_url, net::URLFetcher::GET, this);
-  url_fetcher_->SetRequestContext(request_context_getter);
+  url_fetcher_->SetRequestContext(url_request_context_getter);
   url_fetcher_->Start();
 }
 
+WebApkIconHasher::~WebApkIconHasher() {}
+
 void WebApkIconHasher::OnURLFetchComplete(const net::URLFetcher* source) {
+  download_timeout_timer_.Stop();
+
   if (!source->GetStatus().is_success() ||
       source->GetResponseCode() != net::HTTP_OK) {
-    callback_.Run("");
+    RunCallback("");
     return;
   }
 
@@ -71,5 +94,16 @@ void WebApkIconHasher::OnURLFetchComplete(const net::URLFetcher* source) {
   // browser process is a security bug.
   std::string raw_image_data;
   source->GetResponseAsString(&raw_image_data);
-  callback_.Run(ComputeMurmur2Hash(raw_image_data));
+  RunCallback(ComputeMurmur2Hash(raw_image_data));
+}
+
+void WebApkIconHasher::OnDownloadTimedOut() {
+  url_fetcher_.reset();
+
+  RunCallback("");
+}
+
+void WebApkIconHasher::RunCallback(const std::string& icon_murmur2_hash) {
+  callback_.Run(icon_murmur2_hash);
+  delete this;
 }

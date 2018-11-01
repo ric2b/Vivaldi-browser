@@ -43,7 +43,8 @@ void GetSecureModuleUsed(GetSecureModuleUsedCallback callback) {
       FROM_HERE,
       base::TaskTraits().MayBlock().WithPriority(
           base::TaskPriority::BACKGROUND),
-      base::Bind(&GetSecureModuleInfoFromFilesAndCacheIt), std::move(callback));
+      base::BindOnce(&GetSecureModuleInfoFromFilesAndCacheIt),
+      std::move(callback));
 }
 
 }  // namespace login

@@ -21,6 +21,7 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "ui/base/clipboard/clipboard_types.h"
 #include "ui/base/ui_base_export.h"
@@ -120,10 +121,6 @@ class UI_BASE_EXPORT Clipboard : NON_EXPORTED_BASE(public base::ThreadChecker) {
     return false;
   }
 
-  static ClipboardType FromInt(int32_t type) {
-    return static_cast<ClipboardType>(type);
-  }
-
   // Sets the list of threads that are allowed to access the clipboard.
   static void SetAllowedThreads(
       const std::vector<base::PlatformThreadId>& allowed_threads);
@@ -207,6 +204,13 @@ class UI_BASE_EXPORT Clipboard : NON_EXPORTED_BASE(public base::ThreadChecker) {
   // as a byte vector.
   virtual void ReadData(const FormatType& format,
                         std::string* result) const = 0;
+
+  // Returns an estimate of the time the clipboard was last updated.  If the
+  // time is unknown, returns Time::Time().
+  virtual base::Time GetLastModifiedTime() const;
+
+  // Resets the clipboard last modified time to Time::Time().
+  virtual void ClearLastModifiedTime();
 
   // Gets the FormatType corresponding to an arbitrary format string,
   // registering it with the system if needed. Due to Windows/Linux
@@ -334,12 +338,13 @@ class UI_BASE_EXPORT Clipboard : NON_EXPORTED_BASE(public base::ThreadChecker) {
   // is done (in the unit test case), but a user (like content) can set which
   // threads are allowed to call this method.
   typedef std::vector<base::PlatformThreadId> AllowedThreadsVector;
-  static base::LazyInstance<AllowedThreadsVector> allowed_threads_;
+  static base::LazyInstance<AllowedThreadsVector>::DestructorAtExit
+      allowed_threads_;
 
   // Mapping from threads to clipboard objects.
   typedef std::map<base::PlatformThreadId, std::unique_ptr<Clipboard>>
       ClipboardMap;
-  static base::LazyInstance<ClipboardMap> clipboard_map_;
+  static base::LazyInstance<ClipboardMap>::DestructorAtExit clipboard_map_;
 
   // Mutex that controls access to |g_clipboard_map|.
   static base::LazyInstance<base::Lock>::Leaky clipboard_map_lock_;

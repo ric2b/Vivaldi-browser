@@ -13,6 +13,7 @@
 #include "base/i18n/number_formatting.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -59,7 +60,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
@@ -176,10 +176,6 @@ ToolsMenuModel::~ToolsMenuModel() {}
 // - Developer tools.
 // - Option to enable profiling.
 void ToolsMenuModel::Build(Browser* browser) {
-  bool show_create_shortcuts = true;
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX) || defined(USE_ASH)
-  show_create_shortcuts = false;
-#endif
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableSaveAsMenuLabelExperiment) ||
       base::FieldTrialList::FindFullName("SaveAsMenuText") == "download") {
@@ -197,8 +193,6 @@ void ToolsMenuModel::Build(Browser* browser) {
     string_id = IDS_ADD_TO_SHELF;
 #endif  // defined(USE_ASH)
     AddItemWithStringId(IDC_CREATE_HOSTED_APP, string_id);
-  } else if (show_create_shortcuts) {
-    AddItemWithStringId(IDC_CREATE_SHORTCUTS, IDS_CREATE_SHORTCUTS);
   }
 
   AddSeparator(ui::NORMAL_SEPARATOR);
@@ -437,12 +431,6 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       }
       LogMenuAction(MENU_ACTION_CREATE_HOSTED_APP);
       break;
-    case IDC_CREATE_SHORTCUTS:
-      if (!uma_action_recorded_)
-        UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.CreateShortcuts",
-                                   delta);
-      LogMenuAction(MENU_ACTION_CREATE_SHORTCUTS);
-      break;
     case IDC_MANAGE_EXTENSIONS:
       if (!uma_action_recorded_) {
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.ManageExtensions",
@@ -510,7 +498,7 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       }
       break;
     case IDC_FULLSCREEN:
-      content::RecordAction(UserMetricsAction("EnterFullScreenWithWrenchMenu"));
+      base::RecordAction(UserMetricsAction("EnterFullScreenWithWrenchMenu"));
 
       if (!uma_action_recorded_) {
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.EnterFullScreen",
@@ -553,7 +541,7 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
 
     // Help menu.
     case IDC_HELP_PAGE_VIA_MENU:
-      content::RecordAction(UserMetricsAction("ShowHelpTabViaWrenchMenu"));
+      base::RecordAction(UserMetricsAction("ShowHelpTabViaWrenchMenu"));
 
       if (!uma_action_recorded_)
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.HelpPage", delta);
@@ -717,9 +705,8 @@ void AppMenuModel::Build() {
   AddSeparator(ui::NORMAL_SEPARATOR);
 
   if (!browser_->profile()->IsOffTheRecord()) {
-    recent_tabs_sub_menu_model_.reset(new RecentTabsSubMenuModel(provider_,
-                                                                 browser_,
-                                                                 NULL));
+    recent_tabs_sub_menu_model_ =
+        base::MakeUnique<RecentTabsSubMenuModel>(provider_, browser_);
     AddSubMenuWithStringId(IDC_RECENT_TABS_MENU, IDS_HISTORY_MENU,
                            recent_tabs_sub_menu_model_.get());
   }
@@ -792,7 +779,7 @@ bool AppMenuModel::AddGlobalErrorMenuItems() {
               error->MenuItemIcon());
       menu_items_added = true;
       if (IDC_SHOW_SIGNIN_ERROR == error->MenuItemCommandID()) {
-        content::RecordAction(
+        base::RecordAction(
             base::UserMetricsAction("Signin_Impression_FromMenu"));
       }
     }

@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/path_service.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -80,8 +81,8 @@ class MultilingualSpellCheckTest : public testing::Test {
     for (size_t i = 0; i < num_test_cases; ++i) {
       int misspelling_start = 0;
       int misspelling_length = 0;
-      static_cast<blink::WebSpellCheckClient*>(provider())
-          ->checkSpelling(blink::WebString::fromUTF16(
+      static_cast<blink::WebTextCheckClient*>(provider())
+          ->CheckSpelling(blink::WebString::FromUTF16(
                               base::WideToUTF16(test_cases[i].input)),
                           misspelling_start, misspelling_length, nullptr);
 
@@ -103,7 +104,7 @@ class MultilingualSpellCheckTest : public testing::Test {
     EXPECT_EQ(expected.size(), results.size());
     size_t size = std::min(results.size(), expected.size());
     for (size_t i = 0; i < size; ++i) {
-      EXPECT_EQ(blink::WebTextDecorationTypeSpelling, results[i].decoration);
+      EXPECT_EQ(blink::kWebTextDecorationTypeSpelling, results[i].decoration);
       EXPECT_EQ(expected[i].location, results[i].location);
       EXPECT_EQ(expected[i].length, results[i].length);
     }
@@ -137,12 +138,13 @@ TEST_F(MultilingualSpellCheckTest, MultilingualSpellCheckWord) {
   // A sorted list of languages. This must start sorted to get all possible
   // permutations.
   std::string languages = "el-GR,en-US,es-ES,ru-RU";
-  std::vector<std::string> permuted_languages = base::SplitString(
+  std::vector<base::StringPiece> permuted_languages = base::SplitStringPiece(
       languages, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   do {
-    languages = base::JoinString(permuted_languages, ",");
-    ExpectSpellCheckWordResults(languages, kTestCases, arraysize(kTestCases));
+    std::string reordered_languages = base::JoinString(permuted_languages, ",");
+    ExpectSpellCheckWordResults(reordered_languages, kTestCases,
+                                arraysize(kTestCases));
   } while (std::next_permutation(permuted_languages.begin(),
                                  permuted_languages.end()));
 }
@@ -233,9 +235,9 @@ TEST_F(MultilingualSpellCheckTest, MultilingualSpellCheckSuggestions) {
     blink::WebVector<blink::WebString> suggestions;
     int misspelling_start;
     int misspelling_length;
-    static_cast<blink::WebSpellCheckClient*>(provider())
-        ->checkSpelling(
-            blink::WebString::fromUTF16(base::WideToUTF16(kTestCases[i].input)),
+    static_cast<blink::WebTextCheckClient*>(provider())
+        ->CheckSpelling(
+            blink::WebString::FromUTF16(base::WideToUTF16(kTestCases[i].input)),
             misspelling_start, misspelling_length, &suggestions);
 
     EXPECT_EQ(kTestCases[i].expected_misspelling_start, misspelling_start);
@@ -252,7 +254,7 @@ TEST_F(MultilingualSpellCheckTest, MultilingualSpellCheckSuggestions) {
     EXPECT_EQ(expected_suggestions.size(), suggestions.size());
     for (size_t j = 0;
          j < std::min(expected_suggestions.size(), suggestions.size()); j++) {
-      EXPECT_EQ(expected_suggestions[j], suggestions[j].utf16());
+      EXPECT_EQ(expected_suggestions[j], suggestions[j].Utf16());
     }
   }
 }

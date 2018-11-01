@@ -4,35 +4,35 @@
 
 #include "modules/installation/InstallationServiceImpl.h"
 
+#include <utility>
 #include "core/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "wtf/PtrUtil.h"
-#include <utility>
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
 InstallationServiceImpl::InstallationServiceImpl(LocalFrame& frame)
-    : m_frame(frame) {}
+    : frame_(frame) {}
 
 // static
-void InstallationServiceImpl::create(
+void InstallationServiceImpl::Create(
     LocalFrame* frame,
     mojom::blink::InstallationServiceRequest request) {
-  mojo::MakeStrongBinding(WTF::makeUnique<InstallationServiceImpl>(*frame),
+  mojo::MakeStrongBinding(WTF::MakeUnique<InstallationServiceImpl>(*frame),
                           std::move(request));
 }
 
 void InstallationServiceImpl::OnInstall() {
-  if (!m_frame)
+  if (!frame_)
     return;
 
-  LocalDOMWindow* domWindow = m_frame->domWindow();
-  if (!domWindow)
+  LocalDOMWindow* dom_window = frame_->DomWindow();
+  if (!dom_window)
     return;
 
-  domWindow->dispatchEvent(Event::create(EventTypeNames::appinstalled));
+  dom_window->DispatchEvent(Event::Create(EventTypeNames::appinstalled));
 }
 
 }  // namespace blink

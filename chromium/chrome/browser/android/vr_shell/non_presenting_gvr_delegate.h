@@ -28,16 +28,17 @@ class NonPresentingGvrDelegate : public device::GvrDelegate,
 
   // GvrDelegate implementation
   void SetWebVRSecureOrigin(bool secure_origin) override {}
-  void SubmitWebVRFrame() override {}
+  void SubmitWebVRFrame(int16_t frame_index,
+                        const gpu::MailboxHolder& mailbox) override {}
   void UpdateWebVRTextureBounds(int16_t frame_index,
-                                const gvr::Rectf& left_bounds,
-                                const gvr::Rectf& right_bounds) override {}
+                                const gfx::RectF& left_bounds,
+                                const gfx::RectF& right_bounds,
+                                const gfx::Size& source_size) override {}
   void OnVRVsyncProviderRequest(
       device::mojom::VRVSyncProviderRequest request) override;
   void UpdateVSyncInterval(int64_t timebase_nanos,
                            double interval_seconds) override;
-  bool SupportsPresentation() override;
-  void ResetPose() override;
+
   void CreateVRDisplayInfo(
       const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
       uint32_t device_id) override;

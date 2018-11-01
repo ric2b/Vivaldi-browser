@@ -23,10 +23,11 @@ protected:
   Demuxer * CreatePlatformDemuxer(std::unique_ptr<DataSource> & data_source,
                                   base::MessageLoop & message_loop_);
 
-  void AppendPlatformDecoders(
-          ScopedVector<VideoDecoder> & video_decoders,
-          ScopedVector<AudioDecoder> & audio_decoders,
-          base::MessageLoop & message_loop_);
+  void AppendPlatformAudioDecoders(ScopedVector<AudioDecoder> & audio_decoders,
+          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
+
+  void AppendPlatformVideoDecoders(ScopedVector<VideoDecoder> & video_decoders,
+          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
 
   void EnableMockVDA();
   void DestroyMockVDA();

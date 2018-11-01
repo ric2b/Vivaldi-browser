@@ -27,14 +27,14 @@
 #include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
-#include "ui/events/ipc/latency_info_param_traits.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/swap_result.h"
+#include "ui/latency/ipc/latency_info_param_traits.h"
+#include "ui/latency/latency_info.h"
 #include "url/ipc/url_param_traits.h"
 
 #if defined(OS_MACOSX)
@@ -175,10 +175,11 @@ IPC_SYNC_MESSAGE_ROUTED2_1(GpuCommandBufferMsg_WaitForGetOffsetInRange,
 // Caller passes its current put offset. Current state (including get offset)
 // is returned in shared memory. The input latency info for the current
 // frame is also sent to the GPU process.
-IPC_MESSAGE_ROUTED3(GpuCommandBufferMsg_AsyncFlush,
+IPC_MESSAGE_ROUTED4(GpuCommandBufferMsg_AsyncFlush,
                     int32_t /* put_offset */,
                     uint32_t /* flush_count */,
-                    std::vector<ui::LatencyInfo> /* latency_info */)
+                    std::vector<ui::LatencyInfo> /* latency_info */,
+                    std::vector<gpu::SyncToken> /* sync_token_fences */)
 
 // Sent by the GPU process to display messages in the console.
 IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_ConsoleMsg,

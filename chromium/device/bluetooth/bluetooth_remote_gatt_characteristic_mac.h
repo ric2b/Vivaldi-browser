@@ -7,17 +7,11 @@
 
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
 
+#import <CoreBluetooth/CoreBluetooth.h>
 #include <unordered_map>
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/weak_ptr.h"
-
-#if defined(__OBJC__)
-#import <CoreBluetooth/CoreBluetooth.h>
-#else
-@class CBCharacteristic;
-typedef NS_ENUM(NSInteger, CBCharacteristicWriteType);
-#endif  // defined(__OBJC__)
 
 namespace device {
 
@@ -66,6 +60,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicMac
       const ErrorCallback& error_callback) override;
 
  private:
+  friend class BluetoothLowEnergyDeviceMac;
   friend class BluetoothRemoteGattDescriptorMac;
   friend class BluetoothRemoteGattServiceMac;
   friend class BluetoothTestMac;
@@ -74,8 +69,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicMac
   // Called by the BluetoothRemoteGattServiceMac instance when the
   // characteristics value has been read.
   void DidUpdateValue(NSError* error);
-  // Updates value_ and notifies the adapter of the new value.
-  void UpdateValueAndNotify();
+  // Updates value_.
+  void UpdateValue();
   // Called by the BluetoothRemoteGattServiceMac instance when the
   // characteristics value has been written.
   void DidWriteValue(NSError* error);
@@ -133,7 +128,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicMac
   std::unordered_map<std::string,
                      std::unique_ptr<BluetoothRemoteGattDescriptorMac>>
       gatt_descriptor_macs_;
+
+  base::WeakPtrFactory<BluetoothRemoteGattCharacteristicMac> weak_ptr_factory_;
 };
+
+// Stream operator for logging.
+DEVICE_BLUETOOTH_EXPORT std::ostream& operator<<(
+    std::ostream& out,
+    const BluetoothRemoteGattCharacteristicMac& characteristic);
 
 }  // namespace device
 

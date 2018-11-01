@@ -39,7 +39,6 @@ int64_t kFileSize = 234567LL;
 int64_t kOfflineId = 12345LL;
 
 // Build a store with outdated schema to simulate the upgrading process.
-// TODO(romax): move it to sql_unittests.
 void BuildTestStoreWithSchemaFromM52(const base::FilePath& file) {
   sql::Connection connection;
   ASSERT_TRUE(
@@ -392,8 +391,6 @@ void OfflinePageMetadataStoreTest::GetOfflinePagesCallback(
 
 void OfflinePageMetadataStoreTest::AddCallback(ItemActionStatus status) {
   last_called_callback_ = ADD;
-  // TODO(fgorski): Add specific add status.
-  // last_item_status_ = status;
   last_status_ =
       status == ItemActionStatus::SUCCESS ? STATUS_TRUE : STATUS_FALSE;
 }
@@ -636,7 +633,6 @@ TEST_F(OfflinePageMetadataStoreTest, GetOfflinePagesFromInvalidStore) {
 // Loads a store which has an outdated schema.
 // This test case would crash if it's not handling correctly when we're loading
 // old version stores.
-// TODO(romax): Move this to sql_unittest.
 TEST_F(OfflinePageMetadataStoreTest, LoadVersion52Store) {
   std::unique_ptr<OfflinePageMetadataStore> store(
       BuildStoreWithSchemaFromM52());
@@ -648,7 +644,6 @@ TEST_F(OfflinePageMetadataStoreTest, LoadVersion52Store) {
 // Loads a store which has an outdated schema.
 // This test case would crash if it's not handling correctly when we're loading
 // old version stores.
-// TODO(romax): Move this to sql_unittest.
 TEST_F(OfflinePageMetadataStoreTest, LoadVersion53Store) {
   std::unique_ptr<OfflinePageMetadataStore> store(
       BuildStoreWithSchemaFromM53());
@@ -660,7 +655,6 @@ TEST_F(OfflinePageMetadataStoreTest, LoadVersion53Store) {
 // Loads a string with schema from M54.
 // This test case would crash if it's not handling correctly when we're loading
 // old version stores.
-// TODO(romax): Move this to sql_unittest.
 TEST_F(OfflinePageMetadataStoreTest, LoadVersion54Store) {
   std::unique_ptr<OfflinePageMetadataStore> store(
       BuildStoreWithSchemaFromM54());
@@ -672,7 +666,6 @@ TEST_F(OfflinePageMetadataStoreTest, LoadVersion54Store) {
 // Loads a string with schema from M55.
 // This test case would crash if it's not handling correctly when we're loading
 // old version stores.
-// TODO(romax): Move this to sql_unittest.
 TEST_F(OfflinePageMetadataStoreTest, LoadVersion55Store) {
   std::unique_ptr<OfflinePageMetadataStore> store(
       BuildStoreWithSchemaFromM55());
@@ -684,7 +677,6 @@ TEST_F(OfflinePageMetadataStoreTest, LoadVersion55Store) {
 // Loads a string with schema from M56.
 // This test case would crash if it's not handling correctly when we're loading
 // old version stores.
-// TODO(romax): Move this to sql_unittest.
 TEST_F(OfflinePageMetadataStoreTest, LoadVersion56Store) {
   std::unique_ptr<OfflinePageMetadataStore> store(
       BuildStoreWithSchemaFromM56());

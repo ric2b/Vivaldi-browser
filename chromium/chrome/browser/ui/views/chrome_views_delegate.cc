@@ -16,7 +16,6 @@
 #include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window_state.h"
-#include "chrome/browser/ui/views/harmony/layout_delegate.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/version_info/version_info.h"
@@ -62,9 +61,7 @@ PrefService* GetPrefsForWindow(const views::Widget* window) {
 
 // ChromeViewsDelegate --------------------------------------------------------
 
-#if !defined(OS_WIN)
 ChromeViewsDelegate::ChromeViewsDelegate() {}
-#endif
 
 ChromeViewsDelegate::~ChromeViewsDelegate() {
   DCHECK_EQ(0u, ref_count_);
@@ -87,11 +84,9 @@ void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
   window_preferences->SetInteger("bottom", bounds.bottom());
   window_preferences->SetBoolean("maximized",
                                  show_state == ui::SHOW_STATE_MAXIMIZED);
-  // TODO(afakhry): Remove Docked Windows in M58.
-  window_preferences->SetBoolean("docked", show_state == ui::SHOW_STATE_DOCKED);
 
   gfx::Rect work_area(display::Screen::GetScreen()
-                          ->GetDisplayNearestWindow(window->GetNativeView())
+                          ->GetDisplayNearestView(window->GetNativeView())
                           .work_area());
   window_preferences->SetInteger("work_area_left", work_area.x());
   window_preferences->SetInteger("work_area_top", work_area.y());
@@ -194,60 +189,6 @@ std::string ChromeViewsDelegate::GetApplicationName() {
 scoped_refptr<base::TaskRunner>
 ChromeViewsDelegate::GetBlockingPoolTaskRunner() {
   return content::BrowserThread::GetBlockingPool();
-}
-
-gfx::Insets ChromeViewsDelegate::GetDialogButtonInsets() const {
-  const LayoutDelegate* layout_delegate = LayoutDelegate::Get();
-  const int top = layout_delegate->GetMetric(
-      LayoutDelegate::Metric::DIALOG_BUTTON_TOP_SPACING);
-  const int margin = layout_delegate->GetMetric(
-      LayoutDelegate::Metric::DIALOG_BUTTON_MARGIN);
-  return gfx::Insets(top, margin, margin, margin);
-}
-
-int ChromeViewsDelegate::GetDialogCloseButtonMargin() const {
-  return LayoutDelegate::Get()->GetMetric(
-      LayoutDelegate::Metric::DIALOG_CLOSE_BUTTON_MARGIN);
-}
-
-int ChromeViewsDelegate::GetDialogRelatedButtonHorizontalSpacing() const {
-  return LayoutDelegate::Get()->GetMetric(
-      LayoutDelegate::Metric::RELATED_BUTTON_HORIZONTAL_SPACING);
-}
-
-int ChromeViewsDelegate::GetDialogRelatedControlVerticalSpacing() const {
-  return LayoutDelegate::Get()->GetMetric(
-      LayoutDelegate::Metric::RELATED_CONTROL_VERTICAL_SPACING);
-}
-
-gfx::Insets ChromeViewsDelegate::GetDialogFrameViewInsets() const {
-  const LayoutDelegate* layout_delegate = LayoutDelegate::Get();
-  const int top = layout_delegate->GetMetric(
-      LayoutDelegate::Metric::PANEL_CONTENT_MARGIN);
-  const int side = layout_delegate->GetMetric(
-      LayoutDelegate::Metric::DIALOG_BUTTON_MARGIN);
-  // Titles are inset at the top and sides, but not at the bottom.
-  return gfx::Insets(top, side, 0, side);
-}
-
-gfx::Insets ChromeViewsDelegate::GetBubbleDialogMargins() const {
-  return gfx::Insets(LayoutDelegate::Get()->GetMetric(
-      LayoutDelegate::Metric::PANEL_CONTENT_MARGIN));
-}
-
-int ChromeViewsDelegate::GetButtonMinimumWidth() const {
-  return LayoutDelegate::Get()->GetMetric(
-      LayoutDelegate::Metric::BUTTON_MINIMUM_WIDTH);
-}
-
-int ChromeViewsDelegate::GetDialogButtonMinimumWidth() const {
-  return LayoutDelegate::Get()->GetMetric(
-      LayoutDelegate::Metric::DIALOG_BUTTON_MINIMUM_WIDTH);
-}
-
-int ChromeViewsDelegate::GetButtonHorizontalPadding() const {
-  return LayoutDelegate::Get()->GetMetric(
-      LayoutDelegate::Metric::BUTTON_HORIZONTAL_PADDING);
 }
 
 #if !defined(OS_CHROMEOS)

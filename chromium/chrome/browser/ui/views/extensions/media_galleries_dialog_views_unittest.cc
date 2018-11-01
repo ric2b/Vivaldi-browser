@@ -10,9 +10,11 @@
 #include "chrome/browser/media_galleries/media_galleries_dialog_controller_mock.h"
 #include "chrome/browser/ui/views/extensions/media_galleries_dialog_views.h"
 #include "chrome/browser/ui/views/extensions/media_gallery_checkbox_view.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "components/storage_monitor/storage_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/controls/button/checkbox.h"
+#include "ui/views/test/test_views_delegate.h"
 
 using ::testing::_;
 using ::testing::AnyNumber;
@@ -47,6 +49,8 @@ class MediaGalleriesDialogTest : public testing::Test {
         WillByDefault(Return(headers));
     EXPECT_CALL(controller_, GetSectionEntries(_)).
         Times(AnyNumber());
+    test_views_delegate_.set_layout_provider(
+        ChromeLayoutProvider::CreateLayoutProvider());
   }
 
   void TearDown() override {
@@ -60,6 +64,7 @@ class MediaGalleriesDialogTest : public testing::Test {
  private:
   // TODO(gbillock): Get rid of this mock; make something specialized.
   NiceMock<MediaGalleriesDialogControllerMock> controller_;
+  views::TestViewsDelegate test_views_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaGalleriesDialogTest);
 };

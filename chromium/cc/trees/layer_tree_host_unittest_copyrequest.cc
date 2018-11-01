@@ -8,7 +8,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/layers/layer_iterator.h"
+#include "cc/layers/effect_tree_layer_list_iterator.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/output/direct_renderer.h"
@@ -55,8 +55,8 @@ class LayerTreeHostCopyRequestTestMultipleRequests
   void WaitForCallback() {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&LayerTreeHostCopyRequestTestMultipleRequests::NextStep,
-                   base::Unretained(this)));
+        base::BindOnce(&LayerTreeHostCopyRequestTestMultipleRequests::NextStep,
+                       base::Unretained(this)));
   }
 
   void NextStep() {
@@ -597,6 +597,10 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCopyRequestTestClippedOut);
 class LayerTreeHostCopyRequestTestScaledLayer
     : public LayerTreeHostCopyRequestTest {
  protected:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->layer_transforms_should_scale_layer_contents = true;
+  }
+
   void SetupTree() override {
     root_ = Layer::Create();
     root_->SetBounds(gfx::Size(20, 20));
@@ -780,9 +784,9 @@ class LayerTreeHostCopyRequestTestDeleteTexture
     result_ = nullptr;
 
     ImplThreadTaskRunner()->PostTask(
-        FROM_HERE, base::Bind(&LayerTreeHostCopyRequestTestDeleteTexture::
-                                  CheckNumTexturesAfterReadbackDestroyed,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&LayerTreeHostCopyRequestTestDeleteTexture::
+                                      CheckNumTexturesAfterReadbackDestroyed,
+                                  base::Unretained(this)));
   }
 
   void CheckNumTexturesAfterReadbackDestroyed() {
@@ -809,7 +813,7 @@ class LayerTreeHostCopyRequestTestDeleteTexture
         // Request a copy of the layer. This will use another texture.
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(
+            base::BindOnce(
                 &LayerTreeHostCopyRequestTestDeleteTexture::InsertCopyRequest,
                 base::Unretained(this)));
         break;
@@ -828,9 +832,10 @@ class LayerTreeHostCopyRequestTestDeleteTexture
         // to the compositor. Then check the resulting number of allocated
         // textures.
         MainThreadTaskRunner()->PostTask(
-            FROM_HERE, base::Bind(&LayerTreeHostCopyRequestTestDeleteTexture::
-                                      DestroyCopyResultAndCheckNumTextures,
-                                  base::Unretained(this)));
+            FROM_HERE,
+            base::BindOnce(&LayerTreeHostCopyRequestTestDeleteTexture::
+                               DestroyCopyResultAndCheckNumTextures,
+                           base::Unretained(this)));
         break;
     }
   }
@@ -880,6 +885,11 @@ class LayerTreeHostCopyRequestTestCountTextures
     copy_layer_ = FakePictureLayer::Create(&copy_client_);
     copy_layer_->SetBounds(gfx::Size(10, 10));
     copy_client_.set_bounds(copy_layer_->bounds());
+    PaintFlags flags;
+    flags.setColor(SK_ColorRED);
+    // Ensure the layer isn't completely transparent so the RenderPass isn't
+    // optimized away.
+    copy_client_.add_draw_rect(gfx::Rect(0, 0, 10, 10), flags);
     // Doing a copy makes the layer have a render surface which can cause
     // texture allocations. So get those allocations out of the way in the
     // first frame by forcing it to have a render surface.
@@ -927,8 +937,9 @@ class LayerTreeHostCopyRequestTestCountTextures
         // readback.
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(&LayerTreeHostCopyRequestTestCountTextures::DoEndTest,
-                       base::Unretained(this)));
+            base::BindOnce(
+                &LayerTreeHostCopyRequestTestCountTextures::DoEndTest,
+                base::Unretained(this)));
         break;
     }
   }
@@ -1065,8 +1076,9 @@ class LayerTreeHostCopyRequestTestDestroyBeforeCopy
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
     MainThreadTaskRunner()->PostTask(
         FROM_HERE,
-        base::Bind(&LayerTreeHostCopyRequestTestDestroyBeforeCopy::DidActivate,
-                   base::Unretained(this)));
+        base::BindOnce(
+            &LayerTreeHostCopyRequestTestDestroyBeforeCopy::DidActivate,
+            base::Unretained(this)));
   }
 
   void DidActivate() {
@@ -1142,8 +1154,9 @@ class LayerTreeHostCopyRequestTestShutdownBeforeCopy
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
     MainThreadTaskRunner()->PostTask(
         FROM_HERE,
-        base::Bind(&LayerTreeHostCopyRequestTestShutdownBeforeCopy::DidActivate,
-                   base::Unretained(this)));
+        base::BindOnce(
+            &LayerTreeHostCopyRequestTestShutdownBeforeCopy::DidActivate,
+            base::Unretained(this)));
   }
 
   void DidActivate() {
@@ -1168,8 +1181,9 @@ class LayerTreeHostCopyRequestTestShutdownBeforeCopy
         // the main thread.
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(&LayerTreeHostCopyRequestTestShutdownBeforeCopy::EndTest,
-                       base::Unretained(this)));
+            base::BindOnce(
+                &LayerTreeHostCopyRequestTestShutdownBeforeCopy::EndTest,
+                base::Unretained(this)));
         break;
     }
   }
@@ -1227,14 +1241,12 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
 
     bool saw_root = false;
     bool saw_child = false;
-    for (LayerIterator it =
-             LayerIterator::Begin(frame_data->render_surface_layer_list);
-         it != LayerIterator::End(frame_data->render_surface_layer_list);
-         ++it) {
-      if (it.represents_itself()) {
-        if (*it == root)
+    for (EffectTreeLayerListIterator it(host_impl->active_tree());
+         it.state() != EffectTreeLayerListIterator::State::END; ++it) {
+      if (it.state() == EffectTreeLayerListIterator::State::LAYER) {
+        if (it.current_layer() == root)
           saw_root = true;
-        else if (*it == child)
+        else if (it.current_layer() == child)
           saw_child = true;
         else
           NOTREACHED();
@@ -1268,7 +1280,7 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
         // to the main thread.
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(
+            base::BindOnce(
                 &LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest::
                     TryEndTest,
                 base::Unretained(this), WhatHappened::DRAW));

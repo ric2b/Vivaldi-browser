@@ -39,7 +39,7 @@ void PrintValue(const base::Value* value, int indentLevel) {
   bool bool_value = false;
   if (value->GetAsList(&list_value)) {
     for (const auto& v : *list_value) {
-      PrintValue(v.get(), indentLevel);
+      PrintValue(&v, indentLevel);
     }
   } else if (value->GetAsString(&string_value)) {
     OutputString(indent);
@@ -85,7 +85,7 @@ void VisibilityHandler(const std::string& name, const base::Value* value) {
   const base::ListValue* list;
   if (value->GetAsList(&list)) {
     if (list->empty()) {
-      base::StringValue str("(no visibility)");
+      base::Value str("(no visibility)");
       DefaultHandler(name, &str);
     } else {
       DefaultHandler(name, value);
@@ -97,7 +97,7 @@ void PublicHandler(const std::string& name, const base::Value* value) {
   std::string p;
   if (value->GetAsString(&p)) {
     if (p == "*") {
-      base::StringValue str("[All headers listed in the sources are public.]");
+      base::Value str("[All headers listed in the sources are public.]");
       DefaultHandler(name, &str);
       return;
     }

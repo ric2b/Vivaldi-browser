@@ -72,21 +72,6 @@ extern const char kShutdownType[];
 // invalid attempt to Pin the browser process after that.
 extern const char kBrowserUnpinTrace[];
 
-// GPU information.
-#if !defined(OS_ANDROID)
-extern const char kGPUVendorID[];
-extern const char kGPUDeviceID[];
-#endif
-extern const char kGPUDriverVersion[];
-extern const char kGPUPixelShaderVersion[];
-extern const char kGPUVertexShaderVersion[];
-#if defined(OS_MACOSX)
-extern const char kGPUGLVersion[];
-#elif defined(OS_POSIX)
-extern const char kGPUVendor[];
-extern const char kGPURenderer[];
-#endif
-
 #if defined(OS_WIN)
 extern const char kHungAudioThreadDetails[];
 
@@ -102,6 +87,12 @@ extern const char kThirdPartyModulesNotLoaded[];
 
 // Whether the machine is enterprise managed (only sent on Windows).
 extern const char kIsEnterpriseManaged[];
+
+// The "ap" (additional parameters) value in Chrome's ClientState registry key.
+extern const char kApValue[];
+
+// The "name" value in Chrome's ClientState\cohort registry key.
+extern const char kCohortName[];
 #endif
 
 // Number of input event send IPC failures. Added to debug

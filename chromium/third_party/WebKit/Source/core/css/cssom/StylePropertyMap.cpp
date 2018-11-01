@@ -12,121 +12,40 @@
 
 namespace blink {
 
-namespace {
-
-class StylePropertyMapIterationSource final
-    : public PairIterable<String, CSSStyleValueOrCSSStyleValueSequence>::
-          IterationSource {
- public:
-  explicit StylePropertyMapIterationSource(
-      HeapVector<StylePropertyMap::StylePropertyMapEntry> values)
-      : m_index(0), m_values(values) {}
-
-  bool next(ScriptState*,
-            String& key,
-            CSSStyleValueOrCSSStyleValueSequence& value,
-            ExceptionState&) override {
-    if (m_index >= m_values.size())
-      return false;
-
-    const StylePropertyMap::StylePropertyMapEntry& pair =
-        m_values.at(m_index++);
-    key = pair.first;
-    value = pair.second;
-    return true;
-  }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(m_values);
-    PairIterable<String, CSSStyleValueOrCSSStyleValueSequence>::
-        IterationSource::trace(visitor);
-  }
-
- private:
-  size_t m_index;
-  const HeapVector<StylePropertyMap::StylePropertyMapEntry> m_values;
-};
-
-}  // namespace
-
-CSSStyleValue* StylePropertyMap::get(const String& propertyName,
-                                     ExceptionState& exceptionState) {
-  CSSPropertyID propertyID = cssPropertyID(propertyName);
-  if (propertyID == CSSPropertyInvalid || propertyID == CSSPropertyVariable) {
-    // TODO(meade): Handle custom properties here.
-    exceptionState.throwTypeError("Invalid propertyName: " + propertyName);
-    return nullptr;
-  }
-
-  CSSStyleValueVector styleVector = getAllInternal(propertyID);
-  if (styleVector.isEmpty())
-    return nullptr;
-
-  return styleVector[0];
-}
-
-CSSStyleValueVector StylePropertyMap::getAll(const String& propertyName,
-                                             ExceptionState& exceptionState) {
-  CSSPropertyID propertyID = cssPropertyID(propertyName);
-  if (propertyID != CSSPropertyInvalid && propertyID != CSSPropertyVariable)
-    return getAllInternal(propertyID);
-
-  // TODO(meade): Handle custom properties here.
-  exceptionState.throwTypeError("Invalid propertyName: " + propertyName);
-  return CSSStyleValueVector();
-}
-
-bool StylePropertyMap::has(const String& propertyName,
-                           ExceptionState& exceptionState) {
-  CSSPropertyID propertyID = cssPropertyID(propertyName);
-  if (propertyID != CSSPropertyInvalid && propertyID != CSSPropertyVariable)
-    return !getAllInternal(propertyID).isEmpty();
-
-  // TODO(meade): Handle custom properties here.
-  exceptionState.throwTypeError("Invalid propertyName: " + propertyName);
-  return false;
-}
-
-void StylePropertyMap::set(const String& propertyName,
+void StylePropertyMap::set(const String& property_name,
                            CSSStyleValueOrCSSStyleValueSequenceOrString& item,
-                           ExceptionState& exceptionState) {
-  CSSPropertyID propertyID = cssPropertyID(propertyName);
-  if (propertyID != CSSPropertyInvalid && propertyID != CSSPropertyVariable) {
-    set(propertyID, item, exceptionState);
+                           ExceptionState& exception_state) {
+  CSSPropertyID property_id = cssPropertyID(property_name);
+  if (property_id != CSSPropertyInvalid && property_id != CSSPropertyVariable) {
+    set(property_id, item, exception_state);
     return;
   }
   // TODO(meade): Handle custom properties here.
-  exceptionState.throwTypeError("Invalid propertyName: " + propertyName);
+  exception_state.ThrowTypeError("Invalid propertyName: " + property_name);
 }
 
 void StylePropertyMap::append(
-    const String& propertyName,
+    const String& property_name,
     CSSStyleValueOrCSSStyleValueSequenceOrString& item,
-    ExceptionState& exceptionState) {
-  CSSPropertyID propertyID = cssPropertyID(propertyName);
-  if (propertyID != CSSPropertyInvalid && propertyID != CSSPropertyVariable) {
-    append(propertyID, item, exceptionState);
+    ExceptionState& exception_state) {
+  CSSPropertyID property_id = cssPropertyID(property_name);
+  if (property_id != CSSPropertyInvalid && property_id != CSSPropertyVariable) {
+    append(property_id, item, exception_state);
     return;
   }
   // TODO(meade): Handle custom properties here.
-  exceptionState.throwTypeError("Invalid propertyName: " + propertyName);
+  exception_state.ThrowTypeError("Invalid propertyName: " + property_name);
 }
 
-void StylePropertyMap::remove(const String& propertyName,
-                              ExceptionState& exceptionState) {
-  CSSPropertyID propertyID = cssPropertyID(propertyName);
-  if (propertyID != CSSPropertyInvalid && propertyID != CSSPropertyVariable) {
-    remove(propertyID, exceptionState);
+void StylePropertyMap::remove(const String& property_name,
+                              ExceptionState& exception_state) {
+  CSSPropertyID property_id = cssPropertyID(property_name);
+  if (property_id != CSSPropertyInvalid && property_id != CSSPropertyVariable) {
+    remove(property_id, exception_state);
     return;
   }
   // TODO(meade): Handle custom properties here.
-  exceptionState.throwTypeError("Invalid propertyName: " + propertyName);
-}
-
-StylePropertyMap::IterationSource* StylePropertyMap::startIteration(
-    ScriptState*,
-    ExceptionState&) {
-  return new StylePropertyMapIterationSource(getIterationEntries());
+  exception_state.ThrowTypeError("Invalid propertyName: " + property_name);
 }
 
 }  // namespace blink

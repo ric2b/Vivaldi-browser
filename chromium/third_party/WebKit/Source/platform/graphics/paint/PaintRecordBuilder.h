@@ -10,9 +10,11 @@
 #include "platform/PlatformExport.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
+#include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PropertyTreeState.h"
+#include "platform/wtf/Noncopyable.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "wtf/Noncopyable.h"
 
 class SkMetaData;
 
@@ -37,27 +39,36 @@ class PLATFORM_EXPORT PaintRecordBuilder final : public DisplayItemClient {
   // painting the picture (and hence we can use its cache). Otherwise, a new
   // PaintController is used for the duration of the picture building, which
   // therefore has no caching.
+  // If SPv2 is on, resets paint chunks to PropertyTreeState::root()
+  // before beginning to record.
   PaintRecordBuilder(const FloatRect& bounds,
                      SkMetaData* = nullptr,
-                     GraphicsContext* containingContext = nullptr,
+                     GraphicsContext* containing_context = nullptr,
                      PaintController* = nullptr);
   ~PaintRecordBuilder();
 
-  GraphicsContext& context() { return *m_context; }
+  GraphicsContext& Context() { return *context_; }
 
-  // Returns a picture capturing all drawing performed on the builder's context
-  // since construction.
-  sk_sp<PaintRecord> endRecording();
+  // Returns a PaintRecord capturing all drawing performed on the builder's
+  // context since construction. If SPv2 is on, flattens all paint chunks
+  // into PropertyTreeState::root() space.
+  // In SPv2 mode, replays into the ancestor state given by |replayState|.
+  sk_sp<PaintRecord> EndRecording();
+
+  // Replays the recording directly into the given canvas.
+  void EndRecording(
+      PaintCanvas&,
+      const PropertyTreeState& replay_state = PropertyTreeState::Root());
 
   // DisplayItemClient methods
-  String debugName() const final { return "PaintRecordBuilder"; }
-  LayoutRect visualRect() const final { return LayoutRect(); }
+  String DebugName() const final { return "PaintRecordBuilder"; }
+  LayoutRect VisualRect() const final { return LayoutRect(); }
 
  private:
-  PaintController* m_paintController;
-  std::unique_ptr<PaintController> m_paintControllerPtr;
-  std::unique_ptr<GraphicsContext> m_context;
-  FloatRect m_bounds;
+  PaintController* paint_controller_;
+  std::unique_ptr<PaintController> paint_controller_ptr_;
+  std::unique_ptr<GraphicsContext> context_;
+  FloatRect bounds_;
 };
 
 }  // namespace blink

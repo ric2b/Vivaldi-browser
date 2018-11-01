@@ -5,9 +5,9 @@
 #ifndef AudioWorkletMessagingProxy_h
 #define AudioWorkletMessagingProxy_h
 
-#include "core/workers/ThreadedWorkletMessagingProxy.h"
-#include "wtf/Allocator.h"
 #include <memory>
+#include "core/workers/ThreadedWorkletMessagingProxy.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -23,7 +23,7 @@ class AudioWorkletMessagingProxy final : public ThreadedWorkletMessagingProxy {
  protected:
   ~AudioWorkletMessagingProxy() override;
 
-  std::unique_ptr<WorkerThread> createWorkerThread(double originTime) override;
+  std::unique_ptr<WorkerThread> CreateWorkerThread(double origin_time) override;
 };
 
 }  // namespace blink

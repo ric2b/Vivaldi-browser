@@ -9,9 +9,20 @@
 Polymer({
   is: 'settings-edit-dictionary-page',
 
+  behaviors: [settings.GlobalScrollTargetBehavior],
+
   properties: {
     /** @private {string} */
     newWordValue_: String,
+
+    /**
+     * Needed by GlobalScrollTargetBehavior.
+     * @override
+     */
+    subpageRoute: {
+      type: Object,
+      value: settings.Route.EDIT_DICTIONARY,
+    },
 
     /** @private {!Array<string>} */
     words_: {
@@ -110,15 +121,17 @@ Polymer({
     var index = this.words_.indexOf(word);
     if (index == -1) {
       this.languageSettingsPrivate.addSpellcheckWord(word);
-      this.push('words_', word);
-      index = this.words_.length - 1;
+      this.unshift('words_', word);
+      if (this.words_.length == 1) {
+        // When adding a word to an _empty_ list, the template is expanded. This
+        // is a workaround to resize the iron-list as well.
+        // TODO(dschuyler): Remove this hack after iron-list no longer needs
+        // this workaround to update the list at the same time the template
+        // wrapping the list is expanded.
+        Polymer.dom.flush();
+        this.$$('#list').notifyResize();
+      }
     }
-
-    // Scroll to the word (usually the bottom, or to the index if the word
-    // is already present).
-    this.async(function(){
-      this.root.querySelector('#list').scrollToIndex(index);
-    });
   },
 
   /**

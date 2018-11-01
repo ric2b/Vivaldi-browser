@@ -1,8 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ar">
+<translation id="1620510694547887537">الكاميرا</translation>
 <translation id="1768717197362323622">مللي ثانية</translation>
 <translation id="1822429046913737220">صباحًا/مساءً</translation>
+<translation id="1989112275319619282">تصفّح</translation>
 <translation id="2429669115401274487">مساءً</translation>
 <translation id="2732718972699418926">صباحًا</translation>
 <translation id="2841013758207633010">الوقت</translation>
@@ -24,6 +26,7 @@
 <translation id="6727102863431372879">تعيين</translation>
 <translation id="7102218676258945610">الدقائق</translation>
 <translation id="7138678301420049075">أخرى</translation>
+<translation id="723171743924126238">تحديد الصور</translation>
 <translation id="7575803462290353686">تعيين الوقت</translation>
 <translation id="7781164152564914424">تعيين الشهر</translation>
 <translation id="7821540960913969614">تعيين التاريخ</translation>

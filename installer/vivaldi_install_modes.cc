@@ -7,12 +7,14 @@
 
 #include <stdlib.h>
 
+#include "chrome/app/chrome_dll_resource.h"
+#include "chrome/common/chrome_icon_resources_win.h"
 #include "chrome/install_static/install_modes.h"
 #include "installer/vivaldi_install_modes.h"
 
 namespace install_static {
 
-const wchar_t kCompanyPathName[] = L"Vivaldi";
+const wchar_t kCompanyPathName[] = L"";
 
 const wchar_t kProductPathName[] = L"Vivaldi";
 
@@ -27,13 +29,25 @@ const InstallConstants kInstallModes[] = {
     {
         sizeof(kInstallModes[0]),
         VIVALDI_INDEX,
-        L"",  // Empty install_suffix for the primary install mode.
+        "",  // Empty install_suffix for the primary install mode.
         L"",
         L"",  // The empty string means "stable".
+        L"",          // Empty app_guid since no integraion with Google Update.
+        L"Vivaldi",  // A distinct base_app_name.
+        L"Vivaldi",  // A distinct base_app_id.
+        L"VivaldiHTM",                             // ProgID prefix.
+        L"Vivaldi HTML Document",                  // ProgID description.
+        L"{9C142C0C-124C-4467-B117-EBCC62801D7B}",  // Active Setup GUID.
+        L"{DAB968E0-3A13-4CCC-A3AF-85578ACBE9AB}",  // CommandExecuteImpl CLSID.
+        L"",  // Empty default channel name since no update integration.
         ChannelStrategy::UNSUPPORTED,
         true,  // Supports system-level installs.
-        true,  // Supports multi-install.
-    },
+        true,   // Supports in-product set as default browser UX.
+        false,  // Does not support retention experiments.
+        false,  // Supports multi-install.
+        icon_resources::kApplicationIndex,  // App icon resource index.
+        IDR_MAINFRAME,                      // App icon resource id.
+  },
 };
 
 static_assert(_countof(kInstallModes) == NUM_INSTALL_MODES,

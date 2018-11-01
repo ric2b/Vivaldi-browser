@@ -3,9 +3,7 @@
 // found in the LICENSE file.
 //
 // Accumulates frames for the next packet until more frames no longer fit or
-// it's time to create a packet from them. If multipath enabled, only creates
-// packets on one path at the same time. Currently, next packet number is
-// tracked per-path.
+// it's time to create a packet from them.
 
 #ifndef NET_QUIC_CORE_QUIC_PACKET_CREATOR_H_
 #define NET_QUIC_CORE_QUIC_PACKET_CREATOR_H_
@@ -18,7 +16,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/quic/core/quic_connection_close_delegate_interface.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_iovector.h"
@@ -209,6 +206,10 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
     debug_delegate_ = debug_delegate;
   }
 
+  bool latched_flag_no_stop_waiting_frames() const {
+    return latched_flag_no_stop_waiting_frames_;
+  }
+
  private:
   friend class test::QuicPacketCreatorPeer;
 
@@ -299,8 +300,8 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // Packet used to invoke OnSerializedPacket.
   SerializedPacket packet_;
 
-  // Map mapping path_id to last sent packet number on the path.
-  std::unordered_map<QuicPathId, QuicPacketNumber> multipath_packet_number_;
+  // The latched value of FLAGS_quic_reloadable_flag_quic_no_stop_waiting_frames
+  bool latched_flag_no_stop_waiting_frames_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicPacketCreator);
 };

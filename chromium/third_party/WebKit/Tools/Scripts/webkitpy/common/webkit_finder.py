@@ -87,19 +87,13 @@ class WebKitFinder(object):
 
         Raises an AssertionError if the top dir can't be determined.
         """
-        # Note: This code somewhat duplicates the code in
-        # git.find_checkout_root(). However, that code only works if the top
-        # of the SCM repository also matches the top of the WebKit tree. Some SVN users
-        # (the chromium test bots, for example), might only check out subdirectories like
-        # Tools/Scripts. This code will also work if there is no SCM system at all.
-        # TODO(qyearsley): Remove duplicate code; we're not concerned with SVN users anymore.
-        # Also, instead of caching the result with a private instance variable, we can use
-        # the memoized decorator.
+        # TODO(qyearsley): This code somewhat duplicates the code in
+        # git.find_checkout_root().
         if not self._webkit_base:
             self._webkit_base = self._webkit_base
             module_path = self._filesystem.abspath(self._filesystem.path_to_module(self.__module__))
             tools_index = module_path.rfind('Tools')
-            assert tools_index != -1, "could not find location of this checkout from %s" % module_path
+            assert tools_index != -1, 'could not find location of this checkout from %s' % module_path
             self._webkit_base = self._filesystem.normpath(module_path[0:tools_index - 1])
         return self._webkit_base
 
@@ -118,7 +112,7 @@ class WebKitFinder(object):
         """Returns the relative path to the script from the top of the WebKit tree."""
         # This is intentionally relative in order to force callers to consider what
         # their current working directory is (and change to the top of the tree if necessary).
-        return self._filesystem.join("Tools", "Scripts", script_name)
+        return self._filesystem.join('Tools', 'Scripts', script_name)
 
     def layout_tests_dir(self):
         return self.path_from_webkit_base('LayoutTests')

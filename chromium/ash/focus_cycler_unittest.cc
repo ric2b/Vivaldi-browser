@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/focus_cycler.h"
+#include "ash/focus_cycler.h"
 
 #include <memory>
 
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/system/status_area_widget.h"
-#include "ash/common/system/status_area_widget_delegate.h"
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
+#include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
+#include "ash/system/status_area_widget_delegate.h"
+#include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/test/test_windows.h"
@@ -56,8 +56,6 @@ class PanedWidgetDelegate : public views::WidgetDelegate {
 
 }  // namespace
 
-// TODO(jamescook): Migrate this test to //ash/common after the status area
-// widget moves. http://crbug.com/620955
 class FocusCyclerTest : public AshTestBase {
  public:
   FocusCyclerTest() {}
@@ -393,14 +391,14 @@ TEST_F(FocusCyclerTest, RemoveWidgetOnDisplayRemoved) {
   EXPECT_TRUE(wm::IsActiveWindow(window.get()));
 
   // Cycle focus to the status area.
-  WmShell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
+  Shell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
   EXPECT_FALSE(wm::IsActiveWindow(window.get()));
 
   // Cycle focus to the shelf.
-  WmShell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
+  Shell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
 
   // Cycle focus should go back to the browser.
-  WmShell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
+  Shell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
   EXPECT_TRUE(wm::IsActiveWindow(window.get()));
 }
 

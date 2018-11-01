@@ -5,10 +5,13 @@
 #ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_DATA_H_
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_DATA_H_
 
+#include <stdint.h>
+
 #include <memory>
 #include <string>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/supports_user_data.h"
 #include "net/nqe/effective_connection_type.h"
 #include "url/gurl.h"
@@ -24,6 +27,7 @@ namespace data_reduction_proxy {
 class DataReductionProxyData : public base::SupportsUserData::Data {
  public:
   DataReductionProxyData();
+  ~DataReductionProxyData() override;
 
   // Whether the DataReductionProxy was used for this request or navigation.
   bool used_data_reduction_proxy() const { return used_data_reduction_proxy_; }
@@ -39,14 +43,24 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
     lofi_requested_ = lofi_requested;
   }
 
-  // The session key used for this request.
+  // Whether a lite page response was seen for the request or navigation.
+  bool lite_page_received() const { return lite_page_received_; }
+  void set_lite_page_received(bool lite_page_received) {
+    lite_page_received_ = lite_page_received;
+  }
+
+  // Whether a lite page response was seen for the request or navigation.
+  bool lofi_received() const { return lofi_received_; }
+  void set_lofi_received(bool lofi_received) { lofi_received_ = lofi_received; }
+
+  // The session key used for this request. Only set for main frame requests.
   std::string session_key() const { return session_key_; }
   void set_session_key(const std::string& session_key) {
     session_key_ = session_key;
   }
 
   // The URL the frame is navigating to. This may change during the navigation
-  // when encountering a server redirect.
+  // when encountering a server redirect. Only set for main frame requests.
   GURL request_url() const { return request_url_; }
   void set_request_url(const GURL& request_url) { request_url_ = request_url; }
 
@@ -59,6 +73,11 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
       const net::EffectiveConnectionType& effective_connection_type) {
     effective_connection_type_ = effective_connection_type;
   }
+
+  // An identifier that is guaranteed to be unique to each page load during a
+  // data saver session. Only present on main frame requests.
+  const base::Optional<uint64_t>& page_id() const { return page_id_; }
+  void set_page_id(uint64_t page_id) { page_id_ = page_id; }
 
   // Removes |this| from |request|.
   static void ClearData(net::URLRequest* request);
@@ -85,6 +104,12 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
   // slow.
   bool lofi_requested_;
 
+  // Whether a lite page response was seen for the request or navigation.
+  bool lite_page_received_;
+
+  // Whether a lite page response was seen for the request or navigation.
+  bool lofi_received_;
+
   // The session key used for this request or navigation.
   std::string session_key_;
 
@@ -95,6 +120,10 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
   // The EffectiveConnectionType when the request or navigation starts. This is
   // set for main frame requests only.
   net::EffectiveConnectionType effective_connection_type_;
+
+  // An identifier that is guaranteed to be unique to each page load during a
+  // data saver session. Only present on main frame requests.
+  base::Optional<uint64_t> page_id_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyData);
 };

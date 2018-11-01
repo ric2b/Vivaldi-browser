@@ -7,20 +7,23 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shelf/shelf_layout_manager.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wallpaper/wallpaper_widget_controller.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/drag_drop/drag_drop_controller.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/session/session_controller.h"
+#include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
+#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
+#include "ash/test/test_session_controller_client.h"
+#include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/aura_constants.h"
@@ -56,6 +59,12 @@ aura::Window* GetAlwaysOnTopContainer() {
 
 // Expect ALL the containers!
 void ExpectAllContainers() {
+  // Validate no duplicate container IDs.
+  const size_t all_shell_container_ids_size = arraysize(kAllShellContainerIds);
+  std::set<int32_t> container_ids;
+  for (size_t i = 0; i < all_shell_container_ids_size; ++i)
+    EXPECT_TRUE(container_ids.insert(kAllShellContainerIds[i]).second);
+
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_WallpaperContainer));
@@ -156,24 +165,24 @@ class ShellTest : public test::AshTestBase {
     // Create a LockScreen window.
     views::Widget::InitParams widget_params(
         views::Widget::InitParams::TYPE_WINDOW);
-    SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
-    delegate->LockScreen();
     views::Widget* lock_widget = CreateTestWindow(widget_params);
     Shell::GetContainer(Shell::GetPrimaryRootWindow(),
                         kShellWindowId_LockScreenContainer)
         ->AddChild(lock_widget->GetNativeView());
     lock_widget->Show();
-    EXPECT_TRUE(delegate->IsScreenLocked());
+
+    // Simulate real screen locker to change session state to LOCKED
+    // when it is shown.
+    SessionController* controller = Shell::Get()->session_controller();
+    controller->LockScreenAndFlushForTest();
+
+    EXPECT_TRUE(controller->IsScreenLocked());
     EXPECT_TRUE(lock_widget->GetNativeView()->HasFocus());
 
     // Verify menu is closed.
-    EXPECT_NE(views::MenuController::EXIT_NONE, menu_controller->exit_type());
+    EXPECT_EQ(nullptr, views::MenuController::GetActiveInstance());
     lock_widget->Close();
-    delegate->UnlockScreen();
-
-    // In case the menu wasn't closed, cancel the menu to exit the nested menu
-    // run loop so that the test will not time out.
-    menu_controller->CancelAll();
+    GetSessionControllerClient()->UnlockScreen();
   }
 };
 
@@ -274,7 +283,7 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
   EXPECT_TRUE(
       GetDefaultContainer()->Contains(widget->GetNativeWindow()->parent()));
 
-  WmShell::Get()->GetSessionStateDelegate()->LockScreen();
+  Shell::Get()->session_controller()->LockScreenAndFlushForTest();
   // Create a LockScreen window.
   views::Widget* lock_widget = CreateTestWindow(widget_params);
   Shell::GetContainer(Shell::GetPrimaryRootWindow(),
@@ -331,11 +340,11 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
 }
 
 TEST_F(ShellTest, IsScreenLocked) {
-  SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
-  delegate->LockScreen();
-  EXPECT_TRUE(delegate->IsScreenLocked());
-  delegate->UnlockScreen();
-  EXPECT_FALSE(delegate->IsScreenLocked());
+  SessionController* controller = Shell::Get()->session_controller();
+  controller->LockScreenAndFlushForTest();
+  EXPECT_TRUE(controller->IsScreenLocked());
+  GetSessionControllerClient()->UnlockScreen();
+  EXPECT_FALSE(controller->IsScreenLocked());
 }
 
 TEST_F(ShellTest, LockScreenClosesActiveMenu) {
@@ -343,25 +352,20 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
   std::unique_ptr<ui::SimpleMenuModel> menu_model(
       new ui::SimpleMenuModel(&menu_delegate));
   menu_model->AddItem(0, base::ASCIIToUTF16("Menu item"));
-  views::Widget* widget = WmShell::Get()
+  views::Widget* widget = ShellPort::Get()
                               ->GetPrimaryRootWindow()
                               ->GetRootWindowController()
                               ->wallpaper_widget_controller()
                               ->widget();
-  std::unique_ptr<views::MenuRunner> menu_runner(
-      new views::MenuRunner(menu_model.get(), views::MenuRunner::CONTEXT_MENU));
-
-  // When MenuRunner runs a nested loop the LockScreenAndVerifyMenuClosed
-  // command will fire, check the menu state and ensure the nested menu loop
-  // is exited so that the test will terminate.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&ShellTest::LockScreenAndVerifyMenuClosed,
-                            base::Unretained(this)));
+  std::unique_ptr<views::MenuRunner> menu_runner(new views::MenuRunner(
+      menu_model.get(),
+      views::MenuRunner::CONTEXT_MENU | views::MenuRunner::ASYNC));
 
   EXPECT_EQ(views::MenuRunner::NORMAL_EXIT,
             menu_runner->RunMenuAt(widget, NULL, gfx::Rect(),
                                    views::MENU_ANCHOR_TOPLEFT,
                                    ui::MENU_SOURCE_MOUSE));
+  LockScreenAndVerifyMenuClosed();
 }
 
 TEST_F(ShellTest, ManagedWindowModeBasics) {
@@ -460,10 +464,10 @@ TEST_F(ShellTest, ToggleAutoHide) {
 // pre-target list.
 TEST_F(ShellTest, TestPreTargetHandlerOrder) {
   // TODO: investigate failure in mash, http://crbug.com/695758.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   ui::EventTargetTestApi test_api(shell);
   test::ShellTestApi shell_test_api(shell);
 
@@ -511,7 +515,7 @@ TEST_F(ShellTest2, DontCrashWhenWindowDeleted) {
   // applicable to mash as all windows must be destroyed before ash, that isn't
   // the case with classic-ash where embedders can separately create
   // aura::Windows.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   window_.reset(new aura::Window(NULL));

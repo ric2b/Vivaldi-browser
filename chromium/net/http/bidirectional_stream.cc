@@ -18,7 +18,6 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/bidirectional_stream_request_info.h"
-#include "net/http/http_log_util.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_stream.h"
@@ -28,6 +27,7 @@
 #include "net/log/net_log_source_type.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_http_utils.h"
+#include "net/spdy/spdy_log_util.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config.h"
 #include "url/gurl.h"
@@ -123,7 +123,9 @@ BidirectionalStream::BidirectionalStream(
   stream_request_.reset(
       session->http_stream_factory()->RequestBidirectionalStreamImpl(
           http_request_info, request_info_->priority, server_ssl_config,
-          server_ssl_config, this, net_log_));
+          server_ssl_config, this,
+          /* enable_ip_based_pooling = */ true,
+          /* enable_alternative_services = */ true, net_log_));
   // Check that this call cannot fail to set a non-NULL |stream_request_|.
   DCHECK(stream_request_);
   // Check that HttpStreamFactory does not invoke OnBidirectionalStreamImplReady

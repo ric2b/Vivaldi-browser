@@ -25,7 +25,7 @@ class MockMediaSessionPlayerObserver : public MediaSessionPlayerObserver {
   void OnResume(int player_id) override {}
   void OnSetVolumeMultiplier(
       int player_id, double volume_multiplier) override {}
-  RenderFrameHost* GetRenderFrameHost() const override { return nullptr; }
+  RenderFrameHost* render_frame_host() const override { return nullptr; }
 };
 
 }  // anonymous namespace
@@ -451,7 +451,7 @@ TEST_F(AudioFocusManagerTest, AbandoningGainFocusRevokesTopMostPepperSession) {
       media_session_3, AudioFocusManager::AudioFocusType::Gain);
 
   ASSERT_EQ(media_session_3, GetAudioFocusedSession());
-  ASSERT_TRUE(media_session_2->IsReallySuspended());
+  ASSERT_TRUE(media_session_2->IsSuspended());
   ASSERT_TRUE(media_session_1->IsActive());
   ASSERT_TRUE(IsSessionDucking(media_session_1));
 

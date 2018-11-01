@@ -29,40 +29,40 @@
 #include "modules/webdatabase/SQLResultSetRowList.h"
 
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/modules/v8/ToV8ForModules.h"
 #include "core/dom/ExceptionCode.h"
 
 namespace blink {
 
 unsigned SQLResultSetRowList::length() const {
-  if (m_result.size() == 0)
+  if (result_.size() == 0)
     return 0;
 
-  ASSERT(m_result.size() % m_columns.size() == 0);
+  DCHECK_EQ(result_.size() % columns_.size(), 0u);
 
-  return m_result.size() / m_columns.size();
+  return result_.size() / columns_.size();
 }
 
-ScriptValue SQLResultSetRowList::item(ScriptState* scriptState,
+ScriptValue SQLResultSetRowList::item(ScriptState* script_state,
                                       unsigned index,
-                                      ExceptionState& exceptionState) {
+                                      ExceptionState& exception_state) {
   if (index >= length()) {
-    exceptionState.throwDOMException(
-        IndexSizeError, ExceptionMessages::indexExceedsMaximumBound<unsigned>(
-                            "index", index, length()));
+    exception_state.ThrowDOMException(
+        kIndexSizeError, ExceptionMessages::IndexExceedsMaximumBound<unsigned>(
+                             "index", index, length()));
     return ScriptValue();
   }
 
-  unsigned numColumns = m_columns.size();
-  unsigned valuesIndex = index * numColumns;
+  unsigned num_columns = columns_.size();
+  unsigned values_index = index * num_columns;
 
-  Vector<std::pair<String, SQLValue>> dataArray;
-  for (unsigned i = 0; i < numColumns; ++i)
-    dataArray.push_back(
-        std::make_pair(m_columns[i], m_result[valuesIndex + i]));
+  Vector<std::pair<String, SQLValue>> data_array;
+  for (unsigned i = 0; i < num_columns; ++i)
+    data_array.push_back(
+        std::make_pair(columns_[i], result_[values_index + i]));
 
-  return ScriptValue::from(scriptState, dataArray);
+  return ScriptValue::From(script_state, data_array);
 }
 
 }  // namespace blink

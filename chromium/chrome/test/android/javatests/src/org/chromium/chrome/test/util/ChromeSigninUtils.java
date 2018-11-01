@@ -61,10 +61,10 @@ public class ChromeSigninUtils {
             throw new IllegalArgumentException("ERROR: must specify account");
         }
 
-        if (ChromeSigninController.get(mContext).isSignedIn()) {
-            ChromeSigninController.get(mContext).setSignedInAccountName(null);
+        if (ChromeSigninController.get().isSignedIn()) {
+            ChromeSigninController.get().setSignedInAccountName(null);
         }
-        ChromeSigninController.get(mContext).setSignedInAccountName(username);
+        ChromeSigninController.get().setSignedInAccountName(username);
     }
 
     /**
@@ -77,10 +77,7 @@ public class ChromeSigninUtils {
 
         Account account = new Account(username, GOOGLE_ACCOUNT_TYPE);
         mMockAccountManager = new MockAccountManager(mContext, mTargetContext, account);
-        AccountHolder accountHolder = new AccountHolder.Builder()
-                .account(account)
-                .password(password)
-                .build();
+        AccountHolder accountHolder = AccountHolder.builder(account).password(password).build();
         mMockAccountManager.addAccountHolderExplicitly(accountHolder);
     }
 
@@ -89,8 +86,7 @@ public class ChromeSigninUtils {
      */
     public void removeAllFakeAccountsFromOs() {
         for (Account acct : mMockAccountManager.getAccountsByType(GOOGLE_ACCOUNT_TYPE)) {
-            mMockAccountManager.removeAccountHolderExplicitly(
-                    new AccountHolder.Builder().account(acct).build(), true);
+            mMockAccountManager.removeAccountHolderExplicitly(AccountHolder.builder(acct).build());
         }
     }
 

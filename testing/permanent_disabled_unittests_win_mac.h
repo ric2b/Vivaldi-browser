@@ -81,10 +81,10 @@ DISABLE(PipelineIntegrationTest, BasicPlaybackHashed_MP3)
 DISABLE(PipelineIntegrationTest, MidStreamConfigChangesFail)
 
 // Enable these tests when TURN_ON_MSE_VIVALDI is turned on
-DISABLE(PipelineIntegrationTest, MediaSource_MP3_Icecast)
-DISABLE(PipelineIntegrationTest, MediaSource_ADTS)
-DISABLE(PipelineIntegrationTest, MediaSource_ADTS_TimestampOffset)
-DISABLE(PipelineIntegrationTest, MediaSource_MP3_TimestampOffset)
+ DISABLE(PipelineIntegrationTest, MediaSource_MP3_Icecast)
+// DISABLE(PipelineIntegrationTest, MediaSource_ADTS)
+// DISABLE(PipelineIntegrationTest, MediaSource_ADTS_TimestampOffset)
+ DISABLE(PipelineIntegrationTest, MediaSource_MP3_TimestampOffset)
 
 // Wrong hash - related with TURN_ON_MSE_VIVALDI
 DISABLE(PipelineIntegrationTest, MediaSource_MP3)

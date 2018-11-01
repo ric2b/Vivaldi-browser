@@ -28,106 +28,106 @@
 
 #include "core/css/MediaQuery.h"
 
+#include <memory>
 #include "core/MediaTypeNames.h"
 #include "core/css/MediaQueryExp.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "wtf/NonCopyingSort.h"
-#include "wtf/text/StringBuilder.h"
-#include <memory>
+#include "platform/wtf/NonCopyingSort.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
 // http://dev.w3.org/csswg/cssom/#serialize-a-media-query
-String MediaQuery::serialize() const {
+String MediaQuery::Serialize() const {
   StringBuilder result;
-  switch (m_restrictor) {
-    case MediaQuery::Only:
-      result.append("only ");
+  switch (restrictor_) {
+    case MediaQuery::kOnly:
+      result.Append("only ");
       break;
-    case MediaQuery::Not:
-      result.append("not ");
+    case MediaQuery::kNot:
+      result.Append("not ");
       break;
-    case MediaQuery::None:
+    case MediaQuery::kNone:
       break;
   }
 
-  if (m_expressions.isEmpty()) {
-    result.append(m_mediaType);
-    return result.toString();
+  if (expressions_.IsEmpty()) {
+    result.Append(media_type_);
+    return result.ToString();
   }
 
-  if (m_mediaType != MediaTypeNames::all || m_restrictor != None) {
-    result.append(m_mediaType);
-    result.append(" and ");
+  if (media_type_ != MediaTypeNames::all || restrictor_ != kNone) {
+    result.Append(media_type_);
+    result.Append(" and ");
   }
 
-  result.append(m_expressions.at(0).serialize());
-  for (size_t i = 1; i < m_expressions.size(); ++i) {
-    result.append(" and ");
-    result.append(m_expressions.at(i).serialize());
+  result.Append(expressions_.at(0).Serialize());
+  for (size_t i = 1; i < expressions_.size(); ++i) {
+    result.Append(" and ");
+    result.Append(expressions_.at(i).Serialize());
   }
-  return result.toString();
+  return result.ToString();
 }
 
-static bool expressionCompare(const MediaQueryExp& a, const MediaQueryExp& b) {
-  return codePointCompare(a.serialize(), b.serialize()) < 0;
+static bool ExpressionCompare(const MediaQueryExp& a, const MediaQueryExp& b) {
+  return CodePointCompare(a.Serialize(), b.Serialize()) < 0;
 }
 
-std::unique_ptr<MediaQuery> MediaQuery::createNotAll() {
-  return WTF::makeUnique<MediaQuery>(MediaQuery::Not, MediaTypeNames::all,
+std::unique_ptr<MediaQuery> MediaQuery::CreateNotAll() {
+  return WTF::MakeUnique<MediaQuery>(MediaQuery::kNot, MediaTypeNames::all,
                                      ExpressionHeapVector());
 }
 
-std::unique_ptr<MediaQuery> MediaQuery::create(
+std::unique_ptr<MediaQuery> MediaQuery::Create(
     RestrictorType restrictor,
-    String mediaType,
+    String media_type,
     ExpressionHeapVector expressions) {
-  return WTF::makeUnique<MediaQuery>(restrictor, std::move(mediaType),
+  return WTF::MakeUnique<MediaQuery>(restrictor, std::move(media_type),
                                      std::move(expressions));
 }
 
 MediaQuery::MediaQuery(RestrictorType restrictor,
-                       String mediaType,
+                       String media_type,
                        ExpressionHeapVector expressions)
-    : m_restrictor(restrictor),
-      m_mediaType(attemptStaticStringCreation(mediaType.lower())),
-      m_expressions(std::move(expressions)) {
-  nonCopyingSort(m_expressions.begin(), m_expressions.end(), expressionCompare);
+    : restrictor_(restrictor),
+      media_type_(AttemptStaticStringCreation(media_type.DeprecatedLower())),
+      expressions_(std::move(expressions)) {
+  NonCopyingSort(expressions_.begin(), expressions_.end(), ExpressionCompare);
 
   // Remove all duplicated expressions.
-  MediaQueryExp key = MediaQueryExp::invalid();
-  for (int i = m_expressions.size() - 1; i >= 0; --i) {
-    MediaQueryExp exp = m_expressions.at(i);
-
+  MediaQueryExp key = MediaQueryExp::Invalid();
+  for (int i = expressions_.size() - 1; i >= 0; --i) {
+    MediaQueryExp exp = expressions_.at(i);
+    CHECK(exp.IsValid());
     if (exp == key)
-      m_expressions.remove(i);
+      expressions_.erase(i);
     else
       key = exp;
   }
 }
 
 MediaQuery::MediaQuery(const MediaQuery& o)
-    : m_restrictor(o.m_restrictor),
-      m_mediaType(o.m_mediaType),
-      m_serializationCache(o.m_serializationCache) {
-  m_expressions.reserveInitialCapacity(o.m_expressions.size());
-  for (unsigned i = 0; i < o.m_expressions.size(); ++i)
-    m_expressions.push_back(o.m_expressions[i]);
+    : restrictor_(o.restrictor_),
+      media_type_(o.media_type_),
+      serialization_cache_(o.serialization_cache_) {
+  expressions_.ReserveInitialCapacity(o.expressions_.size());
+  for (unsigned i = 0; i < o.expressions_.size(); ++i)
+    expressions_.push_back(o.expressions_[i]);
 }
 
 MediaQuery::~MediaQuery() {}
 
 // http://dev.w3.org/csswg/cssom/#compare-media-queries
 bool MediaQuery::operator==(const MediaQuery& other) const {
-  return cssText() == other.cssText();
+  return CssText() == other.CssText();
 }
 
 // http://dev.w3.org/csswg/cssom/#serialize-a-list-of-media-queries
-String MediaQuery::cssText() const {
-  if (m_serializationCache.isNull())
-    const_cast<MediaQuery*>(this)->m_serializationCache = serialize();
+String MediaQuery::CssText() const {
+  if (serialization_cache_.IsNull())
+    const_cast<MediaQuery*>(this)->serialization_cache_ = Serialize();
 
-  return m_serializationCache;
+  return serialization_cache_;
 }
 
 }  // namespace blink

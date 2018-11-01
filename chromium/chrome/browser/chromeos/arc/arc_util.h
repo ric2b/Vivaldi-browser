@@ -32,6 +32,7 @@ enum FileSystemCompatibilityState : int32_t {
   // Migration has happend. New filesystem is in use.
   kFileSystemCompatible = 1,
   // Migration has happend, and a notification about the fact was already shown.
+  // TODO(kinaba): This value isn't yet used until crbug.com/711095 is done.
   kFileSystemCompatibleAndNotified = 2,
 
   // Existing code assumes that kFileSystemIncompatible is the only state
@@ -45,6 +46,19 @@ enum FileSystemCompatibilityState : int32_t {
 // account creation.
 // nullptr can be safely passed to this function. In that case, returns false.
 bool IsArcAllowedForProfile(const Profile* profile);
+
+// Returns true if ARC app is allowed to show up on app list for the given
+// profile. This can be a looser condition than IsArcAllowedForProfile.
+// ARC may be temporaliry disallowed for the profile, but it may become again
+// avaiable after the user's action. ARC app list can stay there to ease the
+// user (by showing apps not gone) and to give a guide for the action.
+bool IsArcAllowedInAppListForProfile(const Profile* profile);
+
+// Returns true if the profile is already marked to be on a filesystem
+// compatible to the currently installed ARC version. The check almost never
+// is meaningful on test workstation. Usually it should be checked only when
+// running on the real Chrome OS.
+bool IsArcCompatibleFileSystemUsedForProfile(const Profile* profile);
 
 // Disallows ARC for all profiles for testing.
 // In most cases, disabling ARC should be done via commandline. However,
@@ -80,6 +94,10 @@ bool IsArcPlayStoreEnabledPreferenceManagedForProfile(const Profile* profile);
 // to use Google Play Store. Note that there is a plan to use ARC without
 // Google Play Store, then ARC can run without opt-in.
 void SetArcPlayStoreEnabledForProfile(Profile* profile, bool enabled);
+
+// Returns whether all ARC related OptIn preferences (i.e.
+// ArcBackupRestoreEnabled and ArcLocationServiceEnabled) are managed.
+bool AreArcAllOptInPreferencesManagedForProfile(const Profile* profile);
 
 // Checks and updates the preference value whether the underlying filesystem
 // for the profile is compatible with ARC, when necessary. After it's done (or

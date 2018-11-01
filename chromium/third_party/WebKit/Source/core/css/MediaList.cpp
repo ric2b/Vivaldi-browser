@@ -19,12 +19,12 @@
  */
 #include "core/css/MediaList.h"
 
+#include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/MediaQueryExp.h"
 #include "core/css/parser/MediaQueryParser.h"
-#include "wtf/text/StringBuilder.h"
-#include <memory>
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
@@ -52,69 +52,74 @@ namespace blink {
 MediaQuerySet::MediaQuerySet() {}
 
 MediaQuerySet::MediaQuerySet(const MediaQuerySet& o)
-    : m_queries(o.m_queries.size()) {
-  for (unsigned i = 0; i < m_queries.size(); ++i)
-    m_queries[i] = o.m_queries[i]->copy();
+    : queries_(o.queries_.size()) {
+  for (unsigned i = 0; i < queries_.size(); ++i)
+    queries_[i] = o.queries_[i]->Copy();
 }
 
-RefPtr<MediaQuerySet> MediaQuerySet::create(const String& mediaString) {
-  if (mediaString.isEmpty())
-    return MediaQuerySet::create();
+RefPtr<MediaQuerySet> MediaQuerySet::Create(const String& media_string) {
+  if (media_string.IsEmpty())
+    return MediaQuerySet::Create();
 
-  return MediaQueryParser::parseMediaQuerySet(mediaString);
+  return MediaQueryParser::ParseMediaQuerySet(media_string);
 }
 
-bool MediaQuerySet::set(const String& mediaString) {
-  RefPtr<MediaQuerySet> result = create(mediaString);
-  m_queries.swap(result->m_queries);
+bool MediaQuerySet::Set(const String& media_string) {
+  RefPtr<MediaQuerySet> result = Create(media_string);
+#if DCHECK_IS_ON()
+  for (const auto& query : result->queries_) {
+    DCHECK(query);
+  }
+#endif
+  queries_.Swap(result->queries_);
   return true;
 }
 
-bool MediaQuerySet::add(const String& queryString) {
+bool MediaQuerySet::Add(const String& query_string) {
   // To "parse a media query" for a given string means to follow "the parse
   // a media query list" steps and return "null" if more than one media query
   // is returned, or else the returned media query.
-  RefPtr<MediaQuerySet> result = create(queryString);
+  RefPtr<MediaQuerySet> result = Create(query_string);
 
   // Only continue if exactly one media query is found, as described above.
-  if (result->m_queries.size() != 1)
+  if (result->queries_.size() != 1)
     return true;
 
-  std::unique_ptr<MediaQuery> newQuery = std::move(result->m_queries[0]);
-  ASSERT(newQuery);
+  std::unique_ptr<MediaQuery> new_query = std::move(result->queries_[0]);
+  DCHECK(new_query);
 
   // If comparing with any of the media queries in the collection of media
   // queries returns true terminate these steps.
-  for (size_t i = 0; i < m_queries.size(); ++i) {
-    MediaQuery& query = *m_queries[i];
-    if (query == *newQuery)
+  for (size_t i = 0; i < queries_.size(); ++i) {
+    MediaQuery& query = *queries_[i];
+    if (query == *new_query)
       return true;
   }
 
-  m_queries.push_back(std::move(newQuery));
+  queries_.push_back(std::move(new_query));
   return true;
 }
 
-bool MediaQuerySet::remove(const String& queryStringToRemove) {
+bool MediaQuerySet::Remove(const String& query_string_to_remove) {
   // To "parse a media query" for a given string means to follow "the parse
   // a media query list" steps and return "null" if more than one media query
   // is returned, or else the returned media query.
-  RefPtr<MediaQuerySet> result = create(queryStringToRemove);
+  RefPtr<MediaQuerySet> result = Create(query_string_to_remove);
 
   // Only continue if exactly one media query is found, as described above.
-  if (result->m_queries.size() != 1)
+  if (result->queries_.size() != 1)
     return true;
 
-  std::unique_ptr<MediaQuery> newQuery = std::move(result->m_queries[0]);
-  ASSERT(newQuery);
+  std::unique_ptr<MediaQuery> new_query = std::move(result->queries_[0]);
+  DCHECK(new_query);
 
   // Remove any media query from the collection of media queries for which
   // comparing with the media query returns true.
   bool found = false;
-  for (size_t i = 0; i < m_queries.size(); ++i) {
-    MediaQuery& query = *m_queries[i];
-    if (query == *newQuery) {
-      m_queries.remove(i);
+  for (size_t i = 0; i < queries_.size(); ++i) {
+    MediaQuery& query = *queries_[i];
+    if (query == *new_query) {
+      queries_.erase(i);
       --i;
       found = true;
     }
@@ -123,90 +128,96 @@ bool MediaQuerySet::remove(const String& queryStringToRemove) {
   return found;
 }
 
-void MediaQuerySet::addMediaQuery(std::unique_ptr<MediaQuery> mediaQuery) {
-  m_queries.push_back(std::move(mediaQuery));
+void MediaQuerySet::AddMediaQuery(std::unique_ptr<MediaQuery> media_query) {
+  DCHECK(media_query);
+  queries_.push_back(std::move(media_query));
 }
 
-String MediaQuerySet::mediaText() const {
+String MediaQuerySet::MediaText() const {
   StringBuilder text;
 
   bool first = true;
-  for (size_t i = 0; i < m_queries.size(); ++i) {
+  for (size_t i = 0; i < queries_.size(); ++i) {
     if (!first)
-      text.append(", ");
+      text.Append(", ");
     else
       first = false;
-    text.append(m_queries[i]->cssText());
+    text.Append(queries_[i]->CssText());
   }
-  return text.toString();
+  return text.ToString();
 }
 
-MediaList::MediaList(RefPtr<MediaQuerySet> mediaQueries,
-                     CSSStyleSheet* parentSheet)
-    : m_mediaQueries(mediaQueries),
-      m_parentStyleSheet(parentSheet),
-      m_parentRule(nullptr) {}
+MediaList::MediaList(RefPtr<MediaQuerySet> media_queries,
+                     CSSStyleSheet* parent_sheet)
+    : media_queries_(media_queries),
+      parent_style_sheet_(parent_sheet),
+      parent_rule_(nullptr) {}
 
-MediaList::MediaList(RefPtr<MediaQuerySet> mediaQueries, CSSRule* parentRule)
-    : m_mediaQueries(mediaQueries),
-      m_parentStyleSheet(nullptr),
-      m_parentRule(parentRule) {}
+MediaList::MediaList(RefPtr<MediaQuerySet> media_queries, CSSRule* parent_rule)
+    : media_queries_(media_queries),
+      parent_style_sheet_(nullptr),
+      parent_rule_(parent_rule) {}
 
 void MediaList::setMediaText(const String& value) {
-  CSSStyleSheet::RuleMutationScope mutationScope(m_parentRule);
+  CSSStyleSheet::RuleMutationScope mutation_scope(parent_rule_);
 
-  m_mediaQueries->set(value);
+  media_queries_->Set(value);
 
-  if (m_parentStyleSheet)
-    m_parentStyleSheet->didMutate();
+  if (parent_style_sheet_)
+    parent_style_sheet_->DidMutate();
 }
 
 String MediaList::item(unsigned index) const {
   const Vector<std::unique_ptr<MediaQuery>>& queries =
-      m_mediaQueries->queryVector();
+      media_queries_->QueryVector();
   if (index < queries.size())
-    return queries[index]->cssText();
+    return queries[index]->CssText();
   return String();
 }
 
 void MediaList::deleteMedium(const String& medium,
-                             ExceptionState& exceptionState) {
-  CSSStyleSheet::RuleMutationScope mutationScope(m_parentRule);
+                             ExceptionState& exception_state) {
+  CSSStyleSheet::RuleMutationScope mutation_scope(parent_rule_);
 
-  bool success = m_mediaQueries->remove(medium);
+  bool success = media_queries_->Remove(medium);
   if (!success) {
-    exceptionState.throwDOMException(NotFoundError,
-                                     "Failed to delete '" + medium + "'.");
+    exception_state.ThrowDOMException(kNotFoundError,
+                                      "Failed to delete '" + medium + "'.");
     return;
   }
-  if (m_parentStyleSheet)
-    m_parentStyleSheet->didMutate();
+  if (parent_style_sheet_)
+    parent_style_sheet_->DidMutate();
 }
 
 void MediaList::appendMedium(const String& medium,
-                             ExceptionState& exceptionState) {
-  CSSStyleSheet::RuleMutationScope mutationScope(m_parentRule);
+                             ExceptionState& exception_state) {
+  CSSStyleSheet::RuleMutationScope mutation_scope(parent_rule_);
 
-  bool success = m_mediaQueries->add(medium);
+  bool success = media_queries_->Add(medium);
   if (!success) {
-    exceptionState.throwDOMException(
-        InvalidCharacterError,
+    exception_state.ThrowDOMException(
+        kInvalidCharacterError,
         "The value provided ('" + medium + "') is not a valid medium.");
     return;
   }
 
-  if (m_parentStyleSheet)
-    m_parentStyleSheet->didMutate();
+  if (parent_style_sheet_)
+    parent_style_sheet_->DidMutate();
 }
 
-void MediaList::reattach(RefPtr<MediaQuerySet> mediaQueries) {
-  ASSERT(mediaQueries);
-  m_mediaQueries = mediaQueries;
+void MediaList::Reattach(RefPtr<MediaQuerySet> media_queries) {
+  DCHECK(media_queries);
+#if DCHECK_IS_ON
+  for (const auto& query : mediaQueries->QueryVector) {
+    DCHECK(query);
+  }
+#endif
+  media_queries_ = media_queries;
 }
 
 DEFINE_TRACE(MediaList) {
-  visitor->trace(m_parentStyleSheet);
-  visitor->trace(m_parentRule);
+  visitor->Trace(parent_style_sheet_);
+  visitor->Trace(parent_rule_);
 }
 
 }  // namespace blink

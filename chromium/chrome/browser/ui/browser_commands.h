@@ -102,7 +102,7 @@ void ManagePasswordsForPage(Browser* browser);
 void SavePage(Browser* browser);
 bool CanSavePage(const Browser* browser);
 void ShowFindBar(Browser* browser);
-bool ShowWebsiteSettings(Browser* browser, content::WebContents* web_contents);
+bool ShowPageInfo(Browser* browser, content::WebContents* web_contents);
 void Print(Browser* browser);
 bool CanPrint(Browser* browser);
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
@@ -134,7 +134,6 @@ void OpenFeedbackDialog(Browser* browser);
 void ToggleBookmarkBar(Browser* browser);
 void ShowAppMenu(Browser* browser);
 void ShowAvatarMenu(Browser* browser);
-void ShowFastUserSwitcher(Browser* browser);
 void OpenUpdateChromeDialog(Browser* browser);
 void DistillCurrentPage(Browser* browser);
 bool CanRequestTabletSite(content::WebContents* current_tab);
@@ -156,12 +155,8 @@ void ViewSource(Browser* browser,
 void ViewSelectedSource(Browser* browser);
 bool CanViewSource(const Browser* browser);
 
-void CreateApplicationShortcuts(Browser* browser);
 void CreateBookmarkAppFromCurrentWebContents(Browser* browser);
-bool CanCreateApplicationShortcuts(const Browser* browser);
 bool CanCreateBookmarkApp(const Browser* browser);
-
-void ConvertTabToAppWindow(Browser* browser, content::WebContents* contents);
 
 }  // namespace chrome
 

@@ -26,7 +26,6 @@ public class ExperimentalOptionsTest extends CronetTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        System.loadLibrary("cronet_tests");
         mBuilder = new ExperimentalCronetEngine.Builder(getContext());
         CronetTestUtil.setMockCertVerifierForTesting(
                 mBuilder, QuicTestServer.createMockCertVerifier());
@@ -37,10 +36,54 @@ public class ExperimentalOptionsTest extends CronetTestBase {
     @Override
     protected void tearDown() throws Exception {
         assertTrue(Http2TestServer.shutdownHttp2TestServer());
-        if (mTestFramework.mCronetEngine != null) {
+        if (mTestFramework != null && mTestFramework.mCronetEngine != null) {
             mTestFramework.mCronetEngine.shutdown();
         }
         super.tearDown();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunNativeCronet
+    // Tests that NetLog writes effective experimental options to NetLog.
+    public void testNetLog() throws Exception {
+        File directory = new File(PathUtils.getDataDirectory());
+        File logfile = File.createTempFile("cronet", "json", directory);
+        JSONObject hostResolverParams = CronetTestUtil.generateHostResolverRules();
+        JSONObject experimentalOptions =
+                new JSONObject().put("HostResolverRules", hostResolverParams);
+        mBuilder.setExperimentalOptions(experimentalOptions.toString());
+
+        mTestFramework = new CronetTestFramework(null, null, getContext(), mBuilder);
+        mTestFramework.mCronetEngine.startNetLogToFile(logfile.getPath(), false);
+        String url = Http2TestServer.getEchoMethodUrl();
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        UrlRequest.Builder builder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                url, callback, callback.getExecutor());
+        UrlRequest urlRequest = builder.build();
+        urlRequest.start();
+        callback.blockForDone();
+        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
+        assertEquals("GET", callback.mResponseAsString);
+        mTestFramework.mCronetEngine.stopNetLog();
+        assertTrue(logfile.exists());
+        assertTrue(logfile.length() != 0);
+        BufferedReader logReader = new BufferedReader(new FileReader(logfile));
+        boolean validFile = false;
+        try {
+            String logLine;
+            while ((logLine = logReader.readLine()) != null) {
+                if (logLine.contains("HostResolverRules")) {
+                    validFile = true;
+                    break;
+                }
+            }
+        } finally {
+            logReader.close();
+        }
+        assertTrue(validFile);
+        assertTrue(logfile.delete());
+        assertTrue(!logfile.exists());
     }
 
     @SmallTest

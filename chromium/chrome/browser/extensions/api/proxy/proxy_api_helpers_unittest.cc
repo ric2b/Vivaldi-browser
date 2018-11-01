@@ -7,7 +7,9 @@
 #include "chrome/browser/extensions/api/proxy/proxy_api_helpers.h"
 
 #include <memory>
+#include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/proxy/proxy_api_constants.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
@@ -29,18 +31,20 @@ const char kSamplePacScriptUrl[] = "http://wpad/wpad.dat";
 
 // Helper function to create a ProxyServer dictionary as defined in the
 // extension API.
-base::DictionaryValue* CreateTestProxyServerDict(const std::string& host) {
-  base::DictionaryValue* dict = new base::DictionaryValue;
+std::unique_ptr<base::DictionaryValue> CreateTestProxyServerDict(
+    const std::string& host) {
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString(keys::kProxyConfigRuleHost, host);
   return dict;
 }
 
 // Helper function to create a ProxyServer dictionary as defined in the
 // extension API.
-base::DictionaryValue* CreateTestProxyServerDict(const std::string& schema,
-                                                 const std::string& host,
-                                                 int port) {
-  base::DictionaryValue* dict = new base::DictionaryValue;
+std::unique_ptr<base::DictionaryValue> CreateTestProxyServerDict(
+    const std::string& schema,
+    const std::string& host,
+    int port) {
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString(keys::kProxyConfigRuleScheme, schema);
   dict->SetString(keys::kProxyConfigRuleHost, host);
   dict->SetInteger(keys::kProxyConfigRulePort, port);
@@ -115,9 +119,9 @@ TEST(ExtensionProxyApiHelpers, GetPacUrlFromExtensionPref) {
   EXPECT_FALSE(bad_message);
 
   // Set up a pac script.
-  base::DictionaryValue* pacScriptDict = new base::DictionaryValue;
+  auto pacScriptDict = base::MakeUnique<base::DictionaryValue>();
   pacScriptDict->SetString(keys::kProxyConfigPacScriptUrl, kSamplePacScriptUrl);
-  proxy_config.Set(keys::kProxyConfigPacScript, pacScriptDict);
+  proxy_config.Set(keys::kProxyConfigPacScript, std::move(pacScriptDict));
 
   ASSERT_TRUE(GetPacUrlFromExtensionPref(&proxy_config, &out, &error,
                                          &bad_message));
@@ -144,9 +148,9 @@ TEST(ExtensionProxyApiHelpers, GetPacDataFromExtensionPref) {
   EXPECT_FALSE(bad_message);
 
   // Set up a PAC script.
-  base::DictionaryValue* pacScriptDict = new base::DictionaryValue;
+  auto pacScriptDict = base::MakeUnique<base::DictionaryValue>();
   pacScriptDict->SetString(keys::kProxyConfigPacScriptData, kSamplePacScript);
-  proxy_config.Set(keys::kProxyConfigPacScript, pacScriptDict);
+  proxy_config.Set(keys::kProxyConfigPacScript, std::move(pacScriptDict));
 
   ASSERT_TRUE(GetPacDataFromExtensionPref(&proxy_config, &out, &error,
                                           &bad_message));
@@ -173,10 +177,10 @@ TEST(ExtensionProxyApiHelpers, GetProxyRulesStringFromExtensionPref) {
   EXPECT_EQ(std::string(), out);
   EXPECT_EQ(std::string(), error);
 
-  base::DictionaryValue* proxy_rules = new base::DictionaryValue;
+  auto proxy_rules = base::MakeUnique<base::DictionaryValue>();
   proxy_rules->Set(keys::field_name[1], CreateTestProxyServerDict("proxy1"));
   proxy_rules->Set(keys::field_name[2], CreateTestProxyServerDict("proxy2"));
-  proxy_config.Set(keys::kProxyConfigRules, proxy_rules);
+  proxy_config.Set(keys::kProxyConfigRules, std::move(proxy_rules));
 
   ASSERT_TRUE(
       GetProxyRulesStringFromExtensionPref(&proxy_config, &out, &error,
@@ -205,12 +209,12 @@ TEST(ExtensionProxyApiHelpers, GetBypassListFromExtensionPref) {
   EXPECT_EQ(std::string(), error);
   EXPECT_FALSE(bad_message);
 
-  base::ListValue* bypass_list = new base::ListValue;
+  auto bypass_list = base::MakeUnique<base::ListValue>();
   bypass_list->AppendString("host1");
   bypass_list->AppendString("host2");
-  base::DictionaryValue* proxy_rules = new base::DictionaryValue;
-  proxy_rules->Set(keys::kProxyConfigBypassList, bypass_list);
-  proxy_config.Set(keys::kProxyConfigRules, proxy_rules);
+  auto proxy_rules = base::MakeUnique<base::DictionaryValue>();
+  proxy_rules->Set(keys::kProxyConfigBypassList, std::move(bypass_list));
+  proxy_config.Set(keys::kProxyConfigRules, std::move(proxy_rules));
 
   ASSERT_TRUE(
       GetBypassListFromExtensionPref(&proxy_config, &out, &error,
@@ -222,43 +226,43 @@ TEST(ExtensionProxyApiHelpers, GetBypassListFromExtensionPref) {
 
 TEST(ExtensionProxyApiHelpers, CreateProxyConfigDict) {
   std::string error;
-  std::unique_ptr<base::DictionaryValue> exp_direct(
-      ProxyConfigDictionary::CreateDirect());
+  std::unique_ptr<base::DictionaryValue> exp_direct =
+      ProxyConfigDictionary::CreateDirect();
   std::unique_ptr<base::DictionaryValue> out_direct(CreateProxyConfigDict(
       ProxyPrefs::MODE_DIRECT, false, std::string(), std::string(),
       std::string(), std::string(), &error));
   EXPECT_TRUE(base::Value::Equals(exp_direct.get(), out_direct.get()));
 
-  std::unique_ptr<base::DictionaryValue> exp_auto(
-      ProxyConfigDictionary::CreateAutoDetect());
+  std::unique_ptr<base::DictionaryValue> exp_auto =
+      ProxyConfigDictionary::CreateAutoDetect();
   std::unique_ptr<base::DictionaryValue> out_auto(CreateProxyConfigDict(
       ProxyPrefs::MODE_AUTO_DETECT, false, std::string(), std::string(),
       std::string(), std::string(), &error));
   EXPECT_TRUE(base::Value::Equals(exp_auto.get(), out_auto.get()));
 
-  std::unique_ptr<base::DictionaryValue> exp_pac_url(
-      ProxyConfigDictionary::CreatePacScript(kSamplePacScriptUrl, false));
+  std::unique_ptr<base::DictionaryValue> exp_pac_url =
+      ProxyConfigDictionary::CreatePacScript(kSamplePacScriptUrl, false);
   std::unique_ptr<base::DictionaryValue> out_pac_url(CreateProxyConfigDict(
       ProxyPrefs::MODE_PAC_SCRIPT, false, kSamplePacScriptUrl, std::string(),
       std::string(), std::string(), &error));
   EXPECT_TRUE(base::Value::Equals(exp_pac_url.get(), out_pac_url.get()));
 
-  std::unique_ptr<base::DictionaryValue> exp_pac_data(
-      ProxyConfigDictionary::CreatePacScript(kSamplePacScriptAsDataUrl, false));
+  std::unique_ptr<base::DictionaryValue> exp_pac_data =
+      ProxyConfigDictionary::CreatePacScript(kSamplePacScriptAsDataUrl, false);
   std::unique_ptr<base::DictionaryValue> out_pac_data(CreateProxyConfigDict(
       ProxyPrefs::MODE_PAC_SCRIPT, false, std::string(), kSamplePacScript,
       std::string(), std::string(), &error));
   EXPECT_TRUE(base::Value::Equals(exp_pac_data.get(), out_pac_data.get()));
 
-  std::unique_ptr<base::DictionaryValue> exp_fixed(
-      ProxyConfigDictionary::CreateFixedServers("foo:80", "localhost"));
+  std::unique_ptr<base::DictionaryValue> exp_fixed =
+      ProxyConfigDictionary::CreateFixedServers("foo:80", "localhost");
   std::unique_ptr<base::DictionaryValue> out_fixed(CreateProxyConfigDict(
       ProxyPrefs::MODE_FIXED_SERVERS, false, std::string(), std::string(),
       "foo:80", "localhost", &error));
   EXPECT_TRUE(base::Value::Equals(exp_fixed.get(), out_fixed.get()));
 
-  std::unique_ptr<base::DictionaryValue> exp_system(
-      ProxyConfigDictionary::CreateSystem());
+  std::unique_ptr<base::DictionaryValue> exp_system =
+      ProxyConfigDictionary::CreateSystem();
   std::unique_ptr<base::DictionaryValue> out_system(CreateProxyConfigDict(
       ProxyPrefs::MODE_SYSTEM, false, std::string(), std::string(),
       std::string(), std::string(), &error));
@@ -312,7 +316,7 @@ TEST(ExtensionProxyApiHelpers, CreateProxyRulesDict) {
       ProxyConfigDictionary::CreateFixedServers(
           "http=proxy1:80;https=proxy2:80;ftp=proxy3:80;socks=proxy4:80",
           "localhost"));
-  ProxyConfigDictionary config(browser_pref.get());
+  ProxyConfigDictionary config(std::move(browser_pref));
   std::unique_ptr<base::DictionaryValue> extension_pref(
       CreateProxyRulesDict(config));
   ASSERT_TRUE(extension_pref.get());
@@ -326,9 +330,9 @@ TEST(ExtensionProxyApiHelpers, CreateProxyRulesDict) {
                 CreateTestProxyServerDict("http", "proxy3", 80));
   expected->Set("fallbackProxy",
                 CreateTestProxyServerDict("socks4", "proxy4", 80));
-  base::ListValue* bypass_list = new base::ListValue;
+  auto bypass_list = base::MakeUnique<base::ListValue>();
   bypass_list->AppendString("localhost");
-  expected->Set(keys::kProxyConfigBypassList, bypass_list);
+  expected->Set(keys::kProxyConfigBypassList, std::move(bypass_list));
 
   EXPECT_TRUE(base::Value::Equals(expected.get(), extension_pref.get()));
 }
@@ -340,7 +344,7 @@ TEST(ExtensionProxyApiHelpers, CreateProxyRulesDictMultipleProxies) {
           "http=proxy1:80,default://;https=proxy2:80,proxy1:80;ftp=proxy3:80,"
           "https://proxy5:443;socks=proxy4:80,proxy1:80",
           "localhost"));
-  ProxyConfigDictionary config(browser_pref.get());
+  ProxyConfigDictionary config(std::move(browser_pref));
   std::unique_ptr<base::DictionaryValue> extension_pref(
       CreateProxyRulesDict(config));
   ASSERT_TRUE(extension_pref.get());
@@ -354,9 +358,9 @@ TEST(ExtensionProxyApiHelpers, CreateProxyRulesDictMultipleProxies) {
                 CreateTestProxyServerDict("http", "proxy3", 80));
   expected->Set("fallbackProxy",
                 CreateTestProxyServerDict("socks4", "proxy4", 80));
-  base::ListValue* bypass_list = new base::ListValue;
+  auto bypass_list = base::MakeUnique<base::ListValue>();
   bypass_list->AppendString("localhost");
-  expected->Set(keys::kProxyConfigBypassList, bypass_list);
+  expected->Set(keys::kProxyConfigBypassList, std::move(bypass_list));
 
   EXPECT_TRUE(base::Value::Equals(expected.get(), extension_pref.get()));
 }
@@ -365,7 +369,7 @@ TEST(ExtensionProxyApiHelpers, CreateProxyRulesDictMultipleProxies) {
 TEST(ExtensionProxyApiHelpers, CreatePacScriptDictWithUrl) {
   std::unique_ptr<base::DictionaryValue> browser_pref(
       ProxyConfigDictionary::CreatePacScript(kSamplePacScriptUrl, false));
-  ProxyConfigDictionary config(browser_pref.get());
+  ProxyConfigDictionary config(std::move(browser_pref));
   std::unique_ptr<base::DictionaryValue> extension_pref(
       CreatePacScriptDict(config));
   ASSERT_TRUE(extension_pref.get());
@@ -381,7 +385,7 @@ TEST(ExtensionProxyApiHelpers, CreatePacScriptDictWithUrl) {
 TEST(ExtensionProxyApiHelpers, CreatePacScriptDictWidthData) {
   std::unique_ptr<base::DictionaryValue> browser_pref(
       ProxyConfigDictionary::CreatePacScript(kSamplePacScriptAsDataUrl, false));
-  ProxyConfigDictionary config(browser_pref.get());
+  ProxyConfigDictionary config(std::move(browser_pref));
   std::unique_ptr<base::DictionaryValue> extension_pref(
       CreatePacScriptDict(config));
   ASSERT_TRUE(extension_pref.get());

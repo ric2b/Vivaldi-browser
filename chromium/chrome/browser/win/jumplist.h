@@ -34,6 +34,11 @@
 
 #include "extensions/schema/bookmarks_private.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+class SequencedTaskRunner;
+}
+
 namespace chrome {
 struct FaviconImageResult;
 }
@@ -172,8 +177,8 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // Helper for RunUpdate() that determines its parameters.
   void PostRunUpdate();
 
-  // Called on a timer to invoke RunUpdateOnFileThread() after requests storms
-  // have subsided.
+  // Called on a timer to invoke RunUpdateJumpList() after
+  // requests storms have subsided.
   void DeferredRunUpdate();
 
   extensions::AppWindow* GetAppWindow(Profile* profile);
@@ -207,6 +212,12 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // Id of last favicon task. It's used to cancel current task if a new one
   // comes in before it finishes.
   base::CancelableTaskTracker::TaskId task_id_;
+
+  // A task runner running tasks to update the jumplist in JumpListIcons.
+  scoped_refptr<base::SingleThreadTaskRunner> update_jumplisticons_task_runner_;
+
+  // A task runner running tasks to delete JumpListIconsOld directory.
+  scoped_refptr<base::SequencedTaskRunner> delete_jumplisticonsold_task_runner_;
 
   // For callbacks may be run after destruction.
   base::WeakPtrFactory<JumpList> weak_ptr_factory_;

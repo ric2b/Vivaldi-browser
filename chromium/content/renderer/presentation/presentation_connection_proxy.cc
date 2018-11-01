@@ -5,12 +5,12 @@
 #include "content/renderer/presentation/presentation_connection_proxy.h"
 
 #include "base/logging.h"
-#include "content/public/common/presentation_session.h"
+#include "content/public/common/presentation_info.h"
 #include "content/renderer/presentation/presentation_dispatcher.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationConnection.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationController.h"
-#include "third_party/WebKit/public/platform/modules/presentation/WebPresentationSessionInfo.h"
+#include "third_party/WebKit/public/platform/modules/presentation/WebPresentationInfo.h"
 
 namespace content {
 
@@ -25,35 +25,23 @@ PresentationConnectionProxy::PresentationConnectionProxy(
 PresentationConnectionProxy::~PresentationConnectionProxy() = default;
 
 void PresentationConnectionProxy::SendConnectionMessage(
-    blink::mojom::ConnectionMessagePtr connection_message,
+    PresentationConnectionMessage message,
     const OnMessageCallback& callback) const {
   DCHECK(target_connection_ptr_);
-  target_connection_ptr_->OnMessage(std::move(connection_message), callback);
+  target_connection_ptr_->OnMessage(std::move(message), callback);
 }
 
 void PresentationConnectionProxy::OnMessage(
-    blink::mojom::ConnectionMessagePtr message,
+    PresentationConnectionMessage message,
     const OnMessageCallback& callback) {
   DCHECK(!callback.is_null());
 
-  switch (message->type) {
-    case blink::mojom::PresentationMessageType::TEXT: {
-      DCHECK(message->message);
-      source_connection_->didReceiveTextMessage(
-          blink::WebString::fromUTF8(message->message.value()));
-      break;
-    }
-    case blink::mojom::PresentationMessageType::BINARY: {
-      DCHECK(message->data);
-      source_connection_->didReceiveBinaryMessage(&(message->data->front()),
-                                                  message->data->size());
-      break;
-    }
-    default: {
-      callback.Run(false);
-      NOTREACHED();
-      return;
-    }
+  if (message.is_binary()) {
+    source_connection_->DidReceiveBinaryMessage(&(message.data->front()),
+                                                message.data->size());
+  } else {
+    source_connection_->DidReceiveTextMessage(
+        blink::WebString::FromUTF8(*(message.message)));
   }
 
   callback.Run(true);
@@ -64,11 +52,10 @@ void PresentationConnectionProxy::OnMessage(
 void PresentationConnectionProxy::DidChangeState(
     content::PresentationConnectionState state) {
   if (state == content::PRESENTATION_CONNECTION_STATE_CONNECTED) {
-    source_connection_->didChangeState(
-        blink::WebPresentationConnectionState::Connected);
+    source_connection_->DidChangeState(
+        blink::WebPresentationConnectionState::kConnected);
   } else if (state == content::PRESENTATION_CONNECTION_STATE_CLOSED) {
-    source_connection_->didChangeState(
-        blink::WebPresentationConnectionState::Closed);
+    source_connection_->DidClose();
   } else {
     NOTREACHED();
   }
@@ -76,13 +63,12 @@ void PresentationConnectionProxy::DidChangeState(
 
 void PresentationConnectionProxy::OnClose() {
   DCHECK(target_connection_ptr_);
-  source_connection_->didChangeState(
-      blink::WebPresentationConnectionState::Closed);
+  source_connection_->DidClose();
   target_connection_ptr_->DidChangeState(
       content::PRESENTATION_CONNECTION_STATE_CLOSED);
 }
 
-void PresentationConnectionProxy::close() const {
+void PresentationConnectionProxy::Close() const {
   DCHECK(target_connection_ptr_);
   target_connection_ptr_->OnClose();
 }

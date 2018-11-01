@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_test.h"
@@ -93,16 +94,19 @@ void AbortMessagePump() {
   static_cast<base::MessageLoopForUI*>(base::MessageLoop::current())->Abort();
 }
 
-void RunTest_AbortDontRunMoreTasks(bool delayed) {
-  MessageLoop loop(MessageLoop::TYPE_JAVA);
-
+void RunTest_AbortDontRunMoreTasks(bool delayed, bool init_java_first) {
   WaitableEvent test_done_event(WaitableEvent::ResetPolicy::MANUAL,
                                 WaitableEvent::InitialState::NOT_SIGNALED);
 
-  std::unique_ptr<android::JavaHandlerThreadForTesting> java_thread;
-  java_thread.reset(new android::JavaHandlerThreadForTesting(
-      "JavaHandlerThreadForTesting from AbortDontRunMoreTasks",
-      &test_done_event));
+  std::unique_ptr<android::JavaHandlerThread> java_thread;
+  if (init_java_first) {
+    java_thread =
+        android::JavaHandlerThreadForTesting::CreateJavaFirst(&test_done_event);
+  } else {
+    java_thread = android::JavaHandlerThreadForTesting::Create(
+        "JavaHandlerThreadForTesting from AbortDontRunMoreTasks",
+        &test_done_event);
+  }
   java_thread->Start();
 
   if (delayed) {
@@ -121,10 +125,19 @@ void RunTest_AbortDontRunMoreTasks(bool delayed) {
 }
 
 TEST(MessageLoopTest, JavaExceptionAbort) {
-  RunTest_AbortDontRunMoreTasks(false);
+  constexpr bool delayed = false;
+  constexpr bool init_java_first = false;
+  RunTest_AbortDontRunMoreTasks(delayed, init_java_first);
 }
 TEST(MessageLoopTest, DelayedJavaExceptionAbort) {
-  RunTest_AbortDontRunMoreTasks(true);
+  constexpr bool delayed = true;
+  constexpr bool init_java_first = false;
+  RunTest_AbortDontRunMoreTasks(delayed, init_java_first);
+}
+TEST(MessageLoopTest, JavaExceptionAbortInitJavaFirst) {
+  constexpr bool delayed = false;
+  constexpr bool init_java_first = true;
+  RunTest_AbortDontRunMoreTasks(delayed, init_java_first);
 }
 #endif  // defined(OS_ANDROID)
 
@@ -457,7 +470,7 @@ void RunTest_RecursiveSupport2(MessageLoop::Type message_loop_type) {
 void PostNTasksThenQuit(int posts_remaining) {
   if (posts_remaining > 1) {
     ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, Bind(&PostNTasksThenQuit, posts_remaining - 1));
+        FROM_HERE, BindOnce(&PostNTasksThenQuit, posts_remaining - 1));
   } else {
     MessageLoop::current()->QuitWhenIdle();
   }
@@ -669,7 +682,8 @@ TEST(MessageLoopTest, TaskObserver) {
 
   MessageLoop loop;
   loop.AddTaskObserver(&observer);
-  loop.task_runner()->PostTask(FROM_HERE, Bind(&PostNTasksThenQuit, kNumPosts));
+  loop.task_runner()->PostTask(FROM_HERE,
+                               BindOnce(&PostNTasksThenQuit, kNumPosts));
   RunLoop().Run();
   loop.RemoveTaskObserver(&observer);
 
@@ -846,9 +860,10 @@ TEST(MessageLoopTest, DestructionObserverTest) {
   MLDestructionObserver observer(&task_destroyed, &destruction_observer_called);
   loop->AddDestructionObserver(&observer);
   loop->task_runner()->PostDelayedTask(
-      FROM_HERE, Bind(&DestructionObserverProbe::Run,
-                      new DestructionObserverProbe(
-                          &task_destroyed, &destruction_observer_called)),
+      FROM_HERE,
+      BindOnce(&DestructionObserverProbe::Run,
+               new DestructionObserverProbe(&task_destroyed,
+                                            &destruction_observer_called)),
       kDelay);
   delete loop;
   EXPECT_TRUE(observer.task_destroyed_before_message_loop());
@@ -865,13 +880,13 @@ TEST(MessageLoopTest, ThreadMainTaskRunner) {
 
   scoped_refptr<Foo> foo(new Foo());
   std::string a("a");
-  ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, Bind(
-      &Foo::Test1ConstRef, foo, a));
+  ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, BindOnce(&Foo::Test1ConstRef, foo, a));
 
   // Post quit task;
   ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      Bind(&MessageLoop::QuitWhenIdle, Unretained(MessageLoop::current())));
+      BindOnce(&MessageLoop::QuitWhenIdle, Unretained(MessageLoop::current())));
 
   // Now kick things off
   RunLoop().Run();
@@ -994,8 +1009,7 @@ TEST(MessageLoopTest, OriginalRunnerWorks) {
   loop.SetTaskRunner(new_runner);
 
   scoped_refptr<Foo> foo(new Foo());
-  original_runner->PostTask(FROM_HERE,
-                            Bind(&Foo::Test1ConstRef, foo, "a"));
+  original_runner->PostTask(FROM_HERE, BindOnce(&Foo::Test1ConstRef, foo, "a"));
   RunLoop().RunUntilIdle();
   EXPECT_EQ(1, foo->test_count());
 }

@@ -9,7 +9,6 @@
 #include "cc/animation/animation_host.h"
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
-#include "cc/test/layer_tree_settings_for_testing.h"
 #include "cc/trees/layer_tree_impl.h"
 
 namespace cc {
@@ -17,7 +16,7 @@ namespace cc {
 FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
     TaskRunnerProvider* task_runner_provider,
     TaskGraphRunner* task_graph_runner)
-    : FakeLayerTreeHostImpl(LayerTreeSettingsForTesting(),
+    : FakeLayerTreeHostImpl(LayerTreeSettings(),
                             task_runner_provider,
                             task_graph_runner) {}
 
@@ -81,31 +80,15 @@ void FakeLayerTreeHostImpl::AdvanceToNextFrame(base::TimeDelta advance_by) {
   WillBeginImplFrame(next_begin_frame_args);
 }
 
-int FakeLayerTreeHostImpl::RecursiveUpdateNumChildren(LayerImpl* layer) {
-  int num_children_that_draw_content = 0;
-  for (size_t i = 0; i < layer->test_properties()->children.size(); ++i) {
-    num_children_that_draw_content +=
-        RecursiveUpdateNumChildren(layer->test_properties()->children[i]);
-  }
-  layer->test_properties()->num_descendants_that_draw_content =
-      num_children_that_draw_content;
-  return num_children_that_draw_content + (layer->DrawsContent() ? 1 : 0);
-}
-
-void FakeLayerTreeHostImpl::UpdateNumChildrenAndDrawPropertiesForActiveTree(
-    bool force_skip_verify_visible_rect_calculations) {
-  UpdateNumChildrenAndDrawProperties(
-      active_tree(), force_skip_verify_visible_rect_calculations);
+void FakeLayerTreeHostImpl::UpdateNumChildrenAndDrawPropertiesForActiveTree() {
+  UpdateNumChildrenAndDrawProperties(active_tree());
 }
 
 void FakeLayerTreeHostImpl::UpdateNumChildrenAndDrawProperties(
-    LayerTreeImpl* layerTree,
-    bool force_skip_verify_visible_rect_calculations) {
-  RecursiveUpdateNumChildren(layerTree->root_layer_for_testing());
+    LayerTreeImpl* layerTree) {
   bool update_lcd_text = false;
   layerTree->BuildLayerListAndPropertyTreesForTesting();
-  layerTree->UpdateDrawProperties(update_lcd_text,
-                                  force_skip_verify_visible_rect_calculations);
+  layerTree->UpdateDrawProperties(update_lcd_text);
 }
 
 AnimationHost* FakeLayerTreeHostImpl::animation_host() const {

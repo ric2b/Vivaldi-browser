@@ -13,11 +13,12 @@
 #ifndef LongCallbackFunction_h
 #define LongCallbackFunction_h
 
+#include "bindings/core/v8/NativeValueTraits.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/TraceWrapperV8Reference.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -25,17 +26,17 @@ class ScriptState;
 
 class CORE_EXPORT LongCallbackFunction final : public GarbageCollectedFinalized<LongCallbackFunction>, public TraceWrapperBase {
  public:
-  static LongCallbackFunction* create(ScriptState* scriptState, v8::Local<v8::Value> callback);
+  static LongCallbackFunction* Create(ScriptState*, v8::Local<v8::Value> callback);
 
   ~LongCallbackFunction() = default;
 
-  DECLARE_TRACE();
+  DEFINE_INLINE_TRACE() {}
   DECLARE_TRACE_WRAPPERS();
 
-  bool call(ScriptWrappable* scriptWrappable, int num1, int num2, int& returnValue);
+  bool call(ScriptWrappable* scriptWrappable, int32_t num1, int32_t num2, int32_t& returnValue);
 
   v8::Local<v8::Function> v8Value(v8::Isolate* isolate) {
-    return m_callback.newLocal(isolate);
+    return m_callback.NewLocal(isolate);
   }
 
  private:
@@ -43,6 +44,11 @@ class CORE_EXPORT LongCallbackFunction final : public GarbageCollectedFinalized<
 
   RefPtr<ScriptState> m_scriptState;
   TraceWrapperV8Reference<v8::Function> m_callback;
+};
+
+template <>
+struct NativeValueTraits<LongCallbackFunction> : public NativeValueTraitsBase<LongCallbackFunction> {
+  CORE_EXPORT static LongCallbackFunction* NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
 };
 
 }  // namespace blink

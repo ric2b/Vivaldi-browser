@@ -26,6 +26,7 @@ class CompositorTimingHistory::UMAReporter {
   virtual void AddDrawInterval(base::TimeDelta interval) = 0;
 
   // Latency measurements
+  virtual void AddBeginImplFrameLatency(base::TimeDelta delta) = 0;
   virtual void AddBeginMainFrameQueueDurationCriticalDuration(
       base::TimeDelta duration) = 0;
   virtual void AddBeginMainFrameQueueDurationNotCriticalDuration(
@@ -61,10 +62,6 @@ const double kDrawEstimationPercentile = 90.0;
 
 constexpr base::TimeDelta kSubmitAckWatchdogTimeout =
     base::TimeDelta::FromSeconds(8);
-
-const int kUmaDurationMinMicros = 1;
-const int64_t kUmaDurationMaxMicros = base::Time::kMicrosecondsPerSecond / 5;
-const int kUmaDurationBucketCount = 100;
 
 // This macro is deprecated since its bucket count uses too much bandwidth.
 // It also has sub-optimal range and bucket distribution.
@@ -111,7 +108,6 @@ const int kUMADurationBuckets[] = {
 
 #define UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(name, sample)             \
   do {                                                                     \
-    UMA_HISTOGRAM_CUSTOM_TIMES_MICROS(name, sample);                       \
     UMA_HISTOGRAM_CUSTOM_ENUMERATION(                                      \
         name "2", sample.InMicroseconds(),                                 \
         std::vector<int>(kUMAVSyncBuckets,                                 \
@@ -120,7 +116,6 @@ const int kUMADurationBuckets[] = {
 
 #define UMA_HISTOGRAM_CUSTOM_TIMES_DURATION(name, sample)           \
   do {                                                              \
-    UMA_HISTOGRAM_CUSTOM_TIMES_MICROS(name, sample);                \
     UMA_HISTOGRAM_CUSTOM_ENUMERATION(                               \
         name "2", sample.InMicroseconds(),                          \
         std::vector<int>(                                           \
@@ -150,6 +145,11 @@ class RendererUMAReporter : public CompositorTimingHistory::UMAReporter {
   void AddDrawInterval(base::TimeDelta interval) override {
     UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED("Scheduling.Renderer.DrawInterval",
                                              interval);
+  }
+
+  void AddBeginImplFrameLatency(base::TimeDelta delta) override {
+    UMA_HISTOGRAM_CUSTOM_TIMES_DURATION(
+        "Scheduling.Renderer.BeginImplFrameLatency", delta);
   }
 
   void AddBeginMainFrameQueueDurationCriticalDuration(
@@ -229,6 +229,11 @@ class BrowserUMAReporter : public CompositorTimingHistory::UMAReporter {
                                              interval);
   }
 
+  void AddBeginImplFrameLatency(base::TimeDelta delta) override {
+    UMA_HISTOGRAM_CUSTOM_TIMES_DURATION(
+        "Scheduling.Browser.BeginImplFrameLatency", delta);
+  }
+
   void AddBeginMainFrameQueueDurationCriticalDuration(
       base::TimeDelta duration) override {
     UMA_HISTOGRAM_CUSTOM_TIMES_DURATION(
@@ -290,6 +295,7 @@ class NullUMAReporter : public CompositorTimingHistory::UMAReporter {
   }
   void AddCommitInterval(base::TimeDelta interval) override {}
   void AddDrawInterval(base::TimeDelta interval) override {}
+  void AddBeginImplFrameLatency(base::TimeDelta delta) override {}
   void AddBeginMainFrameQueueDurationCriticalDuration(
       base::TimeDelta duration) override {}
   void AddBeginMainFrameQueueDurationNotCriticalDuration(
@@ -461,7 +467,10 @@ void CompositorTimingHistory::DidCreateAndInitializeCompositorFrameSink() {
 }
 
 void CompositorTimingHistory::WillBeginImplFrame(
-    bool new_active_tree_is_likely) {
+    bool new_active_tree_is_likely,
+    base::TimeTicks frame_time,
+    BeginFrameArgs::BeginFrameArgsType frame_type,
+    base::TimeTicks now) {
   // The check for whether a BeginMainFrame was sent anytime between two
   // BeginImplFrames protects us from not detecting a fast main thread that
   // does all it's work and goes idle in between BeginImplFrames.
@@ -474,13 +483,16 @@ void CompositorTimingHistory::WillBeginImplFrame(
   }
 
   if (submit_ack_watchdog_enabled_) {
-    base::TimeDelta submit_not_acked_time_ = Now() - submit_start_time_;
+    base::TimeDelta submit_not_acked_time_ = now - submit_start_time_;
     if (submit_not_acked_time_ >= kSubmitAckWatchdogTimeout) {
       uma_reporter_->AddSubmitAckWasFast(false);
       // Only record this UMA once per submitted CompositorFrame.
       submit_ack_watchdog_enabled_ = false;
     }
   }
+
+  if (frame_type == BeginFrameArgs::NORMAL)
+    uma_reporter_->AddBeginImplFrameLatency(now - frame_time);
 
   did_send_begin_main_frame_ = false;
 }

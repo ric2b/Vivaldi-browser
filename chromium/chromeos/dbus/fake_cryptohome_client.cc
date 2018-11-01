@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/path_service.h"
@@ -16,6 +17,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/attestation/attestation.pb.h"
 #include "chromeos/chromeos_paths.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome/key.pb.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -30,6 +32,10 @@ namespace {
 constexpr char kTwentyBytesNonce[] = "+addtwentybytesnonce";
 // A symbolic signature.
 constexpr char kSignature[] = "signed";
+// Interval to update the progress of MigrateToDircrypto in milliseconds.
+constexpr int kDircryptoMigrationUpdateIntervalMs = 200;
+// The number of updates the MigrateToDircrypto will send before it completes.
+constexpr uint64_t kDircryptoMigrationMaxProgress = 15;
 }  // namespace
 
 FakeCryptohomeClient::FakeCryptohomeClient()
@@ -63,6 +69,11 @@ void FakeCryptohomeClient::ResetAsyncCallStatusHandlers() {
 void FakeCryptohomeClient::SetLowDiskSpaceHandler(
     const LowDiskSpaceHandler& handler) {}
 
+void FakeCryptohomeClient::SetDircryptoMigrationProgressHandler(
+    const DircryptoMigrationProgessHandler& handler) {
+  dircrypto_migration_progress_handler_ = handler;
+}
+
 void FakeCryptohomeClient::WaitForServiceToBeAvailable(
     const WaitForServiceToBeAvailableCallback& callback) {
   if (service_is_available_) {
@@ -79,9 +90,10 @@ void FakeCryptohomeClient::IsMounted(
       FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS, true));
 }
 
-bool FakeCryptohomeClient::Unmount(bool* success) {
-  *success = unmount_result_;
-  return true;
+void FakeCryptohomeClient::Unmount(const BoolDBusMethodCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(callback, DBUS_METHOD_CALL_SUCCESS, unmount_result_));
 }
 
 void FakeCryptohomeClient::AsyncCheckKey(
@@ -520,6 +532,11 @@ void FakeCryptohomeClient::MountEx(
   cryptohome::MountReply* mount =
       reply.MutableExtension(cryptohome::MountReply::reply);
   mount->set_sanitized_username(GetStubSanitizedUsername(cryptohome_id));
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kTestEncryptionMigrationUI) &&
+      !request.to_migrate_from_ecryptfs()) {
+    reply.set_error(cryptohome::CRYPTOHOME_ERROR_MOUNT_OLD_ENCRYPTION);
+  }
   ReturnProtobufMethodCallback(reply, callback);
 }
 
@@ -574,6 +591,18 @@ void FakeCryptohomeClient::FlushAndSignBootAttributes(
   ReturnProtobufMethodCallback(reply, callback);
 }
 
+void FakeCryptohomeClient::MigrateToDircrypto(
+    const cryptohome::Identification& cryptohome_id,
+    const VoidDBusMethodCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS));
+  dircrypto_migration_progress_ = 0;
+  dircrypto_migration_progress_timer_.Start(
+      FROM_HERE,
+      base::TimeDelta::FromMilliseconds(kDircryptoMigrationUpdateIntervalMs),
+      this, &FakeCryptohomeClient::OnDircryptoMigrationProgressUpdated);
+}
+
 void FakeCryptohomeClient::RemoveFirmwareManagementParametersFromTpm(
     const cryptohome::RemoveFirmwareManagementParametersRequest& request,
     const ProtobufMethodCallback& callback) {
@@ -584,6 +613,14 @@ void FakeCryptohomeClient::SetFirmwareManagementParametersInTpm(
     const cryptohome::SetFirmwareManagementParametersRequest& request,
     const ProtobufMethodCallback& callback) {
   ReturnProtobufMethodCallback(cryptohome::BaseReply(), callback);
+}
+
+void FakeCryptohomeClient::NeedsDircryptoMigration(
+    const cryptohome::Identification& cryptohome_id,
+    const BoolDBusMethodCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS,
+                            needs_dircrypto_migration_));
 }
 
 void FakeCryptohomeClient::SetServiceIsAvailable(bool is_available) {
@@ -648,6 +685,29 @@ void FakeCryptohomeClient::ReturnAsyncMethodDataInternal(
                               true, data));
   }
   ++async_call_id_;
+}
+
+void FakeCryptohomeClient::OnDircryptoMigrationProgressUpdated() {
+  dircrypto_migration_progress_++;
+
+  if (dircrypto_migration_progress_ >= kDircryptoMigrationMaxProgress) {
+    if (!dircrypto_migration_progress_handler_.is_null()) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::Bind(dircrypto_migration_progress_handler_,
+                                cryptohome::DIRCRYPTO_MIGRATION_SUCCESS,
+                                dircrypto_migration_progress_,
+                                kDircryptoMigrationMaxProgress));
+    }
+    dircrypto_migration_progress_timer_.Stop();
+    return;
+  }
+  if (!dircrypto_migration_progress_handler_.is_null()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(dircrypto_migration_progress_handler_,
+                              cryptohome::DIRCRYPTO_MIGRATION_IN_PROGRESS,
+                              dircrypto_migration_progress_,
+                              kDircryptoMigrationMaxProgress));
+  }
 }
 
 }  // namespace chromeos

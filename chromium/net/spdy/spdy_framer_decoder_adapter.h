@@ -10,8 +10,8 @@
 #include <cstdint>
 #include <memory>
 
-#include "base/strings/string_piece.h"
 #include "net/spdy/hpack/hpack_header_table.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 #include "net/spdy/spdy_alt_svc_wire_format.h"
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_headers_handler_interface.h"
@@ -31,6 +31,10 @@ class SpdyFramerDecoderAdapter {
   // will be used.
   virtual void set_visitor(SpdyFramerVisitorInterface* visitor);
   SpdyFramerVisitorInterface* visitor() const { return visitor_; }
+
+  // Set extension callbacks to be called from the framer or decoder. Optional.
+  // If called multiple times, only the last visitor will be used.
+  virtual void set_extension_visitor(ExtensionVisitorInterface* visitor) = 0;
 
   // Set debug callbacks to be called from the framer. The debug visitor is
   // completely optional and need not be set in order for normal operation.
@@ -136,7 +140,6 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
                  bool end) override;
   void OnWindowUpdate(SpdyStreamId stream_id, int delta_window_size) override;
   bool OnGoAwayFrameData(const char* goaway_data, size_t len) override;
-  void OnBlocked(SpdyStreamId stream_id) override;
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
                      bool end) override;
@@ -146,7 +149,7 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
                   int weight,
                   bool exclusive) override;
   void OnAltSvc(SpdyStreamId stream_id,
-                base::StringPiece origin,
+                SpdyStringPiece origin,
                 const SpdyAltSvcWireFormat::AlternativeServiceVector&
                     altsvc_vector) override;
   bool OnUnknownFrame(SpdyStreamId stream_id, uint8_t frame_type) override;

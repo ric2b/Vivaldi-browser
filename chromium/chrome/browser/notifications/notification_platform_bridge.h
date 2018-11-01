@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_PLATFORM_BRIDGE_H_
 #define CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_PLATFORM_BRIDGE_H_
 
+#include <memory>
 #include <set>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
+#include "chrome/browser/notifications/displayed_notifications_dispatch_callback.h"
 #include "chrome/browser/notifications/notification_common.h"
 
 class Notification;
@@ -35,14 +38,12 @@ class NotificationPlatformBridge {
   virtual void Close(const std::string& profile_id,
                      const std::string& notification_id) = 0;
 
-  // Fills in |notifications| with a set of notification ids currently being
-  // displayed for a given profile.
-  // The return value expresses whether the underlying platform has the
-  // capability to provide displayed notifications so the empty set
-  // can be disambiguated.
-  virtual bool GetDisplayed(const std::string& profile_id,
-                            bool incognito,
-                            std::set<std::string>* notification_ids) const = 0;
+  // Writes the ids of all currently displaying notifications and posts
+  // |callback| with the result.
+  virtual void GetDisplayed(
+      const std::string& profile_id,
+      bool incognito,
+      const GetDisplayedNotificationsCallback& callback) const = 0;
 
  protected:
   NotificationPlatformBridge() {}

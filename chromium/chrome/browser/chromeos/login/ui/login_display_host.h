@@ -7,8 +7,7 @@
 
 #include <string>
 
-#include "base/callback.h"
-#include "base/callback_list.h"
+#include "base/callback_forward.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
@@ -52,9 +51,10 @@ class LoginDisplayHost {
   // Called when browsing session starts before creating initial browser.
   virtual void BeforeSessionStart() = 0;
 
-  // Called when user enters or returns to browsing session so
-  // LoginDisplayHost instance may delete itself.
-  virtual void Finalize() = 0;
+  // Called when user enters or returns to browsing session so LoginDisplayHost
+  // instance may delete itself. |completion_callback| will be invoked when the
+  // instance is gone.
+  virtual void Finalize(base::OnceClosure completion_callback) = 0;
 
   // Called when a login has completed successfully.
   virtual void OnCompleteLogin() = 0;
@@ -82,9 +82,9 @@ class LoginDisplayHost {
   virtual AppLaunchController* GetAppLaunchController() = 0;
 
   // Starts screen for adding user into session.
-  // |completion_callback| called before display host shutdown.
+  // |completion_callback| is invoked after login display host shutdown.
   // |completion_callback| can be null.
-  virtual void StartUserAdding(const base::Closure& completion_callback) = 0;
+  virtual void StartUserAdding(base::OnceClosure completion_callback) = 0;
 
   // Cancel addint user into session.
   virtual void CancelUserAdding() = 0;

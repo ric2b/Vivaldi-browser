@@ -104,7 +104,6 @@ bool Nigori::InitByImport(const std::string& user_key,
                           const std::string& encryption_key,
                           const std::string& mac_key) {
   user_key_ = SymmetricKey::Import(SymmetricKey::AES, user_key);
-  DCHECK(user_key_);
 
   encryption_key_ = SymmetricKey::Import(SymmetricKey::AES, encryption_key);
   DCHECK(encryption_key_);
@@ -112,7 +111,7 @@ bool Nigori::InitByImport(const std::string& user_key,
   mac_key_ = SymmetricKey::Import(SymmetricKey::HMAC_SHA1, mac_key);
   DCHECK(mac_key_);
 
-  return user_key_ && encryption_key_ && mac_key_;
+  return encryption_key_ && mac_key_;
 }
 
 // Permute[Kenc,Kmac](type || name)
@@ -236,12 +235,13 @@ bool Nigori::Decrypt(const std::string& encrypted, std::string* value) const {
 bool Nigori::ExportKeys(std::string* user_key,
                         std::string* encryption_key,
                         std::string* mac_key) const {
-  DCHECK(user_key);
   DCHECK(encryption_key);
   DCHECK(mac_key);
 
-  return user_key_->GetRawKey(user_key) &&
-         encryption_key_->GetRawKey(encryption_key) &&
+  if (user_key_)
+    user_key_->GetRawKey(user_key);
+
+  return encryption_key_->GetRawKey(encryption_key) &&
          mac_key_->GetRawKey(mac_key);
 }
 

@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "ash/common/system/chromeos/devicetype_utils.h"
+#include "ash/system/devicetype_utils.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -17,6 +17,7 @@
 #include "base/i18n/message_formatter.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -113,16 +114,16 @@ bool IsEnterpriseManaged() {
 
 // Returns true if current user can change channel, false otherwise.
 bool CanChangeChannel(Profile* profile) {
-  bool value = false;
-  chromeos::CrosSettings::Get()->GetBoolean(chromeos::kReleaseChannelDelegated,
-                                            &value);
-
   // On a managed machine we delegate this setting to the users of the same
   // domain only if the policy value is "domain".
   if (IsEnterpriseManaged()) {
+    bool value = false;
+    chromeos::CrosSettings::Get()->GetBoolean(
+        chromeos::kReleaseChannelDelegated, &value);
     if (!value)
       return false;
-    // Get the currently logged in user and strip the domain part only.
+
+    // Get the currently logged-in user and strip the domain part only.
     std::string domain = "";
     const user_manager::User* user =
         profile ? chromeos::ProfileHelper::Get()->GetUserByProfile(profile)
@@ -135,16 +136,13 @@ bool CanChangeChannel(Profile* profile) {
     policy::BrowserPolicyConnectorChromeOS* connector =
         g_browser_process->platform_part()->browser_policy_connector_chromeos();
     return domain == connector->GetEnterpriseDomain();
-  } else {
-    chromeos::OwnerSettingsServiceChromeOS* service =
-        chromeos::OwnerSettingsServiceChromeOSFactory::GetInstance()
-            ->GetForBrowserContext(profile);
-    // On non managed machines we have local owner who is the only one to change
-    // anything. Ensure that ReleaseChannelDelegated is false.
-    if (service && service->IsOwner())
-      return !value;
   }
-  return false;
+
+  // On non-managed machines, only the local owner can change the channel.
+  chromeos::OwnerSettingsServiceChromeOS* service =
+      chromeos::OwnerSettingsServiceChromeOSFactory::GetInstance()
+          ->GetForBrowserContext(profile);
+  return service && service->IsOwner();
 }
 
 // Returns the path of the regulatory labels directory for a given region, if
@@ -496,7 +494,7 @@ void AboutHandler::HandleGetVersionInfo(const base::ListValue* args) {
 void AboutHandler::OnGetVersionInfoReady(
     std::string callback_id,
     std::unique_ptr<base::DictionaryValue> version_info) {
-  ResolveJavascriptCallback(base::StringValue(callback_id), *version_info);
+  ResolveJavascriptCallback(base::Value(callback_id), *version_info);
 }
 
 void AboutHandler::HandleGetRegulatoryInfo(const base::ListValue* args) {
@@ -540,7 +538,7 @@ void AboutHandler::OnGetTargetChannel(std::string callback_id,
   channel_info->SetBoolean("canChangeChannel",
                            CanChangeChannel(Profile::FromWebUI(web_ui())));
 
-  ResolveJavascriptCallback(base::StringValue(callback_id), *channel_info);
+  ResolveJavascriptCallback(base::Value(callback_id), *channel_info);
 }
 
 void AboutHandler::HandleRequestUpdate(const base::ListValue* args) {
@@ -577,14 +575,14 @@ void AboutHandler::SetUpdateStatus(VersionUpdater::Status status,
     if (!types_msg.empty())
       event->SetString("connectionTypes", types_msg);
     else
-      event->Set("connectionTypes", base::Value::CreateNullValue());
+      event->Set("connectionTypes", base::MakeUnique<base::Value>());
   } else {
-    event->Set("connectionTypes", base::Value::CreateNullValue());
+    event->Set("connectionTypes", base::MakeUnique<base::Value>());
   }
 #endif  // defined(OS_CHROMEOS)
 
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("update-status-changed"), *event);
+                         base::Value("update-status-changed"), *event);
 }
 
 #if defined(OS_MACOSX)
@@ -612,8 +610,7 @@ void AboutHandler::SetPromotionState(VersionUpdater::PromotionState state) {
     promo_state.SetString("text", text);
 
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("promotion-state-changed"),
-                         promo_state);
+                         base::Value("promotion-state-changed"), promo_state);
 }
 #endif  // defined(OS_MACOSX)
 
@@ -622,8 +619,7 @@ void AboutHandler::OnRegulatoryLabelDirFound(
     std::string callback_id,
     const base::FilePath& label_dir_path) {
   if (label_dir_path.empty()) {
-    ResolveJavascriptCallback(base::StringValue(callback_id),
-                              *base::Value::CreateNullValue());
+    ResolveJavascriptCallback(base::Value(callback_id), base::Value());
     return;
   }
 
@@ -650,7 +646,7 @@ void AboutHandler::OnRegulatoryLabelTextRead(
       std::string("chrome://") + chrome::kChromeOSAssetHost + "/" + image_path;
   regulatory_info->SetString("url", url);
 
-  ResolveJavascriptCallback(base::StringValue(callback_id), *regulatory_info);
+  ResolveJavascriptCallback(base::Value(callback_id), *regulatory_info);
 }
 #endif  // defined(OS_CHROMEOS)
 

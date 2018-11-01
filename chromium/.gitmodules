@@ -79,8 +79,8 @@
 [submodule "third_party/fontconfig/src"]
 	path = third_party/fontconfig/src
 	url = ../../external/fontconfig.git
-[submodule "third_party/freetype-android/src"]
-	path = third_party/freetype-android/src
+[submodule "third_party/freetype/src"]
+	path = third_party/freetype/src
 	url = ../src/third_party/freetype2.git
 [submodule "third_party/gestures/gestures"]
 	path = third_party/gestures/gestures
@@ -133,6 +133,9 @@
 [submodule "third_party/libphonenumber/dist"]
 	path = third_party/libphonenumber/dist
 	url = ../../external/libphonenumber.git
+[submodule "third_party/libprotobuf-mutator/src"]
+	path = third_party/libprotobuf-mutator/src
+	url = ../../external/github.com/google/libprotobuf-mutator.git
 [submodule "third_party/libsrtp"]
 	path = third_party/libsrtp
 	url = ../deps/libsrtp.git
@@ -190,9 +193,6 @@
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
-[submodule "third_party/scan-build/src"]
-	path = third_party/scan-build/src
-	url = ../llvm-project/cfe/tools/scan-build.git
 [submodule "third_party/scons-2.0.1"]
 	path = third_party/scons-2.0.1
 	url = ../../native_client/src/third_party/scons-2.0.1.git
@@ -210,7 +210,7 @@
 	url = ../../external/smhasher.git
 [submodule "third_party/snappy/src"]
 	path = third_party/snappy/src
-	url = ../../external/snappy.git
+	url = ../../external/github.com/google/snappy.git
 [submodule "third_party/spirv-headers/src"]
 	path = third_party/spirv-headers/src
 	url = ../../android/platform/external/shaderc/spirv-headers.git

@@ -30,64 +30,68 @@ class CORE_EXPORT InspectorAnimationAgent final
                           v8_inspector::V8InspectorSession*);
 
   // Base agent methods.
-  void restore() override;
-  void didCommitLoadForLocalFrame(LocalFrame*) override;
+  void Restore() override;
+  void DidCommitLoadForLocalFrame(LocalFrame*) override;
 
   // Protocol method implementations
-  Response enable() override;
-  Response disable() override;
-  Response getPlaybackRate(double* playbackRate) override;
-  Response setPlaybackRate(double) override;
-  Response getCurrentTime(const String& id, double* currentTime) override;
-  Response setPaused(std::unique_ptr<protocol::Array<String>> animations,
-                     bool paused) override;
-  Response setTiming(const String& animationId,
-                     double duration,
-                     double delay) override;
-  Response seekAnimations(std::unique_ptr<protocol::Array<String>> animations,
-                          double currentTime) override;
-  Response releaseAnimations(
+  protocol::Response enable() override;
+  protocol::Response disable() override;
+  protocol::Response getPlaybackRate(double* playback_rate) override;
+  protocol::Response setPlaybackRate(double) override;
+  protocol::Response getCurrentTime(const String& id,
+                                    double* current_time) override;
+  protocol::Response setPaused(
+      std::unique_ptr<protocol::Array<String>> animations,
+      bool paused) override;
+  protocol::Response setTiming(const String& animation_id,
+                               double duration,
+                               double delay) override;
+  protocol::Response seekAnimations(
+      std::unique_ptr<protocol::Array<String>> animations,
+      double current_time) override;
+  protocol::Response releaseAnimations(
       std::unique_ptr<protocol::Array<String>> animations) override;
-  Response resolveAnimation(
-      const String& animationId,
+  protocol::Response resolveAnimation(
+      const String& animation_id,
       std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject>*)
       override;
 
   // API for InspectorInstrumentation
-  void didCreateAnimation(unsigned);
-  void animationPlayStateChanged(blink::Animation*,
+  void DidCreateAnimation(unsigned);
+  void AnimationPlayStateChanged(blink::Animation*,
                                  blink::Animation::AnimationPlayState,
                                  blink::Animation::AnimationPlayState);
-  void didClearDocumentOfWindowObject(LocalFrame*);
+  void DidClearDocumentOfWindowObject(LocalFrame*);
 
   // Methods for other agents to use.
-  Response assertAnimation(const String& id, blink::Animation*& result);
+  protocol::Response AssertAnimation(const String& id,
+                                     blink::Animation*& result);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   using AnimationType = protocol::Animation::Animation::TypeEnum;
 
-  std::unique_ptr<protocol::Animation::Animation> buildObjectForAnimation(
+  std::unique_ptr<protocol::Animation::Animation> BuildObjectForAnimation(
       blink::Animation&);
-  std::unique_ptr<protocol::Animation::Animation> buildObjectForAnimation(
+  std::unique_ptr<protocol::Animation::Animation> BuildObjectForAnimation(
       blink::Animation&,
       String,
-      std::unique_ptr<protocol::Animation::KeyframesRule> keyframeRule =
+      std::unique_ptr<protocol::Animation::KeyframesRule> keyframe_rule =
           nullptr);
-  double normalizedStartTime(blink::Animation&);
-  AnimationTimeline& referenceTimeline();
-  blink::Animation* animationClone(blink::Animation*);
-  String createCSSId(blink::Animation&);
+  double NormalizedStartTime(blink::Animation&);
+  AnimationTimeline& ReferenceTimeline();
+  blink::Animation* AnimationClone(blink::Animation*);
+  String CreateCSSId(blink::Animation&);
 
-  Member<InspectedFrames> m_inspectedFrames;
-  Member<InspectorCSSAgent> m_cssAgent;
-  v8_inspector::V8InspectorSession* m_v8Session;
-  HeapHashMap<String, Member<blink::Animation>> m_idToAnimation;
-  HeapHashMap<String, Member<blink::Animation>> m_idToAnimationClone;
-  HashMap<String, String> m_idToAnimationType;
-  bool m_isCloning;
-  HashSet<String> m_clearedAnimations;
+  Member<InspectedFrames> inspected_frames_;
+  Member<InspectorCSSAgent> css_agent_;
+  v8_inspector::V8InspectorSession* v8_session_;
+  HeapHashMap<String, Member<blink::Animation>> id_to_animation_;
+  HeapHashMap<String, Member<blink::Animation>> id_to_animation_clone_;
+  HashMap<String, String> id_to_animation_type_;
+  bool is_cloning_;
+  HashSet<String> cleared_animations_;
 };
 
 }  // namespace blink

@@ -23,17 +23,14 @@
 #endif
 
 using chrome_test_util::OmniboxText;
-using chrome_test_util::StaticHtmlViewContainingText;
 using chrome_test_util::TapWebViewElementWithId;
 using chrome_test_util::WebViewContainingText;
+using chrome_test_util::WebViewNotContainingText;
 
 using web::test::HttpServer;
 
 // Tests display of error pages for bad URLs.
 @interface ErrorPageTestCase : ChromeTestCase
-
-// Checks that the DNS error page is visible.
-- (void)checkErrorPageIsVisible;
 
 // Checks that the DNS error page is not visible.
 - (void)checkErrorPageIsNotVisible;
@@ -44,16 +41,6 @@ using web::test::HttpServer;
 
 #pragma mark - utilities
 
-// TODO(crbug.com/638674): Evaluate if this can move to shared code.
-- (void)checkErrorPageIsVisible {
-  // The DNS error page is static HTML content, so it isn't part of the webview
-  // owned by the webstate.
-  NSString* const kError =
-      l10n_util::GetNSString(IDS_ERRORPAGES_HEADING_NOT_AVAILABLE);
-  [[EarlGrey selectElementWithMatcher:StaticHtmlViewContainingText(kError)]
-      assertWithMatcher:grey_notNil()];
-}
-
 - (void)checkErrorPageIsNotVisible {
   // Check that the webview belongs to the web controller, and that the error
   // text doesn't appear in the webview.
@@ -63,25 +50,37 @@ using web::test::HttpServer;
       assertWithMatcher:grey_notNil()];
   const std::string kError =
       l10n_util::GetStringUTF8(IDS_ERRORPAGES_HEADING_NOT_AVAILABLE);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kError)]
-      assertWithMatcher:grey_nil()];
+  [[EarlGrey selectElementWithMatcher:WebViewNotContainingText(kError)]
+      assertWithMatcher:grey_notNil()];
 }
 
 #pragma mark - tests
 
 // Tests whether the error page is displayed for a bad URL.
 - (void)testErrorPage {
+// TODO(crbug.com/694662): This test relies on external URL because of the bug.
+// Re-enable this test on device once the bug is fixed.
+#if !TARGET_IPHONE_SIMULATOR
+  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
+#endif
+
   std::unique_ptr<web::DataResponseProvider> provider(
       new ErrorPageResponseProvider());
   web::test::SetUpHttpServer(std::move(provider));
 
   [ChromeEarlGrey loadURL:ErrorPageResponseProvider::GetDnsFailureUrl()];
 
-  [self checkErrorPageIsVisible];
+  [ChromeEarlGrey waitForErrorPage];
 }
 
 // Tests whether the error page is displayed if it is behind a redirect.
 - (void)testErrorPageRedirect {
+// TODO(crbug.com/694662): This test relies on external URL because of the bug.
+// Re-enable this test on device once the bug is fixed.
+#if !TARGET_IPHONE_SIMULATOR
+  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
+#endif
+
   std::unique_ptr<web::DataResponseProvider> provider(
       new ErrorPageResponseProvider());
   web::test::SetUpHttpServer(std::move(provider));
@@ -96,7 +95,7 @@ using web::test::HttpServer;
   [[EarlGrey selectElementWithMatcher:OmniboxText(redirectedURL)]
       assertWithMatcher:grey_notNil()];
 
-  [self checkErrorPageIsVisible];
+  [ChromeEarlGrey waitForErrorPage];
 }
 
 // Tests that the error page is not displayed if the bad URL is in a <iframe>

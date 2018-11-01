@@ -32,10 +32,10 @@ def GetSystemHealthBenchmarksToSmokeTest():
 
 
 _DISABLED_TESTS = frozenset({
+  # crbug.com/702455
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:media:youtube',  # pylint: disable=line-too-long
   # crbug.com/637230
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:cnn',  # pylint: disable=line-too-long
-  # crbug.com/666293
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.browse:media:youtube',  # pylint: disable=line-too-long
   # Permenently disabled from smoke test for being long-running.
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.long_running:tools:gmail-foreground',  # pylint: disable=line-too-long
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.long_running:tools:gmail-background',  # pylint: disable=line-too-long
@@ -49,12 +49,18 @@ _DISABLED_TESTS = frozenset({
   # crbug.com/
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:nytimes',  # pylint: disable=line-too-long
 
+  # crbug.com/688190
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.browse:news:washingtonpost',  # pylint: disable=line-too-long
+
   # crbug.com/696824
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:news:qq',  # pylint: disable=line-too-long
 
   # crbug.com/698006
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:drive',  # pylint: disable=line-too-long
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:gmail',  # pylint: disable=line-too-long
+
+  # crbug.com/699966
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.multitab:misc:typical24', # pylint: disable=line-too-long
 })
 
 
@@ -137,6 +143,9 @@ def GenerateBenchmarkOptions(benchmark_class):
 def load_tests(loader, standard_tests, pattern):
   del loader, standard_tests, pattern  # unused
   suite = progress_reporter.TestSuite()
+  # Vivaldi does not test these but waiting for the filters will cause
+  # load failures to trigger
+  return suite
   benchmark_classes = GetSystemHealthBenchmarksToSmokeTest()
   assert benchmark_classes, 'This list should never be empty'
   for benchmark_class in benchmark_classes:
@@ -147,8 +156,14 @@ def load_tests(loader, standard_tests, pattern):
     # Since none of our system health benchmarks creates stories based on
     # command line options, it should be ok to pass options=None to
     # CreateStorySet.
-    for story_to_smoke_test in (
-        benchmark_class().CreateStorySet(options=None).stories):
+    stories_set = benchmark_class().CreateStorySet(options=None)
+
+    # Prefetch WPR archive needed by the stories set to avoid race condition
+    # when feching them when tests are run in parallel.
+    # See crbug.com/700426 for more details.
+    stories_set.wpr_archive_info.DownloadArchivesIfNeeded()
+
+    for story_to_smoke_test in stories_set.stories:
       suite.addTest(
           _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test))
 

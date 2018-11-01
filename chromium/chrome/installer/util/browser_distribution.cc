@@ -12,38 +12,21 @@
 #include <utility>
 
 #include "base/atomicops.h"
-#include "base/command_line.h"
-#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/win/registry.h"
-#include "base/win/windows_version.h"
-#include "chrome/common/chrome_icon_resources_win.h"
-#include "chrome/common/env_vars.h"
 #include "chrome/installer/util/app_registration_data.h"
 #include "chrome/installer/util/google_chrome_distribution.h"
-#include "chrome/installer/util/google_chrome_sxs_distribution.h"
-#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/l10n_string_util.h"
-#include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/non_updating_app_registration_data.h"
 
+#include "base/command_line.h"
 #include "chrome/installer/util/util_constants.h"
-
 #include "installer/util/vivaldi_install_util.h"
-
-using installer::MasterPreferences;
 
 namespace {
 
-const wchar_t kChromiumActiveSetupGuid[] =
-    L"{9C142C0C-124C-4467-B117-EBCC62801D7B}";
-
-const wchar_t kCommandExecuteImplUuid[] =
-    L"{DAB968E0-3A13-4CCC-A3AF-85578ACBE9AB}";
-
-// The BrowserDistribution objects are never freed.
+// The BrowserDistribution object is never freed.
 BrowserDistribution* g_browser_distribution = NULL;
 
 }  // namespace
@@ -61,7 +44,7 @@ BrowserDistribution::BrowserDistribution(
     std::unique_ptr<AppRegistrationData> app_reg_data)
     : app_reg_data_(std::move(app_reg_data)) {}
 
-BrowserDistribution::~BrowserDistribution() {}
+BrowserDistribution::~BrowserDistribution() = default;
 
 template<class DistributionClass>
 BrowserDistribution* BrowserDistribution::GetOrCreateBrowserDistribution(
@@ -82,13 +65,8 @@ BrowserDistribution* BrowserDistribution::GetDistribution() {
   BrowserDistribution* dist = NULL;
 
 #if defined(GOOGLE_CHROME_BUILD)
-  if (InstallUtil::IsChromeSxSProcess()) {
-    dist = GetOrCreateBrowserDistribution<GoogleChromeSxSDistribution>(
-        &g_browser_distribution);
-  } else {
-    dist = GetOrCreateBrowserDistribution<GoogleChromeDistribution>(
-        &g_browser_distribution);
-  }
+  dist = GetOrCreateBrowserDistribution<GoogleChromeDistribution>(
+      &g_browser_distribution);
 #else
   dist = GetOrCreateBrowserDistribution<BrowserDistribution>(
       &g_browser_distribution);
@@ -121,28 +99,14 @@ void BrowserDistribution::DoPostUninstallOperations(
 #endif
 }
 
-base::string16 BrowserDistribution::GetActiveSetupGuid() {
-  return kChromiumActiveSetupGuid;
-}
-
-base::string16 BrowserDistribution::GetBaseAppName() {
-  return L"Vivaldi";
-}
-
 base::string16 BrowserDistribution::GetDisplayName() {
   return GetShortcutName();
 }
 
 base::string16 BrowserDistribution::GetShortcutName() {
-  return GetBaseAppName();
-}
-
-int BrowserDistribution::GetIconIndex() {
-  return icon_resources::kApplicationIndex;
-}
-
-base::string16 BrowserDistribution::GetIconFilename() {
-  return installer::kChromeExe;
+  // IDS_PRODUCT_NAME is automatically mapped to the mode-specific shortcut
+  // name.
+  return installer::GetLocalizedString(IDS_PRODUCT_NAME_BASE);
 }
 
 base::string16 BrowserDistribution::GetStartMenuShortcutSubfolder(
@@ -154,26 +118,6 @@ base::string16 BrowserDistribution::GetStartMenuShortcutSubfolder(
       DCHECK_EQ(SUBFOLDER_CHROME, subfolder_type);
       return GetShortcutName();
   }
-}
-
-base::string16 BrowserDistribution::GetBaseAppId() {
-  return L"Vivaldi";
-}
-
-base::string16 BrowserDistribution::GetBrowserProgIdPrefix() {
-  // This used to be "ChromiumHTML", but was forced to become "ChromiumHTM"
-  // because of http://crbug.com/153349.  See the declaration of this function
-  // in the header file for more details.
-  return L"VivaldiHTM";
-}
-
-base::string16 BrowserDistribution::GetBrowserProgIdDesc() {
-  return L"Vivaldi HTML Document";
-}
-
-
-base::string16 BrowserDistribution::GetInstallSubDir() {
-  return L"Vivaldi";
 }
 
 base::string16 BrowserDistribution::GetPublisherName() {
@@ -214,36 +158,7 @@ base::string16 BrowserDistribution::GetDistributionData(HKEY root_key) {
   return L"";
 }
 
-base::string16 BrowserDistribution::GetRegistryPath() {
-  return base::string16(L"Software\\").append(GetInstallSubDir());
-}
-
-base::string16 BrowserDistribution::GetUninstallRegPath() {
-  return L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Vivaldi";
-}
-
-BrowserDistribution::DefaultBrowserControlPolicy
-    BrowserDistribution::GetDefaultBrowserControlPolicy() {
-  return DEFAULT_BROWSER_FULL_CONTROL;
-}
-
-bool BrowserDistribution::CanCreateDesktopShortcuts() {
-  return true;
-}
-
-base::string16 BrowserDistribution::GetCommandExecuteImplClsid() {
-  return kCommandExecuteImplUuid;
-}
-
 void BrowserDistribution::UpdateInstallStatus(bool system_install,
     installer::ArchiveType archive_type,
     installer::InstallStatus install_status) {
-}
-
-bool BrowserDistribution::ShouldSetExperimentLabels() {
-  return false;
-}
-
-bool BrowserDistribution::HasUserExperiments() {
-  return false;
 }

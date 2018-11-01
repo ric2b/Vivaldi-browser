@@ -18,8 +18,8 @@
 #import "ios/chrome/browser/passwords/password_generation_utils.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/web/public/url_scheme_util.h"
-#import "ios/web/public/web_state/crw_web_view_proxy.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
+#import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "url/gurl.h"
@@ -93,7 +93,6 @@ NSArray* FindDescendantToolbarItemsForActionName(UIView* root,
   return descendants;
 }
 
-#if defined(__IPHONE_9_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_9_0
 NSArray* FindDescendantToolbarItemsForActionName(
     UITextInputAssistantItem* inputAssistantItem,
     NSString* actionName) {
@@ -117,7 +116,6 @@ NSArray* FindDescendantToolbarItemsForActionName(
 
   return toolbarItems;
 }
-#endif
 
 // Computes the frame of each part of the accessory view of the keyboard. It is
 // assumed that the keyboard has either two parts (when it is split) or one part

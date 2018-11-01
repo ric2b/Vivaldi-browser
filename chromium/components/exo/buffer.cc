@@ -53,6 +53,7 @@ GLenum GLInternalFormat(gfx::BufferFormat format) {
       GL_RGBA,                             // RGBA_8888
       GL_RGB,                              // BGRX_8888
       GL_BGRA_EXT,                         // BGRA_8888
+      GL_RGBA,                             // RGBA_F16
       GL_RGB_YCRCB_420_CHROMIUM,           // YVU_420
       GL_RGB_YCBCR_420V_CHROMIUM,          // YUV_420_BIPLANAR
       GL_RGB_YCBCR_422_CHROMIUM,           // UYVY_422
@@ -457,6 +458,7 @@ bool Buffer::ProduceTransferableResource(
     resource->mailbox_holder = gpu::MailboxHolder(contents_texture->mailbox(),
                                                   sync_token, texture_target_);
     resource->is_overlay_candidate = is_overlay_candidate_;
+    resource->buffer_format = gpu_memory_buffer_->GetFormat();
 
     // The contents texture will be released when no longer used by the
     // compositor.

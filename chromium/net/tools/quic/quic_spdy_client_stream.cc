@@ -13,7 +13,6 @@
 #include "net/spdy/spdy_protocol.h"
 #include "net/tools/quic/quic_client_session.h"
 
-using base::StringPiece;
 using std::string;
 
 namespace net {
@@ -62,8 +61,7 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(
     return;
   }
 
-  if (FLAGS_quic_restart_flag_quic_supports_100_continue &&
-      response_code_ == 100 && !has_preliminary_headers_) {
+  if (response_code_ == 100 && !has_preliminary_headers_) {
     // These are preliminary 100 Continue headers, not the actual response
     // headers.
     set_headers_decompressed(false);
@@ -139,7 +137,7 @@ void QuicSpdyClientStream::OnDataAvailable() {
 }
 
 size_t QuicSpdyClientStream::SendRequest(SpdyHeaderBlock headers,
-                                         StringPiece body,
+                                         QuicStringPiece body,
                                          bool fin) {
   QuicConnection::ScopedPacketBundler bundler(
       session_->connection(), QuicConnection::SEND_ACK_IF_QUEUED);

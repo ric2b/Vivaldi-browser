@@ -6,6 +6,7 @@
 #define CredentialsContainer_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -15,13 +16,13 @@ class CredentialRequestOptions;
 class ScriptPromise;
 class ScriptState;
 
-class CredentialsContainer final
+class MODULES_EXPORT CredentialsContainer final
     : public GarbageCollected<CredentialsContainer>,
       public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static CredentialsContainer* create();
+  static CredentialsContainer* Create();
 
   // CredentialsContainer.h
   ScriptPromise get(ScriptState*, const CredentialRequestOptions&);

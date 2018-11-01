@@ -381,21 +381,6 @@ class ImportDataOpenTaskManagerFunction : public ChromeAsyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(ImportDataOpenTaskManagerFunction);
 };
 
-class ImportDataShowDevToolsFunction : public ChromeAsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("importData.showDevTools",
-                             IMPORTDATA_GET_BLOCKTHIRDPARTYCOOKIES)
-  ImportDataShowDevToolsFunction();
-
- protected:
-  ~ImportDataShowDevToolsFunction() override;
-  // ExtensionFunction:
-  bool RunAsync() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ImportDataShowDevToolsFunction);
-};
-
 class ImportDataGetStartupActionFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.getStartupAction",

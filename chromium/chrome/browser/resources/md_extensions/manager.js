@@ -50,6 +50,9 @@ cr.define('extensions', function() {
       /** @type {extensions.Sidebar} */
       sidebar: Object,
 
+      /** @type {extensions.Toolbar} */
+      toolbar: Object,
+
       /** @type {extensions.ItemDelegate} */
       itemDelegate: Object,
 
@@ -106,6 +109,8 @@ cr.define('extensions', function() {
       /** @type {extensions.Sidebar} */
       this.sidebar =
           /** @type {extensions.Sidebar} */(this.$$('extensions-sidebar'));
+      this.toolbar =
+          /** @type {extensions.Toolbar} */(this.$$('extensions-toolbar'));
       this.listHelper_ = new ListHelper(this);
       this.sidebar.setListDelegate(this.listHelper_);
       this.readyPromiseResolver.resolve();
@@ -117,6 +122,10 @@ cr.define('extensions', function() {
 
     get packDialog() {
       return this.$['pack-dialog'];
+    },
+
+    get loadError() {
+      return this.$['load-error'];
     },
 
     get optionsDialog() {
@@ -143,6 +152,10 @@ cr.define('extensions', function() {
      */
     onFilterChanged_: function(event) {
       this.filter = /** @type {string} */ (event.detail);
+    },
+
+    onMenuButtonTap_: function() {
+      this.$.drawer.toggle();
     },
 
     /**
@@ -273,6 +286,7 @@ cr.define('extensions', function() {
      * @param {Page} toPage
      */
     changePage: function(toPage) {
+      this.$.drawer.closeDrawer();
       var fromPage = this.$.pages.selected;
       if (fromPage == toPage)
         return;
@@ -280,19 +294,21 @@ cr.define('extensions', function() {
       var exit;
       if (fromPage == Page.ITEM_LIST && (toPage == Page.DETAIL_VIEW ||
                                          toPage == Page.ERROR_PAGE)) {
-        entry = extensions.Animation.HERO;
-        exit = extensions.Animation.HERO;
+        entry = [extensions.Animation.HERO];
+        // The item grid can be larger than the detail view that we're
+        // hero'ing into, so we want to also fade out to avoid any jarring.
+        exit = [extensions.Animation.HERO, extensions.Animation.FADE_OUT];
       } else if (toPage == Page.ITEM_LIST) {
-        entry = extensions.Animation.FADE_IN;
-        exit = extensions.Animation.SCALE_DOWN;
+        entry = [extensions.Animation.FADE_IN];
+        exit = [extensions.Animation.SCALE_DOWN];
       } else {
         assert(toPage == Page.DETAIL_VIEW ||
                toPage == Page.KEYBOARD_SHORTCUTS);
-        entry = extensions.Animation.FADE_IN;
-        exit = extensions.Animation.FADE_OUT;
+        entry = [extensions.Animation.FADE_IN];
+        exit = [extensions.Animation.FADE_OUT];
       }
-      this.getPage_(fromPage).animationHelper.setExitAnimation(exit);
-      this.getPage_(toPage).animationHelper.setEntryAnimation(entry);
+      this.getPage_(fromPage).animationHelper.setExitAnimations(exit);
+      this.getPage_(toPage).animationHelper.setEntryAnimations(entry);
       this.$.pages.selected = toPage;
     },
 
@@ -329,6 +345,11 @@ cr.define('extensions', function() {
       // Note: we don't reset errorPageItem_ here because doing so just causes
       // extra work for the data-bound error page.
       this.changePage(Page.ITEM_LIST);
+    },
+
+    /** @private */
+    onPackTap_: function() {
+      this.$['pack-dialog'].show();
     }
   });
 
@@ -362,11 +383,6 @@ cr.define('extensions', function() {
     showKeyboardShortcuts: function() {
       this.manager_.changePage(Page.KEYBOARD_SHORTCUTS);
     },
-
-    /** @override */
-    showPackDialog: function() {
-      this.manager_.packDialog.show();
-    }
   };
 
   return {Manager: Manager};

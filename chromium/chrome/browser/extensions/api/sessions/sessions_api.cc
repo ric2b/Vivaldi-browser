@@ -283,9 +283,6 @@ std::unique_ptr<windows::Window> SessionsGetDevicesFunction::CreateWindowModel(
   windows::WindowState state = windows::WINDOW_STATE_NONE;
   switch (window.show_state) {
     case ui::SHOW_STATE_NORMAL:
-
-    // TODO(afakhry): Remove Docked Windows in M58.
-    case ui::SHOW_STATE_DOCKED:
       state = windows::WINDOW_STATE_NORMAL;
       break;
     case ui::SHOW_STATE_MINIMIZED:
@@ -349,7 +346,7 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
        static_cast<int>(device_struct.sessions.size()) < max_results;
        ++it) {
     std::unique_ptr<api::sessions::Session> session_model(
-        CreateSessionModel(*it->second, session->session_tag));
+        CreateSessionModel(it->second->wrapped_window, session->session_tag));
     if (session_model)
       device_struct.sessions.push_back(std::move(*session_model));
   }
@@ -608,8 +605,9 @@ void SessionsAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<SessionsAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<SessionsAPI>>::DestructorAtExit g_factory =
+    LAZY_INSTANCE_INITIALIZER;
 
 BrowserContextKeyedAPIFactory<SessionsAPI>*
 SessionsAPI::GetFactoryInstance() {

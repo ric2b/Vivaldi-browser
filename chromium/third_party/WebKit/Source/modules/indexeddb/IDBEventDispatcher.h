@@ -31,9 +31,9 @@
 
 #include "core/events/EventTarget.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Allocator.h"
-#include "wtf/RefPtr.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -45,7 +45,7 @@ class IDBEventDispatcher {
  public:
   // The second argument contains the target first and then its ancestors in
   // order of how the event bubbles.
-  static DispatchEventResult dispatch(Event*, HeapVector<Member<EventTarget>>&);
+  static DispatchEventResult Dispatch(Event*, HeapVector<Member<EventTarget>>&);
 };
 
 }  // namespace blink

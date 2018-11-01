@@ -26,12 +26,12 @@
 #ifndef ConvolverNode_h
 #define ConvolverNode_h
 
+#include <memory>
 #include "base/gtest_prod_util.h"
 #include "modules/ModulesExport.h"
 #include "modules/webaudio/AudioNode.h"
-#include "wtf/RefPtr.h"
-#include "wtf/ThreadingPrimitives.h"
-#include <memory>
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/ThreadingPrimitives.h"
 
 namespace blink {
 
@@ -42,36 +42,47 @@ class Reverb;
 
 class MODULES_EXPORT ConvolverHandler final : public AudioHandler {
  public:
-  static PassRefPtr<ConvolverHandler> create(AudioNode&, float sampleRate);
+  static PassRefPtr<ConvolverHandler> Create(AudioNode&, float sample_rate);
   ~ConvolverHandler() override;
 
   // AudioHandler
-  void process(size_t framesToProcess) override;
+  void Process(size_t frames_to_process) override;
+  // Called in the main thread when the number of channels for the input may
+  // have changed.
+  void CheckNumberOfChannelsForInput(AudioNodeInput*) override;
 
   // Impulse responses
-  void setBuffer(AudioBuffer*, ExceptionState&);
-  AudioBuffer* buffer();
+  void SetBuffer(AudioBuffer*, ExceptionState&);
+  AudioBuffer* Buffer();
 
-  bool normalize() const { return m_normalize; }
-  void setNormalize(bool normalize) { m_normalize = normalize; }
+  bool Normalize() const { return normalize_; }
+  void SetNormalize(bool normalize) { normalize_ = normalize; }
+  void SetChannelCount(unsigned long, ExceptionState&) final;
+  void SetChannelCountMode(const String&, ExceptionState&) final;
 
  private:
-  ConvolverHandler(AudioNode&, float sampleRate);
-  double tailTime() const override;
-  double latencyTime() const override;
+  ConvolverHandler(AudioNode&, float sample_rate);
+  double TailTime() const override;
+  double LatencyTime() const override;
 
-  std::unique_ptr<Reverb> m_reverb;
+  // Determine how many output channels to use from the number of
+  // input channels and the number of channels in the impulse response
+  // buffer.
+  unsigned ComputeNumberOfOutputChannels(unsigned input_channels,
+                                         unsigned response_channels) const;
+
+  std::unique_ptr<Reverb> reverb_;
   // This Persistent doesn't make a reference cycle including the owner
   // ConvolverNode.
   // It is cross-thread, as it will be accessed by the audio and main threads.
-  CrossThreadPersistent<AudioBuffer> m_buffer;
+  CrossThreadPersistent<AudioBuffer> buffer_;
 
   // This synchronizes dynamic changes to the convolution impulse response with
   // process().
-  mutable Mutex m_processLock;
+  mutable Mutex process_lock_;
 
   // Normalize the impulse response or not. Must default to true.
-  bool m_normalize;
+  bool normalize_;
 
   FRIEND_TEST_ALL_PREFIXES(ConvolverNodeTest, ReverbLifetime);
 };
@@ -80,8 +91,8 @@ class MODULES_EXPORT ConvolverNode final : public AudioNode {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static ConvolverNode* create(BaseAudioContext&, ExceptionState&);
-  static ConvolverNode* create(BaseAudioContext*,
+  static ConvolverNode* Create(BaseAudioContext&, ExceptionState&);
+  static ConvolverNode* Create(BaseAudioContext*,
                                const ConvolverOptions&,
                                ExceptionState&);
 
@@ -92,7 +103,7 @@ class MODULES_EXPORT ConvolverNode final : public AudioNode {
 
  private:
   ConvolverNode(BaseAudioContext&);
-  ConvolverHandler& convolverHandler() const;
+  ConvolverHandler& GetConvolverHandler() const;
 
   FRIEND_TEST_ALL_PREFIXES(ConvolverNodeTest, ReverbLifetime);
 };

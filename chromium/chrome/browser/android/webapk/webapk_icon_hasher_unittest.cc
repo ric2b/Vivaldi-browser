@@ -37,8 +37,7 @@ class WebApkIconHasherRunner {
   ~WebApkIconHasherRunner() {}
 
   void Run(const GURL& icon_url) {
-    WebApkIconHasher hasher;
-    hasher.DownloadAndComputeMurmur2Hash(
+    WebApkIconHasher::DownloadAndComputeMurmur2Hash(
         url_request_context_getter_.get(), icon_url,
         base::Bind(&WebApkIconHasherRunner::OnCompleted,
                    base::Unretained(this)));
@@ -108,6 +107,20 @@ TEST_F(WebApkIconHasherTest, DataUri) {
 
 TEST_F(WebApkIconHasherTest, DataUriInvalid) {
   GURL icon_url("data:image/png;base64");
+  WebApkIconHasherRunner runner;
+  runner.Run(icon_url);
+  EXPECT_EQ("", runner.murmur2_hash());
+}
+
+TEST_F(WebApkIconHasherTest, InvalidUrl) {
+  GURL icon_url("http::google.com");
+  WebApkIconHasherRunner runner;
+  runner.Run(icon_url);
+  EXPECT_EQ("", runner.murmur2_hash());
+}
+
+TEST_F(WebApkIconHasherTest, DownloadTimedOut) {
+  GURL icon_url = test_server()->GetURL("/slow?100");
   WebApkIconHasherRunner runner;
   runner.Run(icon_url);
   EXPECT_EQ("", runner.murmur2_hash());

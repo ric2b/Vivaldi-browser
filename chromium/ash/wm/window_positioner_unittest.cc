@@ -2,20 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/wm/window_positioner.h"
+#include "ash/wm/window_positioner.h"
 
 #include <string>
 
-#include "ash/common/scoped_root_window_for_new_windows.h"
-#include "ash/common/wm/window_positioner.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "ash/scoped_root_window_for_new_windows.h"
 #include "ash/shell.h"
 #include "ash/shell/toplevel_window.h"
+#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_shell_delegate.h"
+#include "ash/wm/window_positioner.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
+#include "ash/wm_window.h"
 #include "base/strings/string_number_conversions.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -30,7 +30,7 @@ TEST_F(WindowPositionerTest, OpenMaximizedWindowOnSecondDisplay) {
   // a new window gets maximized.
   UpdateDisplay("400x400,500x500");
   ScopedRootWindowForNewWindows root_for_new_windows(
-      WmShell::Get()->GetAllRootWindows()[1]);
+      ShellPort::Get()->GetAllRootWindows()[1]);
   shell::ToplevelWindow::CreateParams params;
   params.can_resize = true;
   params.can_maximize = true;
@@ -41,7 +41,7 @@ TEST_F(WindowPositionerTest, OpenMaximizedWindowOnSecondDisplay) {
 
 TEST_F(WindowPositionerTest, OpenDefaultWindowOnSecondDisplay) {
   UpdateDisplay("400x400,1400x900");
-  WmWindow* second_root_window = WmShell::Get()->GetAllRootWindows()[1];
+  WmWindow* second_root_window = ShellPort::Get()->GetAllRootWindows()[1];
   ScopedRootWindowForNewWindows root_for_new_windows(second_root_window);
   shell::ToplevelWindow::CreateParams params;
   params.can_resize = true;
@@ -147,7 +147,7 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowHighResloution) {
   ui::WindowShowState show_state_out = ui::SHOW_STATE_DEFAULT;
 
   test::TestShellDelegate* const delegate =
-      static_cast<test::TestShellDelegate*>(WmShell::Get()->delegate());
+      static_cast<test::TestShellDelegate*>(Shell::Get()->shell_delegate());
   delegate->SetForceMaximizeOnFirstRun(true);
 
   WindowPositioner::GetBoundsAndShowStateForNewWindow(
@@ -166,7 +166,7 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowLowResolution) {
   ui::WindowShowState show_state_out = ui::SHOW_STATE_DEFAULT;
 
   test::TestShellDelegate* const delegate =
-      static_cast<test::TestShellDelegate*>(WmShell::Get()->delegate());
+      static_cast<test::TestShellDelegate*>(Shell::Get()->shell_delegate());
   delegate->SetForceMaximizeOnFirstRun(true);
 
   WindowPositioner::GetBoundsAndShowStateForNewWindow(

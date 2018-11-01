@@ -39,49 +39,23 @@ namespace blink {
 
 class CORE_EXPORT AnimatableLength final : public AnimatableValue {
  public:
-  static PassRefPtr<AnimatableLength> create(const Length& length, float zoom) {
-    return adoptRef(new AnimatableLength(length, zoom));
+  static PassRefPtr<AnimatableLength> Create(const Length& length, float zoom) {
+    return AdoptRef(new AnimatableLength(length, zoom));
   }
-  Length getLength(float zoom, ValueRange) const;
-
-  bool hasSameUnits(const AnimatableLength* other) const {
-    return m_hasPixels == other->m_hasPixels &&
-           m_hasPercent == other->m_hasPercent;
-  }
-
- protected:
-  PassRefPtr<AnimatableValue> interpolateTo(const AnimatableValue*,
-                                            double fraction) const override;
+  Length GetLength(float zoom, ValueRange) const;
 
  private:
-  static PassRefPtr<AnimatableLength> create(double pixels,
-                                             double percent,
-                                             bool hasPixels,
-                                             bool hasPercent) {
-    return adoptRef(
-        new AnimatableLength(pixels, percent, hasPixels, hasPercent));
-  }
   AnimatableLength(const Length&, float zoom);
-  AnimatableLength(double pixels,
-                   double percent,
-                   bool hasPixels,
-                   bool hasPercent)
-      : m_pixels(pixels),
-        m_percent(percent),
-        m_hasPixels(hasPixels),
-        m_hasPercent(hasPercent) {
-    DCHECK(m_hasPixels || m_hasPercent);
-  }
-  AnimatableType type() const override { return TypeLength; }
-  bool equalTo(const AnimatableValue*) const override;
+  AnimatableType GetType() const override { return kTypeLength; }
+  bool EqualTo(const AnimatableValue*) const override;
 
-  double m_pixels;
-  double m_percent;
-  bool m_hasPixels;
-  bool m_hasPercent;
+  double pixels_;
+  double percent_;
+  bool has_pixels_;
+  bool has_percent_;
 };
 
-DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableLength, isLength());
+DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableLength, IsLength());
 
 }  // namespace blink
 

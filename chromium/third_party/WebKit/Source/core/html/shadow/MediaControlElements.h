@@ -31,6 +31,7 @@
 #define MediaControlElements_h
 
 #include "core/html/shadow/MediaControlElementTypes.h"
+#include "core/html/shadow/MediaControlTimelineMetrics.h"
 #include "public/platform/WebLocalizedString.h"
 
 namespace blink {
@@ -39,349 +40,300 @@ class TextTrack;
 
 // ----------------------------
 
-class MediaControlPanelElement final : public MediaControlDivElement {
+class CORE_EXPORT MediaControlPanelElement final
+    : public MediaControlDivElement {
  public:
-  static MediaControlPanelElement* create(MediaControls&);
+  static MediaControlPanelElement* Create(MediaControls&);
 
-  void setIsDisplayed(bool);
+  void SetIsDisplayed(bool);
 
-  bool isOpaque() const;
-  void makeOpaque();
-  void makeTransparent();
+  bool IsOpaque() const;
+  void MakeOpaque();
+  void MakeTransparent();
 
  private:
   explicit MediaControlPanelElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
-  bool keepEventInNode(Event*) override;
+  void DefaultEventHandler(Event*) override;
+  bool KeepEventInNode(Event*) override;
 
-  void startTimer();
-  void stopTimer();
-  void transitionTimerFired(TimerBase*);
-  void didBecomeVisible();
+  void StartTimer();
+  void StopTimer();
+  void TransitionTimerFired(TimerBase*);
+  void DidBecomeVisible();
 
-  bool m_isDisplayed;
-  bool m_opaque;
+  bool is_displayed_;
+  bool opaque_;
 
-  TaskRunnerTimer<MediaControlPanelElement> m_transitionTimer;
+  TaskRunnerTimer<MediaControlPanelElement> transition_timer_;
 };
 
 // ----------------------------
 
-class MediaControlPanelEnclosureElement final : public MediaControlDivElement {
+class CORE_EXPORT MediaControlPlayButtonElement final
+    : public MediaControlInputElement {
  public:
-  static MediaControlPanelEnclosureElement* create(MediaControls&);
+  static MediaControlPlayButtonElement* Create(MediaControls&);
 
- private:
-  explicit MediaControlPanelEnclosureElement(MediaControls&);
-};
+  bool WillRespondToMouseClickEvents() override { return true; }
+  void UpdateDisplayType() override;
 
-// ----------------------------
+  WebLocalizedString::Name GetOverflowStringName() override;
 
-class MediaControlOverlayEnclosureElement final
-    : public MediaControlDivElement {
- public:
-  static MediaControlOverlayEnclosureElement* create(MediaControls&);
-
- private:
-  explicit MediaControlOverlayEnclosureElement(MediaControls&);
-  EventDispatchHandlingState* preDispatchEventHandler(Event*) override;
-};
-
-// ----------------------------
-
-class MediaControlMuteButtonElement final : public MediaControlInputElement {
- public:
-  static MediaControlMuteButtonElement* create(MediaControls&);
-
-  bool willRespondToMouseClickEvents() override { return true; }
-  void updateDisplayType() override;
-
-  WebLocalizedString::Name getOverflowStringName() override;
-
-  bool hasOverflowButton() override { return true; }
-
- private:
-  explicit MediaControlMuteButtonElement(MediaControls&);
-
-  void defaultEventHandler(Event*) override;
-};
-
-// ----------------------------
-
-class MediaControlPlayButtonElement final : public MediaControlInputElement {
- public:
-  static MediaControlPlayButtonElement* create(MediaControls&);
-
-  bool willRespondToMouseClickEvents() override { return true; }
-  void updateDisplayType() override;
-
-  WebLocalizedString::Name getOverflowStringName() override;
-
-  bool hasOverflowButton() override { return true; }
+  bool HasOverflowButton() override { return true; }
 
  private:
   explicit MediaControlPlayButtonElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event*) override;
 };
 
 // ----------------------------
 
-class MediaControlOverlayPlayButtonElement final
+class CORE_EXPORT MediaControlOverlayPlayButtonElement final
     : public MediaControlInputElement {
  public:
-  static MediaControlOverlayPlayButtonElement* create(MediaControls&);
+  static MediaControlOverlayPlayButtonElement* Create(MediaControls&);
 
-  void updateDisplayType() override;
+  void UpdateDisplayType() override;
 
  private:
   explicit MediaControlOverlayPlayButtonElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
-  bool keepEventInNode(Event*) override;
+  void DefaultEventHandler(Event*) override;
+  bool KeepEventInNode(Event*) override;
 };
 
 // ----------------------------
 
-class MediaControlToggleClosedCaptionsButtonElement final
+class CORE_EXPORT MediaControlToggleClosedCaptionsButtonElement final
     : public MediaControlInputElement {
  public:
-  static MediaControlToggleClosedCaptionsButtonElement* create(MediaControls&);
+  static MediaControlToggleClosedCaptionsButtonElement* Create(MediaControls&);
 
-  bool willRespondToMouseClickEvents() override { return true; }
+  bool WillRespondToMouseClickEvents() override { return true; }
 
-  void updateDisplayType() override;
+  void UpdateDisplayType() override;
 
-  WebLocalizedString::Name getOverflowStringName() override;
+  WebLocalizedString::Name GetOverflowStringName() override;
 
-  bool hasOverflowButton() override { return true; }
+  bool HasOverflowButton() override { return true; }
 
  private:
   explicit MediaControlToggleClosedCaptionsButtonElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event*) override;
 };
 
 // ----------------------------
 
-class MediaControlTextTrackListElement final : public MediaControlDivElement {
+class CORE_EXPORT MediaControlTextTrackListElement final
+    : public MediaControlDivElement {
  public:
-  static MediaControlTextTrackListElement* create(MediaControls&);
+  static MediaControlTextTrackListElement* Create(MediaControls&);
 
-  bool willRespondToMouseClickEvents() override { return true; }
+  bool WillRespondToMouseClickEvents() override { return true; }
 
-  void setVisible(bool);
+  void SetVisible(bool);
 
  private:
   explicit MediaControlTextTrackListElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event*) override;
 
-  void refreshTextTrackListMenu();
+  void RefreshTextTrackListMenu();
 
   // Returns the label for the track when a valid track is passed in and "Off"
   // when the parameter is null.
-  String getTextTrackLabel(TextTrack*);
+  String GetTextTrackLabel(TextTrack*);
   // Creates the track element in the list when a valid track is passed in and
   // the "Off" item when the parameter is null.
-  Element* createTextTrackListItem(TextTrack*);
+  Element* CreateTextTrackListItem(TextTrack*);
 };
 
 // ----------------------------
 // Represents the overflow menu which is displayed when the width of the media
 // player is small enough that at least two buttons are no longer visible.
-class MediaControlOverflowMenuButtonElement final
+class CORE_EXPORT MediaControlOverflowMenuButtonElement final
     : public MediaControlInputElement {
  public:
-  static MediaControlOverflowMenuButtonElement* create(MediaControls&);
+  static MediaControlOverflowMenuButtonElement* Create(MediaControls&);
 
   // The overflow button should respond to mouse clicks since we want a click
   // to open up the menu.
-  bool willRespondToMouseClickEvents() override { return true; }
+  bool WillRespondToMouseClickEvents() override { return true; }
 
  private:
   explicit MediaControlOverflowMenuButtonElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event*) override;
 };
 
 // ----------------------------
 // Holds a list of elements within the overflow menu.
-class MediaControlOverflowMenuListElement final
+class CORE_EXPORT MediaControlOverflowMenuListElement final
     : public MediaControlDivElement {
  public:
-  static MediaControlOverflowMenuListElement* create(MediaControls&);
+  static MediaControlOverflowMenuListElement* Create(MediaControls&);
 
  private:
   explicit MediaControlOverflowMenuListElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event*) override;
 };
 
 // ----------------------------
 // Represents a button that allows users to download media if the file is
 // downloadable.
-class MediaControlDownloadButtonElement final
+class CORE_EXPORT MediaControlDownloadButtonElement final
     : public MediaControlInputElement {
  public:
-  static MediaControlDownloadButtonElement* create(MediaControls&);
+  static MediaControlDownloadButtonElement* Create(MediaControls&);
 
-  WebLocalizedString::Name getOverflowStringName() override;
+  WebLocalizedString::Name GetOverflowStringName() override;
 
-  bool hasOverflowButton() override { return true; }
+  bool HasOverflowButton() override { return true; }
 
   // Returns true if the download button should be shown. We should
   // show the button for only non-MSE, non-EME, and non-MediaStream content.
-  bool shouldDisplayDownloadButton();
+  bool ShouldDisplayDownloadButton();
 
-  void setIsWanted(bool) override;
+  void SetIsWanted(bool) override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit MediaControlDownloadButtonElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event*) override;
 
   // Points to an anchor element that contains the URL of the media file.
-  Member<HTMLAnchorElement> m_anchor;
+  Member<HTMLAnchorElement> anchor_;
 
   // This is used for UMA histogram (Media.Controls.Download). New values should
   // be appended only and must be added before |Count|.
   enum class DownloadActionMetrics {
-    Shown = 0,
-    Clicked,
-    Count  // Keep last.
+    kShown = 0,
+    kClicked,
+    kCount  // Keep last.
   };
-  void recordMetrics(DownloadActionMetrics);
+  void RecordMetrics(DownloadActionMetrics);
 
   // UMA related boolean. They are used to prevent counting something twice
   // for the same media element.
-  bool m_clickUseCounted = false;
-  bool m_showUseCounted = false;
+  bool click_use_counted_ = false;
+  bool show_use_counted_ = false;
 };
 
-class MediaControlTimelineElement final : public MediaControlInputElement {
+class CORE_EXPORT MediaControlTimelineElement final
+    : public MediaControlInputElement {
  public:
-  static MediaControlTimelineElement* create(MediaControls&);
+  static MediaControlTimelineElement* Create(MediaControls&);
 
-  bool willRespondToMouseClickEvents() override;
+  bool WillRespondToMouseClickEvents() override;
 
   // FIXME: An "earliest possible position" will be needed once that concept
   // is supported by HTMLMediaElement, see https://crbug.com/137275
-  void setPosition(double);
-  void setDuration(double);
+  void SetPosition(double);
+  void SetDuration(double);
+
+  void OnPlaying();
 
  private:
   explicit MediaControlTimelineElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
-  bool keepEventInNode(Event*) override;
+  void DefaultEventHandler(Event*) override;
+  bool KeepEventInNode(Event*) override;
+
+  // Width in CSS pixels * pageZoomFactor (ignores CSS transforms for
+  // simplicity; deliberately ignores pinch zoom's pageScaleFactor).
+  int TimelineWidth();
+
+  MediaControlTimelineMetrics metrics_;
 };
 
 // ----------------------------
 
-class MediaControlFullscreenButtonElement final
+class CORE_EXPORT MediaControlFullscreenButtonElement final
     : public MediaControlInputElement {
  public:
-  static MediaControlFullscreenButtonElement* create(MediaControls&);
+  static MediaControlFullscreenButtonElement* Create(MediaControls&);
 
-  bool willRespondToMouseClickEvents() override { return true; }
+  bool WillRespondToMouseClickEvents() override { return true; }
 
-  void setIsFullscreen(bool);
+  void SetIsFullscreen(bool);
 
-  WebLocalizedString::Name getOverflowStringName() override;
+  WebLocalizedString::Name GetOverflowStringName() override;
 
-  bool hasOverflowButton() override { return true; }
+  bool HasOverflowButton() override { return true; }
 
  private:
   explicit MediaControlFullscreenButtonElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event*) override;
 };
 
 // ----------------------------
 
-class MediaControlCastButtonElement final : public MediaControlInputElement {
+class CORE_EXPORT MediaControlCastButtonElement final
+    : public MediaControlInputElement {
  public:
-  static MediaControlCastButtonElement* create(MediaControls&,
-                                               bool isOverlayButton);
+  static MediaControlCastButtonElement* Create(MediaControls&,
+                                               bool is_overlay_button);
 
-  bool willRespondToMouseClickEvents() override { return true; }
+  bool WillRespondToMouseClickEvents() override { return true; }
 
-  void setIsPlayingRemotely(bool);
+  void SetIsPlayingRemotely(bool);
 
-  WebLocalizedString::Name getOverflowStringName() override;
+  WebLocalizedString::Name GetOverflowStringName() override;
 
-  bool hasOverflowButton() override { return true; }
+  bool HasOverflowButton() override { return true; }
 
   // This will show a cast button if it is not covered by another element.
   // This MUST be called for cast button elements that are overlay elements.
-  void tryShowOverlay();
+  void TryShowOverlay();
 
  private:
-  explicit MediaControlCastButtonElement(MediaControls&, bool isOverlayButton);
+  explicit MediaControlCastButtonElement(MediaControls&,
+                                         bool is_overlay_button);
 
-  const AtomicString& shadowPseudoId() const override;
-  void defaultEventHandler(Event*) override;
-  bool keepEventInNode(Event*) override;
+  void DefaultEventHandler(Event*) override;
+  bool KeepEventInNode(Event*) override;
 
-  bool m_isOverlayButton;
+  bool is_overlay_button_;
 
   // This is used for UMA histogram (Cast.Sender.Overlay). New values should
   // be appended only and must be added before |Count|.
   enum class CastOverlayMetrics {
-    Created = 0,
-    Shown,
-    Clicked,
-    Count  // Keep last.
+    kCreated = 0,
+    kShown,
+    kClicked,
+    kCount  // Keep last.
   };
-  void recordMetrics(CastOverlayMetrics);
+  void RecordMetrics(CastOverlayMetrics);
 
   // UMA related boolean. They are used to prevent counting something twice
   // for the same media element.
-  bool m_clickUseCounted = false;
-  bool m_showUseCounted = false;
+  bool click_use_counted_ = false;
+  bool show_use_counted_ = false;
 };
 
 // ----------------------------
 
-class MediaControlVolumeSliderElement final : public MediaControlInputElement {
+class CORE_EXPORT MediaControlVolumeSliderElement final
+    : public MediaControlInputElement {
  public:
-  static MediaControlVolumeSliderElement* create(MediaControls&);
+  static MediaControlVolumeSliderElement* Create(MediaControls&);
 
-  bool willRespondToMouseMoveEvents() override;
-  bool willRespondToMouseClickEvents() override;
-  void setVolume(double);
+  bool WillRespondToMouseMoveEvents() override;
+  bool WillRespondToMouseClickEvents() override;
+  void SetVolume(double);
 
  private:
   explicit MediaControlVolumeSliderElement(MediaControls&);
 
-  void defaultEventHandler(Event*) override;
-  bool keepEventInNode(Event*) override;
-};
-
-// ----------------------------
-
-class MediaControlTimeRemainingDisplayElement final
-    : public MediaControlTimeDisplayElement {
- public:
-  static MediaControlTimeRemainingDisplayElement* create(MediaControls&);
-
- private:
-  explicit MediaControlTimeRemainingDisplayElement(MediaControls&);
-};
-
-// ----------------------------
-
-class MediaControlCurrentTimeDisplayElement final
-    : public MediaControlTimeDisplayElement {
- public:
-  static MediaControlCurrentTimeDisplayElement* create(MediaControls&);
-
- private:
-  explicit MediaControlCurrentTimeDisplayElement(MediaControls&);
+  void DefaultEventHandler(Event*) override;
+  bool KeepEventInNode(Event*) override;
 };
 
 }  // namespace blink

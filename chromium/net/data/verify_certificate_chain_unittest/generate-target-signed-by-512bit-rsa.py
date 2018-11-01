@@ -14,7 +14,8 @@ root = common.create_self_signed_root_certificate('Root')
 
 # Intermediate with a very weak key size (512-bit RSA).
 intermediate = common.create_intermediate_certificate('Intermediate', root)
-intermediate.set_key(common.generate_rsa_key(512))
+intermediate.set_key(common.get_or_generate_rsa_key(
+    512, common.create_key_path(intermediate.name)))
 
 # Target certificate.
 target = common.create_end_entity_certificate('Target', intermediate)
@@ -22,14 +23,16 @@ target = common.create_end_entity_certificate('Target', intermediate)
 chain = [target, intermediate]
 trusted = common.TrustAnchor(root, constrained=False)
 time = common.DEFAULT_TIME
+key_purpose = common.DEFAULT_KEY_PURPOSE
 verify_result = False
-errors = """[Context] Processing Certificate
-  index: 1
-      [Error] RSA modulus too small
-        actual: 512
-        minimum: 1024
-      [Error] Unacceptable modulus length for RSA key
-      [Error] VerifySignedData failed
+errors = """----- Certificate i=0 (CN=Target) -----
+ERROR: RSA modulus too small
+  actual: 512
+  minimum: 1024
+ERROR: Unacceptable modulus length for RSA key
+ERROR: VerifySignedData failed
+
 """
 
-common.write_test_file(__doc__, chain, trusted, time, verify_result, errors)
+common.write_test_file(__doc__, chain, trusted, time, key_purpose,
+                       verify_result, errors)

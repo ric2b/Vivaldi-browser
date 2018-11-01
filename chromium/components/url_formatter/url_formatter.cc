@@ -324,12 +324,13 @@ IDNSpoofChecker::IDNSpoofChecker() {
   non_ascii_latin_letters_.freeze();
 
   // These letters are parts of |dangerous_patterns_|.
-  kana_letters_exceptions_ = icu::UnicodeSet(UNICODE_STRING_SIMPLE(
-      "[\\u3078-\\u307a\\u30d8-\\u30da\\u30fb\\u30fc]"), status);
+  kana_letters_exceptions_ = icu::UnicodeSet(
+      UNICODE_STRING_SIMPLE("[\\u3078-\\u307a\\u30d8-\\u30da\\u30fb-\\u30fe]"),
+      status);
   kana_letters_exceptions_.freeze();
 
   // These Cyrillic letters look like Latin. A domain label entirely made of
-  // these letters is blocked as a simpliified whole-script-spoofable.
+  // these letters is blocked as a simplified whole-script-spoofable.
   cyrillic_letters_latin_alike_ =
       icu::UnicodeSet(icu::UnicodeString("[асԁеһіјӏорԛѕԝхуъЬҽпгѵѡ]"), status);
   cyrillic_letters_latin_alike_.freeze();
@@ -406,26 +407,32 @@ bool IDNSpoofChecker::Check(base::StringPiece16 label, bool is_tld_ascii) {
     // TODO(jshin): adjust the pattern once the above ICU bug is fixed.
     // - Disallow U+30FB (Katakana Middle Dot) and U+30FC (Hiragana-Katakana
     //   Prolonged Sound) used out-of-context.
+    // - Dislallow U+30FD/E (Katakana iteration mark/voiced iteration mark)
+    //   unless they're preceded by a Katakana.
     // - Disallow three Hiragana letters (U+307[8-A]) or Katakana letters
     //   (U+30D[8-A]) that look exactly like each other when they're used in a
     //   label otherwise entirely in Katakna or Hiragana.
     // - Disallow U+0585 (Armenian Small Letter Oh) and U+0581 (Armenian Small
     //   Letter Co) to be next to Latin.
     // - Disallow Latin 'o' and 'g' next to Armenian.
+    // - Disalow mixing of Latin and Canadian Syllabary.
     dangerous_pattern = new icu::RegexMatcher(
         icu::UnicodeString(
             "[^\\p{scx=kana}\\p{scx=hira}\\p{scx=hani}]"
             "[\\u30ce\\u30f3\\u30bd\\u30be]"
             "[^\\p{scx=kana}\\p{scx=hira}\\p{scx=hani}]|"
-            "[^\\p{scx=kana}\\p{scx=hira}]\\u30fc|"
-            "\\u30fc[^\\p{scx=kana}\\p{scx=hira}]|"
+            "[^\\p{scx=kana}\\p{scx=hira}]\\u30fc|^\\u30fc|"
+            "[^\\p{scx=kana}][\\u30fd\\u30fe]|^[\\u30fd\\u30fe]|"
             "^[\\p{scx=kana}]+[\\u3078-\\u307a][\\p{scx=kana}]+$|"
             "^[\\p{scx=hira}]+[\\u30d8-\\u30da][\\p{scx=hira}]+$|"
             "[a-z]\\u30fb|\\u30fb[a-z]|"
             "^[\\u0585\\u0581]+[a-z]|[a-z][\\u0585\\u0581]+$|"
             "[a-z][\\u0585\\u0581]+[a-z]|"
             "^[og]+[\\p{scx=armn}]|[\\p{scx=armn}][og]+$|"
-            "[\\p{scx=armn}][og]+[\\p{scx=armn}]", -1, US_INV),
+            "[\\p{scx=armn}][og]+[\\p{scx=armn}]|"
+            "[\\p{sc=cans}].*[a-z]|[a-z].*[\\p{sc=cans}]|"
+            "[\\p{sc=tfng}].*[a-z]|[a-z].*[\\p{sc=tfng}]",
+            -1, US_INV),
         0, status);
     tls_index.Set(dangerous_pattern);
   }
@@ -518,6 +525,21 @@ void IDNSpoofChecker::SetAllowedUnicodeSet(UErrorCode* status) {
   allowed_set.remove(0x338u);   // Combining Long Solidus Overlay
   allowed_set.remove(0x2010u);  // Hyphen
   allowed_set.remove(0x2027u);  // Hyphenation Point
+
+#if defined(OS_MACOSX)
+  // The following characters are reported as present in the default macOS
+  // system UI font, but they render as blank. Remove them from the allowed
+  // set to prevent spoofing until the font issue is resolved.
+
+  // Arabic letter KASHMIRI YEH. Not used in Arabic and Persian.
+  allowed_set.remove(0x0620u);
+
+  // Tibetan characters used for transliteration of ancient texts:
+  allowed_set.remove(0x0F8Cu);
+  allowed_set.remove(0x0F8Du);
+  allowed_set.remove(0x0F8Eu);
+  allowed_set.remove(0x0F8Fu);
+#endif
 
   uspoof_setAllowedUnicodeSet(checker_, &allowed_set, status);
 }

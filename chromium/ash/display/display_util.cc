@@ -7,16 +7,15 @@
 #include <algorithm>
 #include <utility>
 
-#include "ash/common/new_window_controller.h"
-#include "ash/common/system/system_notifier.h"
-#include "ash/common/wm_shell.h"
 #include "ash/display/extended_mouse_warp_controller.h"
 #include "ash/display/null_mouse_warp_controller.h"
 #include "ash/display/unified_mouse_warp_controller.h"
 #include "ash/host/ash_window_tree_host.h"
+#include "ash/new_window_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/system_notifier.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -58,7 +57,7 @@ class DisplayErrorNotificationDelegate
   // message_center::NotificationDelegate:
   void ButtonClick(int index) override {
     DCHECK_EQ(0, index);
-    WmShell::Get()->new_window_controller()->OpenFeedbackPage();
+    Shell::Get()->new_window_controller()->OpenFeedbackPage();
   }
 
  private:
@@ -150,7 +149,7 @@ void MoveCursorTo(AshWindowTreeHost* ash_host,
 
   if (update_last_location_now) {
     gfx::Point new_point_in_screen;
-    if (Shell::GetInstance()->display_manager()->IsInUnifiedMode()) {
+    if (Shell::Get()->display_manager()->IsInUnifiedMode()) {
       new_point_in_screen = point_in_host;
       // First convert to the unified host.
       host->ConvertPixelsToDIP(&new_point_in_screen);

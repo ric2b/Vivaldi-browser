@@ -30,13 +30,14 @@ bool WebApkUpdateManager::Register(JNIEnv* env) {
 // static
 void WebApkUpdateManager::OnBuiltWebApk(const std::string& id,
                                         WebApkInstallResult result,
+                                        bool relax_updates,
                                         const std::string& webapk_package) {
   JNIEnv* env = base::android::AttachCurrentThread();
 
   base::android::ScopedJavaLocalRef<jstring> java_id =
       base::android::ConvertUTF8ToJavaString(env, id);
-  Java_WebApkUpdateManager_onBuiltWebApk(env, java_id.obj(),
-                                         static_cast<int>(result));
+  Java_WebApkUpdateManager_onBuiltWebApk(
+      env, java_id.obj(), static_cast<int>(result), relax_updates);
 }
 
 // static JNI method.
@@ -82,8 +83,8 @@ static void UpdateAsync(
   info.display = static_cast<blink::WebDisplayMode>(java_display_mode);
   info.orientation =
       static_cast<blink::WebScreenOrientationLockType>(java_orientation);
-  info.theme_color = (long)java_theme_color;
-  info.background_color = (long)java_background_color;
+  info.theme_color = (int64_t)java_theme_color;
+  info.background_color = (int64_t)java_background_color;
   info.best_primary_icon_url = best_primary_icon_url;
   info.manifest_url = web_manifest_url;
 
@@ -111,7 +112,8 @@ static void UpdateAsync(
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&WebApkUpdateManager::OnBuiltWebApk, id,
-                   WebApkInstallResult::FAILURE, "" /* webapk_package */));
+                   WebApkInstallResult::FAILURE, false /* relax_updates */,
+                   "" /* webapk_package */));
     return;
   }
   install_service->UpdateAsync(

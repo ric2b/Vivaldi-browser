@@ -19,7 +19,6 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/ntp_tiles/ntp_tile_source.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/common/browser_controls_state.h"
 #include "content/public/common/webplugininfo.h"
@@ -70,7 +69,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(ThemeBackgroundImageAlignment,
                           THEME_BKGRND_IMAGE_ALIGN_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ThemeBackgroundImageTiling, THEME_BKGRND_IMAGE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebConsoleMessage::Level,
-                          blink::WebConsoleMessage::LevelLast)
+                          blink::WebConsoleMessage::kLevelLast)
 IPC_ENUM_TRAITS_MAX_VALUE(content::BrowserControlsState,
                           content::BROWSER_CONTROLS_STATE_LAST)
 
@@ -133,20 +132,6 @@ IPC_MESSAGE_ROUTED2(ChromeViewMsg_RequestFileSystemAccessAsyncResponse,
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetClientSidePhishingDetection,
                     bool /* enable_phishing_detection */)
 
-// Reloads the image selected by the most recently opened context menu
-// (if there indeed is an image at that location).
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_RequestReloadImageForContextNode)
-
-// Asks the renderer for a thumbnail of the image selected by the most
-// recently opened context menu, if there is one. If the image's area
-// is greater than thumbnail_min_area it will be downscaled to
-// be within thumbnail_max_size. The possibly downsampled image will be
-// returned in a ChromeViewHostMsg_RequestThumbnailForContextNode_ACK message.
-IPC_MESSAGE_ROUTED3(ChromeViewMsg_RequestThumbnailForContextNode,
-                    int /* thumbnail_min_area_pixels */,
-                    gfx::Size /* thumbnail_max_size_pixels */,
-                    int /* ID of the callback */)
-
 // Notifies the renderer whether hiding/showing the browser controls is enabled,
 // what the current state should be, and whether or not to animate to the
 // proper state.
@@ -158,13 +143,6 @@ IPC_MESSAGE_ROUTED3(ChromeViewMsg_UpdateBrowserControlsState,
 // Updates the window features of the render view.
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetWindowFeatures,
                     blink::mojom::WindowFeatures /* window_features */)
-
-// Responds to the request for a thumbnail.
-// Thumbnail data will be empty is a thumbnail could not be produced.
-IPC_MESSAGE_ROUTED3(ChromeViewHostMsg_RequestThumbnailForContextNode_ACK,
-                    std::string /* JPEG-encoded thumbnail data */,
-                    gfx::Size /* original size of the image */,
-                    int /* ID of the callback */)
 
 // Requests application info for the page. The renderer responds back with
 // ChromeViewHostMsg_DidGetWebApplicationInfo.
@@ -212,6 +190,9 @@ IPC_MESSAGE_ROUTED0(ChromeViewHostMsg_DownloadPageLater)
 // is being shown in error page.
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_SetIsShowingDownloadButtonInErrorPage,
                     bool /* showing download button */)
+
+// Sent when navigating to chrome://sandbox to install bindings onto the WebUI.
+IPC_MESSAGE_ROUTED0(ChromeViewMsg_AddSandboxStatusExtension)
 #endif  // defined(OS_ANDROID)
 
 //-----------------------------------------------------------------------------
@@ -298,33 +279,14 @@ IPC_SYNC_MESSAGE_CONTROL1_3(
     std::vector<base::string16> /* additional_param_values */)
 #endif
 
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
 // Notifies the browser that a missing plugin placeholder has been removed, so
 // the corresponding PluginPlaceholderHost can be deleted.
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_RemovePluginPlaceholderHost,
                     int /* placeholder_id */)
 
-// Notifies a missing plugin placeholder that a plugin with name |plugin_name|
-// has been found.
-IPC_MESSAGE_ROUTED1(ChromeViewMsg_FoundMissingPlugin,
-                    base::string16 /* plugin_name */)
-
-// Notifies a missing plugin placeholder that no plugin has been found.
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_DidNotFindMissingPlugin)
-
-// Notifies a missing plugin placeholder that we have started downloading
-// the plugin.
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_StartedDownloadingPlugin)
-
 // Notifies a missing plugin placeholder that we have finished downloading
 // the plugin.
 IPC_MESSAGE_ROUTED0(ChromeViewMsg_FinishedDownloadingPlugin)
-
-// Notifies a missing plugin placeholder that there was an error downloading
-// the plugin.
-IPC_MESSAGE_ROUTED1(ChromeViewMsg_ErrorDownloadingPlugin,
-                    std::string /* message */)
-#endif  // BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
 
 // Notifies a missing plugin placeholder that we have finished component-
 // updating the plug-in.
@@ -338,9 +300,6 @@ IPC_MESSAGE_ROUTED0(ChromeViewMsg_PluginComponentUpdateFailure)
 // download.
 IPC_MESSAGE_ROUTED0(ChromeViewMsg_PluginComponentUpdateDownloading)
 
-// Notifies a missing plugin placeholder that the user cancelled downloading
-// the plugin.
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_CancelledDownloadingPlugin)
 
 // Tells the browser to show the Flash permission bubble in the same tab.
 IPC_MESSAGE_ROUTED0(ChromeViewHostMsg_ShowFlashPermissionBubble)
@@ -348,12 +307,6 @@ IPC_MESSAGE_ROUTED0(ChromeViewHostMsg_ShowFlashPermissionBubble)
 // Tells the browser that there was an error loading a plugin.
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_CouldNotLoadPlugin,
                     base::FilePath /* plugin_path */)
-
-// Notification that the page has an OpenSearch description document
-// associated with it.
-IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_PageHasOSDD,
-                    GURL /* page_url */,
-                    GURL /* osdd_url */)
 
 // Notifies when a plugin couldn't be loaded because it's outdated.
 IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_BlockedOutdatedPlugin,

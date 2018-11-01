@@ -46,25 +46,25 @@ class ScriptState;
 class ScriptValue;
 
 class CORE_EXPORT Performance final : public PerformanceBase,
-                                      public ContextLifecycleObserver,
-                                      public PerformanceMonitor::Client {
+                                      public PerformanceMonitor::Client,
+                                      public DOMWindowClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Performance);
   friend class PerformanceTest;
 
  public:
-  static Performance* create(LocalFrame* frame) {
+  static Performance* Create(LocalFrame* frame) {
     return new Performance(frame);
   }
   ~Performance() override;
 
-  ExecutionContext* getExecutionContext() const override;
+  ExecutionContext* GetExecutionContext() const override;
 
   MemoryInfo* memory();
   PerformanceNavigation* navigation() const;
   PerformanceTiming* timing() const override;
 
-  void updateLongTaskInstrumentation() override;
+  void UpdateLongTaskInstrumentation() override;
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
@@ -73,22 +73,21 @@ class CORE_EXPORT Performance final : public PerformanceBase,
  private:
   explicit Performance(LocalFrame*);
 
-  // ContextLifecycleObserver overrides.
-  void contextDestroyed(ExecutionContext*) override;
+  PerformanceNavigationTiming* CreateNavigationTimingInstance() override;
 
-  static std::pair<String, DOMWindow*> sanitizedAttribution(
+  static std::pair<String, DOMWindow*> SanitizedAttribution(
       ExecutionContext*,
-      bool hasMultipleContexts,
-      LocalFrame* observerFrame);
+      bool has_multiple_contexts,
+      LocalFrame* observer_frame);
 
   // PerformanceMonitor::Client implementation.
-  void reportLongTask(double startTime,
-                      double endTime,
-                      ExecutionContext* taskContext,
-                      bool hasMultipleContexts) override;
+  void ReportLongTask(double start_time,
+                      double end_time,
+                      ExecutionContext* task_context,
+                      bool has_multiple_contexts) override;
 
-  mutable Member<PerformanceNavigation> m_navigation;
-  mutable Member<PerformanceTiming> m_timing;
+  mutable Member<PerformanceNavigation> navigation_;
+  mutable Member<PerformanceTiming> timing_;
 };
 
 }  // namespace blink

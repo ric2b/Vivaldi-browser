@@ -14,13 +14,7 @@ const SkColor kSearchBoxBackground = SK_ColorWHITE;
 
 const SkColor kSearchTextColor = SkColorSetRGB(0x33, 0x33, 0x33);
 
-// In Windows, transparent background color will cause ugly text rendering,
-// therefore kContentsBackgroundColor should be used. See crbug.com/406989
-#if defined(OS_CHROMEOS)
 const SkColor kLabelBackgroundColor = SK_ColorTRANSPARENT;
-#else
-const SkColor kLabelBackgroundColor = kContentsBackgroundColor;
-#endif
 
 const SkColor kTopSeparatorColor = SkColorSetRGB(0xC0, 0xC0, 0xC0);
 const SkColor kBottomSeparatorColor = SkColorSetRGB(0xC0, 0xC0, 0xC0);
@@ -140,41 +134,33 @@ const char kSearchQueryLength[] = "Apps.AppListSearchQueryLength";
 const char kSearchResultDistanceFromOrigin[] =
     "Apps.AppListSearchResultDistanceFromOrigin";
 
-#if defined(OS_LINUX)
-#if defined(GOOGLE_CHROME_BUILD)
-const char kAppListWMClass[] = "chrome_app_list";
-#else  // CHROMIUM_BUILD
-const char kAppListWMClass[] = "chromium_app_list";
-#endif
-#endif
-
 gfx::ShadowValue GetShadowForZHeight(int z_height) {
   if (z_height <= 0)
     return gfx::ShadowValue();
 
   switch (z_height) {
     case 1:
-      return gfx::ShadowValue(gfx::Vector2d(0, 1), 2,
+      return gfx::ShadowValue(gfx::Vector2d(0, 1), 4,
                               SkColorSetARGB(0x4C, 0, 0, 0));
     case 2:
-      return gfx::ShadowValue(gfx::Vector2d(0, 2), 4,
+      return gfx::ShadowValue(gfx::Vector2d(0, 2), 8,
                               SkColorSetARGB(0x33, 0, 0, 0));
     default:
-      return gfx::ShadowValue(gfx::Vector2d(0, 8), 12,
+      return gfx::ShadowValue(gfx::Vector2d(0, 8), 24,
                               SkColorSetARGB(0x3F, 0, 0, 0));
   }
 }
 
 const gfx::ShadowValues& IconStartShadows() {
   CR_DEFINE_STATIC_LOCAL(const gfx::ShadowValues, icon_shadows,
-                         (1, gfx::ShadowValue(gfx::Vector2d(0, 1), 2,
+                         (1, gfx::ShadowValue(gfx::Vector2d(0, 1), 4,
                                               SkColorSetARGB(0x33, 0, 0, 0))));
   return icon_shadows;
 }
 
 const gfx::ShadowValues& IconEndShadows() {
   CR_DEFINE_STATIC_LOCAL(const gfx::ShadowValues, icon_shadows,
-                         (1, gfx::ShadowValue(gfx::Vector2d(0, 4), 4,
+                         (1, gfx::ShadowValue(gfx::Vector2d(0, 4), 8,
                                               SkColorSetARGB(0x50, 0, 0, 0))));
   return icon_shadows;
 }

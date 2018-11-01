@@ -6,7 +6,6 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "components/reading_list/core/reading_list_switches.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/reading_list/offline_url_utils.h"
 #include "ios/chrome/browser/reading_list/reading_list_download_service.h"
@@ -15,6 +14,7 @@
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
+#include "ios/web/public/reload_type.h"
 #import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -49,7 +49,6 @@
   DCHECK(browserState);
   DCHECK(URL.is_valid());
 
-  DCHECK(reading_list::switches::IsReadingListEnabled());
   base::FilePath offline_root =
       ReadingListDownloadServiceFactory::GetForBrowserState(
           ios::ChromeBrowserState::FromBrowserState(browserState))
@@ -87,8 +86,14 @@
 }
 
 - (void)reload {
+  if (!_entryURL.is_valid()) {
+    // If entryURL is not valid, the restoreOnlineURL will fail and the |reload|
+    // will be called in a loop. Early return here.
+    return;
+  }
   [self restoreOnlineURL];
-  _webState->GetNavigationManager()->Reload(false);
+  _webState->GetNavigationManager()->Reload(web::ReloadType::NORMAL,
+                                            false /*check_for_repost*/);
 }
 
 - (void)restoreOnlineURL {
@@ -100,7 +105,7 @@
       _webState->GetNavigationManager()->GetLastCommittedItem();
   DCHECK(item && item->GetVirtualURL() == [self virtualURL]);
   item->SetURL(_entryURL);
-  item->SetVirtualURL(_entryURL);
+  item->SetVirtualURL(GURL::EmptyGURL());
 }
 
 @end

@@ -11,8 +11,9 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
-#include "chrome/browser/extensions/api/dial/device_description_fetcher.h"
 #include "chrome/browser/extensions/api/dial/dial_api_factory.h"
+#include "chrome/browser/media/router/discovery/dial/device_description_fetcher.h"
+#include "chrome/browser/media/router/discovery/dial/dial_registry.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/dial.h"
 #include "content/public/browser/browser_thread.h"
@@ -22,47 +23,41 @@
 
 using base::TimeDelta;
 using content::BrowserThread;
-using extensions::api::dial::DeviceDescriptionFetcher;
-using extensions::api::dial::DialDeviceData;
-using extensions::api::dial::DialDeviceDescriptionData;
-using extensions::api::dial::DialRegistry;
+using media_router::DeviceDescriptionFetcher;
+using media_router::DialDeviceData;
+using media_router::DialDeviceDescriptionData;
+using media_router::DialRegistry;
 
 namespace extensions {
-
-namespace {
-
-// How often to poll for devices.
-const int kDialRefreshIntervalSecs = 120;
-
-// We prune a device if it does not respond after this time.
-const int kDialExpirationSecs = 240;
-
-// The maximum number of devices retained at once in the registry.
-const size_t kDialMaxDevices = 256;
-
-}  // namespace
 
 DialAPI::DialAPI(Profile* profile)
     : RefcountedKeyedService(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
-      profile_(profile) {
+      profile_(profile),
+      dial_registry_(nullptr) {
   EventRouter::Get(profile)->RegisterObserver(
       this, api::dial::OnDeviceList::kEventName);
 }
 
-DialAPI::~DialAPI() {}
+DialAPI::~DialAPI() {
+  // TODO(zhaobin): Call dial_registry_->UnregisterObserver() instead. In
+  // current implementation, UnregistryObserver() does not StopDiscovery() and
+  // causes crash in ~DialRegistry(). May keep a listener count and
+  // Register/UnregisterObserver as needed.
+  if (dial_registry_)
+    dial_registry_->StopPeriodicDiscovery();
+}
 
 DialRegistry* DialAPI::dial_registry() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!dial_registry_.get()) {
-    dial_registry_.reset(new DialRegistry(
-        this, TimeDelta::FromSeconds(kDialRefreshIntervalSecs),
-        TimeDelta::FromSeconds(kDialExpirationSecs), kDialMaxDevices));
+  if (!dial_registry_) {
+    dial_registry_ = media_router::DialRegistry::GetInstance();
+    dial_registry_->RegisterObserver(this);
     if (test_device_data_) {
       dial_registry_->AddDeviceForTest(*test_device_data_);
     }
   }
-  return dial_registry_.get();
+  return dial_registry_;
 }
 
 void DialAPI::OnListenerAdded(const EventListenerInfo& details) {
@@ -91,6 +86,17 @@ void DialAPI::NotifyListenerRemovedOnIOThread() {
   dial_registry()->OnListenerRemoved();
 }
 
+void DialAPI::FillDialDevice(const media_router::DialDeviceData& device_data,
+                             api::dial::DialDevice* device) const {
+  DCHECK(!device_data.device_id().empty());
+  DCHECK(media_router::DialDeviceData::IsDeviceDescriptionUrl(
+      device_data.device_description_url()));
+  device->device_label = device_data.label();
+  device->device_description_url = device_data.device_description_url().spec();
+  if (device_data.has_config_id())
+    device->config_id.reset(new int(device_data.config_id()));
+}
+
 void DialAPI::OnDialDeviceEvent(const DialRegistry::DeviceList& devices) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
@@ -109,7 +115,7 @@ void DialAPI::SendEventOnUIThread(const DialRegistry::DeviceList& devices) {
   std::vector<api::dial::DialDevice> args;
   for (const DialDeviceData& device : devices) {
     api::dial::DialDevice api_device;
-    device.FillDialDevice(&api_device);
+    FillDialDevice(device, &api_device);
     args.push_back(std::move(api_device));
   }
   std::unique_ptr<base::ListValue> results =
@@ -156,8 +162,8 @@ void DialAPI::SendErrorOnUIThread(const DialRegistry::DialErrorCode code) {
 void DialAPI::ShutdownOnUIThread() {}
 
 void DialAPI::SetDeviceForTest(
-    const api::dial::DialDeviceData& device_data,
-    const api::dial::DialDeviceDescriptionData& device_description) {
+    const media_router::DialDeviceData& device_data,
+    const media_router::DialDeviceDescriptionData& device_description) {
   test_device_data_ = base::MakeUnique<DialDeviceData>(device_data);
   test_device_description_ =
       base::MakeUnique<DialDeviceDescriptionData>(device_description);
@@ -230,7 +236,7 @@ void DialFetchDeviceDescriptionFunction::MaybeStartFetch(const GURL& url) {
   }
 
   device_description_fetcher_ = base::MakeUnique<DeviceDescriptionFetcher>(
-      url, Profile::FromBrowserContext(browser_context()),
+      url, Profile::FromBrowserContext(browser_context())->GetRequestContext(),
       base::BindOnce(&DialFetchDeviceDescriptionFunction::OnFetchComplete,
                      this),
       base::BindOnce(&DialFetchDeviceDescriptionFunction::OnFetchError, this));
@@ -239,7 +245,7 @@ void DialFetchDeviceDescriptionFunction::MaybeStartFetch(const GURL& url) {
 }
 
 void DialFetchDeviceDescriptionFunction::OnFetchComplete(
-    const api::dial::DialDeviceDescriptionData& result) {
+    const media_router::DialDeviceDescriptionData& result) {
   // Destroy the DeviceDescriptionFetcher since it still contains a reference
   // to |this| in its un-invoked callback.
   device_description_fetcher_.reset();

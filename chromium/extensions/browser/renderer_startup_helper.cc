@@ -4,13 +4,18 @@
 
 #include "extensions/browser/renderer_startup_helper.h"
 
+#include "base/debug/dump_without_crashing.h"
+#include "base/stl_util.h"
+#include "base/strings/string_util.h"
 #include "base/values.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/common/extension_messages.h"
@@ -24,12 +29,35 @@ using content::BrowserContext;
 
 namespace extensions {
 
+namespace {
+
+// Returns whether the |extension| should be loaded in the given
+// |browser_context|.
+bool IsExtensionVisibleToContext(const Extension& extension,
+                                 content::BrowserContext* browser_context) {
+  // Renderers don't need to know about themes.
+  if (extension.is_theme())
+    return false;
+
+  // Only extensions enabled in incognito mode should be loaded in an incognito
+  // renderer. However extensions which can't be enabled in the incognito mode
+  // (e.g. platform apps) should also be loaded in an incognito renderer to
+  // ensure connections from incognito tabs to such extensions work.
+  return !browser_context->IsOffTheRecord() ||
+         !util::CanBeIncognitoEnabled(&extension) ||
+         util::IsIncognitoEnabled(extension.id(), browser_context);
+}
+
+}  // namespace
+
 RendererStartupHelper::RendererStartupHelper(BrowserContext* browser_context)
     : browser_context_(browser_context) {
   DCHECK(browser_context);
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CREATED,
                  content::NotificationService::AllBrowserContextsAndSources());
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_TERMINATED,
+                 content::NotificationService::AllBrowserContextsAndSources());
+  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
                  content::NotificationService::AllBrowserContextsAndSources());
 }
 
@@ -45,6 +73,10 @@ void RendererStartupHelper::Observe(
           content::Source<content::RenderProcessHost>(source).ptr());
       break;
     case content::NOTIFICATION_RENDERER_PROCESS_TERMINATED:
+    // Fall through.
+    case content::NOTIFICATION_RENDERER_PROCESS_CLOSED:
+      // This is needed to take care of the case when a RenderProcessHost is
+      // reused for a different renderer process.
       UntrackProcess(content::Source<content::RenderProcessHost>(source).ptr());
       break;
     default:
@@ -93,30 +125,42 @@ void RendererStartupHelper::InitializeProcess(
 
   // Loaded extensions.
   std::vector<ExtensionMsg_Loaded_Params> loaded_extensions;
+  BrowserContext* renderer_context = process->GetBrowserContext();
   const ExtensionSet& extensions =
       ExtensionRegistry::Get(browser_context_)->enabled_extensions();
   for (const auto& ext : extensions) {
-    // Renderers don't need to know about themes.
-    if (!ext->is_theme()) {
-      // TODO(kalman): Only include tab specific permissions for extension
-      // processes, no other process needs it, so it's mildly wasteful.
-      // I am not sure this is possible to know this here, at such a low
-      // level of the stack. Perhaps site isolation can help.
-      bool include_tab_permissions = true;
-      loaded_extensions.push_back(
-          ExtensionMsg_Loaded_Params(ext.get(), include_tab_permissions));
-    }
+    // OnLoadedExtension should have already been called for the extension.
+    DCHECK(base::ContainsKey(extension_process_map_, ext->id()));
+    DCHECK(!base::ContainsKey(extension_process_map_[ext->id()], process));
+
+    if (!IsExtensionVisibleToContext(*ext, renderer_context))
+      continue;
+
+    // TODO(kalman): Only include tab specific permissions for extension
+    // processes, no other process needs it, so it's mildly wasteful.
+    // I am not sure this is possible to know this here, at such a low
+    // level of the stack. Perhaps site isolation can help.
+    bool include_tab_permissions = true;
+    loaded_extensions.push_back(
+        ExtensionMsg_Loaded_Params(ext.get(), include_tab_permissions));
+    extension_process_map_[ext->id()].insert(process);
   }
+
+  // Activate pending extensions.
   process->Send(new ExtensionMsg_Loaded(loaded_extensions));
   auto iter = pending_active_extensions_.find(process);
   if (iter != pending_active_extensions_.end()) {
     for (const ExtensionId& id : iter->second) {
+      // The extension should be loaded in the process.
       DCHECK(extensions.Contains(id));
+      DCHECK(base::ContainsKey(extension_process_map_, id));
+      DCHECK(base::ContainsKey(extension_process_map_[id], process));
       process->Send(new ExtensionMsg_ActivateExtension(id));
     }
   }
 
   initialized_processes_.insert(process);
+  pending_active_extensions_.erase(process);
 }
 
 void RendererStartupHelper::UntrackProcess(
@@ -128,25 +172,49 @@ void RendererStartupHelper::UntrackProcess(
 
   initialized_processes_.erase(process);
   pending_active_extensions_.erase(process);
+  for (auto& extension_process_pair : extension_process_map_)
+    extension_process_pair.second.erase(process);
 }
 
 void RendererStartupHelper::ActivateExtensionInProcess(
     const Extension& extension,
     content::RenderProcessHost* process) {
-  // Renderers don't need to know about themes. We also don't normally
-  // "activate" themes, but this could happen if someone tries to open a tab
-  // to the e.g. theme's manifest.
-  if (extension.is_theme())
+  // The extension should have been loaded already. Dump without crashing to
+  // debug crbug.com/528026.
+  if (!base::ContainsKey(extension_process_map_, extension.id())) {
+#if DCHECK_IS_ON()
+    NOTREACHED() << "Extension " << extension.id()
+                 << "activated before loading";
+#else
+    base::debug::DumpWithoutCrashing();
+    return;
+#endif
+  }
+
+  if (!IsExtensionVisibleToContext(extension, process->GetBrowserContext()))
     return;
 
-  if (initialized_processes_.count(process))
+  if (base::ContainsKey(initialized_processes_, process)) {
+    DCHECK(base::ContainsKey(extension_process_map_[extension.id()], process));
     process->Send(new ExtensionMsg_ActivateExtension(extension.id()));
-  else
+  } else {
     pending_active_extensions_[process].insert(extension.id());
+  }
 }
 
 void RendererStartupHelper::OnExtensionLoaded(const Extension& extension) {
-  // Renderers don't need to know about themes.
+  // Extension was already loaded.
+  // TODO(crbug.com/708230): Ensure that clients don't call this for an
+  // already loaded extension and change this to a DCHECK.
+  if (base::ContainsKey(extension_process_map_, extension.id()))
+    return;
+
+  // Mark the extension as loaded.
+  std::set<content::RenderProcessHost*>& loaded_process_set =
+      extension_process_map_[extension.id()];
+
+  // IsExtensionVisibleToContext() would filter out themes, but we choose to
+  // return early for performance reasons.
   if (extension.is_theme())
     return;
 
@@ -157,19 +225,33 @@ void RendererStartupHelper::OnExtensionLoaded(const Extension& extension) {
   std::vector<ExtensionMsg_Loaded_Params> params(
       1,
       ExtensionMsg_Loaded_Params(&extension, false /* no tab permissions */));
-  for (content::RenderProcessHost* process : initialized_processes_)
+  for (content::RenderProcessHost* process : initialized_processes_) {
+    if (!IsExtensionVisibleToContext(extension, process->GetBrowserContext()))
+      continue;
     process->Send(new ExtensionMsg_Loaded(params));
+    loaded_process_set.insert(process);
+  }
 }
 
 void RendererStartupHelper::OnExtensionUnloaded(const Extension& extension) {
-  // Renderers don't need to know about themes.
-  if (extension.is_theme())
+  // Extension is not loaded.
+  // TODO(crbug.com/708230): Ensure that clients call this for a loaded
+  // extension only and change this to a DCHECK.
+  if (!base::ContainsKey(extension_process_map_, extension.id()))
     return;
 
-  for (content::RenderProcessHost* process : initialized_processes_)
+  const std::set<content::RenderProcessHost*>& loaded_process_set =
+      extension_process_map_[extension.id()];
+  for (content::RenderProcessHost* process : loaded_process_set) {
+    DCHECK(base::ContainsKey(initialized_processes_, process));
     process->Send(new ExtensionMsg_Unloaded(extension.id()));
+  }
+
   for (auto& process_extensions_pair : pending_active_extensions_)
     process_extensions_pair.second.erase(extension.id());
+
+  // Mark the extension as unloaded.
+  extension_process_map_.erase(extension.id());
 }
 
 //////////////////////////////////////////////////////////////////////////////

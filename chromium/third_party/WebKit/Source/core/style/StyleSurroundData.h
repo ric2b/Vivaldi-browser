@@ -27,8 +27,8 @@
 
 #include "core/style/BorderData.h"
 #include "platform/LengthBox.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefCounted.h"
 
 namespace blink {
 
@@ -37,20 +37,23 @@ namespace blink {
 // instead. Keep the allocation logic, only allocating a new object if needed.
 class CORE_EXPORT StyleSurroundData : public RefCounted<StyleSurroundData> {
  public:
-  static PassRefPtr<StyleSurroundData> create() {
-    return adoptRef(new StyleSurroundData);
+  static PassRefPtr<StyleSurroundData> Create() {
+    return AdoptRef(new StyleSurroundData);
   }
-  PassRefPtr<StyleSurroundData> copy() const {
-    return adoptRef(new StyleSurroundData(*this));
+  PassRefPtr<StyleSurroundData> Copy() const {
+    return AdoptRef(new StyleSurroundData(*this));
   }
 
   bool operator==(const StyleSurroundData&) const;
   bool operator!=(const StyleSurroundData& o) const { return !(*this == o); }
 
-  LengthBox offset;
-  LengthBox margin;
-  LengthBox padding;
-  BorderData border;
+  Length left_;
+  Length right_;
+  Length top_;
+  Length bottom_;
+  LengthBox margin_;
+  LengthBox padding_;
+  BorderData border_;
 
  private:
   StyleSurroundData();

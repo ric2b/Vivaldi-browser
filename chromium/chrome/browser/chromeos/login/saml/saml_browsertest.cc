@@ -42,7 +42,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/media/webrtc/media_permission.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/policy/test/local_policy_test_server.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
@@ -1346,9 +1346,18 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TransferCookiesAffiliated) {
   EXPECT_EQ(kSAMLIdPCookieValue2, GetCookieValue(kSAMLIdPCookieName));
 }
 
-// Flaky on Debug, ASan and MSan bots: crbug.com/683161.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTest,
-                       DISABLED_PRE_TransferCookiesUnaffiliated) {
+// PRE_TransferCookiesUnaffiliated and TransferCookiesUnaffiliated are flaky on
+// MSAN and ASAN, most probably timing out. See crbug.com/683161.
+#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER)
+#define MAYBE_PRE_TransferCookiesUnaffiliated \
+  DISABLED_PRE_TransferCookiesUnaffiliated
+#define MAYBE_TransferCookiesUnaffiliated DISABLED_TransferCookiesUnaffiliated
+#else
+#define MAYBE_PRE_TransferCookiesUnaffiliated PRE_TransferCookiesUnaffiliated
+#define MAYBE_TransferCookiesUnaffiliated TransferCookiesUnaffiliated
+#endif
+
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, MAYBE_PRE_TransferCookiesUnaffiliated) {
   fake_saml_idp()->SetCookieValue(kSAMLIdPCookieValue1);
   LogInWithSAML(kDifferentDomainSAMLUserEmail,
                 kTestAuthSIDCookie1,
@@ -1364,8 +1373,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest,
 // IdP are not transferred to a user's profile on subsequent login if the user
 // does not belong to the domain that the device is enrolled into. Also verifies
 // that GAIA cookies are not transferred.
-// Flaky on Debug, ASan and MSan bots: crbug.com/683161.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, DISABLED_TransferCookiesUnaffiliated) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, MAYBE_TransferCookiesUnaffiliated) {
   fake_saml_idp()->SetCookieValue(kSAMLIdPCookieValue2);
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   ShowGAIALoginForm();
@@ -1407,7 +1415,8 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialChangeAccount) {
 // Tests that clicking "Next" in the SAML interstitial page successfully
 // triggers a SAML redirect request, and the SAML IdP authentication page is
 // loaded and authenticaing there is successful.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialNext) {
+// Disabled due to flakiness, see crbug.com/699228
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, DISABLED_SAMLInterstitialNext) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   fake_gaia_->SetFakeMergeSessionParams(
       kFirstSAMLUserEmail, kTestAuthSIDCookie1, kTestAuthLSIDCookie1);
@@ -1441,48 +1450,37 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
   WaitForSigninScreen();
 
   content::WebContents* web_contents = GetLoginUI()->GetWebContents();
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  content::MediaStreamRequestResult reason;
 
   // Mic should always be blocked.
-  {
-    MediaPermission permission(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, url1,
-                               url1, profile, web_contents);
-    EXPECT_EQ(CONTENT_SETTING_BLOCK, permission.GetPermissionStatus(&reason));
-  }
+  EXPECT_FALSE(
+      MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
+          web_contents, url1, content::MEDIA_DEVICE_AUDIO_CAPTURE));
 
   // Camera should be allowed if allowed by the whitelist, otherwise blocked.
-  {
-    MediaPermission permission(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, url1,
-                               url1, profile, web_contents);
-    EXPECT_EQ(CONTENT_SETTING_ALLOW, permission.GetPermissionStatus(&reason));
-  }
+  EXPECT_TRUE(
+      MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
+          web_contents, url1, content::MEDIA_DEVICE_VIDEO_CAPTURE));
 
-  {
-    MediaPermission permission(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, url2,
-                               url2, profile, web_contents);
-    EXPECT_EQ(CONTENT_SETTING_ALLOW, permission.GetPermissionStatus(&reason));
-  }
+  EXPECT_TRUE(
+      MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
+          web_contents, url2, content::MEDIA_DEVICE_VIDEO_CAPTURE));
 
-  {
-    MediaPermission permission(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, url3,
-                               url3, profile, web_contents);
-    EXPECT_EQ(CONTENT_SETTING_BLOCK, permission.GetPermissionStatus(&reason));
-  }
+  EXPECT_FALSE(
+      MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
+          web_contents, url3, content::MEDIA_DEVICE_VIDEO_CAPTURE));
 
   // Camera should be blocked in the login screen, even if it's allowed via
   // content setting.
-  {
-    HostContentSettingsMapFactory::GetForProfile(profile)
-        ->SetContentSettingDefaultScope(
-            url3, url3, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(),
-            CONTENT_SETTING_ALLOW);
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  HostContentSettingsMapFactory::GetForProfile(profile)
+      ->SetContentSettingDefaultScope(url3, url3,
+                                      CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                                      std::string(), CONTENT_SETTING_ALLOW);
 
-    MediaPermission permission(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, url3,
-                               url3, profile, web_contents);
-    EXPECT_EQ(CONTENT_SETTING_BLOCK, permission.GetPermissionStatus(&reason));
-  }
+  EXPECT_FALSE(
+      MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
+          web_contents, url3, content::MEDIA_DEVICE_VIDEO_CAPTURE));
 }
 
 }  // namespace chromeos

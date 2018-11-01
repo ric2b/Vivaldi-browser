@@ -16,8 +16,8 @@ declare_args() {
   system_webview_package_name = "com.android.webview"
 }
 
-if (!defined(use_webview_internal_framework)) {
-  use_webview_internal_framework = false
+if (!defined(use_unpublished_apis)) {
+  use_unpublished_apis = false
 }
 
 if (enable_resource_whitelist_generation) {
@@ -29,7 +29,7 @@ system_webview_android_manifest =
     "$target_gen_dir/system_webview_apk/AndroidManifest.xml"
 
 group("android_webview") {
-  if (!use_webview_internal_framework) {
+  if (!use_unpublished_apis) {
     deps = [
       ":system_webview_apk",
     ]
@@ -227,7 +227,6 @@ grit("generate_webui_resources") {
 
 grit("generate_components_resources") {
   source = "../components/resources/components_resources.grd"
-  use_qualified_include = true
 
   # See :generate_webui_resources for an explanation of the whitelist
   whitelist = rebase_path("ui/grit_resources_whitelist.txt")
@@ -246,7 +245,6 @@ grit("generate_components_resources") {
 
 grit("generate_components_strings") {
   source = "../components/components_strings.grd"
-  use_qualified_include = true
 
   # components_strings contains strings from all components. WebView
   # will never display most of them, so we try to limit the included
@@ -485,7 +483,6 @@ source_set("common") {
     "browser/renderer_host/aw_render_view_host_ext.h",
     "browser/renderer_host/aw_resource_dispatcher_host_delegate.cc",
     "browser/renderer_host/aw_resource_dispatcher_host_delegate.h",
-    "browser/scoped_allow_wait_for_legacy_web_view_api.h",
     "browser/scoped_app_gl_state_restore.cc",
     "browser/scoped_app_gl_state_restore.h",
     "browser/surfaces_instance.cc",
@@ -499,8 +496,8 @@ source_set("common") {
     "common/aw_descriptors.h",
     "common/aw_hit_test_data.cc",
     "common/aw_hit_test_data.h",
-    "common/aw_media_client_android.cc",
-    "common/aw_media_client_android.h",
+    "common/aw_media_drm_bridge_client.cc",
+    "common/aw_media_drm_bridge_client.h",
     "common/aw_paths.cc",
     "common/aw_paths.h",
     "common/aw_resource.h",
@@ -620,7 +617,6 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AwBrowserContext.java",
     "java/src/org/chromium/android_webview/AwBrowserProcess.java",
     "java/src/org/chromium/android_webview/AwContentVideoViewEmbedder.java",
-    "java/src/org/chromium/android_webview/AwContentViewClient.java",
     "java/src/org/chromium/android_webview/AwContents.java",
     "java/src/org/chromium/android_webview/AwContentsBackgroundThreadClient.java",
     "java/src/org/chromium/android_webview/AwContentsClient.java",
@@ -637,6 +633,7 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AwGLFunctor.java",
     "java/src/org/chromium/android_webview/AwHttpAuthHandler.java",
     "java/src/org/chromium/android_webview/AwLayoutSizer.java",
+    "java/src/org/chromium/android_webview/AwMetricsLogUploader.java",
     "java/src/org/chromium/android_webview/AwMetricsServiceClient.java",
     "java/src/org/chromium/android_webview/AwNetworkChangeNotifierRegistrationPolicy.java",
     "java/src/org/chromium/android_webview/AwPdfExporter.java",
@@ -696,6 +693,7 @@ android_library("android_webview_java") {
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
     "//components/web_restrictions:web_restrictions_java",
     "//content/public/android:content_java",
+    "//device/gamepad:java",
     "//device/geolocation:geolocation_java",
     "//net/android:net_java",
     "//third_party/android_tools:android_support_annotations_java",
@@ -801,13 +799,13 @@ android_library("android_webview_crash_services_java") {
 }
 
 android_aidl("crash_receiver_aidl") {
-  import_include = "java/src"
+  import_include = [ "java/src" ]
   sources = [
     "java/src/org/chromium/android_webview/crash/ICrashReceiverService.aidl",
   ]
 }
 
-if (!use_webview_internal_framework) {
+if (!use_unpublished_apis) {
   system_webview_apk_tmpl("system_webview_apk") {
     android_manifest = system_webview_android_manifest
     android_manifest_dep = ":system_webview_manifest"

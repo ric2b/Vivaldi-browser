@@ -4,23 +4,15 @@
 
 #include "content/browser/renderer_host/delegated_frame_host_client_aura.h"
 
-#include "content/browser/renderer_host/compositor_resize_lock_aura.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/common/view_messages.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/compositor/layer.h"
 
 namespace content {
-namespace {
-
-// When accelerated compositing is enabled and a widget resize is pending,
-// we delay further resizes of the UI. The following constant is the maximum
-// length of time that we should delay further UI resizes while waiting for a
-// resized frame from a renderer.
-const int kResizeLockTimeoutMs = 67;
-
-}  // namespace
 
 DelegatedFrameHostClientAura::DelegatedFrameHostClientAura(
     RenderWidgetHostViewAura* render_widget_host_view)
@@ -71,44 +63,36 @@ bool DelegatedFrameHostClientAura::DelegatedFrameCanCreateResizeLock() const {
 #endif
 }
 
-std::unique_ptr<ResizeLock>
-DelegatedFrameHostClientAura::DelegatedFrameHostCreateResizeLock(
-    bool defer_compositor_lock) {
+std::unique_ptr<CompositorResizeLock>
+DelegatedFrameHostClientAura::DelegatedFrameHostCreateResizeLock() {
+  // Pointer moves are released when the CompositorResizeLock ends.
+  auto* host = render_widget_host_view_->window_->GetHost();
+  host->dispatcher()->HoldPointerMoves();
+
   gfx::Size desired_size = render_widget_host_view_->window_->bounds().size();
-  return std::unique_ptr<ResizeLock>(new CompositorResizeLock(
-      render_widget_host_view_->window_->GetHost(), desired_size,
-      defer_compositor_lock,
-      base::TimeDelta::FromMilliseconds(kResizeLockTimeoutMs)));
+  return base::MakeUnique<CompositorResizeLock>(this, desired_size);
 }
 
-void DelegatedFrameHostClientAura::DelegatedFrameHostResizeLockWasReleased() {
-  render_widget_host_view_->host_->WasResized();
-}
-
-void DelegatedFrameHostClientAura::
-    DelegatedFrameHostSendReclaimCompositorResources(
-        int compositor_frame_sink_id,
-        bool is_swap_ack,
-        const cc::ReturnedResourceArray& resources) {
-  render_widget_host_view_->host_->Send(new ViewMsg_ReclaimCompositorResources(
-      render_widget_host_view_->host_->GetRoutingID(), compositor_frame_sink_id,
-      is_swap_ack, resources));
-}
-
-void DelegatedFrameHostClientAura::SetBeginFrameSource(
-    cc::BeginFrameSource* source) {
-  if (render_widget_host_view_->begin_frame_source_ &&
-      render_widget_host_view_->added_frame_observer_) {
-    render_widget_host_view_->begin_frame_source_->RemoveObserver(
-        render_widget_host_view_);
-    render_widget_host_view_->added_frame_observer_ = false;
-  }
-  render_widget_host_view_->begin_frame_source_ = source;
-  render_widget_host_view_->UpdateNeedsBeginFramesInternal();
+void DelegatedFrameHostClientAura::OnBeginFrame(
+    const cc::BeginFrameArgs& args) {
+  render_widget_host_view_->OnBeginFrame(args);
 }
 
 bool DelegatedFrameHostClientAura::IsAutoResizeEnabled() const {
   return render_widget_host_view_->host_->auto_resize_enabled();
+}
+
+std::unique_ptr<ui::CompositorLock>
+DelegatedFrameHostClientAura::GetCompositorLock(
+    ui::CompositorLockClient* client) {
+  auto* window_host = render_widget_host_view_->window_->GetHost();
+  return window_host->compositor()->GetCompositorLock(client);
+}
+
+void DelegatedFrameHostClientAura::CompositorResizeLockEnded() {
+  auto* window_host = render_widget_host_view_->window_->GetHost();
+  window_host->dispatcher()->ReleasePointerMoves();
+  render_widget_host_view_->host_->WasResized();
 }
 
 }  // namespace content

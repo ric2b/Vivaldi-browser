@@ -23,7 +23,7 @@ std::vector<Alias> GetVivaldiPermissionAliases() {
 }
 }
 
-static base::LazyInstance<VivaldiExtensionsClient> g_client =
+static base::LazyInstance<VivaldiExtensionsClient>::DestructorAtExit g_client =
     LAZY_INSTANCE_INITIALIZER;
 
 VivaldiExtensionsClient::VivaldiExtensionsClient()

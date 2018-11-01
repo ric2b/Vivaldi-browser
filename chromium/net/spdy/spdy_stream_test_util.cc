@@ -40,6 +40,10 @@ void ClosingDelegate::OnClose(int status) {
   // The |stream_| may still be alive (if it is our delegate).
 }
 
+NetLogSource ClosingDelegate::source_dependency() const {
+  return NetLogSource();
+}
+
 StreamDelegateBase::StreamDelegateBase(
     const base::WeakPtr<SpdyStream>& stream)
     : stream_(stream),
@@ -79,15 +83,19 @@ void StreamDelegateBase::OnClose(int status) {
   callback_.callback().Run(status);
 }
 
+NetLogSource StreamDelegateBase::source_dependency() const {
+  return NetLogSource();
+}
+
 int StreamDelegateBase::WaitForClose() {
   int result = callback_.WaitForResult();
   EXPECT_TRUE(!stream_.get());
   return result;
 }
 
-std::string StreamDelegateBase::TakeReceivedData() {
+SpdyString StreamDelegateBase::TakeReceivedData() {
   size_t len = received_data_queue_.GetTotalSize();
-  std::string received_data(len, '\0');
+  SpdyString received_data(len, '\0');
   if (len > 0) {
     EXPECT_EQ(len, received_data_queue_.Dequeue(
                        base::string_as_array(&received_data), len));
@@ -95,10 +103,10 @@ std::string StreamDelegateBase::TakeReceivedData() {
   return received_data;
 }
 
-std::string StreamDelegateBase::GetResponseHeaderValue(
-    const std::string& name) const {
+SpdyString StreamDelegateBase::GetResponseHeaderValue(
+    const SpdyString& name) const {
   SpdyHeaderBlock::const_iterator it = response_headers_.find(name);
-  return (it == response_headers_.end()) ? std::string()
+  return (it == response_headers_.end()) ? SpdyString()
                                          : it->second.as_string();
 }
 
@@ -111,9 +119,8 @@ StreamDelegateDoNothing::~StreamDelegateDoNothing() {
 
 StreamDelegateSendImmediate::StreamDelegateSendImmediate(
     const base::WeakPtr<SpdyStream>& stream,
-    base::StringPiece data)
-    : StreamDelegateBase(stream),
-      data_(data) {}
+    SpdyStringPiece data)
+    : StreamDelegateBase(stream), data_(data) {}
 
 StreamDelegateSendImmediate::~StreamDelegateSendImmediate() {
 }
@@ -129,9 +136,8 @@ void StreamDelegateSendImmediate::OnHeadersReceived(
 
 StreamDelegateWithBody::StreamDelegateWithBody(
     const base::WeakPtr<SpdyStream>& stream,
-    base::StringPiece data)
-    : StreamDelegateBase(stream),
-      buf_(new StringIOBuffer(data.as_string())) {}
+    SpdyStringPiece data)
+    : StreamDelegateBase(stream), buf_(new StringIOBuffer(data.as_string())) {}
 
 StreamDelegateWithBody::~StreamDelegateWithBody() {
 }
@@ -154,6 +160,6 @@ void StreamDelegateCloseOnHeaders::OnHeadersReceived(
   stream()->Cancel();
 }
 
-} // namespace test
+}  // namespace test
 
-} // namespace net
+}  // namespace net

@@ -343,6 +343,68 @@ class InstallStaticUtilTest
   DISALLOW_COPY_AND_ASSIGN(InstallStaticUtilTest);
 };
 
+TEST_P(InstallStaticUtilTest, GetChromeInstallSubDirectory) {
+#if defined(GOOGLE_CHROME_BUILD)
+  // The directory strings for the brand's install modes; parallel to
+  // kInstallModes.
+  static constexpr const wchar_t* kInstallDirs[] = {
+      L"Google\\Chrome", L"Google\\Chrome SxS",
+  };
+#else
+  // The directory strings for the brand's install modes; parallel to
+  // kInstallModes.
+  static constexpr const wchar_t* kInstallDirs[] = {
+      L"Chromium",
+  };
+#endif
+  static_assert(arraysize(kInstallDirs) == NUM_INSTALL_MODES,
+                "kInstallDirs out of date.");
+  EXPECT_THAT(GetChromeInstallSubDirectory(),
+              StrCaseEq(kInstallDirs[std::get<0>(GetParam())]));
+}
+
+TEST_P(InstallStaticUtilTest, GetRegistryPath) {
+#if defined(GOOGLE_CHROME_BUILD)
+  // The registry path strings for the brand's install modes; parallel to
+  // kInstallModes.
+  static constexpr const wchar_t* kRegistryPaths[] = {
+      L"Software\\Google\\Chrome", L"Software\\Google\\Chrome SxS",
+  };
+#else
+  // The registry path strings for the brand's install modes; parallel to
+  // kInstallModes.
+  static constexpr const wchar_t* kRegistryPaths[] = {
+      L"Software\\Chromium",
+  };
+#endif
+  static_assert(arraysize(kRegistryPaths) == NUM_INSTALL_MODES,
+                "kRegistryPaths out of date.");
+  EXPECT_THAT(GetRegistryPath(),
+              StrCaseEq(kRegistryPaths[std::get<0>(GetParam())]));
+}
+
+TEST_P(InstallStaticUtilTest, GetUninstallRegistryPath) {
+#if defined(GOOGLE_CHROME_BUILD)
+  // The uninstall registry path strings for the brand's install modes; parallel
+  // to kInstallModes.
+  static constexpr const wchar_t* kUninstallRegistryPaths[] = {
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Google Chrome",
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"  // (cont'd)
+      L"Google Chrome SxS",
+  };
+#else
+  // The registry path strings for the brand's install modes; parallel to
+  // kInstallModes.
+  static constexpr const wchar_t* kUninstallRegistryPaths[] = {
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Chromium",
+  };
+#endif
+  static_assert(arraysize(kUninstallRegistryPaths) == NUM_INSTALL_MODES,
+                "kUninstallRegistryPaths out of date.");
+  EXPECT_THAT(GetUninstallRegistryPath(),
+              StrCaseEq(kUninstallRegistryPaths[std::get<0>(GetParam())]));
+}
+
 TEST_P(InstallStaticUtilTest, GetAppGuid) {
   // For brands that do not integrate with Omaha/Google Update, the app guid is
   // an empty string.
@@ -352,7 +414,7 @@ TEST_P(InstallStaticUtilTest, GetAppGuid) {
   }
 
 #if defined(GOOGLE_CHROME_BUILD)
-  // The app guids for the brand's install modes; parallel to kInstalLModes.
+  // The app guids for the brand's install modes; parallel to kInstallModes.
   static constexpr const wchar_t* kAppGuids[] = {
       L"{8A69D345-D564-463c-AFF1-A69D9E530F96}",  // Google Chrome.
       L"{4EA16AC7-FD5A-47C3-875B-DBF4A2008C20}",  // Google Chrome SxS (Canary).
@@ -363,6 +425,23 @@ TEST_P(InstallStaticUtilTest, GetAppGuid) {
 #else
   FAIL() << "Not implemented.";
 #endif
+}
+
+TEST_P(InstallStaticUtilTest, GetBaseAppId) {
+#if defined(GOOGLE_CHROME_BUILD)
+  // The base app ids for the brand's install modes; parallel to kInstallModes.
+  static constexpr const wchar_t* kBaseAppIds[] = {
+      L"Chrome", L"ChromeCanary",
+  };
+#else
+  // The base app ids for the brand's install modes; parallel to kInstallModes.
+  static constexpr const wchar_t* kBaseAppIds[] = {
+      L"Chromium",
+  };
+#endif
+  static_assert(arraysize(kBaseAppIds) == NUM_INSTALL_MODES,
+                "kBaseAppIds out of date.");
+  EXPECT_THAT(GetBaseAppId(), StrCaseEq(kBaseAppIds[std::get<0>(GetParam())]));
 }
 
 TEST_P(InstallStaticUtilTest, UsageStatsAbsent) {

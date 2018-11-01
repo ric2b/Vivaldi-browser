@@ -32,8 +32,8 @@
 #define ColorSuggestion_h
 
 #include "platform/graphics/Color.h"
-#include "wtf/Allocator.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -42,8 +42,8 @@ struct ColorSuggestion {
   Color color;
   String label;
 
-  ColorSuggestion(const Color& colorValue, const String& label)
-      : color(colorValue), label(label) {}
+  ColorSuggestion(const Color& color_value, const String& label)
+      : color(color_value), label(label) {}
 };
 
 }  // namespace blink

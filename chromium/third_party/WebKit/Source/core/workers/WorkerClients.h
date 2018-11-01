@@ -33,7 +33,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/Supplementable.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -48,10 +48,10 @@ class CORE_EXPORT WorkerClients final : public GarbageCollected<WorkerClients>,
   WTF_MAKE_NONCOPYABLE(WorkerClients);
 
  public:
-  static WorkerClients* create() { return new WorkerClients; }
+  static WorkerClients* Create() { return new WorkerClients; }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
-    Supplementable<WorkerClients>::trace(visitor);
+    Supplementable<WorkerClients>::Trace(visitor);
   }
 
  private:

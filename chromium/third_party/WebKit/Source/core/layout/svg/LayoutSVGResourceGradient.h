@@ -22,13 +22,12 @@
 #ifndef LayoutSVGResourceGradient_h
 #define LayoutSVGResourceGradient_h
 
+#include <memory>
 #include "core/layout/svg/LayoutSVGResourcePaintServer.h"
 #include "core/svg/SVGGradientElement.h"
-#include "platform/geometry/FloatRect.h"
 #include "platform/graphics/Gradient.h"
 #include "platform/transforms/AffineTransform.h"
-#include "wtf/HashMap.h"
-#include <memory>
+#include "platform/wtf/HashMap.h"
 
 namespace blink {
 
@@ -37,35 +36,33 @@ struct GradientData {
 
  public:
   RefPtr<Gradient> gradient;
-  AffineTransform userspaceTransform;
+  AffineTransform userspace_transform;
 };
 
 class LayoutSVGResourceGradient : public LayoutSVGResourcePaintServer {
  public:
   explicit LayoutSVGResourceGradient(SVGGradientElement*);
 
-  void removeAllClientsFromCache(bool markForInvalidation = true) final;
-  void removeClientFromCache(LayoutObject*,
-                             bool markForInvalidation = true) final;
+  void RemoveAllClientsFromCache(bool mark_for_invalidation = true) final;
+  void RemoveClientFromCache(LayoutObject*,
+                             bool mark_for_invalidation = true) final;
 
-  SVGPaintServer preparePaintServer(const LayoutObject&) final;
+  SVGPaintServer PreparePaintServer(const LayoutObject&) final;
 
-  bool isChildAllowed(LayoutObject* child, const ComputedStyle&) const final;
+  bool IsChildAllowed(LayoutObject* child, const ComputedStyle&) const final;
 
  protected:
-  void addStops(Gradient&, const Vector<Gradient::ColorStop>&) const;
+  virtual SVGUnitTypes::SVGUnitType GradientUnits() const = 0;
+  virtual AffineTransform CalculateGradientTransform() const = 0;
+  virtual bool CollectGradientAttributes() = 0;
+  virtual PassRefPtr<Gradient> BuildGradient() const = 0;
 
-  virtual SVGUnitTypes::SVGUnitType gradientUnits() const = 0;
-  virtual AffineTransform calculateGradientTransform() const = 0;
-  virtual bool collectGradientAttributes(SVGGradientElement*) = 0;
-  virtual PassRefPtr<Gradient> buildGradient() const = 0;
-
-  static GradientSpreadMethod platformSpreadMethodFromSVGType(
+  static GradientSpreadMethod PlatformSpreadMethodFromSVGType(
       SVGSpreadMethodType);
 
  private:
-  bool m_shouldCollectGradientAttributes : 1;
-  HashMap<const LayoutObject*, std::unique_ptr<GradientData>> m_gradientMap;
+  bool should_collect_gradient_attributes_ : 1;
+  HashMap<const LayoutObject*, std::unique_ptr<GradientData>> gradient_map_;
 };
 
 }  // namespace blink

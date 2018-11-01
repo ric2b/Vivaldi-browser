@@ -4,7 +4,7 @@
 
 #include "ash/magnifier/magnification_controller.h"
 
-#include "ash/common/accessibility_types.h"
+#include "ash/accessibility_types.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/strings/stringprintf.h"
@@ -45,8 +45,7 @@ class TextInputView : public views::WidgetDelegateView {
     return gfx::Size(kTextInputWindowWidth, kTextInputWindowHeight);
   }
 
-  // Overridden from views::WidgetDelegate:
-  void FocusOnTextInput() { GetFocusManager()->SetFocusedView(text_field_); }
+  void FocusOnTextInput() { text_field_->RequestFocus(); }
 
  private:
   views::Textfield* text_field_;  // owned by views hierarchy
@@ -81,7 +80,7 @@ class MagnificationControllerTest : public test::AshTestBase {
   }
 
   ash::MagnificationController* GetMagnificationController() const {
-    return ash::Shell::GetInstance()->magnification_controller();
+    return ash::Shell::Get()->magnification_controller();
   }
 
   gfx::Rect GetViewport() const {
@@ -673,7 +672,7 @@ TEST_F(MagnificationControllerTest, CenterTextCaretInViewport) {
 
 // Make sure that unified desktop can enter magnified mode.
 TEST_F(MagnificationControllerTest, EnableMagnifierInUnifiedDesktop) {
-  Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(true);
+  Shell::Get()->display_manager()->SetUnifiedDesktopEnabled(true);
 
   EXPECT_EQ(1.0f, GetMagnificationController()->GetScale());
 

@@ -6,72 +6,53 @@
 
 namespace blink {
 
-namespace {
-
-String meteringModeToString(media::mojom::blink::MeteringMode mode) {
-  switch (mode) {
-    case media::mojom::blink::MeteringMode::NONE:
-      return "none";
-    case media::mojom::blink::MeteringMode::MANUAL:
-      return "manual";
-    case media::mojom::blink::MeteringMode::SINGLE_SHOT:
-      return "single-shot";
-    case media::mojom::blink::MeteringMode::CONTINUOUS:
-      return "continuous";
-    default:
-      NOTREACHED();
-  }
-  return emptyString;
-}
-
-}  // anonymous namespace
-
 // static
-PhotoCapabilities* PhotoCapabilities::create() {
+PhotoCapabilities* PhotoCapabilities::Create() {
   return new PhotoCapabilities();
 }
 
-String PhotoCapabilities::focusMode() const {
-  return meteringModeToString(m_focusMode);
+Vector<String> PhotoCapabilities::fillLightMode() const {
+  Vector<String> fill_light_modes;
+  for (const auto& mode : fill_light_modes_) {
+    switch (mode) {
+      case media::mojom::blink::FillLightMode::OFF:
+        fill_light_modes.push_back("off");
+        break;
+      case media::mojom::blink::FillLightMode::AUTO:
+        fill_light_modes.push_back("auto");
+        break;
+      case media::mojom::blink::FillLightMode::FLASH:
+        fill_light_modes.push_back("flash");
+        break;
+      default:
+        NOTREACHED();
+    }
+  }
+  return fill_light_modes;
 }
 
-String PhotoCapabilities::exposureMode() const {
-  return meteringModeToString(m_exposureMode);
-}
-
-String PhotoCapabilities::whiteBalanceMode() const {
-  return meteringModeToString(m_whiteBalanceMode);
-}
-
-String PhotoCapabilities::fillLightMode() const {
-  switch (m_fillLightMode) {
-    case media::mojom::blink::FillLightMode::NONE:
-      return "none";
-    case media::mojom::blink::FillLightMode::OFF:
-      return "off";
-    case media::mojom::blink::FillLightMode::AUTO:
-      return "auto";
-    case media::mojom::blink::FillLightMode::FLASH:
-      return "flash";
-    case media::mojom::blink::FillLightMode::TORCH:
-      return "torch";
+String PhotoCapabilities::redEyeReduction() const {
+  switch (red_eye_reduction_) {
+    case media::mojom::blink::RedEyeReduction::NEVER:
+      return "never";
+    case media::mojom::blink::RedEyeReduction::ALWAYS:
+      return "always";
+    case media::mojom::blink::RedEyeReduction::CONTROLLABLE:
+      return "controllable";
     default:
       NOTREACHED();
   }
-  return emptyString;
+  return "";
+}
+
+bool PhotoCapabilities::IsRedEyeReductionControllable() const {
+  return red_eye_reduction_ ==
+         media::mojom::blink::RedEyeReduction::CONTROLLABLE;
 }
 
 DEFINE_TRACE(PhotoCapabilities) {
-  visitor->trace(m_iso);
-  visitor->trace(m_imageHeight);
-  visitor->trace(m_imageWidth);
-  visitor->trace(m_zoom);
-  visitor->trace(m_exposureCompensation);
-  visitor->trace(m_colorTemperature);
-  visitor->trace(m_brightness);
-  visitor->trace(m_contrast);
-  visitor->trace(m_saturation);
-  visitor->trace(m_sharpness);
+  visitor->Trace(image_height_);
+  visitor->Trace(image_width_);
 }
 
 }  // namespace blink

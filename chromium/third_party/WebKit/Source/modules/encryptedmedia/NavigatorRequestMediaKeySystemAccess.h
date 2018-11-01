@@ -10,7 +10,7 @@
 #include "core/frame/Navigator.h"
 #include "modules/encryptedmedia/MediaKeySystemConfiguration.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -21,8 +21,8 @@ class NavigatorRequestMediaKeySystemAccess {
   static ScriptPromise requestMediaKeySystemAccess(
       ScriptState*,
       Navigator&,
-      const String& keySystem,
-      const HeapVector<MediaKeySystemConfiguration>& supportedConfigurations);
+      const String& key_system,
+      const HeapVector<MediaKeySystemConfiguration>& supported_configurations);
 };
 
 }  // namespace blink

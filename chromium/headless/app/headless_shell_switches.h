@@ -9,16 +9,20 @@
 
 namespace headless {
 namespace switches {
+
+extern const char kDefaultBackgroundColor[];
 extern const char kCrashDumpsDir[];
 extern const char kDeterministicFetch[];
 extern const char kDumpDom[];
 extern const char kHideScrollbars[];
+extern const char kPrintToPDF[];
 extern const char kProxyServer[];
 extern const char kRemoteDebuggingAddress[];
 extern const char kRepl[];
 extern const char kScreenshot[];
 extern const char kTimeout[];
 extern const char kUseGL[];
+extern const char kUserAgent[];
 extern const char kUserDataDir[];
 extern const char kVirtualTimeBudget[];
 extern const char kWindowSize[];

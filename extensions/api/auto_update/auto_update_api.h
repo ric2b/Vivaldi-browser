@@ -58,7 +58,6 @@ class AutoUpdateDisableUpdateNotifierFunction : public AsyncExtensionFunction {
   ~AutoUpdateDisableUpdateNotifierFunction() override;
   bool RunAsync() override;
 
-  void FinishClosingUpdateNotifiers();
   std::unique_ptr<base::WaitableEvent> quit_all_update_notifiers_event_;
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateDisableUpdateNotifierFunction);
 };

@@ -11,6 +11,7 @@
 #include "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -60,7 +61,6 @@
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
@@ -230,7 +230,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 // then show the no items label.
 - (void)reconfigureBookmarkBar;
 
-- (void)clearMenuTagMap;
 - (int)preferredHeight;
 - (void)addButtonsToView;
 - (BOOL)setManagedBookmarksButtonVisibility;
@@ -321,6 +320,33 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   return contextMenuController_.get();
 }
 
+- (void)loadView {
+  // Height is 0 because this is what the superview expects
+  [self setView:[[[BookmarkBarToolbarView alloc]
+                    initWithFrame:NSMakeRect(0, 0, initialWidth_, 0)]
+                    autorelease]];
+  [[self view] setHidden:YES];
+  [[self view] setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
+  [[self controlledView] setController:self];
+  [[self controlledView] setDelegate:self];
+
+  buttonView_.reset([[BookmarkBarView alloc]
+      initWithController:self
+                   frame:NSMakeRect(0, -2, 584, 144)]);
+  [buttonView_ setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin |
+                                   NSViewMaxXMargin];
+  [[buttonView_ importBookmarksButton] setTarget:self];
+  [[buttonView_ importBookmarksButton] setAction:@selector(importBookmarks:)];
+
+  [self createOffTheSideButton];
+  [buttonView_ addSubview:offTheSideButton_];
+
+  [self.view addSubview:buttonView_];
+  // viewDidLoad became part of the API in 10.10
+  if (!base::mac::IsAtLeastOS10_10())
+    [self viewDidLoad];
+}
+
 - (BookmarkButton*)bookmarkButtonToPulseForNode:(const BookmarkNode*)node {
   // Find the closest parent that is visible on the bar.
   while (node) {
@@ -380,6 +406,9 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 }
 
 - (void)dealloc {
+  [buttonView_ setController:nil];
+  [[self controlledView] setController:nil];
+  [[self controlledView] setDelegate:nil];
   [self browserWillBeDestroyed];
   [super dealloc];
 }
@@ -421,36 +450,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   browser_ = nullptr;
 }
 
-- (void)awakeFromNib {
-  [self viewDidLoad];
-}
-
 - (void)viewDidLoad {
-  if (bridge_) {
-    // When running on 10.10, expect both -awakeFromNib and -viewDidLoad to be
-    // called, but only initialize once.
-    DCHECK(base::mac::IsAtLeastOS10_10());
-    return;
-  }
-
-  // We default to NOT open, which means height=0.
-  DCHECK([[self view] isHidden]);  // Hidden so it's OK to change.
-
-  // Set our initial height to zero, since that is what the superview
-  // expects.  We will resize ourselves open later if needed.
-  [[self view] setFrame:NSMakeRect(0, 0, initialWidth_, 0)];
-
-  // Complete init of the "off the side" button, as much as we can.
-  [offTheSideButton_ setImage:[self offTheSideButtonImage:NO]];
-  BookmarkButtonCell* offTheSideCell = [offTheSideButton_ cell];
-  [offTheSideCell setTag:kMaterialStandardButtonTypeWithLimitedClickFeedback];
-  [offTheSideCell setImagePosition:NSImageOnly];
-
-  // The cell is configured in the nib to draw a white highlight when clicked.
-  [offTheSideCell setHighlightsBy:NSNoCellMask];
-  [offTheSideButton_.draggableButton setDraggable:NO];
-  [offTheSideButton_.draggableButton setActsOnMouseDown:YES];
-
   // We are enabled by default.
   barIsEnabled_ = YES;
 
@@ -467,16 +467,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 
   originalImportBookmarksRect_.origin.x += kBookmarksTextfieldOffsetX;
   [[buttonView_ importBookmarksButton] setFrame:originalImportBookmarksRect_];
-
-  // Move the chevron button up 2pts from its position in the xib.
-  NSRect chevronButtonFrame = [offTheSideButton_ frame];
-  chevronButtonFrame.origin.y -= 2;
-  [offTheSideButton_ setFrame:chevronButtonFrame];
-
-  // To make life happier when the bookmark bar is floating, the chevron is a
-  // child of the button view.
-  [offTheSideButton_ removeFromSuperview];
-  [buttonView_ addSubview:offTheSideButton_];
 
   // When resized we may need to add new buttons, or remove them (if
   // no longer visible), or add/remove the "off the side" menu.
@@ -837,7 +827,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 
   // Middle click on chevron should not open bookmarks under it, instead just
   // open its folder menu.
-  if (sender == offTheSideButton_) {
+  if (sender == offTheSideButton_.get()) {
     [[sender cell] setStartingChildIndex:displayedButtonCount_];
     NSEvent* event = [NSApp currentEvent];
     if ([event type] == NSOtherMouseUp) {
@@ -858,17 +848,17 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 }
 
 // Click on a bookmark folder button.
-- (IBAction)openBookmarkFolderFromButton:(id)sender {
+- (void)openBookmarkFolderFromButton:(id)sender {
   [self openBookmarkFolder:sender];
 }
 
 // Click on the "off the side" button (chevron), which opens like a folder
 // button but isn't exactly a parent folder.
-- (IBAction)openOffTheSideFolderFromButton:(id)sender {
+- (void)openOffTheSideFolderFromButton:(id)sender {
   [self openBookmarkFolder:sender];
 }
 
-- (IBAction)importBookmarks:(id)sender {
+- (void)importBookmarks:(id)sender {
   chrome::ShowImportDialog(browser_);
 }
 
@@ -1095,11 +1085,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   browser_->OpenURL(params);
 }
 
-- (void)clearMenuTagMap {
-  seedId_ = 0;
-  menuTagMap_.clear();
-}
-
 - (int)preferredHeight {
   DCHECK(![self isAnimationRunning]);
 
@@ -1119,15 +1104,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 // Return an appropriate width for the given bookmark button cell.
 - (CGFloat)widthForBookmarkButtonCell:(NSCell*)cell {
   return std::min([cell cellSize].width, bookmarks::kDefaultBookmarkWidth);
-}
-
-- (IBAction)openBookmarkMenuItem:(id)sender {
-  int64_t tag = [self nodeIdFromMenuTag:[sender tag]];
-  const BookmarkNode* node =
-      bookmarks::GetBookmarkNodeByID(bookmarkModel_, tag);
-  WindowOpenDisposition disposition =
-      ui::WindowOpenDispositionFromNSEvent([NSApp currentEvent]);
-  [self openURL:node->url() disposition:disposition];
 }
 
 // For the given root node of the bookmark bar, show or hide (as
@@ -1421,6 +1397,27 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   [buttonView_ addSubview:appsPageShortcutButton_.get()];
 
   [self setAppsPageShortcutButtonVisibility];
+}
+
+- (void)createOffTheSideButton {
+  offTheSideButton_.reset(
+      [[BookmarkButton alloc] initWithFrame:NSMakeRect(586, 0, 20, 24)]);
+  id offTheSideCell = [BookmarkButtonCell offTheSideButtonCell];
+  [offTheSideCell setTag:kMaterialStandardButtonTypeWithLimitedClickFeedback];
+  [offTheSideCell setImagePosition:NSImageOnly];
+
+  [offTheSideCell setHighlightsBy:NSNoCellMask];
+  [offTheSideCell setShowsBorderOnlyWhileMouseInside:YES];
+  [offTheSideCell setBezelStyle:NSShadowlessSquareBezelStyle];
+  [offTheSideButton_ setCell:offTheSideCell];
+  [offTheSideButton_ setImage:[self offTheSideButtonImage:NO]];
+  [offTheSideButton_ setButtonType:NSMomentaryLightButton];
+
+  [offTheSideButton_ setTarget:self];
+  [offTheSideButton_ setAction:@selector(openOffTheSideFolderFromButton:)];
+  [offTheSideButton_ setDelegate:self];
+  [[offTheSideButton_ draggableButton] setDraggable:NO];
+  [[offTheSideButton_ draggableButton] setActsOnMouseDown:YES];
 }
 
 - (void)openAppsPage:(id)sender {
@@ -1798,7 +1795,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
     [button removeFromSuperview];
   }
   [buttons_ removeAllObjects];
-  [self clearMenuTagMap];
   displayedButtonCount_ = 0;
 
   // Make sure there are no stale pointers in the pasteboard.  This
@@ -1901,18 +1897,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   [self reconfigureBookmarkBar];
 }
 
-// Given a NSMenuItem tag, return the appropriate bookmark node id.
-- (int64_t)nodeIdFromMenuTag:(int32_t)tag {
-  return menuTagMap_[tag];
-}
-
-// Create and return a new tag for the given node id.
-- (int32_t)menuTagFromNodeId:(int64_t)menuid {
-  int tag = seedId_++;
-  menuTagMap_[tag] = menuid;
-  return tag;
-}
-
 // Adapt appearance of buttons to the current theme. Called after
 // theme changes, or when our view is added to the view hierarchy.
 // Oddly, the view pings us instead of us pinging our view.  This is
@@ -1954,7 +1938,8 @@ void RecordAppLaunch(Profile* profile, GURL url) {
             [[eventWindow contentView] hitTest:[event locationInWindow]];
         if (hitView == [folderController_ parentButton])
           return NO;
-        if (![hitView isDescendantOf:[self view]] || hitView == buttonView_)
+        if (![hitView isDescendantOf:[self view]] ||
+            hitView == buttonView_.get())
           return YES;
       }
       // If a click in a bookmark bar folder window and that isn't
@@ -2293,12 +2278,6 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   [self addButtonsToView];
   [self configureOffTheSideButtonContentsAndVisibility];
   [self reconfigureBookmarkBar];
-}
-
-- (void)beingDeleted:(BookmarkModel*)model {
-  // The browser may be being torn down; little is safe to do.  As an
-  // example, it may not be safe to clear the pasteboard.
-  // http://crbug.com/38665
 }
 
 - (void)nodeAdded:(BookmarkModel*)model

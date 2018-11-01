@@ -53,7 +53,7 @@ void UIResourceBitmap::Create(sk_sp<SkPixelRef> pixel_ref,
 void UIResourceBitmap::DrawToCanvas(SkCanvas* canvas, SkPaint* paint) {
   SkBitmap bitmap;
   bitmap.setInfo(pixel_ref_.get()->info(), pixel_ref_.get()->rowBytes());
-  bitmap.setPixelRef(pixel_ref_.get());
+  bitmap.setPixelRef(pixel_ref_, 0, 0);
   canvas->drawBitmap(bitmap, 0, 0, paint);
   canvas->flush();
 }
@@ -75,7 +75,7 @@ UIResourceBitmap::UIResourceBitmap(const gfx::Size& size, bool is_opaque) {
   SkImageInfo info =
       SkImageInfo::MakeN32(size.width(), size.height(), alphaType);
   sk_sp<SkPixelRef> pixel_ref(
-      SkMallocPixelRef::NewAllocate(info, info.minRowBytes(), NULL));
+      SkMallocPixelRef::MakeAllocate(info, info.minRowBytes(), NULL));
   pixel_ref->setImmutable();
   Create(std::move(pixel_ref), size, UIResourceBitmap::RGBA8);
   SetOpaque(is_opaque);

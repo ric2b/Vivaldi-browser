@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <map>
-#include <string>
 #include <vector>
 
 #include "ash/shell.h"
@@ -38,6 +37,7 @@
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/common/process.mojom.h"
+#include "components/device_event_log/device_event_log.h"
 #include "components/exo/shell_surface.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -50,6 +50,7 @@
 
 using base::ProcessHandle;
 using base::TimeDelta;
+using base::TimeTicks;
 using content::BrowserThread;
 
 namespace memory {
@@ -113,13 +114,14 @@ std::ostream& operator<<(std::ostream& os, const ProcessType& type) {
 std::ostream& operator<<(
     std::ostream& out, const TabManagerDelegate::Candidate& candidate) {
   if (candidate.app()) {
-    out << "app " << candidate.app()->pid() << " ("
-        << candidate.app()->process_name() << ")"
-        << ", process_state " << candidate.app()->process_state()
-        << ", is_focused " << candidate.app()->is_focused()
-        << ", lastActivityTime " << candidate.app()->last_activity_time();
+    out << "app " << *candidate.app();
   } else if (candidate.tab()) {
-    out << "tab " << candidate.tab()->renderer_handle;
+    const TabStats* const& tab = candidate.tab();
+    out << "tab " << tab->title << ", renderer_handle: " << tab->renderer_handle
+        << ", oom_score: " << tab->oom_score
+        << ", is_discarded: " << tab->is_discarded
+        << ", discard_count: " << tab->discard_count
+        << ", last_active: " << tab->last_active;
   }
   out << ", process_type " << candidate.process_type();
   return out;
@@ -151,8 +153,10 @@ ProcessType TabManagerDelegate::Candidate::GetProcessTypeInternal() const {
   if (app()) {
     if (app()->is_focused())
       return ProcessType::FOCUSED_APP;
-    if (app()->process_state() == arc::mojom::ProcessState::TOP)
+    if (app()->process_state() <=
+        arc::mojom::ProcessState::IMPORTANT_FOREGROUND) {
       return ProcessType::VISIBLE_APP;
+    }
     return ProcessType::BACKGROUND_APP;
   }
   if (tab()) {
@@ -551,6 +555,15 @@ TabManagerDelegate::GetSortedCandidates(
   return candidates;
 }
 
+bool TabManagerDelegate::IsRecentlyKilledArcProcess(
+    const std::string& process_name,
+    const TimeTicks& now) {
+  const auto it = recently_killed_arc_processes_.find(process_name);
+  if (it == recently_killed_arc_processes_.end())
+    return false;
+  return (now - it->second) <= GetArcRespawnKillDelay();
+}
+
 bool TabManagerDelegate::KillArcProcess(const int nspid) {
   auto* arc_service_manager = arc::ArcServiceManager::Get();
   if (!arc_service_manager)
@@ -580,37 +593,63 @@ chromeos::DebugDaemonClient* TabManagerDelegate::GetDebugDaemonClient() {
 void TabManagerDelegate::LowMemoryKillImpl(
     const TabStatsList& tab_list,
     const std::vector<arc::ArcProcess>& arc_processes) {
-
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   VLOG(2) << "LowMemoryKillImpl";
 
   const std::vector<TabManagerDelegate::Candidate> candidates =
       GetSortedCandidates(tab_list, arc_processes);
 
   int target_memory_to_free_kb = mem_stat_->TargetMemoryToFreeKB();
+  const TimeTicks now = TimeTicks::Now();
+
+  MEMORY_LOG(ERROR) << "List of low memory kill candidates "
+                       "(sorted from low priority to high priority):";
+  for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
+    MEMORY_LOG(ERROR) << *it;
+  }
   // Kill processes until the estimated amount of freed memory is sufficient to
   // bring the system memory back to a normal level.
   // The list is sorted by descending importance, so we go through the list
   // backwards.
   for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
-    VLOG(3) << "Target memory to free: " << target_memory_to_free_kb << " KB";
+    MEMORY_LOG(ERROR) << "Target memory to free: " << target_memory_to_free_kb
+                      << " KB";
+    if (target_memory_to_free_kb <= 0)
+      break;
     // Never kill selected tab or Android foreground app, regardless whether
     // they're in the active window. Since the user experience would be bad.
     ProcessType process_type = it->process_type();
     if (process_type == ProcessType::VISIBLE_APP ||
         process_type == ProcessType::FOCUSED_APP ||
         process_type == ProcessType::FOCUSED_TAB) {
-      VLOG(2) << "Skipped killing " << *it;
+      if (it->app()) {
+        MEMORY_LOG(ERROR) << "Skipped killing " << it->app()->process_name();
+      } else if (it->tab()) {
+        MEMORY_LOG(ERROR) << "Skipped killing " << it->tab()->title << " ("
+                          << it->tab()->renderer_handle << ")";
+      }
       continue;
     }
     if (it->app()) {
+      if (IsRecentlyKilledArcProcess(it->app()->process_name(), now)) {
+        MEMORY_LOG(ERROR) << "Avoided killing " << it->app()->process_name()
+                          << " too often";
+        continue;
+      }
       int estimated_memory_freed_kb =
           mem_stat_->EstimatedMemoryFreedKB(it->app()->pid());
       if (KillArcProcess(it->app()->nspid())) {
+        recently_killed_arc_processes_[it->app()->process_name()] = now;
         target_memory_to_free_kb -= estimated_memory_freed_kb;
         MemoryKillsMonitor::LogLowMemoryKill("APP", estimated_memory_freed_kb);
-        VLOG(2) << "Killed " << *it;
+        MEMORY_LOG(ERROR) << "Killed app " << it->app()->process_name() << " ("
+                          << it->app()->pid() << ")"
+                          << ", estimated " << estimated_memory_freed_kb
+                          << " KB freed";
+      } else {
+        MEMORY_LOG(ERROR) << "Failed to kill " << it->app()->process_name();
       }
-    } else {
+    } else if (it->tab()) {
       int64_t tab_id = it->tab()->tab_contents_id;
       // The estimation is problematic since multiple tabs may share the same
       // process, while the calculation counts memory used by the whole process.
@@ -620,11 +659,15 @@ void TabManagerDelegate::LowMemoryKillImpl(
       if (KillTab(tab_id)) {
         target_memory_to_free_kb -= estimated_memory_freed_kb;
         MemoryKillsMonitor::LogLowMemoryKill("TAB", estimated_memory_freed_kb);
-        VLOG(2) << "Killed " << *it;
+        MEMORY_LOG(ERROR) << "Killed tab " << it->tab()->title << " ("
+                          << it->tab()->renderer_handle << "), estimated "
+                          << estimated_memory_freed_kb << " KB freed";
       }
     }
-    if (target_memory_to_free_kb < 0)
-      break;
+  }
+  if (target_memory_to_free_kb > 0) {
+    MEMORY_LOG(ERROR)
+        << "Unable to kill enough candidates to meet target_memory_to_free_kb ";
   }
 }
 

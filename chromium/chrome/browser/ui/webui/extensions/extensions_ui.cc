@@ -50,8 +50,10 @@ class ExtensionWebUiTimer : public content::WebContentsObserver {
 
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override {
-    if (navigation_handle->IsInMainFrame() && !navigation_handle->IsSamePage())
+    if (navigation_handle->IsInMainFrame() &&
+        !navigation_handle->IsSameDocument()) {
       timer_.reset(new base::ElapsedTimer());
+    }
   }
 
   void DocumentLoadedInFrame(
@@ -113,13 +115,6 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddLocalizedString("sidebarApps", IDS_MD_EXTENSIONS_SIDEBAR_APPS);
   source->AddLocalizedString("sidebarExtensions",
                              IDS_MD_EXTENSIONS_SIDEBAR_EXTENSIONS);
-  source->AddLocalizedString("sidebarLoadUnpacked",
-                             IDS_MD_EXTENSIONS_SIDEBAR_LOAD_UNPACKED);
-  source->AddLocalizedString("sidebarPack", IDS_MD_EXTENSIONS_SIDEBAR_PACK);
-  source->AddLocalizedString("sidebarUpdateNow",
-                             IDS_MD_EXTENSIONS_SIDEBAR_UPDATE_NOW);
-  source->AddLocalizedString("developerMode",
-                             IDS_MD_EXTENSIONS_SIDEBAR_DEVELOPER_MODE);
   source->AddLocalizedString("dropToInstall",
                              IDS_EXTENSIONS_INSTALL_DROP_TARGET);
   source->AddLocalizedString("errorsPageHeading",
@@ -147,11 +142,18 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_DEPENDENT_ENTRY);
   source->AddLocalizedString("itemDetails", IDS_MD_EXTENSIONS_ITEM_DETAILS);
   source->AddLocalizedString("itemErrors", IDS_MD_EXTENSIONS_ITEM_ERRORS);
+  source->AddLocalizedString("itemIdHeading",
+                             IDS_MD_EXTENSIONS_ITEM_ID_HEADING);
+  source->AddLocalizedString("itemOff", IDS_MD_EXTENSIONS_ITEM_OFF);
+  source->AddLocalizedString("itemOn", IDS_MD_EXTENSIONS_ITEM_ON);
+  source->AddLocalizedString("itemOptions", IDS_MD_EXTENSIONS_ITEM_OPTIONS);
   source->AddLocalizedString("itemPermissions",
                              IDS_MD_EXTENSIONS_ITEM_PERMISSIONS);
   source->AddLocalizedString("itemPermissionsEmpty",
                              IDS_MD_EXTENSIONS_ITEM_PERMISSIONS_EMPTY);
   source->AddLocalizedString("itemRemove", IDS_MD_EXTENSIONS_ITEM_REMOVE);
+  source->AddLocalizedString("itemRemoveExtension",
+                             IDS_MD_EXTENSIONS_ITEM_REMOVE_EXTENSION);
   source->AddLocalizedString("itemSource",
                              IDS_MD_EXTENSIONS_ITEM_SOURCE);
   source->AddLocalizedString("itemSourcePolicy",
@@ -179,6 +181,19 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
       l10n_util::GetStringFUTF16(
           IDS_EXTENSIONS_ADDED_WITHOUT_KNOWLEDGE,
           l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE)));
+  source->AddLocalizedString(
+      "loadErrorCouldNotLoadManifest",
+      IDS_MD_EXTENSIONS_LOAD_ERROR_COULD_NOT_LOAD_MANIFEST);
+  source->AddLocalizedString("loadErrorHeading",
+                             IDS_MD_EXTENSIONS_LOAD_ERROR_HEADING);
+  source->AddLocalizedString("loadErrorFileLabel",
+                             IDS_MD_EXTENSIONS_LOAD_ERROR_FILE_LABEL);
+  source->AddLocalizedString("loadErrorErrorLabel",
+                             IDS_MD_EXTENSIONS_LOAD_ERROR_ERROR_LABEL);
+  source->AddLocalizedString("loadErrorCancel",
+                             IDS_MD_EXTENSIONS_LOAD_ERROR_CANCEL);
+  source->AddLocalizedString("loadErrorRetry",
+                             IDS_MD_EXTENSIONS_LOAD_ERROR_RETRY);
   source->AddLocalizedString("noErrorsToShow",
                              IDS_EXTENSIONS_ERROR_NO_ERRORS_CODE_MESSAGE);
   source->AddLocalizedString("packDialogTitle",
@@ -206,6 +221,13 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_IN_CHROME);
   source->AddLocalizedString("shortcutTypeAShortcut",
                              IDS_MD_EXTENSIONS_TYPE_A_SHORTCUT);
+  source->AddLocalizedString("toolbarDevMode",
+                             IDS_MD_EXTENSIONS_DEVELOPER_MODE);
+  source->AddLocalizedString("toolbarLoadUnpacked",
+                             IDS_MD_EXTENSIONS_TOOLBAR_LOAD_UNPACKED);
+  source->AddLocalizedString("toolbarPack", IDS_MD_EXTENSIONS_TOOLBAR_PACK);
+  source->AddLocalizedString("toolbarUpdateNow",
+                             IDS_MD_EXTENSIONS_TOOLBAR_UPDATE_NOW);
   source->AddLocalizedString("viewBackgroundPage",
                              IDS_EXTENSIONS_BACKGROUND_PAGE);
   source->AddLocalizedString("viewIncognito",
@@ -252,9 +274,10 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("item.js", IDR_MD_EXTENSIONS_ITEM_JS);
   source->AddResourcePath("item_list.html", IDR_MD_EXTENSIONS_ITEM_LIST_HTML);
   source->AddResourcePath("item_list.js", IDR_MD_EXTENSIONS_ITEM_LIST_JS);
-  source->AddResourcePath("item_source.html",
-                          IDR_MD_EXTENSIONS_ITEM_SOURCE_HTML);
-  source->AddResourcePath("item_source.js", IDR_MD_EXTENSIONS_ITEM_SOURCE_JS);
+  source->AddResourcePath("item_util.html", IDR_MD_EXTENSIONS_ITEM_UTIL_HTML);
+  source->AddResourcePath("item_util.js", IDR_MD_EXTENSIONS_ITEM_UTIL_JS);
+  source->AddResourcePath("load_error.html", IDR_MD_EXTENSIONS_LOAD_ERROR_HTML);
+  source->AddResourcePath("load_error.js", IDR_MD_EXTENSIONS_LOAD_ERROR_JS);
   source->AddResourcePath("options_dialog.html",
                           IDR_MD_EXTENSIONS_OPTIONS_DIALOG_HTML);
   source->AddResourcePath("options_dialog.js",
@@ -274,6 +297,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("sidebar.html", IDR_MD_EXTENSIONS_SIDEBAR_HTML);
   source->AddResourcePath("sidebar.js", IDR_MD_EXTENSIONS_SIDEBAR_JS);
   source->AddResourcePath("strings.html", IDR_MD_EXTENSIONS_STRINGS_HTML);
+  source->AddResourcePath("toolbar.html", IDR_MD_EXTENSIONS_TOOLBAR_HTML);
+  source->AddResourcePath("toolbar.js", IDR_MD_EXTENSIONS_TOOLBAR_JS);
   source->SetDefaultResource(IDR_MD_EXTENSIONS_EXTENSIONS_HTML);
 
   return source;

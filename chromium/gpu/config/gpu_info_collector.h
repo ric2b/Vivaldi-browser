@@ -11,11 +11,11 @@
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
 
-namespace gpu {
+namespace angle {
+struct SystemInfo;
+}
 
-// Collect GPU vendor_id and device ID.
-GPU_EXPORT CollectInfoResult CollectGpuID(uint32_t* vendor_id,
-                                          uint32_t* device_id);
+namespace gpu {
 
 // Collects basic GPU info without creating a GL/DirectX context (and without
 // the danger of crashing), including vendor_id and device_id.
@@ -51,6 +51,11 @@ GPU_EXPORT void MergeGPUInfoGL(GPUInfo* basic_gpu_info,
 // If more than one GPUs are identified, and GL strings are available,
 // identify the active GPU based on GL strings.
 GPU_EXPORT void IdentifyActiveGPU(GPUInfo* gpu_info);
+
+// Helper function to convert data from ANGLE's system info gathering library
+// into a GPUInfo
+void FillGPUInfoFromSystemInfo(GPUInfo* gpu_info,
+                               angle::SystemInfo* system_info);
 
 }  // namespace gpu
 

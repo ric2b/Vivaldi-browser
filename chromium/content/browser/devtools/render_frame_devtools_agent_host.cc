@@ -462,6 +462,7 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
 
   g_instances.Get().push_back(this);
   AddRef();  // Balanced in RenderFrameHostDestroyed.
+
   NotifyCreated();
 }
 
@@ -516,11 +517,11 @@ void RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
   session->SetFallThroughForNotFound(true);
   session->SetRenderFrameHost(handlers_frame_host_);
   if (frame_tree_node_ && !frame_tree_node_->parent()) {
-    session->AddHandler(base::WrapUnique(new protocol::EmulationHandler()));
     session->AddHandler(base::WrapUnique(new protocol::PageHandler()));
     session->AddHandler(base::WrapUnique(new protocol::SecurityHandler()));
   }
   session->AddHandler(base::WrapUnique(new protocol::DOMHandler()));
+  session->AddHandler(base::WrapUnique(new protocol::EmulationHandler()));
   session->AddHandler(base::WrapUnique(new protocol::InputHandler()));
   session->AddHandler(base::WrapUnique(new protocol::InspectorHandler()));
   session->AddHandler(base::WrapUnique(new protocol::IOHandler(
@@ -860,15 +861,6 @@ void RenderFrameDevToolsAgentHost::RenderProcessGone(
 }
 
 bool RenderFrameDevToolsAgentHost::OnMessageReceived(
-    const IPC::Message& message) {
-  if (!current_)
-    return false;
-  if (message.type() == ViewHostMsg_SwapCompositorFrame::ID)
-    OnSwapCompositorFrame(message);
-  return false;
-}
-
-bool RenderFrameDevToolsAgentHost::OnMessageReceived(
     const IPC::Message& message,
     RenderFrameHost* render_frame_host) {
   bool is_current = current_ && current_->host() == render_frame_host;
@@ -922,6 +914,27 @@ void RenderFrameDevToolsAgentHost::WasHidden() {
 #if defined(OS_ANDROID)
   power_save_blocker_.reset();
 #endif
+}
+
+void RenderFrameDevToolsAgentHost::DidReceiveCompositorFrame() {
+  if (!session())
+    return;
+  const cc::CompositorFrameMetadata& metadata =
+      RenderWidgetHostImpl::From(
+          web_contents()->GetRenderViewHost()->GetWidget())
+          ->last_frame_metadata();
+  protocol::PageHandler* page_handler =
+      protocol::PageHandler::FromSession(session());
+  if (page_handler)
+    page_handler->OnSwapCompositorFrame(metadata.Clone());
+  protocol::InputHandler::FromSession(session())->OnSwapCompositorFrame(
+      metadata);
+  protocol::TracingHandler* tracing_handler =
+      protocol::TracingHandler::FromSession(session());
+  if (frame_trace_recorder_ && tracing_handler->did_initiate_recording()) {
+    frame_trace_recorder_->OnSwapCompositorFrame(
+        current_ ? current_->host() : nullptr, metadata);
+  }
 }
 
 void RenderFrameDevToolsAgentHost::
@@ -1005,10 +1018,11 @@ std::string RenderFrameDevToolsAgentHost::GetParentId() {
 std::string RenderFrameDevToolsAgentHost::GetType() {
   DevToolsManager* manager = DevToolsManager::GetInstance();
   if (manager->delegate() && current_) {
-    std::string result = manager->delegate()->GetTargetType(current_->host());
-    if (!result.empty())
-      return result;
+    std::string type = manager->delegate()->GetTargetType(current_->host());
+    if (!type.empty())
+      return type;
   }
+
   if (IsChildFrame())
     return kTypeFrame;
   return kTypePage;
@@ -1017,10 +1031,13 @@ std::string RenderFrameDevToolsAgentHost::GetType() {
 std::string RenderFrameDevToolsAgentHost::GetTitle() {
   DevToolsManager* manager = DevToolsManager::GetInstance();
   if (manager->delegate() && current_) {
-    std::string result = manager->delegate()->GetTargetTitle(current_->host());
-    if (!result.empty())
-      return result;
+    std::string title = manager->delegate()->GetTargetTitle(current_->host());
+    if (!title.empty())
+      return title;
   }
+
+  if (current_ && current_->host()->GetParent())
+    return current_->host()->GetLastCommittedURL().spec();
   content::WebContents* web_contents = GetWebContents();
   if (web_contents)
     return base::UTF16ToUTF8(web_contents->GetTitle());
@@ -1083,29 +1100,6 @@ base::TimeTicks RenderFrameDevToolsAgentHost::GetLastActivityTime() {
   if (content::WebContents* contents = web_contents())
     return contents->GetLastActiveTime();
   return base::TimeTicks();
-}
-
-void RenderFrameDevToolsAgentHost::OnSwapCompositorFrame(
-    const IPC::Message& message) {
-  ViewHostMsg_SwapCompositorFrame::Param param;
-  if (!ViewHostMsg_SwapCompositorFrame::Read(&message, &param))
-    return;
-  if (!session())
-    return;
-  protocol::PageHandler* page_handler =
-      protocol::PageHandler::FromSession(session());
-  if (page_handler) {
-    page_handler->OnSwapCompositorFrame(
-        std::move(std::get<1>(param).metadata));
-  }
-  protocol::InputHandler::FromSession(session())
-      ->OnSwapCompositorFrame(std::get<1>(param).metadata);
-  protocol::TracingHandler* tracing_handler =
-      protocol::TracingHandler::FromSession(session());
-  if (frame_trace_recorder_ && tracing_handler->did_initiate_recording()) {
-    frame_trace_recorder_->OnSwapCompositorFrame(
-        current_ ? current_->host() : nullptr, std::get<1>(param).metadata);
-  }
 }
 
 void RenderFrameDevToolsAgentHost::SignalSynchronousSwapCompositorFrame(

@@ -12,7 +12,7 @@
 
 namespace printing {
 
-base::LazyInstance<std::string> g_user_agent;
+base::LazyInstance<std::string>::Leaky g_user_agent;
 
 void SetAgent(const std::string& user_agent) {
   g_user_agent.Get() = user_agent;
@@ -26,44 +26,37 @@ const std::string& GetAgent() {
 void GetColorModelForMode(
     int color_mode, std::string* color_setting_name, std::string* color_value) {
 #if defined(OS_MACOSX)
-  const char kCUPSColorMode[] = "ColorMode";
-  const char kCUPSColorModel[] = "ColorModel";
-  const char kCUPSPrintoutMode[] = "PrintoutMode";
-  const char kCUPSProcessColorModel[] = "ProcessColorModel";
+  constexpr char kCUPSColorMode[] = "ColorMode";
+  constexpr char kCUPSColorModel[] = "ColorModel";
+  constexpr char kCUPSPrintoutMode[] = "PrintoutMode";
+  constexpr char kCUPSProcessColorModel[] = "ProcessColorModel";
+  constexpr char kCUPSBrotherMonoColor[] = "BRMonoColor";
+  constexpr char kCUPSBrotherPrintQuality[] = "BRPrintQuality";
 #else
-  const char kCUPSColorMode[] = "cups-ColorMode";
-  const char kCUPSColorModel[] = "cups-ColorModel";
-  const char kCUPSPrintoutMode[] = "cups-PrintoutMode";
-  const char kCUPSProcessColorModel[] = "cups-ProcessColorModel";
+  constexpr char kCUPSColorMode[] = "cups-ColorMode";
+  constexpr char kCUPSColorModel[] = "cups-ColorModel";
+  constexpr char kCUPSPrintoutMode[] = "cups-PrintoutMode";
+  constexpr char kCUPSProcessColorModel[] = "cups-ProcessColorModel";
+  constexpr char kCUPSBrotherMonoColor[] = "cups-BRMonoColor";
+  constexpr char kCUPSBrotherPrintQuality[] = "cups-BRPrintQuality";
 #endif  // defined(OS_MACOSX)
 
   color_setting_name->assign(kCUPSColorModel);
   switch (color_mode) {
+    case GRAY:
+      color_value->assign(kGray);
+      break;
     case COLOR:
       color_value->assign(kColor);
       break;
     case CMYK:
       color_value->assign(kCMYK);
       break;
-    case PRINTOUTMODE_NORMAL:
-      color_value->assign(kNormal);
-      color_setting_name->assign(kCUPSPrintoutMode);
-      break;
-    case PRINTOUTMODE_NORMAL_GRAY:
-      color_value->assign(kNormalGray);
-      color_setting_name->assign(kCUPSPrintoutMode);
-      break;
-    case RGB16:
-      color_value->assign(kRGB16);
-      break;
-    case RGBA:
-      color_value->assign(kRGBA);
-      break;
-    case RGB:
-      color_value->assign(kRGB);
-      break;
     case CMY:
       color_value->assign(kCMY);
+      break;
+    case KCMY:
+      color_value->assign(kKCMY);
       break;
     case CMY_K:
       color_value->assign(kCMY_K);
@@ -71,8 +64,17 @@ void GetColorModelForMode(
     case BLACK:
       color_value->assign(kBlack);
       break;
-    case GRAY:
-      color_value->assign(kGray);
+    case GRAYSCALE:
+      color_value->assign(kGrayscale);
+      break;
+    case RGB:
+      color_value->assign(kRGB);
+      break;
+    case RGB16:
+      color_value->assign(kRGB16);
+      break;
+    case RGBA:
+      color_value->assign(kRGBA);
       break;
     case COLORMODE_COLOR:
       color_setting_name->assign(kCUPSColorMode);
@@ -90,6 +92,14 @@ void GetColorModelForMode(
       color_setting_name->assign(kColor);
       color_value->assign(kBlack);
       break;
+    case PRINTOUTMODE_NORMAL:
+      color_setting_name->assign(kCUPSPrintoutMode);
+      color_value->assign(kNormal);
+      break;
+    case PRINTOUTMODE_NORMAL_GRAY:
+      color_setting_name->assign(kCUPSPrintoutMode);
+      color_value->assign(kNormalGray);
+      break;
     case PROCESSCOLORMODEL_CMYK:
       color_setting_name->assign(kCUPSProcessColorModel);
       color_value->assign(kCMYK);
@@ -102,6 +112,22 @@ void GetColorModelForMode(
       color_setting_name->assign(kCUPSProcessColorModel);
       color_value->assign(kRGB);
       break;
+    case BROTHER_CUPS_COLOR:
+      color_setting_name->assign(kCUPSBrotherMonoColor);
+      color_value->assign(kFullColor);
+      break;
+    case BROTHER_CUPS_MONO:
+      color_setting_name->assign(kCUPSBrotherMonoColor);
+      color_value->assign(kMono);
+      break;
+    case BROTHER_BRSCRIPT3_COLOR:
+      color_setting_name->assign(kCUPSBrotherPrintQuality);
+      color_value->assign(kColor);
+      break;
+    case BROTHER_BRSCRIPT3_BLACK:
+      color_setting_name->assign(kCUPSBrotherPrintQuality);
+      color_value->assign(kBlack);
+      break;
     default:
       color_value->assign(kGrayscale);
       break;
@@ -110,11 +136,12 @@ void GetColorModelForMode(
 #endif  // defined(USE_CUPS)
 
 bool IsColorModelSelected(int color_mode) {
-  return (color_mode != GRAY &&
-          color_mode != BLACK &&
+  return (color_mode != GRAY && color_mode != BLACK &&
           color_mode != PRINTOUTMODE_NORMAL_GRAY &&
           color_mode != COLORMODE_MONOCHROME &&
           color_mode != PROCESSCOLORMODEL_GREYSCALE &&
+          color_mode != BROTHER_CUPS_MONO &&
+          color_mode != BROTHER_BRSCRIPT3_BLACK &&
           color_mode != HP_COLOR_BLACK);
 }
 
@@ -132,7 +159,6 @@ PrintSettings::~PrintSettings() {
 
 void PrintSettings::Clear() {
   ranges_.clear();
-  desired_dpi_ = 72;
   selection_only_ = false;
   margin_type_ = DEFAULT_MARGINS;
   title_.clear();
@@ -146,7 +172,8 @@ void PrintSettings::Clear() {
   device_name_.clear();
   requested_media_ = RequestedMedia();
   page_setup_device_units_.Clear();
-  dpi_ = 0;
+  dpi_[0] = 0;
+  dpi_[1] = 0;
   scale_factor_ = 1.0f;
   rasterize_pdf_ = false;
   landscape_ = false;
@@ -170,17 +197,33 @@ void PrintSettings::SetPrinterPrintableArea(
   }
 
   PageMargins margins;
+  bool small_paper_size = false;
   switch (margin_type_) {
     case DEFAULT_MARGINS: {
-      // Default margins 1.0cm = ~2/5 of an inch.
+      // Default margins 1.0cm = ~2/5 of an inch, unless a page dimension is
+      // less than 2.54 cm = ~1 inch, in which case set the margins in that
+      // dimension to 0.
       int margin_printer_units = ConvertUnit(1000, kHundrethsMMPerInch,
                                              units_per_inch);
+      int min_size_printer_units = units_per_inch;
       margins.header = header_footer_text_height;
       margins.footer = header_footer_text_height;
-      margins.top = margin_printer_units;
-      margins.bottom = margin_printer_units;
-      margins.left = margin_printer_units;
-      margins.right = margin_printer_units;
+      if (physical_size_device_units.height() > min_size_printer_units) {
+        margins.top = margin_printer_units;
+        margins.bottom = margin_printer_units;
+      } else {
+        margins.top = 0;
+        margins.bottom = 0;
+        small_paper_size = true;
+      }
+      if (physical_size_device_units.width() > min_size_printer_units) {
+        margins.left = margin_printer_units;
+        margins.right = margin_printer_units;
+      } else {
+        margins.left = 0;
+        margins.right = 0;
+        small_paper_size = true;
+      }
       break;
     }
     case NO_MARGINS:
@@ -219,11 +262,13 @@ void PrintSettings::SetPrinterPrintableArea(
     }
   }
 
-  if (margin_type_ == DEFAULT_MARGINS || margin_type_ == PRINTABLE_AREA_MARGINS)
+  if ((margin_type_ == DEFAULT_MARGINS ||
+       margin_type_ == PRINTABLE_AREA_MARGINS) &&
+      !small_paper_size) {
     page_setup_device_units_.SetRequestedMargins(margins);
-  else
+  } else {
     page_setup_device_units_.ForceRequestedMargins(margins);
-
+  }
   page_setup_device_units_.Init(physical_size_device_units,
                                 printable_area_device_units,
                                 header_footer_text_height);

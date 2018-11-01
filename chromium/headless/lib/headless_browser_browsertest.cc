@@ -9,9 +9,14 @@
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "content/public/browser/permission_manager.h"
+#include "content/public/browser/permission_type.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
+#include "headless/lib/browser/headless_browser_context_impl.h"
+#include "headless/lib/browser/headless_web_contents_impl.h"
 #include "headless/lib/headless_macros.h"
 #include "headless/public/devtools/domains/inspector.h"
 #include "headless/public/devtools/domains/network.h"
@@ -29,6 +34,8 @@
 #include "net/url_request/url_request_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/gfx/geometry/size.h"
 
 using testing::UnorderedElementsAre;
@@ -320,6 +327,26 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, WebGLSupported) {
   EXPECT_TRUE(webgl_supported);
 }
 
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, ClipboardCopyPasteText) {
+  // Tests copy-pasting text with the clipboard in headless mode.
+  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+  ASSERT_TRUE(clipboard);
+  base::string16 paste_text = base::ASCIIToUTF16("Clippy!");
+  for (ui::ClipboardType type :
+       {ui::CLIPBOARD_TYPE_COPY_PASTE, ui::CLIPBOARD_TYPE_SELECTION,
+        ui::CLIPBOARD_TYPE_DRAG}) {
+    if (!ui::Clipboard::IsSupportedClipboardType(type))
+      continue;
+    {
+      ui::ScopedClipboardWriter writer(type);
+      writer.WriteText(paste_text);
+    }
+    base::string16 copy_text;
+    clipboard->ReadText(type, &copy_text);
+    EXPECT_EQ(paste_text, copy_text);
+  }
+}
+
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, DefaultSizes) {
   HeadlessBrowserContext* browser_context =
       browser()->CreateBrowserContextBuilder().Build();
@@ -352,8 +379,12 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, DefaultSizes) {
                   ->GetValue()
                   ->GetAsInteger(&window_height));
 
+#if !defined(OS_MACOSX)
+  // On Mac headless does not override the screen dimensions, so they are
+  // left with the actual screen values.
   EXPECT_EQ(kDefaultOptions.window_size.width(), screen_width);
   EXPECT_EQ(kDefaultOptions.window_size.height(), screen_height);
+#endif  // !defined(OS_MACOSX)
   EXPECT_EQ(kDefaultOptions.window_size.width(), window_width);
   EXPECT_EQ(kDefaultOptions.window_size.height(), window_height);
 }
@@ -728,6 +759,29 @@ IN_PROC_BROWSER_TEST_F(CrashReporterTest, MAYBE_GenerateMinidump) {
 
   browser_context_->Close();
   browser_context_ = nullptr;
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, PermissionManagerAlwaysASK) {
+  GURL url("https://example.com");
+
+  HeadlessBrowserContext* browser_context =
+      browser()->CreateBrowserContextBuilder().Build();
+
+  HeadlessWebContents* headless_web_contents =
+      browser_context->CreateWebContentsBuilder().Build();
+  EXPECT_TRUE(headless_web_contents);
+
+  HeadlessWebContentsImpl* web_contents =
+      HeadlessWebContentsImpl::From(headless_web_contents);
+
+  content::PermissionManager* permission_manager =
+      web_contents->browser_context()->GetPermissionManager();
+  EXPECT_NE(nullptr, permission_manager);
+
+  // Check that the permission manager returns ASK for a given permission type.
+  EXPECT_EQ(blink::mojom::PermissionStatus::ASK,
+            permission_manager->GetPermissionStatus(
+                content::PermissionType::NOTIFICATIONS, url, url));
 }
 
 }  // namespace headless

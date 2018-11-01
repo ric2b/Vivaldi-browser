@@ -21,32 +21,11 @@ bool AllProfilesHaveSameArcPackageDetails() {
 
 class SingleClientArcPackageSyncTest : public SyncTest {
  public:
-  SingleClientArcPackageSyncTest()
-      : SyncTest(SINGLE_CLIENT), sync_helper_(nullptr) {}
+  SingleClientArcPackageSyncTest() : SyncTest(SINGLE_CLIENT) {}
 
   ~SingleClientArcPackageSyncTest() override {}
 
-  bool SetupClients() override {
-    if (!SyncTest::SetupClients())
-      return false;
-
-    // Init SyncArcPackageHelper to ensure that the arc services are initialized
-    // for each Profile.
-    sync_helper_ = SyncArcPackageHelper::GetInstance();
-    return sync_helper_ != nullptr;
-  }
-
-  void TearDownOnMainThread() override {
-    sync_helper_->CleanUp();
-    sync_helper_ = nullptr;
-    SyncTest::TearDownOnMainThread();
-  }
-
-  SyncArcPackageHelper* sync_helper() { return sync_helper_; }
-
  private:
-  SyncArcPackageHelper* sync_helper_;
-
   DISALLOW_COPY_AND_ASSIGN(SingleClientArcPackageSyncTest);
 };
 
@@ -62,8 +41,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientArcPackageSyncTest,
 
   constexpr size_t kNumPackages = 5;
   for (size_t i = 0; i < kNumPackages; ++i) {
-    sync_helper()->InstallPackageWithIndex(GetProfile(0), i);
-    sync_helper()->InstallPackageWithIndex(verifier(), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), i);
+    sync_arc_helper()->InstallPackageWithIndex(verifier(), i);
   }
 
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());

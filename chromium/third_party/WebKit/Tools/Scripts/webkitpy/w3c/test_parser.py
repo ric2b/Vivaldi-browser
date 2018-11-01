@@ -51,19 +51,19 @@ class TestParser(object):
             try:
                 doc = BeautifulSoup(self.filesystem.read_binary_file(filename))
             except IOError:
-                _log.error("IOError: Failed to read %s", filename)
+                _log.error('IOError: Failed to read %s', filename)
                 doc = None
             except HTMLParser.HTMLParseError:
                 # FIXME: Figure out what to do if we can't parse the file.
-                _log.error("HTMLParseError: Failed to parse %s", filename)
+                _log.error('HTMLParseError: Failed to parse %s', filename)
                 doc = None
             except UnicodeEncodeError:
-                _log.error("UnicodeEncodeError while reading %s", filename)
+                _log.error('UnicodeEncodeError while reading %s', filename)
                 doc = None
         else:
             if self.filesystem.isdir(filename):
                 # FIXME: Figure out what is triggering this and what to do about it.
-                _log.error("Trying to load %s, which is a directory", filename)
+                _log.error('Trying to load %s, which is a directory', filename)
             doc = None
 
         if is_ref:
@@ -125,8 +125,8 @@ class TestParser(object):
         elif self.is_jstest():
             test_info = {'test': self.filename, 'jstest': True}
 
-        elif 'csswg-test' in self.filename:
-            # In csswg-test, all other files should be manual tests.
+        elif re.search(r'[/\\]wpt[/\\]css[/\\]', self.filename):
+            # In the former csswg-test tests, all other files should be manual tests.
             # This function isn't called for non-test files in support/.
             test_info = {'test': self.filename}
 

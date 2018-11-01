@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">Καταχωρίστε μια έγκυρη τιμή. Η κοντινότερη έγκυρη τιμή είναι <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Υποβολή</translation>
 <translation id="2674318244760992338">υποσέλιδο</translation>
+<translation id="2709516037105925701">Αυτόματη συμπλήρωση</translation>
 <translation id="2723001399770238859">ήχος</translation>
 <translation id="2746543609216772311">Η τιμή πρέπει να είναι <ph name="MINIMUM_DATE_OR_TIME" /> ή μεταγενέστερη.</translation>
 <translation id="2759744352195237655">αναδυόμενο κουμπί</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">κατάλογος</translation>
 <translation id="6934078000481955284">blockquote</translation>
 <translation id="6941933287844615239">λήψη μέσων</translation>
+<translation id="6989848892321993519">Αυξήστε την έκταση αυτού του κειμένου στους <ph name="MIN_CHARACTERS" /> χαρακτήρες ή περισσότερο (αυτήν τη στιγμή χρησιμοποιείτε 1 χαρακτήρα).</translation>
 <translation id="7057186640035488495">χρόνος ταινίας</translation>
 <translation id="709897737746224366">Αντιστοιχίστε τη ζητούμενη μορφή.</translation>
 <translation id="7223624360433298498">χρόνος που παρήλθε</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">Επιλέξτε ένα αρχείο.</translation>
 <translation id="8461852803063341183">κουμπί επιλογής</translation>
 <translation id="8511325616783751178">αναπτυσσόμενο κουμπί</translation>
+<translation id="8519420564908284378">Αναπαραγωγή και στις δύο οθόνες</translation>
 <translation id="8534579021159131403">Λεπτά</translation>
 <translation id="8541249477527128034">έλεγχος μέσων</translation>
 <translation id="8583702881314752957">λίστα ορισμών</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">έλεγχος απομακρυσμένης αναπαραγωγής</translation>
 <translation id="8750798805984357768">Ορίστε μία από αυτές τις επιλογές.</translation>
 <translation id="8785498733064193001">έναρξη αναπαραγωγής</translation>
+<translation id="8845239796550121995">Γίνεται μετάδοση στην TV</translation>
 <translation id="8851136666856101339">κύριο</translation>
 <translation id="8987927404178983737">Μήνας</translation>
 <translation id="901493112792887934">τρέχων χρόνος σε δευτερόλεπτα</translation>

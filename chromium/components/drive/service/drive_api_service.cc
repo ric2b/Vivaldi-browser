@@ -117,12 +117,14 @@ const char kFileListFields[] =
     "parents(id,parentLink),alternateLink,"
     "modifiedDate,lastViewedByMeDate,shared),nextLink";
 const char kChangeListFields[] =
-    "kind,items(file(kind,id,title,createdDate,sharedWithMeDate,"
+    "kind,items(type,file(kind,id,title,createdDate,sharedWithMeDate,"
     "mimeType,md5Checksum,fileSize,labels/trashed,labels/starred,"
     "imageMediaMetadata/width,"
     "imageMediaMetadata/height,imageMediaMetadata/rotation,etag,"
     "parents(id,parentLink),alternateLink,modifiedDate,"
-    "lastViewedByMeDate,shared),deleted,id,fileId,modificationDate),nextLink,"
+    "lastViewedByMeDate,shared),teamDrive(kind,id,name,capabilities),"
+    "teamDriveId,"
+    "deleted,id,fileId,modificationDate),nextLink,"
     "largestChangeId";
 
 void ExtractOpenUrlAndRun(const std::string& app_id,
@@ -254,14 +256,16 @@ DriveAPIService::DriveAPIService(
     base::SequencedTaskRunner* blocking_task_runner,
     const GURL& base_url,
     const GURL& base_thumbnail_url,
-    const std::string& custom_user_agent)
+    const std::string& custom_user_agent,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation)
     : oauth2_token_service_(oauth2_token_service),
       url_request_context_getter_(url_request_context_getter),
       blocking_task_runner_(blocking_task_runner),
-      url_generator_(base_url, base_thumbnail_url,
+      url_generator_(base_url,
+                     base_thumbnail_url,
                      google_apis::GetTeamDrivesIntegrationSwitch()),
-      custom_user_agent_(custom_user_agent) {
-}
+      custom_user_agent_(custom_user_agent),
+      traffic_annotation_(traffic_annotation) {}
 
 DriveAPIService::~DriveAPIService() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -283,13 +287,10 @@ void DriveAPIService::Initialize(const std::string& account_id) {
   scopes.push_back(kDocsListScope);
 
   sender_.reset(new RequestSender(
-      new google_apis::AuthService(oauth2_token_service_,
-                                   account_id,
-                                   url_request_context_getter_.get(),
-                                   scopes),
-      url_request_context_getter_.get(),
-      blocking_task_runner_.get(),
-      custom_user_agent_));
+      new google_apis::AuthService(oauth2_token_service_, account_id,
+                                   url_request_context_getter_.get(), scopes),
+      url_request_context_getter_.get(), blocking_task_runner_.get(),
+      custom_user_agent_, traffic_annotation_));
   sender_->auth_service()->AddObserver(this);
 
   files_list_request_runner_.reset(

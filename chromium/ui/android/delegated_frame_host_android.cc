@@ -11,7 +11,6 @@
 #include "cc/layers/surface_layer.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/copy_output_result.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_manager.h"
@@ -27,13 +26,12 @@ namespace {
 
 scoped_refptr<cc::SurfaceLayer> CreateSurfaceLayer(
     cc::SurfaceManager* surface_manager,
-    cc::SurfaceId surface_id,
-    const gfx::Size surface_size,
+    cc::SurfaceInfo surface_info,
     bool surface_opaque) {
   // manager must outlive compositors using it.
   auto layer = cc::SurfaceLayer::Create(surface_manager->reference_factory());
-  layer->SetPrimarySurfaceInfo(cc::SurfaceInfo(surface_id, 1.f, surface_size));
-  layer->SetBounds(surface_size);
+  layer->SetPrimarySurfaceInfo(surface_info);
+  layer->SetBounds(surface_info.size_in_pixels());
   layer->SetIsDrawable(true);
   layer->SetContentsOpaque(surface_opaque);
 
@@ -63,7 +61,6 @@ DelegatedFrameHostAndroid::DelegatedFrameHostAndroid(
   DCHECK(view_);
   DCHECK(client_);
 
-  local_surface_id_allocator_.reset(new cc::LocalSurfaceIdAllocator());
   surface_manager_->RegisterFrameSinkId(frame_sink_id_);
   CreateNewCompositorFrameSinkSupport();
 }
@@ -75,57 +72,25 @@ DelegatedFrameHostAndroid::~DelegatedFrameHostAndroid() {
   surface_manager_->InvalidateFrameSinkId(frame_sink_id_);
 }
 
-DelegatedFrameHostAndroid::FrameData::FrameData() = default;
-
-DelegatedFrameHostAndroid::FrameData::~FrameData() = default;
-
 void DelegatedFrameHostAndroid::SubmitCompositorFrame(
+    const cc::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
-  gfx::Size surface_size = root_pass->output_rect.size();
-
-  if (!current_frame_ || surface_size != current_frame_->surface_size ||
-      current_frame_->top_controls_height !=
-          frame.metadata.top_controls_height ||
-      current_frame_->top_controls_shown_ratio !=
-          frame.metadata.top_controls_shown_ratio ||
-      current_frame_->bottom_controls_height !=
-          frame.metadata.bottom_controls_height ||
-      current_frame_->bottom_controls_shown_ratio !=
-          frame.metadata.bottom_controls_shown_ratio ||
-      current_frame_->viewport_selection != frame.metadata.selection ||
-      current_frame_->has_transparent_background !=
-          root_pass->has_transparent_background) {
+  if (local_surface_id != surface_info_.id().local_surface_id()) {
     DestroyDelegatedContent();
     DCHECK(!content_layer_);
-    DCHECK(!current_frame_);
 
-    current_frame_ = base::MakeUnique<FrameData>();
-    current_frame_->local_surface_id =
-        local_surface_id_allocator_->GenerateId();
-    current_frame_->surface_size = surface_size;
-    current_frame_->top_controls_height = frame.metadata.top_controls_height;
-    current_frame_->top_controls_shown_ratio =
-        frame.metadata.top_controls_shown_ratio;
-    current_frame_->bottom_controls_height =
-        frame.metadata.bottom_controls_height;
-    current_frame_->bottom_controls_shown_ratio =
-        frame.metadata.bottom_controls_shown_ratio;
-    current_frame_->has_transparent_background =
-        root_pass->has_transparent_background;
-    current_frame_->viewport_selection = frame.metadata.selection;
-    support_->SubmitCompositorFrame(current_frame_->local_surface_id,
-                                    std::move(frame));
+    cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+    gfx::Size frame_size = root_pass->output_rect.size();
+    surface_info_ = cc::SurfaceInfo(
+        cc::SurfaceId(frame_sink_id_, local_surface_id), 1.f, frame_size);
+    has_transparent_background_ = root_pass->has_transparent_background;
 
-    content_layer_ = CreateSurfaceLayer(
-        surface_manager_,
-        cc::SurfaceId(frame_sink_id_, current_frame_->local_surface_id),
-        current_frame_->surface_size,
-        !current_frame_->has_transparent_background);
+    support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    content_layer_ = CreateSurfaceLayer(surface_manager_, surface_info_,
+                                        !has_transparent_background_);
     view_->GetLayer()->AddChild(content_layer_);
   } else {
-    support_->SubmitCompositorFrame(current_frame_->local_surface_id,
-                                    std::move(frame));
+    support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
   }
 }
 
@@ -137,14 +102,11 @@ void DelegatedFrameHostAndroid::RequestCopyOfSurface(
     WindowAndroidCompositor* compositor,
     const gfx::Rect& src_subrect_in_pixel,
     cc::CopyOutputRequest::CopyOutputRequestCallback result_callback) {
-  DCHECK(current_frame_);
+  DCHECK(surface_info_.is_valid());
   DCHECK(!result_callback.is_null());
 
   scoped_refptr<cc::Layer> readback_layer = CreateSurfaceLayer(
-      surface_manager_,
-      cc::SurfaceId(frame_sink_id_, current_frame_->local_surface_id),
-      current_frame_->surface_size,
-      !current_frame_->has_transparent_background);
+      surface_manager_, surface_info_, !has_transparent_background_);
   readback_layer->SetHideLayerAndSubtree(true);
   compositor->AttachLayerForReadback(readback_layer);
   std::unique_ptr<cc::CopyOutputRequest> copy_output_request =
@@ -158,7 +120,7 @@ void DelegatedFrameHostAndroid::RequestCopyOfSurface(
 }
 
 void DelegatedFrameHostAndroid::DestroyDelegatedContent() {
-  if (!current_frame_)
+  if (!surface_info_.is_valid())
     return;
 
   DCHECK(content_layer_);
@@ -166,11 +128,11 @@ void DelegatedFrameHostAndroid::DestroyDelegatedContent() {
   content_layer_->RemoveFromParent();
   content_layer_ = nullptr;
   support_->EvictFrame();
-  current_frame_.reset();
+  surface_info_ = cc::SurfaceInfo();
 }
 
 bool DelegatedFrameHostAndroid::HasDelegatedContent() const {
-  return current_frame_.get() != nullptr;
+  return surface_info_.is_valid();
 }
 
 void DelegatedFrameHostAndroid::CompositorFrameSinkChanged() {
@@ -198,7 +160,9 @@ void DelegatedFrameHostAndroid::DetachFromCompositor() {
   registered_parent_compositor_ = nullptr;
 }
 
-void DelegatedFrameHostAndroid::DidReceiveCompositorFrameAck() {
+void DelegatedFrameHostAndroid::DidReceiveCompositorFrameAck(
+    const cc::ReturnedResourceArray& resources) {
+  client_->ReclaimResources(resources);
   client_->DidReceiveCompositorFrameAck();
 }
 
@@ -220,14 +184,23 @@ void DelegatedFrameHostAndroid::OnNeedsBeginFrames(bool needs_begin_frames) {
 }
 
 void DelegatedFrameHostAndroid::OnDidFinishFrame(const cc::BeginFrameAck& ack) {
+  // If there was damage, SubmitCompositorFrame includes the ack.
+  if (!ack.has_damage)
+    support_->BeginFrameDidNotSwap(ack);
 }
 
 void DelegatedFrameHostAndroid::CreateNewCompositorFrameSinkSupport() {
+  constexpr bool is_root = false;
+  constexpr bool handles_frame_sink_id_invalidation = false;
+  constexpr bool needs_sync_points = true;
   support_.reset();
-  support_ = base::MakeUnique<cc::CompositorFrameSinkSupport>(
-      this, surface_manager_, frame_sink_id_, false /* is_root */,
-      false /* handles_frame_sink_id_invalidation */,
-      true /* needs_sync_points */);
+  support_ = cc::CompositorFrameSinkSupport::Create(
+      this, surface_manager_, frame_sink_id_, is_root,
+      handles_frame_sink_id_invalidation, needs_sync_points);
+}
+
+cc::SurfaceId DelegatedFrameHostAndroid::SurfaceId() const {
+  return surface_info_.id();
 }
 
 }  // namespace ui

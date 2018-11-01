@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1018656279737460067">Anulowano</translation>
+<translation id="1030173864176315846">Drukowanie <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /> zakończone powodzeniem</translation>
 <translation id="1031362278801463162">Wczytywanie podglądu</translation>
 <translation id="1049795001945932310">&amp;Ustawienia języka</translation>
 <translation id="1056898198331236512">Ostrzeżenie</translation>
@@ -14,6 +15,8 @@
 <translation id="1181037720776840403">Usuń</translation>
 <translation id="1187722533808055681">Wznowienia z bezczynności</translation>
 <translation id="119944043368869598">Wyczyść wszystko</translation>
+<translation id="1218323606465324064">Drukowanie <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /></translation>
+<translation id="1221825588892235038">Tylko zaznaczenie</translation>
 <translation id="1244303850296295656">Błąd rozszerzenia</translation>
 <translation id="1278049586634282054">Zbadaj widok:</translation>
 <translation id="1297175357211070620">Drukarka</translation>
@@ -21,7 +24,7 @@
 <translation id="1303319084542230573">Dodaj drukarkę</translation>
 <translation id="1317502925920562130">Czy jest to strona główna, której oczekiwałeś?</translation>
 <translation id="1368832886055348810">Od lewej do prawej</translation>
-<translation id="1430915738399379752">Drukowanie</translation>
+<translation id="1430915738399379752">Drukuj</translation>
 <translation id="1465176863081977902">&amp;Kopiuj adres dźwięku</translation>
 <translation id="1476607407192946488">&amp;Ustawienia języka</translation>
 <translation id="1507705801791187716">Wspaniale, brak błędów!</translation>
@@ -49,6 +52,7 @@
 <translation id="1769104665586091481">Otwórz link w nowym &amp;oknie</translation>
 <translation id="1789575671122666129">Wyskakujące okienka</translation>
 <translation id="1815083418640426271">Wklej jako zwykły tekst</translation>
+<translation id="1828901632669367785">Drukuj w oknie systemowym…</translation>
 <translation id="1838288018605456492">Kliknij aby skonfigurować</translation>
 <translation id="1846308012215045257">Kliknij prawym przyciskiem myszy, aby uruchomić <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Obróć w &amp;prawo</translation>
@@ -65,12 +69,14 @@
 <translation id="2076269580855484719">Ukryj wtyczkę</translation>
 <translation id="2087822576218954668">Drukowanie: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Załaduj &amp;ramkę ponownie</translation>
+<translation id="2115291620696624944">Błąd podczas drukowania <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Aktualizuj wtyczkę</translation>
 <translation id="2147827593068025794">Synchronizacja w tle</translation>
 <translation id="2148892889047469596">Przesyłaj kartę</translation>
 <translation id="2150139952286079145">Szukaj drukarek</translation>
 <translation id="215753907730220065">Zamknij pełny ekran</translation>
 <translation id="2177950615300672361">Karta prywatna: <ph name="TAB_NAME" /></translation>
+<translation id="218070003709087997">Wpisz wartość numeryczną, by określić liczbę kopii do wydrukowania (od 1 do 999).</translation>
 <translation id="2181927652428971824">Drukuj do Dokumentów Google i innych miejsc docelowych w chmurze. <ph name="BEGIN_LINK" />Zaloguj się<ph name="END_LINK" />, aby drukować za pomocą Google Cloud Print.</translation>
 <translation id="2187317261103489799">Wykrywaj (domyślnie)</translation>
 <translation id="219008588003277019">Moduł klienta natywnego: <ph name="NEXE_NAME" /></translation>
@@ -89,6 +95,7 @@
 <translation id="2348176352564285430">Aplikacja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2357949918965361754">Możesz użyć tej funkcjonalności aby wyświetlić zawartość z przeglądarki Chrome na ekranie twojego telewizora lub innych urządzeń.</translation>
 <translation id="2378982052244864789">Wybierz katalog rozszerzenia.</translation>
+<translation id="2379281330731083556">Drukuj w oknie systemowym <ph name="SHORTCUT_KEY" /></translation>
 <translation id="241082044617551207">Nieznana wtyczka</translation>
 <translation id="2423578206845792524">Zapisz &amp;obraz jako...</translation>
 <translation id="2424091190911472304">Zawsze uruchamiaj na <ph name="ORIGIN" /></translation>
@@ -99,11 +106,14 @@
 <translation id="2482878487686419369">Powiadomienia</translation>
 <translation id="2498436043474441766">Dodaj drukarki</translation>
 <translation id="2501797496290880632">Wprowadź skrót</translation>
+<translation id="2509495747794740764">Współczynnik skalowania musi być liczbą z przedziału od 10 do 200.</translation>
 <translation id="2509857212037838238">Zainstaluj <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Liczba sygnałów utrzymania aktywności</translation>
 <translation id="2550212893339833758">Pamięć stronicowana</translation>
 <translation id="2580924999637585241">Łącznie: <ph name="SHEETS_LABEL" /> – <ph name="NUMBER_OF_SHEETS" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Włącz ponownie</translation>
+<translation id="2679385451463308372">Drukuj w oknie systemowym…</translation>
 <translation id="2680208403056680091">Twoje połączenie internetowe jest kontrolowane</translation>
 <translation id="2721037002783622288">&amp;Szukaj obrazu w <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2726934403674109201">(łącznie: <ph name="COUNT" />)</translation>
@@ -147,6 +157,7 @@
 <translation id="3305661444342691068">Otwórz PDF w podglądzie</translation>
 <translation id="3308134619352333507">Ukryj przycisk</translation>
 <translation id="3309747692199697901">Zawsze uruchamiaj na wszystkich stronach</translation>
+<translation id="3317459757438853210">Druk dwustronny</translation>
 <translation id="3319048459796106952">Nowe okno &amp;incognito</translation>
 <translation id="3324301154597925148">Czy jest to strona wyszukiwania, której oczekiwałeś?</translation>
 <translation id="3341703758641437857">Zezwalaj na dostęp dla adresów plików lokalnych</translation>
@@ -170,6 +181,7 @@
 <translation id="3627588569887975815">Otwórz link w oknie &amp;prywatnym</translation>
 <translation id="3640006360782160348">Anuluj konfigurację drukarki</translation>
 <translation id="3678156199662914018">Rozszerzenie: <ph name="EXTENSION_NAME" /></translation>
+<translation id="3683524264665795342">Żądanie udostępnienia ekranu od <ph name="APP_NAME" /></translation>
 <translation id="370665806235115550">Ładowanie...</translation>
 <translation id="3725367690636977613">strony</translation>
 <translation id="3727187387656390258">Zbadaj wyskakujące okno</translation>
@@ -190,6 +202,7 @@
 <translation id="3925842537050977900">Odepnij z półki</translation>
 <translation id="3927932062596804919">Odmawiaj</translation>
 <translation id="3936390757709632190">&amp;Otwórz dźwięk w nowej karcie</translation>
+<translation id="3936999098172113189">Oczekiwanie na wydruk <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Wstecz</translation>
 <translation id="3948116654032448504">&amp;Szukaj obrazu w <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(zawieszony)</translation>
@@ -208,6 +221,7 @@
 <translation id="411666854932687641">Pamięć prywatna</translation>
 <translation id="4130207949184424187">To rozszerzenie zmieniło stronę wyświetlaną przy wyszukiwaniu w polu adresu.</translation>
 <translation id="4130750466177569591">Zgadzam się</translation>
+<translation id="4131410914670010031">Czarno-biały</translation>
 <translation id="4165986682804962316">Ustawienia witryny</translation>
 <translation id="4176463684765177261">Wyłączono</translation>
 <translation id="4200983522494130825">Nowa &amp;karta</translation>
@@ -232,6 +246,7 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4552495056028768700">Dostęp do strony</translation>
 <translation id="4557136421275541763">Ostrzeżenie:</translation>
+<translation id="4579581181964204535">Nie można przesłać <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Przejdź do strony <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacje i rozszerzenia może zmieniać tylko menedżer (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Rozszerzenie zmieniło stronę wyświetlaną po otwarciu nowej karty.</translation>
@@ -274,6 +289,7 @@
 <translation id="5233638681132016545">Nowa karta</translation>
 <translation id="5233736638227740678">&amp;Wklej</translation>
 <translation id="5265562206369321422">Offline od ponad tygodnia</translation>
+<translation id="5269977353971873915">Drukowanie nie powiodło się</translation>
 <translation id="52912272896845572">Plik kluczy prywatnych jest nieprawidłowy.</translation>
 <translation id="5301954838959518834">OK, rozumiem</translation>
 <translation id="5311260548612583999">Plik kluczy (opcjonalnie):</translation>
@@ -332,6 +348,7 @@
 <translation id="6101226222197207147">Dodano nową aplikację (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Twoje połączenie internetowe jest kontrolowane</translation>
 <translation id="6124650939968185064">To rozszerzenie jest wymagane przez następujące rozszerzenia:</translation>
+<translation id="6147020289383635445">Wyświetlenie podglądu wydruku nie powiodło się.</translation>
 <translation id="6156863943908443225">Pamięć podręczna skryptów</translation>
 <translation id="6169666352732958425">Nie można przesłać pulpitu.</translation>
 <translation id="6171948306033499786">Wstrzymaj drukowanie</translation>
@@ -348,6 +365,8 @@
 <translation id="6273677812470008672">Jakość</translation>
 <translation id="6295855836753816081">Zapisywanie…</translation>
 <translation id="6308937455967653460">Zapisz link ja&amp;ko...</translation>
+<translation id="6326855256003666642">Liczba sygnałów utrzymania aktywności</translation>
+<translation id="6348109281845364640">Konfiguracja drukarki nie powiodła się</translation>
 <translation id="6370021412472292592">Nie można załadować pliku manifestu.</translation>
 <translation id="6398765197997659313">Zamknij pełny ekran</translation>
 <translation id="6406303162637086258">Symuluj ponowne uruchomienie przeglądarki</translation>
@@ -366,6 +385,7 @@
 <translation id="6639554308659482635">Pamięć SQLite</translation>
 <translation id="6655190889273724601">Tryb programisty</translation>
 <translation id="6691936601825168937">&amp;Dalej</translation>
+<translation id="6700480081846086223">Prześlij <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Zakres</translation>
 <translation id="6786747875388722282">Rozszerzenia</translation>
 <translation id="6787839852456839824">Skróty klawiszowe</translation>
@@ -417,6 +437,7 @@
 <translation id="7551643184018910560">Przypnij do półki</translation>
 <translation id="7554791636758816595">Nowa karta</translation>
 <translation id="7564847347806291057">Zakończ proces</translation>
+<translation id="7576690715254076113">Sortuj</translation>
 <translation id="7629827748548208700">Karta: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Anuluj</translation>
 <translation id="7663719505383602579">Odbiornik ARC: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -462,6 +483,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8032244173881942855">Nie można przesłać karty.</translation>
 <translation id="8037357227543935929">Pytaj (domyślnie)</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
+<translation id="8071432093239591881">Drukuj jako obraz</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8137559199583651773">Zarządzaj rozszerzeniami</translation>
 <translation id="8180239481735238521">strona</translation>
@@ -494,6 +516,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8658595122208653918">Zmień opcje drukarki...</translation>
 <translation id="8661290697478713397">Otwórz link w oknie &amp;prywatnym</translation>
 <translation id="8664389313780386848">&amp;Wyświetl źródło strony</translation>
+<translation id="8714838604780058252">Obraz w tle</translation>
 <translation id="8719653885894320876">Nie udało się pobrać wtyczki <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">Po aktualizacji wtyczki <ph name="PLUGIN_NAME" />, odśwież stronę, aby ją aktywować</translation>
 <translation id="8757090071857742562">Nie udało się przesłać pulpitu. Sprawdź, czy potwierdzono prośbę o rozpoczęcie udostępniania ekranu.</translation>

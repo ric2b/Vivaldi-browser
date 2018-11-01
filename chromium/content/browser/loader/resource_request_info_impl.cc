@@ -63,33 +63,32 @@ void ResourceRequestInfo::AllocateForTesting(net::URLRequest* request,
 
   ResourceRequestInfoImpl* info = new ResourceRequestInfoImpl(
       ResourceRequesterInfo::CreateForRendererTesting(
-          render_process_id),                // resource_requester_info
-      render_view_id,                        // route_id
-      -1,                                    // frame_tree_node_id
-      0,                                     // origin_pid
-      0,                                     // request_id
-      render_frame_id,                       // render_frame_id
-      is_main_frame,                         // is_main_frame
-      parent_is_main_frame,                  // parent_is_main_frame
-      resource_type,                         // resource_type
-      ui::PAGE_TRANSITION_LINK,              // transition_type
-      false,                                 // should_replace_current_entry
-      false,                                 // is_download
-      false,                                 // is_stream
-      allow_download,                        // allow_download
-      false,                                 // has_user_gesture
-      false,                                 // enable load timing
-      request->has_upload(),                 // enable upload progress
-      false,                                 // do_not_prompt_for_login
-      blink::WebReferrerPolicyDefault,       // referrer_policy
-      blink::WebPageVisibilityStateVisible,  // visibility_state
-      context,                               // context
-      false,                                 // report_raw_headers
-      is_async,                              // is_async
-      previews_state,                        // previews_state
-      std::string(),                         // original_headers
-      nullptr,                               // body
-      false);                                // initiated_in_secure_context
+          render_process_id),                 // resource_requester_info
+      render_view_id,                         // route_id
+      -1,                                     // frame_tree_node_id
+      0,                                      // origin_pid
+      0,                                      // request_id
+      render_frame_id,                        // render_frame_id
+      is_main_frame,                          // is_main_frame
+      parent_is_main_frame,                   // parent_is_main_frame
+      resource_type,                          // resource_type
+      ui::PAGE_TRANSITION_LINK,               // transition_type
+      false,                                  // should_replace_current_entry
+      false,                                  // is_download
+      false,                                  // is_stream
+      allow_download,                         // allow_download
+      false,                                  // has_user_gesture
+      false,                                  // enable load timing
+      request->has_upload(),                  // enable upload progress
+      false,                                  // do_not_prompt_for_login
+      blink::kWebReferrerPolicyDefault,       // referrer_policy
+      blink::kWebPageVisibilityStateVisible,  // visibility_state
+      context,                                // context
+      false,                                  // report_raw_headers
+      is_async,                               // is_async
+      previews_state,                         // previews_state
+      nullptr,                                // body
+      false);                                 // initiated_in_secure_context
   info->AssociateWithRequest(request);
 }
 
@@ -154,7 +153,6 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
     bool report_raw_headers,
     bool is_async,
     PreviewsState previews_state,
-    const std::string& original_headers,
     const scoped_refptr<ResourceRequestBodyImpl> body,
     bool initiated_in_secure_context)
     : detachable_handler_(NULL),
@@ -185,7 +183,6 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
       report_raw_headers_(report_raw_headers),
       is_async_(is_async),
       previews_state_(previews_state),
-      original_headers_(original_headers),
       body_(body),
       initiated_in_secure_context_(initiated_in_secure_context) {}
 

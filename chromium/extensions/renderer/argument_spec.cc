@@ -5,6 +5,7 @@
 #include "extensions/renderer/argument_spec.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
 #include "extensions/renderer/api_type_reference_map.h"
@@ -42,6 +43,8 @@ ArgumentSpec::ArgumentSpec(const base::Value& value)
   InitializeType(dict);
 }
 
+ArgumentSpec::ArgumentSpec(ArgumentType type) : type_(type), optional_(false) {}
+
 void ArgumentSpec::InitializeType(const base::DictionaryValue* dict) {
   std::string ref_string;
   if (dict->GetString("$ref", &ref_string)) {
@@ -57,7 +60,7 @@ void ArgumentSpec::InitializeType(const base::DictionaryValue* dict) {
       type_ = ArgumentType::CHOICES;
       choices_.reserve(choices->GetSize());
       for (const auto& choice : *choices)
-        choices_.push_back(base::MakeUnique<ArgumentSpec>(*choice));
+        choices_.push_back(base::MakeUnique<ArgumentSpec>(choice));
       return;
     }
   }
@@ -89,6 +92,20 @@ void ArgumentSpec::InitializeType(const base::DictionaryValue* dict) {
   if (dict->GetInteger("minimum", &min))
     minimum_ = min;
 
+  int min_length = 0;
+  if (dict->GetInteger("minLength", &min_length) ||
+      dict->GetInteger("minItems", &min_length)) {
+    DCHECK_GE(min_length, 0);
+    min_length_ = min_length;
+  }
+
+  int max_length = 0;
+  if (dict->GetInteger("maxLength", &max_length) ||
+      dict->GetInteger("maxItems", &max_length)) {
+    DCHECK_GE(max_length, 0);
+    max_length_ = max_length;
+  }
+
   if (type_ == ArgumentType::OBJECT) {
     const base::DictionaryValue* properties_value = nullptr;
     if (dict->GetDictionary("properties", &properties_value)) {
@@ -102,6 +119,12 @@ void ArgumentSpec::InitializeType(const base::DictionaryValue* dict) {
                             &additional_properties_value)) {
       additional_properties_ =
           base::MakeUnique<ArgumentSpec>(*additional_properties_value);
+      // Additional properties are always optional.
+      additional_properties_->optional_ = true;
+    }
+    std::string instance_of;
+    if (dict->GetString("isInstanceOf", &instance_of)) {
+      instance_of_ = instance_of;
     }
   } else if (type_ == ArgumentType::LIST) {
     const base::DictionaryValue* item_value = nullptr;
@@ -138,9 +161,18 @@ bool ArgumentSpec::ParseArgument(v8::Local<v8::Context> context,
                                  std::unique_ptr<base::Value>* out_value,
                                  std::string* error) const {
   if (type_ == ArgumentType::FUNCTION) {
-    // We can't serialize functions. We shouldn't be asked to.
-    DCHECK(!out_value);
-    return value->IsFunction();
+    if (!value->IsFunction())
+      return false;
+
+    if (out_value) {
+      // Certain APIs (contextMenus) have functions as parameters other than the
+      // callback (contextMenus uses it for an onclick listener). Our generated
+      // types have adapted to consider functions "objects" and serialize them
+      // as dictionaries.
+      // TODO(devlin): It'd be awfully nice to get rid of this eccentricity.
+      *out_value = base::MakeUnique<base::DictionaryValue>();
+    }
+    return true;
   }
 
   if (type_ == ArgumentType::REF) {
@@ -216,6 +248,19 @@ bool ArgumentSpec::ParseArgumentToFundamental(
     case ArgumentType::STRING: {
       if (!value->IsString())
         return false;
+
+      v8::Local<v8::String> v8_string = value.As<v8::String>();
+      size_t length = static_cast<size_t>(v8_string->Length());
+      if (min_length_ && length < *min_length_) {
+        *error = "Less than min length";
+        return false;
+      }
+
+      if (max_length_ && length > *max_length_) {
+        *error = "Greater than max length";
+        return false;
+      }
+
       // If we don't need to match enum values and don't need to convert, we're
       // done...
       if (!out_value && enum_values_.empty())
@@ -228,9 +273,9 @@ bool ArgumentSpec::ParseArgumentToFundamental(
       if (!enum_values_.empty() && enum_values_.count(s) == 0)
         return false;
       if (out_value) {
-        // TODO(devlin): If base::StringValue ever takes a std::string&&, we
+        // TODO(devlin): If base::Value ever takes a std::string&&, we
         // could use std::move to construct.
-        *out_value = base::MakeUnique<base::StringValue>(s);
+        *out_value = base::MakeUnique<base::Value>(s);
       }
       return true;
     }
@@ -261,77 +306,105 @@ bool ArgumentSpec::ParseArgumentToObject(
   if (out_value)
     result = base::MakeUnique<base::DictionaryValue>();
 
-  gin::Dictionary dictionary(context->GetIsolate(), object);
-  for (const auto& kv : properties_) {
-    v8::Local<v8::Value> subvalue;
-    // See comment in ParseArgumentToArray() about passing in custom crazy
-    // values here.
-    // TODO(devlin): gin::Dictionary::Get() uses Isolate::GetCurrentContext() -
-    // is that always right here, or should we use the v8::Object APIs and
-    // pass in |context|?
-    // TODO(devlin): Hyper-optimization - Dictionary::Get() also creates a new
-    // v8::String for each call. Hypothetically, we could cache these, or at
-    // least use an internalized string.
-    if (!dictionary.Get(kv.first, &subvalue))
+  v8::Local<v8::Array> own_property_names;
+  if (!object->GetOwnPropertyNames(context).ToLocal(&own_property_names))
+    return false;
+
+  // Track all properties we see from |properties_| to check if any are missing.
+  // Use ArgumentSpec* instead of std::string for comparison + copy efficiency.
+  std::set<const ArgumentSpec*> seen_properties;
+  uint32_t length = own_property_names->Length();
+  for (uint32_t i = 0; i < length; ++i) {
+    v8::Local<v8::Value> key;
+    if (!own_property_names->Get(context, i).ToLocal(&key))
+      return false;
+    // In JS, all keys are strings or numbers (or symbols, but those are
+    // excluded by GetOwnPropertyNames()). If you try to set anything else
+    // (e.g. an object), it is converted to a string.
+    DCHECK(key->IsString() || key->IsNumber());
+    v8::String::Utf8Value utf8_key(key);
+
+    ArgumentSpec* property_spec = nullptr;
+    auto iter = properties_.find(*utf8_key);
+    if (iter != properties_.end()) {
+      property_spec = iter->second.get();
+      seen_properties.insert(property_spec);
+    } else if (additional_properties_) {
+      property_spec = additional_properties_.get();
+    } else {
+      *error = base::StringPrintf("Unknown property: %s", *utf8_key);
+      return false;
+    }
+
+    v8::Local<v8::Value> prop_value;
+    // Fun: It's possible that a previous getter has removed the property from
+    // the object. This isn't that big of a deal, since it would only manifest
+    // in the case of some reasonably-crazy script objects, and it's probably
+    // not worth optimizing for the uncommon case to the detriment of the
+    // common (and either should be totally safe). We can always add a
+    // HasOwnProperty() check here in the future, if we desire.
+    // See also comment in ParseArgumentToArray() about passing in custom
+    // crazy values here.
+    if (!object->Get(context, key).ToLocal(&prop_value))
       return false;
 
-    if (subvalue.IsEmpty() || subvalue->IsNull() || subvalue->IsUndefined()) {
-      if (!kv.second->optional_) {
-        *error = "Missing key: " + kv.first;
+    // Note: We don't serialize undefined or null values.
+    // TODO(devlin): This matches current behavior, but it is correct?
+    if (prop_value->IsUndefined() || prop_value->IsNull()) {
+      if (!property_spec->optional_) {
+        *error = base::StringPrintf("Missing key: %s", *utf8_key);
         return false;
       }
       continue;
     }
+
     std::unique_ptr<base::Value> property;
-    if (!kv.second->ParseArgument(context, subvalue, refs,
-                                  out_value ? &property : nullptr, error)) {
+    if (!property_spec->ParseArgument(context, prop_value, refs,
+                                      result ? &property : nullptr, error)) {
       return false;
     }
     if (result)
-      result->Set(kv.first, std::move(property));
+      result->SetWithoutPathExpansion(*utf8_key, std::move(property));
   }
 
-  // Check for additional properties.
-  if (additional_properties_) {
-    v8::Local<v8::Array> own_property_names;
-    if (!object->GetOwnPropertyNames(context).ToLocal(&own_property_names))
+  for (const auto& pair : properties_) {
+    const ArgumentSpec* spec = pair.second.get();
+    if (!spec->optional_ && seen_properties.count(spec) == 0) {
+      *error = "Missing key: " + pair.first;
       return false;
-    uint32_t length = own_property_names->Length();
-    for (uint32_t i = 0; i < length; ++i) {
-      v8::Local<v8::Value> key;
-      if (!own_property_names->Get(context, i).ToLocal(&key))
-        return false;
-      // In JS, all keys are strings or numbers (or symbols, but those are
-      // excluded by GetOwnPropertyNames()). If you try to set anything else
-      // (e.g. an object), it is converted to a string.
-      DCHECK(key->IsString() || key->IsNumber());
-      v8::String::Utf8Value utf8_key(key);
-      // If the key was one of the specified properties, we've already handled
-      // it. Continue.
-      if (properties_.find(*utf8_key) != properties_.end())
-        continue;
-      v8::Local<v8::Value> subvalue;
-      // Fun: It's possible that a previous getter has removed the property from
-      // the object. This isn't that big of a deal, since it would only manifest
-      // in the case of some reasonably-crazy script objects, and it's probably
-      // not worth optimizing for the uncommon case to the detriment of the
-      // common (and either should be totally safe). We can always add a
-      // HasOwnProperty() check here in the future, if we desire.
-      if (!object->Get(context, key).ToLocal(&subvalue))
-        return false;
+    }
+  }
 
-      // We don't serialize undefined values.
-      // TODO(devlin): This matches current behavior, but it is correct?
-      if (subvalue->IsUndefined())
-        continue;
-
-      std::unique_ptr<base::Value> property;
-      if (!additional_properties_->ParseArgument(
-              context, subvalue, refs, result ? &property : nullptr, error)) {
-        return false;
+  if (instance_of_) {
+    // Check for the instance somewhere in the object's prototype chain.
+    // NOTE: This only checks that something in the prototype chain was
+    // constructed with the same name as the desired instance, but doesn't
+    // validate that it's the same constructor as the expected one. For
+    // instance, if we expect isInstanceOf == 'Date', script could pass in
+    // (function() {
+    //   function Date() {}
+    //   return new Date();
+    // })()
+    // Since the object contains 'Date' in its prototype chain, this check
+    // succeeds, even though the object is not of built-in type Date.
+    // Since this isn't (or at least shouldn't be) a security check, this is
+    // okay.
+    bool found = false;
+    v8::Local<v8::Value> next_check = object;
+    do {
+      v8::Local<v8::Object> current = next_check.As<v8::Object>();
+      v8::String::Utf8Value constructor(current->GetConstructorName());
+      if (*instance_of_ ==
+          base::StringPiece(*constructor, constructor.length())) {
+        found = true;
+        break;
       }
-      if (result)
-        result->SetWithoutPathExpansion(*utf8_key, std::move(property));
+      next_check = current->GetPrototype();
+    } while (next_check->IsObject());
+
+    if (!found) {
+      *error = "Object is not of correct instance";
+      return false;
     }
   }
 
@@ -346,11 +419,23 @@ bool ArgumentSpec::ParseArgumentToArray(v8::Local<v8::Context> context,
                                         std::unique_ptr<base::Value>* out_value,
                                         std::string* error) const {
   DCHECK_EQ(ArgumentType::LIST, type_);
+
+  uint32_t length = value->Length();
+  if (min_length_ && length < *min_length_) {
+    *error = "Less than min length";
+    return false;
+  }
+
+  if (max_length_ && length > *max_length_) {
+    *error = "Greater than max length";
+    return false;
+  }
+
   std::unique_ptr<base::ListValue> result;
   // Only construct the result if we have an |out_value| to populate.
   if (out_value)
     result = base::MakeUnique<base::ListValue>();
-  uint32_t length = value->Length();
+
   for (uint32_t i = 0; i < length; ++i) {
     v8::MaybeLocal<v8::Value> maybe_subvalue = value->Get(context, i);
     v8::Local<v8::Value> subvalue;

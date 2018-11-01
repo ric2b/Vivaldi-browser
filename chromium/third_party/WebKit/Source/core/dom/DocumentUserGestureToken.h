@@ -18,29 +18,31 @@ class DocumentUserGestureToken final : public UserGestureToken {
   WTF_MAKE_NONCOPYABLE(DocumentUserGestureToken);
 
  public:
-  static PassRefPtr<UserGestureToken> create(
+  static PassRefPtr<UserGestureToken> Create(
       Document* document,
-      Status status = PossiblyExistingGesture) {
-    setHasReceivedUserGesture(document);
-    return adoptRef(new DocumentUserGestureToken(status));
+      Status status = kPossiblyExistingGesture) {
+    SetHasReceivedUserGesture(document);
+    return AdoptRef(new DocumentUserGestureToken(status));
   }
 
-  static PassRefPtr<UserGestureToken> adopt(Document* document,
+  static PassRefPtr<UserGestureToken> Adopt(Document* document,
                                             UserGestureToken* token) {
-    if (!token || !token->hasGestures())
+    if (!token || !token->HasGestures())
       return nullptr;
-    setHasReceivedUserGesture(document);
+    SetHasReceivedUserGesture(document);
     return token;
   }
 
  private:
   DocumentUserGestureToken(Status status) : UserGestureToken(status) {}
 
-  static void setHasReceivedUserGesture(Document* document) {
-    if (document && document->frame() &&
-        !document->frame()->hasReceivedUserGesture()) {
-      document->frame()->setDocumentHasReceivedUserGesture();
-      document->frame()->loader().client()->setHasReceivedUserGesture();
+  static void SetHasReceivedUserGesture(Document* document) {
+    if (document && document->GetFrame()) {
+      bool had_gesture = document->GetFrame()->HasReceivedUserGesture();
+      if (!had_gesture)
+        document->GetFrame()->SetDocumentHasReceivedUserGesture();
+      document->GetFrame()->Loader().Client()->SetHasReceivedUserGesture(
+          had_gesture);
     }
   }
 };

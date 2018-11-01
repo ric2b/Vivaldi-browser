@@ -7,11 +7,11 @@
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/output/copy_output_request.h"
+#include "cc/paint/display_item_list.h"
+#include "cc/paint/drawing_display_item.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_recorder.h"
-#include "cc/playback/display_item_list.h"
-#include "cc/playback/drawing_display_item.h"
 #include "cc/test/layer_tree_pixel_test.h"
 #include "cc/test/test_compositor_frame_sink.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -203,15 +203,30 @@ TEST_F(LayerTreeHostTilesTestPartialInvalidation,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));
 }
 
+// crbug.com/707711
+#if defined(OS_LINUX)
+#define MAYBE_PartialRaster_MultiThread_OneCopy \
+  DISABLED_PartialRaster_MultiThread_OneCopy
+#else
+#define MAYBE_PartialRaster_MultiThread_OneCopy \
+  PartialRaster_MultiThread_OneCopy
+#endif
 TEST_F(LayerTreeHostTilesTestPartialInvalidation,
-       PartialRaster_MultiThread_OneCopy) {
+       MAYBE_PartialRaster_MultiThread_OneCopy) {
   RunRasterPixelTest(
       true, PARTIAL_ONE_COPY, picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_partial_flipped.png")));
 }
 
+// crbug.com/707711
+#if defined(OS_LINUX)
+#define MAYBE_FullRaster_MultiThread_OneCopy \
+  DISABLED_FullRaster_MultiThread_OneCopy
+#else
+#define MAYBE_FullRaster_MultiThread_OneCopy FullRaster_MultiThread_OneCopy
+#endif
 TEST_F(LayerTreeHostTilesTestPartialInvalidation,
-       FullRaster_MultiThread_OneCopy) {
+       MAYBE_FullRaster_MultiThread_OneCopy) {
   RunRasterPixelTest(
       true, FULL_ONE_COPY, picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));

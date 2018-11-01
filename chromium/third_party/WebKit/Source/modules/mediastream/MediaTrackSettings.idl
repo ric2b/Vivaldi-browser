@@ -7,17 +7,22 @@
 dictionary MediaTrackSettings {
     long width;
     long height;
-    double aspectRatio;
+    // aspectRatio is not implemented.
+    // double aspectRatio;
     double frameRate;
     DOMString facingMode;
-    double volume;
-    long sampleRate;
-    long sampleSize;
-    boolean echoCancellation;
-    double latency;
-    long channelCount;
+    // volume, sampleRate and sampleSize are not implemented.
+    // double volume;
+    // long sampleRate;
+    // long sampleSize;
+    // echoCancellation is not implemented: crbug.com/682245
+    // boolean echoCancellation;
+    // latency and channelCount are not implemented.
+    // double latency;
+    // long channelCount;
     DOMString deviceId;
-    DOMString groupId;
+    // groupId is not implemented.
+    // DOMString groupId;
     // Media Capture Depth Stream Extensions
     // https://w3c.github.io/mediacapture-depth/#mediatracksettings-dictionary
     // TODO(aleksandar.stojiljkovic): videoKind, depthNear, depthFar,
@@ -28,4 +33,21 @@ dictionary MediaTrackSettings {
     [RuntimeEnabled=MediaCaptureDepth] double depthFar;
     [RuntimeEnabled=MediaCaptureDepth] double focalLengthX;
     [RuntimeEnabled=MediaCaptureDepth] double focalLengthY;
+    // W3C Image Capture API
+    // https://w3c.github.io/mediacapture-image/#mediatracksettings-section
+    // TODO(mcasas) move out when partial dictionaries are supported
+    // http://crbug.com/579896.
+    [RuntimeEnabled=ImageCapture] DOMString         whiteBalanceMode;
+    [RuntimeEnabled=ImageCapture] DOMString         exposureMode;
+    [RuntimeEnabled=ImageCapture] DOMString         focusMode;
+    [RuntimeEnabled=ImageCapture] sequence<Point2D> pointsOfInterest;
+    [RuntimeEnabled=ImageCapture] double            exposureCompensation;
+    [RuntimeEnabled=ImageCapture] double            colorTemperature;
+    [RuntimeEnabled=ImageCapture] double            iso;
+    [RuntimeEnabled=ImageCapture] double            brightness;
+    [RuntimeEnabled=ImageCapture] double            contrast;
+    [RuntimeEnabled=ImageCapture] double            saturation;
+    [RuntimeEnabled=ImageCapture] double            sharpness;
+    [RuntimeEnabled=ImageCapture] double            zoom;
+    [RuntimeEnabled=ImageCapture] boolean           torch;
 };

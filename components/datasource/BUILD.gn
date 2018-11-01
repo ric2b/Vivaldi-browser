@@ -1,0 +1,18 @@
+source_set("datasource") {
+  sources = [
+    "desktop_data_source_win.cc",
+    "desktop_data_source_win.h",
+    "local_image_data_source.cc",
+    "local_image_data_source.h",
+    "vivaldi_data_source.cc",
+    "vivaldi_data_source.h",
+    "vivaldi_data_source_api.cc",
+    "vivaldi_data_source_api.h",
+  ]
+  deps = [
+    "//chrome/common:common",
+    "//content/public/browser",
+    "//base:base",
+    "//skia",
+  ]
+}

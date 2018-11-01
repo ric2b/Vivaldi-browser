@@ -34,31 +34,32 @@
 #include "bindings/modules/v8/V8SQLStatementErrorCallback.h"
 #include "bindings/modules/v8/V8SQLTransaction.h"
 #include "core/dom/ExecutionContext.h"
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 namespace blink {
 
 bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction,
                                               SQLError* error) {
-  v8::Isolate* isolate = m_scriptState->isolate();
-  ExecutionContext* executionContext = m_scriptState->getExecutionContext();
-  if (!executionContext || executionContext->isContextSuspended() ||
-      executionContext->isContextDestroyed())
+  v8::Isolate* isolate = m_scriptState->GetIsolate();
+  ExecutionContext* execution_context =
+      ExecutionContext::From(m_scriptState.Get());
+  if (!execution_context || execution_context->IsContextSuspended() ||
+      execution_context->IsContextDestroyed())
     return true;
-  if (!m_scriptState->contextIsValid())
+  if (!m_scriptState->ContextIsValid())
     return true;
-  ScriptState::Scope scope(m_scriptState.get());
+  ScriptState::Scope scope(m_scriptState.Get());
 
-  v8::Local<v8::Value> transactionHandle =
-      ToV8(transaction, m_scriptState->context()->Global(), isolate);
-  v8::Local<v8::Value> errorHandle =
-      ToV8(error, m_scriptState->context()->Global(), isolate);
-  ASSERT(transactionHandle->IsObject());
+  v8::Local<v8::Value> transaction_handle =
+      ToV8(transaction, m_scriptState->GetContext()->Global(), isolate);
+  v8::Local<v8::Value> error_handle =
+      ToV8(error, m_scriptState->GetContext()->Global(), isolate);
+  ASSERT(transaction_handle->IsObject());
 
-  v8::Local<v8::Value> argv[] = {transactionHandle, errorHandle};
+  v8::Local<v8::Value> argv[] = {transaction_handle, error_handle};
 
-  v8::TryCatch exceptionCatcher(isolate);
-  exceptionCatcher.SetVerbose(true);
+  v8::TryCatch exception_catcher(isolate);
+  exception_catcher.SetVerbose(true);
 
   v8::Local<v8::Value> result;
   // FIXME: This comment doesn't make much sense given what the code is actually
@@ -68,9 +69,9 @@ bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction,
   // statement, if any, or onto the next overall step otherwise. Otherwise,
   // the error callback did not return false, or there was no error callback.
   // Jump to the last step in the overall steps.
-  if (!V8ScriptRunner::callFunction(m_callback.newLocal(isolate),
-                                    m_scriptState->getExecutionContext(),
-                                    m_scriptState->context()->Global(),
+  if (!V8ScriptRunner::CallFunction(m_callback.NewLocal(isolate),
+                                    ExecutionContext::From(m_scriptState.Get()),
+                                    m_scriptState->GetContext()->Global(),
                                     WTF_ARRAY_LENGTH(argv), argv, isolate)
            .ToLocal(&result))
     return true;

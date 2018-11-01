@@ -4,6 +4,8 @@
 
 #include "chrome/browser/win/jumplist.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -11,9 +13,13 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -22,12 +28,14 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/shell_integration_win.h"
+#include "chrome/browser/win/jumplist_file_util.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_icon_resources_win.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/installer/util/browser_distribution.h"
+#include "chrome/install_static/install_util.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/history/core/browser/history_service.h"
@@ -114,6 +122,9 @@ bool CreateIconFile(const gfx::ImageSkia& image_skia,
 // loaded icons.
 void CreateIconFiles(const base::FilePath& icon_dir,
                      const ShellLinkItemList& item_list) {
+  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
+  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplist.CreateIconFilesDuration");
+
   for (ShellLinkItemList::const_iterator item = item_list.begin();
       item != item_list.end(); ++item) {
     base::FilePath icon_path;
@@ -130,8 +141,7 @@ bool UpdateTaskCategory(
   if (!PathService::Get(base::FILE_EXE, &chrome_path))
     return false;
 
-  BrowserDistribution* distribution = BrowserDistribution::GetDistribution();
-  int icon_index = distribution->GetIconIndex();
+  int icon_index = install_static::GetIconResourceIndex();
 
   ShellLinkItemList items;
 
@@ -164,9 +174,8 @@ bool UpdateTaskCategory(
     items.push_back(chrome);
   }
 
-  // Create an IShellLink object which launches Chrome in incognito mode, and
-  // add it to the collection. We use our application icon as the icon for
-  // this item.
+  // Create an IShellLink object which launches Chrome/Vivaldi in incognito mode, and
+  // add it to the collection.
   if (incognito_availability != IncognitoModePrefs::DISABLED) {
     scoped_refptr<ShellLinkItem> incognito = JumpList::CreateShellLink();
     incognito->GetCommandLine()->AppendSwitch(switches::kIncognito);
@@ -175,7 +184,7 @@ bool UpdateTaskCategory(
     base::ReplaceSubstringsAfterOffset(
         &incognito_title, 0, L"&", base::StringPiece16());
     incognito->set_title(incognito_title);
-    incognito->set_icon(chrome_path.value(), icon_index);
+    incognito->set_icon(chrome_path.value(), icon_resources::kIncognitoIndex);
     items.push_back(incognito);
   }
 
@@ -188,6 +197,9 @@ bool UpdateJumpList(const wchar_t* app_id,
                     const ShellLinkItemList& most_visited_pages,
                     const ShellLinkItemList& recently_closed_pages,
                     IncognitoModePrefs::Availability incognito_availability) {
+  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
+  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplist.UpdateJumpListDuration");
+
   // JumpList is implemented only on Windows 7 or later.
   // So, we should return now when this function is called on earlier versions
   // of Windows.
@@ -249,11 +261,10 @@ bool UpdateJumpList(const wchar_t* app_id,
 }
 
 // Updates the jumplist, once all the data has been fetched.
-void RunUpdateOnFileThread(
-    IncognitoModePrefs::Availability incognito_availability,
-    const std::wstring& app_id,
-    const base::FilePath& icon_dir,
-    base::RefCountedData<JumpListData>* ref_counted_data) {
+void RunUpdateJumpList(IncognitoModePrefs::Availability incognito_availability,
+                       const std::wstring& app_id,
+                       const base::FilePath& icon_dir,
+                       base::RefCountedData<JumpListData>* ref_counted_data) {
   JumpListData* data = &ref_counted_data->data;
   ShellLinkItemList local_most_visited_pages;
   ShellLinkItemList local_recently_closed_pages;
@@ -272,64 +283,33 @@ void RunUpdateOnFileThread(
     local_speed_dials = data->speed_dials_;
   }
 
-  // Delete the directory which contains old icon files, rename the current
-  // icon directory, and create a new directory which contains new JumpList
-  // icon files.
-  base::FilePath icon_dir_old(icon_dir.value() + L"Old");
+  // If JumpListIcons directory doesn't exist or is not empty, skip updating the
+  // jumplist icons. The jumplist links should be updated anyway, as it doesn't
+  // involve disk IO.
+  if (base::DirectoryExists(icon_dir) && base::IsDirectoryEmpty(icon_dir)) {
+    // TODO(chengx): Remove the UMA histogram after fixing
+    // http://crbug.com/40407.
+    UMA_HISTOGRAM_COUNTS_100(
+        "WinJumplist.CreateIconFilesCount",
+        local_most_visited_pages.size() + local_recently_closed_pages.size());
 
-  enum FolderOperationResult {
-    SUCCESS = 0,
-    DELETE_DEST_FAILED = 1 << 0,
-    MOVE_FAILED = 1 << 1,
-    DELETE_SRC_FAILED = 1 << 2,
-    CREATE_SRC_FAILED = 1 << 3,
-    // This value is beyond the sum of all bit fields above and
-    // should remain last (shifted by one more than the last value)
-    END = 1 << 4
-  };
+    // Create icon files for shortcuts in the "Most Visited" category.
+    CreateIconFiles(icon_dir, local_most_visited_pages);
 
-  // This variable records the status of three folder operations.
-  uint32_t folder_operation_status = FolderOperationResult::SUCCESS;
-
-  if (!base::DeleteFile(icon_dir_old, true)) {
-    folder_operation_status |= FolderOperationResult::DELETE_DEST_FAILED;
-    // If deletion of |icon_dir_old| fails, do not move |icon_dir| to
-    // |icon_dir_old|, instead, delete |icon_dir| directly to avoid bloating
-    // |icon_dir_old| by moving more things to it.
-    if (!base::DeleteFile(icon_dir, true))
-      folder_operation_status |= FolderOperationResult::DELETE_SRC_FAILED;
-  } else if (!base::Move(icon_dir, icon_dir_old)) {
-    folder_operation_status |= FolderOperationResult::MOVE_FAILED;
-    // If Move() fails, delete |icon_dir| to avoid file accumulation in this
-    // directory, which can eventually lead the folder to be huge.
-    if (!base::DeleteFile(icon_dir, true))
-      folder_operation_status |= FolderOperationResult::DELETE_SRC_FAILED;
+    // Create icon files for shortcuts in the "Recently Closed"
+    // category.
+    CreateIconFiles(icon_dir, local_recently_closed_pages);
   }
-  if (!base::CreateDirectory(icon_dir))
-    folder_operation_status |= FolderOperationResult::CREATE_SRC_FAILED;
-
-  UMA_HISTOGRAM_ENUMERATION("WinJumplist.DetailedFolderResults",
-                            folder_operation_status,
-                            FolderOperationResult::END);
-
-  // Create temporary icon files for shortcuts in the "Most Visited" category.
-  CreateIconFiles(icon_dir, local_most_visited_pages);
-
-  // Create temporary icon files for shortcuts in the "Recently Closed"
-  // category.
-  CreateIconFiles(icon_dir, local_recently_closed_pages);
 
   // Create temporary icon files for shortcuts in the "Speed Dials" category.
   CreateIconFiles(icon_dir, local_speed_dials);
 
   // We finished collecting all resources needed for updating an application
-  // JumpList. So, create a new JumpList and replace the current JumpList
-  // with it.
-  UpdateJumpList(app_id.c_str(),
-                 local_speed_dials,
-                 local_most_visited_pages,
-                 local_recently_closed_pages,
-                 incognito_availability);
+  // Create a new JumpList and replace the current JumpList with it. The
+  // jumplist links are updated anyway, while the jumplist icons may not as
+  // mentioned above.
+  UpdateJumpList(app_id.c_str(), local_speed_dials, local_most_visited_pages,
+                 local_recently_closed_pages, incognito_availability);
 }
 
 }  // namespace
@@ -344,6 +324,19 @@ JumpList::JumpList(Profile* profile)
       profile_(profile),
       jumplist_data_(new base::RefCountedData<JumpListData>),
       task_id_(base::CancelableTaskTracker::kBadTaskId),
+      update_jumplisticons_task_runner_(base::CreateCOMSTATaskRunnerWithTraits(
+          base::TaskTraits()
+              .WithPriority(base::TaskPriority::USER_VISIBLE)
+              .WithShutdownBehavior(
+                  base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+              .MayBlock())),
+      delete_jumplisticonsold_task_runner_(
+          base::CreateSequencedTaskRunnerWithTraits(
+              base::TaskTraits()
+                  .WithPriority(base::TaskPriority::BACKGROUND)
+                  .WithShutdownBehavior(
+                      base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                  .MayBlock())),
       weak_ptr_factory_(this) {
   DCHECK(Enabled());
   // To update JumpList when a tab is added or removed, we add this object to
@@ -620,7 +613,7 @@ void JumpList::StartLoadingFavicon() {
 
   if (!waiting_for_icons) {
     // No more favicons are needed by the application JumpList. Schedule a
-    // RunUpdateOnFileThread call.
+    // RunUpdateJumpList call.
     PostRunUpdate();
     return;
   }
@@ -646,7 +639,8 @@ void JumpList::OnFaviconDataAvailable(
     JumpListData* data = &jumplist_data_->data;
     base::AutoLock auto_lock(data->list_lock_);
     // Attach the received data to the ShellLinkItem object.
-    // This data will be decoded by the RunUpdateOnFileThread method.
+    // This data will be decoded by the RunUpdateJumpList
+    // method.
     if (!image_result.image.IsEmpty() && !data->icon_urls_.empty() &&
         data->icon_urls_.front().second.get()) {
       gfx::ImageSkia image_skia = image_result.image.AsImageSkia();
@@ -704,13 +698,24 @@ void JumpList::DeferredRunUpdate() {
       profile_ ? IncognitoModePrefs::GetAvailability(profile_->GetPrefs())
                : IncognitoModePrefs::ENABLED;
 
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&RunUpdateOnFileThread,
-                 incognito_availability,
-                 app_id_,
-                 icon_dir_,
-                 base::RetainedRef(jumplist_data_)));
+  // Post a task to delete the content in JumpListIcons folder and log the
+  // results to UMA.
+  update_jumplisticons_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&DeleteDirectoryContentAndLogResults, icon_dir_,
+                            kFileDeleteLimit));
+
+  // Post a task to update the jumplist used by the shell.
+  update_jumplisticons_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&RunUpdateJumpList, incognito_availability, app_id_,
+                            icon_dir_, base::RetainedRef(jumplist_data_)));
+
+  // Post a task to delete JumpListIconsOld folder and log the results to UMA.
+  base::FilePath icon_dir_old = icon_dir_.DirName().Append(
+      icon_dir_.BaseName().value() + FILE_PATH_LITERAL("Old"));
+
+  delete_jumplisticonsold_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&DeleteDirectoryAndLogResults,
+                            std::move(icon_dir_old), kFileDeleteLimit));
 }
 
 void JumpList::TopSitesLoaded(history::TopSites* top_sites) {

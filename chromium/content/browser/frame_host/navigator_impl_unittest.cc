@@ -1140,16 +1140,17 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
 }
 
 namespace {
-void SetWithinPage(const GURL& url,
-                   FrameHostMsg_DidCommitProvisionalLoad_Params* params) {
-  params->was_within_same_page = true;
+void SetWithinSameDocument(
+    const GURL& url,
+    FrameHostMsg_DidCommitProvisionalLoad_Params* params) {
+  params->was_within_same_document = true;
   params->url = url;
   params->origin = url::Origin(url);
 }
 }
 
 // A renderer process might try and claim that a cross site navigation was
-// within the same page by setting was_within_same_page = true for
+// within the same document by setting was_within_same_document = true for
 // FrameHostMsg_DidCommitProvisionalLoad. Such case should be detected on the
 // browser side and the renderer process should be killed.
 TEST_F(NavigatorTestWithBrowserSideNavigation, CrossSiteClaimWithinPage) {
@@ -1166,7 +1167,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation, CrossSiteClaimWithinPage) {
   // Claim that the navigation was within same page.
   int bad_msg_count = process()->bad_msg_count();
   GetSpeculativeRenderFrameHost(node)->SendNavigateWithModificationCallback(
-      entry_id, true, kUrl2, base::Bind(SetWithinPage, kUrl1));
+      entry_id, true, kUrl2, base::Bind(SetWithinSameDocument, kUrl1));
   EXPECT_EQ(process()->bad_msg_count(), bad_msg_count + 1);
 }
 
@@ -1238,6 +1239,51 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
   EXPECT_FALSE(node->navigation_request());
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
   EXPECT_EQ(speculative_rfh, main_test_rfh());
+}
+
+// Feature Policy: Test that the feature policy is reset when navigating pages
+// within a site.
+TEST_F(NavigatorTestWithBrowserSideNavigation,
+       FeaturePolicySameSiteNavigation) {
+  const GURL kUrl1("http://www.chromium.org/");
+  const GURL kUrl2("http://www.chromium.org/Home");
+
+  contents()->NavigateAndCommit(kUrl1);
+
+  // Check the feature policy before navigation.
+  FeaturePolicy* original_feature_policy =
+      main_test_rfh()->get_feature_policy();
+  ASSERT_TRUE(original_feature_policy);
+
+  // Navigate to the new URL.
+  contents()->NavigateAndCommit(kUrl2);
+
+  // Check the feature policy after navigation.
+  FeaturePolicy* final_feature_policy = main_test_rfh()->get_feature_policy();
+  ASSERT_TRUE(final_feature_policy);
+  ASSERT_NE(original_feature_policy, final_feature_policy);
+}
+
+// Feature Policy: Test that the feature policy is not reset when navigating
+// within a page.
+TEST_F(NavigatorTestWithBrowserSideNavigation,
+       FeaturePolicyFragmentNavigation) {
+  const GURL kUrl1("http://www.chromium.org/");
+  const GURL kUrl2("http://www.chromium.org/#Home");
+
+  contents()->NavigateAndCommit(kUrl1);
+
+  // Check the feature policy before navigation.
+  FeaturePolicy* original_feature_policy =
+      main_test_rfh()->get_feature_policy();
+  ASSERT_TRUE(original_feature_policy);
+
+  // Navigate to the new URL.
+  contents()->NavigateAndCommit(kUrl2);
+
+  // Check the feature policy after navigation.
+  FeaturePolicy* final_feature_policy = main_test_rfh()->get_feature_policy();
+  ASSERT_EQ(original_feature_policy, final_feature_policy);
 }
 
 }  // namespace content

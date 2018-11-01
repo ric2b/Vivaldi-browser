@@ -94,7 +94,7 @@ bool AwContentRendererClient::HandleNavigation(
     blink::WebNavigationPolicy default_policy,
     bool is_redirect) {
   // Only GETs can be overridden.
-  if (!request.httpMethod().equals("GET"))
+  if (!request.HttpMethod().Equals("GET"))
     return false;
 
   // Any navigation from loadUrl, and goBack/Forward are considered application-
@@ -106,14 +106,14 @@ bool AwContentRendererClient::HandleNavigation(
   // works fine. This will stop working if android_webview starts swapping out
   // renderers on navigation.
   bool application_initiated =
-      !is_content_initiated || type == blink::WebNavigationTypeBackForward;
+      !is_content_initiated || type == blink::kWebNavigationTypeBackForward;
 
   // Don't offer application-initiated navigations unless it's a redirect.
   if (application_initiated && !is_redirect)
     return false;
 
-  bool is_main_frame = !frame->parent();
-  const GURL& gurl = request.url();
+  bool is_main_frame = !frame->Parent();
+  const GURL& gurl = request.Url();
   // For HTTP schemes, only top-level navigations can be overridden. Similarly,
   // WebView Classic lets app override only top level about:blank navigations.
   // So we filter out non-top about:blank navigations here.
@@ -136,8 +136,8 @@ bool AwContentRendererClient::HandleNavigation(
   }
 
   bool ignore_navigation = false;
-  base::string16 url = request.url().string().utf16();
-  bool has_user_gesture = request.hasUserGesture();
+  base::string16 url = request.Url().GetString().Utf16();
+  bool has_user_gesture = request.HasUserGesture();
 
   int render_frame_id = render_frame->GetRoutingID();
   RenderThread::Get()->Send(new AwViewHostMsg_ShouldOverrideUrlLoading(
@@ -170,6 +170,10 @@ void AwContentRendererClient::RenderFrameCreated(
   autofill::PasswordAutofillAgent* password_autofill_agent =
       new autofill::PasswordAutofillAgent(render_frame);
   new autofill::AutofillAgent(render_frame, password_autofill_agent, NULL);
+
+#if BUILDFLAG(ENABLE_SPELLCHECK)
+  new SpellCheckProvider(render_frame, spellcheck_.get());
+#endif
 }
 
 void AwContentRendererClient::RenderViewCreated(
@@ -177,7 +181,13 @@ void AwContentRendererClient::RenderViewCreated(
   AwRenderViewExt::RenderViewCreated(render_view);
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
-  new SpellCheckProvider(render_view, spellcheck_.get());
+  // This is a workaround keeping the behavior that, the Blink side spellcheck
+  // enabled state is initialized on RenderView creation.
+  // TODO(xiaochengh): Design better way to sync between Chrome-side and
+  // Blink-side spellcheck enabled states.  See crbug.com/710097.
+  if (SpellCheckProvider* provider =
+          SpellCheckProvider::Get(render_view->GetMainRenderFrame()))
+    provider->EnableSpellcheck(spellcheck_->IsSpellcheckEnabled());
 #endif
 }
 
@@ -193,17 +203,17 @@ void AwContentRendererClient::GetNavigationErrorStrings(
     std::string* error_html,
     base::string16* error_description) {
   if (error_description) {
-    if (error.localizedDescription.isEmpty())
+    if (error.localized_description.IsEmpty())
       *error_description = base::ASCIIToUTF16(net::ErrorToString(error.reason));
     else
-      *error_description = error.localizedDescription.utf16();
+      *error_description = error.localized_description.Utf16();
   }
 
   if (!error_html)
     return;
 
   // Create the error page based on the error reason.
-  GURL gurl(failed_request.url());
+  GURL gurl(failed_request.Url());
   std::string url_string = gurl.possibly_invalid_spec();
   int reason_id = IDS_AW_WEBPAGE_CAN_NOT_BE_LOADED;
 
@@ -232,7 +242,7 @@ void AwContentRendererClient::GetNavigationErrorStrings(
     }
   }
 
-  std::string err = error.localizedDescription.utf8(
+  std::string err = error.localized_description.Utf8(
       blink::WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD);
 
   if (err.empty())

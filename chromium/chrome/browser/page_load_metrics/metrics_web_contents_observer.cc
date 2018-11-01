@@ -12,7 +12,6 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/user_metrics.h"
 #include "chrome/browser/page_load_metrics/browser_page_track_decider.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_embedder_interface.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
@@ -39,6 +38,16 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(
 namespace page_load_metrics {
 
 namespace {
+
+content::RenderFrameHost* GetMainFrame(content::RenderFrameHost* rfh) {
+  // Don't use rfh->GetRenderViewHost()->GetMainFrame() here because
+  // RenderViewHost is being deprecated and because in OOPIF,
+  // RenderViewHost::GetMainFrame() returns nullptr for child frames hosted in a
+  // different process from the main frame.
+  while (rfh->GetParent() != nullptr)
+    rfh = rfh->GetParent();
+  return rfh;
+}
 
 UserInitiatedInfo CreateUserInitiatedInfo(
     content::NavigationHandle* navigation_handle,
@@ -104,6 +113,20 @@ void MetricsWebContentsObserver::RenderViewHostChanged(
   RegisterInputEventObserver(new_host);
 }
 
+void MetricsWebContentsObserver::MediaStartedPlaying(
+    const content::WebContentsObserver::MediaPlayerInfo& video_type,
+    const content::WebContentsObserver::MediaPlayerId& id) {
+  content::RenderFrameHost* render_frame_host = id.first;
+  if (GetMainFrame(render_frame_host) != web_contents()->GetMainFrame()) {
+    // Ignore media that starts playing in a document that was navigated away
+    // from.
+    return;
+  }
+  if (committed_load_)
+    committed_load_->MediaStartedPlaying(
+        video_type, render_frame_host == web_contents()->GetMainFrame());
+}
+
 bool MetricsWebContentsObserver::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* render_frame_host) {
@@ -119,8 +142,9 @@ bool MetricsWebContentsObserver::OnMessageReceived(
 
 void MetricsWebContentsObserver::WillStartNavigationRequest(
     content::NavigationHandle* navigation_handle) {
-  // Same-page navigations should never go through WillStartNavigationRequest.
-  DCHECK(!navigation_handle->IsSamePage());
+  // Same-document navigations should never go through
+  // WillStartNavigationRequest.
+  DCHECK(!navigation_handle->IsSameDocument());
 
   if (!navigation_handle->IsInMainFrame())
     return;
@@ -232,7 +256,8 @@ void MetricsWebContentsObserver::OnRequestComplete(
     const content::GlobalRequestID& request_id,
     content::ResourceType resource_type,
     bool was_cached,
-    bool used_data_reduction_proxy,
+    std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
+        data_reduction_proxy_data,
     int64_t raw_body_bytes,
     int64_t original_content_length,
     base::TimeTicks creation_time) {
@@ -240,10 +265,20 @@ void MetricsWebContentsObserver::OnRequestComplete(
       GetTrackerOrNullForRequest(request_id, resource_type, creation_time);
   if (tracker) {
     ExtraRequestInfo extra_request_info(
-        was_cached, raw_body_bytes, used_data_reduction_proxy,
-        was_cached ? 0 : original_content_length);
+        was_cached, raw_body_bytes, was_cached ? 0 : original_content_length,
+        std::move(data_reduction_proxy_data));
     tracker->OnLoadedResource(extra_request_info);
   }
+}
+
+void MetricsWebContentsObserver::OnNavigationDelayComplete(
+    content::NavigationHandle* navigation_handle,
+    base::TimeDelta scheduled_delay,
+    base::TimeDelta actual_delay) {
+  auto it = provisional_loads_.find(navigation_handle);
+  if (it == provisional_loads_.end())
+    return;
+  it->second->OnNavigationDelayComplete(scheduled_delay, actual_delay);
 }
 
 const PageLoadExtraInfo
@@ -261,8 +296,9 @@ void MetricsWebContentsObserver::DidFinishNavigation(
       std::move(provisional_loads_[navigation_handle]));
   provisional_loads_.erase(navigation_handle);
 
-  // Ignore same-page navigations.
-  if (navigation_handle->HasCommitted() && navigation_handle->IsSamePage()) {
+  // Ignore same-document navigations.
+  if (navigation_handle->HasCommitted() &&
+      navigation_handle->IsSameDocument()) {
     if (finished_nav)
       finished_nav->StopTracking();
     return;
@@ -363,7 +399,7 @@ void MetricsWebContentsObserver::NavigationStopped() {
 void MetricsWebContentsObserver::OnInputEvent(
     const blink::WebInputEvent& event) {
   // Ignore browser navigation or reload which comes with type Undefined.
-  if (event.type() == blink::WebInputEvent::Type::Undefined)
+  if (event.GetType() == blink::WebInputEvent::Type::kUndefined)
     return;
 
   if (committed_load_)
@@ -510,9 +546,7 @@ void MetricsWebContentsObserver::OnTimingUpdated(
     const PageLoadMetadata& metadata) {
   // We may receive notifications from frames that have been navigated away
   // from. We simply ignore them.
-  if (!render_frame_host->GetRenderViewHost() ||
-      render_frame_host->GetRenderViewHost()->GetMainFrame() !=
-          web_contents()->GetMainFrame()) {
+  if (GetMainFrame(render_frame_host) != web_contents()->GetMainFrame()) {
     RecordInternalError(ERR_IPC_FROM_WRONG_FRAME);
     return;
   }
@@ -544,19 +578,14 @@ void MetricsWebContentsObserver::OnTimingUpdated(
     return;
   }
 
-  if (!committed_load_->UpdateTiming(timing, metadata)) {
-    // If the page load tracker cannot update its timing, something is wrong
-    // with the IPC (it's from another load, or it's invalid in some other way).
-    // We expect this to be a rare occurrence.
-    RecordInternalError(ERR_BAD_TIMING_IPC);
-  }
+  committed_load_->UpdateTiming(timing, metadata);
 }
 
 bool MetricsWebContentsObserver::ShouldTrackNavigation(
     content::NavigationHandle* navigation_handle) const {
   DCHECK(navigation_handle->IsInMainFrame());
   DCHECK(!navigation_handle->HasCommitted() ||
-         !navigation_handle->IsSamePage());
+         !navigation_handle->IsSameDocument());
 
   return BrowserPageTrackDecider(embedder_interface_.get(), web_contents(),
                                  navigation_handle).ShouldTrack();

@@ -10,7 +10,7 @@
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_menu_view_controller.h"
+#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -27,6 +27,8 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using chrome_test_util::NavigationBarDoneButton;
 
 const CGFloat kScrollDisplacement = 50.0;
 
@@ -138,11 +140,7 @@ const CGFloat kScrollDisplacement = 50.0;
 
   [self verifyNoKeyboardCommandsAreRegistered];
 
-  // Close Settings
-  id<GREYMatcher> settingsDoneButton =
-      chrome_test_util::ButtonWithAccessibilityLabelId(
-          IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
-  [[EarlGrey selectElementWithMatcher:settingsDoneButton]
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 }
 

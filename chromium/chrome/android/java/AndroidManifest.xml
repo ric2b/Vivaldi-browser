@@ -36,6 +36,7 @@ by a child template that "extends" this file.
     {% endif %}
     <uses-permission-sdk-m android:name="android.permission.BLUETOOTH"/>
     <uses-permission-sdk-m android:name="android.permission.BLUETOOTH_ADMIN"/>
+    <uses-permission-sdk-m android:name="android.permission.REORDER_TASKS"/>
     <uses-permission-sdk-m android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <uses-permission android:name="android.permission.CAMERA" />
@@ -55,8 +56,8 @@ by a child template that "extends" this file.
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS"/>
-    {% set enable_webvr = enable_webvr|default(0) %}
-    {% if enable_webvr == "true" %}
+    {% set enable_vr = enable_vr|default(0) %}
+    {% if enable_vr == "true" %}
     <!-- Indicates use of Android's VR-mode, available only on Android N+. -->
     <uses-feature android:name="android.software.vr.mode" android:required="false"/>
     <!-- Indicates use of VR features that are available only on Daydream-ready devices. -->
@@ -124,9 +125,7 @@ by a child template that "extends" this file.
         {% else %}
         android:allowBackup="false"
         {% endif %}
-        {% if target_sdk_version|int >= 24 or target_sdk_version == 'O' %}
         android:networkSecurityConfig="@xml/network_security_config"
-        {% endif %}
         {% block extra_application_attributes %}{% endblock %}>
 
         <!-- Samsung MultiWindow Support -->
@@ -259,10 +258,8 @@ by a child template that "extends" this file.
             </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
-            {% if target_sdk_version|int > 24 or target_sdk_version == 'O' %}
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/launchershortcuts" />
-            {% endif %}
 
         </activity-alias>
 
@@ -297,12 +294,10 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.document.DocumentActivity"
             android:exported="false"
             android:theme="@style/MainTheme"
-            android:windowSoftInputMode="adjustResize"
             android:taskAffinity=""
             android:persistableMode="persistAcrossReboots"
             android:autoRemoveFromRecents="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:hardwareAccelerated="false">
+            {{ self.chrome_activity_common() }}>
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.document.DocumentActivity"
             android:targetActivity="org.chromium.chrome.browser.document.DocumentActivity"
@@ -311,12 +306,10 @@ by a child template that "extends" this file.
             android:icon="@mipmap/incognito_app_icon"
             android:exported="false"
             android:theme="@style/IncognitoTheme"
-            android:windowSoftInputMode="adjustResize"
             android:taskAffinity=""
             android:persistableMode="persistNever"
             android:autoRemoveFromRecents="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:hardwareAccelerated="false">
+            {{ self.chrome_activity_common() }}>
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.document.IncognitoDocumentActivity"
             android:targetActivity="org.chromium.chrome.browser.document.IncognitoDocumentActivity"
@@ -326,20 +319,16 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.customtabs.CustomTabActivity"
             android:theme="@style/MainTheme"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:hardwareAccelerated="false"
+            {{ self.chrome_activity_common() }}
             {{ self.supports_video_persistence() }} >
         </activity>
         <activity android:name="org.chromium.chrome.browser.customtabs.SeparateTaskCustomTabActivity"
             android:theme="@style/MainTheme"
             android:exported="false"
             android:taskAffinity=""
-            android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
             android:autoRemoveFromRecents="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:hardwareAccelerated="false"
+            {{ self.chrome_activity_common() }}
             {{ self.supports_video_persistence() }} >
         </activity>
         {% for i in range(10) %}
@@ -348,11 +337,9 @@ by a child template that "extends" this file.
             android:icon="@mipmap/app_single_page_icon"
             android:exported="false"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
             android:taskAffinity=""
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:hardwareAccelerated="false"
+            {{ self.chrome_activity_common() }}
             {{ self.supports_video_persistence() }} >
         </activity>
         {% endfor %}
@@ -361,67 +348,30 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity"
             android:theme="@style/TabbedModeTheme"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize"
             android:launchMode="singleTask"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode"
-            android:hardwareAccelerated="false"
             {# We can only use blocks once in Jinja, for future substitutions we use
             self.supports_video_persistence(). #}
             {% block supports_video_persistence %}
             {% endblock %}
+            {% block chrome_activity_common %}
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode"
+            android:hardwareAccelerated="false"
+            {% endblock %}
             >
-            <!--
-              See the VRChromeTabbedActivity alias below for an explanation of this dummy intent
-              filter. We need to add these filters here as well, or non-presenting webVR pages will
-              trigger a daydream incompatible app message.
-            -->
-            <intent-filter>
-                <action android:name="org.chromium.chrome.browser.dummy.action" />
-                <category android:name="com.google.intent.category.DAYDREAM" />
-                <category android:name="com.google.intent.category.CARDBOARD" />
-            </intent-filter>
         </activity>
-
-        {% if enable_webvr == "true" %}
-        <!--
-            TODO(mthiesse): Temporarily skip ChromeLauncherActivity when returning from Daydream
-            DON flow to avoid polluting metrics.
-        -->
-        <activity-alias android:name="org.chromium.chrome.browser.VRChromeTabbedActivity"
-            android:targetActivity="org.chromium.chrome.browser.ChromeTabbedActivity"
-            android:enableVrMode="@string/gvr_vr_mode_component">
-            <!--
-              Daydream api categorizes an activity to three categories: Cardboard only, hybrid
-              or Daydream. It does so by testing if intents can be resolved by the activity
-              that requests it.
-              In Chrome, CTA is the activity that uses Daydream api and we want to be in hybrid
-              category. So add an intent filter that could pass Daydream tests here.
-            -->
-            <intent-filter>
-                <action android:name="org.chromium.chrome.browser.dummy.action" />
-                <category android:name="com.google.intent.category.DAYDREAM" />
-                <category android:name="com.google.intent.category.CARDBOARD" />
-            </intent-filter>
-        </activity-alias>
-        {% endif %}
-
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity2"
-             android:theme="@style/TabbedModeTheme"
-             android:exported="false"
-             android:windowSoftInputMode="adjustResize"
-             android:taskAffinity="{{ manifest_package }}.ChromeTabbedActivity2"
-             android:launchMode="singleTask"
-             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode"
-             android:hardwareAccelerated="false"
-             {{ self.supports_video_persistence() }}
-             >
+            android:theme="@style/TabbedModeTheme"
+            android:exported="false"
+            android:taskAffinity="{{ manifest_package }}.ChromeTabbedActivity2"
+            android:launchMode="singleTask"
+            {{ self.chrome_activity_common() }}
+            {{ self.supports_video_persistence() }}>
         </activity>
         <activity android:name="org.chromium.chrome.browser.multiwindow.MultiInstanceChromeTabbedActivity"
             android:theme="@style/TabbedModeTheme"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode"
-            android:hardwareAccelerated="false">
+            {{ self.chrome_activity_common() }}>
         </activity>
 
         <activity android:name="org.chromium.chrome.browser.sync.ui.PassphraseActivity"
@@ -532,11 +482,9 @@ by a child template that "extends" this file.
             android:theme="@style/WebappTheme"
             android:label="@string/webapp_activity_title"
             android:documentLaunchMode="intoExisting"
-            android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
-            android:hardwareAccelerated="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            {{ self.supports_video_persistence() }} >
+            {{ self.supports_video_persistence() }}
+            {{ self.chrome_activity_common() }}>
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.webapps.WebappActivity"
             android:targetActivity="org.chromium.chrome.browser.webapps.WebappActivity"
@@ -549,12 +497,10 @@ by a child template that "extends" this file.
             android:icon="@mipmap/app_shortcut_icon"
             android:label="@string/webapp_activity_title"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
-            android:hardwareAccelerated="false"
             android:taskAffinity="{{ manifest_package }}.webapps.WebappActivity{{ i }}"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            {{ self.supports_video_persistence() }} >
+            {{ self.supports_video_persistence() }}
+            {{ self.chrome_activity_common() }}>
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.webapps.WebappActivity{{ i }}"
             android:targetActivity="org.chromium.chrome.browser.webapps.WebappActivity{{ i }}"
@@ -566,13 +512,10 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.webapps.WebApkActivity"
             android:theme="@style/WebappTheme"
             android:label="@string/webapp_activity_title"
-            android:launchMode="singleTop"
             android:documentLaunchMode="intoExisting"
-            android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
-            android:hardwareAccelerated="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            {{ self.supports_video_persistence() }} >
+            {{ self.supports_video_persistence() }}
+            {{ self.chrome_activity_common() }}>
         </activity>
         {% for i in range(10) %}
         <activity android:name="org.chromium.chrome.browser.webapps.WebApkActivity{{ i }}"
@@ -580,12 +523,10 @@ by a child template that "extends" this file.
             android:icon="@mipmap/app_shortcut_icon"
             android:label="@string/webapp_activity_title"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
-            android:hardwareAccelerated="false"
             android:taskAffinity="{{ manifest_package }}.webapps.WebApkActivity{{ i }}"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            {{ self.supports_video_persistence() }} >
+            {{ self.supports_video_persistence() }}
+            {{ self.chrome_activity_common() }}>
         </activity>
         {% endfor %}
 
@@ -656,6 +597,22 @@ by a child template that "extends" this file.
             </intent-filter>
         </activity>
 
+        <!-- This activity is to expose the PhysicalWeb Share option via the generic Android share action. -->
+        <activity
+            android:name="org.chromium.chrome.browser.physicalweb.PhysicalWebShareEntryActivity"
+            android:label="@string/physical_web_share_entry_title"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize" >
+        </activity>
+
+        <!-- Service for Broadcasting a Physical Web URL -->
+        <service
+            android:name="org.chromium.chrome.browser.physicalweb.PhysicalWebBroadcastService"
+            android:exported="false">
+        </service>
+
         <!-- Providers for chrome data. -->
         <provider android:name="org.chromium.chrome.browser.provider.ChromeBrowserProvider"
             android:authorities="{{ manifest_package }}.ChromeBrowserProvider;{{ manifest_package }}.browser;{{ manifest_package }}"
@@ -717,6 +674,36 @@ by a child template that "extends" this file.
             android:exported="false" />
         <receiver android:name="org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProxy"
             android:exported="false" />
+
+        {% if channel in ['canary', 'default'] %}
+        <!-- Search widget -->
+        <receiver android:name="org.chromium.chrome.browser.searchwidget.SearchWidgetProvider">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="org.chromium.chrome.browser.searchwidget.START_SEARCH_ACTIVITY" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="org.chromium.chrome.browser.searchwidget.UPDATE_ALL_WIDGETS" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                       android:resource="@xml/search_widget_info" />
+        </receiver>
+
+        <!-- Search Activity -->
+        <activity android:name="org.chromium.chrome.browser.searchwidget.SearchActivity"
+            android:theme="@style/SearchActivityTheme"
+            android:label="Search"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:clearTaskOnLaunch="true"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:hardwareAccelerated="false" />
+        {% endif %}
 
         <!-- Receiver for GCM messages. -->
         <receiver android:name="com.google.android.gms.gcm.GcmReceiver"

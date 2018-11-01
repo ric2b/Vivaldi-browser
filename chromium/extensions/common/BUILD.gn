@@ -19,11 +19,20 @@ source_set("common_constants") {
 if (enable_extensions) {
   mojom("mojo") {
     sources = [
+      "extension_unpacker.mojom",
+      "manifest_parser.mojom",
+      "mojo/app_window.mojom",
       "mojo/keep_alive.mojom",
     ]
+
     if (proprietary_codecs && enable_wifi_display) {
       sources += [ "mojo/wifi_display_session_service.mojom" ]
     }
+
+    public_deps = [
+      "//mojo/common:common_custom_types",
+      "//url/mojo:url_mojom_gurl",
+    ]
   }
 
   # This must be a static library because extensions common depends on
@@ -92,6 +101,7 @@ if (enable_extensions) {
       "extension_urls.cc",
       "extension_urls.h",
       "extension_utility_messages.h",
+      "extension_utility_types.h",
       "extensions_aliases.cc",
       "extensions_aliases.h",
       "extensions_client.cc",
@@ -170,6 +180,8 @@ if (enable_extensions) {
       "manifest_handlers/options_page_info.h",
       "manifest_handlers/permissions_parser.cc",
       "manifest_handlers/permissions_parser.h",
+      "manifest_handlers/plugins_handler.cc",
+      "manifest_handlers/plugins_handler.h",
       "manifest_handlers/requirements_info.cc",
       "manifest_handlers/requirements_info.h",
       "manifest_handlers/sandboxed_page_info.cc",
@@ -180,6 +192,8 @@ if (enable_extensions) {
       "manifest_handlers/web_accessible_resources_info.h",
       "manifest_handlers/webview_info.cc",
       "manifest_handlers/webview_info.h",
+      "manifest_location_param_traits.cc",
+      "manifest_location_param_traits.h",
       "manifest_url_handlers.cc",
       "manifest_url_handlers.h",
       "message_bundle.cc",
@@ -257,6 +271,8 @@ if (enable_extensions) {
     public_deps = [
       ":common_constants",
       ":mojo",
+      "//content/public/common",
+      "//ipc",
       "//skia",
     ]
 
@@ -269,14 +285,12 @@ if (enable_extensions) {
       "//chrome:resources",
       "//components/crx_file",
       "//components/url_matcher",
-      "//content/public/common",
       "//crypto",
       "//device/bluetooth",
       "//device/usb",
       "//extensions:extensions_resources",
       "//extensions/common/api",
       "//extensions/strings",
-      "//ipc",
       "//net",
       "//third_party/boringssl",
       "//third_party/icu",

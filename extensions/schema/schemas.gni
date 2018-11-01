@@ -9,6 +9,7 @@ sources = [
   "autoupdate.json",
   "bookmarks_private.json",
   "browser_action_utilities.json",
+  "devtools_private.json",
   "editcommand.json",
   "history_private.json",
   "import_data.json",
@@ -32,4 +33,7 @@ uncompiled_sources = []
 root_namespace = "extensions::vivaldi::%(namespace)s"
 schema_include_rules =
     "//vivaldi/extensions/api:extensions::vivaldi::%(namespace)s"
-schema_dependencies = [ "//third_party/WebKit/public:blink_headers" ]
+schema_dependencies = [
+  "//crypto:crypto",
+  "//third_party/WebKit/public:blink_headers",
+]

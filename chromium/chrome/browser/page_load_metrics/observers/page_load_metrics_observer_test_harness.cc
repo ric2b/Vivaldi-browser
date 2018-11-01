@@ -12,8 +12,10 @@
 #include "chrome/browser/page_load_metrics/page_load_metrics_embedder_interface.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/common/page_load_metrics/page_load_metrics_messages.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/web_contents_tester.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 
@@ -137,15 +139,31 @@ void PageLoadMetricsObserverTestHarness::SimulateTimingAndMetadataUpdate(
 
 void PageLoadMetricsObserverTestHarness::SimulateLoadedResource(
     const ExtraRequestInfo& info) {
-  observer_->OnRequestComplete(
-      content::GlobalRequestID(), content::RESOURCE_TYPE_SCRIPT,
-      info.was_cached, info.data_reduction_proxy_used, info.raw_body_bytes,
-      info.original_network_content_length, base::TimeTicks::Now());
+  observer_->OnRequestComplete(content::GlobalRequestID(),
+                               content::RESOURCE_TYPE_SCRIPT, info.was_cached,
+                               info.data_reduction_proxy_data
+                                   ? info.data_reduction_proxy_data->DeepCopy()
+                                   : nullptr,
+                               info.raw_body_bytes,
+                               info.original_network_content_length,
+                               base::TimeTicks::Now());
 }
 
 void PageLoadMetricsObserverTestHarness::SimulateInputEvent(
     const blink::WebInputEvent& event) {
   observer_->OnInputEvent(event);
+}
+
+void PageLoadMetricsObserverTestHarness::SimulateAppEnterBackground() {
+  observer_->FlushMetricsOnAppEnterBackground();
+}
+
+void PageLoadMetricsObserverTestHarness::SimulateMediaPlayed() {
+  content::WebContentsObserver::MediaPlayerInfo video_type(
+      true /* in_has_video*/);
+  content::RenderFrameHost* render_frame_host = web_contents()->GetMainFrame();
+  observer_->MediaStartedPlaying(video_type,
+                                 std::make_pair(render_frame_host, 0));
 }
 
 const base::HistogramTester&

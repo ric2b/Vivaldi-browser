@@ -1,0 +1,188 @@
+{
+  settings: {
+    export_symbol: "CORE_EXPORT",
+    include_path: "core/inspector",
+    includes: [
+      "core/animation/Animation.h",
+      "core/dom/CharacterData.h",
+      "core/dom/PseudoElement.h",
+      "core/html/HTMLSlotElement.h",
+      "core/probe/CoreProbes.h",
+    ],
+  },
+  observers: {
+    Animation: {
+      probes: [
+        "animationPlayStateChanged",
+        "didClearDocumentOfWindowObject",
+        "didCreateAnimation",
+      ]
+    },
+    ApplicationCache: {
+      probes: [
+        "networkStateChanged",
+        "updateApplicationCacheStatus",
+      ]
+    },
+    CSS: {
+      probes: [
+        "activeStyleSheetsUpdated",
+        "documentDetached",
+        "fontsUpdated",
+        "forcePseudoState",
+        "mediaQueryResultChanged",
+      ]
+    },
+    DOM: {
+      probes: [
+        "characterDataModified",
+        "didCommitLoad",
+        "didInsertDOMNode",
+        "didInvalidateStyleAttr",
+        "didModifyDOMAttr",
+        "didPerformElementShadowDistribution",
+        "didPerformSlotDistribution",
+        "didPushShadowRoot",
+        "didRemoveDOMAttr",
+        "domContentLoadedEventFired",
+        "frameDocumentUpdated",
+        "pseudoElementCreated",
+        "pseudoElementDestroyed",
+        "willModifyDOMAttr",
+        "willPopShadowRoot",
+        "willRemoveDOMNode",
+      ]
+    },
+    DOMDebugger: {
+      probes: [
+        "breakableLocation",
+        "didCreateCanvasContext",
+        "didFireWebGLError",
+        "didFireWebGLErrorOrWarning",
+        "didFireWebGLWarning",
+        "didInsertDOMNode",
+        "didInvalidateStyleAttr",
+        "ExecuteScript",
+        "scriptExecutionBlockedByCSP",
+        "UserCallback",
+        "willInsertDOMNode",
+        "willModifyDOMAttr",
+        "willRemoveDOMNode",
+        "willSendXMLHttpOrFetchNetworkRequest",
+      ]
+    },
+    LayerTree: {
+      probes: [
+        "didPaint",
+        "layerTreeDidChange",
+      ]
+    },
+    Log: {
+      probes: [
+        "consoleMessageAdded",
+      ]
+    },
+    Network: {
+      class: "InspectorNetworkAgent",
+      probes: [
+        "applyUserAgentOverride",
+        "detachClientRequest",
+        "didBlockRequest",
+        "didChangeResourcePriority",
+        "didCloseWebSocket",
+        "didCommitLoad",
+        "didCreateWebSocket",
+        "didFailFetch",
+        "didFailLoading",
+        "didFailXHRLoading",
+        "didFinishEventSourceRequest",
+        "didFinishFetch",
+        "didFinishLoading",
+        "didFinishXHRLoading",
+        "didReceiveCORSRedirectResponse",
+        "didReceiveData",
+        "didReceiveEncodedDataLength",
+        "didReceiveResourceResponse",
+        "didReceiveScriptResponse",
+        "didReceiveWebSocketFrame",
+        "didReceiveWebSocketFrameError",
+        "didReceiveWebSocketHandshakeResponse",
+        "didSendWebSocketFrame",
+        "documentThreadableLoaderFailedToStartLoadingForClient",
+        "documentThreadableLoaderStartedLoadingForClient",
+        "frameClearedScheduledClientNavigation",
+        "frameClearedScheduledNavigation",
+        "frameScheduledClientNavigation",
+        "frameScheduledNavigation",
+        "markResourceAsCached",
+        "scriptImported",
+        "shouldBlockRequest",
+        "shouldForceCORSPreflight",
+        "willDispatchEventSourceEvent",
+        "willLoadXHR",
+        "willSendEventSourceRequest",
+        "willSendRequest",
+        "willSendWebSocketHandshakeRequest",
+        "willStartFetch",
+      ]
+    },
+    Page: {
+      probes: [
+        "didChangeViewport",
+        "didClearDocumentOfWindowObject",
+        "didCommitLoad",
+        "didResizeMainFrame",
+        "didRunJavaScriptDialog",
+        "domContentLoadedEventFired",
+        "frameAttachedToParent",
+        "frameClearedScheduledNavigation",
+        "frameDetachedFromParent",
+        "frameScheduledNavigation",
+        "frameStartedLoading",
+        "frameStoppedLoading",
+        "loadEventFired",
+        "RecalculateStyle",
+        "UpdateLayout",
+        "willRunJavaScriptDialog",
+        "windowCreated",
+      ]
+    },
+    Performance: {
+      class: "PerformanceMonitor",
+      include_path: "core/frame",
+      probes: [
+        "CallFunction",
+        "documentWriteFetchScript",
+        "ExecuteScript",
+        "RecalculateStyle",
+        "UpdateLayout",
+        "UserCallback",
+      ]
+    },
+    TraceEvents: {
+      class: "InspectorTraceEvents",
+      probes: [
+        "CallFunction",
+        "didFailLoading",
+        "didFinishLoading",
+        "didReceiveData",
+        "didReceiveResourceResponse",
+        "ParseHTML",
+        "willSendRequest",
+      ]
+    },
+    Tracing: {
+      probes: [
+        "frameStartedLoading",
+        "frameStoppedLoading",
+      ]
+    },
+    Worker: {
+      probes: [
+        "didStartWorker",
+        "shouldWaitForDebuggerOnWorkerStart",
+        "workerTerminated",
+      ]
+    },
+  }
+}

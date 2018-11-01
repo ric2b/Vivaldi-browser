@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/url_formatter/url_formatter.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #import "ios/web/public/web_client.h"
@@ -47,8 +48,7 @@ NavigationItemImpl::NavigationItemImpl()
       is_created_from_hash_change_(false),
       should_skip_repost_form_confirmation_(false),
       navigation_initiation_type_(web::NavigationInitiationType::NONE),
-      is_unsafe_(false),
-      facade_delegate_(nullptr) {}
+      is_unsafe_(false) {}
 
 NavigationItemImpl::~NavigationItemImpl() {
 }
@@ -76,17 +76,7 @@ NavigationItemImpl::NavigationItemImpl(const NavigationItemImpl& item)
       post_data_([item.post_data_ copy]),
       navigation_initiation_type_(item.navigation_initiation_type_),
       is_unsafe_(item.is_unsafe_),
-      cached_display_title_(item.cached_display_title_),
-      facade_delegate_(nullptr) {}
-
-void NavigationItemImpl::SetFacadeDelegate(
-    std::unique_ptr<NavigationItemFacadeDelegate> facade_delegate) {
-  facade_delegate_ = std::move(facade_delegate);
-}
-
-NavigationItemFacadeDelegate* NavigationItemImpl::GetFacadeDelegate() const {
-  return facade_delegate_.get();
-}
+      cached_display_title_(item.cached_display_title_) {}
 
 int NavigationItemImpl::GetUniqueID() const {
   return unique_id_;
@@ -155,23 +145,8 @@ const base::string16& NavigationItemImpl::GetTitleForDisplay() const {
   if (!cached_display_title_.empty())
     return cached_display_title_;
 
-  // Use the virtual URL first if any, and fall back on using the real URL.
-  base::string16 title;
-  if (!virtual_url_.is_empty()) {
-    title = url_formatter::FormatUrl(virtual_url_);
-  } else if (!url_.is_empty()) {
-    title = url_formatter::FormatUrl(url_);
-  }
-
-  // For file:// URLs use the filename as the title, not the full path.
-  if (url_.SchemeIsFile()) {
-    base::string16::size_type slashpos = title.rfind('/');
-    if (slashpos != base::string16::npos)
-      title = title.substr(slashpos + 1);
-  }
-
-  const size_t kMaxTitleChars = 4 * 1024;
-  gfx::ElideString(title, kMaxTitleChars, &cached_display_title_);
+  cached_display_title_ =
+      NavigationItemImpl::GetDisplayTitleForURL(GetVirtualURL());
   return cached_display_title_;
 }
 
@@ -311,5 +286,37 @@ void NavigationItemImpl::ResetForCommit() {
   // always reset to NONE after the item is committed.
   SetNavigationInitiationType(web::NavigationInitiationType::NONE);
 }
+
+// static
+base::string16 NavigationItemImpl::GetDisplayTitleForURL(const GURL& url) {
+  if (url.is_empty())
+    return base::string16();
+
+  base::string16 title = url_formatter::FormatUrl(url);
+
+  // For file:// URLs use the filename as the title, not the full path.
+  if (url.SchemeIsFile()) {
+    base::string16::size_type slashpos = title.rfind('/');
+    if (slashpos != base::string16::npos)
+      title = title.substr(slashpos + 1);
+  }
+
+  const size_t kMaxTitleChars = 4 * 1024;
+  gfx::ElideString(title, kMaxTitleChars, &title);
+  return title;
+}
+
+#ifndef NDEBUG
+NSString* NavigationItemImpl::GetDescription() const {
+  return [NSString
+      stringWithFormat:
+          @"url:%s originalurl:%s title:%s transition:%d displayState:%@ "
+          @"userAgentType:%s",
+          url_.spec().c_str(), original_request_url_.spec().c_str(),
+          base::UTF16ToUTF8(title_).c_str(), transition_type_,
+          page_display_state_.GetDescription(),
+          GetUserAgentTypeDescription(user_agent_type_).c_str()];
+}
+#endif
 
 }  // namespace web

@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/base/iovec.h"
 #include "net/quic/core/frames/quic_frame.h"
 #include "net/quic/core/quic_ack_listener_interface.h"
@@ -27,6 +26,7 @@
 #include "net/quic/core/quic_versions.h"
 #include "net/quic/platform/api/quic_export.h"
 #include "net/quic/platform/api/quic_socket_address.h"
+#include "net/quic/platform/api/quic_string_piece.h"
 
 namespace net {
 
@@ -64,6 +64,8 @@ struct QUIC_EXPORT_PRIVATE QuicPacketPublicHeader {
   // public flags.
   QuicConnectionId connection_id;
   QuicConnectionIdLength connection_id_length;
+  // TODO(fayang): Remove multipath_flag when deprecating
+  // quic_reloadable_flag_quic_remove_multipath_bit.
   bool multipath_flag;
   bool reset_flag;
   bool version_flag;
@@ -86,7 +88,6 @@ struct QUIC_EXPORT_PRIVATE QuicPacketHeader {
 
   QuicPacketPublicHeader public_header;
   QuicPacketNumber packet_number;
-  QuicPathId path_id;
 };
 
 struct QUIC_EXPORT_PRIVATE QuicPublicResetPacket {
@@ -109,8 +110,8 @@ class QUIC_EXPORT_PRIVATE QuicData {
   QuicData(const char* buffer, size_t length, bool owns_buffer);
   virtual ~QuicData();
 
-  base::StringPiece AsStringPiece() const {
-    return base::StringPiece(data(), length());
+  QuicStringPiece AsStringPiece() const {
+    return QuicStringPiece(data(), length());
   }
 
   const char* data() const { return buffer_; }
@@ -137,8 +138,8 @@ class QUIC_EXPORT_PRIVATE QuicPacket : public QuicData {
              bool includes_diversification_nonce,
              QuicPacketNumberLength packet_number_length);
 
-  base::StringPiece AssociatedData(QuicVersion version) const;
-  base::StringPiece Plaintext(QuicVersion version) const;
+  QuicStringPiece AssociatedData(QuicVersion version) const;
+  QuicStringPiece Plaintext(QuicVersion version) const;
 
   char* mutable_data() { return buffer_; }
 
@@ -212,8 +213,7 @@ class QUIC_EXPORT_PRIVATE QuicReceivedPacket : public QuicEncryptedPacket {
 };
 
 struct QUIC_EXPORT_PRIVATE SerializedPacket {
-  SerializedPacket(QuicPathId path_id,
-                   QuicPacketNumber packet_number,
+  SerializedPacket(QuicPacketNumber packet_number,
                    QuicPacketNumberLength packet_number_length,
                    const char* encrypted_buffer,
                    QuicPacketLength encrypted_length,
@@ -231,7 +231,6 @@ struct QUIC_EXPORT_PRIVATE SerializedPacket {
   //  0: no padding
   //  otherwise: only pad up to num_padding_bytes bytes
   int16_t num_padding_bytes;
-  QuicPathId path_id;
   QuicPacketNumber packet_number;
   QuicPacketNumberLength packet_number_length;
   EncryptionLevel encryption_level;
@@ -239,6 +238,9 @@ struct QUIC_EXPORT_PRIVATE SerializedPacket {
   bool has_stop_waiting;
   TransmissionType transmission_type;
   QuicPacketNumber original_packet_number;
+  // The largest acked of the AckFrame in this packet if has_ack is true,
+  // 0 otherwise.
+  QuicPacketNumber largest_acked;
 
   // Optional notifiers which will be informed when this packet has been ACKed.
   std::list<AckListenerWrapper> listeners;

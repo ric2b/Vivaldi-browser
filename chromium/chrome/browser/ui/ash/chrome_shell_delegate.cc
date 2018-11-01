@@ -10,16 +10,15 @@
 
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
-#include "ash/common/accessibility_delegate.h"
-#include "ash/common/accessibility_types.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
-#include "ash/common/wm/mru_window_tracker.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "ash/accessibility_delegate.h"
+#include "ash/accessibility_types.h"
 #include "ash/content/gpu_support_impl.h"
 #include "ash/shell.h"
+#include "ash/wallpaper/wallpaper_delegate.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -29,6 +28,7 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_url_util.h"
+#include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/chromeos/background/ash_wallpaper_delegate.h"
 #include "chrome/browser/chromeos/display/display_configuration_observer.h"
 #include "chrome/browser/chromeos/display/display_preferences.h"
@@ -69,7 +69,6 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/service_manager_connection.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -88,7 +87,7 @@ void InitAfterFirstSessionStart() {
   // windows can be opened in background while login UI is still active because
   // we currently restore browser windows before login UI is deleted.
   aura::Window::Windows mru_list = ash::WmWindow::ToAuraWindows(
-      ash::WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
+      ash::Shell::Get()->mru_window_tracker()->BuildMruWindowList());
   if (!mru_list.empty())
     mru_list.front()->Focus();
 
@@ -103,10 +102,10 @@ void InitAfterFirstSessionStart() {
 class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
  public:
   AccessibilityDelegateImpl() {
-    ash::WmShell::Get()->AddShellObserver(AccessibilityManager::Get());
+    ash::Shell::Get()->AddShellObserver(AccessibilityManager::Get());
   }
   ~AccessibilityDelegateImpl() override {
-    ash::WmShell::Get()->RemoveShellObserver(AccessibilityManager::Get());
+    ash::Shell::Get()->RemoveShellObserver(AccessibilityManager::Get());
   }
 
   void ToggleHighContrast() override {
@@ -221,6 +220,26 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
     return AccessibilityManager::Get()->IsFocusHighlightEnabled();
   }
 
+  void SetStickyKeysEnabled(bool enabled) override {
+    DCHECK(AccessibilityManager::Get());
+    return AccessibilityManager::Get()->EnableStickyKeys(enabled);
+  }
+
+  bool IsStickyKeysEnabled() const override {
+    DCHECK(AccessibilityManager::Get());
+    return AccessibilityManager::Get()->IsStickyKeysEnabled();
+  }
+
+  void SetTapDraggingEnabled(bool enabled) override {
+    DCHECK(AccessibilityManager::Get());
+    return AccessibilityManager::Get()->EnableTapDragging(enabled);
+  }
+
+  bool IsTapDraggingEnabled() const override {
+    DCHECK(AccessibilityManager::Get());
+    return AccessibilityManager::Get()->IsTapDraggingEnabled();
+  }
+
   void SetSelectToSpeakEnabled(bool enabled) override {
     DCHECK(AccessibilityManager::Get());
     AccessibilityManager::Get()->SetSelectToSpeakEnabled(enabled);
@@ -318,6 +337,16 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
 
   ash::AccessibilityAlert GetLastAccessibilityAlert() override {
     return ash::A11Y_ALERT_NONE;
+  }
+
+  void OnTwoFingerTouchStart() override {
+    DCHECK(AccessibilityManager::Get());
+    AccessibilityManager::Get()->OnTwoFingerTouchStart();
+  }
+
+  void OnTwoFingerTouchStop() override {
+    DCHECK(AccessibilityManager::Get());
+    AccessibilityManager::Get()->OnTwoFingerTouchStop();
   }
 
   bool ShouldToggleSpokenFeedbackViaTouch() override {
@@ -423,6 +452,10 @@ bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
 }
 
 void ChromeShellDelegate::PreInit() {
+  // TODO: port to mus. http://crbug.com/678949.
+  if (chromeos::GetAshConfig() != ash::Config::CLASSIC)
+    return;
+
   bool first_run_after_boot = base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kFirstExecAfterBoot);
   chromeos::LoadDisplayPreferences(first_run_after_boot);

@@ -31,12 +31,12 @@
 #ifndef DrawLooperBuilder_h
 #define DrawLooperBuilder_h
 
+#include <memory>
 #include "platform/PlatformExport.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/effects/SkLayerDrawLooper.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
-#include <memory>
 
 class SkDrawLooper;
 
@@ -53,27 +53,27 @@ class PLATFORM_EXPORT DrawLooperBuilder final {
 
  public:
   enum ShadowTransformMode {
-    ShadowRespectsTransforms,
-    ShadowIgnoresTransforms
+    kShadowRespectsTransforms,
+    kShadowIgnoresTransforms
   };
-  enum ShadowAlphaMode { ShadowRespectsAlpha, ShadowIgnoresAlpha };
+  enum ShadowAlphaMode { kShadowRespectsAlpha, kShadowIgnoresAlpha };
 
   DrawLooperBuilder();
   ~DrawLooperBuilder();
 
   // Creates the SkDrawLooper and passes ownership to the caller. The builder
   // should not be used any more after calling this method.
-  sk_sp<SkDrawLooper> detachDrawLooper();
+  sk_sp<SkDrawLooper> DetachDrawLooper();
 
-  void addUnmodifiedContent();
-  void addShadow(const FloatSize& offset,
+  void AddUnmodifiedContent();
+  void AddShadow(const FloatSize& offset,
                  float blur,
                  const Color&,
-                 ShadowTransformMode = ShadowRespectsTransforms,
-                 ShadowAlphaMode = ShadowRespectsAlpha);
+                 ShadowTransformMode = kShadowRespectsTransforms,
+                 ShadowAlphaMode = kShadowRespectsAlpha);
 
  private:
-  SkLayerDrawLooper::Builder m_skDrawLooperBuilder;
+  SkLayerDrawLooper::Builder sk_draw_looper_builder_;
 };
 
 }  // namespace blink

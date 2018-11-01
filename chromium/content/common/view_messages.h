@@ -78,23 +78,23 @@
 #define IPC_MESSAGE_START ViewMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebDeviceEmulationParams::ScreenPosition,
-                          blink::WebDeviceEmulationParams::ScreenPositionLast)
+                          blink::WebDeviceEmulationParams::kScreenPositionLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebMediaPlayerAction::Type,
-                          blink::WebMediaPlayerAction::Type::TypeLast)
+                          blink::WebMediaPlayerAction::Type::kTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPluginAction::Type,
-                          blink::WebPluginAction::Type::TypeLast)
+                          blink::WebPluginAction::Type::kTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPopupType,
-                          blink::WebPopupType::WebPopupTypeLast)
+                          blink::WebPopupType::kWebPopupTypeLast)
 // TODO(dcheng): Update WebScreenOrientationType to have a "Last" enum member.
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebScreenOrientationType,
-                              blink::WebScreenOrientationUndefined,
-                              blink::WebScreenOrientationLandscapeSecondary)
+                              blink::kWebScreenOrientationUndefined,
+                              blink::kWebScreenOrientationLandscapeSecondary)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebWorkerCreationError,
-                          blink::WebWorkerCreationErrorLast)
+                          blink::kWebWorkerCreationErrorLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTextDirection,
-                          blink::WebTextDirection::WebTextDirectionLast)
+                          blink::WebTextDirection::kWebTextDirectionLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebDisplayMode,
-                          blink::WebDisplayMode::WebDisplayModeLast)
+                          blink::WebDisplayMode::kWebDisplayModeLast)
 IPC_ENUM_TRAITS(content::FaviconURL::IconType)
 IPC_ENUM_TRAITS(content::MenuItem::Type)
 IPC_ENUM_TRAITS_MAX_VALUE(content::NavigationGesture,
@@ -120,9 +120,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(ui::TextInputType, ui::TEXT_INPUT_TYPE_MAX)
 #if defined(OS_MACOSX)
 IPC_ENUM_TRAITS_MAX_VALUE(
     blink::WebScrollbarButtonsPlacement,
-    blink::WebScrollbarButtonsPlacement::WebScrollbarButtonsPlacementLast)
+    blink::WebScrollbarButtonsPlacement::kWebScrollbarButtonsPlacementLast)
 
-IPC_ENUM_TRAITS_MAX_VALUE(blink::ScrollerStyle, blink::ScrollerStyleOverlay)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::ScrollerStyle, blink::kScrollerStyleOverlay)
 #endif
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebMediaPlayerAction)
@@ -153,16 +153,16 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebSize)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebDeviceEmulationParams)
-  IPC_STRUCT_TRAITS_MEMBER(screenPosition)
-  IPC_STRUCT_TRAITS_MEMBER(screenSize)
-  IPC_STRUCT_TRAITS_MEMBER(viewPosition)
-  IPC_STRUCT_TRAITS_MEMBER(deviceScaleFactor)
-  IPC_STRUCT_TRAITS_MEMBER(viewSize)
-  IPC_STRUCT_TRAITS_MEMBER(fitToView)
+  IPC_STRUCT_TRAITS_MEMBER(screen_position)
+  IPC_STRUCT_TRAITS_MEMBER(screen_size)
+  IPC_STRUCT_TRAITS_MEMBER(view_position)
+  IPC_STRUCT_TRAITS_MEMBER(device_scale_factor)
+  IPC_STRUCT_TRAITS_MEMBER(view_size)
+  IPC_STRUCT_TRAITS_MEMBER(fit_to_view)
   IPC_STRUCT_TRAITS_MEMBER(offset)
   IPC_STRUCT_TRAITS_MEMBER(scale)
-  IPC_STRUCT_TRAITS_MEMBER(screenOrientationAngle)
-  IPC_STRUCT_TRAITS_MEMBER(screenOrientationType)
+  IPC_STRUCT_TRAITS_MEMBER(screen_orientation_angle)
+  IPC_STRUCT_TRAITS_MEMBER(screen_orientation_type)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::ScreenInfo)
@@ -579,10 +579,18 @@ IPC_MESSAGE_ROUTED1(ViewMsg_PpapiBrokerPermissionResult,
                     bool /* result */)
 #endif
 
-// An acknowledge to ViewHostMsg_MultipleTargetsTouched to notify the renderer
-// process to release the magnified image.
+// An acknowledgement to ViewHostMsg_ShowDisambiguationPopup to notify the
+// renderer process to release the magnified image.
 IPC_MESSAGE_ROUTED1(ViewMsg_ReleaseDisambiguationPopupBitmap,
                     cc::SharedBitmapId /* id */)
+
+// If the ViewHostMsg_ShowDisambiguationPopup resulted in the user tapping
+// inside the popup, instruct the renderer to generate a synthetic tap at that
+// offset.
+IPC_MESSAGE_ROUTED3(ViewMsg_ResolveTapDisambiguation,
+                    double /* timestamp_seconds */,
+                    gfx::Point /* tap_viewport_offset */,
+                    bool /* is_long_press */)
 
 // Fetches complete rendered content of a web page as plain text.
 IPC_MESSAGE_ROUTED0(ViewMsg_GetRenderedText)
@@ -596,14 +604,6 @@ IPC_MESSAGE_ROUTED3(ViewMsg_UpdateBrowserControlsState,
                     bool /* animate */)
 
 #endif
-
-// Sent by browser to tell renderer compositor that some resources that were
-// given to the browser in a swap are not being used anymore.
-// If this message is in response to a swap then is_swap_ack is set.
-IPC_MESSAGE_ROUTED3(ViewMsg_ReclaimCompositorResources,
-                    uint32_t /* compositor_frame_sink_id */,
-                    bool /* is_swap_ack */,
-                    cc::ReturnedResourceArray /* resources */)
 
 IPC_MESSAGE_ROUTED0(ViewMsg_SelectWordAroundCaret)
 
@@ -805,11 +805,14 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_UpdateZoomLimits,
                     int /* minimum_percent */,
                     int /* maximum_percent */)
 
-IPC_MESSAGE_ROUTED3(
-    ViewHostMsg_SwapCompositorFrame,
-    uint32_t /* compositor_frame_sink_id */,
-    cc::CompositorFrame /* frame */,
-    std::vector<IPC::Message> /* messages_to_deliver_with_frame */)
+IPC_MESSAGE_ROUTED2(ViewHostMsg_FrameSwapMessages,
+                    uint32_t /* frame_token */,
+                    std::vector<IPC::Message> /* messages */)
+
+// Sent if the BeginFrame did not cause a SwapCompositorFrame (e.g. because no
+// updates were required or because it was aborted in the renderer).
+IPC_MESSAGE_ROUTED1(ViewHostMsg_BeginFrameDidNotSwap,
+                    cc::BeginFrameAck /* ack */)
 
 // Send back a string to be recorded by UserMetrics.
 IPC_MESSAGE_CONTROL1(ViewHostMsg_UserMetricsRecordAction,
@@ -871,21 +874,10 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_MoveValidationMessage,
 // after the frame widget has painted something.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_DidFirstVisuallyNonEmptyPaint)
 
-// Send after a paint happens after any page commit, including a blank one.
-// TODO(kenrb): This, and all ViewHostMsg_* messages that actually pertain to
-// RenderWidget(Host), should be renamed to WidgetHostMsg_*.
-// See https://crbug.com/537793.
-IPC_MESSAGE_ROUTED0(ViewHostMsg_DidFirstPaintAfterLoad)
-
 // Sent in reply to ViewMsg_WaitForNextFrameForTests.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_WaitForNextFrameForTests_ACK)
 
 #if defined(OS_ANDROID)
-// Start an android intent with the given URI.
-IPC_MESSAGE_ROUTED2(ViewHostMsg_StartContentIntent,
-                    GURL /* content_url */,
-                    bool /* is_main_frame */)
-
 // Notifies that an unhandled tap has occurred at the specified x,y position
 // and that the UI may need to be triggered.
 IPC_MESSAGE_ROUTED2(ViewHostMsg_ShowUnhandledTapUIIfNeeded,

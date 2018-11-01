@@ -2,24 +2,27 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://bookmarks/folder_node.html">
+<link rel="import" href="chrome://bookmarks/store_client.html">
 
 <dom-module id="bookmarks-sidebar">
   <template>
     <style>
       :host {
         display: block;
+        overflow-x: hidden;
+        overflow-y: auto;
         padding-top: 8px;
+        user-select: none;
       }
 
       #folder-tree {
-        -webkit-padding-start: 24px;
+        -webkit-padding-start: 3px;
       }
     </style>
 
     <div id="folder-tree">
       <template is="dom-repeat" items="[[rootFolders]]">
-        <bookmarks-folder-node item="[[item]]"
-            is-selected-folder="[[item.isSelectedFolder]]">
+        <bookmarks-folder-node item-id="[[item]]" depth="0">
         </bookmarks-folder-node>
       </template>
     </div>

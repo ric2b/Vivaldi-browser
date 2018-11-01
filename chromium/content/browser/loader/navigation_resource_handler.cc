@@ -75,11 +75,14 @@ void NavigationResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
-  DCHECK(core_);
   DCHECK(!has_controller());
 
-  // TODO(davidben): Perform a CSP check here, and anything else that would have
-  // been done renderer-side.
+  // The UI thread already cancelled the navigation. Do not proceed.
+  if (!core_) {
+    controller->CancelAndIgnore();
+    return;
+  }
+
   NetLogObserver::PopulateResponseInfo(request(), response);
   response->head.encoded_data_length = request()->GetTotalReceivedBytes();
   core_->NotifyRequestRedirected(redirect_info, response);
@@ -90,8 +93,13 @@ void NavigationResourceHandler::OnRequestRedirected(
 void NavigationResourceHandler::OnResponseStarted(
     ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
-  DCHECK(core_);
   DCHECK(!has_controller());
+
+  // The UI thread already cancelled the navigation. Do not proceed.
+  if (!core_) {
+    controller->CancelAndIgnore();
+    return;
+  }
 
   ResourceRequestInfoImpl* info = GetRequestInfo();
 
@@ -154,11 +162,13 @@ void NavigationResourceHandler::OnWillStart(
   controller->Resume();
 }
 
-bool NavigationResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
-                                           int* buf_size) {
+void NavigationResourceHandler::OnWillRead(
+    scoped_refptr<net::IOBuffer>* buf,
+    int* buf_size,
+    std::unique_ptr<ResourceController> controller) {
   DCHECK(!has_controller());
   writer_.OnWillRead(buf, buf_size, -1);
-  return true;
+  controller->Resume();
 }
 
 void NavigationResourceHandler::OnReadCompleted(

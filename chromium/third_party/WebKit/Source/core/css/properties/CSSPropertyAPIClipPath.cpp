@@ -12,12 +12,13 @@ namespace blink {
 
 const CSSValue* CSSPropertyAPIClipPath::parseSingleValue(
     CSSParserTokenRange& range,
-    const CSSParserContext* context) {
-  if (range.peek().id() == CSSValueNone)
-    return CSSPropertyParserHelpers::consumeIdent(range);
-  if (CSSURIValue* url = CSSPropertyParserHelpers::consumeUrl(range, context))
+    const CSSParserContext& context,
+    CSSPropertyID) {
+  if (range.Peek().Id() == CSSValueNone)
+    return CSSPropertyParserHelpers::ConsumeIdent(range);
+  if (CSSURIValue* url = CSSPropertyParserHelpers::ConsumeUrl(range, &context))
     return url;
-  return CSSPropertyShapeUtils::consumeBasicShape(range, context);
+  return CSSPropertyShapeUtils::ConsumeBasicShape(range, &context);
 }
 
 }  // namespace blink

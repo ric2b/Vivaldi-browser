@@ -7,8 +7,9 @@
 
 #include "core/dom/AnimationWorkletProxyClient.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Noncopyable.h"
 #include "web/CompositorAnimator.h"
-#include "wtf/Noncopyable.h"
+#include "web/CompositorProxyClientImpl.h"
 
 namespace blink {
 
@@ -21,7 +22,8 @@ class CompositorMutatorImpl;
 // This is constructed on the main thread but it is used in the worklet backing
 // thread i.e., compositor thread.
 class AnimationWorkletProxyClientImpl final
-    : public AnimationWorkletProxyClient,
+    : public GarbageCollectedFinalized<AnimationWorkletProxyClientImpl>,
+      public AnimationWorkletProxyClient,
       public CompositorAnimator {
   WTF_MAKE_NONCOPYABLE(AnimationWorkletProxyClientImpl);
   USING_GARBAGE_COLLECTED_MIXIN(AnimationWorkletProxyClientImpl);
@@ -32,16 +34,13 @@ class AnimationWorkletProxyClientImpl final
 
   // CompositorAnimator:
   // This method is invoked in compositor thread
-  bool mutate(double monotonicTimeNow,
+  bool Mutate(double monotonic_time_now,
               CompositorMutableStateProvider*) override;
 
-  // CompositorProxyClient:
-  void registerCompositorProxy(CompositorProxy*) override;
-  void unregisterCompositorProxy(CompositorProxy*) override;
-
  private:
-  CrossThreadPersistent<CompositorMutatorImpl> m_mutator;
-  HeapHashSet<WeakMember<CompositorProxy>> m_proxies;
+  CrossThreadPersistent<CompositorMutatorImpl> mutator_;
+
+  CrossThreadPersistent<CompositorProxyClientImpl> compositor_proxy_client_;
 };
 
 }  // namespace blink

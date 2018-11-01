@@ -942,6 +942,11 @@ void BookmarkChangeProcessor::SetSyncNodeMetaInfo(
     for (BookmarkNode::MetaInfoMap::const_iterator it = meta_info_map->begin();
         it != meta_info_map->end(); ++it) {
       sync_pb::MetaInfo* meta_info = specifics.add_meta_info();
+      if (it->first == "Thumbnail") {
+        // Never sync the Thumbnail key as it's not relevant in the receiving
+        // end.
+        continue;
+      }
       meta_info->set_key(it->first);
       meta_info->set_value(it->second);
     }

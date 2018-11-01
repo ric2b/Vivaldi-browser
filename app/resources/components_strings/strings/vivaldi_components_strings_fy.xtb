@@ -3,43 +3,66 @@
 <translationbundle lang="fy">
 <translation id="1152921474424827756">In eksimplaar yn it <ph name="BEGIN_LINK" />lytsûnthâld<ph name="END_LINK" /> fan <ph name="URL" /> iepenje</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat de ferbining ûnferwachts ferbrutsen.</translation>
+<translation id="1161325031994447685">Meitsje op 'e nei ferbining mei Wi-Fi</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Besykje jo koekjes op te romjen<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Oer dizze ferzje</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hat gjin gegevens stjoerd.</translation>
 <translation id="1506687042165942984">In bewarre (ferâldere) kopy fan dizze side sjen litte.</translation>
 <translation id="1559528461873125649">Triem of triemtafel bestiet net</translation>
+<translation id="1640244768702815859">Besykje <ph name="BEGIN_LINK" />de thússide fan de webstee te besykjen<ph name="END_LINK" />.</translation>
+<translation id="1645368109819982629">Net stipe protokol</translation>
 <translation id="1710259589646384581">Bestjoeringssysteem</translation>
 <translation id="1728677426644403582">Jo besjogge de boarne fan in webstee</translation>
+<translation id="1734878702283171397">Besykje kontakt op te nimmen mei de systeembehearder.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Besykje it útfieren fan de Oplosser foar netwurk<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">Gean nei <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Bedoele jo <ph name="LINK" />?</translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolearje de proksy en de brânmuorre<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">De webstee kin gjin feilige ferbining ferskaffe</translation>
+<translation id="2230458221926704099">Reparearje jo ferbining mei help fan de <ph name="BEGIN_LINK" />diagnose app<ph name="END_LINK" /></translation>
+<translation id="224482879335890159">Sykje mei VIvaldi nei <ph name="LINK" /></translation>
 <translation id="2292556288342944218">Jo ynternet tagong is tsjinkeard</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Oplosser foar netwurk útfiere<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> stjoerde in ûnjildige reaksje.</translation>
 <translation id="2609632851001447353">Farianten</translation>
 <translation id="2650446666397867134">Tagong ta de triem is wegere</translation>
 <translation id="2705137772291741111">De bewarre kopy yn it lytsûnthâld fan dizze webstee is net te berikken.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Oplosser foar ferbinings útfiere<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">De ferbining is reset.</translation>
 <translation id="2909946352844186028">In netwurk feroaring is ûntdutsen.</translation>
+<translation id="2948083400971632585">Jo kinne ynstelde ferbining proksy's útskeakelje yn de ynstellings menu.</translation>
 <translation id="3005723025932146533">Bewarre kopy sjen litte</translation>
 <translation id="3093245981617870298">Jo ha gjin ferbining.</translation>
 <translation id="3109728660330352905">Jo ha gjin tastimming om dizze side te besjen.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Besykje it útfieren fan oplosser foar ferbinings<ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">Kontrolearje jo proksy ynstellings of nim kontakt op mei jo netwurkbehearder
  om te hifkjen dat de proksy tsjinner wurket. As jo tinke dat jo gjin proksy tsjinner
 nedich ha: <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3226128629678568754">Druk de ferfarsk knop om de gegevens dy nedich binne om de side te laden op 'e nij te ferstjoeren.</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is op it stuit net berikber.</translation>
 <translation id="3447661539832366887">De eigner fan dit apparaat hat it spultsje dinosaurus útskeakele.</translation>
 <translation id="3586931643579894722">Details ferbergje</translation>
 <translation id="3630155396527302611">As dit programma al op de list stiet as in programma dat tagong hat ta
       it netwurk, helje it dan út de list en heakje it op 'e nij ta.</translation>
 <translation id="3658742229777143148">Revysje</translation>
+<translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrolearje de proksy, brânmourre, en DNS ynstellings<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">As jo in proksy tsjinner brûke...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is tsjinkeard</translation>
 <translation id="4021036232240155012">DNS is in netwurk tsjinst dat in webstee namme omset nei syn ynternet adres.</translation>
+<translation id="4075732493274867456">De kliïnt en tsjinner stypje net in algemiene SSL protokol ferzje of sifer suite.</translation>
+<translation id="4130226655945681476">Kontrolearje de netwurk kabels, modem, en router</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kontrolearje brânmuorre en anty-firus ynstellings<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Besykje it útfieren fan de oplosser foar netwurk<ph name="END_LINK" />.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> hat jo ynloch sertifikaat net akseptearre, of der is net ien ferskaft.</translation>
+<translation id="4506599922270137252">Nim kontakt om mei de systeembehearder</translation>
 <translation id="4522570452068850558">Details</translation>
+<translation id="4558551763791394412">Besykje it útskeakeljen fan jo tafoegings.</translation>
 <translation id="4708268264240856090">Jo ferbining wie ûnderbrutsen</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows oplosser  foar netwurk útfiere<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Utfierber paad</translation>
 <translation id="4764776831041365478">De webstee op <ph name="URL" /> is mooglik tydlik út de loft of permanint ferpleatst nei in oar webadres.</translation>
 <translation id="5023310440958281426">Kontrolearje it belied fan jo behearder</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrolearje it proksy adres<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
 <translation id="5431657950005405462">Jo triem is net fûn</translation>
 <translation id="5452270690849572955">Dizze <ph name="HOST_NAME" /> side koe net fûn wurde</translation>
@@ -48,12 +71,14 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
     Nim kontakt op mei jo netwurkbehearder.</translation>
 <translation id="5510766032865166053">De triem is mooglik ferpleatst of wiske.</translation>
 <translation id="5556459405103347317">Ferfarskje</translation>
+<translation id="5610142619324316209">Kontrolearje jo ferbining</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> hat jo tefolle omlaat.</translation>
 <translation id="5675650730144413517">Dizze webstee wurket net</translation>
 <translation id="5869405914158311789">Dizze webstee is net berikber</translation>
 <translation id="5990559369517809815">Fersiken nei de tsjinner binne tsjinkeard troch in tafoeging.</translation>
 <translation id="6146055958333702838">Kontrolearje de kabels en werstart de routers,modems of oare netwurk
     apparaten dy jo brûke op 'e nij op.</translation>
+<translation id="614940544461990577">Besykje:</translation>
 <translation id="6165508094623778733">Mear ynformaasje</translation>
 <translation id="6203231073485539293">Kontrolearje jo ynternet ferbining</translation>
 <translation id="6305205051461490394"><ph name="URL" /> is net te berikken.</translation>
@@ -61,6 +86,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="6328639280570009161">Besykje netwurk foarsizzing út te skeakeljen</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> wegeret te ferbinen.</translation>
 <translation id="6569060085658103619">Jo besjogge in tafoegings side</translation>
+<translation id="6685834062052613830">Loch út en foltôgje de opset</translation>
 <translation id="6711464428925977395">Der is iet fout mei de proksy tsjinner,of it adres is net goed.</translation>
 <translation id="6757797048963528358">Jo apparaat is gean sliepen.</translation>
 <translation id="6897140037006041989">Brûkers agint</translation>

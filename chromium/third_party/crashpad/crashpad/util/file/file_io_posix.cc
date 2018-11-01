@@ -19,71 +19,58 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <limits>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
-
-namespace {
-
-struct ReadTraits {
-  using VoidBufferType = void*;
-  using CharBufferType = char*;
-  static crashpad::FileOperationResult Operate(int fd,
-                                               CharBufferType buffer,
-                                               size_t size) {
-    return read(fd, buffer, size);
-  }
-};
-
-struct WriteTraits {
-  using VoidBufferType = const void*;
-  using CharBufferType = const char*;
-  static crashpad::FileOperationResult Operate(int fd,
-                                               CharBufferType buffer,
-                                               size_t size) {
-    return write(fd, buffer, size);
-  }
-};
-
-template <typename Traits>
-crashpad::FileOperationResult
-ReadOrWrite(int fd, typename Traits::VoidBufferType buffer, size_t size) {
-  typename Traits::CharBufferType buffer_c =
-      reinterpret_cast<typename Traits::CharBufferType>(buffer);
-
-  crashpad::FileOperationResult total_bytes = 0;
-  while (size > 0) {
-    crashpad::FileOperationResult bytes =
-        HANDLE_EINTR(Traits::Operate(fd, buffer_c, size));
-    if (bytes < 0) {
-      return bytes;
-    } else if (bytes == 0) {
-      break;
-    }
-
-    buffer_c += bytes;
-    size -= bytes;
-    total_bytes += bytes;
-  }
-
-  return total_bytes;
-}
-
-}  // namespace
 
 namespace crashpad {
 
 namespace {
 
+struct ReadTraits {
+  using BufferType = void*;
+  static FileOperationResult Operate(int fd, BufferType buffer, size_t size) {
+    return read(fd, buffer, size);
+  }
+};
+
+struct WriteTraits {
+  using BufferType = const void*;
+  static FileOperationResult Operate(int fd, BufferType buffer, size_t size) {
+    return write(fd, buffer, size);
+  }
+};
+
+template <typename Traits>
+FileOperationResult ReadOrWrite(int fd,
+                                typename Traits::BufferType buffer,
+                                size_t size) {
+  constexpr size_t kMaxReadWriteSize =
+      static_cast<size_t>(std::numeric_limits<ssize_t>::max());
+  const size_t requested_bytes = std::min(size, kMaxReadWriteSize);
+
+  FileOperationResult transacted_bytes =
+      HANDLE_EINTR(Traits::Operate(fd, buffer, requested_bytes));
+  if (transacted_bytes < 0) {
+    return -1;
+  }
+
+  DCHECK_LE(static_cast<size_t>(transacted_bytes), requested_bytes);
+  return transacted_bytes;
+}
+
 FileHandle OpenFileForOutput(int rdwr_or_wronly,
                              const base::FilePath& path,
                              FileWriteMode mode,
                              FilePermissions permissions) {
+  int flags = O_NOCTTY | O_CLOEXEC;
+
   DCHECK(rdwr_or_wronly & (O_RDWR | O_WRONLY));
   DCHECK_EQ(rdwr_or_wronly & ~(O_RDWR | O_WRONLY), 0);
-
-  int flags = rdwr_or_wronly;
+  flags |= rdwr_or_wronly;
 
   switch (mode) {
     case FileWriteMode::kReuseOrFail:
@@ -107,18 +94,26 @@ FileHandle OpenFileForOutput(int rdwr_or_wronly,
 
 }  // namespace
 
+namespace internal {
+
+const char kNativeReadFunctionName[] = "read";
+const char kNativeWriteFunctionName[] = "write";
+
+FileOperationResult NativeWriteFile(FileHandle file,
+                                    const void* buffer,
+                                    size_t size) {
+  return ReadOrWrite<WriteTraits>(file, buffer, size);
+}
+
+}  // namespace internal
+
 FileOperationResult ReadFile(FileHandle file, void* buffer, size_t size) {
   return ReadOrWrite<ReadTraits>(file, buffer, size);
 }
 
-FileOperationResult WriteFile(FileHandle file,
-                              const void* buffer,
-                              size_t size) {
-  return ReadOrWrite<WriteTraits>(file, buffer, size);
-}
-
 FileHandle OpenFileForRead(const base::FilePath& path) {
-  return HANDLE_EINTR(open(path.value().c_str(), O_RDONLY));
+  return HANDLE_EINTR(
+      open(path.value().c_str(), O_RDONLY | O_NOCTTY | O_CLOEXEC));
 }
 
 FileHandle OpenFileForWrite(const base::FilePath& path,
@@ -195,6 +190,20 @@ FileOffset LoggingFileSizeByHandle(FileHandle file) {
     return -1;
   }
   return st.st_size;
+}
+
+FileHandle StdioFileHandle(StdioStream stdio_stream) {
+  switch (stdio_stream) {
+    case StdioStream::kStandardInput:
+      return STDIN_FILENO;
+    case StdioStream::kStandardOutput:
+      return STDOUT_FILENO;
+    case StdioStream::kStandardError:
+      return STDERR_FILENO;
+  }
+
+  NOTREACHED();
+  return kInvalidFileHandle;
 }
 
 }  // namespace crashpad

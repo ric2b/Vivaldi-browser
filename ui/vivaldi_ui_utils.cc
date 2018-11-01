@@ -9,6 +9,7 @@
 
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "chrome/browser/ui/browser.h"
@@ -192,6 +193,14 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
     clipped_bitmap.copyTo(&result, kN32_SkColorType);
 #endif
   return result;
+}
+
+Browser* GetBrowserFromWebContents(content::WebContents* web_contents) {
+  DCHECK(web_contents);
+  gfx::NativeWindow window =
+    platform_util::GetTopLevel(web_contents->GetNativeView());
+  DCHECK(window);
+  return chrome::FindBrowserWithWindow(window);
 }
 
 }  // namespace ui_tools

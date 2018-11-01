@@ -4,4 +4,17 @@
 
 #include "core/css/properties/CSSPropertyAPIWebkitBorderSpacing.h"
 
-namespace blink {}  // namespace blink
+#include "core/css/parser/CSSParserContext.h"
+#include "core/css/parser/CSSPropertyParserHelpers.h"
+
+namespace blink {
+
+const CSSValue* CSSPropertyAPIWebkitBorderSpacing::parseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    CSSPropertyID) {
+  return CSSPropertyParserHelpers::ConsumeLength(range, context.Mode(),
+                                                 kValueRangeNonNegative);
+}
+
+}  // namespace blink

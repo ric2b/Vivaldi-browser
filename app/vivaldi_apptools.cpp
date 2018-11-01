@@ -33,8 +33,8 @@ const char *vivaldi_extra_locales_array[] = {
   "nn",
 };
 
-base::LazyInstance<std::set<std::string>> vivaldi_extra_locales =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<std::set<std::string>>::DestructorAtExit
+    vivaldi_extra_locales = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 

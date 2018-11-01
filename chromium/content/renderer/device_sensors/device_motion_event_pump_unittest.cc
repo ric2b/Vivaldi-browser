@@ -30,7 +30,7 @@ class MockDeviceMotionListener : public blink::WebDeviceMotionListener {
   }
   ~MockDeviceMotionListener() override {}
 
-  void didChangeDeviceMotion(const blink::WebDeviceMotionData& data) override {
+  void DidChangeDeviceMotion(const device::MotionData& data) override {
     memcpy(&data_, &data, sizeof(data));
     did_change_device_motion_ = true;
     ++number_of_events_;
@@ -42,14 +42,12 @@ class MockDeviceMotionListener : public blink::WebDeviceMotionListener {
 
   int number_of_events() const { return number_of_events_; }
 
-  const blink::WebDeviceMotionData& data() const {
-    return data_;
-  }
+  const device::MotionData& data() const { return data_; }
 
  private:
   bool did_change_device_motion_;
   int number_of_events_;
-  blink::WebDeviceMotionData data_;
+  device::MotionData data_;
 
   DISALLOW_COPY_AND_ASSIGN(MockDeviceMotionListener);
 };
@@ -103,14 +101,14 @@ class DeviceMotionEventPumpTest : public testing::Test {
   }
 
   void InitBuffer(bool allAvailableSensorsActive) {
-    blink::WebDeviceMotionData& data = buffer()->data;
-    data.accelerationX = 1;
-    data.hasAccelerationX = true;
-    data.accelerationY = 2;
-    data.hasAccelerationY = true;
-    data.accelerationZ = 3;
-    data.hasAccelerationZ = true;
-    data.allAvailableSensorsAreActive = allAvailableSensorsActive;
+    device::MotionData& data = buffer()->data;
+    data.acceleration_x = 1;
+    data.has_acceleration_x = true;
+    data.acceleration_y = 2;
+    data.has_acceleration_y = true;
+    data.acceleration_z = 3;
+    data.has_acceleration_z = true;
+    data.all_available_sensors_are_active = allAvailableSensorsActive;
   }
 
   MockDeviceMotionListener* listener() { return listener_.get(); }
@@ -142,21 +140,21 @@ TEST_F(DeviceMotionEventPumpTest, DidStartPolling) {
 
   base::RunLoop().Run();
 
-  const blink::WebDeviceMotionData& received_data = listener()->data();
+  const device::MotionData& received_data = listener()->data();
   EXPECT_TRUE(listener()->did_change_device_motion());
-  EXPECT_TRUE(received_data.hasAccelerationX);
-  EXPECT_EQ(1, static_cast<double>(received_data.accelerationX));
-  EXPECT_TRUE(received_data.hasAccelerationX);
-  EXPECT_EQ(2, static_cast<double>(received_data.accelerationY));
-  EXPECT_TRUE(received_data.hasAccelerationY);
-  EXPECT_EQ(3, static_cast<double>(received_data.accelerationZ));
-  EXPECT_TRUE(received_data.hasAccelerationZ);
-  EXPECT_FALSE(received_data.hasAccelerationIncludingGravityX);
-  EXPECT_FALSE(received_data.hasAccelerationIncludingGravityY);
-  EXPECT_FALSE(received_data.hasAccelerationIncludingGravityZ);
-  EXPECT_FALSE(received_data.hasRotationRateAlpha);
-  EXPECT_FALSE(received_data.hasRotationRateBeta);
-  EXPECT_FALSE(received_data.hasRotationRateGamma);
+  EXPECT_TRUE(received_data.has_acceleration_x);
+  EXPECT_EQ(1, static_cast<double>(received_data.acceleration_x));
+  EXPECT_TRUE(received_data.has_acceleration_x);
+  EXPECT_EQ(2, static_cast<double>(received_data.acceleration_y));
+  EXPECT_TRUE(received_data.has_acceleration_y);
+  EXPECT_EQ(3, static_cast<double>(received_data.acceleration_z));
+  EXPECT_TRUE(received_data.has_acceleration_z);
+  EXPECT_FALSE(received_data.has_acceleration_including_gravity_x);
+  EXPECT_FALSE(received_data.has_acceleration_including_gravity_y);
+  EXPECT_FALSE(received_data.has_acceleration_including_gravity_z);
+  EXPECT_FALSE(received_data.has_rotation_rate_alpha);
+  EXPECT_FALSE(received_data.has_rotation_rate_beta);
+  EXPECT_FALSE(received_data.has_rotation_rate_gamma);
 }
 
 TEST_F(DeviceMotionEventPumpTest, DidStartPollingNotAllSensorsActive) {
@@ -167,19 +165,20 @@ TEST_F(DeviceMotionEventPumpTest, DidStartPollingNotAllSensorsActive) {
 
   base::RunLoop().Run();
 
-  const blink::WebDeviceMotionData& received_data = listener()->data();
-  // No change in device motion because allAvailableSensorsAreActive is false.
+  const device::MotionData& received_data = listener()->data();
+  // No change in device motion because all_available_sensors_are_active is
+  // false.
   EXPECT_FALSE(listener()->did_change_device_motion());
-  EXPECT_FALSE(received_data.hasAccelerationX);
-  EXPECT_FALSE(received_data.hasAccelerationX);
-  EXPECT_FALSE(received_data.hasAccelerationY);
-  EXPECT_FALSE(received_data.hasAccelerationZ);
-  EXPECT_FALSE(received_data.hasAccelerationIncludingGravityX);
-  EXPECT_FALSE(received_data.hasAccelerationIncludingGravityY);
-  EXPECT_FALSE(received_data.hasAccelerationIncludingGravityZ);
-  EXPECT_FALSE(received_data.hasRotationRateAlpha);
-  EXPECT_FALSE(received_data.hasRotationRateBeta);
-  EXPECT_FALSE(received_data.hasRotationRateGamma);
+  EXPECT_FALSE(received_data.has_acceleration_x);
+  EXPECT_FALSE(received_data.has_acceleration_x);
+  EXPECT_FALSE(received_data.has_acceleration_y);
+  EXPECT_FALSE(received_data.has_acceleration_z);
+  EXPECT_FALSE(received_data.has_acceleration_including_gravity_x);
+  EXPECT_FALSE(received_data.has_acceleration_including_gravity_y);
+  EXPECT_FALSE(received_data.has_acceleration_including_gravity_z);
+  EXPECT_FALSE(received_data.has_rotation_rate_alpha);
+  EXPECT_FALSE(received_data.has_rotation_rate_beta);
+  EXPECT_FALSE(received_data.has_rotation_rate_gamma);
 }
 
 // Confirm that the frequency of pumping events is not greater than 60Hz. A rate

@@ -31,7 +31,7 @@ namespace {
 
 // Keeps track of pending scripted print preview closures.
 // No locking, only access on the UI thread.
-base::LazyInstance<std::map<content::RenderProcessHost*, base::Closure>>
+base::LazyInstance<std::map<content::RenderProcessHost*, base::Closure>>::Leaky
     g_scripted_print_preview_closure_map = LAZY_INSTANCE_INITIALIZER;
 
 void EnableInternalPDFPluginForContents(int render_process_id,
@@ -94,13 +94,7 @@ bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
   if (!print_preview_dialog)
     return PrintNow(rfh);
 
-  if (!print_preview_dialog->GetWebUI())
-    return false;
-
-  PrintPreviewUI* print_preview_ui = static_cast<PrintPreviewUI*>(
-      print_preview_dialog->GetWebUI()->GetController());
-  print_preview_ui->OnShowSystemDialog();
-  return true;
+  return !!print_preview_dialog->GetWebUI();
 }
 #endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 

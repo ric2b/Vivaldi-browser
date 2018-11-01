@@ -35,7 +35,7 @@ json_schema_api("api_registration") {
 }
 
 group("schema") {
-  deps = [
+  public_deps = [
     ":api",
     ":api_registration",
   ]

@@ -16,13 +16,14 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace chromeos {
 
 namespace {
 
-base::LazyInstance<PrintersManagerFactory> g_printers_manager =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<PrintersManagerFactory>::DestructorAtExit
+    g_printers_manager = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -54,17 +55,10 @@ PrintersManager* PrintersManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* browser_context) const {
   Profile* profile = Profile::FromBrowserContext(browser_context);
 
-  browser_sync::ProfileSyncService* sync_service =
-      ProfileSyncServiceFactory::GetForProfile(profile);
-
-  // TODO(skym): After crbug.com/688533 is fixed, this should not use
-  // CreateInMemoryStoreForTest, but rather a ModelTypeStore creation mechanism
-  // that's agnostic to the existence of sync infrastructure.
   const syncer::ModelTypeStoreFactory& store_factory =
-      sync_service ? sync_service->GetModelTypeStoreFactory(syncer::PRINTERS)
-                   : base::BindRepeating(
-                         syncer::ModelTypeStore::CreateInMemoryStoreForTest,
-                         syncer::PRINTERS);
+      browser_sync::ProfileSyncService::GetModelTypeStoreFactory(
+          syncer::PRINTERS, profile->GetPath(),
+          content::BrowserThread::GetBlockingPool());
 
   std::unique_ptr<PrintersSyncBridge> sync_bridge =
       base::MakeUnique<PrintersSyncBridge>(

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "cc/output/begin_frame_args.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/compositor_frame_sink_support_client.h"
@@ -19,6 +20,7 @@
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/render_process_host.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
@@ -33,7 +35,6 @@ class TickClock;
 
 namespace cc {
 class CompositorFrameSinkSupport;
-class LocalSurfaceIdAllocator;
 }
 
 namespace media {
@@ -48,7 +49,7 @@ namespace content {
 
 class DelegatedFrameHost;
 class RenderWidgetHostViewFrameSubscriber;
-class ResizeLock;
+class CompositorResizeLock;
 
 // The DelegatedFrameHostClient is the interface from the DelegatedFrameHost,
 // which manages delegated frames, and the ui::Compositor being used to
@@ -66,16 +67,10 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
   virtual gfx::Size DelegatedFrameHostDesiredSizeInDIP() const = 0;
 
   virtual bool DelegatedFrameCanCreateResizeLock() const = 0;
-  virtual std::unique_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
-      bool defer_compositor_lock) = 0;
-  virtual void DelegatedFrameHostResizeLockWasReleased() = 0;
+  virtual std::unique_ptr<CompositorResizeLock>
+  DelegatedFrameHostCreateResizeLock() = 0;
 
-  virtual void DelegatedFrameHostSendReclaimCompositorResources(
-      int compositor_frame_sink_id,
-      bool is_swap_ack,
-      const cc::ReturnedResourceArray& resources) = 0;
-
-  virtual void SetBeginFrameSource(cc::BeginFrameSource* source) = 0;
+  virtual void OnBeginFrame(const cc::BeginFrameArgs& args) = 0;
   virtual bool IsAutoResizeEnabled() const = 0;
 };
 
@@ -89,7 +84,6 @@ class CONTENT_EXPORT DelegatedFrameHost
       public ui::ContextFactoryObserver,
       public DelegatedFrameEvictorClient,
       public NON_EXPORTED_BASE(cc::CompositorFrameSinkSupportClient),
-      public cc::ExternalBeginFrameSourceClient,
       public base::SupportsWeakPtr<DelegatedFrameHost> {
  public:
   DelegatedFrameHost(const cc::FrameSinkId& frame_sink_id,
@@ -115,7 +109,8 @@ class CONTENT_EXPORT DelegatedFrameHost
   void EvictDelegatedFrame() override;
 
   // cc::CompositorFrameSinkSupportClient implementation.
-  void DidReceiveCompositorFrameAck() override;
+  void DidReceiveCompositorFrameAck(
+      const cc::ReturnedResourceArray& resources) override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
   void WillDrawSurface(const cc::LocalSurfaceId& id,
@@ -123,8 +118,10 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // Public interface exposed to RenderWidgetHostView.
 
-  void SwapDelegatedFrame(uint32_t compositor_frame_sink_id,
-                          cc::CompositorFrame frame);
+  void DidCreateNewRendererCompositorFrameSink(
+      cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink);
+  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+                             cc::CompositorFrame frame);
   void ClearDelegatedFrame();
   void WasHidden();
   void WasShown(const ui::LatencyInfo& latency_info);
@@ -173,14 +170,15 @@ class CONTENT_EXPORT DelegatedFrameHost
                                          RenderWidgetHostViewBase* target_view,
                                          gfx::Point* transformed_point);
 
+  void SetNeedsBeginFrames(bool needs_begin_frames);
+  void BeginFrameDidNotSwap(const cc::BeginFrameAck& ack);
+
   // Exposed for tests.
   cc::SurfaceId SurfaceIdForTesting() const {
     return cc::SurfaceId(frame_sink_id_, local_surface_id_);
   }
 
-  const cc::LocalSurfaceId& LocalSurfaceIdForTesting() const {
-    return local_surface_id_;
-  }
+  bool HasFrameForTesting() const { return has_frame_; }
 
   void OnCompositingDidCommitForTesting(ui::Compositor* compositor) {
     OnCompositingDidCommit(compositor);
@@ -205,12 +203,11 @@ class CONTENT_EXPORT DelegatedFrameHost
   RenderWidgetHostViewFrameSubscriber* frame_subscriber() const {
     return frame_subscriber_.get();
   }
-  bool ShouldCreateResizeLock();
   void LockResources();
   void UnlockResources();
   void RequestCopyOfOutput(std::unique_ptr<cc::CopyOutputRequest> request);
 
-  bool ShouldSkipFrame(gfx::Size size_in_dip) const;
+  bool ShouldSkipFrame(const gfx::Size& size_in_dip);
 
   // Lazily grab a resize lock if the aura window size doesn't match the current
   // frame size, to give time to the renderer.
@@ -249,12 +246,10 @@ class CONTENT_EXPORT DelegatedFrameHost
   // initiate a copy-into-video-frame request.
   void AttemptFrameSubscriberCapture(const gfx::Rect& damage_rect);
 
-  // cc::ExternalBeginFrameSource implementation.
-  void OnNeedsBeginFrames(bool needs_begin_frames) override;
-  void OnDidFinishFrame(const cc::BeginFrameAck& ack) override;
-
   void CreateCompositorFrameSinkSupport();
   void ResetCompositorFrameSinkSupport();
+
+  void DidFinishFrame(const cc::BeginFrameAck& ack);
 
   const cc::FrameSinkId frame_sink_id_;
   cc::LocalSurfaceId local_surface_id_;
@@ -272,11 +267,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   // Overridable tick clock used for testing functions using current time.
   std::unique_ptr<base::TickClock> tick_clock_;
 
-  // With delegated renderer, this is the last output surface, used to
-  // disambiguate resources with the same id coming from different output
-  // surfaces.
-  uint32_t last_compositor_frame_sink_id_;
-
   // True after a delegated frame has been skipped, until a frame is not
   // skipped.
   bool skipped_frames_;
@@ -289,7 +279,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   SkColor background_color_;
 
   // State for rendering into a Surface.
-  std::unique_ptr<cc::LocalSurfaceIdAllocator> id_allocator_;
   std::unique_ptr<cc::CompositorFrameSinkSupport> support_;
   gfx::Size current_surface_size_;
   float current_scale_factor_;
@@ -301,24 +290,15 @@ class CONTENT_EXPORT DelegatedFrameHost
   // size. It keeps track of the size we expect from the renderer, and locks the
   // compositor, as well as the UI for a short time to give a chance to the
   // renderer of producing a frame of the right size.
-  std::unique_ptr<ResizeLock> resize_lock_;
+  std::unique_ptr<CompositorResizeLock> resize_lock_;
+  bool create_resize_lock_after_commit_ = false;
+  bool allow_one_renderer_frame_during_resize_lock_ = false;
 
   // Keeps track of the current frame size.
   gfx::Size current_frame_size_in_dip_;
 
   // This lock is for waiting for a front surface to become available to draw.
-  scoped_refptr<ui::CompositorLock> released_front_lock_;
-
-  enum CanLockCompositorState {
-    YES_CAN_LOCK,
-    // We locked, so at some point we'll need to kick a frame.
-    YES_DID_LOCK,
-    // No. A lock timed out, we need to kick a new frame before locking again.
-    NO_PENDING_RENDERER_FRAME,
-    // No. We've got a frame, but it hasn't been committed.
-    NO_PENDING_COMMIT,
-  };
-  CanLockCompositorState can_lock_compositor_;
+  std::unique_ptr<ui::CompositorLock> released_front_lock_;
 
   base::TimeTicks last_draw_ended_;
 
@@ -335,9 +315,14 @@ class CONTENT_EXPORT DelegatedFrameHost
   std::unique_ptr<display_compositor::ReadbackYUVInterface>
       yuv_readback_pipeline_;
 
-  std::unique_ptr<cc::ExternalBeginFrameSource> begin_frame_source_;
-
   bool needs_begin_frame_ = false;
+  uint32_t latest_confirmed_begin_frame_source_id_ = 0;
+  uint64_t latest_confirmed_begin_frame_sequence_number_ =
+      cc::BeginFrameArgs::kInvalidFrameNumber;
+
+  bool has_frame_ = false;
+  cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+      nullptr;
 
   std::unique_ptr<DelegatedFrameEvictor> delegated_frame_evictor_;
 };

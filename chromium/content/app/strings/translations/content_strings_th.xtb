@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">โปรดป้อนค่าที่ถูกต้อง ค่าใกล้เคียงที่สุดที่ถูกต้องคือ <ph name="VALID_VALUE" /></translation>
 <translation id="2653659639078652383">ส่ง</translation>
 <translation id="2674318244760992338">ส่วนท้าย</translation>
+<translation id="2709516037105925701">ป้อนอัตโนมัติ</translation>
 <translation id="2723001399770238859">เสียง</translation>
 <translation id="2746543609216772311">ค่าต้องเป็น <ph name="MINIMUM_DATE_OR_TIME" /> หรือหลังจากนั้น</translation>
 <translation id="2759744352195237655">ปุ่มป๊อปอัป</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">ไดเรกทอรี</translation>
 <translation id="6934078000481955284">ข้อความที่ยกมา</translation>
 <translation id="6941933287844615239">ดาวน์โหลดสื่อ</translation>
+<translation id="6989848892321993519">โปรดกรอกข้อความนี้ให้มีอักขระอย่างน้อย <ph name="MIN_CHARACTERS" /> ตัว (ตอนนี้คุณมี 1 ตัว)</translation>
 <translation id="7057186640035488495">เวลาของภาพยนตร์</translation>
 <translation id="709897737746224366">โปรดจับคู่รูปแบบที่ร้องขอ</translation>
 <translation id="7223624360433298498">เวลาที่ผ่านไป</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">โปรดเลือกไฟล์</translation>
 <translation id="8461852803063341183">ปุ่มตัวเลือก</translation>
 <translation id="8511325616783751178">ปุ่มแบบเลื่อนลง</translation>
+<translation id="8519420564908284378">เล่นในทั้งสองหน้าจอ</translation>
 <translation id="8534579021159131403">นาที</translation>
 <translation id="8541249477527128034">การควบคุมสื่อ</translation>
 <translation id="8583702881314752957">รายการคำจำกัดความ</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">ควบคุมการเล่นระยะไกล</translation>
 <translation id="8750798805984357768">โปรดเลือกตัวเลือกอย่างหนึ่งอย่างใดเหล่านี้</translation>
 <translation id="8785498733064193001">เริ่มเล่น</translation>
+<translation id="8845239796550121995">ตอนนี้กำลังแคสต์ไปยัง TV</translation>
 <translation id="8851136666856101339">หลัก</translation>
 <translation id="8987927404178983737">เดือน</translation>
 <translation id="901493112792887934">เวลาปัจจุบันเป็นวินาที</translation>

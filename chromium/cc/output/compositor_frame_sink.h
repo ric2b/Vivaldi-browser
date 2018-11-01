@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/output/context_provider.h"
 #include "cc/output/overlay_candidate_validator.h"
 #include "cc/output/vulkan_context_provider.h"
@@ -27,6 +27,7 @@ namespace cc {
 
 class CompositorFrame;
 class CompositorFrameSinkClient;
+class LocalSurfaceId;
 class SharedBitmapManager;
 
 // An interface for submitting CompositorFrames to a display compositor
@@ -104,6 +105,10 @@ class CC_EXPORT CompositorFrameSink {
   // If supported, this causes a ReclaimResources for all resources that are
   // currently in use.
   virtual void ForceReclaimResources() {}
+
+  // If supported, this sets the LocalSurfaceId the CompositorFrameSink will use
+  // to submit a CompositorFrame.
+  virtual void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id) {}
 
   // Support for a pull-model where draws are requested by the output surface.
   //

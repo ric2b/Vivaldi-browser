@@ -6,13 +6,11 @@
 
 #include <string>
 
-#include "ash/common/system/date/date_default_view.h"
-#include "ash/common/system/date/date_view.h"
-#include "ash/common/system/date/system_info_default_view.h"
-#include "ash/common/system/date/tray_date.h"
-#include "ash/common/system/date/tray_system_info.h"
-#include "ash/common/system/tray/system_tray.h"
 #include "ash/shell.h"
+#include "ash/system/date/date_view.h"
+#include "ash/system/date/system_info_default_view.h"
+#include "ash/system/date/tray_system_info.h"
+#include "ash/system/tray/system_tray.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -38,9 +36,7 @@ const char kUser2[] = "user2@gmail.com";
 
 base::HourClockType GetHourType() {
   const ash::TraySystemInfo* tray_system_info =
-      ash::Shell::GetInstance()
-          ->GetPrimarySystemTray()
-          ->GetTraySystemInfoForTesting();
+      ash::Shell::Get()->GetPrimarySystemTray()->GetTraySystemInfoForTesting();
   const ash::SystemInfoDefaultView* system_info_default_view =
       tray_system_info->GetDefaultViewForTesting();
 
@@ -48,9 +44,8 @@ base::HourClockType GetHourType() {
 }
 
 void CreateDefaultView() {
-  ash::TraySystemInfo* tray_system_info = ash::Shell::GetInstance()
-                                              ->GetPrimarySystemTray()
-                                              ->GetTraySystemInfoForTesting();
+  ash::TraySystemInfo* tray_system_info =
+      ash::Shell::Get()->GetPrimarySystemTray()->GetTraySystemInfoForTesting();
   tray_system_info->CreateDefaultViewForTesting(
       ash::LoginStatus::NOT_LOGGED_IN);
 }

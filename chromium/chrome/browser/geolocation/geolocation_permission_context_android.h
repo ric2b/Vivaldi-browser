@@ -24,7 +24,11 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "chrome/browser/android/location_settings.h"
 #include "chrome/browser/geolocation/geolocation_permission_context.h"
+#include "components/location/android/location_settings_dialog_context.h"
+#include "components/location/android/location_settings_dialog_outcome.h"
 
 namespace content {
 class WebContents;
@@ -34,24 +38,40 @@ namespace infobars {
 class InfoBar;
 }
 
-class LocationSettings;
 class GURL;
 class PermissionRequestID;
+class PrefRegistrySimple;
 
 class GeolocationPermissionContextAndroid
     : public GeolocationPermissionContext {
  public:
+  // This enum is used in histograms, thus is append only. Do not re-order or
+  // remove any entries, or add any except at the end.
+  enum class LocationSettingsDialogBackOff {
+    kNoBackOff,
+    kOneWeek,
+    kOneMonth,
+    kThreeMonths,
+    kCount,
+  };
+
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
   explicit GeolocationPermissionContextAndroid(Profile* profile);
   ~GeolocationPermissionContextAndroid() override;
 
  protected:
   // GeolocationPermissionContext:
   ContentSetting GetPermissionStatusInternal(
+      content::RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,
       const GURL& embedding_origin) const override;
 
  private:
   friend class GeolocationPermissionContextTests;
+
+  static void AddDayOffsetForTesting(int days);
+  static void SetDSEOriginForTesting(const char* dse_origin);
 
   // GeolocationPermissionContext:
   void RequestPermission(
@@ -62,18 +82,68 @@ class GeolocationPermissionContextAndroid
       const BrowserPermissionCallback& callback) override;
   void CancelPermissionRequest(content::WebContents* web_contents,
                                const PermissionRequestID& id) override;
+  void UserMadePermissionDecision(const PermissionRequestID& id,
+                                  const GURL& requesting_origin,
+                                  const GURL& embedding_origin,
+                                  ContentSetting content_setting) override;
   void NotifyPermissionSet(const PermissionRequestID& id,
                            const GURL& requesting_origin,
                            const GURL& embedding_origin,
                            const BrowserPermissionCallback& callback,
                            bool persist,
                            ContentSetting content_setting) override;
+  PermissionResult UpdatePermissionStatusWithDeviceStatus(
+      PermissionResult result,
+      const GURL& requesting_origin,
+      const GURL& embedding_origin) const override;
+
+  // Functions to handle back off for showing the Location Settings Dialog.
+  std::string GetLocationSettingsBackOffLevelPref(bool is_default_search) const;
+  std::string GetLocationSettingsNextShowPref(bool is_default_search) const;
+  bool IsInLocationSettingsBackOff(bool is_default_search) const;
+  void ResetLocationSettingsBackOff(bool is_default_search);
+  void UpdateLocationSettingsBackOff(bool is_default_search);
+  LocationSettingsDialogBackOff LocationSettingsBackOffLevel(
+      bool is_default_search) const;
+
+  // Returns whether location access is possible for the given origin. Ignores
+  // Location Settings Dialog backoff, as the backoff is ignored if the user
+  // will be prompted for permission.
+  bool IsLocationAccessPossible(content::WebContents* web_contents,
+                                const GURL& requesting_origin,
+                                bool user_gesture);
+
+  bool IsRequestingOriginDSE(const GURL& requesting_origin) const;
 
   void HandleUpdateAndroidPermissions(const PermissionRequestID& id,
                                       const GURL& requesting_frame_origin,
                                       const GURL& embedding_origin,
                                       const BrowserPermissionCallback& callback,
                                       bool permissions_updated);
+
+  // Will return true if the location settings dialog will be shown for the
+  // given origins. This is true if the location setting is off, the dialog can
+  // be shown, any gesture requirements for the origin are met, and the dialog
+  // is not being suppressed for backoff.
+  bool CanShowLocationSettingsDialog(const GURL& requesting_origin,
+                                     bool user_gesture,
+                                     bool ignore_backoff) const;
+
+  void OnLocationSettingsDialogShown(
+      const PermissionRequestID& id,
+      const GURL& requesting_origin,
+      const GURL& embedding_origin,
+      const BrowserPermissionCallback& callback,
+      bool persist,
+      ContentSetting content_setting,
+      LocationSettingsDialogOutcome prompt_outcome);
+
+  void FinishNotifyPermissionSet(const PermissionRequestID& id,
+                                 const GURL& requesting_origin,
+                                 const GURL& embedding_origin,
+                                 const BrowserPermissionCallback& callback,
+                                 bool persist,
+                                 ContentSetting content_setting);
 
   // Overrides the LocationSettings object used to determine whether
   // system and Chrome-wide location permissions are enabled.

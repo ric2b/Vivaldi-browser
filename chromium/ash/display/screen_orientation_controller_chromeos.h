@@ -8,9 +8,8 @@
 #include <unordered_map>
 
 #include "ash/ash_export.h"
-#include "ash/common/shell_observer.h"
-#include "ash/common/wm_activation_observer.h"
-#include "ash/common/wm_display_observer.h"
+#include "ash/shell_observer.h"
+#include "ash/wm_display_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/accelerometer/accelerometer_reader.h"
@@ -18,6 +17,7 @@
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display.h"
+#include "ui/wm/public/activation_change_observer.h"
 
 namespace ash {
 namespace test {
@@ -26,7 +26,7 @@ class ScreenOrientationControllerTestApi;
 
 // Implements ChromeOS specific functionality for ScreenOrientationProvider.
 class ASH_EXPORT ScreenOrientationController
-    : public WmActivationObserver,
+    : public aura::client::ActivationChangeObserver,
       public aura::WindowObserver,
       public chromeos::AccelerometerReader::Observer,
       public WmDisplayObserver,
@@ -83,7 +83,7 @@ class ASH_EXPORT ScreenOrientationController
   bool rotation_locked() const { return rotation_locked_; }
 
   bool user_rotation_locked() const {
-    return user_locked_orientation_ != blink::WebScreenOrientationLockAny;
+    return user_locked_orientation_ != blink::kWebScreenOrientationLockAny;
   }
 
   // Trun on/off the user rotation lock. When turned on, it will lock
@@ -95,9 +95,10 @@ class ASH_EXPORT ScreenOrientationController
   // Set locked to the given |rotation| and save it.
   void SetLockToRotation(display::Display::Rotation rotation);
 
-  // WmActivationObserver:
-  void OnWindowActivated(WmWindow* gained_active,
-                         WmWindow* lost_active) override;
+  // aura::client::ActivationChangeObserver:
+  void OnWindowActivated(ActivationReason reason,
+                         aura::Window* gained_active,
+                         aura::Window* lost_active) override;
 
   // aura::WindowObserver:
   void OnWindowDestroying(aura::Window* window) override;
@@ -112,7 +113,7 @@ class ASH_EXPORT ScreenOrientationController
 
   // ShellObserver:
   void OnMaximizeModeStarted() override;
-  void OnMaximizeModeEnded() override;
+  void OnMaximizeModeEnding() override;
 
  private:
   friend class test::ScreenOrientationControllerTestApi;
@@ -125,7 +126,7 @@ class ASH_EXPORT ScreenOrientationController
           lock_completion_behavior(lock_completion_behavior) {}
 
     blink::WebScreenOrientationLockType orientation =
-        blink::WebScreenOrientationLockAny;
+        blink::kWebScreenOrientationLockAny;
     LockCompletionBehavior lock_completion_behavior =
         LockCompletionBehavior::None;
   };
@@ -214,7 +215,7 @@ class ASH_EXPORT ScreenOrientationController
 
   // The orientation of the device locked by the user.
   blink::WebScreenOrientationLockType user_locked_orientation_ =
-      blink::WebScreenOrientationLockAny;
+      blink::kWebScreenOrientationLockAny;
 
   // The current rotation set by ScreenOrientationController for the internal
   // display.

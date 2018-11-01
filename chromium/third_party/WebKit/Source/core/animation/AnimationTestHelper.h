@@ -5,17 +5,17 @@
 #ifndef AnimationTestHelper_h
 #define AnimationTestHelper_h
 
+#include "platform/wtf/text/StringView.h"
+#include "platform/wtf/text/WTFString.h"
 #include "v8/include/v8.h"
-#include "wtf/text/StringView.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
-void setV8ObjectPropertyAsString(v8::Isolate*,
+void SetV8ObjectPropertyAsString(v8::Isolate*,
                                  v8::Local<v8::Object>,
                                  const StringView& name,
                                  const StringView& value);
-void setV8ObjectPropertyAsNumber(v8::Isolate*,
+void SetV8ObjectPropertyAsNumber(v8::Isolate*,
                                  v8::Local<v8::Object>,
                                  const StringView& name,
                                  double value);

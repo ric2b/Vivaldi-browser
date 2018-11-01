@@ -25,8 +25,8 @@
 #ifndef RTCStatsResponseBase_h
 #define RTCStatsResponseBase_h
 
+#include "platform/wtf/Forward.h"
 #include "public/platform/WebRTCLegacyStats.h"
-#include "wtf/Forward.h"
 
 namespace blink {
 
@@ -35,7 +35,7 @@ class RTCStatsResponseBase
  public:
   virtual ~RTCStatsResponseBase() {}
 
-  virtual void addStats(const WebRTCLegacyStats&) = 0;
+  virtual void AddStats(const WebRTCLegacyStats&) = 0;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 };

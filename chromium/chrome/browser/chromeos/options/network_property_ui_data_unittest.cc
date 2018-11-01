@@ -41,21 +41,21 @@ TEST_F(NetworkPropertyUIDataTest, PropertyInit) {
 TEST_F(NetworkPropertyUIDataTest, ParseOncProperty) {
   base::DictionaryValue onc;
 
-  base::StringValue val_a("a");
-  base::StringValue val_b("b");
-  base::StringValue val_a_a("a_a");
-  base::StringValue val_a_b("a_b");
+  base::Value val_a("a");
+  base::Value val_b("b");
+  base::Value val_a_a("a_a");
+  base::Value val_a_b("a_b");
 
-  onc.Set("a", val_a.DeepCopy());
-  onc.Set("b", val_b.DeepCopy());
-  onc.Set("a.a", val_a_a.DeepCopy());
-  onc.Set("a.b", val_a_b.DeepCopy());
+  onc.Set("a", val_a.CreateDeepCopy());
+  onc.Set("b", val_b.CreateDeepCopy());
+  onc.Set("a.a", val_a_a.CreateDeepCopy());
+  onc.Set("a.b", val_a_b.CreateDeepCopy());
   base::ListValue recommended;
   recommended.AppendString("b");
   recommended.AppendString("c");
   recommended.AppendString("a.a");
-  onc.Set("Recommended", recommended.DeepCopy());
-  onc.Set("a.Recommended", recommended.DeepCopy());
+  onc.Set("Recommended", recommended.CreateDeepCopy());
+  onc.Set("a.Recommended", recommended.CreateDeepCopy());
 
   NetworkPropertyUIData prop;
 

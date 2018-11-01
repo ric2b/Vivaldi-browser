@@ -6,24 +6,28 @@
 
 #include <memory>
 
-#include "base/mac/scoped_nsobject.h"
+#include "base/memory/ptr_util.h"
 #import "base/test/ios/wait_util.h"
 #include "base/time/time.h"
 #include "components/toolbar/test_toolbar_model.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
-#import "ios/chrome/browser/tabs/tab.h"
-#import "ios/chrome/browser/tabs/tab_model.h"
-#include "ios/chrome/browser/ui/omnibox/location_bar_view_ios.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_model_delegate_ios.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_model_impl_ios.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
+#include "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
+#include "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/test/base/perf_test_ios.h"
+#include "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "ui/base/test/ios/keyboard_appearance_listener.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -64,24 +68,23 @@ class OmniboxPerfTest : public PerfTest {
         chrome_browser_state_.get());
 
     // Sets up the listener for keyboard activation/deactivation notifications.
-    keyboard_listener_.reset([[KeyboardAppearanceListener alloc] init]);
+    keyboard_listener_ = [[KeyboardAppearanceListener alloc] init];
 
     // Create a real window to host the Toolbar.
     CGRect screenBounds = [[UIScreen mainScreen] bounds];
-    window_.reset([[UIWindow alloc] initWithFrame:screenBounds]);
+    window_ = [[UIWindow alloc] initWithFrame:screenBounds];
     [window_ makeKeyAndVisible];
 
-    // Create a mock Tab and a TabModel that will always return the mock Tab as
-    // the current tab.
-    current_tab_.reset(
-        [(Tab*)[OCMockObject niceMockForClass:[Tab class]] retain]);
-    id tab_model = [OCMockObject mockForClass:[TabModel class]];
-    [[[tab_model stub] andReturn:current_tab_] currentTab];
-    tab_model_.reset([tab_model retain]);
+    // Create a WebStateList that will always return the test WebState as
+    // the active WebState.
+    web_state_list_ = base::MakeUnique<WebStateList>(&web_state_list_delegate_);
+    std::unique_ptr<web::TestWebState> web_state =
+        base::MakeUnique<web::TestWebState>();
+    web_state_list_->InsertWebState(0, std::move(web_state));
 
     // Creates the Toolbar for testing and sizes it to the width of the screen.
     toolbar_model_delegate_.reset(
-        new ToolbarModelDelegateIOS(tab_model_.get()));
+        new ToolbarModelDelegateIOS(web_state_list_.get()));
     toolbar_model_ios_.reset(
         new ToolbarModelImplIOS(toolbar_model_delegate_.get()));
 
@@ -93,11 +96,11 @@ class OmniboxPerfTest : public PerfTest {
     [[[webToolbarDelegate stub] andReturnValue:OCMOCK_VALUE(model_for_mock)]
         toolbarModelIOS];
     id urlLoader = [OCMockObject niceMockForProtocol:@protocol(UrlLoader)];
-    toolbar_.reset([[WebToolbarController alloc]
+    toolbar_ = [[WebToolbarController alloc]
         initWithDelegate:webToolbarDelegate
                urlLoader:urlLoader
             browserState:chrome_browser_state_.get()
-         preloadProvider:nil]);
+         preloadProvider:nil];
     UIView* toolbarView = [toolbar_ view];
     CGRect toolbarFrame = toolbarView.frame;
     toolbarFrame.origin = CGPointZero;
@@ -106,7 +109,7 @@ class OmniboxPerfTest : public PerfTest {
     // Add toolbar to window.
     [window_ addSubview:toolbarView];
     base::test::ios::WaitUntilCondition(^bool() {
-      return IsToolbarLoaded(window_.get());
+      return IsToolbarLoaded(window_);
     });
   }
 
@@ -114,7 +117,7 @@ class OmniboxPerfTest : public PerfTest {
     // Remove toolbar from window.
     [[toolbar_ view] removeFromSuperview];
     base::test::ios::WaitUntilCondition(^bool() {
-      return !IsToolbarLoaded(window_.get());
+      return !IsToolbarLoaded(window_);
     });
     [toolbar_ browserStateDestroyed];
     PerfTest::TearDown();
@@ -148,8 +151,8 @@ class OmniboxPerfTest : public PerfTest {
   // Omnibox focus timings. Call this function to preload keyboard before
   // doing the real test.
   base::TimeDelta PreLoadKeyboard() {
-    base::scoped_nsobject<UITextField> textField(
-        [[UITextField alloc] initWithFrame:CGRectMake(20, 100, 280, 29)]);
+    UITextField* textField =
+        [[UITextField alloc] initWithFrame:CGRectMake(20, 100, 280, 29)];
     [textField setBorderStyle:UITextBorderStyleRoundedRect];
     [window_ addSubview:textField];
     base::TimeDelta elapsed = base::test::ios::TimeUntilCondition(
@@ -201,13 +204,13 @@ class OmniboxPerfTest : public PerfTest {
   }
 
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
-  base::scoped_nsobject<Tab> current_tab_;
-  base::scoped_nsobject<TabModel> tab_model_;
+  FakeWebStateListDelegate web_state_list_delegate_;
+  std::unique_ptr<WebStateList> web_state_list_;
   std::unique_ptr<ToolbarModelDelegateIOS> toolbar_model_delegate_;
   std::unique_ptr<ToolbarModelIOS> toolbar_model_ios_;
-  base::scoped_nsobject<WebToolbarController> toolbar_;
-  base::scoped_nsobject<UIWindow> window_;
-  base::scoped_nsobject<KeyboardAppearanceListener> keyboard_listener_;
+  WebToolbarController* toolbar_;
+  UIWindow* window_;
+  KeyboardAppearanceListener* keyboard_listener_;
 };
 
 // Measures the amount of time it takes the Omnibox text field to activate

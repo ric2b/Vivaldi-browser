@@ -32,10 +32,10 @@
 #define QuotaTracker_h
 
 #include "modules/ModulesExport.h"
-#include "wtf/HashMap.h"
-#include "wtf/ThreadingPrimitives.h"
-#include "wtf/text/StringHash.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/ThreadingPrimitives.h"
+#include "platform/wtf/text/StringHash.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -46,27 +46,27 @@ class MODULES_EXPORT QuotaTracker {
   WTF_MAKE_NONCOPYABLE(QuotaTracker);
 
  public:
-  static QuotaTracker& instance();
+  static QuotaTracker& Instance();
 
-  void getDatabaseSizeAndSpaceAvailableToOrigin(
+  void GetDatabaseSizeAndSpaceAvailableToOrigin(
       SecurityOrigin*,
-      const String& databaseName,
-      unsigned long long* databaseSize,
-      unsigned long long* spaceAvailable);
-  void updateDatabaseSize(SecurityOrigin*,
-                          const String& databaseName,
-                          unsigned long long databaseSize);
-  void updateSpaceAvailableToOrigin(SecurityOrigin*,
-                                    unsigned long long spaceAvailable);
-  void resetSpaceAvailableToOrigin(SecurityOrigin*);
+      const String& database_name,
+      unsigned long long* database_size,
+      unsigned long long* space_available);
+  void UpdateDatabaseSize(SecurityOrigin*,
+                          const String& database_name,
+                          unsigned long long database_size);
+  void UpdateSpaceAvailableToOrigin(SecurityOrigin*,
+                                    unsigned long long space_available);
+  void ResetSpaceAvailableToOrigin(SecurityOrigin*);
 
  private:
   QuotaTracker() {}
 
   typedef HashMap<String, unsigned long long> SizeMap;
-  SizeMap m_spaceAvailableToOrigins;
-  HashMap<String, SizeMap> m_databaseSizes;
-  Mutex m_dataGuard;
+  SizeMap space_available_to_origins_;
+  HashMap<String, SizeMap> database_sizes_;
+  Mutex data_guard_;
 };
 
 }  // namespace blink

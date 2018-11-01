@@ -7,7 +7,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/style/FillLayer.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -19,9 +19,9 @@ class SizeListPropertyFunctions {
   STATIC_ONLY(SizeListPropertyFunctions);
 
  public:
-  static SizeList getInitialSizeList(CSSPropertyID);
-  static SizeList getSizeList(CSSPropertyID, const ComputedStyle&);
-  static void setSizeList(CSSPropertyID, ComputedStyle&, const SizeList&);
+  static SizeList GetInitialSizeList(CSSPropertyID);
+  static SizeList GetSizeList(CSSPropertyID, const ComputedStyle&);
+  static void SetSizeList(CSSPropertyID, ComputedStyle&, const SizeList&);
 };
 
 }  // namespace blink

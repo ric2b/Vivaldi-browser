@@ -40,12 +40,12 @@
 
 // Define ourselves as the clientPtr.  Mozilla just hacked their C++ callback
 // class into this old C decoder, so we will too.
+#include <memory>
 #include "platform/image-decoders/FastSharedBufferReader.h"
 #include "platform/image-decoders/gif/GIFImageDecoder.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/Vector.h"
-#include <memory>
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/Vector.h"
 
 #define MAX_DICTIONARY_ENTRY_BITS 12
 #define MAX_DICTIONARY_ENTRIES 4096  // 2^MAX_DICTIONARY_ENTRY_BITS
@@ -185,7 +185,7 @@ struct GIFFrameContext {
         m_width(0),
         m_height(0),
         m_transparentPixel(kNotFound),
-        m_disposalMethod(blink::ImageFrame::DisposeNotSpecified),
+        m_disposalMethod(blink::ImageFrame::kDisposeNotSpecified),
         m_dataSize(0),
         m_progressiveDisplay(false),
         m_interlaced(false),
@@ -298,12 +298,14 @@ class PLATFORM_EXPORT GIFImageReader final {
 
   ~GIFImageReader() {}
 
-  void setData(PassRefPtr<blink::SegmentReader> data) { m_data = data; }
+  void setData(PassRefPtr<blink::SegmentReader> data) {
+    m_data = std::move(data);
+  }
   bool parse(blink::GIFImageDecoder::GIFParseQuery);
   bool decode(size_t frameIndex);
 
   size_t imagesCount() const {
-    if (m_frames.isEmpty())
+    if (m_frames.IsEmpty())
       return 0;
 
     // This avoids counting an empty frame when the file is truncated right
@@ -333,7 +335,7 @@ class PLATFORM_EXPORT GIFImageReader final {
 
   void addFrameIfNecessary();
   bool currentFrameIsFirstFrame() const {
-    return m_frames.isEmpty() ||
+    return m_frames.IsEmpty() ||
            (m_frames.size() == 1u && !m_frames[0]->isComplete());
   }
 

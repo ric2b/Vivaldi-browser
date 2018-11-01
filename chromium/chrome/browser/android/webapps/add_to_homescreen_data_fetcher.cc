@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string16.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -25,7 +26,6 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_types.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/manifest.h"
@@ -35,6 +35,9 @@
 #include "url/gurl.h"
 
 namespace {
+
+// The default number of milliseconds to wait for the data download to complete.
+const int kDataTimeoutInMilliseconds = 4000;
 
 // Looks up the original, online URL of the site requested.  The URL from the
 // WebContents may be a distilled article which is not appropriate for a home
@@ -81,7 +84,6 @@ AddToHomescreenDataFetcher::AddToHomescreenDataFetcher(
       weak_observer_(observer),
       shortcut_info_(GetShortcutUrl(web_contents->GetBrowserContext(),
                                     web_contents->GetLastCommittedURL())),
-      data_timeout_timer_(false, false),
       ideal_icon_size_in_px_(ideal_icon_size_in_px),
       minimum_icon_size_in_px_(minimum_icon_size_in_px),
       ideal_splash_image_size_in_px_(ideal_splash_image_size_in_px),
@@ -119,7 +121,7 @@ void AddToHomescreenDataFetcher::OnDidGetWebApplicationInfo(
 
   if (web_app_info.mobile_capable == WebApplicationInfo::MOBILE_CAPABLE ||
       web_app_info.mobile_capable == WebApplicationInfo::MOBILE_CAPABLE_APPLE) {
-    shortcut_info_.display = blink::WebDisplayModeStandalone;
+    shortcut_info_.display = blink::kWebDisplayModeStandalone;
     shortcut_info_.UpdateSource(
         ShortcutInfo::SOURCE_ADD_TO_HOMESCREEN_STANDALONE);
   }
@@ -127,15 +129,15 @@ void AddToHomescreenDataFetcher::OnDidGetWebApplicationInfo(
   // Record what type of shortcut was added by the user.
   switch (web_app_info.mobile_capable) {
     case WebApplicationInfo::MOBILE_CAPABLE:
-      content::RecordAction(
+      base::RecordAction(
           base::UserMetricsAction("webapps.AddShortcut.AppShortcut"));
       break;
     case WebApplicationInfo::MOBILE_CAPABLE_APPLE:
-      content::RecordAction(
+      base::RecordAction(
           base::UserMetricsAction("webapps.AddShortcut.AppShortcutApple"));
       break;
     case WebApplicationInfo::MOBILE_CAPABLE_UNSPECIFIED:
-      content::RecordAction(
+      base::RecordAction(
           base::UserMetricsAction("webapps.AddShortcut.Bookmark"));
       break;
   }
@@ -148,7 +150,7 @@ void AddToHomescreenDataFetcher::OnDidGetWebApplicationInfo(
   // Kick off a timeout for downloading data. If we haven't finished within the
   // timeout, fall back to using a dynamically-generated launcher icon.
   data_timeout_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromMilliseconds(4000),
+      FROM_HERE, base::TimeDelta::FromMilliseconds(kDataTimeoutInMilliseconds),
       base::Bind(&AddToHomescreenDataFetcher::OnDataTimedout, this));
 
   manager->GetData(
@@ -191,14 +193,13 @@ void AddToHomescreenDataFetcher::OnDataTimedout() {
     weak_observer_->OnUserTitleAvailable(base::string16());
   }
 
-  if (!is_icon_saved_) {
-    badge_icon_.reset();
-    CreateLauncherIcon(SkBitmap());
-  }
+  badge_icon_.reset();
+  CreateLauncherIcon(SkBitmap());
 }
 
 void AddToHomescreenDataFetcher::OnDidPerformInstallableCheck(
     const InstallableData& data) {
+  data_timeout_timer_.Stop();
   badge_icon_.reset();
 
   if (!web_contents() || !weak_observer_ || is_installable_check_complete_)
@@ -220,8 +221,7 @@ void AddToHomescreenDataFetcher::OnDidPerformInstallableCheck(
   }
 
   if (!data.manifest.IsEmpty()) {
-    content::RecordAction(
-        base::UserMetricsAction("webapps.AddShortcut.Manifest"));
+    base::RecordAction(base::UserMetricsAction("webapps.AddShortcut.Manifest"));
     shortcut_info_.UpdateFromManifest(data.manifest);
     shortcut_info_.manifest_url = data.manifest_url;
 

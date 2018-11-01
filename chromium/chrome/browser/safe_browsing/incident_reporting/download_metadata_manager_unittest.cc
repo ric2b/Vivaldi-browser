@@ -15,8 +15,8 @@
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/safe_browsing/csd.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/test/mock_download_item.h"
@@ -143,7 +143,8 @@ class DownloadMetadataManagerTestBase : public ::testing::Test {
   void WriteTestMetadataFileForItem(uint32_t download_id) {
     std::string data;
     ASSERT_TRUE(GetTestMetadata(download_id)->SerializeToString(&data));
-    ASSERT_TRUE(base::WriteFile(GetMetadataPath(), data.data(), data.size()));
+    ASSERT_EQ(static_cast<int>(data.size()),
+              base::WriteFile(GetMetadataPath(), data.data(), data.size()));
   }
 
   // Writes a test DownloadMetadata file for kTestDownloadId to the test profile

@@ -7,22 +7,22 @@
 #include "core/dom/DocumentInit.h"
 #include "core/dom/DocumentParser.h"
 #include "core/html/HTMLViewSourceDocument.h"
+#include "platform/wtf/text/WTFString.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
 // This is a regression test for https://crbug.com/664915
 TEST(HTMLViewSourceParserTest, DetachThenFinish_ShouldNotCrash) {
-  String mimeType("text/html");
+  String mime_type("text/html");
   HTMLViewSourceDocument* document =
-      HTMLViewSourceDocument::create(DocumentInit(), mimeType);
+      HTMLViewSourceDocument::Create(DocumentInit(), mime_type);
   HTMLViewSourceParser* parser =
-      HTMLViewSourceParser::create(*document, mimeType);
+      HTMLViewSourceParser::Create(*document, mime_type);
   // A client may detach the parser from the document.
-  parser->detach();
+  parser->Detach();
   // A DocumentWriter may call finish() after detach().
-  static_cast<DocumentParser*>(parser)->finish();
+  static_cast<DocumentParser*>(parser)->Finish();
   // The test passed if finish did not crash.
 }
 

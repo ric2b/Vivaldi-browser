@@ -35,7 +35,7 @@
 #include "modules/filesystem/DOMFileSystemSync.h"
 #include "modules/filesystem/EntryBase.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -47,10 +47,10 @@ class EntrySync : public EntryBase, public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static EntrySync* create(EntryBase*);
+  static EntrySync* Create(EntryBase*);
 
   DOMFileSystemSync* filesystem() const {
-    return static_cast<DOMFileSystemSync*>(m_fileSystem.get());
+    return static_cast<DOMFileSystemSync*>(file_system_.Get());
   }
 
   Metadata* getMetadata(ExceptionState&);
@@ -66,7 +66,7 @@ class EntrySync : public EntryBase, public ScriptWrappable {
   DECLARE_VIRTUAL_TRACE();
 
  protected:
-  EntrySync(DOMFileSystemBase*, const String& fullPath);
+  EntrySync(DOMFileSystemBase*, const String& full_path);
 };
 
 }  // namespace blink

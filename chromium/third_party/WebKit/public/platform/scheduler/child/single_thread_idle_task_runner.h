@@ -64,15 +64,15 @@ class SingleThreadIdleTaskRunner
   // literals). They may not include " chars.
   SingleThreadIdleTaskRunner(
       scoped_refptr<base::SingleThreadTaskRunner> idle_priority_task_runner,
-      Delegate* Delegate,
+      Delegate* delegate,
       const char* tracing_category);
 
   virtual void PostIdleTask(const tracked_objects::Location& from_here,
                             const IdleTask& idle_task);
 
   // |idle_task| is eligible to run after the next time an idle period starts
-  // after |delay|.  Note this has after wakeup semantics, i.e. unless something
-  // else wakes the CPU up, this won't run.
+  // after |delay|.  Note this has after wake-up semantics, i.e. unless
+  // something else wakes the CPU up, this won't run.
   virtual void PostDelayedIdleTask(const tracked_objects::Location& from_here,
                                    const base::TimeDelta delay,
                                    const IdleTask& idle_task);

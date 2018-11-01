@@ -393,7 +393,7 @@ Extensions.ExtensionServer = class extends Common.Object {
       return this._status.OK();
     }
 
-    var request = SDK.NetworkLog.requestForURL(message.url);
+    var request = NetworkLog.networkLog.requestForURL(message.url);
     if (request) {
       Common.Revealer.reveal(request);
       return this._status.OK();
@@ -422,7 +422,7 @@ Extensions.ExtensionServer = class extends Common.Object {
     var injectedScript;
     if (options.injectedScript)
       injectedScript = '(function(){' + options.injectedScript + '})()';
-    SDK.targetManager.reloadPage(!!options.ignoreCache, injectedScript);
+    SDK.ResourceTreeModel.reloadAllPages(!!options.ignoreCache, injectedScript);
     return this._status.OK();
   }
 
@@ -449,8 +449,8 @@ Extensions.ExtensionServer = class extends Common.Object {
   }
 
   _onGetHAR() {
-    var requests = SDK.NetworkLog.requests();
-    var harLog = (new SDK.HARLog(requests)).build();
+    var requests = NetworkLog.networkLog.requests();
+    var harLog = (new NetworkLog.HARLog(requests)).build();
     for (var i = 0; i < harLog.entries.length; ++i)
       harLog.entries[i]._requestId = this._requestId(requests[i]);
     return harLog;
@@ -481,8 +481,8 @@ Extensions.ExtensionServer = class extends Common.Object {
     uiSourceCodes =
         uiSourceCodes.concat(Workspace.workspace.uiSourceCodesForProjectType(Workspace.projectTypes.ContentScripts));
     uiSourceCodes.forEach(pushResourceData.bind(this));
-    for (var target of SDK.targetManager.targets(SDK.Target.Capability.DOM))
-      SDK.ResourceTreeModel.fromTarget(target).forAllResources(pushResourceData.bind(this));
+    for (var resourceTreeModel of SDK.targetManager.models(SDK.ResourceTreeModel))
+      resourceTreeModel.forAllResources(pushResourceData.bind(this));
     return resources.valuesArray();
   }
 
@@ -710,7 +710,7 @@ Extensions.ExtensionServer = class extends Common.Object {
     var request = /** @type {!SDK.NetworkRequest} */ (event.data);
     this._postNotification(
         Extensions.extensionAPI.Events.NetworkRequestFinished, this._requestId(request),
-        (new SDK.HAREntry(request)).build());
+        (new NetworkLog.HAREntry(request)).build());
   }
 
   _notifyElementsSelectionChanged() {
@@ -893,7 +893,7 @@ Extensions.ExtensionServer = class extends Common.Object {
    * @return {!Extensions.ExtensionStatus.Record|undefined}
    */
   evaluate(expression, exposeCommandLineAPI, returnByValue, options, securityOrigin, callback) {
-    var contextId;
+    var context;
 
     /**
      * @param {string} url
@@ -909,72 +909,65 @@ Extensions.ExtensionServer = class extends Common.Object {
       return found;
     }
 
-    if (typeof options === 'object') {
-      var frame;
-      if (options.frameURL) {
-        frame = resolveURLToFrame(options.frameURL);
-      } else {
-        var target = SDK.targetManager.mainTarget();
-        var resourceTreeModel = target && SDK.ResourceTreeModel.fromTarget(target);
-        frame = resourceTreeModel && resourceTreeModel.mainFrame;
-      }
-      if (!frame) {
-        if (options.frameURL)
-          console.warn('evaluate: there is no frame with URL ' + options.frameURL);
-        else
-          console.warn('evaluate: the main frame is not yet available');
-        return this._status.E_NOTFOUND(options.frameURL || '<top>');
-      }
-
-      var contextSecurityOrigin;
-      if (options.useContentScriptContext)
-        contextSecurityOrigin = securityOrigin;
-      else if (options.scriptExecutionContext)
-        contextSecurityOrigin = options.scriptExecutionContext;
-
-      var context;
-      var executionContexts = frame.target().runtimeModel.executionContexts();
-      if (contextSecurityOrigin) {
-        for (var i = 0; i < executionContexts.length; ++i) {
-          var executionContext = executionContexts[i];
-          if (executionContext.frameId === frame.id && executionContext.origin === contextSecurityOrigin &&
-              !executionContext.isDefault)
-            context = executionContext;
-        }
-        if (!context) {
-          console.warn('The JavaScript context ' + contextSecurityOrigin + ' was not found in the frame ' + frame.url);
-          return this._status.E_NOTFOUND(contextSecurityOrigin);
-        }
-      } else {
-        for (var i = 0; i < executionContexts.length; ++i) {
-          var executionContext = executionContexts[i];
-          if (executionContext.frameId === frame.id && executionContext.isDefault)
-            context = executionContext;
-        }
-        if (!context)
-          return this._status.E_FAILED(frame.url + ' has no execution context');
-      }
-
-      contextId = context.id;
+    options = options || {};
+    var frame;
+    if (options.frameURL) {
+      frame = resolveURLToFrame(options.frameURL);
+    } else {
+      var target = SDK.targetManager.mainTarget();
+      var resourceTreeModel = target && target.model(SDK.ResourceTreeModel);
+      frame = resourceTreeModel && resourceTreeModel.mainFrame;
     }
-    var target = target ? target : SDK.targetManager.mainTarget();
-    if (!target)
-      return;
+    if (!frame) {
+      if (options.frameURL)
+        console.warn('evaluate: there is no frame with URL ' + options.frameURL);
+      else
+        console.warn('evaluate: the main frame is not yet available');
+      return this._status.E_NOTFOUND(options.frameURL || '<top>');
+    }
 
-    target.runtimeAgent().evaluate(
-        expression, 'extension', exposeCommandLineAPI, true, contextId, returnByValue, false, false, false, onEvalute);
+    var contextSecurityOrigin;
+    if (options.useContentScriptContext)
+      contextSecurityOrigin = securityOrigin;
+    else if (options.scriptExecutionContext)
+      contextSecurityOrigin = options.scriptExecutionContext;
+
+    var runtimeModel = frame.resourceTreeModel().target().model(SDK.RuntimeModel);
+    var executionContexts = runtimeModel ? runtimeModel.executionContexts() : [];
+    if (contextSecurityOrigin) {
+      for (var i = 0; i < executionContexts.length; ++i) {
+        var executionContext = executionContexts[i];
+        if (executionContext.frameId === frame.id && executionContext.origin === contextSecurityOrigin &&
+            !executionContext.isDefault)
+          context = executionContext;
+      }
+      if (!context) {
+        console.warn('The JavaScript context ' + contextSecurityOrigin + ' was not found in the frame ' + frame.url);
+        return this._status.E_NOTFOUND(contextSecurityOrigin);
+      }
+    } else {
+      for (var i = 0; i < executionContexts.length; ++i) {
+        var executionContext = executionContexts[i];
+        if (executionContext.frameId === frame.id && executionContext.isDefault)
+          context = executionContext;
+      }
+      if (!context)
+        return this._status.E_FAILED(frame.url + ' has no execution context');
+    }
+
+    context.evaluate(expression, 'extension', exposeCommandLineAPI, true, returnByValue, false, false, onEvaluate);
 
     /**
-     * @param {?Protocol.Error} error
-     * @param {!Protocol.Runtime.RemoteObject} result
+     * @param {?SDK.RemoteObject} result
      * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
+     * @param {string=} error
      */
-    function onEvalute(error, result, exceptionDetails) {
+    function onEvaluate(result, exceptionDetails, error) {
       if (error) {
         callback(error, null, !!exceptionDetails);
         return;
       }
-      callback(error, target.runtimeModel.createRemoteObject(result), !!exceptionDetails);
+      callback(null, result, !!exceptionDetails);
     }
   }
 };

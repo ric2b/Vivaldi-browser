@@ -37,53 +37,56 @@
 
 namespace blink {
 
-WebSerializedScriptValue WebSerializedScriptValue::fromString(
+WebSerializedScriptValue WebSerializedScriptValue::FromString(
     const WebString& s) {
-  return SerializedScriptValue::create(s);
+  return SerializedScriptValue::Create(s);
 }
 
-WebSerializedScriptValue WebSerializedScriptValue::serialize(
+WebSerializedScriptValue WebSerializedScriptValue::Serialize(
+    v8::Isolate* isolate,
     v8::Local<v8::Value> value) {
-  DummyExceptionStateForTesting exceptionState;
-  WebSerializedScriptValue serializedValue = SerializedScriptValue::serialize(
-      v8::Isolate::GetCurrent(), value, nullptr, nullptr, exceptionState);
-  if (exceptionState.hadException())
-    return createInvalid();
-  return serializedValue;
+  DummyExceptionStateForTesting exception_state;
+  WebSerializedScriptValue serialized_value = SerializedScriptValue::Serialize(
+      isolate, value, SerializedScriptValue::SerializeOptions(),
+      exception_state);
+  if (exception_state.HadException())
+    return CreateInvalid();
+  return serialized_value;
 }
 
-WebSerializedScriptValue WebSerializedScriptValue::createInvalid() {
-  return SerializedScriptValue::create();
+WebSerializedScriptValue WebSerializedScriptValue::CreateInvalid() {
+  return SerializedScriptValue::Create();
 }
 
-void WebSerializedScriptValue::reset() {
-  m_private.reset();
+void WebSerializedScriptValue::Reset() {
+  private_.Reset();
 }
 
-void WebSerializedScriptValue::assign(const WebSerializedScriptValue& other) {
-  m_private = other.m_private;
+void WebSerializedScriptValue::Assign(const WebSerializedScriptValue& other) {
+  private_ = other.private_;
 }
 
-WebString WebSerializedScriptValue::toString() const {
-  return m_private->toWireString();
+WebString WebSerializedScriptValue::ToString() const {
+  return private_->ToWireString();
 }
 
-v8::Local<v8::Value> WebSerializedScriptValue::deserialize() {
-  return m_private->deserialize();
+v8::Local<v8::Value> WebSerializedScriptValue::Deserialize(
+    v8::Isolate* isolate) {
+  return private_->Deserialize(isolate);
 }
 
 WebSerializedScriptValue::WebSerializedScriptValue(
     PassRefPtr<SerializedScriptValue> value)
-    : m_private(value) {}
+    : private_(value) {}
 
 WebSerializedScriptValue& WebSerializedScriptValue::operator=(
     PassRefPtr<SerializedScriptValue> value) {
-  m_private = value;
+  private_ = value;
   return *this;
 }
 
 WebSerializedScriptValue::operator PassRefPtr<SerializedScriptValue>() const {
-  return m_private.get();
+  return private_.Get();
 }
 
 }  // namespace blink

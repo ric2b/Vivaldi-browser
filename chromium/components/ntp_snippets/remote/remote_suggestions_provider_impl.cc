@@ -21,9 +21,10 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
-#include "components/image_fetcher/image_decoder.h"
-#include "components/image_fetcher/image_fetcher.h"
+#include "components/image_fetcher/core/image_decoder.h"
+#include "components/image_fetcher/core/image_fetcher.h"
 #include "components/ntp_snippets/category_rankers/category_ranker.h"
+#include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/remote_suggestions_database.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
@@ -31,6 +32,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/variations/variations_associated_data.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 
@@ -50,6 +52,47 @@ const char kCategoryContentId[] = "id";
 const char kCategoryContentTitle[] = "title";
 const char kCategoryContentProvidedByServer[] = "provided_by_server";
 const char kCategoryContentAllowFetchingMore[] = "allow_fetching_more";
+
+// Variation parameter for ordering new remote categories based on their
+// position in the response relative to "Article for you" category.
+const char kOrderNewRemoteCategoriesBasedOnArticlesCategory[] =
+    "order_new_remote_categories_based_on_articles_category";
+
+bool IsOrderingNewRemoteCategoriesBasedOnArticlesCategoryEnabled() {
+  return variations::GetVariationParamByFeatureAsBool(
+      ntp_snippets::kArticleSuggestionsFeature,
+      kOrderNewRemoteCategoriesBasedOnArticlesCategory,
+      /*default_value=*/false);
+}
+
+void AddFetchedCategoriesToRankerBasedOnArticlesCategory(
+    CategoryRanker* ranker,
+    const RemoteSuggestionsFetcher::FetchedCategoriesVector& fetched_categories,
+    Category articles_category) {
+  DCHECK(IsOrderingNewRemoteCategoriesBasedOnArticlesCategoryEnabled());
+  // Insert categories which precede "Articles" in the response.
+  for (const RemoteSuggestionsFetcher::FetchedCategory& fetched_category :
+       fetched_categories) {
+    if (fetched_category.category == articles_category) {
+      break;
+    }
+    ranker->InsertCategoryBeforeIfNecessary(fetched_category.category,
+                                            articles_category);
+  }
+  // Insert categories which follow "Articles" in the response. Note that we
+  // insert them in reversed order, because they are inserted right after
+  // "Articles", which reverses the order.
+  for (auto fetched_category_it = fetched_categories.rbegin();
+       fetched_category_it != fetched_categories.rend();
+       ++fetched_category_it) {
+    if (fetched_category_it->category == articles_category) {
+      return;
+    }
+    ranker->InsertCategoryAfterIfNecessary(fetched_category_it->category,
+                                           articles_category);
+  }
+  NOTREACHED() << "Articles category was not found.";
+}
 
 template <typename SuggestionPtrContainer>
 std::unique_ptr<std::vector<std::string>> GetSuggestionIDVector(
@@ -74,13 +117,11 @@ bool HasIntersection(const std::vector<std::string>& a,
 void EraseByPrimaryID(RemoteSuggestion::PtrVector* suggestions,
                       const std::vector<std::string>& ids) {
   std::set<std::string> ids_lookup(ids.begin(), ids.end());
-  suggestions->erase(
-      std::remove_if(
-          suggestions->begin(), suggestions->end(),
-          [&ids_lookup](const std::unique_ptr<RemoteSuggestion>& suggestion) {
-            return base::ContainsValue(ids_lookup, suggestion->id());
-          }),
-      suggestions->end());
+  base::EraseIf(
+      *suggestions,
+      [&ids_lookup](const std::unique_ptr<RemoteSuggestion>& suggestion) {
+        return base::ContainsValue(ids_lookup, suggestion->id());
+      });
 }
 
 void EraseMatchingSuggestions(
@@ -91,23 +132,18 @@ void EraseMatchingSuggestions(
     const std::vector<std::string>& suggestion_ids = suggestion->GetAllIDs();
     compare_against_ids.insert(suggestion_ids.begin(), suggestion_ids.end());
   }
-  suggestions->erase(
-      std::remove_if(suggestions->begin(), suggestions->end(),
-                     [&compare_against_ids](
-                         const std::unique_ptr<RemoteSuggestion>& suggestion) {
-                       return HasIntersection(suggestion->GetAllIDs(),
-                                              compare_against_ids);
-                     }),
-      suggestions->end());
+  base::EraseIf(
+      *suggestions, [&compare_against_ids](
+                        const std::unique_ptr<RemoteSuggestion>& suggestion) {
+        return HasIntersection(suggestion->GetAllIDs(), compare_against_ids);
+      });
 }
 
 void RemoveNullPointers(RemoteSuggestion::PtrVector* suggestions) {
-  suggestions->erase(
-      std::remove_if(suggestions->begin(), suggestions->end(),
-                     [](const std::unique_ptr<RemoteSuggestion>& suggestion) {
-                       return !suggestion;
-                     }),
-      suggestions->end());
+  base::EraseIf(*suggestions,
+                [](const std::unique_ptr<RemoteSuggestion>& suggestion) {
+                  return !suggestion;
+                });
 }
 
 void RemoveIncompleteSuggestions(RemoteSuggestion::PtrVector* suggestions) {
@@ -118,12 +154,10 @@ void RemoveIncompleteSuggestions(RemoteSuggestion::PtrVector* suggestions) {
   int num_suggestions = suggestions->size();
   // Remove suggestions that do not have all the info we need to display it to
   // the user.
-  suggestions->erase(
-      std::remove_if(suggestions->begin(), suggestions->end(),
-                     [](const std::unique_ptr<RemoteSuggestion>& suggestion) {
-                       return !suggestion->is_complete();
-                     }),
-      suggestions->end());
+  base::EraseIf(*suggestions,
+                [](const std::unique_ptr<RemoteSuggestion>& suggestion) {
+                  return !suggestion->is_complete();
+                });
   int num_suggestions_removed = num_suggestions - suggestions->size();
   UMA_HISTOGRAM_BOOLEAN("NewTabPage.Snippets.IncompleteSnippetsAfterFetch",
                         num_suggestions_removed > 0);
@@ -162,11 +196,9 @@ void CallWithEmptyResults(const FetchDoneCallback& callback,
 
 CachedImageFetcher::CachedImageFetcher(
     std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher,
-    std::unique_ptr<image_fetcher::ImageDecoder> image_decoder,
     PrefService* pref_service,
     RemoteSuggestionsDatabase* database)
     : image_fetcher_(std::move(image_fetcher)),
-      image_decoder_(std::move(image_decoder)),
       database_(database),
       thumbnail_requests_throttler_(
           pref_service,
@@ -205,7 +237,8 @@ void CachedImageFetcher::OnImageDataFetched(
 void CachedImageFetcher::OnImageDecodingDone(
     const ImageFetchedCallback& callback,
     const std::string& id_within_category,
-    const gfx::Image& image) {
+    const gfx::Image& image,
+    const image_fetcher::RequestMetadata& metadata) {
   callback.Run(image);
 }
 
@@ -214,9 +247,9 @@ void CachedImageFetcher::OnImageFetchedFromDatabase(
     const ContentSuggestion::ID& suggestion_id,
     const GURL& url,
     std::string data) {  // SnippetImageCallback requires by-value.
-  // |image_decoder_| is null in tests.
-  if (image_decoder_ && !data.empty()) {
-    image_decoder_->DecodeImage(
+  // The image decoder is null in tests.
+  if (image_fetcher_->GetImageDecoder() && !data.empty()) {
+    image_fetcher_->GetImageDecoder()->DecodeImage(
         data,
         // We're not dealing with multi-frame images.
         /*desired_image_frame_size=*/gfx::Size(),
@@ -246,9 +279,8 @@ void CachedImageFetcher::FetchImageFromNetwork(
     const ContentSuggestion::ID& suggestion_id,
     const GURL& url,
     const ImageFetchedCallback& callback) {
-  if (url.is_empty() ||
-      !thumbnail_requests_throttler_.DemandQuotaForRequest(
-          /*interactive_request=*/true)) {
+  if (url.is_empty() || !thumbnail_requests_throttler_.DemandQuotaForRequest(
+                            /*interactive_request=*/true)) {
     // Return an empty image. Directly, this is never synchronous with the
     // original FetchSuggestionImage() call - an asynchronous database query has
     // happened in the meantime.
@@ -267,9 +299,9 @@ RemoteSuggestionsProviderImpl::RemoteSuggestionsProviderImpl(
     PrefService* pref_service,
     const std::string& application_language_code,
     CategoryRanker* category_ranker,
+    RemoteSuggestionsScheduler* scheduler,
     std::unique_ptr<RemoteSuggestionsFetcher> suggestions_fetcher,
     std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher,
-    std::unique_ptr<image_fetcher::ImageDecoder> image_decoder,
     std::unique_ptr<RemoteSuggestionsDatabase> database,
     std::unique_ptr<RemoteSuggestionsStatusService> status_service)
     : RemoteSuggestionsProvider(observer),
@@ -279,17 +311,13 @@ RemoteSuggestionsProviderImpl::RemoteSuggestionsProviderImpl(
           Category::FromKnownCategory(KnownCategories::ARTICLES)),
       application_language_code_(application_language_code),
       category_ranker_(category_ranker),
+      remote_suggestions_scheduler_(scheduler),
       suggestions_fetcher_(std::move(suggestions_fetcher)),
       database_(std::move(database)),
-      image_fetcher_(std::move(image_fetcher),
-                     std::move(image_decoder),
-                     pref_service,
-                     database_.get()),
+      image_fetcher_(std::move(image_fetcher), pref_service, database_.get()),
       status_service_(std::move(status_service)),
       fetch_when_ready_(false),
       fetch_when_ready_interactive_(false),
-      fetch_when_ready_callback_(nullptr),
-      remote_suggestions_scheduler_(nullptr),
       clear_history_dependent_state_when_initialized_(false),
       clock_(base::MakeUnique<base::DefaultClock>()) {
   RestoreCategoriesFromPrefs();
@@ -331,21 +359,22 @@ void RemoteSuggestionsProviderImpl::RegisterProfilePrefs(
   RemoteSuggestionsStatusService::RegisterProfilePrefs(registry);
 }
 
-void RemoteSuggestionsProviderImpl::SetRemoteSuggestionsScheduler(
-    RemoteSuggestionsScheduler* scheduler) {
-  remote_suggestions_scheduler_ = scheduler;
-  // Call the observer right away if we've reached any final state.
-  NotifyStateChanged();
-}
-
 void RemoteSuggestionsProviderImpl::ReloadSuggestions() {
-  FetchSuggestions(/*interactive_request=*/true,
-                   /*callback=*/nullptr);
+  if (!remote_suggestions_scheduler_->AcquireQuotaForInteractiveFetch()) {
+    return;
+  }
+  FetchSuggestions(
+      /*interactive_request=*/true,
+      base::Bind(
+          [](RemoteSuggestionsScheduler* scheduler, Status status_code) {
+            scheduler->OnInteractiveFetchFinished(status_code);
+          },
+          base::Unretained(remote_suggestions_scheduler_)));
 }
 
 void RemoteSuggestionsProviderImpl::RefetchInTheBackground(
-    std::unique_ptr<FetchStatusCallback> callback) {
-  FetchSuggestions(/*interactive_request=*/false, std::move(callback));
+    const FetchStatusCallback& callback) {
+  FetchSuggestions(/*interactive_request=*/false, callback);
 }
 
 const RemoteSuggestionsFetcher*
@@ -353,13 +382,27 @@ RemoteSuggestionsProviderImpl::suggestions_fetcher_for_debugging() const {
   return suggestions_fetcher_.get();
 }
 
+GURL RemoteSuggestionsProviderImpl::GetUrlWithFavicon(
+    const ContentSuggestion::ID& suggestion_id) const {
+  DCHECK(base::ContainsKey(category_contents_, suggestion_id.category()));
+
+  const CategoryContent& content =
+      category_contents_.at(suggestion_id.category());
+  const RemoteSuggestion* suggestion =
+      content.FindSuggestion(suggestion_id.id_within_category());
+  if (!suggestion) {
+    return GURL();
+  }
+  return ContentSuggestion::GetFaviconDomain(suggestion->url());
+}
+
 void RemoteSuggestionsProviderImpl::FetchSuggestions(
     bool interactive_request,
-    std::unique_ptr<FetchStatusCallback> callback) {
+    const FetchStatusCallback& callback) {
   if (!ready()) {
     fetch_when_ready_ = true;
     fetch_when_ready_interactive_ = interactive_request;
-    fetch_when_ready_callback_ = std::move(callback);
+    fetch_when_ready_callback_ = callback;
     return;
   }
 
@@ -368,9 +411,9 @@ void RemoteSuggestionsProviderImpl::FetchSuggestions(
   RequestParams params = BuildFetchParams();
   params.interactive_request = interactive_request;
   suggestions_fetcher_->FetchSnippets(
-      params, base::BindOnce(&RemoteSuggestionsProviderImpl::OnFetchFinished,
-                             base::Unretained(this), std::move(callback),
-                             interactive_request));
+      params,
+      base::BindOnce(&RemoteSuggestionsProviderImpl::OnFetchFinished,
+                     base::Unretained(this), callback, interactive_request));
 }
 
 void RemoteSuggestionsProviderImpl::Fetch(
@@ -383,6 +426,21 @@ void RemoteSuggestionsProviderImpl::Fetch(
                                 "RemoteSuggestionsProvider is not ready!"));
     return;
   }
+  if (!remote_suggestions_scheduler_->AcquireQuotaForInteractiveFetch()) {
+    CallWithEmptyResults(callback, Status(StatusCode::TEMPORARY_ERROR,
+                                          "Interactive quota exceeded!"));
+    return;
+  }
+  // Make sure after the fetch, the scheduler is informed about the status.
+  FetchDoneCallback callback_wrapper = base::Bind(
+      [](RemoteSuggestionsScheduler* scheduler,
+         const FetchDoneCallback& callback, Status status_code,
+         std::vector<ContentSuggestion> suggestions) {
+        scheduler->OnInteractiveFetchFinished(status_code);
+        callback.Run(status_code, std::move(suggestions));
+      },
+      base::Unretained(remote_suggestions_scheduler_), callback);
+
   RequestParams params = BuildFetchParams();
   params.excluded_ids.insert(known_suggestion_ids.begin(),
                              known_suggestion_ids.end());
@@ -392,7 +450,7 @@ void RemoteSuggestionsProviderImpl::Fetch(
   suggestions_fetcher_->FetchSnippets(
       params,
       base::BindOnce(&RemoteSuggestionsProviderImpl::OnFetchMoreFinished,
-                     base::Unretained(this), callback));
+                     base::Unretained(this), callback_wrapper));
 }
 
 // Builds default fetcher params.
@@ -657,13 +715,12 @@ void RemoteSuggestionsProviderImpl::OnFetchMoreFinished(
   // Should Nuke also cancel outstanding requests, or do we want to check the
   // status?
   UpdateCategoryStatus(category, CategoryStatus::AVAILABLE);
-  // Notify callers and observers.
   fetching_callback.Run(Status::Success(), std::move(result));
   NotifyNewSuggestions(category, *existing_content);
 }
 
 void RemoteSuggestionsProviderImpl::OnFetchFinished(
-    std::unique_ptr<FetchStatusCallback> callback,
+    const FetchStatusCallback& callback,
     bool interactive_request,
     Status status,
     RemoteSuggestionsFetcher::OptionalFetchedCategories fetched_categories) {
@@ -696,6 +753,7 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
   if (fetched_categories) {
     // TODO(treib): Reorder |category_contents_| to match the order we received
     // from the server. crbug.com/653816
+    bool response_includes_article_category = false;
     for (RemoteSuggestionsFetcher::FetchedCategory& fetched_category :
          *fetched_categories) {
       // TODO(tschumann): Remove this histogram once we only talk to the content
@@ -705,14 +763,27 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
             "NewTabPage.Snippets.NumArticlesFetched",
             std::min(fetched_category.suggestions.size(),
                      static_cast<size_t>(kMaxSuggestionCount + 1)));
+        response_includes_article_category = true;
       }
-      category_ranker_->AppendCategoryIfNecessary(fetched_category.category);
+
       CategoryContent* content =
           UpdateCategoryInfo(fetched_category.category, fetched_category.info);
       content->included_in_last_server_response = true;
       SanitizeReceivedSuggestions(content->dismissed,
                                   &fetched_category.suggestions);
       IntegrateSuggestions(content, std::move(fetched_category.suggestions));
+    }
+
+    // Add new remote categories to the ranker.
+    if (IsOrderingNewRemoteCategoriesBasedOnArticlesCategoryEnabled() &&
+        response_includes_article_category) {
+      AddFetchedCategoriesToRankerBasedOnArticlesCategory(
+          category_ranker_, *fetched_categories, articles_category_);
+    } else {
+      for (const RemoteSuggestionsFetcher::FetchedCategory& fetched_category :
+           *fetched_categories) {
+        category_ranker_->AppendCategoryIfNecessary(fetched_category.category);
+      }
     }
   }
 
@@ -743,7 +814,7 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
   }
 
   if (callback) {
-    callback->Run(status);
+    callback.Run(status);
   }
 }
 
@@ -887,18 +958,14 @@ void RemoteSuggestionsProviderImpl::ClearHistoryDependentState() {
   }
 
   NukeAllSuggestions();
-  if (remote_suggestions_scheduler_) {
-    remote_suggestions_scheduler_->OnHistoryCleared();
-  }
+  remote_suggestions_scheduler_->OnHistoryCleared();
 }
 
 void RemoteSuggestionsProviderImpl::ClearSuggestions() {
   DCHECK(initialized());
 
   NukeAllSuggestions();
-  if (remote_suggestions_scheduler_) {
-    remote_suggestions_scheduler_->OnSuggestionsCleared();
-  }
+  remote_suggestions_scheduler_->OnSuggestionsCleared();
 }
 
 void RemoteSuggestionsProviderImpl::NukeAllSuggestions() {
@@ -947,8 +1014,7 @@ void RemoteSuggestionsProviderImpl::EnterStateReady() {
   auto article_category_it = category_contents_.find(articles_category_);
   DCHECK(article_category_it != category_contents_.end());
   if (fetch_when_ready_) {
-    FetchSuggestions(fetch_when_ready_interactive_,
-                     std::move(fetch_when_ready_callback_));
+    FetchSuggestions(fetch_when_ready_interactive_, fetch_when_ready_callback_);
     fetch_when_ready_ = false;
   }
 
@@ -1085,10 +1151,6 @@ void RemoteSuggestionsProviderImpl::EnterState(State state) {
 }
 
 void RemoteSuggestionsProviderImpl::NotifyStateChanged() {
-  if (!remote_suggestions_scheduler_) {
-    return;
-  }
-
   switch (state_) {
     case State::NOT_INITED:
       // Initial state, not sure yet whether active or not.
@@ -1200,29 +1262,29 @@ void RemoteSuggestionsProviderImpl::RestoreCategoriesFromPrefs() {
 
   const base::ListValue* list =
       pref_service_->GetList(prefs::kRemoteSuggestionCategories);
-  for (const std::unique_ptr<base::Value>& entry : *list) {
+  for (const base::Value& entry : *list) {
     const base::DictionaryValue* dict = nullptr;
-    if (!entry->GetAsDictionary(&dict)) {
-      DLOG(WARNING) << "Invalid category pref value: " << *entry;
+    if (!entry.GetAsDictionary(&dict)) {
+      DLOG(WARNING) << "Invalid category pref value: " << entry;
       continue;
     }
     int id = 0;
     if (!dict->GetInteger(kCategoryContentId, &id)) {
       DLOG(WARNING) << "Invalid category pref value, missing '"
-                    << kCategoryContentId << "': " << *entry;
+                    << kCategoryContentId << "': " << entry;
       continue;
     }
     base::string16 title;
     if (!dict->GetString(kCategoryContentTitle, &title)) {
       DLOG(WARNING) << "Invalid category pref value, missing '"
-                    << kCategoryContentTitle << "': " << *entry;
+                    << kCategoryContentTitle << "': " << entry;
       continue;
     }
     bool included_in_last_server_response = false;
     if (!dict->GetBoolean(kCategoryContentProvidedByServer,
                           &included_in_last_server_response)) {
       DLOG(WARNING) << "Invalid category pref value, missing '"
-                    << kCategoryContentProvidedByServer << "': " << *entry;
+                    << kCategoryContentProvidedByServer << "': " << entry;
       continue;
     }
     bool allow_fetching_more_results = false;
@@ -1270,8 +1332,9 @@ void RemoteSuggestionsProviderImpl::StoreCategoriesToPrefs() {
     dict->SetString(kCategoryContentTitle, content.info.title());
     dict->SetBoolean(kCategoryContentProvidedByServer,
                      content.included_in_last_server_response);
-    dict->SetBoolean(kCategoryContentAllowFetchingMore,
-                     content.info.has_fetch_action());
+    bool has_fetch_action = content.info.additional_action() ==
+                            ContentSuggestionsAdditionalAction::FETCH;
+    dict->SetBoolean(kCategoryContentAllowFetchingMore, has_fetch_action);
     list.Append(std::move(dict));
   }
   // Finally, store the result in the pref service.

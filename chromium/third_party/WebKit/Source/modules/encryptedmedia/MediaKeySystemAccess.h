@@ -5,12 +5,12 @@
 #ifndef MediaKeySystemAccess_h
 #define MediaKeySystemAccess_h
 
+#include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/encryptedmedia/MediaKeySystemConfiguration.h"
+#include "platform/wtf/Forward.h"
 #include "public/platform/WebContentDecryptionModuleAccess.h"
-#include "wtf/Forward.h"
-#include <memory>
 
 namespace blink {
 
@@ -20,19 +20,19 @@ class MediaKeySystemAccess final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  MediaKeySystemAccess(const String& keySystem,
+  MediaKeySystemAccess(const String& key_system,
                        std::unique_ptr<WebContentDecryptionModuleAccess>);
   virtual ~MediaKeySystemAccess();
 
-  const String& keySystem() const { return m_keySystem; }
+  const String& keySystem() const { return key_system_; }
   void getConfiguration(MediaKeySystemConfiguration& result);
   ScriptPromise createMediaKeys(ScriptState*);
 
   DECLARE_TRACE();
 
  private:
-  const String m_keySystem;
-  std::unique_ptr<WebContentDecryptionModuleAccess> m_access;
+  const String key_system_;
+  std::unique_ptr<WebContentDecryptionModuleAccess> access_;
 };
 
 }  // namespace blink

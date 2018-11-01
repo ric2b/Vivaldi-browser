@@ -22,6 +22,7 @@ extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiNumberOfDaysToKeepVisits[];
 extern const char kVivaldiTabZoom[];
 extern const char kVivaldiTabsToLinks[];
+extern const char kVivaldiHasDesktopWallpaperProtocol[];
 
 extern const char kVivaldiExperiments[];
 

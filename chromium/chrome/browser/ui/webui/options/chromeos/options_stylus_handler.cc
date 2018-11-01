@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/webui/options/chromeos/options_stylus_handler.h"
 
-#include "ash/common/system/chromeos/palette/palette_utils.h"
+#include "ash/system/palette/palette_utils.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
@@ -108,8 +108,8 @@ void OptionsStylusHandler::UpdateNoteTakingApps() {
   base::ListValue apps_list;
 
   NoteTakingHelper* helper = NoteTakingHelper::Get();
-  if (helper->android_enabled() && !helper->android_apps_received()) {
-    // If Android is enabled but not ready yet, let the JS know so it can
+  if (helper->play_store_enabled() && !helper->android_apps_received()) {
+    // If Play Store is enabled but not ready yet, let the JS know so it can
     // disable the menu and display an explanatory message.
     waiting_for_android = true;
   } else {

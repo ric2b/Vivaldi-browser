@@ -40,159 +40,165 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
-ScheduledAction* ScheduledAction::create(ScriptState* scriptState,
+ScheduledAction* ScheduledAction::Create(ScriptState* script_state,
                                          ExecutionContext* target,
                                          const ScriptValue& handler,
                                          const Vector<ScriptValue>& arguments) {
-  ASSERT(handler.isFunction());
-  if (!scriptState->world().isWorkerWorld()) {
-    DCHECK(BindingSecurity::shouldAllowAccessToFrame(
-        enteredDOMWindow(scriptState->isolate()), toDocument(target)->frame(),
-        BindingSecurity::ErrorReportOption::DoNotReport));
+  ASSERT(handler.IsFunction());
+  if (!script_state->World().IsWorkerWorld()) {
+    if (!BindingSecurity::ShouldAllowAccessToFrame(
+            EnteredDOMWindow(script_state->GetIsolate()),
+            ToDocument(target)->GetFrame(),
+            BindingSecurity::ErrorReportOption::kDoNotReport)) {
+      UseCounter::Count(target, UseCounter::kScheduledActionIgnored);
+      return new ScheduledAction(script_state);
+    }
   }
-  return new ScheduledAction(scriptState, handler, arguments);
+  return new ScheduledAction(script_state, handler, arguments);
 }
 
-ScheduledAction* ScheduledAction::create(ScriptState* scriptState,
+ScheduledAction* ScheduledAction::Create(ScriptState* script_state,
                                          ExecutionContext* target,
                                          const String& handler) {
-  if (!scriptState->world().isWorkerWorld()) {
-    DCHECK(BindingSecurity::shouldAllowAccessToFrame(
-        enteredDOMWindow(scriptState->isolate()), toDocument(target)->frame(),
-        BindingSecurity::ErrorReportOption::DoNotReport));
+  if (!script_state->World().IsWorkerWorld()) {
+    if (!BindingSecurity::ShouldAllowAccessToFrame(
+            EnteredDOMWindow(script_state->GetIsolate()),
+            ToDocument(target)->GetFrame(),
+            BindingSecurity::ErrorReportOption::kDoNotReport)) {
+      UseCounter::Count(target, UseCounter::kScheduledActionIgnored);
+      return new ScheduledAction(script_state);
+    }
   }
-  return new ScheduledAction(scriptState, handler);
-}
-
-DEFINE_TRACE(ScheduledAction) {
-  visitor->trace(m_code);
+  return new ScheduledAction(script_state, handler);
 }
 
 ScheduledAction::~ScheduledAction() {
   // Verify that owning DOMTimer has eagerly disposed.
-  DCHECK(m_info.IsEmpty());
+  DCHECK(info_.IsEmpty());
 }
 
-void ScheduledAction::dispose() {
-  m_code.dispose();
-  m_info.Clear();
-  m_function.clear();
-  m_scriptState.clear();
+void ScheduledAction::Dispose() {
+  code_ = String();
+  info_.Clear();
+  function_.Clear();
+  script_state_.Clear();
 }
 
-void ScheduledAction::execute(ExecutionContext* context) {
-  if (context->isDocument()) {
-    LocalFrame* frame = toDocument(context)->frame();
+void ScheduledAction::Execute(ExecutionContext* context) {
+  if (context->IsDocument()) {
+    LocalFrame* frame = ToDocument(context)->GetFrame();
     if (!frame) {
       DVLOG(1) << "ScheduledAction::execute " << this << ": no frame";
       return;
     }
-    if (!context->canExecuteScripts(AboutToExecuteScript)) {
+    if (!context->CanExecuteScripts(kAboutToExecuteScript)) {
       DVLOG(1) << "ScheduledAction::execute " << this
                << ": frame can not execute scripts";
       return;
     }
-    execute(frame);
+    Execute(frame);
   } else {
     DVLOG(1) << "ScheduledAction::execute " << this << ": worker scope";
-    execute(toWorkerGlobalScope(context));
+    Execute(ToWorkerGlobalScope(context));
   }
 }
 
-ScheduledAction::ScheduledAction(ScriptState* scriptState,
+ScheduledAction::ScheduledAction(ScriptState* script_state,
                                  const ScriptValue& function,
                                  const Vector<ScriptValue>& arguments)
-    : m_scriptState(scriptState),
-      m_info(scriptState->isolate()),
-      m_code(String(), KURL(), TextPosition::belowRangePosition()) {
-  ASSERT(function.isFunction());
-  m_function.set(scriptState->isolate(),
-                 v8::Local<v8::Function>::Cast(function.v8Value()));
-  m_info.ReserveCapacity(arguments.size());
+    : script_state_(script_state), info_(script_state->GetIsolate()) {
+  ASSERT(function.IsFunction());
+  function_.Set(script_state->GetIsolate(),
+                v8::Local<v8::Function>::Cast(function.V8Value()));
+  info_.ReserveCapacity(arguments.size());
   for (const ScriptValue& argument : arguments)
-    m_info.Append(argument.v8Value());
+    info_.Append(argument.V8Value());
 }
 
-ScheduledAction::ScheduledAction(ScriptState* scriptState, const String& code)
-    : m_scriptState(scriptState),
-      m_info(scriptState->isolate()),
-      m_code(code, KURL()) {}
+ScheduledAction::ScheduledAction(ScriptState* script_state, const String& code)
+    : script_state_(script_state),
+      info_(script_state->GetIsolate()),
+      code_(code) {}
 
-void ScheduledAction::execute(LocalFrame* frame) {
-  if (!m_scriptState->contextIsValid()) {
+ScheduledAction::ScheduledAction(ScriptState* script_state)
+    : script_state_(script_state), info_(script_state->GetIsolate()) {}
+
+void ScheduledAction::Execute(LocalFrame* frame) {
+  if (!script_state_->ContextIsValid()) {
     DVLOG(1) << "ScheduledAction::execute " << this << ": context is empty";
     return;
   }
 
   TRACE_EVENT0("v8", "ScheduledAction::execute");
-  ScriptState::Scope scope(m_scriptState.get());
-  if (!m_function.isEmpty()) {
+  ScriptState::Scope scope(script_state_.Get());
+  if (!function_.IsEmpty()) {
     DVLOG(1) << "ScheduledAction::execute " << this << ": have function";
     v8::Local<v8::Function> function =
-        m_function.newLocal(m_scriptState->isolate());
-    ScriptState* scriptStateForFunc =
-        ScriptState::from(function->CreationContext());
-    if (!scriptStateForFunc->contextIsValid()) {
+        function_.NewLocal(script_state_->GetIsolate());
+    ScriptState* script_state_for_func =
+        ScriptState::From(function->CreationContext());
+    if (!script_state_for_func->ContextIsValid()) {
       DVLOG(1) << "ScheduledAction::execute " << this
                << ": function's context is empty";
       return;
     }
     Vector<v8::Local<v8::Value>> info;
-    createLocalHandlesForArgs(&info);
-    V8ScriptRunner::callFunction(
-        function, frame->document(), m_scriptState->context()->Global(),
-        info.size(), info.data(), m_scriptState->isolate());
+    CreateLocalHandlesForArgs(&info);
+    V8ScriptRunner::CallFunction(
+        function, frame->GetDocument(), script_state_->GetContext()->Global(),
+        info.size(), info.Data(), script_state_->GetIsolate());
   } else {
     DVLOG(1) << "ScheduledAction::execute " << this
              << ": executing from source";
-    frame->script().executeScriptAndReturnValue(m_scriptState->context(),
-                                                ScriptSourceCode(m_code));
+    frame->GetScriptController().ExecuteScriptAndReturnValue(
+        script_state_->GetContext(), ScriptSourceCode(code_));
   }
 
   // The frame might be invalid at this point because JavaScript could have
   // released it.
 }
 
-void ScheduledAction::execute(WorkerGlobalScope* worker) {
-  ASSERT(worker->thread()->isCurrentThread());
+void ScheduledAction::Execute(WorkerGlobalScope* worker) {
+  ASSERT(worker->GetThread()->IsCurrentThread());
 
-  if (!m_scriptState->contextIsValid()) {
+  if (!script_state_->ContextIsValid()) {
     DVLOG(1) << "ScheduledAction::execute " << this << ": context is empty";
     return;
   }
 
-  if (!m_function.isEmpty()) {
-    ScriptState::Scope scope(m_scriptState.get());
+  if (!function_.IsEmpty()) {
+    ScriptState::Scope scope(script_state_.Get());
     v8::Local<v8::Function> function =
-        m_function.newLocal(m_scriptState->isolate());
-    ScriptState* scriptStateForFunc =
-        ScriptState::from(function->CreationContext());
-    if (!scriptStateForFunc->contextIsValid()) {
+        function_.NewLocal(script_state_->GetIsolate());
+    ScriptState* script_state_for_func =
+        ScriptState::From(function->CreationContext());
+    if (!script_state_for_func->ContextIsValid()) {
       DVLOG(1) << "ScheduledAction::execute " << this
                << ": function's context is empty";
       return;
     }
     Vector<v8::Local<v8::Value>> info;
-    createLocalHandlesForArgs(&info);
-    V8ScriptRunner::callFunction(
-        function, worker, m_scriptState->context()->Global(), info.size(),
-        info.data(), m_scriptState->isolate());
+    CreateLocalHandlesForArgs(&info);
+    V8ScriptRunner::CallFunction(
+        function, worker, script_state_->GetContext()->Global(), info.size(),
+        info.Data(), script_state_->GetIsolate());
   } else {
-    worker->scriptController()->evaluate(m_code);
+    worker->ScriptController()->Evaluate(ScriptSourceCode(code_));
   }
 }
 
-void ScheduledAction::createLocalHandlesForArgs(
+void ScheduledAction::CreateLocalHandlesForArgs(
     Vector<v8::Local<v8::Value>>* handles) {
-  handles->reserveCapacity(m_info.Size());
-  for (size_t i = 0; i < m_info.Size(); ++i)
-    handles->push_back(m_info.Get(i));
+  handles->ReserveCapacity(info_.Size());
+  for (size_t i = 0; i < info_.Size(); ++i)
+    handles->push_back(info_.Get(i));
 }
 
 }  // namespace blink

@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Մուտքագրեք կարճ ստեղն</translation>
 <translation id="2509495747794740764">Մասշտաբի արժեքը պետք է լինի թիվ 10-ի ու 200-ի միջև։</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" />-ի տեղակայում</translation>
+<translation id="253557089021624350">Keepalive ակտիվությունների հաշվիչ</translation>
 <translation id="2550212893339833758">Փոխանակվող հիշողություն</translation>
 <translation id="2580924999637585241">Ընդհանուր՝ <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome ինտերնետ-խանութ</translation>
@@ -145,7 +146,7 @@
 <translation id="3154429428035006212">Ցանցում չէ ավելի քան մեկ ամիս</translation>
 <translation id="3222066309010235055">Նախնական ռենդեր. <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Խոսափող</translation>
-<translation id="32279126412636473">Վերստին բեռնել (⌘R)</translation>
+<translation id="32279126412636473">Կրկին բեռնել (⌘R)</translation>
 <translation id="3241680850019875542">Ընտրեք արմատային պանակը՝ ընդլայնումը փաթեթավորելու համար։ Ընդլայնումը թարմացնելու համար ընտրեք նաև մասնավոր բանալիի ֆայլը՝ վերօգտագործելու համար։</translation>
 <translation id="3280237271814976245">Պահպանել &amp;որպես…</translation>
 <translation id="3285322247471302225">Նոր &amp;ներդիր</translation>
@@ -309,7 +310,7 @@
 <translation id="5521078259930077036">Արդյոք սա՞ է Ձեր ակնկալած գլխավոր էջը։</translation>
 <translation id="5532223876348815659">Համընդհանուր</translation>
 <translation id="5542132724887566711">Պրոֆիլ</translation>
-<translation id="5556459405103347317">Վերստին բեռնել</translation>
+<translation id="5556459405103347317">Կրկին բեռնել</translation>
 <translation id="5575473780076478375">Ընդլայնում՝ գաղտնի ռեժիմում. <ph name="EXTENSION_NAME" /></translation>
 <translation id="5581700288664681403"><ph name="CLOUD_PRINT_NAME" />-ի բեռնում</translation>
 <translation id="5623842676595125836">Մատյան</translation>
@@ -361,12 +362,13 @@
 <translation id="6273677812470008672">Որակ</translation>
 <translation id="6295855836753816081">Պահպանվում է…</translation>
 <translation id="6308937455967653460">Պահպանել հ&amp;ղումը որպես…</translation>
+<translation id="6326855256003666642">Keepalive ակտիվությունների հաշվիչ</translation>
 <translation id="6348109281845364640">Տպիչը կարգավորելը ձախողվեց</translation>
 <translation id="6370021412472292592">Չհաջողվեց բեռնել manifest-ը։</translation>
 <translation id="6398765197997659313">Լիաէկրան ռեժիմից դուրս գալ</translation>
 <translation id="6406303162637086258">Ձևացնել բրաուզերի վերագործարկում</translation>
 <translation id="6412931879992742813">Նոր գաղտնի պատուհան</translation>
-<translation id="6437213622978068772">Վերստին բեռնել (Ctrl+R)</translation>
+<translation id="6437213622978068772">Կրկին բեռնել (Ctrl+R)</translation>
 <translation id="6445450263907939268">Եթե Դուք չեք ցանկացել այս փոփոխությունները, կարող եք վերականգնել նախկին կարգավորումները։</translation>
 <translation id="6447842834002726250">Քուքիներ</translation>
 <translation id="6452181791372256707">Մերժել</translation>
@@ -383,7 +385,7 @@
 <translation id="6700480081846086223">Հեռարձակել <ph name="HOST_NAME" />-ը</translation>
 <translation id="6706210727756204531">Ասպարեզ</translation>
 <translation id="6786747875388722282">Ընդլայնումներ</translation>
-<translation id="6787839852456839824">Կարճ ստեղնել</translation>
+<translation id="6787839852456839824">Կարճ ստեղներ</translation>
 <translation id="6788210894632713004">Չփաթեթավորված ընդլայնում</translation>
 <translation id="6798954102094737107">Փլագին. <ph name="PLUGIN_NAME" /></translation>
 <translation id="6807889908376551050">Ցույց տալ բոլորը…</translation>

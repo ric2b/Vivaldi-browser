@@ -31,12 +31,12 @@
 #ifndef GridArea_h
 #define GridArea_h
 
-#include "core/style/GridPositionsResolver.h"
-#include "wtf/Allocator.h"
-#include "wtf/HashMap.h"
-#include "wtf/MathExtras.h"
-#include "wtf/text/WTFString.h"
 #include <algorithm>
+#include "core/style/GridPositionsResolver.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/MathExtras.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -47,54 +47,55 @@ namespace blink {
 // efficient one memory-wise.
 const int kGridMaxTracks = 1000;
 
-// A span in a single direction (either rows or columns). Note that |startLine|
-// and |endLine| are grid lines' indexes.
+// A span in a single direction (either rows or columns). Note that |start_line|
+// and |end_line| are grid lines' indexes.
 // Despite line numbers in the spec start in "1", the indexes here start in "0".
 struct GridSpan {
   USING_FAST_MALLOC(GridSpan);
 
  public:
-  static GridSpan untranslatedDefiniteGridSpan(int startLine, int endLine) {
-    return GridSpan(startLine, endLine, UntranslatedDefinite);
+  static GridSpan UntranslatedDefiniteGridSpan(int start_line, int end_line) {
+    return GridSpan(start_line, end_line, kUntranslatedDefinite);
   }
 
-  static GridSpan translatedDefiniteGridSpan(size_t startLine, size_t endLine) {
-    return GridSpan(startLine, endLine, TranslatedDefinite);
+  static GridSpan TranslatedDefiniteGridSpan(size_t start_line,
+                                             size_t end_line) {
+    return GridSpan(start_line, end_line, kTranslatedDefinite);
   }
 
-  static GridSpan indefiniteGridSpan() { return GridSpan(0, 1, Indefinite); }
+  static GridSpan IndefiniteGridSpan() { return GridSpan(0, 1, kIndefinite); }
 
   bool operator==(const GridSpan& o) const {
-    return m_type == o.m_type && m_startLine == o.m_startLine &&
-           m_endLine == o.m_endLine;
+    return type_ == o.type_ && start_line_ == o.start_line_ &&
+           end_line_ == o.end_line_;
   }
 
-  size_t integerSpan() const {
-    ASSERT(isTranslatedDefinite());
-    ASSERT(m_endLine > m_startLine);
-    return m_endLine - m_startLine;
+  size_t IntegerSpan() const {
+    DCHECK(IsTranslatedDefinite());
+    DCHECK_GT(end_line_, start_line_);
+    return end_line_ - start_line_;
   }
 
-  int untranslatedStartLine() const {
-    ASSERT(m_type == UntranslatedDefinite);
-    return m_startLine;
+  int UntranslatedStartLine() const {
+    DCHECK_EQ(type_, kUntranslatedDefinite);
+    return start_line_;
   }
 
-  int untranslatedEndLine() const {
-    ASSERT(m_type == UntranslatedDefinite);
-    return m_endLine;
+  int UntranslatedEndLine() const {
+    DCHECK_EQ(type_, kUntranslatedDefinite);
+    return end_line_;
   }
 
-  size_t startLine() const {
-    ASSERT(isTranslatedDefinite());
-    ASSERT(m_startLine >= 0);
-    return m_startLine;
+  size_t StartLine() const {
+    DCHECK(IsTranslatedDefinite());
+    DCHECK_GE(start_line_, 0);
+    return start_line_;
   }
 
-  size_t endLine() const {
-    ASSERT(isTranslatedDefinite());
-    ASSERT(m_endLine > 0);
-    return m_endLine;
+  size_t EndLine() const {
+    DCHECK(IsTranslatedDefinite());
+    DCHECK_GT(end_line_, 0);
+    return end_line_;
   }
 
   struct GridSpanIterator {
@@ -110,49 +111,49 @@ struct GridSpan {
   };
 
   GridSpanIterator begin() const {
-    ASSERT(isTranslatedDefinite());
-    return m_startLine;
+    DCHECK(IsTranslatedDefinite());
+    return start_line_;
   }
 
   GridSpanIterator end() const {
-    ASSERT(isTranslatedDefinite());
-    return m_endLine;
+    DCHECK(IsTranslatedDefinite());
+    return end_line_;
   }
 
-  bool isTranslatedDefinite() const { return m_type == TranslatedDefinite; }
+  bool IsTranslatedDefinite() const { return type_ == kTranslatedDefinite; }
 
-  bool isIndefinite() const { return m_type == Indefinite; }
+  bool IsIndefinite() const { return type_ == kIndefinite; }
 
-  void translate(size_t offset) {
-    ASSERT(m_type == UntranslatedDefinite);
+  void Translate(size_t offset) {
+    DCHECK_EQ(type_, kUntranslatedDefinite);
 
-    m_type = TranslatedDefinite;
-    m_startLine += offset;
-    m_endLine += offset;
+    type_ = kTranslatedDefinite;
+    start_line_ += offset;
+    end_line_ += offset;
 
-    ASSERT(m_startLine >= 0);
-    ASSERT(m_endLine > 0);
+    DCHECK_GE(start_line_, 0);
+    DCHECK_GT(end_line_, 0);
   }
 
  private:
-  enum GridSpanType { UntranslatedDefinite, TranslatedDefinite, Indefinite };
+  enum GridSpanType { kUntranslatedDefinite, kTranslatedDefinite, kIndefinite };
 
-  GridSpan(int startLine, int endLine, GridSpanType type) : m_type(type) {
+  GridSpan(int start_line, int end_line, GridSpanType type) : type_(type) {
 #if DCHECK_IS_ON()
-    ASSERT(startLine < endLine);
-    if (type == TranslatedDefinite) {
-      ASSERT(startLine >= 0);
-      ASSERT(endLine > 0);
+    DCHECK_LT(start_line, end_line);
+    if (type == kTranslatedDefinite) {
+      DCHECK_GE(start_line, 0);
+      DCHECK_GT(end_line, 0);
     }
 #endif
 
-    m_startLine = clampTo<int>(startLine, -kGridMaxTracks, kGridMaxTracks - 1);
-    m_endLine = clampTo<int>(endLine, -kGridMaxTracks + 1, kGridMaxTracks);
+    start_line_ = clampTo<int>(start_line, -kGridMaxTracks, kGridMaxTracks - 1);
+    end_line_ = clampTo<int>(end_line, -kGridMaxTracks + 1, kGridMaxTracks);
   }
 
-  int m_startLine;
-  int m_endLine;
-  GridSpanType m_type;
+  int start_line_;
+  int end_line_;
+  GridSpanType type_;
 };
 
 // This represents a grid area that spans in both rows' and columns' direction.
@@ -162,8 +163,8 @@ struct GridArea {
  public:
   // HashMap requires a default constuctor.
   GridArea()
-      : columns(GridSpan::indefiniteGridSpan()),
-        rows(GridSpan::indefiniteGridSpan()) {}
+      : columns(GridSpan::IndefiniteGridSpan()),
+        rows(GridSpan::IndefiniteGridSpan()) {}
 
   GridArea(const GridSpan& r, const GridSpan& c) : columns(c), rows(r) {}
 

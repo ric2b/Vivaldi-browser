@@ -8,14 +8,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <string>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/hpack/hpack_huffman_table.h"
+#include "net/spdy/platform/api/spdy_string.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 
 // All section references below are to
 // http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-08
@@ -34,7 +34,7 @@ class NET_EXPORT_PRIVATE HpackInputStream {
  public:
   friend class test::HpackInputStreamPeer;
 
-  explicit HpackInputStream(base::StringPiece buffer);
+  explicit HpackInputStream(SpdyStringPiece buffer);
   ~HpackInputStream();
 
   // Returns whether or not there is more data to process.
@@ -48,8 +48,8 @@ class NET_EXPORT_PRIVATE HpackInputStream {
   // decoding was successful, or false if an error was encountered.
 
   bool DecodeNextUint32(uint32_t* I);
-  bool DecodeNextIdentityString(base::StringPiece* str);
-  bool DecodeNextHuffmanString(std::string* str);
+  bool DecodeNextIdentityString(SpdyStringPiece* str);
+  bool DecodeNextHuffmanString(SpdyString* str);
 
   // Stores input bits into the most-significant, unfilled bits of |out|.
   // |peeked_count| is the number of filled bits in |out| which have been
@@ -90,7 +90,7 @@ class NET_EXPORT_PRIVATE HpackInputStream {
   bool NeedMoreData() const;
 
  private:
-  base::StringPiece buffer_;
+  SpdyStringPiece buffer_;
   size_t bit_offset_;
   // Total number of bytes parsed successfully. Only get updated when an
   // opcode is parsed successfully.

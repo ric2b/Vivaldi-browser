@@ -43,8 +43,9 @@ using navigation_interception::InterceptNavigationDelegate;
 
 namespace {
 
-base::LazyInstance<android_webview::AwResourceDispatcherHostDelegate>
-    g_webview_resource_dispatcher_host_delegate = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<android_webview::AwResourceDispatcherHostDelegate>::
+    DestructorAtExit g_webview_resource_dispatcher_host_delegate =
+        LAZY_INSTANCE_INITIALIZER;
 
 void SetCacheControlFlag(
     net::URLRequest* request, int flag) {
@@ -161,6 +162,16 @@ std::unique_ptr<AwContentsIoThreadClient>
 IoThreadClientThrottle::GetIoThreadClient() const {
   if (content::ResourceRequestInfo::OriginatedFromServiceWorker(request_))
     return AwContentsIoThreadClient::GetServiceWorkerIoThreadClient();
+
+  if (render_process_id_ == -1 || render_frame_id_ == -1) {
+    const content::ResourceRequestInfo* resourceRequestInfo =
+        content::ResourceRequestInfo::ForRequest(request_);
+    if (resourceRequestInfo == nullptr) {
+      return nullptr;
+    }
+    return AwContentsIoThreadClient::FromID(
+        resourceRequestInfo->GetFrameTreeNodeId());
+  }
 
   return AwContentsIoThreadClient::FromID(render_process_id_, render_frame_id_);
 }

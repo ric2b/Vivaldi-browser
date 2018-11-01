@@ -26,61 +26,61 @@
 #include "platform/fonts/SegmentedFontData.h"
 
 #include "platform/fonts/SimpleFontData.h"
-#include "wtf/Assertions.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
-const SimpleFontData* SegmentedFontData::fontDataForCharacter(UChar32 c) const {
-  auto end = m_faces.end();
-  for (auto it = m_faces.begin(); it != end; ++it) {
-    if ((*it)->contains(c))
-      return (*it)->fontData();
+const SimpleFontData* SegmentedFontData::FontDataForCharacter(UChar32 c) const {
+  auto end = faces_.end();
+  for (auto it = faces_.begin(); it != end; ++it) {
+    if ((*it)->Contains(c))
+      return (*it)->FontData();
   }
-  return m_faces[0]->fontData();
+  return faces_[0]->FontData();
 }
 
-bool SegmentedFontData::containsCharacter(UChar32 c) const {
-  auto end = m_faces.end();
-  for (auto it = m_faces.begin(); it != end; ++it) {
-    if ((*it)->contains(c))
+bool SegmentedFontData::ContainsCharacter(UChar32 c) const {
+  auto end = faces_.end();
+  for (auto it = faces_.begin(); it != end; ++it) {
+    if ((*it)->Contains(c))
       return true;
   }
   return false;
 }
 
-bool SegmentedFontData::isCustomFont() const {
+bool SegmentedFontData::IsCustomFont() const {
   // All segmented fonts are custom fonts.
   return true;
 }
 
-bool SegmentedFontData::isLoading() const {
-  auto end = m_faces.end();
-  for (auto it = m_faces.begin(); it != end; ++it) {
-    if ((*it)->fontData()->isLoading())
+bool SegmentedFontData::IsLoading() const {
+  auto end = faces_.end();
+  for (auto it = faces_.begin(); it != end; ++it) {
+    if ((*it)->FontData()->IsLoading())
       return true;
   }
   return false;
 }
 
 // Returns true if any of the sub fonts are loadingFallback.
-bool SegmentedFontData::isLoadingFallback() const {
-  auto end = m_faces.end();
-  for (auto it = m_faces.begin(); it != end; ++it) {
-    if ((*it)->fontData()->isLoadingFallback())
+bool SegmentedFontData::IsLoadingFallback() const {
+  auto end = faces_.end();
+  for (auto it = faces_.begin(); it != end; ++it) {
+    if ((*it)->FontData()->IsLoadingFallback())
       return true;
   }
   return false;
 }
 
-bool SegmentedFontData::isSegmented() const {
+bool SegmentedFontData::IsSegmented() const {
   return true;
 }
 
-bool SegmentedFontData::shouldSkipDrawing() const {
-  auto end = m_faces.end();
-  for (auto it = m_faces.begin(); it != end; ++it) {
-    if ((*it)->fontData()->shouldSkipDrawing())
+bool SegmentedFontData::ShouldSkipDrawing() const {
+  auto end = faces_.end();
+  for (auto it = faces_.begin(); it != end; ++it) {
+    if ((*it)->FontData()->ShouldSkipDrawing())
       return true;
   }
   return false;

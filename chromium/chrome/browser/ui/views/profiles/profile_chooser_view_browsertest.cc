@@ -121,12 +121,10 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
  protected:
   void SetUp() override {
     ExtensionBrowserTest::SetUp();
-    DCHECK(switches::IsNewProfileManagement());
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBrowserTest::SetUpCommandLine(command_line);
-    switches::EnableNewProfileManagementForTesting(command_line);
   }
 
   void OpenProfileChooserView(Browser* browser) {
@@ -250,13 +248,6 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, ViewProfileUMA) {
   profile->GetPrefs()->SetInteger(prefs::kProfileAvatarTutorialShown, 0);
 
   ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
-
-  // The MD user menu doesn't display any upgrade toast so it doesn't log this
-  // in UMA.
-  if (!switches::IsMaterialDesignUserMenu()) {
-    histograms.ExpectUniqueSample("Profile.NewAvatarMenu.Upgrade",
-        ProfileMetrics::PROFILE_AVATAR_MENU_UPGRADE_VIEW, 1);
-  }
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, LockProfile) {

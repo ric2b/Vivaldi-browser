@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/system/tray/system_tray.h"
 #include "ash/first_run/first_run_helper.h"
 #include "ash/shell.h"
+#include "ash/system/tray/system_tray.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
 #include "chrome/browser/chromeos/first_run/first_run_controller.h"
 #include "chrome/browser/chromeos/first_run/step_names.h"
@@ -135,8 +135,7 @@ IN_PROC_BROWSER_TEST_F(FirstRunUIBrowserTest, FirstRunFlow) {
   content::RunAllPendingInMessageLoop();
   EXPECT_EQ(controller(), (void*)NULL);
   // shell_helper() is destructed already, thats why we call Shell directly.
-  EXPECT_FALSE(ash::Shell::GetInstance()->GetPrimarySystemTray()->
-      HasSystemBubble());
+  EXPECT_FALSE(ash::Shell::Get()->GetPrimarySystemTray()->HasSystemBubble());
 }
 
 }  // namespace chromeos

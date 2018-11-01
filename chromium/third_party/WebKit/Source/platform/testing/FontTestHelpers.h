@@ -5,7 +5,7 @@
 #ifndef FontTestHelpers_h
 #define FontTestHelpers_h
 
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -14,8 +14,8 @@ class Font;
 namespace testing {
 
 // Reads a font from a specified path, for use in unit tests only.
-Font createTestFont(const AtomicString& familyName,
-                    const String& fontPath,
+Font CreateTestFont(const AtomicString& family_name,
+                    const String& font_path,
                     float size);
 
 }  // namespace testing

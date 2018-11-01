@@ -7,6 +7,11 @@
 namespace headless {
 namespace switches {
 
+// The background color to be used if the page doesn't specify one. Provided as
+// RGBA integer value in hex, e.g. 'ff0000ff' for red or '00000000' for
+// transparent.
+const char kDefaultBackgroundColor[] = "default-background-color";
+
 // The directory breakpad should store minidumps in.
 const char kCrashDumpsDir[] = "crash-dumps-dir";
 
@@ -20,6 +25,9 @@ const char kDumpDom[] = "dump-dom";
 
 // Hide scrollbars from screenshots.
 const char kHideScrollbars[] = "hide-scrollbars";
+
+// Save a pdf file of the loaded page.
+const char kPrintToPDF[] = "print-to-pdf";
 
 // Uses a specified proxy server, overrides system settings. This switch only
 // affects HTTP and HTTPS requests.
@@ -45,6 +53,9 @@ const char kTimeout[] = "timeout";
 // Sets the GL implementation to use. Use a blank string to disable GL
 // rendering.
 const char kUseGL[] = "use-gl";
+
+// A string used to override the default user agent with a custom one.
+const char kUserAgent[] = "user-agent";
 
 // Directory where the browser stores the user profile.
 const char kUserDataDir[] = "user-data-dir";

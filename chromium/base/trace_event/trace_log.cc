@@ -19,8 +19,10 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
+#include "base/process/process_info.h"
 #include "base/process/process_metrics.h"
 #include "base/stl_util.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/stringprintf.h"
@@ -645,8 +647,8 @@ void TraceLog::SetEnabled(const TraceConfig& trace_config,
     observer->OnTraceLogEnabled();
   for (const auto& it : observer_map) {
     it.second.task_runner->PostTask(
-        FROM_HERE, Bind(&AsyncEnabledStateObserver::OnTraceLogEnabled,
-                        it.second.observer));
+        FROM_HERE, BindOnce(&AsyncEnabledStateObserver::OnTraceLogEnabled,
+                            it.second.observer));
   }
 
   {
@@ -746,8 +748,8 @@ void TraceLog::SetDisabledWhileLocked(uint8_t modes_to_disable) {
       observer->OnTraceLogDisabled();
     for (const auto& it : observer_map) {
       it.second.task_runner->PostTask(
-          FROM_HERE, Bind(&AsyncEnabledStateObserver::OnTraceLogDisabled,
-                          it.second.observer));
+          FROM_HERE, BindOnce(&AsyncEnabledStateObserver::OnTraceLogDisabled,
+                              it.second.observer));
     }
   }
   dispatching_to_observer_list_ = false;
@@ -891,12 +893,13 @@ void TraceLog::FlushInternal(const TraceLog::OutputCallback& cb,
   if (!thread_message_loop_task_runners.empty()) {
     for (auto& task_runner : thread_message_loop_task_runners) {
       task_runner->PostTask(
-          FROM_HERE, Bind(&TraceLog::FlushCurrentThread, Unretained(this),
-                          gen, discard_events));
+          FROM_HERE, BindOnce(&TraceLog::FlushCurrentThread, Unretained(this),
+                              gen, discard_events));
     }
     flush_task_runner_->PostDelayedTask(
-        FROM_HERE, Bind(&TraceLog::OnFlushTimeout, Unretained(this), gen,
-                        discard_events),
+        FROM_HERE,
+        BindOnce(&TraceLog::OnFlushTimeout, Unretained(this), gen,
+                 discard_events),
         TimeDelta::FromMilliseconds(kThreadFlushTimeoutMs));
     return;
   }
@@ -967,14 +970,15 @@ void TraceLog::FinishFlush(int generation, bool discard_events) {
 
   if (use_worker_thread_) {
     base::PostTaskWithTraits(
-        FROM_HERE, base::TaskTraits()
-                       .MayBlock()
-                       .WithPriority(base::TaskPriority::BACKGROUND)
-                       .WithShutdownBehavior(
-                           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
-        Bind(&TraceLog::ConvertTraceEventsToTraceFormat,
-             Passed(&previous_logged_events), flush_output_callback,
-             argument_filter_predicate));
+        FROM_HERE,
+        base::TaskTraits()
+            .MayBlock()
+            .WithPriority(base::TaskPriority::BACKGROUND)
+            .WithShutdownBehavior(
+                base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+        BindOnce(&TraceLog::ConvertTraceEventsToTraceFormat,
+                 Passed(&previous_logged_events), flush_output_callback,
+                 argument_filter_predicate));
     return;
   }
 
@@ -1002,8 +1006,8 @@ void TraceLog::FlushCurrentThread(int generation, bool discard_events) {
     return;
 
   flush_task_runner_->PostTask(
-      FROM_HERE, Bind(&TraceLog::FinishFlush, Unretained(this), generation,
-                      discard_events));
+      FROM_HERE, BindOnce(&TraceLog::FinishFlush, Unretained(this), generation,
+                          discard_events));
 }
 
 void TraceLog::OnFlushTimeout(int generation, bool discard_events) {
@@ -1500,8 +1504,18 @@ void TraceLog::AddMetadataEventsWhileLocked() {
                             process_name_);
   }
 
+#if !defined(OS_NACL) && !defined(OS_IOS)
+  Time process_creation_time = CurrentProcessInfo::CreationTime();
+  if (!process_creation_time.is_null()) {
+    TimeDelta process_uptime = Time::Now() - process_creation_time;
+    InitializeMetadataEvent(AddEventToThreadSharedChunkWhileLocked(NULL, false),
+                            current_thread_id, "process_uptime_seconds",
+                            "uptime", process_uptime.InSeconds());
+  }
+#endif  // !defined(OS_NACL) && !defined(OS_IOS)
+
   if (!process_labels_.empty()) {
-    std::vector<std::string> labels;
+    std::vector<base::StringPiece> labels;
     for (const auto& it : process_labels_)
       labels.push_back(it.second);
     InitializeMetadataEvent(AddEventToThreadSharedChunkWhileLocked(NULL, false),

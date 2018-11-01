@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/strings/string16.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
@@ -98,6 +99,12 @@ class FindBarController : public content::NotificationObserver {
   // The last match count we reported to the user. This is used by
   // UpdateFindBarForCurrentResult to avoid flickering.
   int last_reported_matchcount_;
+
+  // Used to keep track of whether the user has been notified that the find came
+  // up empty. A single find session can result in multiple final updates, if
+  // the document contents change dynamically. It's a nuisance to notify the
+  // user more than once that a search came up empty, however.
+  base::string16 alerted_search_;
 
   DISALLOW_COPY_AND_ASSIGN(FindBarController);
 };

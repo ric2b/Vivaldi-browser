@@ -16,6 +16,7 @@
 #include "chrome/common/features.h"
 #include "content/public/common/url_constants.h"
 #include "media/media_features.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 
 namespace chrome {
@@ -100,6 +101,7 @@ extern const char kChromeUINativeNewTabURL[];
 extern const char kChromeUINativeBookmarksURL[];
 extern const char kChromeUINativePhysicalWebDiagnosticsURL[];
 extern const char kChromeUINativeRecentTabsURL[];
+extern const char kChromeUINativeHistoryURL[];
 extern const char kChromeUIWebApksURL[];
 #endif  // defined(OS_ANDROID)
 
@@ -125,6 +127,7 @@ extern const char kChromeUIMdCupsSettingsURL[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
+extern const char kChromeUICleanupToolURL[];
 extern const char kChromeUIMetroFlowURL[];
 #endif
 
@@ -161,6 +164,7 @@ extern const char kChromeUICertificateViewerHost[];
 extern const char kChromeUICertificateViewerDialogHost[];
 extern const char kChromeUIChromeSigninHost[];
 extern const char kChromeUIChromeURLsHost[];
+extern const char kChromeUIComponentsHost[];
 extern const char kChromeUIConflictsHost[];
 extern const char kChromeUIConstrainedHTMLTestHost[];
 extern const char kChromeUICrashesHost[];
@@ -211,8 +215,8 @@ extern const char kChromeUINTPTilesInternalsHost[];
 extern const char kChromeUIOfflineInternalsHost[];
 extern const char kChromeUIOmniboxHost[];
 extern const char kChromeUIPhysicalWebHost[];
-extern const char kChromeUIComponentsHost[];
 extern const char kChromeUIPolicyHost[];
+extern const char kChromeUIPrefsInternalsHost[];
 extern const char kChromeUIMdUserManagerHost[];
 extern const char kChromeUIPredictorsHost[];
 extern const char kChromeUIProfilerHost[];
@@ -257,6 +261,9 @@ extern const char kChromeUIPrintHost[];
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 extern const char kChromeUILinuxProxyConfigHost[];
+#endif
+
+#if defined(OS_LINUX) || defined(OS_ANDROID)
 extern const char kChromeUISandboxHost[];
 #endif
 
@@ -267,10 +274,6 @@ extern const char kChromeUIPhysicalWebDiagnosticsHost[];
 extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUISnippetsInternalsHost[];
 extern const char kChromeUIWebApksHost[];
-#endif
-
-#if defined(ENABLE_WEBVR)
-extern const char kChromeUIVrShellUIHost[];
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -311,6 +314,7 @@ extern const char kChromeOSAssetPath[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
+extern const char kChromeUICleanupToolHost[];
 extern const char kChromeUIMetroFlowHost[];
 #endif
 
@@ -460,7 +464,7 @@ extern const char kChromiumProjectURL[];
 // first run dialog.
 extern const char kLearnMoreReportingURL[];
 
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // The URL for the "Learn more" page for the outdated plugin infobar.
 extern const char kOutdatedPluginLearnMoreURL[];
 #endif
@@ -570,6 +574,11 @@ extern const char kCrosScheme[];
 
 #if defined(OS_ANDROID)
 extern const char kAndroidAppScheme[];
+#endif
+
+#if defined(OS_CHROMEOS)
+// "Learn more" URL for the Printing section under Options.
+extern const char kCrosPrintingLearnMoreURL[];
 #endif
 
 // "Learn more" URL for the Cloud Print section under Options.

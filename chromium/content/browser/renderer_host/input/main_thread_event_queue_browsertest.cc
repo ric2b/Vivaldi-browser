@@ -27,7 +27,7 @@
 #include "content/shell/browser/shell.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/event_switches.h"
-#include "ui/events/latency_info.h"
+#include "ui/latency/latency_info.h"
 
 using blink::WebInputEvent;
 
@@ -111,15 +111,15 @@ class MainThreadEventQueueBrowserTest : public ContentBrowserTest {
     // Send a click event to cause some jankiness. This is done via a click
     // event as ExecuteScript is synchronous.
     SimulateMouseClick(shell()->web_contents(), 0,
-                       blink::WebPointerProperties::Button::Left);
+                       blink::WebPointerProperties::Button::kLeft);
     scoped_refptr<InputMsgWatcher> input_msg_watcher(
-        new InputMsgWatcher(GetWidgetHost(), blink::WebInputEvent::MouseMove));
+        new InputMsgWatcher(GetWidgetHost(), blink::WebInputEvent::kMouseMove));
     GetWidgetHost()->ForwardMouseEvent(SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::MouseMove, 10, 10, 0));
+        blink::WebInputEvent::kMouseMove, 10, 10, 0));
     GetWidgetHost()->ForwardMouseEvent(SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::MouseMove, 15, 15, 0));
+        blink::WebInputEvent::kMouseMove, 15, 15, 0));
     GetWidgetHost()->ForwardMouseEvent(SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::MouseMove, 20, 25, 0));
+        blink::WebInputEvent::kMouseMove, 20, 25, 0));
 
     // Runs until we get the InputMsgAck callback.
     EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED, input_msg_watcher->WaitForAck());
@@ -153,9 +153,9 @@ class MainThreadEventQueueBrowserTest : public ContentBrowserTest {
     // Send a click event to cause some jankiness. This is done via a click
     // event as ExecuteScript is synchronous.
     SimulateMouseClick(shell()->web_contents(), 0,
-                       blink::WebPointerProperties::Button::Left);
+                       blink::WebPointerProperties::Button::kLeft);
     scoped_refptr<InputMsgWatcher> input_msg_watcher(
-        new InputMsgWatcher(GetWidgetHost(), blink::WebInputEvent::TouchMove));
+        new InputMsgWatcher(GetWidgetHost(), blink::WebInputEvent::kTouchMove));
 
     for (const auto& event : kEvents)
       GetWidgetHost()->ForwardEmulatedTouchEvent(event);
@@ -184,6 +184,7 @@ class MainThreadEventQueueBrowserTest : public ContentBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(MainThreadEventQueueBrowserTest);
 };
 
+#define MAYBE_MouseMove MouseMove
 IN_PROC_BROWSER_TEST_F(MainThreadEventQueueBrowserTest, MouseMove) {
   LoadURL(kJankyPageURL);
   DoMouseMove();

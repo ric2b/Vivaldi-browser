@@ -25,7 +25,7 @@ class SharedWorkerRepository final
   ~SharedWorkerRepository();
 
   // WebSharedWorkerRepositoryClient overrides.
-  void connect(
+  void Connect(
       const blink::WebURL& url,
       const blink::WebString& name,
       DocumentID document_id,
@@ -33,9 +33,9 @@ class SharedWorkerRepository final
       blink::WebContentSecurityPolicyType,
       blink::WebAddressSpace,
       blink::WebSharedWorkerCreationContextType,
-      blink::WebMessagePortChannel* channel,
+      std::unique_ptr<blink::WebMessagePortChannel> channel,
       std::unique_ptr<blink::WebSharedWorkerConnectListener> listener) override;
-  void documentDetached(DocumentID document_id) override;
+  void DocumentDetached(DocumentID document_id) override;
 
  private:
   RenderFrameImpl* render_frame_;

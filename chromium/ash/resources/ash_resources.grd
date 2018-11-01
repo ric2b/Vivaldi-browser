@@ -28,91 +28,23 @@
       <structure type="chrome_scaled_image" name="IDR_AURA_PHANTOM_WINDOW_TOP" file="common/phantom_window_top.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_PHANTOM_WINDOW_TOP_LEFT" file="common/phantom_window_top_left.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_PHANTOM_WINDOW_TOP_RIGHT" file="common/phantom_window_top_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_BOTTOM" file="common/resize_shadow_bottom.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_BOTTOM_LEFT" file="common/resize_shadow_bottom_left.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_BOTTOM_RIGHT" file="common/resize_shadow_bottom_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_LEFT" file="common/resize_shadow_left.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_RIGHT" file="common/resize_shadow_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_TOP" file="common/resize_shadow_top.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_TOP_LEFT" file="common/resize_shadow_top_left.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_RESIZE_SHADOW_TOP_RIGHT" file="common/resize_shadow_top_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_CENTER" file="common/shelf/status_tray_normal_center.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_LEFT" file="common/shelf/status_tray_normal_left.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_ONBLACK_CENTER" file="common/shelf/status_tray_normal_onblack_center.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_ONBLACK_LEFT" file="common/shelf/status_tray_normal_onblack_left.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_ONBLACK_RIGHT" file="common/shelf/status_tray_normal_onblack_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_PRESSED_CENTER" file="common/shelf/status_tray_pressed_center.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_PRESSED_LEFT" file="common/shelf/status_tray_pressed_left.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_PRESSED_RIGHT" file="common/shelf/status_tray_pressed_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_HORIZ_RIGHT" file="common/shelf/status_tray_normal_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_BOTTOM" file="common/shelf/status_tray_vertical_normal_bottom.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_CENTER" file="common/shelf/status_tray_vertical_normal_center.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_ONBLACK_BOTTOM" file="common/shelf/status_tray_vertical_normal_onblack_bottom.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_ONBLACK_CENTER" file="common/shelf/status_tray_vertical_normal_onblack_center.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_ONBLACK_TOP" file="common/shelf/status_tray_vertical_normal_onblack_top.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_PRESSED_BOTTOM" file="common/shelf/status_tray_vertical_pressed_bottom.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_PRESSED_CENTER" file="common/shelf/status_tray_vertical_pressed_center.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_PRESSED_TOP" file="common/shelf/status_tray_vertical_pressed_top.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_TRAY_BG_VERTICAL_TOP" file="common/shelf/status_tray_vertical_normal_top.png" />
 
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_ACCESSIBILITY_DARK" file="cros/status/status_accessibility_dark.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CAST" file="cros/status/status_cast.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CAST_DEVICE_ICON" file="cros/status/status_cast_device_icon.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CAST_ENABLED" file="cros/status/status_cast_enabled.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_HELP" file="cros/status/status_help.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_HELP_HOVER" file="cros/status/status_help_hover.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_IME" file="cros/status/status_ime.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_LESS" file="cros/status/status_less.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_LOCALE" file="cros/status/status_locale.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_LOCKSCREEN" file="cros/status/status_lockscreen.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_LOCKSCREEN_HOVER" file="cros/status/status_lockscreen_hover.png" />
-
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_CONTROLLED" file="cros/network/status_captive_portal_access.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_FAILED" file="cros/network/status_network_failed.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_FAILED_CELLULAR" file="cros/network/status_cellular_failed.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_VPN" file="cros/network/statusbar_vpn_dark.png" />
-
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_NOTIFICATION_3G" file="cros/network/notification_3g.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_NOTIFICATION_DATASAVER" file="cros/network/notification_datasaver.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_NOTIFICATION_LTE" file="cros/network/notification_lte.png" />
-
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_SCREENSHARE" file="cros/status/status_screenshare.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_SCREENSHARE_DARK" file="cros/status/status_screenshare_dark.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_SHUTDOWN" file="cros/status/status_shutdown.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_SHUTDOWN_HOVER" file="cros/status/status_shutdown_hover.png" />
 
-      <!-- ChromeOS specific icons -->
-      <if expr="chromeos">
-        <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BATTERY_CRITICAL" file="cros/notification/notification_battery_critical_icon.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BATTERY_FLUCTUATING" file="cros/notification/notification_battery_fluctuating_icon.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BATTERY_LOW" file="cros/notification/notification_battery_low_icon.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BLUETOOTH" file="cros/notification/notification_bluetooth_icon.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_DISPLAY" file="cros/notification/display_notification_icon.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_LOW_POWER_CHARGER" file="cros/notification/notification_low_power_charger.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_BRIGHTNESS" file="cros/status/status_brightness.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_BUBBLE_SESSION_LENGTH_LIMIT" file="cros/status/status_session_length_timer.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CELLULAR_DISABLED" file="cros/network/status_cellular_disabled.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CELLULAR_DISABLED_HOVER" file="cros/network/status_cellular_disabled_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CELLULAR_ENABLED" file="cros/network/status_cellular_enabled.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CELLULAR_ENABLED_HOVER" file="cros/network/status_cellular_enabled_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_CHILD_USER" file="cros/status/status_child_user.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_ENTERPRISE" file="cros/status/status_managed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_SUPERVISED_USER" file="cros/status/status_managed_mode_user.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_INFO" file="cros/network/status_network_info.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER" file="cros/network/status_network_info_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_NOTIFICATION_SESSION_LENGTH_LIMIT" file="cros/notification/notification_session_length_timer.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_POWER_SMALL" file="cros/status/status_power_small_all.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_POWER_SMALL_CHARGING_UNRELIABLE" file="cros/status/status_power_small_all_fluctuating.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_POWER_SMALL_CHARGING_UNRELIABLE_DARK" file="cros/status/status_power_small_all_dark_fluctuating.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_POWER_SMALL_DARK" file="cros/status/status_power_small_all_dark.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_RECORDING" file="cros/status/status_recording.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_RECORDING_RED" file="cros/status/status_recording_red.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_SETTINGS" file="cros/status/status_settings.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_WIFI_DISABLED" file="cros/network/status_wifi_disabled.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_WIFI_DISABLED_HOVER" file="cros/network/status_wifi_disabled_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_WIFI_ENABLED" file="cros/network/status_wifi_enabled.png" />
-        <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_WIFI_ENABLED_HOVER" file="cros/network/status_wifi_enabled_hover.png" />
-      </if>
+      <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BATTERY_CRITICAL" file="cros/notification/notification_battery_critical_icon.png" />
+      <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BATTERY_FLUCTUATING" file="cros/notification/notification_battery_fluctuating_icon.png" />
+      <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BATTERY_LOW" file="cros/notification/notification_battery_low_icon.png" />
+      <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_BLUETOOTH" file="cros/notification/notification_bluetooth_icon.png" />
+      <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_DISPLAY" file="cros/notification/display_notification_icon.png" />
+      <structure type="chrome_scaled_image" name="IDR_AURA_NOTIFICATION_LOW_POWER_CHARGER" file="cros/notification/notification_low_power_charger.png" />
 
       <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_HEADER_SHADE_INACTIVE_BOTTOM" file="common/window_header_shade_bottom_inactive.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_HEADER_SHADE_INACTIVE_LEFT" file="common/window_header_shade_left_inactive.png" />
@@ -121,6 +53,7 @@
 
       <structure type="chrome_scaled_image" name="IDR_AVATAR_HOLDER" file="cros/avatar_holder.png" />
       <structure type="chrome_scaled_image" name="IDR_AVATAR_HOLDER_MASK" file="cros/avatar_holder_mask.png" />
+
     </structures>
   </release>
 </grit>

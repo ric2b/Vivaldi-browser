@@ -12,18 +12,18 @@
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/sessions_export.h"
 
+class GURL;
+
 namespace base {
 class CancelableTaskTracker;
 class SequencedWorkerPool;
 }
 
-class GURL;
-
 namespace sessions {
 
 class LiveTab;
-struct SessionWindow;
 class LiveTabContext;
+struct SessionWindow;
 
 // Callback from TabRestoreServiceClient::GetLastSession.
 // The second parameter is the id of the window that was last active.
@@ -40,7 +40,10 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
   // Creates a LiveTabContext instance that is associated with |app_name|. May
   // return nullptr (e.g., if the embedder does not support LiveTabContext
   // functionality).
-  virtual LiveTabContext* CreateLiveTabContext(const std::string& app_name) = 0;
+  // NOTE(andre@vivaldi.com) : We added ext_data to be able to restore a browser
+  // window with the saved ext_data.
+  virtual LiveTabContext* CreateLiveTabContext(const std::string& app_name,
+                                               const std::string& ext_data) = 0;
 
   // Returns the LiveTabContext instance that is associated with
   // |tab|, or null if there is no such instance.

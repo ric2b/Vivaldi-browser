@@ -45,6 +45,7 @@ class ChromeAutofillClient
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   ukm::UkmService* GetUkmService() override;
+  SaveCardBubbleController* GetSaveCardBubbleController() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -55,6 +56,7 @@ class ChromeAutofillClient
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
+      bool should_cvc_be_requested,
       const base::Closure& callback) override;
   void ConfirmCreditCardFillAssist(const CreditCard& card,
                                    const base::Closure& callback) override;
@@ -77,7 +79,6 @@ class ChromeAutofillClient
       const std::vector<autofill::FormStructure*>& forms) override;
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
-  void OnFirstUserGestureObserved() override;
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
   void StartSigninFlow() override;

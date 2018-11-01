@@ -16,7 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/resources/release_callback_impl.h"
 #include "cc/resources/resource_format.h"
 #include "cc/resources/texture_mailbox.h"
@@ -80,28 +80,6 @@ class CC_EXPORT VideoResourceUpdater
   VideoFrameExternalResources CreateExternalResourcesFromVideoFrame(
       scoped_refptr<media::VideoFrame> video_frame);
 
-  // Base class for converting short integers to half-floats.
-  // TODO(hubbe): Move this to media/.
-  class HalfFloatMaker {
-   public:
-    // Convert an array of short integers into an array of half-floats.
-    // |src| is an array of integers in range 0 .. 2^{bits_per_channel} - 1
-    // |num| is number of entries in input and output array.
-    // The numbers stored in |dst| will be half floats in range 0.0..1.0
-    virtual void MakeHalfFloats(const uint16_t* src,
-                                size_t num,
-                                uint16_t* dst) = 0;
-    // The half-floats made needs by this class will be in the range
-    // [Offset() .. Offset() + 1.0/Multiplier]. So if you want results
-    // in the 0-1 range, you need to do:
-    //   (half_float - Offset()) * Multiplier()
-    // to each returned value.
-    virtual float Offset() const = 0;
-    virtual float Multiplier() const = 0;
-  };
-
-  static std::unique_ptr<HalfFloatMaker> NewHalfFloatMaker(
-      int bits_per_channel);
 
  private:
   class PlaneResource {
@@ -177,6 +155,7 @@ class CC_EXPORT VideoResourceUpdater
                                           bool immutable_hint);
   void DeleteResource(ResourceList::iterator resource_it);
   void CopyPlaneTexture(media::VideoFrame* video_frame,
+                        const gfx::ColorSpace& resource_color_space,
                         const gpu::MailboxHolder& mailbox_holder,
                         VideoFrameExternalResources* external_resources);
   VideoFrameExternalResources CreateForHardwarePlanes(

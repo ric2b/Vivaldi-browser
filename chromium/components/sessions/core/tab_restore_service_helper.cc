@@ -205,7 +205,8 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
       // single tab within it. If the entry's ID matches the one to restore,
       // then the entire window will be restored.
       if (!restoring_tab_in_window) {
-        context = client_->CreateLiveTabContext(window.app_name);
+        context =
+            client_->CreateLiveTabContext(window.app_name, window.ext_data);
         for (size_t tab_i = 0; tab_i < window.tabs.size(); ++tab_i) {
           const Tab& tab = *window.tabs[tab_i];
           LiveTab* restored_tab = context->AddRestoredTab(
@@ -215,7 +216,6 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
               tab.from_last_session, tab.platform_data.get(),
               tab.user_agent_override, tab.ext_data);
           if (restored_tab) {
-            restored_tab->LoadIfNecessary();
             client_->OnTabRestored(
                 tab.navigations.at(tab.current_navigation_index).virtual_url());
             live_tabs.push_back(restored_tab);
@@ -417,16 +417,11 @@ void TabRestoreServiceHelper::PopulateTab(Tab* tab,
                                           int index,
                                           LiveTabContext* context,
                                           LiveTab* live_tab) {
-  const int pending_index = live_tab->GetPendingEntryIndex();
   int entry_count =
       live_tab->IsInitialBlankNavigation() ? 0 : live_tab->GetEntryCount();
-  if (entry_count == 0 && pending_index == 0)
-    entry_count++;
   tab->navigations.resize(static_cast<int>(entry_count));
   for (int i = 0; i < entry_count; ++i) {
-    SerializedNavigationEntry entry = (i == pending_index)
-                                          ? live_tab->GetPendingEntry()
-                                          : live_tab->GetEntryAtIndex(i);
+    SerializedNavigationEntry entry = live_tab->GetEntryAtIndex(i);
     tab->navigations[i] = entry;
   }
   tab->timestamp = TimeNow();
@@ -473,7 +468,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
     if (context && disposition != WindowOpenDisposition::NEW_WINDOW) {
       tab_index = tab.tabstrip_index;
     } else {
-      context = client_->CreateLiveTabContext(std::string());
+      context = client_->CreateLiveTabContext(std::string(), std::string());
       if (tab.browser_id)
         UpdateTabBrowserIDs(tab.browser_id, context->GetSessionID().id());
     }
@@ -491,7 +486,6 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
         disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB, tab.pinned,
         tab.from_last_session, tab.platform_data.get(),
         tab.user_agent_override, tab.ext_data);
-    restored_tab->LoadIfNecessary();
   }
   client_->OnTabRestored(
       tab.navigations.at(tab.current_navigation_index).virtual_url());

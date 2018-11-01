@@ -6,89 +6,243 @@
 [
   {
     "namespace": "sync",
-    "description": "Use the <code>chrome.sync</code> for sync messages.",
+    "description": "Use <code>vivaldi.sync</code> for sync messages.",
     "types": [
       {
-        "id": "SyncParamItem",
+        "id": "SyncLoginDetails",
         "type": "object",
-        "description": "SyncParamItem.",
+        "description": "Information available following a successful sync login",
         "properties": {
-          "key": {
+          "username": {
             "type": "string",
-            "description": "The key name."
+            "description": "The user name used to log it to sync"
           },
-          "value": {
+          "password": {
             "type": "string",
-            "description": "The auth key value."
+            "description": "The sync encryption password"
+          }
+        }
+      },
+      {
+        "id": "SyncToken",
+        "type": "object",
+        "description": "Information available following a successful sync login",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token obtained from the server"
+          },
+          "account_id": {
+            "type": "string",
+            "descirption": "The sync account id for which the token is valid"
+          },
+          "expire": {
+            "type": "string",
+            "description": "The time at which the token expires"
+          }
+        }
+      },
+      {
+        "id": "SyncDataType",
+        "type": "object",
+        "description": "A structure containing the system status of a data type.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the data type."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "true if we want to sync this data type, otherwise false."
           }
         }
       }
     ],
     "functions": [
       {
-        "name": "send",
+        "name": "loginComplete",
         "type": "function",
-        "description": "Send sync message.",
+        "description": "Indicates that the sync login completed successfully",
         "parameters": [
           {
-            "name": "eventName",
-            "type": "string",
-            "description":  "The name of the event."
+            "name": "loginDetails",
+            "$ref": "SyncLoginDetails"
           },
           {
-            "name": "eventArgList",
-            "type": "array",
-            "items": { "$ref": "SyncParamItem" },
-            "description": "List of arguments for the sync event."
+            "name": "token",
+            "$ref": "SyncToken"
+          }
+        ]
+      },
+      {
+        "name": "refreshToken",
+        "type": "function",
+        "description": "Indicates that the a new access token to the sync account was obtained",
+        "parameters": [
+          {
+            "name": "token",
+            "$ref": "SyncToken"
+          }
+        ]
+      },
+      {
+        "name": "setEncryptionPassword",
+        "type": "function",
+        "description": "Sets the password to use for encryption/decryption of Sync data.",
+        "parameters": [
+          {
+            "name": "password",
+            "type": "string"
           },
           {
-            "type": "function",
             "name": "callback",
+            "type": "function",
             "parameters": [
               {
-                "name": "result",
-                "type": "string",
-                "description":  "Resulting status of the sync event/command."
+                "name": "accepted",
+                "type": "boolean",
+                "description": "Whether the password was accepted. This will be false if we have data to decrypt and the password doesn't allow to decrypt them or if we already had a password set."
+              },
+              {
+                "name": "passwordRequired",
+                "type": "boolean",
+                "description": "Whether the password is actually required. If accepted is false and this sis true, the user must be prompted again."
               }
             ]
           }
         ]
+      },
+      {
+        "name": "isFirstSetup",
+        "type": "function",
+        "description": "Returns true if this is the initial setup of Sync. If so,setTypes must be called before any syncing occurs.",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "firstSetup",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setTypes",
+        "type": "function",
+        "description": "Sets which data types should be synced",
+        "parameters": [
+          {
+            "name": "syncEverything",
+            "type": "boolean",
+            "description": "Sets which datatypes sould be synced."
+          },
+          {
+            "name": "types",
+            "type": "array",
+            "items": {
+              "$ref": "SyncDataType"
+            },
+            "description": "List of data types to be enabled"
+          }
+        ]
+      },
+      {
+        "name": "getTypes",
+        "type": "function",
+        "description": "Sets which data types should be synced",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "syncEverything",
+                "type": "boolean",
+                "description": "Gets a list of datatypes that are currently synced."
+              },
+              {
+                "name": "types",
+                "type": "array",
+                "items": {
+                  "$ref": "SyncDataType"
+                },
+                "description": "List of data types to be enabled"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "logout",
+        "type": "function",
+        "description": "Indicates that the user should be logged out from sync",
+        "parameters": [ ]
+      },
+      {
+        "name": "clearData",
+        "type": "function",
+        "description": "Clear all the user's data on the server side and logs them out",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "description": "Called when the data has been cleared",
+            "parameters": [ ]
+          }
+        ]
+      },
+      {
+        "name": "pollServer",
+        "type": "function",
+        "description": "Triggers a polling of the sync server",
+        "parameters": []
       }
     ],
     "events": [
       {
-        "name": "onChanged",
+        "name": "onSyncConfigured",
         "type": "function",
-        "description": "Fired when a sync event happens.",
-        "parameters": [
-          {
-            "type": "string",
-            "name": "param1",
-            "description": "Status message from the sync manager."
-          },
-          {
-            "type": "string",
-            "name": "param2",
-            "description": "Detailed status message from the sync manager."
-          }
-        ]
-      }
-    ],
-    "events": [
+        "description": "Fired when the sync engine has been configured.",
+        "parameters": []
+      },
       {
-        "name": "onChanged",
+        "name": "onLoginDone",
         "type": "function",
-        "description": "Fired when a sync event happens.",
-        "parameters": [
-          {
-            "type": "string",
-            "name": "param1"
-          },
-          {
-            "type": "string",
-            "name": "param2"
-          }
-        ]
+        "description": "Fired when the sync engine has started.",
+        "parameters": []
+      },
+      {
+        "name": "onSyncEngineInitFailed",
+        "type": "function",
+        "description": "Fired when the sync engine has failed to start.",
+        "parameters": []
+      },
+      {
+        "name": "onBeginSyncing",
+        "type": "function",
+        "description": "Fired when syncing starts.",
+        "parameters": []
+      },
+      {
+        "name": "onEndSyncing",
+        "type": "function",
+        "description": "Fired when syncing is done.",
+        "parameters": []
+      },
+      {
+        "name": "onAccessTokenRequested",
+        "type": "function",
+        "description": "Fired when a new access token is required.",
+        "parameters": []
+      },
+      {
+        "name": "onEncryptionPasswordRequested",
+        "type": "function",
+        "description": "Fired when a password is required to decrypt received Sync data.",
+        "parameters": []
       }
     ]
   }

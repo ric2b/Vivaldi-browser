@@ -24,7 +24,7 @@
         --paper-input-suffix: {
           /* Required to align the icon in |clearSearch| vertically. */
           line-height: 0;
-        }
+        };
       }
 
       paper-icon-button {
@@ -37,11 +37,13 @@
       #searchIcon {
         height: 16px;
         padding: 4px;
+        vertical-align: middle;
         width: 16px;
       }
 
       paper-input-container {
         display: inline-block;
+        vertical-align: middle;
         width: 160px;  /* Special width for search input. */
       }
 
@@ -49,17 +51,9 @@
         -webkit-appearance: none;
       }
 
-      #prompt,
       #searchInput {
         font-size: 92.3076923%;  /* To 12px from 13px. */
-      }
-
-      #prompt {
-        color: var(--paper-grey-600);
-      }
-
-      :host([has-search-text]) #prompt {
-        visibility: hidden;
+        min-height: 24px;
       }
 
       #searchInput {
@@ -73,10 +67,9 @@
     </style>
     <iron-icon id="searchIcon" icon="cr:search"></iron-icon>
     <paper-input-container no-label-float>
-      <label id="prompt">[[label]]</label>
       <input id="searchInput" type="search" on-search="onSearchTermSearch"
-          on-input="onSearchTermInput" aria-labelledby="prompt" incremental>
-      </input>
+          on-input="onSearchTermInput" aria-labelledby="prompt" incremental
+          autofocus$="[[autofocus]]" placeholder="[[label]]">
       <paper-icon-button suffix icon="cr:cancel" id="clearSearch"
           on-tap="onTapClear_" title="[[clearLabel]]"
           hidden$="[[!hasSearchText]]">

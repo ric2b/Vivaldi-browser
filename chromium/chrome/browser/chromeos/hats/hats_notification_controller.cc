@@ -4,8 +4,8 @@
 
 #include "chrome/browser/chromeos/hats/hats_notification_controller.h"
 
-#include "ash/common/system/system_notifier.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/system_notifier.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
@@ -24,7 +24,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/network/network_state.h"
-#include "components/image_fetcher/image_fetcher_impl.h"
+#include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -242,8 +242,10 @@ void HatsNotificationController::OnPortalDetectionCompleted(
                  weak_pointer_factory_.GetWeakPtr()));
 }
 
-void HatsNotificationController::OnImageFetched(const std::string& id,
-                                                const gfx::Image& image) {
+void HatsNotificationController::OnImageFetched(
+    const std::string& id,
+    const gfx::Image& image,
+    const image_fetcher::RequestMetadata& metadata) {
   DCHECK(id == kImageFetcher1xId || id == kImageFetcher2xId);
 
   completed_requests_++;

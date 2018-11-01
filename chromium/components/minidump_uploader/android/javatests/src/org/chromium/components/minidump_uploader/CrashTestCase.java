@@ -6,6 +6,7 @@ package org.chromium.components.minidump_uploader;
 
 import android.test.InstrumentationTestCase;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.components.minidump_uploader.util.CrashReportingPermissionManager;
 
@@ -26,6 +27,8 @@ public class CrashTestCase extends InstrumentationTestCase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+        ContextUtils.initApplicationContextForTests(
+                getInstrumentation().getTargetContext().getApplicationContext());
         mCacheDir = getExistingCacheDir();
         mCrashDir = new File(
                 mCacheDir,
@@ -40,7 +43,7 @@ public class CrashTestCase extends InstrumentationTestCase {
      * Can be overriden by sub-classes to allow for use with different cache directories.
      */
     protected File getExistingCacheDir() {
-        return getInstrumentation().getTargetContext().getCacheDir();
+        return ContextUtils.getApplicationContext().getCacheDir();
     }
 
     @Override
@@ -99,9 +102,7 @@ public class CrashTestCase extends InstrumentationTestCase {
     public static class MockCrashReportingPermissionManager
             implements CrashReportingPermissionManager {
         protected boolean mIsInSample;
-        protected boolean mIsPermitted;
         protected boolean mIsUserPermitted;
-        protected boolean mIsCommandLineDisabled;
         protected boolean mIsNetworkAvailable;
         protected boolean mIsEnabledForTests;
 
@@ -118,18 +119,8 @@ public class CrashTestCase extends InstrumentationTestCase {
         }
 
         @Override
-        public boolean isMetricsUploadPermitted() {
-            return mIsPermitted;
-        }
-
-        @Override
         public boolean isUsageAndCrashReportingPermittedByUser() {
             return mIsUserPermitted;
-        }
-
-        @Override
-        public boolean isCrashUploadDisabledByCommandLine() {
-            return mIsCommandLineDisabled;
         }
 
         @Override

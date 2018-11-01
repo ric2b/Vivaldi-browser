@@ -2359,9 +2359,9 @@
           'id': 168,
           'caption': '''Configure allowed app/extension types''',
           'tags': [],
-          'desc': '''Controls which app/extension types are allowed to be installed.
+          'desc': '''Controls which app/extension types are allowed to be installed and limits runtime access.
 
-          This setting white-lists the allowed types of extension/apps that can be installed in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>. The value is a list of strings, each of which should be one of the following: "extension", "theme", "user_script", "hosted_app", "legacy_packaged_app", "platform_app". See the <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> extensions documentation for more information on these types.
+          This setting white-lists the allowed types of extension/apps that can be installed in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and which hosts they can interact with. The value is a list of strings, each of which should be one of the following: "extension", "theme", "user_script", "hosted_app", "legacy_packaged_app", "platform_app". See the <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> extensions documentation for more information on these types.
 
           Note that this policy also affects extensions and apps to be force-installed via ExtensionInstallForcelist.
 
@@ -2399,6 +2399,16 @@
                     'type': 'string',
                     'pattern': '^[0-9]+([.][0-9]+)*$',
                   },
+                  'runtime_blocked_hosts': {
+                    'type': 'array',
+                    'items': {
+                      'type': 'string'
+                    },
+                    'id': 'ListOfUrlPatterns'
+                  },
+                  'runtime_allowed_hosts': {
+                    '$ref': 'ListOfUrlPatterns'
+                  }
                 },
               },
               '^update_url:': {
@@ -2434,6 +2444,12 @@
                   'allowed_types': {
                     '$ref': 'ExtensionAllowedTypes',
                   },
+                  'runtime_blocked_hosts': {
+                    '$ref': 'ListOfUrlPatterns'
+                  },
+                  'runtime_allowed_hosts': {
+                    '$ref': 'ListOfUrlPatterns'
+                  }
                 },
               },
             },
@@ -4715,14 +4731,13 @@
       'type': 'main',
       'schema': { 'type': 'boolean' },
       'supported_on': ['chrome.*:18-'],
-      'deprecated': True,
       'features': {
         'dynamic_refresh': False,
         'per_profile': True,
       },
       'example_value': False,
       'id': 117,
-      'caption': '''Disable Print Preview (deprecated)''',
+      'caption': '''Disable Print Preview''',
       'tags': [],
       'desc': '''Show the system print dialog instead of print preview.
 
@@ -5178,8 +5193,8 @@
       'tags': [],
       'desc': '''How frequently monitoring network packets are sent, in milliseconds.
 
-      If this policy is unset, the default frequency is 3 minutes. The minimum
-      frequency is 30 seconds and the maximum frequency is 24 hours - values
+      If this policy is unset, the default interval is 3 minutes. The minimum
+      interval is 30 seconds and the maximum interval is 24 hours - values
       outside of this range will be clamped to this range.''',
       'arc_support': 'This policy has no effect on the logging done by Android.',
     },
@@ -8147,11 +8162,11 @@
       },
       'example_value': True,
       'id': 276,
-      'caption': '''Enable add person in profile manager''',
+      'caption': '''Enable add person in user manager''',
       'tags': [],
       'desc': '''If this policy is set to true or not configured, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will allow Add Person from the user manager.
 
-      If this policy is set to false, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will not allow creation of new profiles from the profile manager.''',
+      If this policy is set to false, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will not allow creation of new profiles from the user manager.''',
     },
     {
       'name': 'ForceBrowserSignin',
@@ -9349,14 +9364,13 @@
               'type': 'object',
               'id': 'PpdResource',
               'properties': {
-                'effective_manufacturer': { 'type': 'string' },
                 'effective_model': { 'type': 'string' }
               }
             }
           }
         }
       },
-      'supported_on': [ 'chrome_os:56-' ],
+      'supported_on': [ 'chrome_os:57-' ],
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -9369,8 +9383,7 @@
         "uri": "ipps://print-server.intranet.example.com:443/ipp/cl2k4",
         "uuid": "1c395fdb-5d93-4904-b246-b2c046e79d12",
         "ppd_resource": {
-          "effective_manufacturer": "MakesPrinters",
-          "effective_model": "ColorLaser2k4"
+          "effective_model": "Printer Manufacturer ColorLaser2k4"
         }
       }],
       'id': 350,
@@ -9385,13 +9398,19 @@
       name="PRINTER_DESCRIPTION">description</ph> are free form strings that
       can be customized for ease of printer selection. <ph
       name="PRINTER_MANUFACTURER">manufacturer</ph> and <ph
-      name="PRINTER_MODEL">model</ph> should match one of the <ph
-      name="PRODUCT_NAME">$2<ex>Google Chrome OS</ex></ph> supported
-      printers.  <ph name="PRINTER_URI">uri</ph> should be an address reachable
+      name="PRINTER_MODEL">model</ph> serve to ease printer identification by
+      end users. They represent the manufcaturer and model of the printer. <ph
+      name="PRINTER_URI">uri</ph> should be an address reachable
       from a client computer including the <ph name="URI_SCHEME">scheme</ph>,
       <ph name="URI_PORT">port</ph>, and <ph name="URI_QUEUE">queue</ph>.  <ph
       name="PRINTER_UUID">uuid</ph> is optional.  If provided, it is used to
       help deduplicate <ph name="ZEROCONF_DISCOVERY">zeroconf</ph> printers.
+
+      <ph name="PRINTER_EFFECTIVE_MODEL">effective_model</ph> must match one of
+      the strings which represent a <ph name="PRODUCT_NAME">$2<ex>Google Chrome
+      OS</ex></ph> supported printer. The string will be used to identify and
+      install the appropriate PPD for the printer. More information can be
+      found at https://support.google.com/chrome?p=noncloudprint.
 
       Printer setup is completed upon the first use of a printer.  PPDs are not
       downloaded until the printer is used.  After that time, frequently used
@@ -9616,7 +9635,7 @@
       'tags': [],
       'desc': '''Configures which keyboard layouts are allowed on the <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> sign-in screen.
 
-      If this policy is set to a list of input method identifiers, the given input methods will be available on the sign-in screen. The first given input method will be preselected. While a user pod is focused on the sign-in screen, the user's least recently used input method will be available in addition to the input methods given by this policy.  If this policy is not set, the input methods on the sign-in screen will be derived from the locale in which the sign-in screen is displayed.  Values which are not valid input method identifiers will be ignored.''',
+      If this policy is set to a list of input method identifiers, the given input methods will be available on the sign-in screen. The first given input method will be preselected. While a user pod is focused on the sign-in screen, the user's last used input method will be available in addition to the input methods given by this policy. If this policy is not set, the input methods on the sign-in screen will be derived from the locale in which the sign-in screen is displayed. Values which are not valid input method identifiers will be ignored.''',
     },
   ],
   'messages': {

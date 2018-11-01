@@ -25,6 +25,7 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/LayoutReplaced.h"
+#include "core/plugins/PluginView.h"
 #include "platform/FrameViewBase.h"
 
 namespace blink {
@@ -36,58 +37,65 @@ class CORE_EXPORT LayoutPart : public LayoutReplaced {
   explicit LayoutPart(Element*);
   ~LayoutPart() override;
 
-  bool requiresAcceleratedCompositing() const;
+  bool RequiresAcceleratedCompositing() const;
 
-  bool needsPreferredWidthsRecalculation() const final;
+  bool NeedsPreferredWidthsRecalculation() const final;
 
-  bool nodeAtPoint(HitTestResult&,
-                   const HitTestLocation& locationInContainer,
-                   const LayoutPoint& accumulatedOffset,
+  bool NodeAtPoint(HitTestResult&,
+                   const HitTestLocation& location_in_container,
+                   const LayoutPoint& accumulated_offset,
                    HitTestAction) override;
 
-  void ref() { ++m_refCount; }
-  void deref();
+  void Ref() { ++ref_count_; }
+  void Deref();
 
-  FrameViewBase* widget() const;
+  // LayoutPart::ChildFrameView returns the FrameView associated with
+  // the current Node, if Node is HTMLFrameOwnerElement.
+  // This is different to LayoutObject::GetFrameView which returns
+  // the FrameView associated with the root Document Frame.
+  FrameView* ChildFrameView() const;
+  PluginView* Plugin() const;
+  FrameViewBase* PluginOrFrame() const;
 
-  LayoutRect replacedContentRect() const final;
+  LayoutRect ReplacedContentRect() const final;
 
-  void updateOnWidgetChange();
-  void updateWidgetGeometry();
+  void UpdateOnWidgetChange();
+  void UpdateGeometry();
 
-  bool isLayoutPart() const final { return true; }
-  virtual void paintContents(const PaintInfo&, const LayoutPoint&) const;
+  bool IsLayoutPart() const final { return true; }
+  virtual void PaintContents(const PaintInfo&, const LayoutPoint&) const;
 
-  bool isThrottledFrameView() const;
+  bool IsThrottledFrameView() const;
 
  protected:
-  PaintLayerType layerTypeRequired() const override;
+  PaintLayerType LayerTypeRequired() const override;
 
-  void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) final;
-  void layout() override;
-  void paint(const PaintInfo&, const LayoutPoint&) const override;
-  CursorDirective getCursor(const LayoutPoint&, Cursor&) const final;
+  void StyleDidChange(StyleDifference, const ComputedStyle* old_style) final;
+  void UpdateLayout() override;
+  void Paint(const PaintInfo&, const LayoutPoint&) const override;
+  CursorDirective GetCursor(const LayoutPoint&, Cursor&) const final;
 
   // Overridden to invalidate the child frame if any.
-  void invalidatePaintOfSubtreesIfNeeded(
+  void InvalidatePaintOfSubtreesIfNeeded(
       const PaintInvalidationState&) override;
 
  private:
-  void updateWidgetGeometryInternal();
-  CompositingReasons additionalCompositingReasons() const override;
+  void UpdateGeometryInternal(FrameViewBase&);
+  CompositingReasons AdditionalCompositingReasons() const override;
 
-  void willBeDestroyed() final;
-  void destroy() final;
+  void WillBeDestroyed() final;
+  void Destroy() final;
 
-  bool nodeAtPointOverWidget(HitTestResult&,
-                             const HitTestLocation& locationInContainer,
-                             const LayoutPoint& accumulatedOffset,
-                             HitTestAction);
+  bool NodeAtPointOverFrameViewBase(
+      HitTestResult&,
+      const HitTestLocation& location_in_container,
+      const LayoutPoint& accumulated_offset,
+      HitTestAction);
 
-  int m_refCount;
+  int ref_count_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutPart, isLayoutPart());
+DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutPart, IsLayoutPart());
 
 }  // namespace blink
 

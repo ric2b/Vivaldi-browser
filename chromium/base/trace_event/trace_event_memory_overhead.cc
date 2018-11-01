@@ -77,16 +77,16 @@ void TraceEventMemoryOverhead::AddValue(const Value& value) {
       break;
 
     case Value::Type::STRING: {
-      const StringValue* string_value = nullptr;
+      const Value* string_value = nullptr;
       value.GetAsString(&string_value);
-      Add("StringValue", sizeof(StringValue));
+      Add("StringValue", sizeof(Value));
       AddString(string_value->GetString());
     } break;
 
     case Value::Type::BINARY: {
-      const BinaryValue* binary_value = nullptr;
+      const Value* binary_value = nullptr;
       value.GetAsBinary(&binary_value);
-      Add("BinaryValue", sizeof(BinaryValue) + binary_value->GetSize());
+      Add("BinaryValue", sizeof(Value) + binary_value->GetSize());
     } break;
 
     case Value::Type::DICTIONARY: {
@@ -105,7 +105,7 @@ void TraceEventMemoryOverhead::AddValue(const Value& value) {
       value.GetAsList(&list_value);
       Add("ListValue", sizeof(ListValue));
       for (const auto& v : *list_value)
-        AddValue(*v);
+        AddValue(v);
     } break;
 
     default:

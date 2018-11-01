@@ -11,8 +11,12 @@ using ::testing::Return;
 namespace content {
 namespace {
 
-void SuccessRun(const DownloadFile::InitializeCallback& callback) {
-  callback.Run(DOWNLOAD_INTERRUPT_REASON_NONE);
+void SuccessRun(
+    const DownloadFile::InitializeCallback& initialize_callback,
+    const DownloadFile::CancelRequestCallback& cancel_request_callback,
+    const DownloadItem::ReceivedSlices& received_slices,
+    bool is_parallelizable) {
+  initialize_callback.Run(DOWNLOAD_INTERRUPT_REASON_NONE);
 }
 
 }  // namespace
@@ -20,11 +24,20 @@ void SuccessRun(const DownloadFile::InitializeCallback& callback) {
 MockDownloadFile::MockDownloadFile() {
   // This is here because |Initialize()| is normally called right after
   // construction.
-  ON_CALL(*this, Initialize(_))
+  ON_CALL(*this, Initialize(_, _, _, _))
       .WillByDefault(::testing::Invoke(SuccessRun));
 }
 
 MockDownloadFile::~MockDownloadFile() {
+}
+
+void MockDownloadFile::AddByteStream(
+    std::unique_ptr<ByteStreamReader> stream_reader,
+    int64_t offset,
+    int64_t length) {
+  // Gmock currently can't mock method that takes move-only parameters,
+  // delegate the EXPECT_CALL count to |DoAddByteStream|.
+  DoAddByteStream(stream_reader.get(), offset, length);
 }
 
 }  // namespace content

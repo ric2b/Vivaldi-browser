@@ -10,8 +10,9 @@ namespace blink {
 
 const CSSValue* CSSPropertyAPIColumnCount::parseSingleValue(
     CSSParserTokenRange& range,
-    const CSSParserContext* context) {
-  return CSSPropertyColumnUtils::consumeColumnCount(range);
+    const CSSParserContext& context,
+    CSSPropertyID) {
+  return CSSPropertyColumnUtils::ConsumeColumnCount(range);
 }
 
 }  // namespace blink

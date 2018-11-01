@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -68,13 +69,6 @@ namespace content {
 class ByteStreamReader;
 
 namespace {
-
-// Matches a DownloadCreateInfo* that points to the same object as |info| and
-// has a |default_download_directory| that matches |download_directory|.
-MATCHER_P2(DownloadCreateInfoWithDefaultPath, info, download_directory, "") {
-  return arg == info &&
-      arg->default_download_directory == download_directory;
-}
 
 class MockDownloadManagerDelegate : public DownloadManagerDelegate {
  public:
@@ -139,8 +133,8 @@ class MockDownloadItemFactory
       const GURL& tab_referrer_url,
       const std::string& mime_type,
       const std::string& original_mime_type,
-      const base::Time& start_time,
-      const base::Time& end_time,
+      base::Time start_time,
+      base::Time end_time,
       const std::string& etag,
       const std::string& last_modofied,
       int64_t received_bytes,
@@ -150,6 +144,8 @@ class MockDownloadItemFactory
       DownloadDangerType danger_type,
       DownloadInterruptReason interrupt_reason,
       bool opened,
+      base::Time last_access_time,
+      bool transient,
       const std::vector<DownloadItem::ReceivedSlice>& received_slices,
       const net::NetLogWithSource& net_log) override;
   DownloadItemImpl* CreateActiveItem(
@@ -212,8 +208,8 @@ DownloadItemImpl* MockDownloadItemFactory::CreatePersistedItem(
     const GURL& tab_referrer_url,
     const std::string& mime_type,
     const std::string& original_mime_type,
-    const base::Time& start_time,
-    const base::Time& end_time,
+    base::Time start_time,
+    base::Time end_time,
     const std::string& etag,
     const std::string& last_modified,
     int64_t received_bytes,
@@ -223,6 +219,8 @@ DownloadItemImpl* MockDownloadItemFactory::CreatePersistedItem(
     DownloadDangerType danger_type,
     DownloadInterruptReason interrupt_reason,
     bool opened,
+    base::Time last_access_time,
+    bool transient,
     const std::vector<DownloadItem::ReceivedSlice>& received_slices,
     const net::NetLogWithSource& net_log) {
   DCHECK(items_.find(download_id) == items_.end());
@@ -288,7 +286,7 @@ class MockDownloadFileFactory
   MOCK_METHOD2(MockCreateFile,
                MockDownloadFile*(const DownloadSaveInfo&, ByteStreamReader*));
 
-  virtual DownloadFile* CreateFile(
+  DownloadFile* CreateFile(
       std::unique_ptr<DownloadSaveInfo> save_info,
       const base::FilePath& default_download_directory,
       std::unique_ptr<ByteStreamReader> byte_stream,
@@ -324,7 +322,8 @@ class MockBrowserContext : public BrowserContext {
                    const base::FilePath& partition_path, bool in_memory));
 
   // Define these two methods to avoid a
-  // cannot access private member declared in class 'ScopedVector<net::URLRequestInterceptor>'
+  // 'cannot access private member declared in class
+  // URLRequestInterceptorScopedVector'
   // build error if they're put in MOCK_METHOD.
   net::URLRequestContextGetter* CreateRequestContext(
       ProtocolHandlerMap* protocol_handlers,
@@ -374,10 +373,12 @@ class DownloadManagerTest : public testing::Test {
 
   DownloadManagerTest()
       : callback_called_(false),
+        target_disposition_(DownloadItem::TARGET_DISPOSITION_OVERWRITE),
+        danger_type_(DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS),
+        interrupt_reason_(DOWNLOAD_INTERRUPT_REASON_NONE),
         ui_thread_(BrowserThread::UI, &message_loop_),
         file_thread_(BrowserThread::FILE, &message_loop_),
-        next_download_id_(0) {
-  }
+        next_download_id_(0) {}
 
   // We tear down everything in TearDown().
   ~DownloadManagerTest() override {}
@@ -480,12 +481,14 @@ class DownloadManagerTest : public testing::Test {
       const base::FilePath& target_path,
       DownloadItem::TargetDisposition disposition,
       DownloadDangerType danger_type,
-      const base::FilePath& intermediate_path) {
+      const base::FilePath& intermediate_path,
+      DownloadInterruptReason interrupt_reason) {
     callback_called_ = true;
     target_path_ = target_path;
     target_disposition_ = disposition;
     danger_type_ = danger_type;
     intermediate_path_ = intermediate_path;
+    interrupt_reason_ = interrupt_reason;
   }
 
   void DetermineDownloadTarget(DownloadItemImpl* item) {
@@ -506,6 +509,7 @@ class DownloadManagerTest : public testing::Test {
   DownloadItem::TargetDisposition target_disposition_;
   DownloadDangerType danger_type_;
   base::FilePath intermediate_path_;
+  DownloadInterruptReason interrupt_reason_;
 
   std::vector<GURL> download_urls_;
 
@@ -579,13 +583,13 @@ TEST_F(DownloadManagerTest, DetermineDownloadTarget_False) {
       .WillOnce(ReturnRef(path));
 
   // Confirm that the callback was called with the right values in this case.
-  callback_called_ = false;
   DetermineDownloadTarget(&item);
   EXPECT_TRUE(callback_called_);
   EXPECT_EQ(path, target_path_);
   EXPECT_EQ(DownloadItem::TARGET_DISPOSITION_OVERWRITE, target_disposition_);
   EXPECT_EQ(DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS, danger_type_);
   EXPECT_EQ(path, intermediate_path_);
+  EXPECT_EQ(DOWNLOAD_INTERRUPT_REASON_NONE, interrupt_reason_);
 }
 
 TEST_F(DownloadManagerTest, GetDownloadByGuid) {
@@ -607,7 +611,7 @@ TEST_F(DownloadManagerTest, GetDownloadByGuid) {
       "application/octet-stream", "application/octet-stream", base::Time::Now(),
       base::Time::Now(), std::string(), std::string(), 10, 10, std::string(),
       DownloadItem::INTERRUPTED, DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-      DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED, false,
+      DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED, false, base::Time::Now(), true,
       std::vector<DownloadItem::ReceivedSlice>());
   ASSERT_TRUE(persisted_item);
 

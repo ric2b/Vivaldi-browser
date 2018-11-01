@@ -573,7 +573,7 @@ class LayerTreeHostAnimationTestForceRedraw
   }
 
   void UpdateLayerTreeHost() override {
-    layer_tree_host()->SetNextCommitForcesRedraw();
+    layer_tree_host()->SetNeedsCommitWithForcedRedraw();
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
@@ -1355,9 +1355,9 @@ class LayerTreeHostAnimationTestAddAnimationAfterAnimating
     if (!TestEnded()) {
       ImplThreadTaskRunner()->PostTask(
           FROM_HERE,
-          base::Bind(&LayerTreeHostAnimationTestAddAnimationAfterAnimating::
-                         CheckAnimations,
-                     base::Unretained(this), host_impl));
+          base::BindOnce(&LayerTreeHostAnimationTestAddAnimationAfterAnimating::
+                             CheckAnimations,
+                         base::Unretained(this), host_impl));
     }
   }
 

@@ -6,7 +6,7 @@
 #define MediaQueryBlockWatcher_h
 
 #include "core/CoreExport.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -17,11 +17,11 @@ class CORE_EXPORT MediaQueryBlockWatcher {
 
  public:
   MediaQueryBlockWatcher();
-  void handleToken(const CSSParserToken&);
-  unsigned blockLevel() const { return m_blockLevel; }
+  void HandleToken(const CSSParserToken&);
+  unsigned BlockLevel() const { return block_level_; }
 
  private:
-  unsigned m_blockLevel;
+  unsigned block_level_;
 };
 
 }  // namespace blink

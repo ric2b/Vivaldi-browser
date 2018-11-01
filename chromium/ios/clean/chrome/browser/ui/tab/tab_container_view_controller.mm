@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ======                        New Architecture                         =====
-// =         This code is only used in the new iOS Chrome architecture.       =
-// ============================================================================
-
 #import "ios/clean/chrome/browser/ui/tab/tab_container_view_controller.h"
 
 #import "ios/clean/chrome/browser/ui/tab_strip/tab_strip_events.h"
@@ -17,13 +13,14 @@
 
 namespace {
 CGFloat kToolbarHeight = 44.0f;
-CGFloat kTabStripHeight = 90.0f;
+CGFloat kTabStripHeight = 120.0f;
 }
 
 @interface TabContainerViewController ()
 
 // Container views for child view controllers. The child view controller's
-// view is added as a subview that fills it's container view via autoresizing.
+// view is added as a subview that fills its container view via autoresizing.
+@property(nonatomic, strong) UIView* findBarView;
 @property(nonatomic, strong) UIView* tabStripView;
 @property(nonatomic, strong) UIView* toolbarView;
 @property(nonatomic, strong) UIView* contentView;
@@ -45,6 +42,8 @@ CGFloat kTabStripHeight = 90.0f;
 @implementation TabContainerViewController
 
 @synthesize contentViewController = _contentViewController;
+@synthesize findBarView = _findBarView;
+@synthesize findBarViewController = _findBarViewController;
 @synthesize toolbarViewController = _toolbarViewController;
 @synthesize tabStripViewController = _tabStripViewController;
 @synthesize tabStripView = _tabStripView;
@@ -59,19 +58,26 @@ CGFloat kTabStripHeight = 90.0f;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  self.findBarView = [[UIView alloc] init];
   self.tabStripView = [[UIView alloc] init];
   self.toolbarView = [[UIView alloc] init];
   self.contentView = [[UIView alloc] init];
-  [self.view addSubview:self.tabStripView];
-  [self.view addSubview:self.toolbarView];
-  [self.view addSubview:self.contentView];
+  self.findBarView.translatesAutoresizingMaskIntoConstraints = NO;
   self.tabStripView.translatesAutoresizingMaskIntoConstraints = NO;
   self.toolbarView.translatesAutoresizingMaskIntoConstraints = NO;
   self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
   self.view.backgroundColor = [UIColor blackColor];
+  self.findBarView.backgroundColor = [UIColor greenColor];
   self.tabStripView.backgroundColor = [UIColor blackColor];
   self.toolbarView.backgroundColor = [UIColor blackColor];
   self.contentView.backgroundColor = [UIColor blackColor];
+
+  // Views that are added last have the highest z-order.
+  [self.view addSubview:self.tabStripView];
+  [self.view addSubview:self.toolbarView];
+  [self.view addSubview:self.contentView];
+  [self.view addSubview:self.findBarView];
+  self.findBarView.hidden = YES;
 
   [self addChildViewController:self.tabStripViewController
                      toSubview:self.tabStripView];
@@ -102,6 +108,18 @@ CGFloat kTabStripHeight = 90.0f;
                        toSubview:self.contentView];
   }
   _contentViewController = contentViewController;
+}
+
+- (void)setFindBarViewController:(UIViewController*)findBarViewController {
+  if (self.findBarViewController == findBarViewController)
+    return;
+  if ([self isViewLoaded]) {
+    [self detachChildViewController:self.findBarViewController];
+    [self addChildViewController:findBarViewController
+                       toSubview:self.findBarView];
+  }
+  _findBarViewController = findBarViewController;
+  self.findBarView.hidden = (_findBarViewController == nil);
 }
 
 - (void)setToolbarViewController:(UIViewController*)toolbarViewController {
@@ -224,7 +242,8 @@ CGFloat kTabStripHeight = 90.0f;
   return nil;
 }
 
-#pragma mark - TabStripActions
+#pragma mark - Action handling
+
 - (void)showTabStrip:(id)sender {
   self.tabStripHeightConstraint.constant = kTabStripHeight;
   // HACK: Remove fake action.
@@ -281,6 +300,15 @@ CGFloat kTabStripHeight = 90.0f;
         constraintEqualToAnchor:self.view.trailingAnchor],
     [self.contentView.bottomAnchor
         constraintEqualToAnchor:self.bottomLayoutGuide.topAnchor],
+
+    [self.findBarView.topAnchor
+        constraintEqualToAnchor:self.toolbarView.topAnchor],
+    [self.findBarView.bottomAnchor
+        constraintEqualToAnchor:self.toolbarView.bottomAnchor],
+    [self.findBarView.leadingAnchor
+        constraintEqualToAnchor:self.toolbarView.leadingAnchor],
+    [self.findBarView.trailingAnchor
+        constraintEqualToAnchor:self.toolbarView.trailingAnchor],
   ];
 }
 

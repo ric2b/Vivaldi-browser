@@ -4,8 +4,9 @@
 
 #include "ash/wm/gestures/overview_gesture_handler.h"
 
-#include "ash/common/wm/overview/window_selector_controller.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/wm/overview/window_selector_controller.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 
@@ -33,7 +34,7 @@ bool OverviewGestureHandler::ProcessScrollEvent(const ui::ScrollEvent& event) {
   scroll_y_ += event.y_offset();
 
   WindowSelectorController* window_selector_controller =
-      WmShell::Get()->window_selector_controller();
+      Shell::Get()->window_selector_controller();
 
   // Horizontal 3-finger scroll moves selection when already in overview mode.
   if (std::fabs(scroll_x_) >= std::fabs(scroll_y_)) {
@@ -65,7 +66,7 @@ bool OverviewGestureHandler::ProcessScrollEvent(const ui::ScrollEvent& event) {
 
   // Reset scroll amount on toggling.
   scroll_x_ = scroll_y_ = 0;
-  WmShell::Get()->RecordUserMetricsAction(UMA_TOUCHPAD_GESTURE_OVERVIEW);
+  ShellPort::Get()->RecordUserMetricsAction(UMA_TOUCHPAD_GESTURE_OVERVIEW);
   if (window_selector_controller->IsSelecting() &&
       window_selector_controller->AcceptSelection()) {
     return true;

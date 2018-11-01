@@ -8,16 +8,20 @@
 #include "core/CoreExport.h"
 #include "core/layout/ng/ng_fragment.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
-#include "core/layout/ng/ng_units.h"
 #include "core/layout/ng/ng_writing_mode.h"
 
 namespace blink {
 
+struct NGLogicalSize;
+
 class CORE_EXPORT NGBoxFragment final : public NGFragment {
  public:
   NGBoxFragment(NGWritingMode writing_mode,
-                NGPhysicalBoxFragment* physical_fragment)
+                const NGPhysicalBoxFragment* physical_fragment)
       : NGFragment(writing_mode, physical_fragment) {}
+
+  // Returns the total size, including the contents outside of the border-box.
+  NGLogicalSize OverflowSize() const;
 
   const WTF::Optional<NGLogicalOffset>& BfcOffset() const;
 

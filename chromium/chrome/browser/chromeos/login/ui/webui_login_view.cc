@@ -4,10 +4,9 @@
 
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 
-#include "ash/common/focus_cycler.h"
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/wm_shell.h"
+#include "ash/focus_cycler.h"
 #include "ash/shell.h"
+#include "ash/system/tray/system_tray.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
@@ -29,7 +28,6 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
@@ -71,8 +69,6 @@ namespace {
 const char kAccelNameCancel[] = "cancel";
 const char kAccelNameEnableDebugging[] = "debugging";
 const char kAccelNameEnrollment[] = "enrollment";
-// TODO(rsorokin): Remove custom Active Directory shortcut for the launch.
-const char kAccelNameEnrollmentAd[] = "enrollment_ad";
 const char kAccelNameKioskEnable[] = "kiosk_enable";
 const char kAccelNameVersion[] = "version";
 const char kAccelNameReset[] = "reset";
@@ -127,9 +123,6 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
   accel_map_[ui::Accelerator(ui::VKEY_E,
                              ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
       kAccelNameEnrollment;
-  accel_map_[ui::Accelerator(
-      ui::VKEY_A, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
-      kAccelNameEnrollmentAd;
   if (KioskAppManager::IsConsumerKioskEnabled()) {
     accel_map_[ui::Accelerator(ui::VKEY_K,
                                ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
@@ -179,9 +172,8 @@ WebUILoginView::~WebUILoginView() {
     observer.OnHostDestroying();
 
   if (!ash_util::IsRunningInMash() &&
-      ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
-    ash::Shell::GetInstance()->GetPrimarySystemTray()->SetNextFocusableView(
-        nullptr);
+      ash::Shell::Get()->HasPrimaryStatusArea()) {
+    ash::Shell::Get()->GetPrimarySystemTray()->SetNextFocusableView(nullptr);
   } else {
     NOTIMPLEMENTED();
   }
@@ -305,7 +297,7 @@ bool WebUILoginView::AcceleratorPressed(
 
   content::WebUI* web_ui = GetWebUI();
   if (web_ui) {
-    base::StringValue accel_name(entry->second);
+    base::Value accel_name(entry->second);
     web_ui->CallJavascriptFunctionUnsafe("cr.ui.Oobe.handleAccelerator",
                                          accel_name);
   }
@@ -440,7 +432,7 @@ void WebUILoginView::HandleKeyboardEvent(content::WebContents* source,
   // Make sure error bubble is cleared on keyboard event. This is needed
   // when the focus is inside an iframe. Only clear on KeyDown to prevent hiding
   // an immediate authentication error (See crbug.com/103643).
-  if (event.type() == blink::WebInputEvent::KeyDown) {
+  if (event.GetType() == blink::WebInputEvent::kKeyDown) {
     content::WebUI* web_ui = GetWebUI();
     if (web_ui)
       web_ui->CallJavascriptFunctionUnsafe("cr.ui.Oobe.clearErrors");
@@ -462,11 +454,13 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
   if (ash_util::IsRunningInMash())
     return true;
 
-  ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
-  if (tray && tray->GetWidget()->IsVisible()) {
+  ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
+  if (tray && tray->GetWidget()->IsVisible() && tray->visible()) {
     tray->SetNextFocusableView(this);
-    ash::WmShell::Get()->focus_cycler()->RotateFocus(
+    ash::Shell::Get()->focus_cycler()->RotateFocus(
         reverse ? ash::FocusCycler::BACKWARD : ash::FocusCycler::FORWARD);
+  } else {
+    AboutToRequestFocusFromTabTraversal(reverse);
   }
 
   return true;
@@ -478,8 +472,8 @@ void WebUILoginView::RequestMediaAccessPermission(
     const content::MediaResponseCallback& callback) {
   // Note: This is needed for taking photos when selecting new user images
   // and SAML logins. Must work for all user types (including supervised).
-  MediaStreamDevicesController::RequestPermissions(web_contents, request,
-                                                   callback);
+  MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
+      web_contents, request, callback, nullptr /* extension */);
 }
 
 bool WebUILoginView::CheckMediaAccessPermission(
@@ -494,9 +488,9 @@ bool WebUILoginView::PreHandleGestureEvent(
     content::WebContents* source,
     const blink::WebGestureEvent& event) {
   // Disable pinch zooming.
-  return event.type() == blink::WebGestureEvent::GesturePinchBegin ||
-         event.type() == blink::WebGestureEvent::GesturePinchUpdate ||
-         event.type() == blink::WebGestureEvent::GesturePinchEnd;
+  return event.GetType() == blink::WebGestureEvent::kGesturePinchBegin ||
+         event.GetType() == blink::WebGestureEvent::kGesturePinchUpdate ||
+         event.GetType() == blink::WebGestureEvent::kGesturePinchEnd;
 }
 
 void WebUILoginView::OnLoginPromptVisible() {

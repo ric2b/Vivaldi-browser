@@ -54,31 +54,14 @@ class MirrorOnBootTest : public test::AshTestBase {
 
 typedef test::AshTestBase MirrorWindowControllerTest;
 
-#if defined(OS_WIN)
-// Software mirroring does not work on win.
-#define MAYBE_MirrorCursorBasic DISABLED_MirrorCursorBasic
-#define MAYBE_MirrorCursorLocations DISABLED_MirrorCursorLocations
-#define MAYBE_MirrorCursorMoveOnEnter DISABLED_MirrorCursorMoveOnEnter
-#define MAYBE_MirrorCursorRotate DISABLED_MirrorCursorRotate
-#define MAYBE_DockMode DISABLED_DockMode
-#define MAYBE_MirrorOnBoot DISABLED_MirrorOnBoot
-#else
-#define MAYBE_MirrorCursorBasic MirrorCursorBasic
-#define MAYBE_MirrorCursorLocations MirrorCursorLocations
-#define MAYBE_MirrorCursorMoveOnEnter MirrorCursorMoveOnEnter
-#define MAYBE_MirrorCursorRotate MirrorCursorRotate
-#define MAYBE_DockMode DockMode
-#define MAYBE_MirrorOnBoot MirrorOnBoot
-#endif
-
-TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorBasic) {
+TEST_F(MirrorWindowControllerTest, MirrorCursorBasic) {
   test::MirrorWindowTestApi test_api;
   aura::test::TestWindowDelegate test_window_delegate;
   test_window_delegate.set_window_component(HTTOP);
 
   display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   UpdateDisplay("400x400,400x400");
-  aura::Window* root = Shell::GetInstance()->GetPrimaryRootWindow();
+  aura::Window* root = Shell::Get()->GetPrimaryRootWindow();
   std::unique_ptr<aura::Window> window(aura::test::CreateTestWindowWithDelegate(
       &test_window_delegate, 0, gfx::Rect(50, 50, 100, 100), root));
   window->Show();
@@ -117,14 +100,14 @@ TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorBasic) {
   EXPECT_TRUE(test_api.GetCursorWindow()->IsVisible());
 }
 
-TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorRotate) {
+TEST_F(MirrorWindowControllerTest, MirrorCursorRotate) {
   test::MirrorWindowTestApi test_api;
   aura::test::TestWindowDelegate test_window_delegate;
   test_window_delegate.set_window_component(HTTOP);
 
   display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   UpdateDisplay("400x400,400x400");
-  aura::Window* root = Shell::GetInstance()->GetPrimaryRootWindow();
+  aura::Window* root = Shell::Get()->GetPrimaryRootWindow();
   std::unique_ptr<aura::Window> window(aura::test::CreateTestWindowWithDelegate(
       &test_window_delegate, 0, gfx::Rect(50, 50, 100, 100), root));
   window->Show();
@@ -171,14 +154,14 @@ TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorRotate) {
 // Make sure that the mirror cursor's location is same as
 // the source display's host location in the mirror root window's
 // coordinates.
-TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorLocations) {
+TEST_F(MirrorWindowControllerTest, MirrorCursorLocations) {
   test::MirrorWindowTestApi test_api;
   display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
 
   // Test with device scale factor.
   UpdateDisplay("400x600*2,400x600");
 
-  aura::Window* root = Shell::GetInstance()->GetPrimaryRootWindow();
+  aura::Window* root = Shell::Get()->GetPrimaryRootWindow();
   ui::test::EventGenerator generator(root);
   generator.MoveMouseToInHost(10, 20);
 
@@ -205,9 +188,9 @@ TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorLocations) {
 
 // Test the behavior of the cursor when entering software mirror mode swaps the
 // cursor's display.
-TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorMoveOnEnter) {
+TEST_F(MirrorWindowControllerTest, MirrorCursorMoveOnEnter) {
   aura::Env* env = aura::Env::GetInstance();
-  Shell* shell = Shell::GetInstance();
+  Shell* shell = Shell::Get();
   WindowTreeHostManager* window_tree_host_manager =
       shell->window_tree_host_manager();
 
@@ -253,7 +236,7 @@ TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorMoveOnEnter) {
 
 // Make sure that the compositor based mirroring can switch
 // from/to dock mode.
-TEST_F(MirrorWindowControllerTest, MAYBE_DockMode) {
+TEST_F(MirrorWindowControllerTest, DockMode) {
   const int64_t internal_id = 1;
   const int64_t external_id = 2;
 
@@ -297,7 +280,7 @@ TEST_F(MirrorWindowControllerTest, MAYBE_DockMode) {
   EXPECT_EQ(external_id, display_manager()->mirroring_display_id());
 }
 
-TEST_F(MirrorOnBootTest, MAYBE_MirrorOnBoot) {
+TEST_F(MirrorOnBootTest, MirrorOnBoot) {
   EXPECT_TRUE(display_manager()->IsInMirrorMode());
   RunAllPendingInMessageLoop();
   test::MirrorWindowTestApi test_api;

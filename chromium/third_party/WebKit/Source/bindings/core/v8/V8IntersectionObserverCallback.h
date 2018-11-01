@@ -8,6 +8,7 @@
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScopedPersistent.h"
 #include "core/CoreExport.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/dom/IntersectionObserverCallback.h"
 
 namespace blink {
@@ -22,16 +23,16 @@ class V8IntersectionObserverCallback final
 
   DECLARE_VIRTUAL_TRACE();
 
-  void handleEvent(const HeapVector<Member<IntersectionObserverEntry>>&,
+  void HandleEvent(const HeapVector<Member<IntersectionObserverEntry>>&,
                    IntersectionObserver&) override;
 
-  ExecutionContext* getExecutionContext() const override {
-    return m_scriptState->getExecutionContext();
+  ExecutionContext* GetExecutionContext() const override {
+    return ExecutionContext::From(script_state_.Get());
   }
 
  private:
-  ScopedPersistent<v8::Function> m_callback;
-  RefPtr<ScriptState> m_scriptState;
+  ScopedPersistent<v8::Function> callback_;
+  RefPtr<ScriptState> script_state_;
 };
 
 }  // namespace blink

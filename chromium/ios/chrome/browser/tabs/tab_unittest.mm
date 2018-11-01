@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/ios/block_types.h"
+#import "base/ios/weak_nsobject.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -23,7 +24,9 @@
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/chrome_url_util.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
+#import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
+#import "ios/chrome/browser/tabs/tab_helper_util.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/ui/open_in_controller.h"
@@ -94,9 +97,6 @@ const char kValidFilenameUrl[] = "http://www.hostname.com/filename.pdf";
 
 - (void)closeTabAtIndex:(NSUInteger)index {
   [tabsForTesting_ removeObjectAtIndex:index];
-}
-
-- (void)didCloseTab:(Tab*)closedTab {
 }
 @end
 
@@ -193,20 +193,21 @@ class TabTest : public BlockCleanupTest {
 
     mock_web_controller_ =
         [OCMockObject niceMockForClass:[CRWWebController class]];
-    auto web_state_impl = base::MakeUnique<WebStateImpl>(browser_state);
-    web_state_impl->SetWebController(mock_web_controller_);
-    web_state_impl->GetNavigationManagerImpl().InitializeSession(NO);
-    web_state_impl_ = web_state_impl.get();
+    web::WebState::CreateParams create_params(browser_state);
+    web_state_impl_ = base::MakeUnique<WebStateImpl>(create_params);
+    web_state_impl_->SetWebController(mock_web_controller_);
+    web_state_impl_->GetNavigationManagerImpl().InitializeSession();
+    web::WebStateImpl* web_state_impl = web_state_impl_.get();
     [[[static_cast<OCMockObject*>(mock_web_controller_) stub]
-        andReturnValue:OCMOCK_VALUE(web_state_impl_)] webStateImpl];
+        andReturnValue:OCMOCK_VALUE(web_state_impl)] webStateImpl];
     web_controller_view_.reset([[UIView alloc] init]);
     [[[static_cast<OCMockObject*>(mock_web_controller_) stub]
         andReturn:web_controller_view_.get()] view];
-    tab_.reset([[Tab alloc] initWithWebState:std::move(web_state_impl)
-                                       model:nil
-                            attachTabHelpers:NO]);
-    web::NavigationManager::WebLoadParams params(GURL("chrome://version/"));
-    [[tab_ webController] loadWithParams:params];
+    LegacyTabHelper::CreateForWebState(web_state_impl_.get());
+    tab_.reset(LegacyTabHelper::GetTabForWebState(web_state_impl_.get()));
+    web::NavigationManager::WebLoadParams load_params(
+        GURL("chrome://version/"));
+    [tab_ navigationManager]->LoadURLWithParams(load_params);
 
     // There should be no entries in the history at this point.
     history::QueryResults results;
@@ -219,13 +220,13 @@ class TabTest : public BlockCleanupTest {
   }
 
   void TearDown() override {
-    [tab_ close];
-
+    // Ensure that the Tab is destroyed before the autorelease pool is cleared.
+    web_state_impl_.reset();
     BlockCleanupTest::TearDown();
   }
 
   void BrowseTo(const GURL& userUrl, const GURL& redirectUrl, NSString* title) {
-    DCHECK_EQ(tab_.get().webState, web_state_impl_);
+    DCHECK_EQ(tab_.get().webState, web_state_impl_.get());
 
     [tab_ webWillAddPendingURL:userUrl transition:ui::PAGE_TRANSITION_TYPED];
     web_state_impl_->OnProvisionalNavigationStarted(userUrl);
@@ -235,12 +236,13 @@ class TabTest : public BlockCleanupTest {
     web::Referrer empty_referrer;
     [tab_ navigationManagerImpl]->AddPendingItem(
         redirectUrl, empty_referrer, ui::PAGE_TRANSITION_CLIENT_REDIRECT,
-        web::NavigationInitiationType::RENDERER_INITIATED);
+        web::NavigationInitiationType::RENDERER_INITIATED,
+        web::NavigationManager::UserAgentOverrideOption::INHERIT);
 
     web_state_impl_->OnProvisionalNavigationStarted(redirectUrl);
     [[tab_ navigationManagerImpl]->GetSessionController() commitPendingItem];
-    [[tab_ webController] webStateImpl]->OnNavigationCommitted(redirectUrl);
-    [tab_ webDidStartLoadingURL:redirectUrl shouldUpdateHistory:YES];
+    web_state_impl_->UpdateHttpResponseHeaders(redirectUrl);
+    web_state_impl_->OnNavigationCommitted(redirectUrl);
 
     base::string16 new_title = base::SysNSStringToUTF16(title);
     [tab_ navigationManager]->GetLastCommittedItem()->SetTitle(new_title);
@@ -252,16 +254,15 @@ class TabTest : public BlockCleanupTest {
   }
 
   void BrowseToNewTab() {
-    DCHECK_EQ(tab_.get().webState, web_state_impl_);
+    DCHECK_EQ(tab_.get().webState, web_state_impl_.get());
     const GURL url(kNewTabUrl);
     // TODO(crbug.com/661992): This will not work with a mock CRWWebController.
     // The only test that uses it is currently disabled.
     web::NavigationManager::WebLoadParams params(url);
     params.transition_type = ui::PAGE_TRANSITION_TYPED;
-    [[tab_ webController] loadWithParams:params];
+    [tab_ navigationManager]->LoadURLWithParams(params);
     [[[(id)mock_web_controller_ expect]
         andReturnValue:OCMOCK_VALUE(kPageLoading)] loadPhase];
-    [tab_ webDidStartLoadingURL:url shouldUpdateHistory:YES];
     [[[(id)mock_web_controller_ expect]
         andReturnValue:OCMOCK_VALUE(kPageLoaded)] loadPhase];
     web_state_impl_->OnPageLoaded(url, true);
@@ -318,13 +319,13 @@ class TabTest : public BlockCleanupTest {
   web::TestWebThreadBundle thread_bundle_;
   IOSChromeScopedTestingChromeBrowserStateManager scoped_browser_state_manager_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
-  base::scoped_nsobject<Tab> tab_;
-  web::WebStateImpl* web_state_impl_;
+  std::unique_ptr<web::WebStateImpl> web_state_impl_;
   history::HistoryService* history_service_;  // weak
   CRWWebController* mock_web_controller_;     // weak
   base::scoped_nsobject<UIView> web_controller_view_;
   base::scoped_nsobject<ArrayTabModel> tabModel_;
   base::scoped_nsobject<id> mock_external_app_launcher_;
+  base::WeakNSObject<Tab> tab_;
 };
 
 TEST_F(TabTest, AddToHistoryWithRedirect) {
@@ -378,8 +379,7 @@ TEST_F(TabTest, GetSuggestedFilenameFromContentDisposition) {
   headers->AddHeader(base::StringPrintf("Content-Type: application/pdf"));
   headers->AddHeader(base::StringPrintf("Content-Disposition: %s",
                                         kContentDispositionWithFilename));
-  [[tab_ webController] webStateImpl]->OnHttpResponseHeadersReceived(
-      headers.get(), url);
+  web_state_impl_->OnHttpResponseHeadersReceived(headers.get(), url);
   BrowseTo(url, url, [NSString string]);
   EXPECT_NSEQ(@"suggested_filename.pdf",
               [[tab_ openInController] suggestedFilename]);
@@ -394,8 +394,7 @@ TEST_F(TabTest, GetSuggestedFilenameFromURL) {
   headers->AddHeader(base::StringPrintf("Content-Type: application/pdf"));
   headers->AddHeader(base::StringPrintf("Content-Disposition: %s",
                                         kContentDispositionWithoutFilename));
-  [[tab_ webController] webStateImpl]->OnHttpResponseHeadersReceived(
-      headers.get(), url);
+  web_state_impl_->OnHttpResponseHeadersReceived(headers.get(), url);
   BrowseTo(url, url, [NSString string]);
   EXPECT_NSEQ(@"filename.pdf", [[tab_ openInController] suggestedFilename]);
 }
@@ -407,8 +406,7 @@ TEST_F(TabTest, GetSuggestedFilenameFromDefaultName) {
   scoped_refptr<net::HttpResponseHeaders> headers =
       new net::HttpResponseHeaders("HTTP 1.1 200 OK");
   headers->AddHeader(base::StringPrintf("Content-Type: application/pdf"));
-  [[tab_ webController] webStateImpl]->OnHttpResponseHeadersReceived(
-      headers.get(), url);
+  web_state_impl_->OnHttpResponseHeadersReceived(headers.get(), url);
   BrowseTo(url, url, [NSString string]);
   EXPECT_NSEQ(@"Document.pdf", [[tab_ openInController] suggestedFilename]);
 }

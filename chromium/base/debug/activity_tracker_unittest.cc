@@ -84,41 +84,73 @@ class ActivityTrackerTest : public testing::Test {
     return GlobalActivityTracker::Get()->user_data_allocator_.cache_used();
   }
 
+  void HandleProcessExit(int64_t id,
+                         int64_t stamp,
+                         int code,
+                         GlobalActivityTracker::ProcessPhase phase,
+                         std::string&& command,
+                         ActivityUserData::Snapshot&& data) {
+    exit_id = id;
+    exit_stamp = stamp;
+    exit_code = code;
+    exit_phase = phase;
+    exit_command = std::move(command);
+    exit_data = std::move(data);
+  }
+
   static void DoNothing() {}
+
+  int64_t exit_id = 0;
+  int64_t exit_stamp;
+  int exit_code;
+  GlobalActivityTracker::ProcessPhase exit_phase;
+  std::string exit_command;
+  ActivityUserData::Snapshot exit_data;
 };
 
 TEST_F(ActivityTrackerTest, UserDataTest) {
   char buffer[256];
   memset(buffer, 0, sizeof(buffer));
   ActivityUserData data(buffer, sizeof(buffer));
-  ASSERT_EQ(sizeof(buffer) - 8, data.available_);
+  size_t space = sizeof(buffer) - sizeof(ActivityUserData::MemoryHeader);
+  ASSERT_EQ(space, data.available_);
 
   data.SetInt("foo", 1);
-  ASSERT_EQ(sizeof(buffer) - 8 - 24, data.available_);
+  space -= 24;
+  ASSERT_EQ(space, data.available_);
 
   data.SetUint("b", 1U);  // Small names fit beside header in a word.
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16, data.available_);
+  space -= 16;
+  ASSERT_EQ(space, data.available_);
 
   data.Set("c", buffer, 10);
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16 - 24, data.available_);
+  space -= 24;
+  ASSERT_EQ(space, data.available_);
 
   data.SetString("dear john", "it's been fun");
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16 - 24 - 32, data.available_);
+  space -= 32;
+  ASSERT_EQ(space, data.available_);
 
   data.Set("c", buffer, 20);
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16 - 24 - 32, data.available_);
+  ASSERT_EQ(space, data.available_);
 
   data.SetString("dear john", "but we're done together");
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16 - 24 - 32, data.available_);
+  ASSERT_EQ(space, data.available_);
 
   data.SetString("dear john", "bye");
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16 - 24 - 32, data.available_);
+  ASSERT_EQ(space, data.available_);
 
   data.SetChar("d", 'x');
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16 - 24 - 32 - 8, data.available_);
+  space -= 8;
+  ASSERT_EQ(space, data.available_);
 
   data.SetBool("ee", true);
-  ASSERT_EQ(sizeof(buffer) - 8 - 24 - 16 - 24 - 32 - 8 - 16, data.available_);
+  space -= 16;
+  ASSERT_EQ(space, data.available_);
+
+  data.SetString("f", "");
+  space -= 8;
+  ASSERT_EQ(space, data.available_);
 }
 
 TEST_F(ActivityTrackerTest, PushPopTest) {
@@ -172,7 +204,7 @@ TEST_F(ActivityTrackerTest, PushPopTest) {
 }
 
 TEST_F(ActivityTrackerTest, ScopedTaskTest) {
-  GlobalActivityTracker::CreateWithLocalMemory(kMemorySize, 0, "", 3);
+  GlobalActivityTracker::CreateWithLocalMemory(kMemorySize, 0, "", 3, 0);
 
   ThreadActivityTracker* tracker =
       GlobalActivityTracker::Get()->GetOrCreateTrackerForCurrentThread();
@@ -184,7 +216,7 @@ TEST_F(ActivityTrackerTest, ScopedTaskTest) {
   ASSERT_EQ(0U, snapshot.activity_stack.size());
 
   {
-    PendingTask task1(FROM_HERE, base::Bind(&DoNothing));
+    PendingTask task1(FROM_HERE, base::BindOnce(&DoNothing));
     ScopedTaskRunActivity activity1(task1);
     ActivityUserData& user_data1 = activity1.user_data();
     (void)user_data1;  // Tell compiler it's been used.
@@ -195,7 +227,7 @@ TEST_F(ActivityTrackerTest, ScopedTaskTest) {
     EXPECT_EQ(Activity::ACT_TASK, snapshot.activity_stack[0].activity_type);
 
     {
-      PendingTask task2(FROM_HERE, base::Bind(&DoNothing));
+      PendingTask task2(FROM_HERE, base::BindOnce(&DoNothing));
       ScopedTaskRunActivity activity2(task2);
       ActivityUserData& user_data2 = activity2.user_data();
       (void)user_data2;  // Tell compiler it's been used.
@@ -216,6 +248,28 @@ TEST_F(ActivityTrackerTest, ScopedTaskTest) {
   ASSERT_EQ(0U, snapshot.activity_stack_depth);
   ASSERT_EQ(0U, snapshot.activity_stack.size());
   ASSERT_EQ(2U, GetGlobalUserDataMemoryCacheUsed());
+}
+
+TEST_F(ActivityTrackerTest, ExceptionTest) {
+  GlobalActivityTracker::CreateWithLocalMemory(kMemorySize, 0, "", 3, 0);
+  GlobalActivityTracker* global = GlobalActivityTracker::Get();
+
+  ThreadActivityTracker* tracker =
+      GlobalActivityTracker::Get()->GetOrCreateTrackerForCurrentThread();
+  ThreadActivityTracker::Snapshot snapshot;
+  ASSERT_EQ(0U, GetGlobalUserDataMemoryCacheUsed());
+
+  ASSERT_TRUE(tracker->CreateSnapshot(&snapshot));
+  ASSERT_EQ(0U, snapshot.last_exception.activity_type);
+
+  char origin;
+  global->RecordException(&origin, 42);
+
+  ASSERT_TRUE(tracker->CreateSnapshot(&snapshot));
+  EXPECT_EQ(Activity::ACT_EXCEPTION, snapshot.last_exception.activity_type);
+  EXPECT_EQ(reinterpret_cast<uintptr_t>(&origin),
+            snapshot.last_exception.origin_address);
+  EXPECT_EQ(42U, snapshot.last_exception.data.exception.code);
 }
 
 TEST_F(ActivityTrackerTest, CreateWithFileTest) {
@@ -245,6 +299,14 @@ TEST_F(ActivityTrackerTest, CreateWithFileTest) {
 
 
 // GlobalActivityTracker tests below.
+
+TEST_F(ActivityTrackerTest, BasicTest) {
+  GlobalActivityTracker::CreateWithLocalMemory(kMemorySize, 0, "", 3, 0);
+  GlobalActivityTracker* global = GlobalActivityTracker::Get();
+
+  // Ensure the data repositories have backing store, indicated by non-zero ID.
+  EXPECT_NE(0U, global->process_data().id());
+}
 
 class SimpleActivityThread : public SimpleThread {
  public:
@@ -300,7 +362,7 @@ class SimpleActivityThread : public SimpleThread {
 };
 
 TEST_F(ActivityTrackerTest, ThreadDeathTest) {
-  GlobalActivityTracker::CreateWithLocalMemory(kMemorySize, 0, "", 3);
+  GlobalActivityTracker::CreateWithLocalMemory(kMemorySize, 0, "", 3, 0);
   GlobalActivityTracker::Get()->GetOrCreateTrackerForCurrentThread();
   const size_t starting_active = GetGlobalActiveTrackerCount();
   const size_t starting_inactive = GetGlobalInactiveTrackerCount();
@@ -330,6 +392,108 @@ TEST_F(ActivityTrackerTest, ThreadDeathTest) {
   t2.Join();
   EXPECT_EQ(starting_active, GetGlobalActiveTrackerCount());
   EXPECT_EQ(starting_inactive + 1, GetGlobalInactiveTrackerCount());
+}
+
+TEST_F(ActivityTrackerTest, ProcessDeathTest) {
+  // This doesn't actually create and destroy a process. Instead, it uses for-
+  // testing interfaces to simulate data created by other processes.
+  const ProcessId other_process_id = GetCurrentProcId() + 1;
+
+  GlobalActivityTracker::CreateWithLocalMemory(kMemorySize, 0, "", 3, 0);
+  GlobalActivityTracker* global = GlobalActivityTracker::Get();
+  ThreadActivityTracker* thread = global->GetOrCreateTrackerForCurrentThread();
+
+  // Get callbacks for process exit.
+  global->SetProcessExitCallback(
+      Bind(&ActivityTrackerTest::HandleProcessExit, Unretained(this)));
+
+  // Pretend than another process has started.
+  global->RecordProcessLaunch(other_process_id, FILE_PATH_LITERAL("foo --bar"));
+
+  // Do some activities.
+  PendingTask task(FROM_HERE, base::BindOnce(&DoNothing));
+  ScopedTaskRunActivity activity(task);
+  ActivityUserData& user_data = activity.user_data();
+  ASSERT_NE(0U, user_data.id());
+
+  // Get the memory-allocator references to that data.
+  PersistentMemoryAllocator::Reference proc_data_ref =
+      global->allocator()->GetAsReference(
+          global->process_data().GetBaseAddress(),
+          GlobalActivityTracker::kTypeIdProcessDataRecord);
+  ASSERT_TRUE(proc_data_ref);
+  PersistentMemoryAllocator::Reference tracker_ref =
+      global->allocator()->GetAsReference(
+          thread->GetBaseAddress(),
+          GlobalActivityTracker::kTypeIdActivityTracker);
+  ASSERT_TRUE(tracker_ref);
+  PersistentMemoryAllocator::Reference user_data_ref =
+      global->allocator()->GetAsReference(
+          user_data.GetBaseAddress(),
+          GlobalActivityTracker::kTypeIdUserDataRecord);
+  ASSERT_TRUE(user_data_ref);
+
+  // Make a copy of the thread-tracker state so it can be restored later.
+  const size_t tracker_size = global->allocator()->GetAllocSize(tracker_ref);
+  std::unique_ptr<char[]> tracker_copy(new char[tracker_size]);
+  memcpy(tracker_copy.get(), thread->GetBaseAddress(), tracker_size);
+
+  // Change the objects to appear to be owned by another process.
+  int64_t owning_id;
+  int64_t stamp;
+  ASSERT_TRUE(ActivityUserData::GetOwningProcessId(
+      global->process_data().GetBaseAddress(), &owning_id, &stamp));
+  EXPECT_NE(other_process_id, owning_id);
+  ASSERT_TRUE(ThreadActivityTracker::GetOwningProcessId(
+      thread->GetBaseAddress(), &owning_id, &stamp));
+  EXPECT_NE(other_process_id, owning_id);
+  ASSERT_TRUE(ActivityUserData::GetOwningProcessId(user_data.GetBaseAddress(),
+                                                   &owning_id, &stamp));
+  EXPECT_NE(other_process_id, owning_id);
+  global->process_data().SetOwningProcessIdForTesting(other_process_id, stamp);
+  thread->SetOwningProcessIdForTesting(other_process_id, stamp);
+  user_data.SetOwningProcessIdForTesting(other_process_id, stamp);
+  ASSERT_TRUE(ActivityUserData::GetOwningProcessId(
+      global->process_data().GetBaseAddress(), &owning_id, &stamp));
+  EXPECT_EQ(other_process_id, owning_id);
+  ASSERT_TRUE(ThreadActivityTracker::GetOwningProcessId(
+      thread->GetBaseAddress(), &owning_id, &stamp));
+  EXPECT_EQ(other_process_id, owning_id);
+  ASSERT_TRUE(ActivityUserData::GetOwningProcessId(user_data.GetBaseAddress(),
+                                                   &owning_id, &stamp));
+  EXPECT_EQ(other_process_id, owning_id);
+
+  // Check that process exit will perform callback and free the allocations.
+  ASSERT_EQ(0, exit_id);
+  ASSERT_EQ(GlobalActivityTracker::kTypeIdProcessDataRecord,
+            global->allocator()->GetType(proc_data_ref));
+  ASSERT_EQ(GlobalActivityTracker::kTypeIdActivityTracker,
+            global->allocator()->GetType(tracker_ref));
+  ASSERT_EQ(GlobalActivityTracker::kTypeIdUserDataRecord,
+            global->allocator()->GetType(user_data_ref));
+  global->RecordProcessExit(other_process_id, 0);
+  EXPECT_EQ(other_process_id, exit_id);
+  EXPECT_EQ("foo --bar", exit_command);
+  EXPECT_EQ(GlobalActivityTracker::kTypeIdProcessDataRecordFree,
+            global->allocator()->GetType(proc_data_ref));
+  EXPECT_EQ(GlobalActivityTracker::kTypeIdActivityTrackerFree,
+            global->allocator()->GetType(tracker_ref));
+  EXPECT_EQ(GlobalActivityTracker::kTypeIdUserDataRecordFree,
+            global->allocator()->GetType(user_data_ref));
+
+  // Restore memory contents and types so things don't crash when doing real
+  // process clean-up.
+  memcpy(const_cast<void*>(thread->GetBaseAddress()), tracker_copy.get(),
+         tracker_size);
+  global->allocator()->ChangeType(
+      proc_data_ref, GlobalActivityTracker::kTypeIdProcessDataRecord,
+      GlobalActivityTracker::kTypeIdUserDataRecordFree, false);
+  global->allocator()->ChangeType(
+      tracker_ref, GlobalActivityTracker::kTypeIdActivityTracker,
+      GlobalActivityTracker::kTypeIdActivityTrackerFree, false);
+  global->allocator()->ChangeType(
+      user_data_ref, GlobalActivityTracker::kTypeIdUserDataRecord,
+      GlobalActivityTracker::kTypeIdUserDataRecordFree, false);
 }
 
 }  // namespace debug

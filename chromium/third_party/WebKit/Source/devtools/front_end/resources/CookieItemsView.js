@@ -29,17 +29,15 @@
 
 Resources.CookieItemsView = class extends Resources.StorageItemsView {
   /**
-   * @param {!Resources.CookieTreeElement} treeElement
    * @param {!SDK.CookieModel} model
    * @param {string} cookieDomain
    */
-  constructor(treeElement, model, cookieDomain) {
+  constructor(model, cookieDomain) {
     super(Common.UIString('Cookies'), 'cookiesPanel');
 
     this.element.classList.add('storage-view');
 
     this._model = model;
-    this._treeElement = treeElement;
     this._cookieDomain = cookieDomain;
 
     this._totalSize = 0;
@@ -88,12 +86,16 @@ Resources.CookieItemsView = class extends Resources.StorageItemsView {
     this._totalSize = allCookies.reduce((size, cookie) => size + cookie.size(), 0);
 
     if (!this._cookiesTable) {
-      const parsedURL = this._cookieDomain.asParsedURL();
-      const domain = parsedURL ? parsedURL.host : '';
       this._cookiesTable = new CookieTable.CookiesTable(
-          this._saveCookie.bind(this), this.refreshItems.bind(this), () => this.setCanDeleteSelected(true),
-          this._deleteCookie.bind(this), domain);
+          this._saveCookie.bind(this),
+          this.refreshItems.bind(this),
+          () => this.setCanDeleteSelected(!!this._cookiesTable.selectedCookie()),
+          this._deleteCookie.bind(this));
     }
+
+    const parsedURL = this._cookieDomain.asParsedURL();
+    const host = parsedURL ? parsedURL.host : '';
+    this._cookiesTable.setCookieDomain(host);
 
     var shownCookies = this.filter(allCookies, cookie => `${cookie.name()} ${cookie.value()} ${cookie.domain()}`);
     this._cookiesTable.setCookies(shownCookies);

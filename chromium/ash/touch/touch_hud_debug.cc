@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ash/root_window_controller.h"
@@ -322,7 +323,7 @@ TouchHudDebug::TouchHudDebug(aura::Window* initial_root)
       canvas_(NULL),
       label_container_(NULL) {
   const display::Display& display =
-      Shell::GetInstance()->display_manager()->GetDisplayForId(display_id());
+      Shell::Get()->display_manager()->GetDisplayForId(display_id());
 
   views::View* content = widget()->GetContentsView();
 
@@ -355,7 +356,7 @@ TouchHudDebug::~TouchHudDebug() {}
 // static
 std::unique_ptr<base::DictionaryValue> TouchHudDebug::GetAllAsDictionary() {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
-  aura::Window::Windows roots = Shell::GetInstance()->GetAllRootWindows();
+  aura::Window::Windows roots = Shell::Get()->GetAllRootWindows();
   for (aura::Window::Windows::iterator iter = roots.begin();
        iter != roots.end(); ++iter) {
     RootWindowController* controller = GetRootWindowController(*iter);
@@ -363,7 +364,7 @@ std::unique_ptr<base::DictionaryValue> TouchHudDebug::GetAllAsDictionary() {
     if (hud) {
       std::unique_ptr<base::ListValue> list = hud->GetLogAsList();
       if (!list->empty())
-        value->Set(base::Int64ToString(hud->display_id()), list.release());
+        value->Set(base::Int64ToString(hud->display_id()), std::move(list));
     }
   }
   return value;

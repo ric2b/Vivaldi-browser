@@ -18,6 +18,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -38,6 +39,7 @@
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/host_zoom_map_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
+#include "content/browser/renderer_host/input/timeout_monitor.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
@@ -66,7 +68,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
@@ -85,11 +86,12 @@
 #include "ui/base/device_form_factor.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/native_theme/native_theme_switches.h"
+#include "ui/native_theme/native_theme_features.h"
 #include "url/url_constants.h"
 
 #if defined(OS_WIN)
@@ -231,6 +233,9 @@ RenderViewHostImpl::RenderViewHostImpl(
                    base::Unretained(ResourceDispatcherHostImpl::Get()),
                    GetProcess()->GetID(), GetRoutingID()));
   }
+
+  close_timeout_.reset(new TimeoutMonitor(base::Bind(
+      &RenderViewHostImpl::ClosePageTimeout, weak_factory_.GetWeakPtr())));
 }
 
 RenderViewHostImpl::~RenderViewHostImpl() {
@@ -279,8 +284,10 @@ bool RenderViewHostImpl::CreateRenderView(
   // https://crbug.com/575245.
   // TODO(creis): Remove this once we've found the cause.
   if (main_frame_routing_id_ != MSG_ROUTING_NONE &&
-      proxy_route_id != MSG_ROUTING_NONE)
+      proxy_route_id != MSG_ROUTING_NONE) {
+    NOTREACHED() << "Don't set both main_frame_routing_id_ and proxy_route_id";
     base::debug::DumpWithoutCrashing();
+  }
 
   GetWidget()->set_renderer_initialized(true);
 
@@ -313,6 +320,15 @@ bool RenderViewHostImpl::CreateRenderView(
   params->max_size = GetWidget()->max_size_for_auto_resize();
   params->page_zoom_level = delegate_->GetPendingPageZoomLevel();
   params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
+
+  // Pretend that HDR displays are sRGB so that we do not have inconsistent
+  // coloring.
+  // TODO(ccameron): Disable this once color correct rasterization is functional
+  // https://crbug.com/701942
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)) {
+    gfx::ColorSpace::CreateSRGB().GetICCProfile(
+        &params->image_decode_color_space);
+  }
 
   GetWidget()->GetResizeParams(&params->initial_size);
   GetWidget()->SetInitialRenderSizeParams(params->initial_size);
@@ -438,8 +454,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
           features::kCrossOriginMediaPlaybackRequiresUserGesture);
 #endif  // defined(OS_ANDROID)
 
-  prefs.device_supports_touch = ui::GetTouchScreensAvailability() ==
-                                ui::TouchScreensAvailability::ENABLED;
   const std::string touch_enabled_switch =
       command_line.HasSwitch(switches::kTouchEventFeatureDetection)
           ? command_line.GetSwitchValueASCII(
@@ -447,7 +461,8 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
           : switches::kTouchEventFeatureDetectionAuto;
   prefs.touch_event_feature_detection_enabled =
       (touch_enabled_switch == switches::kTouchEventFeatureDetectionAuto)
-          ? prefs.device_supports_touch
+          ? (ui::GetTouchScreensAvailability() ==
+             ui::TouchScreensAvailability::ENABLED)
           : (touch_enabled_switch.empty() ||
              touch_enabled_switch ==
                  switches::kTouchEventFeatureDetectionEnabled);
@@ -494,15 +509,11 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       command_line.HasSwitch(switches::kMainFrameResizesAreOrientationChanges);
 
   prefs.color_correct_rendering_enabled =
-      command_line.HasSwitch(cc::switches::kEnableColorCorrectRendering) ||
-      command_line.HasSwitch(cc::switches::kEnableTrueColorRendering);
+      command_line.HasSwitch(cc::switches::kEnableColorCorrectRendering);
 
   prefs.color_correct_rendering_default_mode_enabled =
       command_line.HasSwitch(
           switches::kEnableColorCorrectRenderingDefaultMode);
-
-  prefs.true_color_rendering_enabled =
-      command_line.HasSwitch(cc::switches::kEnableTrueColorRendering);
 
   prefs.spatial_navigation_enabled = command_line.HasSwitch(
       switches::kEnableSpatialNavigation);
@@ -541,15 +552,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.background_video_track_optimization_enabled =
       base::FeatureList::IsEnabled(media::kBackgroundVideoTrackOptimization);
 
-  // TODO(avayvod, asvitkine): Query the value directly when it is available in
-  // the renderer process. See https://crbug.com/681160.
-  prefs.max_keyframe_distance_to_disable_background_video =
-      base::TimeDelta::FromMilliseconds(
-          variations::GetVariationParamByFeatureAsInt(
-              media::kBackgroundVideoTrackOptimization,
-              "max_keyframe_distance_ms",
-              base::TimeDelta::FromSeconds(10).InMilliseconds()));
-
   // TODO(servolk, asvitkine): Query the value directly when it is available in
   // the renderer process. See https://crbug.com/681160.
   prefs.enable_instant_source_buffer_gc =
@@ -577,10 +579,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
 void RenderViewHostImpl::ClosePage() {
   is_waiting_for_close_ack_ = true;
-  GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(kUnloadTimeoutMS),
-      blink::WebInputEvent::Undefined,
-      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_CLOSE_PAGE);
 
   bool is_javascript_dialog_showing = delegate_->IsJavaScriptDialogShowing();
 
@@ -588,10 +586,7 @@ void RenderViewHostImpl::ClosePage() {
   // close event because it is known unresponsive, waiting for the reply from
   // the dialog.
   if (IsRenderViewLive() && !is_javascript_dialog_showing) {
-    // Since we are sending an IPC message to the renderer, increase the event
-    // count to prevent the hang monitor timeout from being stopped by input
-    // event acknowledgments.
-    GetWidget()->increment_in_flight_event_count();
+    close_timeout_->Start(TimeDelta::FromMilliseconds(kUnloadTimeoutMS));
 
     // TODO(creis): Should this be moved to Shutdown?  It may not be called for
     // RenderViewHosts that have been swapped out.
@@ -609,7 +604,7 @@ void RenderViewHostImpl::ClosePage() {
 }
 
 void RenderViewHostImpl::ClosePageIgnoringUnloadEvents() {
-  GetWidget()->StopHangMonitorTimeout();
+  close_timeout_->Stop();
   is_waiting_for_close_ack_ = false;
 
   sudden_termination_allowed_ = true;
@@ -855,7 +850,6 @@ void RenderViewHostImpl::OnTakeFocus(bool reverse) {
 }
 
 void RenderViewHostImpl::OnClosePageACK() {
-  GetWidget()->decrement_in_flight_event_count();
   ClosePageIgnoringUnloadEvents();
 }
 
@@ -867,7 +861,7 @@ void RenderViewHostImpl::OnFocus() {
 
 void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  if (mouse_event.type() == WebInputEvent::MouseWheel &&
+  if (mouse_event.GetType() == WebInputEvent::kMouseWheel &&
       GetWidget()->ignore_input_events()) {
     delegate_->OnIgnoredUIEvent();
   }
@@ -876,7 +870,7 @@ void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
 bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
   if (GetWidget()->ignore_input_events()) {
-    if (key_event.type() == WebInputEvent::RawKeyDown)
+    if (key_event.GetType() == WebInputEvent::kRawKeyDown)
       delegate_->OnIgnoredUIEvent();
     return false;
   }
@@ -965,5 +959,11 @@ void RenderViewHostImpl::RenderViewReady() {
   delegate_->RenderViewReady(this);
 }
 
+void RenderViewHostImpl::ClosePageTimeout() {
+  if (delegate_->ShouldIgnoreUnresponsiveRenderer())
+    return;
+
+  ClosePageIgnoringUnloadEvents();
+}
 
 }  // namespace content

@@ -246,7 +246,22 @@ void ClickBasedCategoryRanker::AppendCategoryIfNecessary(Category category) {
   if (!ContainsCategory(category)) {
     ordered_categories_.push_back(RankedCategory(
         category, /*clicks=*/0, /*last_dismissed=*/base::Time()));
+    StoreOrderToPrefs(ordered_categories_);
   }
+}
+
+void ClickBasedCategoryRanker::InsertCategoryBeforeIfNecessary(
+    Category category_to_insert,
+    Category anchor) {
+  InsertCategoryRelativeToIfNecessary(category_to_insert, anchor,
+                                      /*after=*/false);
+}
+
+void ClickBasedCategoryRanker::InsertCategoryAfterIfNecessary(
+    Category category_to_insert,
+    Category anchor) {
+  InsertCategoryRelativeToIfNecessary(category_to_insert, anchor,
+                                      /*after=*/true);
 }
 
 void ClickBasedCategoryRanker::OnSuggestionOpened(Category category) {
@@ -384,8 +399,8 @@ void ClickBasedCategoryRanker::AppendKnownCategory(
     KnownCategories known_category) {
   Category category = Category::FromKnownCategory(known_category);
   DCHECK(!ContainsCategory(category));
-  ordered_categories_.push_back(RankedCategory(
-      category, /*clicks=*/0, /*last_dismissed=*/base::Time()));
+  ordered_categories_.push_back(
+      RankedCategory(category, /*clicks=*/0, /*last_dismissed=*/base::Time()));
 }
 
 namespace {
@@ -413,9 +428,9 @@ bool ClickBasedCategoryRanker::ReadOrderFromPrefs(
     return false;
   }
 
-  for (const std::unique_ptr<base::Value>& value : *list) {
-    base::DictionaryValue* dictionary;
-    if (!value->GetAsDictionary(&dictionary)) {
+  for (const base::Value& value : *list) {
+    const base::DictionaryValue* dictionary;
+    if (!value.GetAsDictionary(&dictionary)) {
       LOG(DFATAL) << "Failed to parse category data from prefs param "
                   << prefs::kClickBasedCategoryRankerOrderWithClicks
                   << " into dictionary.";
@@ -468,6 +483,23 @@ bool ClickBasedCategoryRanker::ContainsCategory(Category category) const {
     }
   }
   return false;
+}
+
+void ClickBasedCategoryRanker::InsertCategoryRelativeToIfNecessary(
+    Category category_to_insert,
+    Category anchor,
+    bool after) {
+  DCHECK(ContainsCategory(anchor));
+  if (ContainsCategory(category_to_insert)) {
+    return;
+  }
+
+  std::vector<RankedCategory>::iterator anchor_it = FindCategory(anchor);
+  ordered_categories_.insert(anchor_it + (after ? 1 : 0),
+                             RankedCategory(category_to_insert,
+                                            /*clicks=*/anchor_it->clicks,
+                                            /*last_dismissed=*/base::Time()));
+  StoreOrderToPrefs(ordered_categories_);
 }
 
 base::Time ClickBasedCategoryRanker::ReadLastDecayTimeFromPrefs() const {

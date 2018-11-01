@@ -20,7 +20,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/safe_browsing_db/safe_browsing_prefs.h"
-#include "components/search_engines/search_engines_pref_names.h"
+#include "components/search_engines/default_search_manager.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/translate_pref_names.h"
@@ -39,6 +39,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "ui/chromeos/events/pref_names.h"
 #endif
 
 namespace {
@@ -119,6 +120,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)[::prefs::kDefaultCharset] =
       settings_private::PrefType::PREF_TYPE_STRING;
+#if defined(OS_MACOSX)
+  (*s_whitelist)[::prefs::kWebkitTabsToLinks] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+#endif
 
   // On startup.
   (*s_whitelist)[::prefs::kRestoreOnStartup] =
@@ -171,8 +176,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
 #endif
 
   // Search page.
-  (*s_whitelist)[::prefs::kDefaultSearchProviderEnabled] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[DefaultSearchManager::kDefaultSearchProviderDataPrefName] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
   (*s_whitelist)[::prefs::kGoogleNowLauncherEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
@@ -278,6 +283,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kWakeOnWifiDarkConnect] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::chromeos::kSignedDataRoamingEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Timezone settings.
   (*s_whitelist)[chromeos::kSystemTimezone] =
@@ -341,15 +348,15 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Import data
-  (*s_whitelist)[::prefs::kImportAutofillFormData] =
+  (*s_whitelist)[::prefs::kImportDialogAutofillFormData] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kImportBookmarks] =
+  (*s_whitelist)[::prefs::kImportDialogBookmarks] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kImportHistory] =
+  (*s_whitelist)[::prefs::kImportDialogHistory] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kImportSavedPasswords] =
+  (*s_whitelist)[::prefs::kImportDialogSavedPasswords] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kImportSearchEngine] =
+  (*s_whitelist)[::prefs::kImportDialogSearchEngine] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 #endif
 
@@ -369,6 +376,14 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
   return *s_whitelist;
+}
+
+settings_private::PrefType PrefsUtil::GetWhitelistedPrefType(
+    const std::string& pref_name) {
+  const TypedPrefMap& keys = GetWhitelistedKeys();
+  const auto& iter = keys.find(pref_name);
+  return iter != keys.end() ? iter->second
+                            : settings_private::PrefType::PREF_TYPE_NONE;
 }
 
 settings_private::PrefType PrefsUtil::GetType(const std::string& name,
@@ -398,7 +413,10 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetCrosSettingsPref(
 
 #if defined(OS_CHROMEOS)
   const base::Value* value = CrosSettings::Get()->GetPref(name);
-  DCHECK(value) << "Pref not found: " << name;
+  if (!value) {
+    LOG(ERROR) << "Cros settings pref not found: " << name;
+    return nullptr;
+  }
   pref_object->key = name;
   pref_object->type = GetType(name, value->GetType());
   pref_object->value.reset(value->DeepCopy());
@@ -409,10 +427,17 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetCrosSettingsPref(
 
 std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
     const std::string& name) {
+  if (GetWhitelistedPrefType(name) ==
+      settings_private::PrefType::PREF_TYPE_NONE) {
+    return nullptr;
+  }
+
   const PrefService::Preference* pref = nullptr;
   std::unique_ptr<settings_private::PrefObject> pref_object;
   if (IsCrosSetting(name)) {
     pref_object = GetCrosSettingsPref(name);
+    if (!pref_object)
+      return nullptr;
   } else {
     PrefService* pref_service = FindServiceForPref(name);
     pref = pref_service->FindPreference(name);
@@ -505,6 +530,11 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
 
 PrefsUtil::SetPrefResult PrefsUtil::SetPref(const std::string& pref_name,
                                             const base::Value* value) {
+  if (GetWhitelistedPrefType(pref_name) ==
+      settings_private::PrefType::PREF_TYPE_NONE) {
+    return PREF_NOT_FOUND;
+  }
+
   if (IsCrosSetting(pref_name))
     return SetCrosSettingsPref(pref_name, value);
 
@@ -620,15 +650,8 @@ bool PrefsUtil::RemoveFromListCrosSetting(const std::string& pref_name,
 }
 
 bool PrefsUtil::IsPrefTypeURL(const std::string& pref_name) {
-  settings_private::PrefType pref_type =
-      settings_private::PrefType::PREF_TYPE_NONE;
-
-  const TypedPrefMap keys = GetWhitelistedKeys();
-  const auto& iter = keys.find(pref_name);
-  if (iter != keys.end())
-    pref_type = iter->second;
-
-  return pref_type == settings_private::PrefType::PREF_TYPE_URL;
+  return GetWhitelistedPrefType(pref_name) ==
+         settings_private::PrefType::PREF_TYPE_URL;
 }
 
 #if defined(OS_CHROMEOS)
@@ -739,8 +762,10 @@ const Extension* PrefsUtil::GetExtensionControllingPref(
   if (pref_object.key == ::prefs::kURLsToRestoreOnStartup)
     return GetExtensionOverridingStartupPages(profile_);
 
-  if (pref_object.key == ::prefs::kDefaultSearchProviderEnabled)
+  if (pref_object.key ==
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName) {
     return GetExtensionOverridingSearchEngine(profile_);
+  }
 
   if (pref_object.key == proxy_config::prefs::kProxy)
     return GetExtensionOverridingProxy(profile_);

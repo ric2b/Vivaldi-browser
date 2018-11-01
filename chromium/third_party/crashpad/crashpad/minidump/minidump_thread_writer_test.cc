@@ -61,15 +61,15 @@ void GetThreadListStream(const std::string& file_contents,
   ASSERT_NO_FATAL_FAILURE(VerifyMinidumpHeader(header, kExpectedStreams, 0));
   ASSERT_TRUE(directory);
 
-  ASSERT_EQ(kMinidumpStreamTypeThreadList, directory[0].StreamType);
-  EXPECT_EQ(kThreadListStreamOffset, directory[0].Location.Rva);
+  ASSERT_EQ(directory[0].StreamType, kMinidumpStreamTypeThreadList);
+  EXPECT_EQ(directory[0].Location.Rva, kThreadListStreamOffset);
 
   *thread_list = MinidumpWritableAtLocationDescriptor<MINIDUMP_THREAD_LIST>(
       file_contents, directory[0].Location);
   ASSERT_TRUE(thread_list);
 
   if (memory_list) {
-    ASSERT_EQ(kMinidumpStreamTypeMemoryList, directory[1].StreamType);
+    ASSERT_EQ(directory[1].StreamType, kMinidumpStreamTypeMemoryList);
 
     *memory_list = MinidumpWritableAtLocationDescriptor<MINIDUMP_MEMORY_LIST>(
         file_contents, directory[1].Location);
@@ -81,20 +81,20 @@ TEST(MinidumpThreadWriter, EmptyThreadList) {
   MinidumpFileWriter minidump_file_writer;
   auto thread_list_writer = base::WrapUnique(new MinidumpThreadListWriter());
 
-  minidump_file_writer.AddStream(std::move(thread_list_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(thread_list_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
 
-  ASSERT_EQ(sizeof(MINIDUMP_HEADER) + sizeof(MINIDUMP_DIRECTORY) +
-                sizeof(MINIDUMP_THREAD_LIST),
-            string_file.string().size());
+  ASSERT_EQ(string_file.string().size(),
+            sizeof(MINIDUMP_HEADER) + sizeof(MINIDUMP_DIRECTORY) +
+                sizeof(MINIDUMP_THREAD_LIST));
 
   const MINIDUMP_THREAD_LIST* thread_list = nullptr;
   ASSERT_NO_FATAL_FAILURE(
       GetThreadListStream(string_file.string(), &thread_list, nullptr));
 
-  EXPECT_EQ(0u, thread_list->NumberOfThreads);
+  EXPECT_EQ(thread_list->NumberOfThreads, 0u);
 }
 
 // The MINIDUMP_THREADs |expected| and |observed| are compared against each
@@ -109,30 +109,30 @@ void ExpectThread(const MINIDUMP_THREAD* expected,
                   const std::string& file_contents,
                   const MINIDUMP_MEMORY_DESCRIPTOR** stack,
                   const void** context_base) {
-  EXPECT_EQ(expected->ThreadId, observed->ThreadId);
-  EXPECT_EQ(expected->SuspendCount, observed->SuspendCount);
-  EXPECT_EQ(expected->PriorityClass, observed->PriorityClass);
-  EXPECT_EQ(expected->Priority, observed->Priority);
-  EXPECT_EQ(expected->Teb, observed->Teb);
+  EXPECT_EQ(observed->ThreadId, expected->ThreadId);
+  EXPECT_EQ(observed->SuspendCount, expected->SuspendCount);
+  EXPECT_EQ(observed->PriorityClass, expected->PriorityClass);
+  EXPECT_EQ(observed->Priority, expected->Priority);
+  EXPECT_EQ(observed->Teb, expected->Teb);
 
-  EXPECT_EQ(expected->Stack.StartOfMemoryRange,
-            observed->Stack.StartOfMemoryRange);
-  EXPECT_EQ(expected->Stack.Memory.DataSize, observed->Stack.Memory.DataSize);
+  EXPECT_EQ(observed->Stack.StartOfMemoryRange,
+            expected->Stack.StartOfMemoryRange);
+  EXPECT_EQ(observed->Stack.Memory.DataSize, expected->Stack.Memory.DataSize);
   if (stack) {
-    ASSERT_NE(0u, observed->Stack.Memory.DataSize);
-    ASSERT_NE(0u, observed->Stack.Memory.Rva);
+    ASSERT_NE(observed->Stack.Memory.DataSize, 0u);
+    ASSERT_NE(observed->Stack.Memory.Rva, 0u);
     ASSERT_GE(file_contents.size(),
               observed->Stack.Memory.Rva + observed->Stack.Memory.DataSize);
     *stack = &observed->Stack;
   } else {
-    EXPECT_EQ(0u, observed->Stack.StartOfMemoryRange);
-    EXPECT_EQ(0u, observed->Stack.Memory.DataSize);
-    EXPECT_EQ(0u, observed->Stack.Memory.Rva);
+    EXPECT_EQ(observed->Stack.StartOfMemoryRange, 0u);
+    EXPECT_EQ(observed->Stack.Memory.DataSize, 0u);
+    EXPECT_EQ(observed->Stack.Memory.Rva, 0u);
   }
 
-  EXPECT_EQ(expected->ThreadContext.DataSize, observed->ThreadContext.DataSize);
-  ASSERT_NE(0u, observed->ThreadContext.DataSize);
-  ASSERT_NE(0u, observed->ThreadContext.Rva);
+  EXPECT_EQ(observed->ThreadContext.DataSize, expected->ThreadContext.DataSize);
+  ASSERT_NE(observed->ThreadContext.DataSize, 0u);
+  ASSERT_NE(observed->ThreadContext.Rva, 0u);
   ASSERT_GE(file_contents.size(),
             observed->ThreadContext.Rva + expected->ThreadContext.DataSize);
   *context_base = &file_contents[observed->ThreadContext.Rva];
@@ -161,21 +161,21 @@ TEST(MinidumpThreadWriter, OneThread_x86_NoStack) {
   thread_writer->SetContext(std::move(context_x86_writer));
 
   thread_list_writer->AddThread(std::move(thread_writer));
-  minidump_file_writer.AddStream(std::move(thread_list_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(thread_list_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
 
-  ASSERT_EQ(sizeof(MINIDUMP_HEADER) + sizeof(MINIDUMP_DIRECTORY) +
+  ASSERT_EQ(string_file.string().size(),
+            sizeof(MINIDUMP_HEADER) + sizeof(MINIDUMP_DIRECTORY) +
                 sizeof(MINIDUMP_THREAD_LIST) + 1 * sizeof(MINIDUMP_THREAD) +
-                1 * sizeof(MinidumpContextX86),
-            string_file.string().size());
+                1 * sizeof(MinidumpContextX86));
 
   const MINIDUMP_THREAD_LIST* thread_list = nullptr;
   ASSERT_NO_FATAL_FAILURE(
       GetThreadListStream(string_file.string(), &thread_list, nullptr));
 
-  EXPECT_EQ(1u, thread_list->NumberOfThreads);
+  EXPECT_EQ(thread_list->NumberOfThreads, 1u);
 
   MINIDUMP_THREAD expected = {};
   expected.ThreadId = kThreadID;
@@ -231,21 +231,21 @@ TEST(MinidumpThreadWriter, OneThread_AMD64_Stack) {
   thread_writer->SetContext(std::move(context_amd64_writer));
 
   thread_list_writer->AddThread(std::move(thread_writer));
-  minidump_file_writer.AddStream(std::move(thread_list_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(thread_list_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
 
-  ASSERT_EQ(sizeof(MINIDUMP_HEADER) + sizeof(MINIDUMP_DIRECTORY) +
+  ASSERT_EQ(string_file.string().size(),
+            sizeof(MINIDUMP_HEADER) + sizeof(MINIDUMP_DIRECTORY) +
                 sizeof(MINIDUMP_THREAD_LIST) + 1 * sizeof(MINIDUMP_THREAD) +
-                1 * sizeof(MinidumpContextAMD64) + kMemorySize,
-            string_file.string().size());
+                1 * sizeof(MinidumpContextAMD64) + kMemorySize);
 
   const MINIDUMP_THREAD_LIST* thread_list = nullptr;
   ASSERT_NO_FATAL_FAILURE(
       GetThreadListStream(string_file.string(), &thread_list, nullptr));
 
-  EXPECT_EQ(1u, thread_list->NumberOfThreads);
+  EXPECT_EQ(thread_list->NumberOfThreads, 1u);
 
   MINIDUMP_THREAD expected = {};
   expected.ThreadId = kThreadID;
@@ -363,27 +363,28 @@ TEST(MinidumpThreadWriter, ThreeThreads_x86_MemoryList) {
 
   thread_list_writer->AddThread(std::move(thread_writer_2));
 
-  minidump_file_writer.AddStream(std::move(thread_list_writer));
-  minidump_file_writer.AddStream(std::move(memory_list_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(thread_list_writer)));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(memory_list_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
 
-  ASSERT_EQ(sizeof(MINIDUMP_HEADER) + 2 * sizeof(MINIDUMP_DIRECTORY) +
-                sizeof(MINIDUMP_THREAD_LIST) + 3 * sizeof(MINIDUMP_THREAD) +
-                sizeof(MINIDUMP_MEMORY_LIST) +
-                3 * sizeof(MINIDUMP_MEMORY_DESCRIPTOR) +
-                3 * sizeof(MinidumpContextX86) + kMemorySize0 + kMemorySize1 +
-                kMemorySize2 + 12,  // 12 for alignment
-            string_file.string().size());
+  ASSERT_EQ(
+      string_file.string().size(),
+      sizeof(MINIDUMP_HEADER) + 2 * sizeof(MINIDUMP_DIRECTORY) +
+          sizeof(MINIDUMP_THREAD_LIST) + 3 * sizeof(MINIDUMP_THREAD) +
+          sizeof(MINIDUMP_MEMORY_LIST) +
+          3 * sizeof(MINIDUMP_MEMORY_DESCRIPTOR) +
+          3 * sizeof(MinidumpContextX86) + kMemorySize0 + kMemorySize1 +
+          kMemorySize2 + 12);  // 12 for alignment
 
   const MINIDUMP_THREAD_LIST* thread_list = nullptr;
   const MINIDUMP_MEMORY_LIST* memory_list = nullptr;
   ASSERT_NO_FATAL_FAILURE(
       GetThreadListStream(string_file.string(), &thread_list, &memory_list));
 
-  EXPECT_EQ(3u, thread_list->NumberOfThreads);
-  EXPECT_EQ(3u, memory_list->NumberOfMemoryRanges);
+  EXPECT_EQ(thread_list->NumberOfThreads, 3u);
+  EXPECT_EQ(memory_list->NumberOfMemoryRanges, 3u);
 
   {
     SCOPED_TRACE("thread 0");
@@ -623,8 +624,8 @@ void RunInitializeFromSnapshotTest(bool thread_id_collision) {
   thread_list_writer->InitializeFromSnapshot(thread_snapshots, &thread_id_map);
 
   MinidumpFileWriter minidump_file_writer;
-  minidump_file_writer.AddStream(std::move(thread_list_writer));
-  minidump_file_writer.AddStream(std::move(memory_list_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(thread_list_writer)));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(memory_list_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
@@ -634,8 +635,8 @@ void RunInitializeFromSnapshotTest(bool thread_id_collision) {
   ASSERT_NO_FATAL_FAILURE(
       GetThreadListStream(string_file.string(), &thread_list, &memory_list));
 
-  ASSERT_EQ(3u, thread_list->NumberOfThreads);
-  ASSERT_EQ(5u, memory_list->NumberOfMemoryRanges);
+  ASSERT_EQ(thread_list->NumberOfThreads, 3u);
+  ASSERT_EQ(memory_list->NumberOfMemoryRanges, 5u);
 
   size_t memory_index = 0;
   for (size_t index = 0; index < thread_list->NumberOfThreads; ++index) {
@@ -678,7 +679,7 @@ void RunInitializeFromSnapshotTest(bool thread_id_collision) {
     std::string expected_data(kTebSize, static_cast<char>('t' + index));
     std::string observed_data(&string_file.string()[memory->Memory.Rva],
                               memory->Memory.DataSize);
-    EXPECT_EQ(expected_data, observed_data);
+    EXPECT_EQ(observed_data, expected_data);
     ++memory_index;
   }
 }
@@ -702,7 +703,7 @@ TEST(MinidumpThreadWriterDeathTest, NoContext) {
   auto thread_writer = base::WrapUnique(new MinidumpThreadWriter());
 
   thread_list_writer->AddThread(std::move(thread_writer));
-  minidump_file_writer.AddStream(std::move(thread_list_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(thread_list_writer)));
 
   StringFile string_file;
   ASSERT_DEATH_CHECK(minidump_file_writer.WriteEverything(&string_file),

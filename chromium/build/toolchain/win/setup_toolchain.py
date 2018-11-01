@@ -128,6 +128,11 @@ def _LoadToolchainEnv(cpu, sdk_dir):
                                        os.environ['GYP_MSVS_OVERRIDE_PATH'],
                                        'VC/vcvarsall.bat'))
     if not os.path.exists(script_path):
+      # vcvarsall.bat for VS 2017 fails if run after running vcvarsall.bat from
+      # VS 2013 or VS 2015. Fix this by clearing the vsinstalldir environment
+      # variable.
+      if 'VSINSTALLDIR' in os.environ:
+        del os.environ['VSINSTALLDIR']
       other_path = os.path.normpath(os.path.join(
                                         os.environ['GYP_MSVS_OVERRIDE_PATH'],
                                         'VC/Auxiliary/Build/vcvarsall.bat'))
@@ -135,7 +140,10 @@ def _LoadToolchainEnv(cpu, sdk_dir):
         raise Exception('%s is missing - make sure VC++ tools are installed.' %
                         script_path)
       script_path = other_path
-    args = [script_path, 'amd64_x86' if cpu == 'x86' else 'amd64']
+    # Chromium requires the 10.0.14393.0 SDK. Previous versions don't have all
+    # of the required declarations, and 10.0.15063.0 is buggy.
+    args = [script_path, 'amd64_x86' if cpu == 'x86' else 'amd64',
+            '10.0.14393.0']
     variables = _LoadEnvFromBat(args)
   return _ExtractImportantEnvironment(variables)
 

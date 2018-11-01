@@ -26,14 +26,14 @@
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 
 #include "platform/HTTPNames.h"
-#include "platform/network/ResourceResponse.h"
+#include "platform/loader/fetch/ResourceResponse.h"
 
 namespace blink {
 
 ContentSecurityPolicyResponseHeaders::ContentSecurityPolicyResponseHeaders(
     const ResourceResponse& response)
-    : m_contentSecurityPolicy(
-          response.httpHeaderField(HTTPNames::Content_Security_Policy)),
-      m_contentSecurityPolicyReportOnly(response.httpHeaderField(
+    : content_security_policy_(
+          response.HttpHeaderField(HTTPNames::Content_Security_Policy)),
+      content_security_policy_report_only_(response.HttpHeaderField(
           HTTPNames::Content_Security_Policy_Report_Only)) {}
 }

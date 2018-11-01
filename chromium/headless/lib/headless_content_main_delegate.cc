@@ -4,8 +4,11 @@
 
 #include "headless/lib/headless_content_main_delegate.h"
 
+#include <utility>
+
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
@@ -19,6 +22,7 @@
 #include "headless/lib/browser/headless_content_browser_client.h"
 #include "headless/lib/headless_crash_reporter_client.h"
 #include "headless/lib/headless_macros.h"
+#include "headless/lib/renderer/headless_content_renderer_client.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/switches.h"
@@ -39,6 +43,8 @@ HeadlessContentMainDelegate* g_current_headless_content_main_delegate = nullptr;
 
 base::LazyInstance<HeadlessCrashReporterClient>::Leaky g_headless_crash_client =
     LAZY_INSTANCE_INITIALIZER;
+
+const char kLogFileName[] = "CHROME_LOG_FILE";
 }  // namespace
 
 HeadlessContentMainDelegate::HeadlessContentMainDelegate(
@@ -127,6 +133,12 @@ void HeadlessContentMainDelegate::InitLogging(
     log_path = log_filename;
   }
 
+  std::string filename;
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  if (env->GetVar(kLogFileName, &filename) && !filename.empty()) {
+    log_path = base::FilePath::FromUTF8Unsafe(filename);
+  }
+
   const std::string process_type =
       command_line.GetSwitchValueASCII(switches::kProcessType);
 
@@ -211,7 +223,9 @@ void HeadlessContentMainDelegate::ZygoteForked() {
   // Unconditionally try to turn on crash reporting since we do not have access
   // to the latest browser options at this point when testing. Breakpad will
   // bail out gracefully if the browser process hasn't enabled crash reporting.
+#if defined(HEADLESS_USE_BREAKPAD)
   breakpad::InitCrashReporter(process_type);
+#endif
 }
 #endif
 
@@ -245,6 +259,12 @@ void HeadlessContentMainDelegate::InitializeResourceBundle() {
   pak_file = dir_module.Append(FILE_PATH_LITERAL("headless_lib.pak"));
   if (!base::PathExists(pak_file))
     pak_file = dir_module.Append(FILE_PATH_LITERAL("resources.pak"));
+#if defined(OS_MACOSX) && !defined(COMPONENT_BUILD)
+  // In non component builds, check if fall back in Resources/ folder is
+  // available.
+  if (!base::PathExists(pak_file))
+    pak_file = dir_module.Append(FILE_PATH_LITERAL("Resources/resources.pak"));
+#endif
   ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       pak_file, ui::SCALE_FACTOR_NONE);
 #endif
@@ -252,8 +272,15 @@ void HeadlessContentMainDelegate::InitializeResourceBundle() {
 
 content::ContentBrowserClient*
 HeadlessContentMainDelegate::CreateContentBrowserClient() {
-  browser_client_.reset(new HeadlessContentBrowserClient(browser_.get()));
+  browser_client_ =
+      base::MakeUnique<HeadlessContentBrowserClient>(browser_.get());
   return browser_client_.get();
+}
+
+content::ContentRendererClient*
+HeadlessContentMainDelegate::CreateContentRendererClient() {
+  renderer_client_ = base::MakeUnique<HeadlessContentRendererClient>();
+  return renderer_client_.get();
 }
 
 }  // namespace headless

@@ -55,6 +55,7 @@ struct HistoryDatabaseParams;
 class HistoryDBTask;
 class InMemoryHistoryBackend;
 class TypedUrlSyncableService;
+class TypedURLSyncBridge;
 class HistoryBackendHelper;
 class URLDatabase;
 
@@ -337,6 +338,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
                    const GURL& icon_url,
                    const std::vector<SkBitmap>& bitmaps);
 
+  bool SetLastResortFavicons(const GURL& page_url,
+                             favicon_base::IconType icon_type,
+                             const GURL& icon_url,
+                             const std::vector<SkBitmap>& bitmaps);
+
   void SetFaviconsOutOfDateForPage(const GURL& page_url);
 
   void SetImportedFavicons(
@@ -406,6 +412,10 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // Returns the syncable service for syncing typed urls. The returned service
   // is owned by |this| object.
   virtual TypedUrlSyncableService* GetTypedUrlSyncableService() const;
+
+  // Returns the sync bridge for syncing typed urls. The returned service
+  // is owned by |this| object.
+  TypedURLSyncBridge* GetTypedURLSyncBridge() const;
 
   // Deleting ------------------------------------------------------------------
 
@@ -526,6 +536,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, SetFaviconsReplaceBitmapData);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest,
                            SetFaviconsSameFaviconURLForTwoPages);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, SetLastResortFaviconsForEmptyDB);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest,
+                           SetLastResortFaviconsForPageInDB);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest,
+                           SetLastResortFaviconsForIconInDB);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest,
                            UpdateFaviconMappingsAndFetchNoChange);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, MergeFaviconPageURLNotInDB);
@@ -618,8 +633,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // at |cur_visit|.
   void GetRedirectsToSpecificVisit(VisitID cur_visit, RedirectList* redirects);
 
-  // Update the visit_duration information in visits table.
+  // Updates the visit_duration information in visits table.
   void UpdateVisitDuration(VisitID visit_id, const base::Time end_ts);
+
+  // Returns whether |url| is on an untyped intranet host.
+  bool IsUntypedIntranetHost(const GURL& url);
 
   // Querying ------------------------------------------------------------------
 
@@ -667,6 +685,16 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
                            const base::Time ts);
 
   // Favicons ------------------------------------------------------------------
+
+  // If |bitmaps_are_expired| is true, the icon for |icon_url| will be modified
+  // only if it's not present in the database. In that case, it will be
+  // initially set as expired. Returns whether the new bitmaps were actually
+  // written.
+  bool SetFaviconsImpl(const GURL& page_url,
+                       favicon_base::IconType icon_type,
+                       const GURL& icon_url,
+                       const std::vector<SkBitmap>& bitmaps,
+                       bool bitmaps_are_expired);
 
   // Used by both UpdateFaviconMappingsAndFetch and GetFavicons.
   // If |page_url| is non-null, the icon urls for |page_url| (and all
@@ -898,10 +926,12 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // List of observers
   base::ObserverList<HistoryBackendObserver> observers_;
 
-  // Used to manage syncing of the typed urls datatype. This will be null before
-  // Init is called. Defined after observers_ because it unregisters itself as
-  // observer during destruction.
+  // Used to manage syncing of the typed urls datatype. They will be null before
+  // Init is called, and only one will be instantiated after Init is called
+  // depending on switches::kSyncUSSTypedURL. Defined after observers_ because
+  // it unregisters itself as observer during destruction.
   std::unique_ptr<TypedUrlSyncableService> typed_url_syncable_service_;
+  std::unique_ptr<TypedURLSyncBridge> typed_url_sync_bridge_;
 
   DISALLOW_COPY_AND_ASSIGN(HistoryBackend);
 };

@@ -131,6 +131,7 @@ class AXPosition {
         str = "TreePosition tree_id=" + base::IntToString(tree_id_) +
               " anchor_id=" + base::IntToString(anchor_id_) + " child_index=" +
               str_child_index;
+        break;
       }
       case AXPositionKind::TEXT_POSITION: {
         std::string str_text_offset;
@@ -143,6 +144,7 @@ class AXPosition {
               " anchor_id=" + base::IntToString(anchor_id_) + " text_offset=" +
               str_text_offset + " affinity=" +
               ui::ToString(static_cast<AXTextAffinity>(affinity_));
+        break;
       }
     }
 
@@ -225,6 +227,80 @@ class AXPosition {
     return false;
   }
 
+  bool AtStartOfWord() const {
+    AXPositionInstance text_position = AsLeafTextPosition();
+    switch (text_position->kind_) {
+      case AXPositionKind::NULL_POSITION:
+        return false;
+      case AXPositionKind::TREE_POSITION:
+        NOTREACHED();
+        return false;
+      case AXPositionKind::TEXT_POSITION: {
+        const std::vector<int32_t> word_starts =
+            text_position->GetWordStartOffsets();
+        auto iterator =
+            std::find(word_starts.begin(), word_starts.end(),
+                      static_cast<int32_t>(text_position->text_offset_));
+        return iterator != word_starts.end();
+      }
+    }
+    return false;
+  }
+
+  bool AtEndOfWord() const {
+    AXPositionInstance text_position = AsLeafTextPosition();
+    switch (text_position->kind_) {
+      case AXPositionKind::NULL_POSITION:
+        return false;
+      case AXPositionKind::TREE_POSITION:
+        NOTREACHED();
+        return false;
+      case AXPositionKind::TEXT_POSITION: {
+        const std::vector<int32_t> word_ends =
+            text_position->GetWordEndOffsets();
+        auto iterator =
+            std::find(word_ends.begin(), word_ends.end(),
+                      static_cast<int32_t>(text_position->text_offset_));
+        return iterator != word_ends.end();
+      }
+    }
+    return false;
+  }
+
+  bool AtStartOfLine() const {
+    AXPositionInstance text_position = AsLeafTextPosition();
+    switch (text_position->kind_) {
+      case AXPositionKind::NULL_POSITION:
+        return false;
+      case AXPositionKind::TREE_POSITION:
+        NOTREACHED();
+        return false;
+      case AXPositionKind::TEXT_POSITION:
+        return !text_position->IsInLineBreak() &&
+               GetPreviousOnLineID(text_position->anchor_id_) ==
+                   INVALID_ANCHOR_ID &&
+               text_position->AtStartOfAnchor();
+    }
+    return false;
+  }
+
+  bool AtEndOfLine() const {
+    AXPositionInstance text_position = AsLeafTextPosition();
+    switch (text_position->kind_) {
+      case AXPositionKind::NULL_POSITION:
+        return false;
+      case AXPositionKind::TREE_POSITION:
+        NOTREACHED();
+        return false;
+      case AXPositionKind::TEXT_POSITION:
+        return !text_position->IsInLineBreak() &&
+               GetNextOnLineID(text_position->anchor_id_) ==
+                   INVALID_ANCHOR_ID &&
+               text_position->AtEndOfAnchor();
+    }
+    return false;
+  }
+
   // This method returns a position instead of a node because this allows us to
   // return the corresponding text offset or child index in the ancestor that
   // relates to the current position.
@@ -266,7 +342,8 @@ class AXPosition {
     DCHECK(copy);
     DCHECK_NE(copy->text_offset_, INVALID_OFFSET);
     // If the anchor node has no text inside it then the child index should be
-    // set to |BEFORE_TEXT|, hence the check for the text's length.
+    // set to |BEFORE_TEXT|, hence the check if |MaxTextOffset| is greater than
+    // 0.
     if (copy->MaxTextOffset() > 0 &&
         copy->text_offset_ >= copy->MaxTextOffset()) {
       copy->child_index_ = copy->AnchorChildCount();
@@ -278,13 +355,14 @@ class AXPosition {
       for (int i = 0; i < copy->AnchorChildCount(); ++i) {
         AXPositionInstance child = copy->CreateChildPositionAt(i);
         DCHECK(child);
+        int child_length = child->MaxTextOffsetInParent();
         if (copy->text_offset_ >= current_offset &&
-            copy->text_offset_ < (current_offset + child->MaxTextOffset())) {
+            copy->text_offset_ < (current_offset + child_length)) {
           copy->child_index_ = i;
           break;
         }
 
-        current_offset += child->MaxTextOffset();
+        current_offset += child_length;
       }
     }
 
@@ -314,21 +392,22 @@ class AXPosition {
       for (int i = 0; i <= child_index_; ++i) {
         AXPositionInstance child = copy->CreateChildPositionAt(i);
         DCHECK(child);
+        int child_length = child->MaxTextOffsetInParent();
 
         // If the current text offset is valid, we don't touch it.
         // Otherwise, we reset it to the beginning of the current child node.
         if (i == child_index_ &&
             (copy->text_offset_ < new_offset ||
-             copy->text_offset_ > (new_offset + child->MaxTextOffset()) ||
+             copy->text_offset_ > (new_offset + child_length) ||
              // When the text offset is equal to the text's length but this is
              // not an "after text" position.
              (!copy->AtEndOfAnchor() &&
-              copy->text_offset_ == (new_offset + child->MaxTextOffset())))) {
+              copy->text_offset_ == (new_offset + child_length)))) {
           copy->text_offset_ = new_offset;
           break;
         }
 
-        new_offset += child->MaxTextOffset();
+        new_offset += child_length;
       }
     }
 
@@ -361,7 +440,7 @@ class AXPosition {
     for (int i = 0; i < tree_position->child_index_; ++i) {
       child_position = tree_position->CreateChildPositionAt(i);
       DCHECK(child_position);
-      adjusted_offset -= child_position->MaxTextOffset();
+      adjusted_offset -= child_position->MaxTextOffsetInParent();
     }
     DCHECK_GE(adjusted_offset, 0);
 
@@ -446,20 +525,28 @@ class AXPosition {
     if (tree_id == INVALID_TREE_ID || parent_id == INVALID_ANCHOR_ID)
       return CreateNullPosition();
 
-    DCHECK_NE(tree_id, INVALID_TREE_ID);
-    DCHECK_NE(parent_id, INVALID_ANCHOR_ID);
     switch (kind_) {
       case AXPositionKind::NULL_POSITION:
         NOTREACHED();
         return CreateNullPosition();
       case AXPositionKind::TREE_POSITION:
         return CreateTreePosition(tree_id, parent_id, AnchorIndexInParent());
-      case AXPositionKind::TEXT_POSITION:
-        // Make sure that our affinity is propagated to our parent because by
-        // design our parent includes all our text.
-        return CreateTextPosition(tree_id, parent_id,
-                                  AnchorTextOffsetInParent() + text_offset_,
-                                  affinity_);
+      case AXPositionKind::TEXT_POSITION: {
+        // If our parent contains all our text, we need to maintain the affinity
+        // and the text offset. Otherwise, we return a position that is either
+        // before or after the child and we don't maintain the affinity when the
+        // position is after the child.
+        int parent_offset = AnchorTextOffsetInParent();
+        AXTextAffinity parent_affinity = affinity_;
+        if (MaxTextOffset() == MaxTextOffsetInParent()) {
+          parent_offset += text_offset_;
+        } else if (text_offset_ > 0) {
+          parent_offset += MaxTextOffsetInParent();
+          parent_affinity = AX_TEXT_AFFINITY_DOWNSTREAM;
+        }
+        return CreateTextPosition(tree_id, parent_id, parent_offset,
+                                  parent_affinity);
+      }
     }
 
     return CreateNullPosition();
@@ -545,22 +632,13 @@ class AXPosition {
     if (text_position->IsNullPosition())
       return text_position;
 
-    // Ignore any nodes with no text or no word boundaries.
-    while (!text_position->IsNullPosition() &&
-           (!text_position->MaxTextOffset() ||
-            text_position->GetWordStartOffsets().empty())) {
-      text_position = text_position->CreateNextTextAnchorPosition();
-    }
-
-    if (text_position->IsNullPosition())
-      return text_position;
-
     const std::vector<int32_t> word_starts =
         text_position->GetWordStartOffsets();
     auto iterator =
         std::upper_bound(word_starts.begin(), word_starts.end(),
                          static_cast<int32_t>(text_position->text_offset_));
     if (iterator == word_starts.end()) {
+      // Ignore any nodes with no text or no word boundaries.
       do {
         text_position = text_position->CreateNextTextAnchorPosition();
       } while (!text_position->IsNullPosition() &&
@@ -569,10 +647,9 @@ class AXPosition {
       if (text_position->IsNullPosition())
         return text_position;
 
-      // In case there are some non-word characters in front of the first word
-      // in this text node.
       const std::vector<int32_t> word_starts =
           text_position->GetWordStartOffsets();
+      DCHECK(!word_starts.empty());
       text_position->text_offset_ = static_cast<int>(word_starts[0]);
     } else {
       text_position->text_offset_ = static_cast<int>(*iterator);
@@ -586,7 +663,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -596,22 +673,11 @@ class AXPosition {
   AXPositionInstance CreatePreviousWordStartPosition() const {
     bool was_tree_position = IsTreePosition();
     AXPositionInstance text_position = AsLeafTextPosition();
-    if (text_position->IsNullPosition())
-      return text_position;
 
     if (text_position->AtStartOfAnchor()) {
       text_position = text_position->CreatePreviousTextAnchorPosition();
       text_position = text_position->CreatePositionAtEndOfAnchor();
     }
-
-    // Ignore any nodes with no text or no word boundaries.
-    while (!text_position->IsNullPosition() &&
-           (!text_position->MaxTextOffset() ||
-            text_position->GetWordStartOffsets().empty())) {
-      text_position = text_position->CreatePreviousTextAnchorPosition();
-      text_position = text_position->CreatePositionAtEndOfAnchor();
-    }
-
     if (text_position->IsNullPosition())
       return text_position;
 
@@ -620,9 +686,8 @@ class AXPosition {
     auto iterator =
         std::lower_bound(word_starts.begin(), word_starts.end(),
                          static_cast<int32_t>(text_position->text_offset_));
-    if (iterator == word_starts.begin()) {
-      // There must be some non-word characters in front of the first word in
-      // this text node.
+    if (word_starts.empty() || iterator == word_starts.begin()) {
+      // Ignore any nodes with no text or no word boundaries.
       do {
         text_position = text_position->CreatePreviousTextAnchorPosition();
       } while (!text_position->IsNullPosition() &&
@@ -633,6 +698,7 @@ class AXPosition {
 
       const std::vector<int32_t> word_starts =
           text_position->GetWordStartOffsets();
+      DCHECK(!word_starts.empty());
       text_position->text_offset_ = static_cast<int>(*(word_starts.end() - 1));
     } else {
       text_position->text_offset_ = static_cast<int>(*(--iterator));
@@ -646,7 +712,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -657,27 +723,18 @@ class AXPosition {
   AXPositionInstance CreateNextWordEndPosition() const {
     bool was_tree_position = IsTreePosition();
     AXPositionInstance text_position = AsLeafTextPosition();
-    if (text_position->IsNullPosition())
-      return text_position;
 
     if (text_position->AtEndOfAnchor())
       text_position = text_position->CreateNextTextAnchorPosition();
-
-    // Ignore any nodes with no text or no word boundaries.
-    while (!text_position->IsNullPosition() &&
-           (!text_position->MaxTextOffset() ||
-            text_position->GetWordEndOffsets().empty())) {
-      text_position = text_position->CreateNextTextAnchorPosition();
-    }
-
     if (text_position->IsNullPosition())
       return text_position;
 
-    const std::vector<int> word_ends = text_position->GetWordEndOffsets();
-    auto iterator = std::upper_bound(word_ends.begin(), word_ends.end(),
-                                     text_position->text_offset_);
+    const std::vector<int32_t> word_ends = text_position->GetWordEndOffsets();
+    auto iterator =
+        std::upper_bound(word_ends.begin(), word_ends.end(),
+                         static_cast<int32_t>(text_position->text_offset_));
     if (iterator == word_ends.end()) {
-      // We should be in the last word of this text node.
+      // Ignore any nodes with no text or no word boundaries.
       do {
         text_position = text_position->CreateNextTextAnchorPosition();
       } while (!text_position->IsNullPosition() &&
@@ -686,10 +743,11 @@ class AXPosition {
       if (text_position->IsNullPosition())
         return text_position;
 
-      const std::vector<int> word_ends = text_position->GetWordEndOffsets();
-      text_position->text_offset_ = word_ends[0];
+      const std::vector<int32_t> word_ends = text_position->GetWordEndOffsets();
+      DCHECK(!word_ends.empty());
+      text_position->text_offset_ = static_cast<int>(word_ends[0]);
     } else {
-      text_position->text_offset_ = *iterator;
+      text_position->text_offset_ = static_cast<int>(*iterator);
       text_position->affinity_ = AX_TEXT_AFFINITY_DOWNSTREAM;
     }
 
@@ -700,7 +758,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -711,21 +769,11 @@ class AXPosition {
   AXPositionInstance CreatePreviousWordEndPosition() const {
     bool was_tree_position = IsTreePosition();
     AXPositionInstance text_position = AsLeafTextPosition();
-    if (text_position->IsNullPosition())
-      return text_position;
 
     if (text_position->AtStartOfAnchor()) {
       text_position = text_position->CreatePreviousTextAnchorPosition();
       text_position = text_position->CreatePositionAtEndOfAnchor();
     }
-
-    // Ignore any nodes with no text or no word boundaries.
-    while (!text_position->IsNullPosition() &&
-           (!text_position->MaxTextOffset() ||
-            text_position->GetWordStartOffsets().empty())) {
-      text_position = text_position->CreatePreviousTextAnchorPosition();
-    }
-
     if (text_position->IsNullPosition())
       return text_position;
 
@@ -733,9 +781,8 @@ class AXPosition {
     auto iterator =
         std::lower_bound(word_ends.begin(), word_ends.end(),
                          static_cast<int32_t>(text_position->text_offset_));
-    if (iterator == word_ends.begin()) {
-      // We must be anywhere up to and including the end of the first word in
-      // this node.
+    if (word_ends.empty() || iterator == word_ends.begin()) {
+      // Ignore any nodes with no text or no word boundaries.
       do {
         text_position = text_position->CreatePreviousTextAnchorPosition();
       } while (!text_position->IsNullPosition() &&
@@ -745,6 +792,7 @@ class AXPosition {
         return text_position;
 
       const std::vector<int32_t> word_ends = text_position->GetWordEndOffsets();
+      DCHECK(!word_ends.empty());
       text_position->text_offset_ = static_cast<int>(*(word_ends.end() - 1));
     } else {
       text_position->text_offset_ = static_cast<int>(*(--iterator));
@@ -758,7 +806,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -780,6 +828,8 @@ class AXPosition {
                            AX_TEXT_AFFINITY_DOWNSTREAM);
     text_position =
         text_position->AsLeafTextPosition()->CreateNextTextAnchorPosition();
+    while (text_position->IsInLineBreak())
+      text_position = text_position->CreateNextTextAnchorPosition();
     if (text_position->IsNullPosition())
       return text_position;
 
@@ -790,7 +840,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -800,7 +850,7 @@ class AXPosition {
   AXPositionInstance CreatePreviousLineStartPosition() const {
     bool was_tree_position = IsTreePosition();
     AXPositionInstance text_position = AsLeafTextPosition();
-    if (text_position->AtStartOfAnchor())
+    if (text_position->IsInLineBreak() || text_position->AtStartOfAnchor())
       text_position = text_position->CreatePreviousTextAnchorPosition();
     if (text_position->IsNullPosition())
       return text_position;
@@ -822,7 +872,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -849,9 +899,8 @@ class AXPosition {
         CreateTextPosition(tree_id_, next_on_line_id, 0 /* text_offset */,
                            AX_TEXT_AFFINITY_DOWNSTREAM);
     text_position = text_position->AsLeafTextPosition();
-    while (text_position->IsInLineBreak()) {
+    while (text_position->IsInLineBreak())
       text_position = text_position->CreatePreviousTextAnchorPosition();
-    }
     if (text_position->IsNullPosition())
       return text_position;
     text_position = text_position->CreatePositionAtEndOfAnchor();
@@ -863,7 +912,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -886,9 +935,8 @@ class AXPosition {
                            AX_TEXT_AFFINITY_DOWNSTREAM);
     text_position =
         text_position->AsLeafTextPosition()->CreatePreviousTextAnchorPosition();
-    while (text_position->IsInLineBreak()) {
+    while (text_position->IsInLineBreak())
       text_position = text_position->CreatePreviousTextAnchorPosition();
-    }
     if (text_position->IsNullPosition())
       return text_position;
     text_position = text_position->CreatePositionAtEndOfAnchor();
@@ -900,7 +948,7 @@ class AXPosition {
     AXPositionInstance common_ancestor =
         text_position->LowestCommonAncestor(*this);
     if (GetAnchor() == common_ancestor->GetAnchor())
-      return common_ancestor;
+      text_position = std::move(common_ancestor);
 
     if (was_tree_position)
       text_position = text_position->AsTreePosition();
@@ -1028,7 +1076,7 @@ class AXPosition {
     for (int i = 0; i < parent_position->child_index(); ++i) {
       AXPositionInstance child = parent_position->CreateChildPositionAt(i);
       DCHECK(child);
-      offset_in_parent += child->MaxTextOffset();
+      offset_in_parent += child->MaxTextOffsetInParent();
     }
     return offset_in_parent;
   }
@@ -1042,8 +1090,12 @@ class AXPosition {
   virtual void AnchorParent(int* tree_id, int32_t* parent_id) const = 0;
   virtual AXNodeType* GetNodeInTree(int tree_id, int32_t node_id) const = 0;
   // Returns the length of the text that is present inside the anchor node,
-  // including any text found in descendant nodes.
+  // including any text found in descendant text nodes.
   virtual int MaxTextOffset() const = 0;
+  // Returns the length of text that this anchor node takes up in its parent.
+  // On some platforms, embedded objects are represented in their parent with a
+  // single embedded object character.
+  virtual int MaxTextOffsetInParent() const { return MaxTextOffset(); }
   virtual bool IsInLineBreak() const = 0;
   virtual std::vector<int32_t> GetWordStartOffsets() const = 0;
   virtual std::vector<int32_t> GetWordEndOffsets() const = 0;

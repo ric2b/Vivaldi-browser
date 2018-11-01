@@ -7,9 +7,13 @@
 
 #include <stdint.h>
 
-#include "cc/base/cc_export.h"
-#include "cc/playback/raster_source.h"
+#include "cc/cc_export.h"
+#include "cc/raster/raster_source.h"
 #include "ui/gfx/geometry/rect.h"
+
+namespace gfx {
+class AxisTransform2d;
+}  // namespace gfx
 
 namespace cc {
 
@@ -23,7 +27,7 @@ class CC_EXPORT RasterBuffer {
       const gfx::Rect& raster_full_rect,
       const gfx::Rect& raster_dirty_rect,
       uint64_t new_content_id,
-      float scale,
+      const gfx::AxisTransform2d& transform,
       const RasterSource::PlaybackSettings& playback_settings) = 0;
 };
 

@@ -52,6 +52,12 @@ GPERF_TEMPLATE = """
 #pragma warning(disable : 4302 4311)
 #endif
 
+#if defined(__clang__)
+#pragma clang diagnostic push
+// TODO(thakis): Remove once we use a gperf that no longer produces "register".
+#pragma clang diagnostic ignored "-Wdeprecated-register"
+#endif
+
 namespace blink {
 static const char valueListStringPool[] = {
 %(value_keyword_strings)s
@@ -71,34 +77,36 @@ struct Value;
 %%define class-name %(class_name)sHash
 %%define lookup-function-name findValueImpl
 %%define hash-function-name value_hash_function
-%%define slot-name nameOffset
+%%define slot-name name_offset
 %%define word-array-name value_word_list
 %%pic
 %%enum
 %%%%
 %(value_keyword_to_enum_map)s
 %%%%
-const Value* findValue(register const char* str, register unsigned int len)
-{
-    return CSSValueKeywordsHash::findValueImpl(str, len);
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+
+const Value* FindValue(const char* str, unsigned int len) {
+  return CSSValueKeywordsHash::findValueImpl(str, len);
 }
 
-const char* getValueName(CSSValueID id)
-{
-    ASSERT(id > 0 && id < numCSSValueKeywords);
-    return valueListStringPool + valueListStringOffsets[id - 1];
+const char* getValueName(CSSValueID id) {
+  ASSERT(id > 0 && id < numCSSValueKeywords);
+  return valueListStringPool + valueListStringOffsets[id - 1];
 }
 
-bool isValueAllowedInMode(unsigned short id, CSSParserMode mode)
-{
-    switch (id) {
-        %(ua_sheet_mode_values_keywords)s
-            return isUASheetBehavior(mode);
-        %(quirks_mode_or_ua_sheet_mode_values_keywords)s
-            return isUASheetBehavior(mode) || isQuirksModeBehavior(mode);
-        default:
-            return true;
-    }
+bool isValueAllowedInMode(unsigned short id, CSSParserMode mode) {
+  switch (id) {
+    %(ua_sheet_mode_values_keywords)s
+      return IsUASheetBehavior(mode);
+    %(quirks_mode_or_ua_sheet_mode_values_keywords)s
+      return IsUASheetBehavior(mode) || IsQuirksModeBehavior(mode);
+    default:
+      return true;
+  }
 }
 
 } // namespace blink

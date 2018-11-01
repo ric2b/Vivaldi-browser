@@ -76,6 +76,7 @@
 #include "chrome/browser/update_client/chrome_update_query_params_delegate.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
@@ -85,7 +86,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/switch_utils.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/gcm_driver/gcm_driver.h"
@@ -104,7 +104,7 @@
 #include "components/rappor/rappor_service_impl.h"
 #include "components/safe_json/safe_json_parser.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "components/subresource_filter/content/browser/content_ruleset_service_delegate.h"
+#include "components/subresource_filter/content/browser/content_ruleset_service.h"
 #include "components/subresource_filter/core/browser/ruleset_service.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
@@ -163,7 +163,7 @@
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
 #endif
 
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/plugins_resource_service.h"
 #endif
 
@@ -196,7 +196,8 @@ static const int kUpdateCheckIntervalHours = 6;
 // and Windows. We have a timeout here because we're unable to run the UI
 // messageloop and there's some deadlock risk. Our only option is to exit
 // anyway.
-static const int kEndSessionTimeoutSeconds = 10;
+static constexpr base::TimeDelta kEndSessionTimeout =
+    base::TimeDelta::FromSeconds(10);
 #endif
 
 using content::BrowserThread;
@@ -308,7 +309,7 @@ void BrowserProcessImpl::StartTearDown() {
   if (safe_browsing_service_.get())
     safe_browsing_service()->ShutDown();
   network_time_tracker_.reset();
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGINS)
   plugins_resource_service_.reset();
 #endif
 
@@ -412,9 +413,11 @@ class RundownTaskCounter :
   // of times before calling TimedWait.
   void Post(base::SequencedTaskRunner* task_runner);
 
-  // Waits until the count is zero or |max_time| has passed.
-  // This can only be called once per instance.
-  bool TimedWait(const base::TimeDelta& max_time);
+  // Waits until the count is zero or |end_time| is reached.
+  // This can only be called once per instance. Returns true if a count of zero
+  // is reached or false if the |end_time| is reached. It is valid to pass an
+  // |end_time| in the past.
+  bool TimedWaitUntil(const base::TimeTicks& end_time);
 
  private:
   friend class base::RefCountedThreadSafe<RundownTaskCounter>;
@@ -455,11 +458,11 @@ void RundownTaskCounter::Decrement() {
     waitable_event_.Signal();
 }
 
-bool RundownTaskCounter::TimedWait(const base::TimeDelta& max_time) {
+bool RundownTaskCounter::TimedWaitUntil(const base::TimeTicks& end_time) {
   // Decrement the excess count from the constructor.
   Decrement();
 
-  return waitable_event_.TimedWait(max_time);
+  return waitable_event_.TimedWaitUntil(end_time);
 }
 
 }  // namespace
@@ -469,12 +472,22 @@ void BrowserProcessImpl::EndSession() {
   ProfileManager* pm = profile_manager();
   std::vector<Profile*> profiles(pm->GetLoadedProfiles());
   scoped_refptr<RundownTaskCounter> rundown_counter(new RundownTaskCounter());
+  const bool pref_service_enabled =
+      base::FeatureList::IsEnabled(features::kPrefService);
+  std::vector<scoped_refptr<base::SequencedTaskRunner>> profile_writer_runners;
   for (size_t i = 0; i < profiles.size(); ++i) {
     Profile* profile = profiles[i];
     profile->SetExitType(Profile::EXIT_SESSION_ENDED);
     if (profile->GetPrefs()) {
       profile->GetPrefs()->CommitPendingWrite();
-      rundown_counter->Post(profile->GetIOTaskRunner().get());
+      if (pref_service_enabled) {
+        rundown_counter->Post(content::BrowserThread::GetTaskRunnerForThread(
+                                  content::BrowserThread::IO)
+                                  .get());
+        profile_writer_runners.push_back(profile->GetIOTaskRunner());
+      } else {
+        rundown_counter->Post(profile->GetIOTaskRunner().get());
+      }
     }
   }
 
@@ -515,8 +528,16 @@ void BrowserProcessImpl::EndSession() {
   // GPU process synchronously. Because the system may not be allowing
   // processes to launch, this can result in a hang. See
   // http://crbug.com/318527.
-  rundown_counter->TimedWait(
-      base::TimeDelta::FromSeconds(kEndSessionTimeoutSeconds));
+  const base::TimeTicks end_time = base::TimeTicks::Now() + kEndSessionTimeout;
+  const bool timed_out = !rundown_counter->TimedWaitUntil(end_time);
+  if (timed_out || !pref_service_enabled)
+    return;
+
+  scoped_refptr<RundownTaskCounter> profile_write_rundown_counter(
+      new RundownTaskCounter());
+  for (auto& profile_writer_runner : profile_writer_runners)
+    profile_write_rundown_counter->Post(profile_writer_runner.get());
+  profile_write_rundown_counter->TimedWaitUntil(end_time);
 #else
   NOTIMPLEMENTED();
 #endif
@@ -614,7 +635,7 @@ NotificationUIManager* BrowserProcessImpl::notification_ui_manager() {
 }
 
 NotificationPlatformBridge* BrowserProcessImpl::notification_platform_bridge() {
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
   if (!created_notification_bridge_)
     CreateNotificationPlatformBridge();
   return notification_bridge_.get();
@@ -905,7 +926,7 @@ safe_browsing::ClientSideDetectionService*
   return NULL;
 }
 
-subresource_filter::RulesetService*
+subresource_filter::ContentRulesetService*
 BrowserProcessImpl::subresource_filter_ruleset_service() {
   DCHECK(CalledOnValidThread());
   if (!created_subresource_filter_ruleset_service_)
@@ -1106,11 +1127,10 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   // Triggers initialization of the singleton instance on UI thread.
   PluginFinder::GetInstance()->Init();
 
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
-  DCHECK(!plugins_resource_service_.get());
-  plugins_resource_service_.reset(new PluginsResourceService(local_state()));
+  DCHECK(!plugins_resource_service_);
+  plugins_resource_service_ =
+      base::MakeUnique<PluginsResourceService>(local_state());
   plugins_resource_service_->Init();
-#endif
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if !defined(OS_ANDROID)
@@ -1145,7 +1165,7 @@ void BrowserProcessImpl::CreateIntranetRedirectDetector() {
 }
 
 void BrowserProcessImpl::CreateNotificationPlatformBridge() {
-#if (defined(OS_ANDROID) || defined(OS_MACOSX))
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
   DCHECK(!notification_bridge_);
   notification_bridge_.reset(NotificationPlatformBridge::Create());
   created_notification_bridge_ = true;
@@ -1227,11 +1247,13 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
   base::FilePath indexed_ruleset_base_dir =
       user_data_dir.Append(subresource_filter::kTopLevelDirectoryName)
           .Append(subresource_filter::kIndexedRulesetBaseDirectoryName);
-  subresource_filter_ruleset_service_.reset(
-      new subresource_filter::RulesetService(
+  subresource_filter_ruleset_service_ =
+      base::MakeUnique<subresource_filter::ContentRulesetService>(
+          blocking_task_runner);
+  subresource_filter_ruleset_service_->set_ruleset_service(
+      base::MakeUnique<subresource_filter::RulesetService>(
           local_state(), blocking_task_runner,
-          base::MakeUnique<subresource_filter::ContentRulesetServiceDelegate>(),
-          indexed_ruleset_base_dir));
+          subresource_filter_ruleset_service_.get(), indexed_ruleset_base_dir));
 }
 
 void BrowserProcessImpl::CreateGCMDriver() {

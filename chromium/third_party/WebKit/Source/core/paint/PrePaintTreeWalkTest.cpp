@@ -8,67 +8,85 @@
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintPropertyTreePrinter.h"
+#include "core/paint/PrePaintTreeWalk.h"
 #include "platform/graphics/paint/GeometryMapper.h"
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/text/TextStream.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/Vector.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/HashMap.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
-typedef bool TestParamRootLayerScrolling;
+typedef std::pair<bool, bool> SlimmingPaintAndRootLayerScrolling;
 class PrePaintTreeWalkTest
-    : public ::testing::WithParamInterface<TestParamRootLayerScrolling>,
+    : public ::testing::WithParamInterface<SlimmingPaintAndRootLayerScrolling>,
       private ScopedSlimmingPaintV2ForTest,
+      private ScopedSlimmingPaintInvalidationForTest,
       private ScopedRootLayerScrollingForTest,
       public RenderingTest {
  public:
   PrePaintTreeWalkTest()
-      : ScopedSlimmingPaintV2ForTest(true),
-        ScopedRootLayerScrollingForTest(GetParam()),
-        RenderingTest(EmptyLocalFrameClient::create()) {}
+      : ScopedSlimmingPaintV2ForTest(GetParam().second),
+        ScopedSlimmingPaintInvalidationForTest(true),
+        ScopedRootLayerScrollingForTest(GetParam().first),
+        RenderingTest(EmptyLocalFrameClient::Create()) {}
 
-  const TransformPaintPropertyNode* framePreTranslation() {
-    FrameView* frameView = document().view();
+  const TransformPaintPropertyNode* FramePreTranslation() {
+    FrameView* frame_view = GetDocument().View();
     if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-      return frameView->layoutView()
-          ->paintProperties()
-          ->paintOffsetTranslation();
+      return frame_view->GetLayoutView()
+          ->PaintProperties()
+          ->PaintOffsetTranslation();
     }
-    return frameView->preTranslation();
+    return frame_view->PreTranslation();
   }
 
-  const TransformPaintPropertyNode* frameScrollTranslation() {
-    FrameView* frameView = document().view();
+  const TransformPaintPropertyNode* FrameScrollTranslation() {
+    FrameView* frame_view = GetDocument().View();
     if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-      return frameView->layoutView()->paintProperties()->scrollTranslation();
+      return frame_view->GetLayoutView()
+          ->PaintProperties()
+          ->ScrollTranslation();
     }
-    return frameView->scrollTranslation();
+    return frame_view->ScrollTranslation();
+  }
+
+ protected:
+  PaintLayer* GetPaintLayerByElementId(const char* id) {
+    return ToLayoutBoxModelObject(GetLayoutObjectByElementId(id))->Layer();
   }
 
  private:
   void SetUp() override {
-    Settings::setMockScrollbarsEnabled(true);
+    Settings::SetMockScrollbarsEnabled(true);
 
     RenderingTest::SetUp();
-    enableCompositing();
+    EnableCompositing();
   }
 
   void TearDown() override {
     RenderingTest::TearDown();
 
-    Settings::setMockScrollbarsEnabled(false);
+    Settings::SetMockScrollbarsEnabled(false);
   }
 };
 
-INSTANTIATE_TEST_CASE_P(All, PrePaintTreeWalkTest, ::testing::Bool());
+SlimmingPaintAndRootLayerScrolling g_prepaint_foo[] = {
+    SlimmingPaintAndRootLayerScrolling(false, false),
+    SlimmingPaintAndRootLayerScrolling(true, false),
+    SlimmingPaintAndRootLayerScrolling(false, true),
+    SlimmingPaintAndRootLayerScrolling(true, true)};
+
+INSTANTIATE_TEST_CASE_P(All,
+                        PrePaintTreeWalkTest,
+                        ::testing::ValuesIn(g_prepaint_foo));
 
 TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithBorderInvalidation) {
-  setBodyInnerHTML(
+  SetBodyInnerHTML(
       "<style>"
       "  body { margin: 0; }"
       "  #transformed { transform: translate(100px, 100px); }"
@@ -76,40 +94,40 @@ TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithBorderInvalidation) {
       "</style>"
       "<div id='transformed'></div>");
 
-  auto* transformedElement = document().getElementById("transformed");
-  const auto* transformedProperties =
-      transformedElement->layoutObject()->paintProperties();
-  EXPECT_EQ(TransformationMatrix().translate(100, 100),
-            transformedProperties->transform()->matrix());
+  auto* transformed_element = GetDocument().GetElementById("transformed");
+  const auto* transformed_properties =
+      transformed_element->GetLayoutObject()->PaintProperties();
+  EXPECT_EQ(TransformationMatrix().Translate(100, 100),
+            transformed_properties->Transform()->Matrix());
 
   // Artifically change the transform node.
-  const_cast<ObjectPaintProperties*>(transformedProperties)->clearTransform();
-  EXPECT_EQ(nullptr, transformedProperties->transform());
+  const_cast<ObjectPaintProperties*>(transformed_properties)->ClearTransform();
+  EXPECT_EQ(nullptr, transformed_properties->Transform());
 
   // Cause a paint invalidation.
-  transformedElement->setAttribute(HTMLNames::classAttr, "border");
-  document().view()->updateAllLifecyclePhases();
+  transformed_element->setAttribute(HTMLNames::classAttr, "border");
+  GetDocument().View()->UpdateAllLifecyclePhases();
 
   // Should have changed back.
-  EXPECT_EQ(TransformationMatrix().translate(100, 100),
-            transformedProperties->transform()->matrix());
+  EXPECT_EQ(TransformationMatrix().Translate(100, 100),
+            transformed_properties->Transform()->Matrix());
 }
 
 TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithFrameScroll) {
-  setBodyInnerHTML("<style> body { height: 10000px; } </style>");
-  EXPECT_EQ(TransformationMatrix().translate(0, 0),
-            frameScrollTranslation()->matrix());
+  SetBodyInnerHTML("<style> body { height: 10000px; } </style>");
+  EXPECT_EQ(TransformationMatrix().Translate(0, 0),
+            FrameScrollTranslation()->Matrix());
 
   // Cause a scroll invalidation and ensure the translation is updated.
-  document().domWindow()->scrollTo(0, 100);
-  document().view()->updateAllLifecyclePhases();
+  GetDocument().domWindow()->scrollTo(0, 100);
+  GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_EQ(TransformationMatrix().translate(0, -100),
-            frameScrollTranslation()->matrix());
+  EXPECT_EQ(TransformationMatrix().Translate(0, -100),
+            FrameScrollTranslation()->Matrix());
 }
 
 TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithCSSTransformInvalidation) {
-  setBodyInnerHTML(
+  SetBodyInnerHTML(
       "<style>"
       "  .transformA { transform: translate(100px, 100px); }"
       "  .transformB { transform: translate(200px, 200px); }"
@@ -117,44 +135,47 @@ TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithCSSTransformInvalidation) {
       "</style>"
       "<div id='transformed' class='transformA'></div>");
 
-  auto* transformedElement = document().getElementById("transformed");
-  const auto* transformedProperties =
-      transformedElement->layoutObject()->paintProperties();
-  EXPECT_EQ(TransformationMatrix().translate(100, 100),
-            transformedProperties->transform()->matrix());
+  auto* transformed_element = GetDocument().GetElementById("transformed");
+  const auto* transformed_properties =
+      transformed_element->GetLayoutObject()->PaintProperties();
+  EXPECT_EQ(TransformationMatrix().Translate(100, 100),
+            transformed_properties->Transform()->Matrix());
 
   // Invalidate the CSS transform property.
-  transformedElement->setAttribute(HTMLNames::classAttr, "transformB");
-  document().view()->updateAllLifecyclePhases();
+  transformed_element->setAttribute(HTMLNames::classAttr, "transformB");
+  GetDocument().View()->UpdateAllLifecyclePhases();
 
   // The transform should have changed.
-  EXPECT_EQ(TransformationMatrix().translate(200, 200),
-            transformedProperties->transform()->matrix());
+  EXPECT_EQ(TransformationMatrix().Translate(200, 200),
+            transformed_properties->Transform()->Matrix());
 }
 
 TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithOpacityInvalidation) {
-  setBodyInnerHTML(
+  // In SPv1 mode, we don't need or store property tree nodes for effects.
+  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return;
+  SetBodyInnerHTML(
       "<style>"
       "  .opacityA { opacity: 0.9; }"
       "  .opacityB { opacity: 0.4; }"
       "</style>"
       "<div id='transparent' class='opacityA'></div>");
 
-  auto* transparentElement = document().getElementById("transparent");
-  const auto* transparentProperties =
-      transparentElement->layoutObject()->paintProperties();
-  EXPECT_EQ(0.9f, transparentProperties->effect()->opacity());
+  auto* transparent_element = GetDocument().GetElementById("transparent");
+  const auto* transparent_properties =
+      transparent_element->GetLayoutObject()->PaintProperties();
+  EXPECT_EQ(0.9f, transparent_properties->Effect()->Opacity());
 
   // Invalidate the opacity property.
-  transparentElement->setAttribute(HTMLNames::classAttr, "opacityB");
-  document().view()->updateAllLifecyclePhases();
+  transparent_element->setAttribute(HTMLNames::classAttr, "opacityB");
+  GetDocument().View()->UpdateAllLifecyclePhases();
 
   // The opacity should have changed.
-  EXPECT_EQ(0.4f, transparentProperties->effect()->opacity());
+  EXPECT_EQ(0.4f, transparent_properties->Effect()->Opacity());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange) {
-  setBodyInnerHTML(
+  SetBodyInnerHTML(
       "<style>"
       "  .clip { overflow: hidden }"
       "</style>"
@@ -165,21 +186,21 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange) {
       "  </div>"
       "</div>");
 
-  auto* parent = document().getElementById("parent");
-  auto* child = document().getElementById("child");
-  auto* childPaintLayer =
-      toLayoutBoxModelObject(child->layoutObject())->layer();
-  EXPECT_FALSE(childPaintLayer->needsRepaint());
-  EXPECT_FALSE(childPaintLayer->needsPaintPhaseFloat());
+  auto* parent = GetDocument().GetElementById("parent");
+  auto* child = GetDocument().GetElementById("child");
+  auto* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(HTMLNames::classAttr, "clip");
-  document().view()->updateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
 
-  EXPECT_TRUE(childPaintLayer->needsRepaint());
+  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange2DTransform) {
-  setBodyInnerHTML(
+  SetBodyInnerHTML(
       "<style>"
       "  .clip { overflow: hidden }"
       "</style>"
@@ -190,49 +211,49 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange2DTransform) {
       "  </div>"
       "</div>");
 
-  auto* parent = document().getElementById("parent");
-  auto* child = document().getElementById("child");
-  auto* childPaintLayer =
-      toLayoutBoxModelObject(child->layoutObject())->layer();
-  EXPECT_FALSE(childPaintLayer->needsRepaint());
-  EXPECT_FALSE(childPaintLayer->needsPaintPhaseFloat());
+  auto* parent = GetDocument().GetElementById("parent");
+  auto* child = GetDocument().GetElementById("child");
+  auto* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(HTMLNames::classAttr, "clip");
-  document().view()->updateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
 
-  EXPECT_TRUE(childPaintLayer->needsRepaint());
+  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosAbs) {
-  setBodyInnerHTML(
+  SetBodyInnerHTML(
       "<style>"
       "  .clip { overflow: hidden }"
       "</style>"
       "<div id='parent' style='transform: translateZ(0); width: 100px;"
       "  height: 100px; position: absolute'>"
-      "  <div id='child' style='overflow: hidden; z-index: 0; width: 50px;"
-      "      height: 50px'>"
+      "  <div id='child' style='overflow: hidden; position: relative;"
+      "      z-index: 0; width: 50px; height: 50px'>"
       "    content"
       "  </div>"
       "</div>");
 
-  auto* parent = document().getElementById("parent");
-  auto* child = document().getElementById("child");
-  auto* childPaintLayer =
-      toLayoutBoxModelObject(child->layoutObject())->layer();
-  EXPECT_FALSE(childPaintLayer->needsRepaint());
-  EXPECT_FALSE(childPaintLayer->needsPaintPhaseFloat());
+  auto* parent = GetDocument().GetElementById("parent");
+  auto* child = GetDocument().GetElementById("child");
+  auto* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(HTMLNames::classAttr, "clip");
-  document().view()->updateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
 
-  EXPECT_TRUE(childPaintLayer->needsRepaint());
+  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
-  setBodyInnerHTML(
+  SetBodyInnerHTML(
       "<style>"
       "  .clip { overflow: hidden }"
       "</style>"
@@ -244,19 +265,19 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
       "  </div>"
       "</div>");
 
-  auto* parent = document().getElementById("parent");
-  auto* child = document().getElementById("child");
-  auto* childPaintLayer =
-      toLayoutBoxModelObject(child->layoutObject())->layer();
-  EXPECT_FALSE(childPaintLayer->needsRepaint());
-  EXPECT_FALSE(childPaintLayer->needsPaintPhaseFloat());
+  auto* parent = GetDocument().GetElementById("parent");
+  auto* child = GetDocument().GetElementById("child");
+  auto* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(HTMLNames::classAttr, "clip");
-  document().view()->updateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
 
-  EXPECT_TRUE(childPaintLayer->needsRepaint());
+  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
 }
 
 }  // namespace blink

@@ -2,16 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ======                        New Architecture                         =====
-// =         This code is only used in the new iOS Chrome architecture.       =
-// ============================================================================
-
 #ifndef IOS_CLEAN_CHROME_BROWSER_UI_PRESENTERS_MENU_PRESENTATION_CONTROLLER_H_
 #define IOS_CLEAN_CHROME_BROWSER_UI_PRESENTERS_MENU_PRESENTATION_CONTROLLER_H_
 
 #import <UIKit/UIKit.h>
 
-@protocol ToolbarCommands;
+@protocol ToolsMenuCommands;
 
 // A presentation controller for presenting a "menu" interface: a (usually)
 // rectangular presentation that covers part of the window, and which doesn't
@@ -25,7 +21,8 @@
 // the region the menu appears in. Otherwise a default rectangular area is
 // controller's view.
 @interface MenuPresentationController : UIPresentationController
-@property(nonatomic, assign) id<ToolbarCommands> toolbarCommandHandler;
+// The dispatcher for this presentation controller.
+@property(nonatomic, weak) id<ToolsMenuCommands> dispatcher;
 @end
 
 #endif  // IOS_CLEAN_CHROME_BROWSER_UI_PRESENTERS_MENU_PRESENTATION_CONTROLLER_H_

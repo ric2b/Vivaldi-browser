@@ -228,6 +228,18 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckPacket(
     QuicPacketNumber ack_least_unacked,
     QuicPacketNumber stop_least_unacked,
     bool send_feedback) {
+  return MakeAckPacket(packet_number, largest_received, ack_least_unacked,
+                       stop_least_unacked, send_feedback,
+                       QuicTime::Delta::Zero());
+}
+
+std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckPacket(
+    QuicPacketNumber packet_number,
+    QuicPacketNumber largest_received,
+    QuicPacketNumber ack_least_unacked,
+    QuicPacketNumber stop_least_unacked,
+    bool send_feedback,
+    QuicTime::Delta ack_delay_time) {
   QuicPacketHeader header;
   header.public_header.connection_id = connection_id_;
   header.public_header.reset_flag = false;
@@ -236,7 +248,7 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckPacket(
   header.packet_number = packet_number;
 
   QuicAckFrame ack(MakeAckFrame(largest_received));
-  ack.ack_delay_time = QuicTime::Delta::Zero();
+  ack.ack_delay_time = ack_delay_time;
   for (QuicPacketNumber i = ack_least_unacked; i <= largest_received; ++i) {
     ack.received_packet_times.push_back(std::make_pair(i, clock_->Now()));
   }
@@ -271,7 +283,7 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeDataPacket(
     bool should_include_version,
     bool fin,
     QuicStreamOffset offset,
-    base::StringPiece data) {
+    QuicStringPiece data) {
   InitializeHeader(packet_number, should_include_version);
   QuicStreamFrame frame(stream_id, fin, offset, data);
   DVLOG(1) << "Adding frame: " << frame;
@@ -294,7 +306,7 @@ QuicTestPacketMaker::MakeMultipleDataFramesPacket(
   for (size_t i = 0; i < data_writes.size(); ++i) {
     bool is_fin = fin && (i == data_writes.size() - 1);
     stream_frames.push_back(base::MakeUnique<QuicStreamFrame>(
-        stream_id, is_fin, offset, base::StringPiece(data_writes[i])));
+        stream_id, is_fin, offset, QuicStringPiece(data_writes[i])));
     offset += data_writes[i].length();
   }
   for (const auto& stream_frame : stream_frames) {
@@ -313,7 +325,7 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckAndDataPacket(
     QuicPacketNumber least_unacked,
     bool fin,
     QuicStreamOffset offset,
-    base::StringPiece data) {
+    QuicStringPiece data) {
   InitializeHeader(packet_number, include_version);
 
   QuicAckFrame ack(MakeAckFrame(largest_received));
@@ -362,9 +374,8 @@ QuicTestPacketMaker::MakeRequestHeadersAndMultipleDataFramesPacket(
   QuicFrames frames;
   QuicStreamOffset header_offset =
       header_stream_offset == nullptr ? 0 : *header_stream_offset;
-  QuicStreamFrame frame(
-      kHeadersStreamId, false, header_offset,
-      base::StringPiece(spdy_frame.data(), spdy_frame.size()));
+  QuicStreamFrame frame(kHeadersStreamId, false, header_offset,
+                        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
   frames.push_back(QuicFrame(&frame));
   if (header_stream_offset != nullptr) {
     *header_stream_offset += spdy_frame.size();
@@ -377,7 +388,7 @@ QuicTestPacketMaker::MakeRequestHeadersAndMultipleDataFramesPacket(
   for (size_t i = 0; i < data_writes.size(); ++i) {
     bool is_fin = fin && (i == data_writes.size() - 1);
     stream_frames.push_back(base::MakeUnique<QuicStreamFrame>(
-        stream_id, is_fin, offset, base::StringPiece(data_writes[i])));
+        stream_id, is_fin, offset, QuicStringPiece(data_writes[i])));
     offset += data_writes[i].length();
   }
   for (const auto& stream_frame : stream_frames) {
@@ -413,6 +424,24 @@ QuicTestPacketMaker::MakeRequestHeadersPacket(QuicPacketNumber packet_number,
                                               SpdyHeaderBlock headers,
                                               size_t* spdy_headers_frame_length,
                                               QuicStreamOffset* offset) {
+  std::string unused_stream_data;
+  return MakeRequestHeadersPacketAndSaveData(
+      packet_number, stream_id, should_include_version, fin, priority,
+      std::move(headers), spdy_headers_frame_length, offset,
+      &unused_stream_data);
+}
+
+std::unique_ptr<QuicReceivedPacket>
+QuicTestPacketMaker::MakeRequestHeadersPacketAndSaveData(
+    QuicPacketNumber packet_number,
+    QuicStreamId stream_id,
+    bool should_include_version,
+    bool fin,
+    SpdyPriority priority,
+    SpdyHeaderBlock headers,
+    size_t* spdy_headers_frame_length,
+    QuicStreamOffset* offset,
+    std::string* stream_data) {
   InitializeHeader(packet_number, should_include_version);
   SpdySerializedFrame spdy_frame;
   SpdyHeadersIR headers_frame(stream_id, std::move(headers));
@@ -420,20 +449,21 @@ QuicTestPacketMaker::MakeRequestHeadersPacket(QuicPacketNumber packet_number,
   headers_frame.set_weight(Spdy3PriorityToHttp2Weight(priority));
   headers_frame.set_has_priority(true);
   spdy_frame = spdy_request_framer_.SerializeFrame(headers_frame);
+  *stream_data = std::string(spdy_frame.data(), spdy_frame.size());
 
-  if (spdy_headers_frame_length) {
+  if (spdy_headers_frame_length)
     *spdy_headers_frame_length = spdy_frame.size();
-  }
+
   if (offset != nullptr) {
     QuicStreamFrame frame(
         kHeadersStreamId, false, *offset,
-        base::StringPiece(spdy_frame.data(), spdy_frame.size()));
+        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
     *offset += spdy_frame.size();
     return MakePacket(header_, QuicFrame(&frame));
   } else {
     QuicStreamFrame frame(
         kHeadersStreamId, false, 0,
-        base::StringPiece(spdy_frame.data(), spdy_frame.size()));
+        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
 
     return MakePacket(header_, QuicFrame(&frame));
   }
@@ -478,13 +508,13 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakePushPromisePacket(
   if (offset != nullptr) {
     QuicStreamFrame frame(
         kHeadersStreamId, false, *offset,
-        base::StringPiece(spdy_frame.data(), spdy_frame.size()));
+        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
     *offset += spdy_frame.size();
     return MakePacket(header_, QuicFrame(&frame));
   } else {
     QuicStreamFrame frame(
         kHeadersStreamId, false, 0,
-        base::StringPiece(spdy_frame.data(), spdy_frame.size()));
+        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
     return MakePacket(header_, QuicFrame(&frame));
   }
 }
@@ -495,14 +525,15 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeForceHolDataPacket(
     bool should_include_version,
     bool fin,
     QuicStreamOffset* offset,
-    base::StringPiece data) {
+    QuicStringPiece data) {
   SpdyDataIR spdy_data(stream_id, data);
   spdy_data.set_fin(fin);
   SpdySerializedFrame spdy_frame(
       spdy_request_framer_.SerializeFrame(spdy_data));
   InitializeHeader(packet_number, should_include_version);
-  QuicStreamFrame quic_frame(kHeadersStreamId, false, *offset,
-                             StringPiece(spdy_frame.data(), spdy_frame.size()));
+  QuicStreamFrame quic_frame(
+      kHeadersStreamId, false, *offset,
+      QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
   *offset += spdy_frame.size();
   return MakePacket(header_, QuicFrame(&quic_frame));
 }
@@ -530,13 +561,13 @@ QuicTestPacketMaker::MakeResponseHeadersPacket(
   if (offset != nullptr) {
     QuicStreamFrame frame(
         kHeadersStreamId, false, *offset,
-        base::StringPiece(spdy_frame.data(), spdy_frame.size()));
+        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
     *offset += spdy_frame.size();
     return MakePacket(header_, QuicFrame(&frame));
   } else {
     QuicStreamFrame frame(
         kHeadersStreamId, false, 0,
-        base::StringPiece(spdy_frame.data(), spdy_frame.size()));
+        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
     return MakePacket(header_, QuicFrame(&frame));
   }
 }
@@ -636,20 +667,35 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeSettingsPacket(
     size_t value,
     bool should_include_version,
     QuicStreamOffset* offset) {
+  std::string unused_data;
+  return MakeSettingsPacketAndSaveData(
+      packet_number, id, value, should_include_version, offset, &unused_data);
+}
+
+std::unique_ptr<QuicReceivedPacket>
+QuicTestPacketMaker::MakeSettingsPacketAndSaveData(
+    QuicPacketNumber packet_number,
+    SpdySettingsIds id,
+    size_t value,
+    bool should_include_version,
+    QuicStreamOffset* offset,
+    std::string* stream_data) {
   SpdySettingsIR settings_frame;
   settings_frame.AddSetting(id, value);
   SpdySerializedFrame spdy_frame(
       spdy_request_framer_.SerializeFrame(settings_frame));
   InitializeHeader(packet_number, should_include_version);
+  *stream_data = std::string(spdy_frame.data(), spdy_frame.size());
   if (offset != nullptr) {
     QuicStreamFrame quic_frame(
         kHeadersStreamId, false, *offset,
-        StringPiece(spdy_frame.data(), spdy_frame.size()));
+        QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
     *offset += spdy_frame.size();
     return MakePacket(header_, QuicFrame(&quic_frame));
   }
-  QuicStreamFrame quic_frame(kHeadersStreamId, false, 0,
-                             StringPiece(spdy_frame.data(), spdy_frame.size()));
+  QuicStreamFrame quic_frame(
+      kHeadersStreamId, false, 0,
+      QuicStringPiece(spdy_frame.data(), spdy_frame.size()));
   return MakePacket(header_, QuicFrame(&quic_frame));
 }
 

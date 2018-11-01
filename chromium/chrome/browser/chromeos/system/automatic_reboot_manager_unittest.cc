@@ -319,10 +319,10 @@ void AutomaticRebootManagerBasicTest::SetUp() {
   const base::FilePath& temp_dir = temp_dir_.GetPath();
   const base::FilePath uptime_file = temp_dir.Append("uptime");
   uptime_provider()->set_uptime_file_path(uptime_file);
-  ASSERT_FALSE(base::WriteFile(uptime_file, NULL, 0));
+  ASSERT_EQ(0, base::WriteFile(uptime_file, NULL, 0));
   update_reboot_needed_uptime_file_ =
       temp_dir.Append("update_reboot_needed_uptime");
-  ASSERT_FALSE(base::WriteFile(update_reboot_needed_uptime_file_, NULL, 0));
+  ASSERT_EQ(0, base::WriteFile(update_reboot_needed_uptime_file_, NULL, 0));
   ASSERT_TRUE(PathService::Override(chromeos::FILE_UPTIME, uptime_file));
   ASSERT_TRUE(PathService::Override(chromeos::FILE_UPDATE_REBOOT_NEEDED_UPTIME,
                                     update_reboot_needed_uptime_file_));
@@ -374,8 +374,9 @@ void AutomaticRebootManagerBasicTest::SetRebootAfterUpdate(
     bool reboot_after_update,
     bool expect_reboot) {
   reboot_after_update_ = reboot_after_update;
-  local_state_.SetManagedPref(prefs::kRebootAfterUpdate,
-                              new base::Value(reboot_after_update));
+  local_state_.SetManagedPref(
+      prefs::kRebootAfterUpdate,
+      base::MakeUnique<base::Value>(reboot_after_update));
   task_runner_->RunUntilIdle();
   EXPECT_EQ(expect_reboot ? 1 : 0,
             power_manager_client_->num_request_restart_calls());
@@ -390,7 +391,7 @@ void AutomaticRebootManagerBasicTest::SetUptimeLimit(
   } else {
     local_state_.SetManagedPref(
         prefs::kUptimeLimit,
-        new base::Value(static_cast<int>(limit.InSeconds())));
+        base::MakeUnique<base::Value>(static_cast<int>(limit.InSeconds())));
   }
   task_runner_->RunUntilIdle();
   EXPECT_EQ(expect_reboot ? 1 : 0,

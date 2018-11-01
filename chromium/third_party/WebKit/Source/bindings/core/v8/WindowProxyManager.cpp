@@ -8,86 +8,96 @@
 
 namespace blink {
 
-namespace {
+DEFINE_TRACE(WindowProxyManager) {
+  visitor->Trace(frame_);
+  visitor->Trace(window_proxy_);
+  visitor->Trace(isolated_worlds_);
+}
 
-WindowProxy* createWindowProxyForFrame(v8::Isolate* isolate,
-                                       Frame& frame,
+void WindowProxyManager::ClearForClose() {
+  window_proxy_->ClearForClose();
+  for (auto& entry : isolated_worlds_)
+    entry.value->ClearForClose();
+}
 
-                                       RefPtr<DOMWrapperWorld> world) {
-  if (frame.isLocalFrame()) {
-    return LocalWindowProxy::create(isolate, toLocalFrame(frame),
-                                    std::move(world));
+void WindowProxyManager::ClearForNavigation() {
+  window_proxy_->ClearForNavigation();
+  for (auto& entry : isolated_worlds_)
+    entry.value->ClearForNavigation();
+}
+
+void WindowProxyManager::ReleaseGlobalProxies(
+    GlobalProxyVector& global_proxies) {
+  DCHECK(global_proxies.IsEmpty());
+  global_proxies.ReserveInitialCapacity(1 + isolated_worlds_.size());
+  global_proxies.emplace_back(&window_proxy_->World(),
+                              window_proxy_->ReleaseGlobalProxy());
+  for (auto& entry : isolated_worlds_) {
+    global_proxies.emplace_back(
+        &entry.value->World(),
+        WindowProxyMaybeUninitialized(entry.value->World())
+            ->ReleaseGlobalProxy());
   }
-  return RemoteWindowProxy::create(isolate, toRemoteFrame(frame),
-                                   std::move(world));
-}
 }
 
-DEFINE_TRACE(WindowProxyManagerBase) {
-  visitor->trace(m_frame);
-  visitor->trace(m_windowProxy);
-  visitor->trace(m_isolatedWorlds);
+void WindowProxyManager::SetGlobalProxies(
+    const GlobalProxyVector& global_proxies) {
+  for (const auto& entry : global_proxies)
+    WindowProxyMaybeUninitialized(*entry.first)->SetGlobalProxy(entry.second);
 }
 
-WindowProxy* WindowProxyManagerBase::windowProxy(DOMWrapperWorld& world) {
-  WindowProxy* windowProxy = nullptr;
-  if (world.isMainWorld()) {
-    windowProxy = m_windowProxy.get();
+WindowProxyManager::WindowProxyManager(Frame& frame, FrameType frame_type)
+    : isolate_(v8::Isolate::GetCurrent()),
+      frame_(&frame),
+      frame_type_(frame_type),
+      window_proxy_(CreateWindowProxy(DOMWrapperWorld::MainWorld())) {}
+
+WindowProxy* WindowProxyManager::CreateWindowProxy(DOMWrapperWorld& world) {
+  switch (frame_type_) {
+    case FrameType::kLocal:
+      // Directly use static_cast instead of toLocalFrame because
+      // WindowProxyManager gets instantiated during a construction of
+      // LocalFrame and at that time virtual member functions are not yet
+      // available (we cannot use LocalFrame::isLocalFrame).  Ditto for
+      // RemoteFrame.
+      return LocalWindowProxy::Create(
+          isolate_, *static_cast<LocalFrame*>(frame_.Get()), &world);
+    case FrameType::kRemote:
+      return RemoteWindowProxy::Create(
+          isolate_, *static_cast<RemoteFrame*>(frame_.Get()), &world);
+  }
+  NOTREACHED();
+  return nullptr;
+}
+
+WindowProxy* WindowProxyManager::WindowProxyMaybeUninitialized(
+    DOMWrapperWorld& world) {
+  WindowProxy* window_proxy = nullptr;
+  if (world.IsMainWorld()) {
+    window_proxy = window_proxy_.Get();
   } else {
-    IsolatedWorldMap::iterator iter = m_isolatedWorlds.find(world.worldId());
-    if (iter != m_isolatedWorlds.end()) {
-      windowProxy = iter->value.get();
+    IsolatedWorldMap::iterator iter = isolated_worlds_.Find(world.GetWorldId());
+    if (iter != isolated_worlds_.end()) {
+      window_proxy = iter->value.Get();
     } else {
-      windowProxy = createWindowProxyForFrame(m_isolate, *m_frame, &world);
-      m_isolatedWorlds.set(world.worldId(), windowProxy);
+      window_proxy = CreateWindowProxy(world);
+      isolated_worlds_.Set(world.GetWorldId(), window_proxy);
     }
   }
-  return windowProxy;
+  return window_proxy;
 }
 
-void WindowProxyManagerBase::clearForClose() {
-  m_windowProxy->clearForClose();
-  for (auto& entry : m_isolatedWorlds)
-    entry.value->clearForClose();
-}
+void LocalWindowProxyManager::UpdateSecurityOrigin(
+    SecurityOrigin* security_origin) {
+  static_cast<LocalWindowProxy*>(window_proxy_.Get())
+      ->UpdateSecurityOrigin(security_origin);
 
-void WindowProxyManagerBase::clearForNavigation() {
-  m_windowProxy->clearForNavigation();
-  for (auto& entry : m_isolatedWorlds)
-    entry.value->clearForNavigation();
-}
-
-void WindowProxyManagerBase::releaseGlobals(GlobalsVector& globals) {
-  globals.reserveInitialCapacity(1 + m_isolatedWorlds.size());
-  globals.emplace_back(&m_windowProxy->world(), m_windowProxy->releaseGlobal());
-  for (auto& entry : m_isolatedWorlds) {
-    globals.emplace_back(&entry.value->world(),
-                         windowProxy(entry.value->world())->releaseGlobal());
-  }
-}
-
-void WindowProxyManagerBase::setGlobals(const GlobalsVector& globals) {
-  for (const auto& entry : globals)
-    windowProxy(*entry.first)->setGlobal(entry.second);
-}
-
-WindowProxyManagerBase::WindowProxyManagerBase(Frame& frame)
-    : m_isolate(v8::Isolate::GetCurrent()),
-      m_frame(&frame),
-      m_windowProxy(createWindowProxyForFrame(m_isolate,
-                                              frame,
-                                              &DOMWrapperWorld::mainWorld())) {}
-
-void LocalWindowProxyManager::updateSecurityOrigin(
-    SecurityOrigin* securityOrigin) {
-  static_cast<LocalWindowProxy*>(mainWorldProxy())
-      ->updateSecurityOrigin(securityOrigin);
-  for (auto& entry : isolatedWorlds()) {
-    auto* isolatedWindowProxy =
-        static_cast<LocalWindowProxy*>(entry.value.get());
-    SecurityOrigin* isolatedSecurityOrigin =
-        isolatedWindowProxy->world().isolatedWorldSecurityOrigin();
-    isolatedWindowProxy->updateSecurityOrigin(isolatedSecurityOrigin);
+  for (auto& entry : isolated_worlds_) {
+    auto* isolated_window_proxy =
+        static_cast<LocalWindowProxy*>(entry.value.Get());
+    SecurityOrigin* isolated_security_origin =
+        isolated_window_proxy->World().IsolatedWorldSecurityOrigin();
+    isolated_window_proxy->UpdateSecurityOrigin(isolated_security_origin);
   }
 }
 

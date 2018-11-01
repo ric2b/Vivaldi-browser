@@ -18,10 +18,13 @@
 #include "media/base/demuxer_stream.h"
 #include "media/base/eme_constants.h"
 #include "media/base/encryption_scheme.h"
+#include "media/base/output_device_info.h"
 #include "media/base/sample_format.h"
 #include "media/base/subsample_entry.h"
 #include "media/base/video_codecs.h"
+#include "media/base/video_color_space.h"
 #include "media/base/video_types.h"
+#include "ui/gfx/ipc/color/gfx_param_traits_macros.h"
 
 // Enum traits.
 
@@ -72,6 +75,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::ContentDecryptionModule::MessageType,
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmSessionType,
                           media::CdmSessionType::SESSION_TYPE_MAX)
 
+IPC_ENUM_TRAITS_MAX_VALUE(media::OutputDeviceStatus,
+                          media::OUTPUT_DEVICE_STATUS_MAX)
+
 IPC_ENUM_TRAITS_MAX_VALUE(media::SampleFormat, media::kSampleFormatMax)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoCodec, media::kVideoCodecMax)
@@ -81,6 +87,24 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(media::VideoCodecProfile,
                               media::VIDEO_CODEC_PROFILE_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoPixelFormat, media::PIXEL_FORMAT_MAX)
+
+IPC_ENUM_TRAITS_VALIDATE(
+    media::VideoColorSpace::PrimaryID,
+    static_cast<int>(value) ==
+        static_cast<int>(
+            media::VideoColorSpace::GetPrimaryID(static_cast<int>(value))));
+
+IPC_ENUM_TRAITS_VALIDATE(
+    media::VideoColorSpace::TransferID,
+    static_cast<int>(value) ==
+        static_cast<int>(
+            media::VideoColorSpace::GetTransferID(static_cast<int>(value))));
+
+IPC_ENUM_TRAITS_VALIDATE(
+    media::VideoColorSpace::MatrixID,
+    static_cast<int>(value) ==
+        static_cast<int>(
+            media::VideoColorSpace::GetMatrixID(static_cast<int>(value))));
 
 // Struct traits.
 
@@ -93,6 +117,13 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(media::SubsampleEntry)
   IPC_STRUCT_TRAITS_MEMBER(clear_bytes)
   IPC_STRUCT_TRAITS_MEMBER(cypher_bytes)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(media::VideoColorSpace)
+  IPC_STRUCT_TRAITS_MEMBER(primaries)
+  IPC_STRUCT_TRAITS_MEMBER(transfer)
+  IPC_STRUCT_TRAITS_MEMBER(matrix)
+  IPC_STRUCT_TRAITS_MEMBER(range)
 IPC_STRUCT_TRAITS_END()
 
 #endif  // MEDIA_BASE_IPC_MEDIA_PARAM_TRAITS_MACROS_H_

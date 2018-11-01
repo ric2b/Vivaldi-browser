@@ -11,30 +11,20 @@
 #include <string>
 #include <vector>
 
-#include "ash/common/accessibility_types.h"
-#include "ash/common/system/chromeos/supervised/custodian_info_tray_observer.h"
-#include "ash/common/system/tray/ime_info.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
-#include "base/callback_forward.h"
-#include "base/callback_list.h"
-#include "base/compiler_specific.h"
+#include "ash/accessibility_types.h"
+#include "ash/system/supervised/custodian_info_tray_observer.h"
+#include "ash/system/tray/ime_info.h"
+#include "ash/system/tray/system_tray_delegate.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
-#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_service_observer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#include "chromeos/dbus/session_manager_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/signin/core/account_id/account_id.h"
-#include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "device/bluetooth/bluetooth_adapter.h"
-#include "device/bluetooth/bluetooth_discovery_session.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -44,33 +34,21 @@ namespace ash {
 class SystemTrayNotifier;
 }
 
-namespace user_manager {
-class User;
-}
-
 namespace chromeos {
 
 class SystemTrayDelegateChromeOS
     : public ui::ime::InputMethodMenuManager::Observer,
       public ash::SystemTrayDelegate,
-      public SessionManagerClient::Observer,
       public content::NotificationObserver,
       public input_method::InputMethodManager::Observer,
-      public device::BluetoothAdapter::Observer,
       public policy::CloudPolicyStore::Observer,
       public chrome::BrowserListObserver,
       public extensions::AppWindowRegistry::Observer,
-      public user_manager::UserManager::Observer,
-      public user_manager::UserManager::UserSessionStateObserver,
       public SupervisedUserServiceObserver,
       public input_method::InputMethodManager::ImeMenuObserver {
  public:
   SystemTrayDelegateChromeOS();
-
   ~SystemTrayDelegateChromeOS() override;
-
-  void InitializeOnAdapterReady(
-      scoped_refptr<device::BluetoothAdapter> adapter);
 
   // Overridden from ash::SystemTrayDelegate:
   void Initialize() override;
@@ -86,26 +64,15 @@ class SystemTrayDelegateChromeOS
   bool ShouldShowNotificationTray() const override;
   void ShowEnterpriseInfo() override;
   void ShowUserLogin() override;
-  void GetAvailableBluetoothDevices(ash::BluetoothDeviceList* list) override;
-  void BluetoothStartDiscovering() override;
-  void BluetoothStopDiscovering() override;
-  void ConnectToBluetoothDevice(const std::string& address) override;
-  bool IsBluetoothDiscovering() const override;
   void GetCurrentIME(ash::IMEInfo* info) override;
   void GetAvailableIMEList(ash::IMEInfoList* list) override;
   void GetCurrentIMEProperties(ash::IMEPropertyInfoList* list) override;
   base::string16 GetIMEManagedMessage() override;
   void SwitchIME(const std::string& ime_id) override;
   void ActivateIMEProperty(const std::string& key) override;
-  void ManageBluetoothDevices() override;
-  void ToggleBluetooth() override;
-  bool GetBluetoothAvailable() override;
-  bool GetBluetoothEnabled() override;
-  bool GetBluetoothDiscovering() override;
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() const override;
   bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
   bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
-  int GetSystemTrayMenuWidth() override;
   void ActiveUserWasChanged() override;
   bool IsSearchKeyMappedToCapsLock() override;
   void AddCustodianInfoTrayObserver(
@@ -114,15 +81,6 @@ class SystemTrayDelegateChromeOS
       ash::CustodianInfoTrayObserver* observer) override;
   std::unique_ptr<ash::SystemTrayItem> CreateRotationLockTrayItem(
       ash::SystemTray* tray) override;
-
-  // Overridden from user_manager::UserManager::Observer:
-  void OnUserImageChanged(const user_manager::User& user) override;
-
-  // Overridden from user_manager::UserManager::UserSessionStateObserver:
-  void UserAddedToSession(const user_manager::User* active_user) override;
-  void ActiveUserChanged(const user_manager::User* active_user) override;
-
-  void UserChangedChildStatus(user_manager::User* user) override;
 
  private:
   ash::SystemTrayNotifier* GetSystemTrayNotifier();
@@ -147,10 +105,6 @@ class SystemTrayDelegateChromeOS
   // windows.
   void NotifyIfLastWindowClosed();
 
-  // Overridden from SessionManagerClient::Observer.
-  void ScreenIsLocked() override;
-  void ScreenIsUnlocked() override;
-
   // content::NotificationObserver implementation.
   void Observe(int type,
                const content::NotificationSource& source,
@@ -171,23 +125,6 @@ class SystemTrayDelegateChromeOS
   // Overridden from InputMethodMenuManager::Observer.
   void InputMethodMenuItemChanged(
       ui::ime::InputMethodMenuManager* manager) override;
-
-  // Overridden from BluetoothAdapter::Observer.
-  void AdapterPresentChanged(device::BluetoothAdapter* adapter,
-                             bool present) override;
-  void AdapterPoweredChanged(device::BluetoothAdapter* adapter,
-                             bool powered) override;
-  void AdapterDiscoveringChanged(device::BluetoothAdapter* adapter,
-                                 bool discovering) override;
-  void DeviceAdded(device::BluetoothAdapter* adapter,
-                   device::BluetoothDevice* device) override;
-  void DeviceChanged(device::BluetoothAdapter* adapter,
-                     device::BluetoothDevice* device) override;
-  void DeviceRemoved(device::BluetoothAdapter* adapter,
-                     device::BluetoothDevice* device) override;
-
-  void OnStartBluetoothDiscoverySession(
-      std::unique_ptr<device::BluetoothDiscoverySession> discovery_session);
 
   void UpdateEnterpriseDomain();
 
@@ -230,19 +167,13 @@ class SystemTrayDelegateChromeOS
   base::TimeDelta session_length_limit_;
   std::string enterprise_domain_;
   bool is_active_directory_managed_ = false;
-  bool should_run_bluetooth_discovery_ = false;
   bool session_started_ = false;
 
-  scoped_refptr<device::BluetoothAdapter> bluetooth_adapter_;
-  std::unique_ptr<device::BluetoothDiscoverySession>
-      bluetooth_discovery_session_;
   std::unique_ptr<ash::NetworkingConfigDelegate> networking_config_delegate_;
   std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
 
   base::ObserverList<ash::CustodianInfoTrayObserver>
       custodian_info_changed_observers_;
-
-  base::WeakPtrFactory<SystemTrayDelegateChromeOS> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTrayDelegateChromeOS);
 };

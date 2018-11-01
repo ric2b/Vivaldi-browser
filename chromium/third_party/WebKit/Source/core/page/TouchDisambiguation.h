@@ -33,7 +33,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -41,10 +41,11 @@ class LocalFrame;
 class IntRect;
 class Node;
 
-CORE_EXPORT void findGoodTouchTargets(const IntRect& touchBox,
-                                      LocalFrame* mainFrame,
-                                      Vector<IntRect>& goodTargets,
-                                      HeapVector<Member<Node>>& highlightNodes);
+CORE_EXPORT void FindGoodTouchTargets(
+    const IntRect& touch_box,
+    LocalFrame* main_frame,
+    Vector<IntRect>& good_targets,
+    HeapVector<Member<Node>>& highlight_nodes);
 
 }  // namespace blink
 

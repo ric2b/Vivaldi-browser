@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/test/scoped_async_task_scheduler.h"
 #include "chrome/browser/component_updater/chrome_component_updater_configurator.h"
 #include "components/component_updater/component_updater_switches.h"
 #include "components/component_updater/component_updater_url_constants.h"
@@ -33,6 +34,7 @@ class ChromeComponentUpdaterConfiguratorTest : public testing::Test {
   TestingPrefServiceSimple* pref_service() { return pref_service_.get(); }
 
  private:
+  base::test::ScopedAsyncTaskScheduler scoped_async_task_scheduler_;
   std::unique_ptr<TestingPrefServiceSimple> pref_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeComponentUpdaterConfiguratorTest);
@@ -63,7 +65,6 @@ TEST_F(ChromeComponentUpdaterConfiguratorTest, TestFastUpdate) {
 
   CHECK_EQ(10, config->InitialDelay());
   CHECK_EQ(5 * 60 * 60, config->NextCheckDelay());
-  CHECK_EQ(1, config->StepDelay());
   CHECK_EQ(2, config->OnDemandDelay());
   CHECK_EQ(10, config->UpdateDelay());
 }
@@ -157,17 +158,17 @@ TEST_F(ChromeComponentUpdaterConfiguratorTest, TestEnabledComponentUpdates) {
 
   // Tests the component updates are disabled.
   pref_service()->SetManagedPref("component_updates.component_updates_enabled",
-                                 new base::Value(false));
+                                 base::MakeUnique<base::Value>(false));
   EXPECT_FALSE(config->EnabledComponentUpdates());
 
   // Tests the component updates are enabled.
   pref_service()->SetManagedPref("component_updates.component_updates_enabled",
-                                 new base::Value(true));
+                                 base::MakeUnique<base::Value>(true));
   EXPECT_TRUE(config->EnabledComponentUpdates());
 
   // Sanity check setting the preference back to |false| and then removing it.
   pref_service()->SetManagedPref("component_updates.component_updates_enabled",
-                                 new base::Value(false));
+                                 base::MakeUnique<base::Value>(false));
   EXPECT_FALSE(config->EnabledComponentUpdates());
   pref_service()->RemoveManagedPref(
       "component_updates.component_updates_enabled");

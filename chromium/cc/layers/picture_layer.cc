@@ -8,10 +8,11 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer_impl.h"
+#include "cc/layers/recording_source.h"
 #include "cc/paint/paint_record.h"
-#include "cc/playback/recording_source.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
@@ -54,6 +55,8 @@ void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
   DropRecordingSourceContentIfInvalid();
 
   layer_impl->SetNearestNeighbor(picture_layer_inputs_.nearest_neighbor);
+  layer_impl->SetUseTransformedRasterization(
+      ShouldUseTransformedRasterization());
 
   // Preserve lcd text settings from the current raster source.
   bool can_use_lcd_text = layer_impl->RasterSourceUsesLCDText();
@@ -61,8 +64,8 @@ void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
       recording_source_->CreateRasterSource(can_use_lcd_text);
   layer_impl->set_gpu_raster_max_texture_size(
       layer_tree_host()->device_viewport_size());
-  layer_impl->UpdateRasterSource(raster_source, &last_updated_invalidation_,
-                                 nullptr);
+  layer_impl->UpdateRasterSource(std::move(raster_source),
+                                 &last_updated_invalidation_, nullptr);
   DCHECK(last_updated_invalidation_.IsEmpty());
 }
 
@@ -143,6 +146,11 @@ bool PictureLayer::Update() {
 }
 
 void PictureLayer::SetLayerMaskType(LayerMaskType mask_type) {
+  // We do not allow converting SINGLE_TEXTURE_MASK to MULTI_TEXTURE_MASK in
+  // order to avoid rerastering when a mask's transform is being animated.
+  if (mask_type_ == LayerMaskType::SINGLE_TEXTURE_MASK &&
+      mask_type == LayerMaskType::MULTI_TEXTURE_MASK)
+    return;
   mask_type_ = mask_type;
 }
 
@@ -198,6 +206,14 @@ void PictureLayer::SetNearestNeighbor(bool nearest_neighbor) {
   SetNeedsCommit();
 }
 
+void PictureLayer::SetAllowTransformedRasterization(bool allowed) {
+  if (picture_layer_inputs_.allow_transformed_rasterization == allowed)
+    return;
+
+  picture_layer_inputs_.allow_transformed_rasterization = allowed;
+  SetNeedsCommit();
+}
+
 bool PictureLayer::HasDrawableContent() const {
   return picture_layer_inputs_.client && Layer::HasDrawableContent();
 }
@@ -231,6 +247,46 @@ void PictureLayer::DropRecordingSourceContentIfInvalid() {
     picture_layer_inputs_.display_list = nullptr;
     picture_layer_inputs_.painter_reported_memory_usage = 0;
   }
+}
+
+bool PictureLayer::ShouldUseTransformedRasterization() const {
+  if (!picture_layer_inputs_.allow_transformed_rasterization)
+    return false;
+
+  // Background color overfill is undesirable with transformed rasterization.
+  // However, without background overfill, the tiles will be non-opaque on
+  // external edges, and layer opaque region can't be computed in layer space
+  // due to rounding under extreme scaling. This defeats many opaque layer
+  // optimization. Prefer optimization over quality for this particular case.
+  if (contents_opaque())
+    return false;
+
+  const TransformTree& transform_tree =
+      layer_tree_host()->property_trees()->transform_tree;
+  DCHECK(!transform_tree.needs_update());
+  auto* transform_node = transform_tree.Node(transform_tree_index());
+  DCHECK(transform_node);
+  // TODO(pdr): This is a workaround for https://crbug.com/708951 to avoid
+  // crashing when there's no transform node. This workaround should be removed.
+  if (!transform_node)
+    return false;
+
+  if (transform_node->to_screen_is_potentially_animated)
+    return false;
+
+  const gfx::Transform& to_screen =
+      transform_tree.ToScreen(transform_tree_index());
+  if (!to_screen.IsScaleOrTranslation())
+    return false;
+
+  float origin_x =
+      to_screen.matrix().getFloat(0, 3) + offset_to_transform_parent().x();
+  float origin_y =
+      to_screen.matrix().getFloat(1, 3) + offset_to_transform_parent().y();
+  if (origin_x - floorf(origin_x) == 0.f && origin_y - floorf(origin_y) == 0.f)
+    return false;
+
+  return true;
 }
 
 const DisplayItemList* PictureLayer::GetDisplayItemList() {

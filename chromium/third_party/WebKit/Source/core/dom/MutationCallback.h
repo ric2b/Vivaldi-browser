@@ -33,7 +33,7 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -41,13 +41,14 @@ class ExecutionContext;
 class MutationRecord;
 class MutationObserver;
 
-class MutationCallback : public GarbageCollectedFinalized<MutationCallback> {
+class MutationCallback : public GarbageCollectedFinalized<MutationCallback>,
+                         public TraceWrapperBase {
  public:
   virtual ~MutationCallback() {}
 
-  virtual void call(const HeapVector<Member<MutationRecord>>&,
+  virtual void Call(const HeapVector<Member<MutationRecord>>&,
                     MutationObserver*) = 0;
-  virtual ExecutionContext* getExecutionContext() const = 0;
+  virtual ExecutionContext* GetExecutionContext() const = 0;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 };

@@ -21,9 +21,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
-#include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_thread.h"
-#include "content/public/test/test_file_system_options.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "storage/browser/fileapi/file_system_backend.h"
 #include "storage/browser/fileapi/file_system_context.h"
@@ -31,6 +29,8 @@
 #include "storage/browser/fileapi/file_system_url.h"
 #include "storage/browser/fileapi/isolated_context.h"
 #include "storage/browser/fileapi/native_file_util.h"
+#include "storage/browser/test/mock_special_storage_policy.h"
+#include "storage/browser/test/test_file_system_options.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #define FPL(x) FILE_PATH_LITERAL(x)
@@ -333,7 +333,8 @@ TEST_F(NativeMediaFileUtilTest, CopyDestFiltering) {
     base::FilePath src_path = root_path().AppendASCII("foo.jpg");
     FileSystemURL src_url = CreateURL(FPL("foo.jpg"));
     static const char kDummyData[] = "dummy";
-    ASSERT_TRUE(base::WriteFile(src_path, kDummyData, strlen(kDummyData)));
+    ASSERT_EQ(static_cast<int>(strlen(kDummyData)),
+              base::WriteFile(src_path, kDummyData, strlen(kDummyData)));
 
     for (size_t i = 0; i < arraysize(kFilteringTestCases); ++i) {
       if (loop_count == 0 && kFilteringTestCases[i].is_directory) {
@@ -445,8 +446,8 @@ TEST_F(NativeMediaFileUtilTest, MoveDestFiltering) {
       base::FilePath src_path = root_path().AppendASCII("foo.jpg");
       FileSystemURL src_url = CreateURL(FPL("foo.jpg"));
       static const char kDummyData[] = "dummy";
-      ASSERT_TRUE(
-          base::WriteFile(src_path, kDummyData, strlen(kDummyData)));
+      ASSERT_EQ(static_cast<int>(strlen(kDummyData)),
+                base::WriteFile(src_path, kDummyData, strlen(kDummyData)));
 
       FileSystemURL root_url = CreateURL(FPL(""));
       FileSystemURL url = CreateURL(kFilteringTestCases[i].path);

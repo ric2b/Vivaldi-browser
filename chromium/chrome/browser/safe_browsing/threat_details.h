@@ -17,26 +17,29 @@
 #include <vector>
 
 #include "base/containers/hash_tables.h"
-#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/safe_browsing/ui_manager.h"
-#include "chrome/common/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/common/safebrowsing_types.h"
+#include "components/safe_browsing/csd.pb.h"
+#include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/completion_callback.h"
 
+namespace history {
+class HistoryService;
+}  // namespace history
+
 namespace net {
 class URLRequestContextGetter;
-}
+}  // namespace net
 
-class Profile;
 struct SafeBrowsingHostMsg_ThreatDOMDetails_Node;
 
 namespace safe_browsing {
 
-extern const base::Feature kFillDOMInThreatDetails;
+class BaseUIManager;
 
 // Maps a URL to its Resource.
 class ThreatDetailsCacheCollector;
@@ -74,11 +77,14 @@ class ThreatDetails : public base::RefCountedThreadSafe<
   typedef security_interstitials::UnsafeResource UnsafeResource;
 
   // Constructs a new ThreatDetails instance, using the factory.
-  static ThreatDetails* NewThreatDetails(BaseUIManager* ui_manager,
-                                         content::WebContents* web_contents,
-                                         const UnsafeResource& resource);
+  static ThreatDetails* NewThreatDetails(
+      BaseUIManager* ui_manager,
+      content::WebContents* web_contents,
+      const UnsafeResource& resource,
+      net::URLRequestContextGetter* request_context_getter,
+      history::HistoryService* history_service);
 
-  // Makes the passed |factory| the factory used to instanciate
+  // Makes the passed |factory| the factory used to instantiate
   // SafeBrowsingBlockingPage objects. Useful for tests.
   static void RegisterFactory(ThreatDetailsFactory* factory) {
     factory_ = factory;
@@ -106,7 +112,9 @@ class ThreatDetails : public base::RefCountedThreadSafe<
 
   ThreatDetails(BaseUIManager* ui_manager,
                 content::WebContents* web_contents,
-                const UnsafeResource& resource);
+                const UnsafeResource& resource,
+                net::URLRequestContextGetter* request_context_getter,
+                history::HistoryService* history_service);
 
   ~ThreatDetails() override;
 
@@ -115,8 +123,6 @@ class ThreatDetails : public base::RefCountedThreadSafe<
       const int frame_tree_node_id,
       const GURL& frame_last_committed_url,
       const std::vector<SafeBrowsingHostMsg_ThreatDOMDetails_Node>& params);
-
-  Profile* profile_;
 
   // The report protocol buffer.
   std::unique_ptr<ClientSafeBrowsingReportRequest> report_;
@@ -166,13 +172,15 @@ class ThreatDetails : public base::RefCountedThreadSafe<
   // from. |frame_url| is the URL that the render frame was handling.
   // |element_node_id| is a unique ID of the element within the render frame.
   // |tag_name| is the tag of the element. |parent_element_node_id| is the
-  // unique ID of the parent element with the render frame. |resource| is set if
-  // this element is a resource.
+  // unique ID of the parent element with the render frame. |attributes|
+  // containes the names and values of the element's attributes.|resource| is
+  // set if this element is a resource.
   void AddDomElement(const int frame_tree_node_id,
                      const std::string& frame_url,
                      const int element_node_id,
                      const std::string& tag_name,
                      const int parent_element_node_id,
+                     const std::vector<AttributeNameValue>& attributes,
                      const ClientSafeBrowsingReportRequest::Resource* resource);
 
   scoped_refptr<BaseUIManager> ui_manager_;
@@ -244,7 +252,9 @@ class ThreatDetailsFactory {
   virtual ThreatDetails* CreateThreatDetails(
       BaseUIManager* ui_manager,
       content::WebContents* web_contents,
-      const SafeBrowsingUIManager::UnsafeResource& unsafe_resource) = 0;
+      const security_interstitials::UnsafeResource& unsafe_resource,
+      net::URLRequestContextGetter* request_context_getter,
+      history::HistoryService* history_service) = 0;
 };
 
 }  // namespace safe_browsing

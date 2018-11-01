@@ -107,11 +107,19 @@ bool ShouldEnableQuic(base::StringPiece quic_trial_group,
              "true");
 }
 
-bool ShouldDisableQuicWhenConnectionTimesOutWithOpenStreams(
+bool ShouldMarkQuicBrokenWhenNetworkBlackholes(
     const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params,
-                        "disable_quic_on_timeout_with_open_streams"),
+                        "mark_quic_broken_when_network_blackholes"),
+      "true");
+}
+
+bool ShouldRetryWithoutAltSvcOnQuicErrors(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params,
+                        "retry_without_alt_svc_on_quic_errors"),
       "true");
 }
 
@@ -333,9 +341,10 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
   params->enable_quic = ShouldEnableQuic(
       quic_trial_group, quic_trial_params, is_quic_force_disabled,
       is_quic_force_enabled);
-  params->disable_quic_on_timeout_with_open_streams =
-      ShouldDisableQuicWhenConnectionTimesOutWithOpenStreams(quic_trial_params);
-
+  params->mark_quic_broken_when_network_blackholes =
+      ShouldMarkQuicBrokenWhenNetworkBlackholes(quic_trial_params);
+  params->retry_without_alt_svc_on_quic_errors =
+      ShouldRetryWithoutAltSvcOnQuicErrors(quic_trial_params);
   params->enable_quic_alternative_service_with_different_host =
       ShouldQuicEnableAlternativeServicesForDifferentHost(quic_trial_params);
 

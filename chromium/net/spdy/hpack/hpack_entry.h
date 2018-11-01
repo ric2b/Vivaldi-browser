@@ -7,11 +7,10 @@
 
 #include <stddef.h>
 
-#include <string>
-
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
+#include "net/spdy/platform/api/spdy_string.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 
 // All section references below are to
 // http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-08
@@ -35,15 +34,15 @@ class NET_EXPORT_PRIVATE HpackEntry {
   // The combination of |is_static| and |insertion_index| allows an
   // HpackEntryTable to determine the index of an HpackEntry in O(1) time.
   // Copies |name| and |value|.
-  HpackEntry(base::StringPiece name,
-             base::StringPiece value,
+  HpackEntry(SpdyStringPiece name,
+             SpdyStringPiece value,
              bool is_static,
              size_t insertion_index);
 
   // Create a 'lookup' entry (only) suitable for querying a HpackEntrySet. The
   // instance InsertionIndex() always returns 0 and IsLookup() returns true.
   // The memory backing |name| and |value| must outlive this object.
-  HpackEntry(base::StringPiece name, base::StringPiece value);
+  HpackEntry(SpdyStringPiece name, SpdyStringPiece value);
 
   HpackEntry(const HpackEntry& other);
   HpackEntry& operator=(const HpackEntry& other);
@@ -54,8 +53,8 @@ class NET_EXPORT_PRIVATE HpackEntry {
 
   ~HpackEntry();
 
-  base::StringPiece name() const { return name_ref_; }
-  base::StringPiece value() const { return value_ref_; }
+  SpdyStringPiece name() const { return name_ref_; }
+  SpdyStringPiece value() const { return value_ref_; }
 
   // Returns whether this entry is a member of the static (as opposed to
   // dynamic) table.
@@ -68,10 +67,10 @@ class NET_EXPORT_PRIVATE HpackEntry {
   size_t InsertionIndex() const { return insertion_index_; }
 
   // Returns the size of an entry as defined in 5.1.
-  static size_t Size(base::StringPiece name, base::StringPiece value);
+  static size_t Size(SpdyStringPiece name, SpdyStringPiece value);
   size_t Size() const;
 
-  std::string GetDebugString() const;
+  SpdyString GetDebugString() const;
 
   int64_t time_added() const { return time_added_; }
   void set_time_added(int64_t now) { time_added_ = now; }
@@ -87,13 +86,13 @@ class NET_EXPORT_PRIVATE HpackEntry {
   };
 
   // These members are not used for LOOKUP entries.
-  std::string name_;
-  std::string value_;
+  SpdyString name_;
+  SpdyString value_;
 
   // These members are always valid. For DYNAMIC and STATIC entries, they
   // always point to |name_| and |value_|.
-  base::StringPiece name_ref_;
-  base::StringPiece value_ref_;
+  SpdyStringPiece name_ref_;
+  SpdyStringPiece value_ref_;
 
   // The entry's index in the total set of entries ever inserted into the header
   // table.

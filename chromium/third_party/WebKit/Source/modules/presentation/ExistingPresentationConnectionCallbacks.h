@@ -6,16 +6,16 @@
 #define ExistingPresentationConnectionCallbacks_h
 
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebCallbacks.h"
 #include "public/platform/modules/presentation/WebPresentationConnectionCallbacks.h"
-#include "wtf/Noncopyable.h"
 
 namespace blink {
 
 class PresentationConnection;
 class ScriptPromiseResolver;
+struct WebPresentationInfo;
 struct WebPresentationError;
-struct WebPresentationSessionInfo;
 
 // ExistingPresentationConnectionCallbacks extends WebCallbacks to resolve the
 // underlying promise. It takes the PresentationConnection object that
@@ -31,15 +31,15 @@ class ExistingPresentationConnectionCallbacks final
   ~ExistingPresentationConnectionCallbacks() override = default;
 
   // WebCallbacks implementation
-  void onSuccess(const WebPresentationSessionInfo&) override;
-  void onError(const WebPresentationError&) override;
+  void OnSuccess(const WebPresentationInfo&) override;
+  void OnError(const WebPresentationError&) override;
 
   // WebPresentationConnectionCallbacks implementation
-  WebPresentationConnection* getConnection() override;
+  WebPresentationConnection* GetConnection() override;
 
  private:
-  Persistent<ScriptPromiseResolver> m_resolver;
-  Persistent<PresentationConnection> m_connection;
+  Persistent<ScriptPromiseResolver> resolver_;
+  Persistent<PresentationConnection> connection_;
 
   WTF_MAKE_NONCOPYABLE(ExistingPresentationConnectionCallbacks);
 };

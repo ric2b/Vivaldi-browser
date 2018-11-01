@@ -54,6 +54,9 @@ std::string MakePrefName(const std::string& extension_id,
 
 namespace extensions {
 
+ExternalRegistryLoader::ExternalRegistryLoader()
+    : attempted_watching_registry_(false) {}
+
 void ExternalRegistryLoader::StartLoading() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   BrowserThread::PostTask(
@@ -187,20 +190,26 @@ ExternalRegistryLoader::LoadPrefsOnFileThread() {
 
 void ExternalRegistryLoader::LoadOnFileThread() {
   base::TimeTicks start_time = base::TimeTicks::Now();
-  prefs_ = LoadPrefsOnFileThread();
+  std::unique_ptr<base::DictionaryValue> prefs = LoadPrefsOnFileThread();
   LOCAL_HISTOGRAM_TIMES("Extensions.ExternalRegistryLoaderWin",
                         base::TimeTicks::Now() - start_time);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&ExternalRegistryLoader::CompleteLoadAndStartWatchingRegistry,
-                 this));
+                 this, base::Passed(&prefs)));
 }
 
-void ExternalRegistryLoader::CompleteLoadAndStartWatchingRegistry() {
+void ExternalRegistryLoader::CompleteLoadAndStartWatchingRegistry(
+    std::unique_ptr<base::DictionaryValue> prefs) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK(prefs);
+  prefs_ = std::move(prefs);
   LoadFinished();
 
-  // Start watching registry.
+  // Attempt to watch registry if we haven't already.
+  if (attempted_watching_registry_)
+    return;
+
   LONG result = ERROR_SUCCESS;
   if ((result = hklm_key_.Create(HKEY_LOCAL_MACHINE, kRegistryExtensions,
                                  KEY_NOTIFY | KEY_WOW64_32KEY)) ==
@@ -222,6 +231,8 @@ void ExternalRegistryLoader::CompleteLoadAndStartWatchingRegistry() {
   } else {
     LOG(WARNING) << "Error observing HKCU: " << result;
   }
+
+  attempted_watching_registry_ = true;
 }
 
 void ExternalRegistryLoader::OnRegistryKeyChanged(base::win::RegKey* key) {

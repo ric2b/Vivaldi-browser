@@ -4,55 +4,15 @@
 
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_mus.h"
 
+#include "ash/public/cpp/app_launch_id.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/ash/app_launcher_id.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/event_constants.h"
-
-class ChromeShelfItemDelegate : public ash::mojom::ShelfItemDelegate {
- public:
-  explicit ChromeShelfItemDelegate(const std::string& app_id,
-                                   ChromeLauncherController* controller)
-      : app_id_(app_id),
-        item_delegate_binding_(this),
-        controller_(controller) {}
-  ~ChromeShelfItemDelegate() override {}
-
-  ash::mojom::ShelfItemDelegateAssociatedPtrInfo
-  CreateInterfacePtrInfoAndBind() {
-    DCHECK(!item_delegate_binding_.is_bound());
-    ash::mojom::ShelfItemDelegateAssociatedPtrInfo ptr_info;
-    item_delegate_binding_.Bind(&ptr_info);
-    return ptr_info;
-  }
-
- private:
-  // ash::mojom::ShelfItemDelegate:
-  void LaunchItem() override {
-    controller_->LaunchApp(ash::AppLauncherId(app_id_),
-                           ash::LAUNCH_FROM_UNKNOWN, ui::EF_NONE);
-  }
-  void ExecuteCommand(uint32_t command_id, int event_flags) override {
-    NOTIMPLEMENTED();
-  }
-  void ItemPinned() override { NOTIMPLEMENTED(); }
-  void ItemUnpinned() override { NOTIMPLEMENTED(); }
-  void ItemReordered(uint32_t order) override { NOTIMPLEMENTED(); }
-
-  std::string app_id_;
-  mojo::AssociatedBinding<ash::mojom::ShelfItemDelegate> item_delegate_binding_;
-
-  // Not owned.
-  ChromeLauncherController* controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeShelfItemDelegate);
-};
 
 ChromeLauncherControllerMus::ChromeLauncherControllerMus() {
   AttachProfile(ProfileManager::GetActiveUserProfile());
@@ -61,8 +21,7 @@ ChromeLauncherControllerMus::ChromeLauncherControllerMus() {
 ChromeLauncherControllerMus::~ChromeLauncherControllerMus() {}
 
 ash::ShelfID ChromeLauncherControllerMus::CreateAppLauncherItem(
-    LauncherItemController* controller,
-    const std::string& app_id,
+    std::unique_ptr<ash::ShelfItemDelegate> item_delegate,
     ash::ShelfItemStatus status) {
   NOTIMPLEMENTED();
   return ash::TYPE_UNDEFINED;
@@ -84,21 +43,7 @@ void ChromeLauncherControllerMus::SetItemStatus(ash::ShelfID id,
   NOTIMPLEMENTED();
 }
 
-void ChromeLauncherControllerMus::SetItemController(
-    ash::ShelfID id,
-    LauncherItemController* controller) {
-  NOTIMPLEMENTED();
-}
-
 void ChromeLauncherControllerMus::CloseLauncherItem(ash::ShelfID id) {
-  NOTIMPLEMENTED();
-}
-
-void ChromeLauncherControllerMus::Pin(ash::ShelfID id) {
-  NOTIMPLEMENTED();
-}
-
-void ChromeLauncherControllerMus::Unpin(ash::ShelfID id) {
   NOTIMPLEMENTED();
 }
 
@@ -107,15 +52,8 @@ bool ChromeLauncherControllerMus::IsPinned(ash::ShelfID id) {
   return false;
 }
 
-void ChromeLauncherControllerMus::TogglePinned(ash::ShelfID id) {
-  NOTIMPLEMENTED();
-}
-
-void ChromeLauncherControllerMus::LockV1AppWithID(const std::string& app_id) {
-  NOTIMPLEMENTED();
-}
-
-void ChromeLauncherControllerMus::UnlockV1AppWithID(const std::string& app_id) {
+void ChromeLauncherControllerMus::SetV1AppStatus(const std::string& app_id,
+                                                 ash::ShelfItemStatus status) {
   NOTIMPLEMENTED();
 }
 
@@ -182,11 +120,10 @@ void ChromeLauncherControllerMus::AdditionalUserAddedToSession(
   NOTIMPLEMENTED();
 }
 
-ash::ShelfAppMenuItemList
-ChromeLauncherControllerMus::GetAppMenuItemsForTesting(
+ash::MenuItemList ChromeLauncherControllerMus::GetAppMenuItemsForTesting(
     const ash::ShelfItem& item) {
   NOTIMPLEMENTED();
-  return ash::ShelfAppMenuItemList();
+  return ash::MenuItemList();
 }
 
 std::vector<content::WebContents*>
@@ -232,12 +169,6 @@ ChromeLauncherControllerMus::GetBrowserShortcutLauncherItemController() {
   return nullptr;
 }
 
-LauncherItemController* ChromeLauncherControllerMus::GetLauncherItemController(
-    const ash::ShelfID id) {
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-
 bool ChromeLauncherControllerMus::ShelfBoundsChangesProbablyWithUser(
     ash::WmShelf* shelf,
     const AccountId& account_id) const {
@@ -274,29 +205,23 @@ void ChromeLauncherControllerMus::PinAppsFromPrefs() {
   if (!ConnectToShelfController())
     return;
 
-  std::vector<ash::AppLauncherId> pinned_apps =
+  std::vector<ash::AppLaunchId> pinned_apps =
       ash::launcher::GetPinnedAppsFromPrefs(profile()->GetPrefs(),
                                             launcher_controller_helper());
 
-  for (const auto& app_launcher_id : pinned_apps) {
-    const std::string app_id = app_launcher_id.app_id();
-    if (app_launcher_id.app_id() == ash::launcher::kPinnedAppsPlaceholder)
+  for (const auto& app_launch_id : pinned_apps) {
+    const std::string app_id = app_launch_id.app_id();
+    if (app_launch_id.app_id() == ash::launcher::kPinnedAppsPlaceholder)
       continue;
 
     ash::mojom::ShelfItemPtr item(ash::mojom::ShelfItem::New());
     item->app_id = app_id;
-    item->app_title = base::UTF16ToUTF8(
-        launcher_controller_helper()->GetAppTitle(profile(), app_id));
+    item->title = launcher_controller_helper()->GetAppTitle(profile(), app_id);
     ResourceBundle& rb = ResourceBundle::GetSharedInstance();
     const gfx::Image& image = rb.GetImageNamed(IDR_APP_DEFAULT_ICON);
     item->image = *image.ToSkBitmap();
-    std::unique_ptr<ChromeShelfItemDelegate> delegate(
-        new ChromeShelfItemDelegate(app_id, this));
-    shelf_controller()->PinItem(std::move(item),
-                                delegate->CreateInterfacePtrInfoAndBind());
-    app_id_to_item_delegate_.insert(
-        std::make_pair(app_id, std::move(delegate)));
-
+    // TOOD(msw): Actually pin the item and install its delegate; this code is
+    // unused at the moment. See http://crbug.com/647879
     AppIconLoader* app_icon_loader = GetAppIconLoaderForApp(app_id);
     if (app_icon_loader) {
       app_icon_loader->FetchImage(app_id);

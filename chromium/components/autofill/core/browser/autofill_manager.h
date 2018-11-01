@@ -43,8 +43,6 @@
 #define ENABLE_FORM_DEBUG_DUMP
 #endif
 
-class GURL;
-
 namespace gfx {
 class RectF;
 }
@@ -191,9 +189,9 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Will send an upload based on the |form_structure| data and the local
   // Autofill profile data. |observed_submission| is specified if the upload
   // follows an observed submission event.
-  void StartUploadProcess(std::unique_ptr<FormStructure> form_structure,
-                          const base::TimeTicks& timestamp,
-                          bool observed_submission);
+  virtual void StartUploadProcess(std::unique_ptr<FormStructure> form_structure,
+                                  const base::TimeTicks& timestamp,
+                                  bool observed_submission);
 
   // Update the pending form with |form|, possibly processing the current
   // pending form for upload.
@@ -268,6 +266,10 @@ class AutofillManager : public AutofillDownloadManager::Observer,
 
   std::vector<std::unique_ptr<FormStructure>>* form_structures() {
     return &form_structures_;
+  }
+
+  AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger() {
+    return form_interactions_ukm_logger_.get();
   }
 
   // Exposed for testing.
@@ -414,6 +416,9 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Parses the forms using heuristic matching and querying the Autofill server.
   void ParseForms(const std::vector<FormData>& forms);
 
+  // Parses the form and adds it to |form_structures_|.
+  bool ParseForm(const FormData& form, FormStructure** parsed_form_structure);
+
   // Imports the form data, submitted by the user, into |personal_data_|.
   void ImportFormData(const FormStructure& submitted_form);
 
@@ -507,6 +512,10 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Handles single-field autocomplete form data.
   std::unique_ptr<AutocompleteHistoryManager> autocomplete_history_manager_;
 
+  // Utility for logging URL keyed metrics.
+  std::unique_ptr<AutofillMetrics::FormInteractionsUkmLogger>
+      form_interactions_ukm_logger_;
+
   // Utilities for logging form events.
   std::unique_ptr<AutofillMetrics::FormEventLogger> address_form_event_logger_;
   std::unique_ptr<AutofillMetrics::FormEventLogger>
@@ -552,6 +561,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   payments::PaymentsClient::UploadRequestDetails upload_request_;
   bool user_did_accept_upload_prompt_;
   GURL pending_upload_request_url_;
+  bool should_cvc_be_requested_;
 
 #ifdef ENABLE_FORM_DEBUG_DUMP
   // The last few autofilled forms (key/value pairs) submitted, for debugging.
@@ -592,6 +602,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AddressSubmittedFormEvents);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AddressWillSubmitFormEvents);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AddressSuggestionsCount);
+  FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AutofillFormSubmittedState);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AutofillIsEnabledAtPageLoad);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, CreditCardSelectedFormEvents);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, CreditCardFilledFormEvents);

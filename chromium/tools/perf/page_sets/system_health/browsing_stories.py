@@ -131,10 +131,6 @@ class FlipboardMobileStory(_NewsBrowsingStory):
   ITEM_SCROLL_REPEAT = 4
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return possible_browser.platform.IsSvelte()  # crbug.com/668097
-
 
 class FlipboardDesktopStory(_NewsBrowsingStory):
   NAME = 'browse:news:flipboard'
@@ -145,7 +141,7 @@ class FlipboardDesktopStory(_NewsBrowsingStory):
 
 
 # crbug.com/657665 for win and mac
-@decorators.Disabled('win', 'yosemite', 'elcapitan')
+@decorators.Disabled('win', 'mac')
 class HackerNewsStory(_NewsBrowsingStory):
   NAME = 'browse:news:hackernews'
   URL = 'https://news.ycombinator.com'
@@ -214,7 +210,6 @@ class TwitterDesktopStory(_NewsBrowsingStory):
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
 
-@decorators.Disabled('all')  # crbug.com/688190
 class WashingtonPostMobileStory(_NewsBrowsingStory):
   """Progressive website"""
   NAME = 'browse:news:washingtonpost'
@@ -383,6 +378,8 @@ class ImgurMobileStory(_MediaBrowsingStory):
   IS_SINGLE_PAGE_APP = True
 
 
+# crbug.com/704197 for win and mac
+@decorators.Disabled('win', 'mac')
 class ImgurDesktopStory(_MediaBrowsingStory):
   NAME = 'browse:media:imgur'
   URL = 'http://imgur.com/gallery/5UlBN'

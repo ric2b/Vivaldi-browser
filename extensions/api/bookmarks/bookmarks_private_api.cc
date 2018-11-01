@@ -45,8 +45,8 @@ void VivaldiBookmarksAPI::Shutdown() {
   bookmark_model_->RemoveObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI> >::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*

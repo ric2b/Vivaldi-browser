@@ -14,6 +14,7 @@
 #include "content/browser/renderer_host/input/input_router_impl.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
+#include "content/public/common/content_features.h"
 #include "ipc/ipc_sender.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
@@ -126,23 +127,23 @@ Gestures BuildScrollSequence(size_t steps,
   Gestures gestures;
   const gfx::Vector2dF delta = ScaleVector2d(distance, 1.f / steps);
 
-  WebGestureEvent gesture(WebInputEvent::GestureScrollBegin,
-                          WebInputEvent::NoModifiers,
+  WebGestureEvent gesture(WebInputEvent::kGestureScrollBegin,
+                          WebInputEvent::kNoModifiers,
                           ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   gesture.x = origin.x();
   gesture.y = origin.y();
   gestures.push_back(gesture);
 
-  gesture.setType(WebInputEvent::GestureScrollUpdate);
-  gesture.data.scrollUpdate.deltaX = delta.x();
-  gesture.data.scrollUpdate.deltaY = delta.y();
+  gesture.SetType(WebInputEvent::kGestureScrollUpdate);
+  gesture.data.scroll_update.delta_x = delta.x();
+  gesture.data.scroll_update.delta_y = delta.y();
   for (size_t i = 0; i < steps; ++i) {
     gesture.x += delta.x();
     gesture.y += delta.y();
     gestures.push_back(gesture);
   }
 
-  gesture.setType(WebInputEvent::GestureScrollEnd);
+  gesture.SetType(WebInputEvent::kGestureScrollEnd);
   gestures.push_back(gesture);
   return gestures;
 }
@@ -154,29 +155,29 @@ Touches BuildTouchSequence(size_t steps,
   Touches touches;
   const gfx::Vector2dF delta = ScaleVector2d(distance, 1.f / steps);
 
-  WebTouchEvent touch(WebInputEvent::TouchStart, WebInputEvent::NoModifiers,
+  WebTouchEvent touch(WebInputEvent::kTouchStart, WebInputEvent::kNoModifiers,
                       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  touch.touchesLength = 1;
+  touch.touches_length = 1;
   touch.touches[0].id = 0;
-  touch.touches[0].state = WebTouchPoint::StatePressed;
+  touch.touches[0].state = WebTouchPoint::kStatePressed;
   touch.touches[0].position.x = origin.x();
   touch.touches[0].position.y = origin.y();
-  touch.touches[0].screenPosition.x = origin.x();
-  touch.touches[0].screenPosition.y = origin.y();
+  touch.touches[0].screen_position.x = origin.x();
+  touch.touches[0].screen_position.y = origin.y();
   touches.push_back(touch);
 
-  touch.setType(WebInputEvent::TouchMove);
-  touch.touches[0].state = WebTouchPoint::StateMoved;
+  touch.SetType(WebInputEvent::kTouchMove);
+  touch.touches[0].state = WebTouchPoint::kStateMoved;
   for (size_t i = 0; i < steps; ++i) {
     touch.touches[0].position.x += delta.x();
     touch.touches[0].position.y += delta.y();
-    touch.touches[0].screenPosition.x += delta.x();
-    touch.touches[0].screenPosition.y += delta.y();
+    touch.touches[0].screen_position.x += delta.x();
+    touch.touches[0].screen_position.y += delta.y();
     touches.push_back(touch);
   }
 
-  touch.setType(WebInputEvent::TouchEnd);
-  touch.touches[0].state = WebTouchPoint::StateReleased;
+  touch.SetType(WebInputEvent::kTouchEnd);
+  touch.touches[0].state = WebTouchPoint::kStateReleased;
   touches.push_back(touch);
   return touches;
 }
@@ -205,6 +206,12 @@ class InputEventTimer {
   base::TimeTicks start_;
   DISALLOW_COPY_AND_ASSIGN(InputEventTimer);
 };
+
+bool ShouldBlockEventStream(const blink::WebInputEvent& event) {
+  return ui::WebInputEventTraits::ShouldBlockEventStream(
+      event,
+      base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents));
+}
 
 }  // namespace
 
@@ -247,9 +254,9 @@ class InputRouterImplPerfTest : public testing::Test {
 
   void SendEventAckIfNecessary(const blink::WebInputEvent& event,
                                InputEventAckState ack_result) {
-    if (!ui::WebInputEventTraits::ShouldBlockEventStream(event))
+    if (!ShouldBlockEventStream(event))
       return;
-    InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD, event.type(),
+    InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD, event.GetType(),
                       ack_result);
     InputHostMsg_HandleInputEvent_ACK response(0, ack);
     input_router_->OnMessageReceived(response);

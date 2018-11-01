@@ -7,11 +7,16 @@
 
 #import <Foundation/Foundation.h>
 
+#import "chrome/browser/ui/cocoa/notifications/xpc_mach_port.h"
+
 // Collection of protocols used for XPC communication between chrome
 // and the alert notification xpc service.
 
 // Protocol for the XPC notification service.
 @protocol NotificationDelivery
+
+// Sets the Mach exception handler port to use for the XPCService.
+- (void)setMachExceptionPort:(CrXPCMachPort*)port;
 
 // |notificationData| is generated using a NofiticationBuilder object.
 - (void)deliverNotification:(NSDictionary*)notificationData;
@@ -22,6 +27,12 @@
 
 // Closes all the alerts being displayed.
 - (void)closeAllNotifications;
+
+// Will invoke |reply| with an array of NSString notification IDs for all alerts
+// for |profileId| and |incognito| value currently displayed.
+- (void)getDisplayedAlertsForProfileId:(NSString*)profileId
+                          andIncognito:(BOOL)incognito
+                             withReply:(void (^)(NSArray*))reply;
 @end
 
 // Response protocol for the XPC notification service to notify Chrome of

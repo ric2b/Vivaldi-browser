@@ -5,55 +5,71 @@
 #include "ios/web/web_state/navigation_context_impl.h"
 
 #import "ios/web/public/test/fakes/test_web_state.h"
+#include "net/http/http_response_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
 namespace web {
+namespace {
+const char kRawResponseHeaders[] =
+    "HTTP/1.1 200 OK\0"
+    "Content-Length: 450\0"
+    "Connection: keep-alive\0";
+}  // namespace
 
 // Test fixture for NavigationContextImplTest testing.
 class NavigationContextImplTest : public PlatformTest {
  protected:
-  NavigationContextImplTest() : url_("https://chromium.test") {}
+  NavigationContextImplTest()
+      : url_("https://chromium.test"),
+        response_headers_(new net::HttpResponseHeaders(
+            std::string(kRawResponseHeaders, sizeof(kRawResponseHeaders)))) {}
 
   TestWebState web_state_;
   GURL url_;
+  scoped_refptr<net::HttpResponseHeaders> response_headers_;
 };
 
 // Tests CreateNavigationContext factory method.
 TEST_F(NavigationContextImplTest, NavigationContext) {
   std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateNavigationContext(&web_state_, url_);
+      NavigationContextImpl::CreateNavigationContext(&web_state_, url_,
+                                                     response_headers_);
   ASSERT_TRUE(context);
 
   EXPECT_EQ(&web_state_, context->GetWebState());
   EXPECT_EQ(url_, context->GetUrl());
-  EXPECT_FALSE(context->IsSamePage());
+  EXPECT_FALSE(context->IsSameDocument());
   EXPECT_FALSE(context->IsErrorPage());
+  EXPECT_EQ(response_headers_.get(), context->GetResponseHeaders());
 }
 
-// Tests CreateSamePageNavigationContext factory method.
-TEST_F(NavigationContextImplTest, SamePageNavigationContext) {
+// Tests CreateSameDocumentNavigationContext factory method.
+TEST_F(NavigationContextImplTest, SameDocumentNavigationContext) {
   std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateSamePageNavigationContext(&web_state_, url_);
+      NavigationContextImpl::CreateSameDocumentNavigationContext(&web_state_,
+                                                                 url_);
   ASSERT_TRUE(context);
 
   EXPECT_EQ(&web_state_, context->GetWebState());
   EXPECT_EQ(url_, context->GetUrl());
-  EXPECT_TRUE(context->IsSamePage());
+  EXPECT_TRUE(context->IsSameDocument());
   EXPECT_FALSE(context->IsErrorPage());
+  EXPECT_FALSE(context->GetResponseHeaders());
 }
 
 // Tests CreateErrorPageNavigationContext factory method.
 TEST_F(NavigationContextImplTest, ErrorPageNavigationContext) {
   std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateErrorPageNavigationContext(&web_state_,
-                                                              url_);
+      NavigationContextImpl::CreateErrorPageNavigationContext(
+          &web_state_, url_, response_headers_);
   ASSERT_TRUE(context);
 
   EXPECT_EQ(&web_state_, context->GetWebState());
   EXPECT_EQ(url_, context->GetUrl());
-  EXPECT_FALSE(context->IsSamePage());
+  EXPECT_FALSE(context->IsSameDocument());
   EXPECT_TRUE(context->IsErrorPage());
+  EXPECT_EQ(response_headers_.get(), context->GetResponseHeaders());
 }
 
 }  // namespace web

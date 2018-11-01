@@ -20,10 +20,10 @@ namespace extensions {
 
 namespace {
 
-base::LazyInstance<WorkerThreadDispatcher> g_instance =
+base::LazyInstance<WorkerThreadDispatcher>::DestructorAtExit g_instance =
     LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<base::ThreadLocalPointer<extensions::ServiceWorkerData>>
-    g_data_tls = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ThreadLocalPointer<extensions::ServiceWorkerData>>::
+    DestructorAtExit g_data_tls = LAZY_INSTANCE_INITIALIZER;
 
 void OnResponseOnWorkerThread(int request_id,
                               bool succeeded,
@@ -47,7 +47,8 @@ ServiceWorkerData* GetServiceWorkerData() {
 
 // Handler for sending IPCs with native extension bindings.
 void SendRequestIPC(ScriptContext* context,
-                    const ExtensionHostMsg_Request_Params& params) {
+                    const ExtensionHostMsg_Request_Params& params,
+                    binding::RequestThread thread) {
   // TODO(devlin): This won't handle incrementing/decrementing service worker
   // lifetime.
   WorkerThreadDispatcher::Get()->Send(
@@ -56,7 +57,9 @@ void SendRequestIPC(ScriptContext* context,
 
 void SendEventListenersIPC(binding::EventListenersChanged changed,
                            ScriptContext* context,
-                           const std::string& event_name) {
+                           const std::string& event_name,
+                           const base::DictionaryValue* filter,
+                           bool was_manual) {
   // TODO(devlin/lazyboy): Wire this up once extension workers support events.
 }
 

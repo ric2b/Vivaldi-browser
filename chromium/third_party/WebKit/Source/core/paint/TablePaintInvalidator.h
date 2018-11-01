@@ -6,7 +6,7 @@
 #define TablePaintInvalidator_h
 
 #include "platform/graphics/PaintInvalidationReason.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -19,13 +19,13 @@ class TablePaintInvalidator {
  public:
   TablePaintInvalidator(const LayoutTable& table,
                         const PaintInvalidatorContext& context)
-      : m_table(table), m_context(context) {}
+      : table_(table), context_(context) {}
 
-  PaintInvalidationReason invalidatePaintIfNeeded();
+  PaintInvalidationReason InvalidatePaintIfNeeded();
 
  private:
-  const LayoutTable& m_table;
-  const PaintInvalidatorContext& m_context;
+  const LayoutTable& table_;
+  const PaintInvalidatorContext& context_;
 };
 
 }  // namespace blink

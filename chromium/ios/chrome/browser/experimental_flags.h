@@ -76,17 +76,11 @@ bool IsPasswordGenerationEnabled();
 // Whether the Payment Request API is enabled or not.
 bool IsPaymentRequestEnabled();
 
-// Whether the back-forward navigation uses pending index.
-bool IsPendingIndexNavigationEnabled();
-
 // Whether the Physical Web feature is enabled.
 bool IsPhysicalWebEnabled();
 
 // Whether reader mode is enabled.
 bool IsReaderModeEnabled();
-
-// Whether the reading list is enabled.
-bool IsReadingListEnabled();
 
 // Whether the Sign In Flow via SFSafariViewController is enabled.
 bool IsSafariVCSignInEnabled();
@@ -106,6 +100,9 @@ bool UseOnlyLocalHeuristicsForPasswordGeneration();
 
 // Whether the Suggestions UI is enabled.
 bool IsSuggestionsUIEnabled();
+
+// Wether Sign-in promo is enabled.
+bool IsSigninPromoEnabled();
 
 }  // namespace experimental_flags
 

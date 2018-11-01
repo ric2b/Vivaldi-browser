@@ -45,8 +45,8 @@ namespace views {
 
 namespace {
 
-gfx::Size GetExpandedWindowSize(DWORD window_style, gfx::Size size) {
-  if (!(window_style & WS_EX_COMPOSITED) || !ui::win::IsAeroGlassEnabled())
+gfx::Size GetExpandedWindowSize(bool is_translucent, gfx::Size size) {
+  if (!is_translucent || !ui::win::IsAeroGlassEnabled())
     return size;
 
   // Some AMD drivers can't display windows that are less than 64x64 pixels,
@@ -224,8 +224,8 @@ bool DesktopWindowTreeHostWin::IsVisible() const {
 void DesktopWindowTreeHostWin::SetSize(const gfx::Size& size) {
   gfx::Size size_in_pixels = display::win::ScreenWin::DIPToScreenSize(GetHWND(),
                                                                       size);
-  gfx::Size expanded = GetExpandedWindowSize(
-      message_handler_->window_ex_style(), size_in_pixels);
+  gfx::Size expanded =
+      GetExpandedWindowSize(message_handler_->is_translucent(), size_in_pixels);
   window_enlargement_ =
       gfx::Vector2d(expanded.width() - size_in_pixels.width(),
                     expanded.height() - size_in_pixels.height());
@@ -246,8 +246,8 @@ void DesktopWindowTreeHostWin::CenterWindow(const gfx::Size& size) {
   gfx::Size size_in_pixels = display::win::ScreenWin::DIPToScreenSize(GetHWND(),
                                                                       size);
   gfx::Size expanded_size;
-  expanded_size = GetExpandedWindowSize(message_handler_->window_ex_style(),
-                                        size_in_pixels);
+  expanded_size =
+      GetExpandedWindowSize(message_handler_->is_translucent(), size_in_pixels);
   window_enlargement_ =
       gfx::Vector2d(expanded_size.width() - size_in_pixels.width(),
                     expanded_size.height() - size_in_pixels.height());
@@ -539,7 +539,7 @@ void DesktopWindowTreeHostWin::SetBoundsInPixels(const gfx::Rect& bounds) {
 
   gfx::Rect new_expanded(
       expanded.origin(),
-      GetExpandedWindowSize(message_handler_->window_ex_style(),
+      GetExpandedWindowSize(message_handler_->is_translucent(),
                             expanded.size()));
   window_enlargement_ =
       gfx::Vector2d(new_expanded.width() - expanded.width(),
@@ -832,7 +832,7 @@ void DesktopWindowTreeHostWin::HandleNativeBlur(HWND focused_window) {
 }
 
 bool DesktopWindowTreeHostWin::HandleMouseEvent(const ui::MouseEvent& event) {
-  SendEventToProcessor(const_cast<ui::MouseEvent*>(&event));
+  SendEventToSink(const_cast<ui::MouseEvent*>(&event));
   return event.handled();
 }
 
@@ -862,11 +862,11 @@ void DesktopWindowTreeHostWin::HandleTouchEvent(
                                   static_cast<View*>(NULL));
       target_event.set_location(gfx::Point(target_location));
       target_event.set_root_location(target_event.location());
-      target->SendEventToProcessor(&target_event);
+      target->SendEventToSink(&target_event);
       return;
     }
   }
-  SendEventToProcessor(const_cast<ui::TouchEvent*>(&event));
+  SendEventToSink(const_cast<ui::TouchEvent*>(&event));
 }
 
 bool DesktopWindowTreeHostWin::HandleIMEMessage(UINT message,
@@ -922,7 +922,7 @@ void DesktopWindowTreeHostWin::PostHandleMSG(UINT message,
 
 bool DesktopWindowTreeHostWin::HandleScrollEvent(
     const ui::ScrollEvent& event) {
-  SendEventToProcessor(const_cast<ui::ScrollEvent*>(&event));
+  SendEventToSink(const_cast<ui::ScrollEvent*>(&event));
   return event.handled();
 }
 

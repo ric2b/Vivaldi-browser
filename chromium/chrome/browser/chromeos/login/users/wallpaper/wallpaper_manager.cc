@@ -6,15 +6,16 @@
 
 #include <utility>
 
-#include "ash/common/ash_constants.h"
-#include "ash/common/wallpaper/wallpaper_controller.h"
-#include "ash/common/wm_shell.h"
+#include "ash/ash_constants.h"
 #include "ash/public/interfaces/constants.mojom.h"
+#include "ash/shell.h"
+#include "ash/wallpaper/wallpaper_controller.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/sha1.h"
@@ -210,11 +211,10 @@ void SetWallpaper(const gfx::ImageSkia& image,
     // TODO(crbug.com/655875): Optimize ash wallpaper transport; avoid sending
     // large bitmaps over Mojo; use shared memory like BitmapUploader, etc.
     wallpaper_controller->SetWallpaper(*image.bitmap(), layout);
-  } else if (ash::WmShell::HasInstance()) {
+  } else if (ash::Shell::HasInstance()) {
     // Note: Wallpaper setting is skipped in unit tests without shell instances.
     // In classic ash, interact with the WallpaperController class directly.
-    ash::WmShell::Get()->wallpaper_controller()->SetWallpaperImage(image,
-                                                                   layout);
+    ash::Shell::Get()->wallpaper_controller()->SetWallpaperImage(image, layout);
   }
 }
 
@@ -473,7 +473,7 @@ void WallpaperManager::InitializeWallpaper() {
   // Zero delays is also set in autotests.
   if (WizardController::IsZeroDelayEnabled()) {
     // Ensure tests have some sort of wallpaper.
-    ash::WmShell::Get()->wallpaper_controller()->CreateEmptyWallpaper();
+    ash::Shell::Get()->wallpaper_controller()->CreateEmptyWallpaper();
     return;
   }
 
@@ -714,14 +714,14 @@ void WallpaperManager::SetUserWallpaperInfo(const AccountId& account_id,
   DictionaryPrefUpdate wallpaper_update(local_state,
                                         wallpaper::kUsersWallpaperInfo);
 
-  base::DictionaryValue* wallpaper_info_dict = new base::DictionaryValue();
+  auto wallpaper_info_dict = base::MakeUnique<base::DictionaryValue>();
   wallpaper_info_dict->SetString(kNewWallpaperDateNodeName,
       base::Int64ToString(info.date.ToInternalValue()));
   wallpaper_info_dict->SetString(kNewWallpaperLocationNodeName, info.location);
   wallpaper_info_dict->SetInteger(kNewWallpaperLayoutNodeName, info.layout);
   wallpaper_info_dict->SetInteger(kNewWallpaperTypeNodeName, info.type);
   wallpaper_update->SetWithoutPathExpansion(account_id.GetUserEmail(),
-                                            wallpaper_info_dict);
+                                            std::move(wallpaper_info_dict));
 }
 
 void WallpaperManager::ScheduleSetUserWallpaper(const AccountId& account_id,
@@ -1349,7 +1349,7 @@ void WallpaperManager::SetDefaultWallpaperPath(
   default_large_wallpaper_file_ = default_large_wallpaper_file;
 
   ash::WallpaperController* controller =
-      ash::WmShell::Get()->wallpaper_controller();
+      ash::Shell::Get()->wallpaper_controller();
 
   // |need_update_screen| is true if the previous default wallpaper is visible
   // now, so we need to update wallpaper on the screen.

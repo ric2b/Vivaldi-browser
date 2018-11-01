@@ -79,7 +79,8 @@ static bool LoadMediaFoundationDlls() {
 static bool PrepareVideoCaptureAttributesMediaFoundation(
     IMFAttributes** attributes,
     int count) {
-  InitializeMediaFoundation();
+  if (!InitializeMediaFoundation())
+    return false;
 
   if (FAILED(MFCreateAttributes(attributes, count)))
     return false;
@@ -167,7 +168,7 @@ static void GetDeviceDescriptorsDirectShow(Descriptors* device_descriptors) {
   // Enumerate all video capture devices.
   for (ScopedComPtr<IMoniker> moniker;
        enum_moniker->Next(1, moniker.Receive(), NULL) == S_OK;
-       moniker.Release()) {
+       moniker.Reset()) {
     ScopedComPtr<IPropertyBag> prop_bag;
     hr = moniker->BindToStorage(0, 0, IID_IPropertyBag, prop_bag.ReceiveVoid());
     if (FAILED(hr))
@@ -379,7 +380,7 @@ static void GetDeviceSupportedFormatsMediaFoundation(
     }
     VideoCaptureDeviceMFWin::FormatFromGuid(type_guid,
                                             &capture_format.pixel_format);
-    type.Release();
+    type.Reset();
     ++stream_index;
     if (capture_format.pixel_format == PIXEL_FORMAT_UNKNOWN)
       continue;

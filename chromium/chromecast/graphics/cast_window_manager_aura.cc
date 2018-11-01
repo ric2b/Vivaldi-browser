@@ -211,10 +211,6 @@ void CastWindowManagerAura::Setup() {
   capture_client_.reset(
       new aura::client::DefaultCaptureClient(window_tree_host_->window()));
 
-  CastVSyncSettings::GetInstance()->AddObserver(this);
-  window_tree_host_->compositor()->SetAuthoritativeVSyncInterval(
-      CastVSyncSettings::GetInstance()->GetVSyncInterval());
-
   window_tree_host_->Show();
 }
 
@@ -222,7 +218,6 @@ void CastWindowManagerAura::TearDown() {
   if (!window_tree_host_) {
     return;
   }
-  CastVSyncSettings::GetInstance()->RemoveObserver(this);
   capture_client_.reset();
   aura::client::SetWindowParentingClient(window_tree_host_->window(), nullptr);
   aura::client::SetActivationClient(window_tree_host_->window(), nullptr);
@@ -241,8 +236,7 @@ gfx::NativeView CastWindowManagerAura::GetRootWindow() {
   return window_tree_host_->window();
 }
 
-aura::Window* CastWindowManagerAura::GetDefaultParent(aura::Window* context,
-                                                      aura::Window* window,
+aura::Window* CastWindowManagerAura::GetDefaultParent(aura::Window* window,
                                                       const gfx::Rect& bounds) {
   DCHECK(window_tree_host_);
   return window_tree_host_->window();
@@ -257,11 +251,6 @@ void CastWindowManagerAura::AddWindow(gfx::NativeView child) {
   if (!parent->Contains(child)) {
     parent->AddChild(child);
   }
-}
-
-void CastWindowManagerAura::OnVSyncIntervalChanged(base::TimeDelta interval) {
-  DCHECK(window_tree_host_.get());
-  window_tree_host_->compositor()->SetAuthoritativeVSyncInterval(interval);
 }
 
 }  // namespace chromecast

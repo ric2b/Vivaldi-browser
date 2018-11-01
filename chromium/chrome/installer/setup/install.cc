@@ -22,6 +22,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/shortcut.h"
 #include "chrome/install_static/install_details.h"
+#include "chrome/install_static/install_util.h"
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_crash_reporting.h"
 #include "chrome/installer/setup/installer_state.h"
@@ -620,27 +621,29 @@ InstallStatus InstallOrUpdateProduct(
           installer::GetRunningProcessesForPath(
               installer_state.target_path().Append(
                   installer::kVivaldiUpdateNotifierOldExe)));
-      base::string16 event_path(L"Global\\Vivaldi/Update_notifier/Restart/");
+      base::string16 quit_event_path(L"Global\\Vivaldi/Update_notifier/Quit/");
       base::string16 normalized_path =
           installer_state.target_path().NormalizePathSeparatorsTo(L'/').value();
       // See
       // https://web.archive.org/web/20130528052217/http://blogs.msdn.com/b/michkap/archive/2005/10/17/481600.aspx
       CharUpper(&normalized_path[0]);
-      event_path += normalized_path;
+      quit_event_path += normalized_path;
       installer_state.target_path().NormalizePathSeparatorsTo(L'/').value();
-      base::win::ScopedHandle restart_event(
-          OpenEvent(EVENT_MODIFY_STATE, FALSE, event_path.c_str()));
-      SetEvent(restart_event.Get());
+      base::win::ScopedHandle quit_event(
+          OpenEvent(EVENT_MODIFY_STATE, FALSE, quit_event_path.c_str()));
+      SetEvent(quit_event.Get());
       // This is hopefully enough time for all running notifiers to be notified.
       Sleep(1000);
-      ResetEvent(restart_event.Get());
+      ResetEvent(quit_event.Get());
       // Kill any remaining notifier
       installer::KillProcesses(update_notifier_processes);
       base::DeleteFile(installer_state.target_path().Append(
                            installer::kVivaldiUpdateNotifierOldExe),
                        false);
     }
-
+    // For Vivaldi, do not clean up old versions here. The old setup.exe is used
+    // when delta patching itself. The cleanup is done in setup_main.cc.
+    if (!installer_state.is_vivaldi()) {
     // Delete files that belong to old versions of Chrome. If that fails during
     // a not-in-use update, launch a --delete-old-version process. If this is an
     // in-use update, a --delete-old-versions process will be launched when
@@ -653,6 +656,7 @@ InstallStatus InstallOrUpdateProduct(
           installer_state.GetInstallerDirectory(new_version)
               .Append(setup_path.BaseName());
       LaunchDeleteOldVersionsProcess(new_version_setup_path, installer_state);
+    }
     }
   }
 
@@ -670,6 +674,15 @@ void LaunchDeleteOldVersionsProcess(const base::FilePath& setup_path,
   // Unconditionally enable verbose logging for now to make diagnosing potential
   // failures possible.
   command_line.AppendSwitch(switches::kVerboseLogging);
+
+  // For Vivaldi we need to append the supplied install dir.
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  if (cmd_line.HasSwitch(switches::kVivaldiInstallDir)) {
+    base::FilePath vivaldi_install_dir =
+        cmd_line.GetSwitchValuePath(switches::kVivaldiInstallDir);
+    command_line.AppendSwitchPath(switches::kVivaldiInstallDir,
+                                  vivaldi_install_dir);
+  }
 
   base::LaunchOptions launch_options;
   launch_options.start_hidden = true;
@@ -732,7 +745,7 @@ void HandleOsUpgradeForBrowser(const installer::InstallerState& installer_state,
     UpdateDefaultBrowserBeaconForPath(chrome_exe);
   } else {
     UpdateActiveSetupVersionWorkItem active_setup_work_item(
-        InstallUtil::GetActiveSetupPath(chrome.distribution()),
+        install_static::GetActiveSetupPath(),
         UpdateActiveSetupVersionWorkItem::
             UPDATE_AND_BUMP_OS_UPGRADES_COMPONENT);
     if (active_setup_work_item.Do())

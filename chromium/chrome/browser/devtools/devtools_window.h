@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_DEVTOOLS_DEVTOOLS_WINDOW_H_
 #define CHROME_BROWSER_DEVTOOLS_DEVTOOLS_WINDOW_H_
 
+#include "base/memory/ref_counted.h"
 #include "base/macros.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
@@ -25,6 +26,10 @@ class RenderFrameHost;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
+}
+
+namespace extensions {
+class DevtoolsConnectorItem;
 }
 
 class DevToolsWindow : public DevToolsUIBindings::Delegate,
@@ -97,14 +102,6 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   static void ToggleDevToolsWindow(
       Browser* browser,
       const DevToolsToggleAction& action);
-
-  // External frontend is always undocked.
-  static void OpenExternalFrontend(
-      Profile* profile,
-      const std::string& frontend_uri,
-      const scoped_refptr<content::DevToolsAgentHost>& agent_host,
-      bool is_worker,
-      bool is_v8_only);
 
   // Node frontend is always undocked.
   static void OpenNodeFrontendWindow(Profile* profile);
@@ -212,9 +209,20 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   content::WebContents* GetInspectedWebContents();
 
+  // Vivaldi methods:
+  bool IsClosing() { return life_stage_ == kClosing; }
+  // Given the inspected web contents, returns the main web contents used
+  // to host devtools.
+  static content::WebContents* GetDevtoolsWebContentsForInspectedWebContents(
+    content::WebContents* inspected_web_contents);
+  void ForceCloseWindow();
+
  private:
   friend class DevToolsWindowTesting;
   friend class DevToolsWindowCreationObserver;
+
+  // Vivaldi:
+  friend class DevtoolsConnectorItem;
 
   using CreationCallback = base::Callback<void(DevToolsWindow*)>;
   static void AddCreationCallbackForTest(const CreationCallback& callback);
@@ -245,28 +253,37 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
     kClosing
   };
 
+  enum FrontendType {
+    kFrontendDefault,
+    kFrontendRemote,
+    kFrontendWorker,
+    kFrontendV8,
+    kFrontendNode
+  };
+
   DevToolsWindow(Profile* profile,
                  content::WebContents* main_web_contents,
                  DevToolsUIBindings* bindings,
                  content::WebContents* inspected_web_contents,
                  bool can_dock);
 
+  // External frontend is always undocked.
+  static void OpenExternalFrontend(
+      Profile* profile,
+      const std::string& frontend_uri,
+      const scoped_refptr<content::DevToolsAgentHost>& agent_host,
+      FrontendType frontend_type);
+
   static DevToolsWindow* Create(Profile* profile,
-                                const GURL& frontend_url,
                                 content::WebContents* inspected_web_contents,
-                                bool shared_worker_frontend,
-                                bool v8_only_frontend,
-                                bool node_frontend,
-                                const std::string& remote_frontend,
+                                FrontendType frontend_type,
+                                const std::string& frontend_url,
                                 bool can_dock,
                                 const std::string& settings,
                                 const std::string& panel);
   static GURL GetDevToolsURL(Profile* profile,
-                             const GURL& base_url,
-                             bool shared_worker_frontend,
-                             bool v8_only_frontend,
-                             bool node_frontend,
-                             const std::string& remote_frontend,
+                             FrontendType frontend_type,
+                             const std::string& frontend_url,
                              bool can_dock,
                              const std::string& panel);
 
@@ -296,9 +313,9 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   void BeforeUnloadFired(content::WebContents* tab,
                          bool proceed,
                          bool* proceed_to_fire_unload) override;
-  bool PreHandleKeyboardEvent(content::WebContents* source,
-                              const content::NativeWebKeyboardEvent& event,
-                              bool* is_keyboard_shortcut) override;
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
   void HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
@@ -341,6 +358,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   void UpdateBrowserToolbar();
   void UpdateBrowserWindow();
 
+  void CreateDevToolsBrowserForVivaldi();
+
   std::unique_ptr<ObserverWithAccessor> inspected_contents_observer_;
 
   Profile* profile_;
@@ -364,6 +383,9 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   base::TimeTicks inspect_element_start_time_;
   std::unique_ptr<DevToolsEventForwarder> event_forwarder_;
+
+  // Vivaldi:
+  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
 
   friend class DevToolsEventForwarder;
   DISALLOW_COPY_AND_ASSIGN(DevToolsWindow);

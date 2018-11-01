@@ -8,7 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/custom/CustomElementReaction.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -22,7 +22,7 @@ class CORE_EXPORT CustomElementUpgradeReaction final
   CustomElementUpgradeReaction(CustomElementDefinition*);
 
  private:
-  void invoke(Element*) override;
+  void Invoke(Element*) override;
 };
 
 }  // namespace blink

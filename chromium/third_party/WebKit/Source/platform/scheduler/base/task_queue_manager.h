@@ -125,7 +125,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
   void SetObserver(Observer* observer);
 
   // Returns the delegate used by the TaskQueueManager.
-  const scoped_refptr<TaskQueueManagerDelegate>& delegate() const;
+  const scoped_refptr<TaskQueueManagerDelegate>& Delegate() const;
 
   // Time domains must be registered for the task queues to get updated.
   void RegisterTimeDomain(TimeDomain* time_domain);
@@ -180,7 +180,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
       DCHECK(time_domain);
     }
 
-    base::TimeDelta delay() const { return delay_; }
+    base::TimeDelta Delay() const { return delay_; }
     TimeDomain* time_domain() const { return time_domain_; }
 
     bool operator>(const NextTaskDelay& other) const {
@@ -252,7 +252,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
 
   // Delayed Tasks with run_times <= Now() are enqueued onto the work queue and
   // reloads any empty work queues.
-  void WakeupReadyDelayedQueues(LazyNow* lazy_now);
+  void WakeUpReadyDelayedQueues(LazyNow* lazy_now);
 
   // Chooses the next work queue to service. Returns true if |out_queue|
   // indicates the queue from which the next task should be run, false to

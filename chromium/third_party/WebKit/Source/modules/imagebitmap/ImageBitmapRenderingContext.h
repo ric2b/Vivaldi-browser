@@ -8,11 +8,12 @@
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
 #include "modules/ModulesExport.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class ImageBitmap;
+class ImageLayerBridge;
 
 class MODULES_EXPORT ImageBitmapRenderingContext final
     : public CanvasRenderingContext {
@@ -26,37 +27,37 @@ class MODULES_EXPORT ImageBitmapRenderingContext final
     Factory() {}
     ~Factory() override {}
 
-    CanvasRenderingContext* create(HTMLCanvasElement*,
+    CanvasRenderingContext* Create(HTMLCanvasElement*,
                                    const CanvasContextCreationAttributes&,
                                    Document&) override;
-    CanvasRenderingContext::ContextType getContextType() const override {
-      return CanvasRenderingContext::ContextImageBitmap;
+    CanvasRenderingContext::ContextType GetContextType() const override {
+      return CanvasRenderingContext::kContextImageBitmap;
     }
   };
+
+  DECLARE_TRACE();
 
   // Script API
   void transferFromImageBitmap(ImageBitmap*, ExceptionState&);
 
   // CanvasRenderingContext implementation
-  ContextType getContextType() const override {
-    return CanvasRenderingContext::ContextImageBitmap;
+  ContextType GetContextType() const override {
+    return CanvasRenderingContext::kContextImageBitmap;
   }
-  void setIsHidden(bool) override {}
+  void SetIsHidden(bool) override {}
   bool isContextLost() const override { return false; }
-  bool paint(GraphicsContext&, const IntRect&) override;
-  void setCanvasGetContextResult(RenderingContext&) final;
-  PassRefPtr<Image> getImage(AccelerationHint, SnapshotReason) const final {
-    return m_image.get();
-  }
+  void SetCanvasGetContextResult(RenderingContext&) final;
+  PassRefPtr<Image> GetImage(AccelerationHint, SnapshotReason) const final;
+  bool IsComposited() const final { return true; }
+  bool IsAccelerated() const final;
 
-  // TODO(junov): Implement GPU accelerated rendering using a layer bridge
-  WebLayer* platformLayer() const override { return nullptr; }
+  WebLayer* PlatformLayer() const final;
   // TODO(junov): handle lost contexts when content is GPU-backed
-  void loseContext(LostContextMode) override {}
+  void LoseContext(LostContextMode) override {}
 
-  void stop() override;
+  void Stop() override;
 
-  bool isPaintable() const final { return m_image.get(); }
+  bool IsPaintable() const final;
 
   virtual ~ImageBitmapRenderingContext();
 
@@ -65,16 +66,16 @@ class MODULES_EXPORT ImageBitmapRenderingContext final
                               const CanvasContextCreationAttributes&,
                               Document&);
 
-  RefPtr<Image> m_image;
+  Member<ImageLayerBridge> image_layer_bridge_;
 };
 
 DEFINE_TYPE_CASTS(ImageBitmapRenderingContext,
                   CanvasRenderingContext,
                   context,
-                  context->getContextType() ==
-                      CanvasRenderingContext::ContextImageBitmap,
-                  context.getContextType() ==
-                      CanvasRenderingContext::ContextImageBitmap);
+                  context->GetContextType() ==
+                      CanvasRenderingContext::kContextImageBitmap,
+                  context.GetContextType() ==
+                      CanvasRenderingContext::kContextImageBitmap);
 
 }  // blink
 

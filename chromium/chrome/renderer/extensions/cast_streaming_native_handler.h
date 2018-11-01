@@ -19,7 +19,6 @@ class CastUdpTransport;
 namespace base {
 class DictionaryValue;
 class Value;
-using BinaryValue = Value;
 }
 
 namespace net {
@@ -36,11 +35,13 @@ struct FrameReceiverConfig;
 }
 
 namespace extensions {
+class ExtensionBindingsSystem;
 
 // Native code that handle chrome.webrtc custom bindings.
 class CastStreamingNativeHandler : public ObjectBackedNativeHandler {
  public:
-  explicit CastStreamingNativeHandler(ScriptContext* context);
+  CastStreamingNativeHandler(ScriptContext* context,
+                             ExtensionBindingsSystem* bindings_system);
   ~CastStreamingNativeHandler() override;
 
  protected:
@@ -104,7 +105,7 @@ class CastStreamingNativeHandler : public ObjectBackedNativeHandler {
       const std::string& error_message);
 
   void CallGetRawEventsCallback(int transport_id,
-                                std::unique_ptr<base::BinaryValue> raw_events);
+                                std::unique_ptr<base::Value> raw_events);
   void CallGetStatsCallback(int transport_id,
                             std::unique_ptr<base::DictionaryValue> stats);
 
@@ -139,6 +140,8 @@ class CastStreamingNativeHandler : public ObjectBackedNativeHandler {
   using RtpStreamCallbackMap = std::map<int, v8::Global<v8::Function>>;
   RtpStreamCallbackMap get_raw_events_callbacks_;
   RtpStreamCallbackMap get_stats_callbacks_;
+
+  ExtensionBindingsSystem* bindings_system_;
 
   base::WeakPtrFactory<CastStreamingNativeHandler> weak_factory_;
 

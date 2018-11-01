@@ -10,7 +10,6 @@
 #include <set>
 #include <vector>
 
-#include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "media/base/demuxer_stream.h"
@@ -93,25 +92,30 @@ std::vector<PipelineStatus> StatusQueue::Deserialize(
   return result;
 }
 
-// Maps DemuxerStream instances to decoding mode.
-base::LazyInstance<std::map<const DemuxerStream*, PlatformMediaDecodingMode>>
-    g_pipeline_streams = LAZY_INSTANCE_INITIALIZER;
+class StatsGlobalState {
+public:
+    static StatsGlobalState * GetInstance() {
+        static StatsGlobalState * instance = new StatsGlobalState();
+        return instance;
+    }
 
-// A registry of decoder class names.
-base::LazyInstance<std::set<std::string>> g_decoder_class_names =
-    LAZY_INSTANCE_INITIALIZER;
+    // Maps DemuxerStream instances to decoding mode.
+    std::map<const DemuxerStream*, PlatformMediaDecodingMode> g_pipeline_streams;
 
-// DemuxerStream instances associated with decoders (rather than the whole
-// pipeline).
-base::LazyInstance<std::set<const DemuxerStream*>> g_decoder_streams =
-    LAZY_INSTANCE_INITIALIZER;
+    // A registry of decoder class names.
+    std::set<std::string> g_decoder_class_names;
 
-// A queue of PipelineStatus values.  Used in a child process to collect stats
-// before sending them to the browser process.
-base::LazyInstance<StatusQueue> g_status_queue = LAZY_INSTANCE_INITIALIZER;
+    // DemuxerStream instances associated with decoders (rather than the whole
+    // pipeline).
+    std::set<const DemuxerStream*> g_decoder_streams;
+
+    // A queue of PipelineStatus values.  Used in a child process to collect stats
+    // before sending them to the browser process.
+    StatusQueue g_status_queue;
+};
 
 void Enqueue(PipelineStatus status) {
-  g_status_queue.Get().Push(status);
+  StatsGlobalState::GetInstance()->g_status_queue.Push(status);
 }
 
 void ReportDecoderStreamError(const DemuxerStream* stream) {
@@ -189,47 +193,47 @@ void ReportVideoDecoderInitResult(bool success) {
 
 void AddStream(const DemuxerStream* stream,
                PlatformMediaDecodingMode decoding_mode) {
-  DCHECK_EQ(0u, g_pipeline_streams.Get().count(stream));
-  g_pipeline_streams.Get()[stream] = decoding_mode;
+  DCHECK_EQ(0u, StatsGlobalState::GetInstance()->g_pipeline_streams.count(stream));
+  StatsGlobalState::GetInstance()->g_pipeline_streams[stream] = decoding_mode;
 }
 
 void RemoveStream(const DemuxerStream* stream) {
-  DCHECK_EQ(1u, g_pipeline_streams.Get().count(stream));
-  g_pipeline_streams.Get().erase(stream);
+  DCHECK_EQ(1u, StatsGlobalState::GetInstance()->g_pipeline_streams.count(stream));
+  StatsGlobalState::GetInstance()->g_pipeline_streams.erase(stream);
 }
 
 void AddDecoderClass(const std::string& decoder_class_name) {
-  g_decoder_class_names.Get().insert(decoder_class_name);
+  StatsGlobalState::GetInstance()->g_decoder_class_names.insert(decoder_class_name);
 }
 
 void AddStreamForDecoderClass(const DemuxerStream* stream,
                               const std::string& decoder_class_name) {
-  if (g_decoder_class_names.Get().count(decoder_class_name) < 1)
+  if (StatsGlobalState::GetInstance()->g_decoder_class_names.count(decoder_class_name) < 1)
     // Unknown decoder name -- no one claimed it by calling AddDecoderClass().
     return;
 
-  const auto result = g_decoder_streams.Get().insert(stream);
+  const auto result = StatsGlobalState::GetInstance()->g_decoder_streams.insert(stream);
   DCHECK(result.second);
 }
 
 void RemoveStreamForDecoderClass(const DemuxerStream* stream,
                                  const std::string& decoder_class_name) {
-  if (g_decoder_class_names.Get().count(decoder_class_name) < 1)
+  if (StatsGlobalState::GetInstance()->g_decoder_class_names.count(decoder_class_name) < 1)
     // Unknown decoder name -- no one claimed it by calling AddDecoderClass().
     return;
 
-  const auto erased_count = g_decoder_streams.Get().erase(stream);
+  const auto erased_count = StatsGlobalState::GetInstance()->g_decoder_streams.erase(stream);
   DCHECK_EQ(1u, erased_count);
 }
 
 void ReportStreamError(const DemuxerStream* stream) {
-  if (g_decoder_streams.Get().count(stream) > 0) {
+  if (StatsGlobalState::GetInstance()->g_decoder_streams.count(stream) > 0) {
     ReportDecoderStreamError(stream);
     return;
   }
 
-  const auto it = g_pipeline_streams.Get().find(stream);
-  if (it != g_pipeline_streams.Get().end()) {
+  const auto it = StatsGlobalState::GetInstance()->g_pipeline_streams.find(stream);
+  if (it != StatsGlobalState::GetInstance()->g_pipeline_streams.end()) {
     ReportPipelineStreamError(stream, it->second);
     return;
   }
@@ -239,8 +243,8 @@ void ReportStreamError(const DemuxerStream* stream) {
 }
 
 void SerializeInto(base::DictionaryValue* dictionary) {
-  StatusQueue::Serialize(g_status_queue.Get(), dictionary);
-  g_status_queue.Get().Clear();
+  StatusQueue::Serialize(StatsGlobalState::GetInstance()->g_status_queue, dictionary);
+  StatsGlobalState::GetInstance()->g_status_queue.Clear();
 }
 
 void DeserializeAndReport(const base::DictionaryValue& dictionary) {

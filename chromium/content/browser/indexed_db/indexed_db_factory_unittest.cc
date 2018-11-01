@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_simple_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_factory_impl.h"
@@ -46,7 +47,7 @@ class MockIDBFactory : public IndexedDBFactoryImpl {
     scoped_refptr<IndexedDBBackingStore> backing_store =
         OpenBackingStore(origin, data_directory, nullptr /* request_context */,
                          &data_loss_info, &disk_full, &s);
-    EXPECT_EQ(blink::WebIDBDataLossNone, data_loss_info.status);
+    EXPECT_EQ(blink::kWebIDBDataLossNone, data_loss_info.status);
     return backing_store;
   }
 
@@ -228,11 +229,14 @@ class DiskFullFactory : public IndexedDBFactoryImpl {
 class LookingForQuotaErrorMockCallbacks : public IndexedDBCallbacks {
  public:
   LookingForQuotaErrorMockCallbacks()
-      : IndexedDBCallbacks(nullptr, url::Origin(), nullptr),
+      : IndexedDBCallbacks(nullptr,
+                           url::Origin(),
+                           nullptr,
+                           base::ThreadTaskRunnerHandle::Get()),
         error_called_(false) {}
   void OnError(const IndexedDBDatabaseError& error) override {
     error_called_ = true;
-    EXPECT_EQ(blink::WebIDBDatabaseExceptionQuotaError, error.code());
+    EXPECT_EQ(blink::kWebIDBDatabaseExceptionQuotaError, error.code());
   }
   bool error_called() const { return error_called_; }
 

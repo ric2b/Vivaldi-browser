@@ -19,19 +19,9 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
     this._onScrollBound = this._onScroll.bind(this);
     this._scrollContainer.addEventListener('scroll', this._onScrollBound, true);
 
-    // This is not in setScrollContainer because mouse wheel needs to detect events on the content not the scrollbar itself.
-    this._scrollContainer.addEventListener('mousewheel', this._onWheel.bind(this), true);
     /** @type {!Array.<!DataGrid.ViewportDataGridNode>} */
     this._visibleNodes = [];
     this._inline = false;
-
-    // Wheel target shouldn't be removed from DOM to preserve native kinetic scrolling.
-    /** @type {?Node} */
-    this._wheelTarget = null;
-
-    // Element that was hidden earlier, but hasn't been removed yet.
-    /** @type {?Node} */
-    this._hiddenWheelTarget = null;
 
     this._stickToBottom = false;
     this._updateIsFromUser = false;
@@ -66,13 +56,6 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
    */
   setStickToBottom(stick) {
     this._stickToBottom = stick;
-  }
-
-  /**
-   * @param {?Event} event
-   */
-  _onWheel(event) {
-    this._wheelTarget = event.target ? event.target.enclosingNodeOrSelfWithNodeName('tr') : null;
   }
 
   /**
@@ -184,26 +167,16 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
     var visibleNodes = viewportState.visibleNodes;
     var visibleNodesSet = new Set(visibleNodes);
 
-    if (this._hiddenWheelTarget && this._hiddenWheelTarget !== this._wheelTarget) {
-      this._hiddenWheelTarget.remove();
-      this._hiddenWheelTarget = null;
-    }
-
     for (var i = 0; i < this._visibleNodes.length; ++i) {
       var oldNode = this._visibleNodes[i];
       if (!visibleNodesSet.has(oldNode) && oldNode.attached()) {
         var element = oldNode.existingElement();
-        if (element === this._wheelTarget)
-          this._hiddenWheelTarget = oldNode.abandonElement();
-        else
-          element.remove();
+        element.remove();
         oldNode.wasDetached();
       }
     }
 
     var previousElement = this.topFillerRowElement();
-    if (previousElement.nextSibling === this._hiddenWheelTarget)
-      previousElement = this._hiddenWheelTarget;
     var tBody = this.dataTableBody;
     var offset = viewportState.offset;
 
@@ -221,7 +194,8 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
       var element = node.element();
       node.willAttach();
       node.setStriped((offset + i) % 2 === 0);
-      tBody.insertBefore(element, previousElement.nextSibling);
+      if (element !== previousElement.nextSibling)
+        tBody.insertBefore(element, previousElement.nextSibling);
       node.revealed = true;
       previousElement = element;
     }
@@ -270,7 +244,6 @@ DataGrid.ViewportDataGrid.Events = {
 
 /**
  * @unrestricted
- * @this {NODE_TYPE}
  * @extends {DataGrid.DataGridNode<!NODE_TYPE>}
  * @template NODE_TYPE
  */
@@ -400,8 +373,9 @@ DataGrid.ViewportDataGridNode = class extends DataGrid.DataGridNode {
     if (child.parent !== this)
       throw 'removeChild: Node is not a child of this node.';
 
-    child._unlink();
     this.children.remove(child, true);
+    child._unlink();
+
     if (!this.children.length)
       this.setHasChildren(false);
     if (this._expanded)
@@ -428,10 +402,7 @@ DataGrid.ViewportDataGridNode = class extends DataGrid.DataGridNode {
       this.existingElement().remove();
       this.wasDetached();
     }
-    this.dataGrid = null;
-    this.parent = null;
-    this.nextSibling = null;
-    this.previousSibling = null;
+    this.resetNode();
   }
 
   /**
@@ -482,17 +453,6 @@ DataGrid.ViewportDataGridNode = class extends DataGrid.DataGridNode {
     } else {
       this.resetElement();
     }
-  }
-
-  /**
-   * @return {?Element}
-   */
-  abandonElement() {
-    var result = this.existingElement();
-    if (result)
-      result.style.display = 'none';
-    this.resetElement();
-    return result;
   }
 
   /**

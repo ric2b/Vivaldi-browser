@@ -5,7 +5,7 @@
 #ifndef CC_TREES_TRANSFORM_NODE_H_
 #define CC_TREES_TRANSFORM_NODE_H_
 
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/transform.h"
@@ -148,10 +148,6 @@ struct CC_EXPORT TransformCachedNodeData {
 
   gfx::Transform from_screen;
   gfx::Transform to_screen;
-  int target_id;
-  // This id is used for all content that draws into a render surface associated
-  // with this transform node.
-  int content_target_id;
 
   bool is_showing_backface : 1;
 

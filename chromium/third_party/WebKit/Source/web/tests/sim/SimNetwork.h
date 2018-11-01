@@ -5,10 +5,10 @@
 #ifndef SimNetwork_h
 #define SimNetwork_h
 
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/text/StringHash.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebURLLoaderTestDelegate.h"
-#include "wtf/HashMap.h"
-#include "wtf/text/StringHash.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -27,29 +27,28 @@ class SimNetwork final : public WebURLLoaderTestDelegate {
  private:
   friend class SimRequest;
 
-  static SimNetwork& current();
+  static SimNetwork& Current();
 
-  void servePendingRequests();
-  void addRequest(SimRequest&);
-  void removeRequest(SimRequest&);
+  void ServePendingRequests();
+  void AddRequest(SimRequest&);
+  void RemoveRequest(SimRequest&);
 
   // WebURLLoaderTestDelegate
-  void didReceiveResponse(WebURLLoaderClient*,
-                          const WebURLResponse&) override;
-  void didReceiveData(WebURLLoaderClient*,
+  void DidReceiveResponse(WebURLLoaderClient*, const WebURLResponse&) override;
+  void DidReceiveData(WebURLLoaderClient*,
                       const char* data,
-                      int dataLength) override;
-  void didFail(WebURLLoaderClient*,
+                      int data_length) override;
+  void DidFail(WebURLLoaderClient*,
                const WebURLError&,
-               int64_t totalEncodedDataLength,
-               int64_t totalEncodedBodyLength) override;
-  void didFinishLoading(WebURLLoaderClient*,
-                        double finishTime,
-                        int64_t totalEncodedDataLength,
-                        int64_t totalEncodedBodyLength) override;
+               int64_t total_encoded_data_length,
+               int64_t total_encoded_body_length) override;
+  void DidFinishLoading(WebURLLoaderClient*,
+                        double finish_time,
+                        int64_t total_encoded_data_length,
+                        int64_t total_encoded_body_length) override;
 
-  SimRequest* m_currentRequest;
-  HashMap<String, SimRequest*> m_requests;
+  SimRequest* current_request_;
+  HashMap<String, SimRequest*> requests_;
 };
 
 }  // namespace blink

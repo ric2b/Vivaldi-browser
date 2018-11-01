@@ -357,12 +357,11 @@ const char kEnableBlinkFeatures[]           = "enable-blink-features";
 const char kEnableBrowserSideNavigation[]   = "enable-browser-side-navigation";
 
 // Changes the behavior of the "default" color space conversion mode in
-// createImageBitmap. When enabled without kEnableColorCorrectRendering or
-// kEnableTrueColorRendering flags, "default" means color correct the image
-// bitmap to the display color space.
+// createImageBitmap. When enabled without the kEnableColorCorrectRendering
+// flag, "default" means color correct the image bitmap to the display color
+// space.
 const char kEnableColorCorrectRenderingDefaultMode[] =
     "enable-color-correct-rendering-default-mode";
-
 
 // Enables display list based 2d canvas implementation. Options:
 //  1. Enable: allow browser to use display list for 2d canvas (browser makes
@@ -419,6 +418,9 @@ const char kEnableLogging[]                 = "enable-logging";
 
 // Enables the network information API.
 const char kEnableNetworkInformation[]      = "enable-network-information";
+
+// Enables the network service.
+const char kEnableNetworkService[] = "enable-network-service";
 
 // Disables the video decoder from drawing to an NV12 textures instead of ARGB.
 const char kDisableNv12DxgiVideo[] = "disable-nv12-dxgi-video";
@@ -658,9 +660,6 @@ const char kNoReferrers[]                   = "no-referrers";
 // Disables the sandbox for all process types that are normally sandboxed.
 const char kNoSandbox[]                     = "no-sandbox";
 
-// Do not use the mojo UI Service in the Chrome render process.
-const char kNoUseMusInRenderer[] = "no-use-mus-in-renderer";
-
 // Disables the use of a zygote process for forking child processes. Instead,
 // child processes will be forked and exec'd directly. Note that --no-sandbox
 // should also be used together with this flag because the sandbox needs the
@@ -692,6 +691,12 @@ const char kOverridePluginPowerSaverForTesting[] =
 // Defaults to '1'.
 const char kOverscrollHistoryNavigation[] =
     "overscroll-history-navigation";
+
+// Controls the value of the threshold to start horizontal overscroll relative
+// to the default value.
+// E.g. set the value to '133' to have the overscroll start threshold be 133%
+// of the default threshold.
+const char kOverscrollStartThreshold[] = "overscroll-start-threshold";
 
 // Override the default value for the 'passive' field in javascript
 // addEventListener calls. Values are defined as:
@@ -785,11 +790,6 @@ const char kSandboxIPCProcess[]             = "sandbox-ipc";
 // Set the value to '1' to enable the feature, and set to '0' to disable.
 // Defaults to disabled.
 const char kScrollEndEffect[] = "scroll-end-effect";
-
-// Describes the file descriptors passed to the child process. List:
-// <file id from manifest>:<global descriptor id>,<file id string from manifest>
-// :<global descriptor id>,...
-const char kSharedFiles[] = "shared-files";
 
 // Visibly render a border around paint rects in the web page to help debug
 // and study painting behavior.
@@ -924,6 +924,10 @@ const char kDisableWebRtcHWEncoding[] = "disable-webrtc-hw-encoding";
 // Disables HW VP8 encode acceleration for WebRTC.
 const char kDisableWebRtcHWVP8Encoding[]     = "disable-webrtc-hw-vp8-encoding";
 
+// Enables negotiation of GCM cipher suites from RFC 7714 for SRTP in WebRTC.
+// See https://tools.ietf.org/html/rfc7714 for further information.
+const char kEnableWebRtcSrtpAesGcm[] = "enable-webrtc-srtp-aes-gcm";
+
 // Enables Origin header in Stun messages for WebRTC.
 const char kEnableWebRtcStunOrigin[]        = "enable-webrtc-stun-origin";
 
@@ -963,10 +967,6 @@ const char kDisableScreenOrientationLock[]  = "disable-screen-orientation-lock";
 // viewport boundaries.
 const char kEnableAdaptiveSelectionHandleOrientation[] =
     "enable-adaptive-selection-handle-orientation";
-
-// Enable content intent detection in the renderer.
-const char kEnableContentIntentDetection[] =
-    "enable-content-intent-detection";
 
 // Enable drag manipulation of longpress-triggered text selections.
 const char kEnableLongpressDragSelection[]  = "enable-longpress-drag-selection";

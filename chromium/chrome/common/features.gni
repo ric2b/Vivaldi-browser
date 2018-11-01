@@ -6,6 +6,7 @@ import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
+import("//device/vr/features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
 import("//net/features.gni")
@@ -13,18 +14,20 @@ import("//ppapi/features/features.gni")
 import("//printing/features/features.gni")
 import("//ui/base/ui_features.gni")
 
+assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
+
 # Please keep features in alphabetical order.
 declare_args() {
   enable_app_list = is_chromeos
 
   # Enables support for background apps.
-  enable_background = !is_ios && !is_android && !is_chromecast
+  enable_background = !is_android && !is_chromecast
 
   # Enable the printing system dialog for platforms that support printing
   # and have a system dialog.
   enable_basic_print_dialog = enable_basic_printing && !is_chromeos
 
-  enable_captive_portal_detection = !is_android && !is_ios && !is_chromecast
+  enable_captive_portal_detection = !is_android && !is_chromecast
 
   # Google Now is disabled to prepare for its removal.
   # http://crbug.com/539674
@@ -39,6 +42,10 @@ declare_args() {
   # ChromeOS builds have this enabled by default.
   enable_hotwording = is_chrome_branded && is_chromeos
 
+  # Enables usage of the system-provided notification center.
+  enable_native_notifications =
+      is_android || is_mac || (is_desktop_linux && use_glib && use_gio)
+
   enable_one_click_signin =
       is_win || is_mac || (is_linux && !is_chromeos && !is_chromecast)
 
@@ -46,22 +53,16 @@ declare_args() {
   # Specify --mash to chrome to have chrome start the mash environment.
   enable_package_mash_services = is_chromeos
 
-  enable_plugin_installation = is_win || is_mac
-
   enable_service_discovery = enable_mdns || is_mac
 
   # Enables use of the session service, which is enabled by default.
   # Android stores them separately on the Java side.
-  enable_session_service = !is_android && !is_ios && !is_chromecast
+  enable_session_service = !is_android && !is_chromecast
 
-  enable_supervised_users = !is_ios && !is_chromecast
+  enable_supervised_users = !is_chromecast
 
-  # Enables vr shell UI development on local or remote page.
-  enable_vr_shell_ui_dev = false
-
-  # Enable native notifications via XPC services (mac only).
-  # TODO(miguelg): remove this.
-  enable_xpc_notifications = true
+  # Indicates if Wayland display server support is enabled.
+  enable_wayland_server = is_chromeos
 
   # Indicates if the build is using PGO.
   pgo_build = chrome_pgo_phase > 0
@@ -92,7 +93,7 @@ chrome_grit_defines = [
   "enable_printing=$_enable_printing",
   "enable_service_discovery=$enable_service_discovery",
   "enable_webrtc=$enable_webrtc",
-  "enable_webvr=$enable_webvr",
+  "enable_vr=$enable_vr",
   "mac_views_browser=$mac_views_browser",
   "safe_browsing_mode=$safe_browsing_mode",
   "use_vulcanize=$use_vulcanize",

@@ -56,7 +56,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/renderer_preferences.h"
@@ -290,7 +289,7 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
   }
 
   base::Value* id = new base::Value(stream_id_);
-  base::StringValue* chunkValue = new base::StringValue(chunk);
+  base::Value* chunkValue = new base::Value(chunk);
   base::Value* encodedValue = new base::Value(encoded);
 
   content::BrowserThread::PostTask(
@@ -633,7 +632,7 @@ void DevToolsUIBindings::DispatchProtocolMessage(
 
   base::Value total_size(static_cast<int>(message.length()));
   for (size_t pos = 0; pos < message.length(); pos += kMaxMessageChunkSize) {
-    base::StringValue message_value(message.substr(pos, kMaxMessageChunkSize));
+    base::Value message_value(message.substr(pos, kMaxMessageChunkSize));
     CallClientFunction("DevToolsAPI.dispatchMessageChunk",
                        &message_value, pos ? NULL : &total_size, NULL);
   }
@@ -711,7 +710,7 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
             "resources from the network to enrich the debugging experience "
             "(e.g. source map resources)."
           trigger: "User opens Developer Tools to debug a web page."
-          data: "Any resources requested by Developer Tools"
+          data: "Any resources requested by Developer Tools."
           destination: WEBSITE
         }
         policy {
@@ -719,10 +718,10 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
           cookies_store: "user"
           setting:
             "It's not possible to disable this feature from settings."
-          policy {
+          chrome_policy {
             DeveloperToolsDisabled {
               policy_options {mode: MANDATORY}
-              value: true
+              DeveloperToolsDisabled: true
             }
           }
         })");
@@ -1061,11 +1060,11 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
     return;
   }
   // Each histogram name must follow a different code path in
-  // order to UMA_HISTOGRAM_ENUMERATION work correctly.
+  // order to UMA_HISTOGRAM_EXACT_LINEAR work correctly.
   if (name == kDevToolsActionTakenHistogram)
-    UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
+    UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
   else if (name == kDevToolsPanelShownHistogram)
-    UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
+    UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
   else
     frontend_host_->BadMessageRecieved();
 }
@@ -1090,7 +1089,7 @@ void DevToolsUIBindings::JsonReceived(const DispatchCallback& callback,
     callback.Run(nullptr);
     return;
   }
-  base::StringValue message_value(message);
+  base::Value message_value(message);
   callback.Run(&message_value);
 }
 
@@ -1100,10 +1099,9 @@ void DevToolsUIBindings::OnURLFetchComplete(const net::URLFetcher* source) {
   DCHECK(it != pending_requests_.end());
 
   base::DictionaryValue response;
-  base::DictionaryValue* headers = new base::DictionaryValue();
+  auto headers = base::MakeUnique<base::DictionaryValue>();
   net::HttpResponseHeaders* rh = source->GetResponseHeaders();
   response.SetInteger("statusCode", rh ? rh->response_code() : 200);
-  response.Set("headers", headers);
 
   size_t iterator = 0;
   std::string name;
@@ -1111,6 +1109,7 @@ void DevToolsUIBindings::OnURLFetchComplete(const net::URLFetcher* source) {
   while (rh && rh->EnumerateHeaderLines(&iterator, &name, &value))
     headers->SetString(name, value);
 
+  response.Set("headers", std::move(headers));
   it->second.Run(&response);
   pending_requests_.erase(it);
   delete source;
@@ -1130,18 +1129,18 @@ void DevToolsUIBindings::DevicesUpdated(
 }
 
 void DevToolsUIBindings::FileSavedAs(const std::string& url) {
-  base::StringValue url_value(url);
+  base::Value url_value(url);
   CallClientFunction("DevToolsAPI.savedURL", &url_value, NULL, NULL);
 }
 
 void DevToolsUIBindings::CanceledFileSaveAs(const std::string& url) {
-  base::StringValue url_value(url);
+  base::Value url_value(url);
   CallClientFunction("DevToolsAPI.canceledSaveURL",
                      &url_value, NULL, NULL);
 }
 
 void DevToolsUIBindings::AppendedTo(const std::string& url) {
-  base::StringValue url_value(url);
+  base::Value url_value(url);
   CallClientFunction("DevToolsAPI.appendedToURL", &url_value, NULL,
                      NULL);
 }
@@ -1156,7 +1155,7 @@ void DevToolsUIBindings::FileSystemAdded(
 
 void DevToolsUIBindings::FileSystemRemoved(
     const std::string& file_system_path) {
-  base::StringValue file_system_path_value(file_system_path);
+  base::Value file_system_path_value(file_system_path);
   CallClientFunction("DevToolsAPI.fileSystemRemoved",
                      &file_system_path_value, NULL, NULL);
 }
@@ -1180,7 +1179,7 @@ void DevToolsUIBindings::IndexingTotalWorkCalculated(
     int total_work) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::Value request_id_value(request_id);
-  base::StringValue file_system_path_value(file_system_path);
+  base::Value file_system_path_value(file_system_path);
   base::Value total_work_value(total_work);
   CallClientFunction("DevToolsAPI.indexingTotalWorkCalculated",
                      &request_id_value, &file_system_path_value,
@@ -1192,7 +1191,7 @@ void DevToolsUIBindings::IndexingWorked(int request_id,
                                         int worked) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::Value request_id_value(request_id);
-  base::StringValue file_system_path_value(file_system_path);
+  base::Value file_system_path_value(file_system_path);
   base::Value worked_value(worked);
   CallClientFunction("DevToolsAPI.indexingWorked", &request_id_value,
                      &file_system_path_value, &worked_value);
@@ -1203,7 +1202,7 @@ void DevToolsUIBindings::IndexingDone(int request_id,
   indexing_jobs_.erase(request_id);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::Value request_id_value(request_id);
-  base::StringValue file_system_path_value(file_system_path);
+  base::Value file_system_path_value(file_system_path);
   CallClientFunction("DevToolsAPI.indexingDone", &request_id_value,
                      &file_system_path_value, NULL);
 }
@@ -1219,7 +1218,7 @@ void DevToolsUIBindings::SearchCompleted(
     file_paths_value.AppendString(*it);
   }
   base::Value request_id_value(request_id);
-  base::StringValue file_system_path_value(file_system_path);
+  base::Value file_system_path_value(file_system_path);
   CallClientFunction("DevToolsAPI.searchCompleted", &request_id_value,
                      &file_system_path_value, &file_paths_value);
 }
@@ -1272,15 +1271,14 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
 
     std::unique_ptr<base::DictionaryValue> extension_info(
         new base::DictionaryValue());
-    extension_info->Set(
+    extension_info->SetString(
         "startPage",
-        new base::StringValue(extensions::chrome_manifest_urls::GetDevToolsPage(
-                                  extension.get()).spec()));
-    extension_info->Set("name", new base::StringValue(extension->name()));
-    extension_info->Set(
-        "exposeExperimentalAPIs",
-        new base::Value(extension->permissions_data()->HasAPIPermission(
-            extensions::APIPermission::kExperimental)));
+        extensions::chrome_manifest_urls::GetDevToolsPage(extension.get())
+            .spec());
+    extension_info->SetString("name", extension->name());
+    extension_info->SetBoolean("exposeExperimentalAPIs",
+                               extension->permissions_data()->HasAPIPermission(
+                                   extensions::APIPermission::kExperimental));
     results.Append(std::move(extension_info));
   }
 

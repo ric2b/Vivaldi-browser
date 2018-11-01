@@ -695,19 +695,8 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
     frame = GetFrameByName(frame_name);
     DCHECK(frame);
 
-    // Wait until frame contents (e.g. images) have painted (which should happen
-    // in the animation frame that *starts* after the onload event - therefore
-    // we need to wait for 2 animation frames).
-    script = std::string(
-        "requestAnimationFrame(function() {\n"
-        "  requestAnimationFrame(function() {\n"
-        "    domAutomationController.send(43);\n"
-        "  });\n"
-        "});\n");
-    if (!content::ExecuteScriptAndExtractInt(frame, script, &response))
-      return false;
-    if (response != 43)
-      return false;
+    // Wait until frame contents have painted and are ready for hit testing.
+    WaitForChildFrameSurfaceReady(frame);
 
     return true;
   }

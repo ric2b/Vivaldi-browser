@@ -13,23 +13,19 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/login_status.h"
-#include "ash/common/shell_delegate.h"
-#include "ash/common/system/chromeos/bluetooth/bluetooth_observer.h"
-#include "ash/common/system/chromeos/power/power_status.h"
-#include "ash/common/system/chromeos/session/logout_button_observer.h"
-#include "ash/common/system/date/clock_observer.h"
-#include "ash/common/system/ime/ime_observer.h"
-#include "ash/common/system/tray/system_tray_notifier.h"
-#include "ash/common/system/tray_accessibility.h"
-#include "ash/common/system/user/user_observer.h"
-#include "ash/common/wm_shell.h"
-#include "ash/system/chromeos/rotation/tray_rotation_lock.h"
-#include "base/bind_helpers.h"
+#include "ash/login_status.h"
+#include "ash/shell.h"
+#include "ash/shell_delegate.h"
+#include "ash/system/date/clock_observer.h"
+#include "ash/system/ime/ime_observer.h"
+#include "ash/system/power/power_status.h"
+#include "ash/system/rotation/tray_rotation_lock.h"
+#include "ash/system/session/logout_button_observer.h"
+#include "ash/system/tray/system_tray_notifier.h"
+#include "ash/system/tray_accessibility.h"
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
@@ -37,7 +33,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
-#include "chrome/browser/chromeos/bluetooth/bluetooth_pairing_dialog.h"
 #include "chrome/browser/chromeos/events/system_key_event_listener.h"
 #include "chrome/browser/chromeos/input_method/input_method_switch_recorder.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
@@ -66,8 +61,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "components/google/core/browser/google_util.h"
@@ -79,14 +72,11 @@
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/user_metrics.h"
-#include "device/bluetooth/bluetooth_adapter.h"
-#include "device/bluetooth/bluetooth_adapter_factory.h"
-#include "device/bluetooth/bluetooth_device.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
+#include "ui/chromeos/events/pref_names.h"
 #include "ui/chromeos/ime/input_method_menu_item.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
 
@@ -115,14 +105,6 @@ void ExtractIMEInfo(const input_method::InputMethodDescriptor& ime,
   info->third_party = extension_ime_util::IsExtensionIME(ime.id());
 }
 
-void BluetoothSetDiscoveringError() {
-  LOG(ERROR) << "BluetoothSetDiscovering failed.";
-}
-
-void BluetoothDeviceConnectError(
-    device::BluetoothDevice::ConnectErrorCode error_code) {
-}
-
 void OnAcceptMultiprofilesIntro(bool no_show_again) {
   PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
   prefs->SetBoolean(prefs::kMultiProfileNeverShowIntro, no_show_again);
@@ -136,8 +118,8 @@ bool IsSessionInSecondaryLoginScreen() {
 }  // namespace
 
 SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
-    : networking_config_delegate_(new NetworkingConfigDelegateChromeos()),
-      weak_ptr_factory_(this) {
+    : networking_config_delegate_(
+          base::MakeUnique<NetworkingConfigDelegateChromeos>()) {
   // Register notifications on construction so that events such as
   // PROFILE_CREATED do not get missed if they happen before Initialize().
   registrar_.reset(new content::NotificationRegistrar);
@@ -158,30 +140,14 @@ SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
   accessibility_subscription_ = accessibility_manager->RegisterCallback(
       base::Bind(&SystemTrayDelegateChromeOS::OnAccessibilityStatusChanged,
                  base::Unretained(this)));
-
-  user_manager::UserManager::Get()->AddObserver(this);
-  user_manager::UserManager::Get()->AddSessionStateObserver(this);
 }
 
 void SystemTrayDelegateChromeOS::Initialize() {
-  DBusThreadManager::Get()->GetSessionManagerClient()->AddObserver(this);
-
   input_method::InputMethodManager::Get()->AddObserver(this);
   input_method::InputMethodManager::Get()->AddImeMenuObserver(this);
   ui::ime::InputMethodMenuManager::GetInstance()->AddObserver(this);
 
-  device::BluetoothAdapterFactory::GetAdapter(
-      base::Bind(&SystemTrayDelegateChromeOS::InitializeOnAdapterReady,
-                 weak_ptr_factory_.GetWeakPtr()));
-
   BrowserList::AddObserver(this);
-}
-
-void SystemTrayDelegateChromeOS::InitializeOnAdapterReady(
-    scoped_refptr<device::BluetoothAdapter> adapter) {
-  bluetooth_adapter_ = adapter;
-  CHECK(bluetooth_adapter_);
-  bluetooth_adapter_->AddObserver(this);
 
   local_state_registrar_.reset(new PrefChangeRegistrar);
   local_state_registrar_->Init(g_browser_process->local_state());
@@ -218,11 +184,8 @@ SystemTrayDelegateChromeOS::~SystemTrayDelegateChromeOS() {
   // Unregister a11y status subscription.
   accessibility_subscription_.reset();
 
-  DBusThreadManager::Get()->GetSessionManagerClient()->RemoveObserver(this);
   input_method::InputMethodManager::Get()->RemoveObserver(this);
   ui::ime::InputMethodMenuManager::GetInstance()->RemoveObserver(this);
-  if (bluetooth_adapter_)
-    bluetooth_adapter_->RemoveObserver(this);
 
   BrowserList::RemoveObserver(this);
   StopObservingAppWindowRegistry();
@@ -234,9 +197,6 @@ SystemTrayDelegateChromeOS::~SystemTrayDelegateChromeOS() {
       connector->GetDeviceCloudPolicyManager();
   if (policy_manager)
     policy_manager->core()->store()->RemoveObserver(this);
-
-  user_manager::UserManager::Get()->RemoveObserver(this);
-  user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
 }
 
 ash::LoginStatus SystemTrayDelegateChromeOS::GetUserLoginStatus() const {
@@ -323,8 +283,7 @@ void SystemTrayDelegateChromeOS::ShowEnterpriseInfo() {
 }
 
 void SystemTrayDelegateChromeOS::ShowUserLogin() {
-  ash::WmShell* wm_shell = ash::WmShell::Get();
-  if (!wm_shell->delegate()->IsMultiProfilesEnabled())
+  if (!ash::Shell::Get()->shell_delegate()->IsMultiProfilesEnabled())
     return;
 
   // Only regular non-supervised users could add other users to current session.
@@ -365,76 +324,6 @@ void SystemTrayDelegateChromeOS::ShowUserLogin() {
       UserAddingScreen::Get()->Start();
     }
   }
-}
-
-void SystemTrayDelegateChromeOS::GetAvailableBluetoothDevices(
-    ash::BluetoothDeviceList* list) {
-  device::BluetoothAdapter::DeviceList devices =
-      bluetooth_adapter_->GetDevices();
-  for (size_t i = 0; i < devices.size(); ++i) {
-    device::BluetoothDevice* device = devices[i];
-    ash::BluetoothDeviceInfo info;
-    info.address = device->GetAddress();
-    info.display_name = device->GetNameForDisplay();
-    info.connected = device->IsConnected();
-    info.connecting = device->IsConnecting();
-    info.paired = device->IsPaired();
-    info.device_type = device->GetDeviceType();
-    list->push_back(info);
-  }
-}
-
-void SystemTrayDelegateChromeOS::BluetoothStartDiscovering() {
-  if (GetBluetoothDiscovering()) {
-    LOG(WARNING) << "Already have active Bluetooth device discovery session.";
-    return;
-  }
-  VLOG(1) << "Requesting new Bluetooth device discovery session.";
-  should_run_bluetooth_discovery_ = true;
-  bluetooth_adapter_->StartDiscoverySession(
-      base::Bind(&SystemTrayDelegateChromeOS::OnStartBluetoothDiscoverySession,
-                 weak_ptr_factory_.GetWeakPtr()),
-      base::Bind(&BluetoothSetDiscoveringError));
-}
-
-void SystemTrayDelegateChromeOS::BluetoothStopDiscovering() {
-  should_run_bluetooth_discovery_ = false;
-  if (!GetBluetoothDiscovering()) {
-    LOG(WARNING) << "No active Bluetooth device discovery session.";
-    return;
-  }
-  VLOG(1) << "Stopping Bluetooth device discovery session.";
-  bluetooth_discovery_session_->Stop(
-      base::Bind(&base::DoNothing), base::Bind(&BluetoothSetDiscoveringError));
-}
-
-void SystemTrayDelegateChromeOS::ConnectToBluetoothDevice(
-    const std::string& address) {
-  device::BluetoothDevice* device = bluetooth_adapter_->GetDevice(address);
-  if (!device || device->IsConnecting() ||
-      (device->IsConnected() && device->IsPaired())) {
-    return;
-  }
-  if (device->IsPaired() && !device->IsConnectable())
-    return;
-  if (device->IsPaired() || !device->IsPairable()) {
-    base::RecordAction(
-        base::UserMetricsAction("StatusArea_Bluetooth_Connect_Known"));
-    device->Connect(NULL,
-                    base::Bind(&base::DoNothing),
-                    base::Bind(&BluetoothDeviceConnectError));
-    return;
-  }
-  // Show pairing dialog for the unpaired device.
-  base::RecordAction(
-      base::UserMetricsAction("StatusArea_Bluetooth_Connect_Unknown"));
-  BluetoothPairingDialog* dialog = new BluetoothPairingDialog(device);
-  // The dialog deletes itself on close.
-  dialog->ShowInContainer(SystemTrayClient::GetDialogParentContainerId());
-}
-
-bool SystemTrayDelegateChromeOS::IsBluetoothDiscovering() const {
-  return bluetooth_adapter_ && bluetooth_adapter_->IsDiscovering();
 }
 
 void SystemTrayDelegateChromeOS::GetCurrentIME(ash::IMEInfo* info) {
@@ -497,31 +386,6 @@ void SystemTrayDelegateChromeOS::ActivateIMEProperty(const std::string& key) {
   input_method::InputMethodManager::Get()->ActivateInputMethodMenuItem(key);
 }
 
-void SystemTrayDelegateChromeOS::ManageBluetoothDevices() {
-  content::RecordAction(base::UserMetricsAction("ShowBluetoothSettingsPage"));
-  chrome::ShowSettingsSubPageForProfile(ProfileManager::GetActiveUserProfile(),
-                                        chrome::kBluetoothSubPage);
-}
-
-void SystemTrayDelegateChromeOS::ToggleBluetooth() {
-  bluetooth_adapter_->SetPowered(!bluetooth_adapter_->IsPowered(),
-                                 base::Bind(&base::DoNothing),
-                                 base::Bind(&base::DoNothing));
-}
-
-bool SystemTrayDelegateChromeOS::GetBluetoothAvailable() {
-  return bluetooth_adapter_ && bluetooth_adapter_->IsPresent();
-}
-
-bool SystemTrayDelegateChromeOS::GetBluetoothEnabled() {
-  return bluetooth_adapter_ && bluetooth_adapter_->IsPowered();
-}
-
-bool SystemTrayDelegateChromeOS::GetBluetoothDiscovering() {
-  return bluetooth_discovery_session_ &&
-         bluetooth_discovery_session_->IsActive();
-}
-
 ash::NetworkingConfigDelegate*
 SystemTrayDelegateChromeOS::GetNetworkingConfigDelegate() const {
   return networking_config_delegate_.get();
@@ -539,14 +403,8 @@ bool SystemTrayDelegateChromeOS::GetSessionLengthLimit(
   return have_session_length_limit_;
 }
 
-int SystemTrayDelegateChromeOS::GetSystemTrayMenuWidth() {
-  return l10n_util::GetLocalizedContentsWidthInPixels(
-      IDS_SYSTEM_TRAY_MENU_BUBBLE_WIDTH_PIXELS);
-}
-
 void SystemTrayDelegateChromeOS::ActiveUserWasChanged() {
   SetProfile(ProfileManager::GetActiveUserProfile());
-  GetSystemTrayNotifier()->NotifyUserUpdate();
 }
 
 bool SystemTrayDelegateChromeOS::IsSearchKeyMappedToCapsLock() {
@@ -568,27 +426,8 @@ SystemTrayDelegateChromeOS::CreateRotationLockTrayItem(ash::SystemTray* tray) {
   return base::MakeUnique<ash::TrayRotationLock>(tray);
 }
 
-void SystemTrayDelegateChromeOS::UserAddedToSession(
-    const user_manager::User* active_user) {
-  GetSystemTrayNotifier()->NotifyUserAddedToSession();
-}
-
-void SystemTrayDelegateChromeOS::ActiveUserChanged(
-    const user_manager::User* /* active_user */) {
-}
-
-void SystemTrayDelegateChromeOS::UserChangedChildStatus(
-    user_manager::User* user) {
-  Profile* user_profile = ProfileHelper::Get()->GetProfileByUser(user);
-
-  // Returned user_profile might be NULL on restoring Users on browser start.
-  // At some point profile is not yet fully initiated.
-  if (session_started_ && user_profile && user_profile_ == user_profile)
-    ash::WmShell::Get()->UpdateAfterLoginStatusChange(GetUserLoginStatus());
-}
-
 ash::SystemTrayNotifier* SystemTrayDelegateChromeOS::GetSystemTrayNotifier() {
-  return ash::WmShell::Get()->system_tray_notifier();
+  return ash::Shell::Get()->system_tray_notifier();
 }
 
 void SystemTrayDelegateChromeOS::SetProfile(Profile* profile) {
@@ -739,15 +578,6 @@ void SystemTrayDelegateChromeOS::NotifyIfLastWindowClosed() {
   GetSystemTrayNotifier()->NotifyLastWindowClosed();
 }
 
-// Overridden from SessionManagerClient::Observer.
-void SystemTrayDelegateChromeOS::ScreenIsLocked() {
-  ash::WmShell::Get()->UpdateAfterLoginStatusChange(GetUserLoginStatus());
-}
-
-void SystemTrayDelegateChromeOS::ScreenIsUnlocked() {
-  ash::WmShell::Get()->UpdateAfterLoginStatusChange(GetUserLoginStatus());
-}
-
 // content::NotificationObserver implementation.
 void SystemTrayDelegateChromeOS::Observe(
     int type,
@@ -771,7 +601,6 @@ void SystemTrayDelegateChromeOS::Observe(
     }
     case chrome::NOTIFICATION_SESSION_STARTED: {
       session_started_ = true;
-      ash::WmShell::Get()->UpdateAfterLoginStatusChange(GetUserLoginStatus());
       SetProfile(ProfileManager::GetActiveUserProfile());
       break;
     }
@@ -812,54 +641,6 @@ void SystemTrayDelegateChromeOS::InputMethodMenuItemChanged(
   GetSystemTrayNotifier()->NotifyRefreshIME();
 }
 
-// Overridden from BluetoothAdapter::Observer.
-void SystemTrayDelegateChromeOS::AdapterPresentChanged(
-    device::BluetoothAdapter* adapter,
-    bool present) {
-  GetSystemTrayNotifier()->NotifyRefreshBluetooth();
-}
-
-void SystemTrayDelegateChromeOS::AdapterPoweredChanged(
-    device::BluetoothAdapter* adapter,
-    bool powered) {
-  GetSystemTrayNotifier()->NotifyRefreshBluetooth();
-}
-
-void SystemTrayDelegateChromeOS::AdapterDiscoveringChanged(
-    device::BluetoothAdapter* adapter,
-    bool discovering) {
-  GetSystemTrayNotifier()->NotifyBluetoothDiscoveringChanged();
-}
-
-void SystemTrayDelegateChromeOS::DeviceAdded(device::BluetoothAdapter* adapter,
-                                             device::BluetoothDevice* device) {
-  GetSystemTrayNotifier()->NotifyRefreshBluetooth();
-}
-
-void SystemTrayDelegateChromeOS::DeviceChanged(
-    device::BluetoothAdapter* adapter,
-    device::BluetoothDevice* device) {
-  GetSystemTrayNotifier()->NotifyRefreshBluetooth();
-}
-
-void SystemTrayDelegateChromeOS::DeviceRemoved(
-    device::BluetoothAdapter* adapter,
-    device::BluetoothDevice* device) {
-  GetSystemTrayNotifier()->NotifyRefreshBluetooth();
-}
-
-void SystemTrayDelegateChromeOS::OnStartBluetoothDiscoverySession(
-    std::unique_ptr<device::BluetoothDiscoverySession> discovery_session) {
-  // If the discovery session was returned after a request to stop discovery
-  // (e.g. the user dismissed the Bluetooth detailed view before the call
-  // returned), don't claim the discovery session and let it clean up.
-  if (!should_run_bluetooth_discovery_)
-    return;
-  VLOG(1) << "Claiming new Bluetooth device discovery session.";
-  bluetooth_discovery_session_ = std::move(discovery_session);
-  GetSystemTrayNotifier()->NotifyBluetoothDiscoveringChanged();
-}
-
 void SystemTrayDelegateChromeOS::UpdateEnterpriseDomain() {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -882,13 +663,6 @@ void SystemTrayDelegateChromeOS::OnStoreLoaded(
 
 void SystemTrayDelegateChromeOS::OnStoreError(policy::CloudPolicyStore* store) {
   UpdateEnterpriseDomain();
-}
-
-void SystemTrayDelegateChromeOS::OnUserImageChanged(
-    const user_manager::User& user) {
-  // This is also invoked on login screen when user avatar is loaded from file.
-  if (GetUserLoginStatus() != ash::LoginStatus::NOT_LOGGED_IN)
-    GetSystemTrayNotifier()->NotifyUserUpdate();
 }
 
 // Overridden from chrome::BrowserListObserver.

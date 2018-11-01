@@ -41,7 +41,7 @@
 #include "url/gurl.h"
 
 #if defined(USE_ASH)
-#include "ash/common/wm/window_state.h"  // nogncheck
+#include "ash/wm/window_state.h"  // nogncheck
 #include "ash/wm/window_state_aura.h"  // nogncheck
 #endif
 
@@ -653,6 +653,7 @@ void StatusBubbleViews::Init() {
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     params.parent = frame->GetNativeView();
     params.context = frame->GetNativeWindow();
+    params.name = "StatusBubble";
 #if defined(USE_AURA)
     params.mus_properties
         [ui::mojom::WindowManager::kWindowIgnoredByShelf_InitProperty] =
@@ -866,10 +867,9 @@ void StatusBubbleViews::AvoidMouse(const gfx::Point& location) {
 
     // Check if the bubble sticks out from the monitor or will obscure
     // download shelf.
-    gfx::NativeView window = base_view_->GetWidget()->GetNativeView();
-    gfx::Rect monitor_rect = display::Screen::GetScreen()
-                                 ->GetDisplayNearestWindow(window)
-                                 .work_area();
+    gfx::NativeView view = base_view_->GetWidget()->GetNativeView();
+    gfx::Rect monitor_rect =
+        display::Screen::GetScreen()->GetDisplayNearestView(view).work_area();
     const int bubble_bottom_y = top_left.y() + position_.y() + size_.height();
 
     if (bubble_bottom_y + offset > monitor_rect.height() ||

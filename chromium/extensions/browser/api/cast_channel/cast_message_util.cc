@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
+#include "extensions/browser/api/cast_channel/cast_auth_util.h"
 #include "extensions/common/api/cast_channel.h"
 #include "extensions/common/api/cast_channel/cast_channel.pb.h"
 
@@ -81,11 +82,11 @@ bool CastMessageToMessageInfo(const CastMessage& message_proto,
   switch (message_proto.payload_type()) {
   case CastMessage_PayloadType_STRING:
     if (message_proto.has_payload_utf8())
-      value.reset(new base::StringValue(message_proto.payload_utf8()));
+      value.reset(new base::Value(message_proto.payload_utf8()));
     break;
   case CastMessage_PayloadType_BINARY:
     if (message_proto.has_payload_binary())
-      value = base::BinaryValue::CreateWithCopiedBuffer(
+      value = base::Value::CreateWithCopiedBuffer(
           message_proto.payload_binary().data(),
           message_proto.payload_binary().size());
     break;
@@ -134,10 +135,11 @@ std::string AuthMessageToString(const DeviceAuthMessage& message) {
   return out;
 }
 
-void CreateAuthChallengeMessage(CastMessage* message_proto) {
+void CreateAuthChallengeMessage(CastMessage* message_proto,
+                                const AuthContext& auth_context) {
   CHECK(message_proto);
   DeviceAuthMessage auth_message;
-  auth_message.mutable_challenge();
+  auth_message.mutable_challenge()->set_sender_nonce(auth_context.nonce());
   std::string auth_message_string;
   auth_message.SerializeToString(&auth_message_string);
 

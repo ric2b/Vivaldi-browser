@@ -13,15 +13,15 @@
 namespace blink {
 
 TEST(MediaQueryMatcherTest, LostFrame) {
-  std::unique_ptr<DummyPageHolder> pageHolder =
-      DummyPageHolder::create(IntSize(500, 500));
+  std::unique_ptr<DummyPageHolder> page_holder =
+      DummyPageHolder::Create(IntSize(500, 500));
   MediaQueryMatcher* matcher =
-      MediaQueryMatcher::create(pageHolder->document());
-  RefPtr<MediaQuerySet> querySet = MediaQuerySet::create(MediaTypeNames::all);
-  ASSERT_TRUE(matcher->evaluate(querySet.get()));
+      MediaQueryMatcher::Create(page_holder->GetDocument());
+  RefPtr<MediaQuerySet> query_set = MediaQuerySet::Create(MediaTypeNames::all);
+  ASSERT_TRUE(matcher->Evaluate(query_set.Get()));
 
-  matcher->documentDetached();
-  ASSERT_FALSE(matcher->evaluate(querySet.get()));
+  matcher->DocumentDetached();
+  ASSERT_FALSE(matcher->Evaluate(query_set.Get()));
 }
 
 }  // namespace blink

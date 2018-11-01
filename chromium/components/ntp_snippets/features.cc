@@ -22,14 +22,8 @@ const base::Feature kBookmarkSuggestionsFeature{
 const base::Feature kRecentOfflineTabSuggestionsFeature{
     "NTPOfflinePageSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kSaveToOfflineFeature{
-    "NTPSaveToOffline", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kOfflineBadgeFeature{
-    "NTPOfflineBadge", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kIncreasedVisibility{
-    "NTPSnippetsIncreasedVisibility", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIncreasedVisibility{"NTPSnippetsIncreasedVisibility",
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kPhysicalWebPageSuggestionsFeature{
     "NTPPhysicalWebPageSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -42,6 +36,10 @@ const base::Feature kPreferAmpUrlsFeature{"NTPPreferAmpUrls",
 
 const base::Feature kCategoryRanker{"ContentSuggestionsCategoryRanker",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kPublisherFaviconsFromNewServerFeature{
+    "ContentSuggestionsFaviconsFromNewServer",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kCategoryRankerParameter[] = "category_ranker";
 const char kCategoryRankerConstantRanker[] = "constant";

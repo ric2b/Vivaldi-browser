@@ -6,21 +6,21 @@
 #define KURLStructTraits_h
 
 #include "platform/weborigin/KURL.h"
+#include "platform/wtf/text/WTFString.h"
 #include "url/mojo/url.mojom-blink.h"
 #include "url/url_constants.h"
-#include "wtf/text/WTFString.h"
 
 namespace mojo {
 
 template <>
 struct StructTraits<url::mojom::blink::Url::DataView, ::blink::KURL> {
   static WTF::String url(const ::blink::KURL& blinkUrl) {
-    if (!blinkUrl.isValid() ||
-        blinkUrl.getString().length() > url::kMaxURLChars) {
-      return emptyString;
+    if (!blinkUrl.IsValid() ||
+        blinkUrl.GetString().length() > url::kMaxURLChars) {
+      return g_empty_string;
     }
 
-    return blinkUrl.getString();
+    return blinkUrl.GetString();
   }
   static bool Read(url::mojom::blink::Url::DataView data, ::blink::KURL* out) {
     WTF::String urlString;
@@ -31,7 +31,7 @@ struct StructTraits<url::mojom::blink::Url::DataView, ::blink::KURL> {
       return false;
 
     *out = ::blink::KURL(::blink::KURL(), urlString);
-    if (!urlString.isEmpty() && !out->isValid())
+    if (!urlString.IsEmpty() && !out->IsValid())
       return false;
 
     return true;

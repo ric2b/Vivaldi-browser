@@ -34,55 +34,46 @@
 #include "core/CoreExport.h"
 #include "core/animation/animatable/AnimatableValue.h"
 #include "platform/graphics/Color.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
-class CORE_EXPORT AnimatableColorImpl {
+class AnimatableColorImpl {
   DISALLOW_NEW();
 
  public:
   AnimatableColorImpl(float red, float green, float blue, float alpha);
   AnimatableColorImpl(Color);
-  Color toColor() const;
-  AnimatableColorImpl interpolateTo(const AnimatableColorImpl&,
-                                    double fraction) const;
   bool operator==(const AnimatableColorImpl&) const;
 
  private:
-  float m_alpha;
-  float m_red;
-  float m_green;
-  float m_blue;
+  float alpha_;
+  float red_;
+  float green_;
+  float blue_;
 };
 
 // This class handles both the regular and 'visted link' colors for a given
 // property. Currently it is used for all properties, even those which do not
 // support a separate 'visited link' color (eg SVG properties). This is correct
 // but inefficient.
-class CORE_EXPORT AnimatableColor final : public AnimatableValue {
+class AnimatableColor final : public AnimatableValue {
  public:
-  static PassRefPtr<AnimatableColor> create(
+  static PassRefPtr<AnimatableColor> Create(
       const AnimatableColorImpl&,
-      const AnimatableColorImpl& visitedLinkColor);
-  Color getColor() const { return m_color.toColor(); }
-  Color visitedLinkColor() const { return m_visitedLinkColor.toColor(); }
-
- protected:
-  PassRefPtr<AnimatableValue> interpolateTo(const AnimatableValue*,
-                                            double fraction) const override;
+      const AnimatableColorImpl& visited_link_color);
 
  private:
   AnimatableColor(const AnimatableColorImpl& color,
-                  const AnimatableColorImpl& visitedLinkColor)
-      : m_color(color), m_visitedLinkColor(visitedLinkColor) {}
-  AnimatableType type() const override { return TypeColor; }
-  bool equalTo(const AnimatableValue*) const override;
-  const AnimatableColorImpl m_color;
-  const AnimatableColorImpl m_visitedLinkColor;
+                  const AnimatableColorImpl& visited_link_color)
+      : color_(color), visited_link_color_(visited_link_color) {}
+  AnimatableType GetType() const override { return kTypeColor; }
+  bool EqualTo(const AnimatableValue*) const override;
+  const AnimatableColorImpl color_;
+  const AnimatableColorImpl visited_link_color_;
 };
 
-DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableColor, isColor());
+DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableColor, IsColor());
 
 }  // namespace blink
 

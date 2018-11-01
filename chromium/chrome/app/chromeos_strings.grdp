@@ -70,30 +70,6 @@ Press any key to continue exploring.
   </message>
 
   <!-- File Manager -->
-  <message name="IDS_FLAGS_FILE_MANAGER_MTP_NAME" desc="Name of the about:flag option for MTP support in file manager.">
-    MTP support in File Manager
-  </message>
-  <message name="IDS_FLAGS_FILE_MANAGER_MTP_DESCRIPTION" desc="Description of the about:flag option for MTP support in file manager.">
-    Show MTP devices as a file storage in the file manager.
-  </message>
-  <message name="IDS_FLAGS_VIDEO_PLAYER_CHROMECAST_SUPPORT_NAME" desc="Name of the about:flag option to enable the chromecast support for video app.">
-    Experimental Chromecast support for Video Player
-  </message>
-  <message name="IDS_FLAGS_VIDEO_PLAYER_CHROMECAST_SUPPORT_DESCRIPTION" desc="Description of the about:flag option to the enable the chromecast support for video app.">
-    This option enables experimental Chromecast support for Video Player app on ChromeOS.
-  </message>
-  <message name="IDS_FLAGS_NEW_ZIP_UNPACKER_NAME" desc="Name of about::flags option for the new ZIP unpacker based on the File System Provider API.">
-    New ZIP unpacker
-  </message>
-  <message name="IDS_FLAGS_NEW_ZIP_UNPACKER_DESCRIPTION" desc="Description of about::flags option for the new ZIP unpacker based on the File System Provider API.">
-    New ZIP unpacker flow, based on the File System Provider API.
-  </message>
-  <message name="IDS_FLAGS_SHOW_ARC_FILES_APP_NAME" desc="Name of about::flags option for showing Android Files app in launcher.">
-    Show Android Files app
-  </message>
-  <message name="IDS_FLAGS_SHOW_ARC_FILES_APP_DESCRIPTION" desc="Description of the about::flag option for showing ARC Files app in launcher.">
-    Show Android Files app in Chrome OS launcher. This is only effective on a device with access to Play Store.
-  </message>
   <message name="IDS_FILE_SYSTEM_PROVIDER_UNRESPONSIVE_WARNING" desc="A warning shown in a notification that an operation is taking longer than expected.">
     An operation is taking longer than expected. Do you want to abort it?
   </message>
@@ -1386,54 +1362,6 @@ Press any key to continue exploring.
   <message name="IDS_ECHO_CONSENT_DISMISS_BUTTON" desc="Dismiss dialog button label for disabled echo dialog.">
     Dismiss
   </message>
-  <message name="IDS_FLAGS_OFFICE_EDITING_COMPONENT_APP_NAME" desc="Name for the flag for Office Editing for Docs, Sheets &amp; Slides component extension.">
-    Office Editing for Docs, Sheets &amp; Slides
-  </message>
-  <message name="IDS_FLAGS_OFFICE_EDITING_COMPONENT_APP_DESCRIPTION" desc="Description for the flag for Office Editing for Docs, Sheets &amp; Slides component extension.">
-    Office Editing for Docs, Sheets &amp; Slides for testing purposes.
-  </message>
-  <message name="IDS_FLAGS_DISPLAY_COLOR_CALIBRATION_NAME" desc="Name for the flag for the color calibration of the display.">
-    Color calibration of the display
-  </message>
-  <message name="IDS_FLAGS_DISPLAY_COLOR_CALIBRATION_DESCRIPTION" desc="Description for the flag for the color calibration of the display.">
-    Allow color calibration of the display if the display supports the feature.
-  </message>
-  <message name="IDS_FLAGS_MEMORY_PRESSURE_THRESHOLD_NAME" desc="Name for the flag which specifies which memory pressure strategy should be used on ChromeOS.">
-    Memory discard strategy for advanced pressure handling
-  </message>
-  <message name="IDS_FLAGS_MEMORY_PRESSURE_THRESHOLD_DESCRIPTION" desc="Description for the flag which specifies which memory pressure strategy should be used on ChromeOS.">
-    Memory discarding strategy to use
-  </message>
-  <message name="IDS_FLAGS_CONSERVATIVE_THRESHOLDS" desc="The value of the Memory pressure for ChromeOS which requests conservative thresholds.">
-    Conservative memory pressure release strategy
-  </message>
-  <message name="IDS_FLAGS_AGGRESSIVE_CACHE_DISCARD_THRESHOLDS" desc="The value of the Memory pressure thresholds for ChromeOS which use an aggressive cache release strategy.">
-    Aggressive cache release strategy
-  </message>
-  <message name="IDS_FLAGS_AGGRESSIVE_TAB_DISCARD_THRESHOLDS" desc="The value of the Memory pressure thresholds for ChromeOS which uses an aggressive tab release strategy.">
-    Aggressive tab release strategy
-  </message>
-  <message name="IDS_FLAGS_AGGRESSIVE_THRESHOLDS" desc="The value of the Memory pressure thresholds for ChromeOS which use an aggressive release strategy.">
-    Aggressive tab and cache release strategy
-  </message>
-  <message name="IDS_FLAGS_WAKE_ON_PACKETS_NAME" desc="Name for the flag to enable wake on packets.">
-    Wake On Packets
-  </message>
-  <message name="IDS_FLAGS_WAKE_ON_PACKETS_DESCRIPTION" desc="Description for the flag to enable wake on packets.">
-    Enables waking the device based on the receipt of some network packets.
-  </message>
-  <message name="IDS_FLAGS_QUICK_UNLOCK_PIN" desc="Title of the flag used to enable quick unlock pin.">
-    Quick Unlock (PIN)
-  </message>
-  <message name="IDS_FLAGS_QUICK_UNLOCK_PIN_DESCRIPTION" desc="Description of the flag used to enable quick unlock pin.">
-    Enabling PIN quick unlock allows you to use a PIN to unlock your Chromebook on the lock screen after you have signed into your device.
-  </message>
-  <message name="IDS_FLAGS_QUICK_UNLOCK_FINGERPRINT" desc="Title of the flag used to enable quick unlock fingerprint.">
-    Quick Unlock (Fingerprint)
-  </message>
-  <message name="IDS_FLAGS_QUICK_UNLOCK_FINGERPRINT_DESCRIPTION" desc="Description of the flag used to enable quick unlock fingerprint.">
-    Enabling fingerprint quick unlock allows you to setup and use a fingerprint to unlock your Chromebook on the lock screen after you have signed into your device.
-  </message>
   <message name="IDS_OFFERS_CONSENT_INFOBAR_LABEL_LEARN_MORE" desc="Text of the Learn More link in the echo dialog.">
     Learn More
   </message>
@@ -1565,6 +1493,9 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_RESET_SCREEN_ICON_TITLE" desc="Accessible title of the reset screen icon depicting exclamation mark.">
     Exclamation mark icon
+  </message>
+  <message name="IDS_RESET_SCREEN_ILLUSTRATION_TITLE" desc="Accessible title of the reset screen illustration depicting powerwash.">
+    Powerwash illustration
   </message>
   <message name="IDS_UPDATE_SCREEN_TITLE" desc="Title of the OOBE update screen">
     Update
@@ -2215,6 +2146,9 @@ Press any key to continue exploring.
   <message name="IDS_LOGIN_CAPTCHA_INSTRUCTIONS" desc="Explanatory message shown when the user must type letters shown in a captcha image to reauthenticate.">
     Type the characters you see in the picture below.
   </message>
+  <message name="IDS_LOGIN_NEEDS_DIRCRYPTO_MIGRATION_BANNER" desc="Banner text for users that need to migrate their data to use dircrypto.">
+    You've got a new critical update. Sign in to get started.
+  </message>
   <message name="IDS_OPTIONS_SETTINGS_SECONDARY_USER_BANNER" desc="Banner displayed in settings page when the user is secondary in a multi-profile session.">
     Some settings belonging to <ph name="PRIMARY_EMAIL">$1<ex>john@google.com</ex></ph> are being shared with you. These settings only affect your account when using multiple sign-in.
   </message>
@@ -2395,6 +2329,35 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_NETWORK_ACTIVATION_NEEDS_CONNECTION" desc="Message when attempting to activate a mobile network that requires a connection">
     Activation of '<ph name="name">$1<ex>Generic Wireless</ex></ph>' requires a network connection.
+  </message>
+
+  <!-- Strings shown within tether notifications -->
+  <message name="IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_TITLE" desc="Title of the notification shown to the user when an attempt to tether to another device has failed.">
+    Instant Tethering connection failed
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_MESSAGE" desc="Message shown as part of the notification shown to the user when an attempt to tether to another device has failed which gives the user instructions about how to configure tethering.">
+    Tap to configure
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_WIFI_AVAILABLE_ONE_DEVICE_TITLE" desc="Title of the notification shown to the user when a tether hotspot is available via one nearby device.">
+    Wi-Fi available via phone
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_WIFI_AVAILABLE_ONE_DEVICE_MESSAGE" desc="Message shown as part of the notification shown to the user when a tether hotspot is available via one nearby device.">
+    Data connection available from your <ph name="PHONE_NAME">$1<ex>Google Pixel XL</ex></ph>
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_WIFI_AVAILABLE_ONE_DEVICE_CONNECT" desc="Text of the button shown to the user when a tether hotspot is available via one nearby device. When the button is clicked, a connection starts.">
+    Connect
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_WIFI_AVAILABLE_MULTIPLE_DEVICES_TITLE" desc="Title of the notification shown to the user when multiple tether hotspots are available via multiple nearby devices.">
+    Wi-Fi available via multiple devices
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_WIFI_AVAILABLE_MULTIPLE_DEVICES_MESSAGE" desc="Message shown as part of the notification shown to the user when multiple tether hotspots are available via multiple nearby devices.">
+    Data connection available
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_SET_UP_NEEDED_TITLE" desc="Title of the notification shown to the user when set up is needed on another device to start tethering.">
+    Finish setting up connection on your <ph name="PHONE_NAME">$1<ex>Google Pixel XL</ex></ph>
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_SET_UP_NEEDED_MESSAGE" desc="Message shown as part of the notification shown to the user when set up is needed on another device to start tethering.">
+    Tap the notification on your Pixel to set up a private Wi-Fi connection that can be used by this device.
   </message>
 
   <!-- Options strings -->
@@ -2674,27 +2637,6 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_UNSUPPORTED_DEVICE">
     Unsupported Bluetooth device: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_ATTRIBUTE_LENGTH_INVALID">
-    Write operation exceeds the maximum length of the attribute to: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_CONNECTION_CONGESTED">
-    Connection is congested to remote device: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_INSUFFICIENT_ENCRYPTION">
-    Insufficient encryption for a given operation on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_OFFSET_INVALID">
-    Read or write operation was requested with an invalid offset on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_READ_NOT_PERMITTED">
-    Read operation is not permitted on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_REQUEST_NOT_SUPPORTED">
-    The given request is not supported to: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_WRITE_NOT_PERMITTED">
-    Write operation is not permitted on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
-  </message>
   <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_DISCONNECT_FAILED">
     Failed to disconnect from "<ph name="DEVICE_NAME">%1<ex>Nexus S</ex></ph>".
   </message>
@@ -2785,8 +2727,14 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION" desc="In the settings tab, the description of an option to hold a key and click to speak any on-screen text out loud.">
     Hold down Search and click or drag to speak anything
   </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_OPTIONS_LABEL" desc="In the settings tab, the label for the button that opens the Options page for the Select-to-Speak feature.">
+    Select-to-speak options
+  </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to enable switch access (for users with limited motor control).">
     Switch access (control the computer with just one or two switches)
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_OPTIONS_LABEL" desc="In the settings tab, the label for the button that opens the Options page for the Switch Access feature.">
+    Switch access options
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MANAGE_ACCESSIBILITY_FEATURES" desc="In the settings tab, the title of a link that opens a screen allowing the user to change accessibility features.">
     Manage accessibility features
@@ -2832,18 +2780,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_TITLE" desc="In the settings tab, the title of a link that adds additional accessibility features not found in the built-in settings.">
     Add additional features
-  </message>
-  <message name="IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_NAME" desc="Name of the about:flag option for experimental accessibility features.">
-    Experimental accessibility features
-  </message>
-  <message name="IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_DESCRIPTION" desc="Description of the about:flag option for experimental accessibility features.">
-    Enable additional accessibility features in the Settings page.
-  </message>
-  <message name="IDS_FLAGS_DISABLE_SYSTEM_TIMEZONE_AUTOMATIC_DETECTION_NAME" desc="Name of the about:flag option for disabling EnableSystemTimezoneAutomaticDetection policy.">
-    SystemTimezoneAutomaticDetection policy support
-  </message>
-  <message name="IDS_FLAGS_DISABLE_SYSTEM_TIMEZONE_AUTOMATIC_DETECTION_DESCRIPTION" desc="Description of the about:flag option for disabling EnableSystemTimezoneAutomaticDetection policy.">
-    Disable system timezone automatic detection device policy.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_BUTTON_LABEL" desc="Label for the button opening display settings tab.">
     Display settings
@@ -4821,6 +4757,9 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_ROTATE_SCREEN" desc="The text in the keyboard overlay to explain the shortcut (rotate the screen).">
     Rotate screen
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_ROTATE_WINDOW" desc="The text in the keyboard overlay to explain the shortcut (rotate the window).">
+    Rotate window
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_SAVE" desc="The text in the keyboard overlay to explain the shortcut (save page as a file).">
     Save
   </message>
@@ -4842,11 +4781,17 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_SELECT_WORD_AT_A_TIME" desc="The text in the keyboard overlay to explain the shortcut.">
     Select "word at a time"
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_SHOW_IME_BUBBLE" desc="The text in the keyboard overlay to explain the shortcut (Show the input options menu bubble).">
+    Input options bubble
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_SHOW_MESSAGE_CENTER" desc="The text in the keyboard overlay to explain the shortcut (Show the message center).">
     Message center
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_SHOW_STATUS_MENU" desc="The text in the keyboard overlay to explain the shortcut (show the status menu).">
     Status menu
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_SHOW_STYLUS_TOOLS" desc="The text in the keyboard overlay to explain the shortcut (show the stylus tools).">
+    Stylus tools
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_SIGN_OUT" desc="The text in the keyboard overlay to explain the shortcut.">
     Sign out
@@ -4884,8 +4829,14 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_SPEECH_INPUT" desc="The text in the keyboard overlay to explain the shortcut (start or stop speech input).">
     Speech input
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_TOUCH_HUD_MODE_CHANGE" desc="The text in the keyboard overlay to explain the shortcut (touch hub mode change).">
+    Touch HUD mode change
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_UNDO" desc="The text in the keyboard overlay to explain the shortcut.">
     Undo
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_UNPIN" desc="The text in the keyboard overlay to explain the shortcut.">
+    Unpin
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_VIEW_KEYBOARD_OVERLAY" desc="The text in the keyboard overlay to explain the shortcut.">
     Keyboard overlay
@@ -5702,6 +5653,71 @@ Battery full
     This device was locked by the owner.
   </message>
 
+  <!-- Encryption migration dialog -->
+  <message name="IDS_ENCRYPTION_MIGRATION_READY_TITLE" desc="Title shown in encryption migration screen, which asks the user to install a critical update.">
+    Install critical update
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_READY_DESCRIPTION" desc="Description shown in encryption migration screen, which asks the user to install a critical update.">
+    To download and use Android apps, first you need to install an update. While your device is updating, you can’t use it. Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will restart after installation completes.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_MIGRATING_TITLE" desc="Title shown in encryption migration screen when the migration is ongoing.">
+    Installing critical update
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_MIGRATING_DESCRIPTION" desc="Description shown in encryption migration screen when the migration is ongoing.">
+    Don’t turn off or close your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> until the update finishes. Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will restart after installation completes.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_PROGRESS_LABEL" desc="Label to show the progress of the migration.">
+    <ph name="PROGRESS_PERCENT">$1<ex>90</ex></ph>% done
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_BATTERY_WARNING_LABEL" desc="Label to tell the user that the battery level is too low to start the migration.">
+    Battery too low for update (<ph name="PROGRESS_PERCENT">$1<ex>10</ex></ph>%)
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_ASK_CHARGE_MESSAGE" desc="Label to ask the user to charge the device.">
+    Please plug your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> into a power source.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_NECESSARY_BATTERY_LEVEL_MESSAGE" desc="Explanation about how to start migration when the battery level is low.">
+    Update will begin when battery reaches <ph name="BATTERY_LEVEL">$1<ex>30</ex></ph>%.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_CHARGING_LABEL" desc="Label which is shown when the device is charging.">
+    Charging.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_FAILED_TITLE" desc="Title shown in encryption migration screen when the migration fails.">
+    Something went wrong
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_FAILED_SUBTITLE" desc="In encryption migration screen, explanation about the failure of migration.">
+    Sorry, some files were damaged and the update wasn’t successful. Your synced files are safe.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_FAILED_MESSAGE" desc="In encryption migration screen, label to ask user to create the account again.">
+    Unfortunately, you'll need to add your account to this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> again.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_NOSPACE_WARNING_LABEL" desc="Label to tell the user that migration can not start due to low storage space.">
+    Not enough storage for update
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_ASK_FREE_SPACE_MESSAGE" desc="In encryption migration screen, message to ask the user to free some space on the device.">
+    Please free up some space on your device.
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_AVAILABLE_SPACE_LABEL" desc="In encryption migration screen, label to tell the user how much space is available now.">
+    Available: <ph name="AVAILABLE_SPACE">$1<ex>5 MB</ex></ph>
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_NECESSARY_SPACE_LABEL" desc="In encryption migration screen, label to tell the user how much space is necessary to start migration.">
+    Needed to update: <ph name="NECESSARY_SPACE">$1<ex>10 MB</ex></ph>
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_BUTTON_UPDATE" desc="In encryption migration screen, button label to start migration (i.e. update the encryption of user data).">
+    Update
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_BUTTON_SKIP" desc="In encryption migration screen, button label to skip the migration.">
+    Skip
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_BUTTON_RESTART" desc="In encryption migration screen, button label to restart the device.">
+    Restart
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_BUTTON_CONTINUE" desc="In encryption migration screen, button label to continue to sign in to the user's session.">
+    Continue
+  </message>
+  <message name="IDS_ENCRYPTION_MIGRATION_BUTTON_SIGNIN" desc="In encryption migration screen, button label to sign in to the user's session.">
+    Sign in
+  </message>
+
   <!-- Idle warning dialog -->
   <message name="IDS_IDLE_WARNING_TITLE" desc="Title of the warning dialog shown when the user becomes idle and is about to get logged out.">
     Are you still there?
@@ -5797,20 +5813,6 @@ Battery full
   <message name="IDS_EOL_DISMISS_BUTTON" desc="A button label shown in the notification for eol status change to dismiss the notification.">
     Don't remind me again
   </message>
-  <message name="IDS_FLAGS_EOL_NOTIFICATION_NAME" desc="Name of the about:flag option to disable eol notification.">
-    Disable Device End of Life notification.
-  </message>
-  <message name="IDS_FLAGS_EOL_NOTIFICATION_DESCRIPTION" desc="Description of the about:flag option to disable eol notification.">
-    Disable Notifcation when Device is End of Life.
-  </message>
-
-  <!-- Stylus strings -->
-  <message name="IDS_FLAGS_FORCE_ENABLE_STYLUS_TOOLS_NAME" desc="Name of the about:flag option to enable stylus tools.">
-    Force enable stylus features
-  </message>
-  <message name="IDS_FLAGS_FORCE_ENABLE_STYLUS_TOOLS_DESCRIPTION" desc="Description of the about:flag option to enable stylus tools.">
-    Forces display of the stylus tools menu in the shelf and the stylus section in settings, even if there is no attached stylus device.
-  </message>
 
   <!-- Genius App -->
   <message name="IDS_GENIUS_APP_NAME" desc="Name of the genius app in the app shelf">
@@ -5905,14 +5907,14 @@ All users must sign out to continue.
   <message name="IDS_FIRST_RUN_NEXT_BUTTON" desc="Text on the first-run tutorial button leading to next step of tutorial.">
     Next
   </message>
+  <message name="IDS_FIRST_RUN_ACCESSIBLE_TITLE" desc="Accessible title of the first screen in the first run app.">
+    Welcome
+  </message>
+  <message name="IDS_FIRST_RUN_STEP_ACCESSIBLE_TITLE" desc="Accessible title for all first run app screens except for the first screen.">
+    Tour
+  </message>
 
   <!-- Network portal notification -->
-  <message name="IDS_FLAGS_NETWORK_PORTAL_NOTIFICATION_NAME" desc="Title for the flag to enable/disable notifications about captive portals.">
-    Notifications about captive portals
-  </message>
-  <message name="IDS_FLAGS_NETWORK_PORTAL_NOTIFICATION_DESCRIPTION" desc="Description for the flag to enable/disable notifications about captive portals.">
-    If enabled, notification is displayed when device is connected to a network behind captive portal.
-  </message>
   <message name="IDS_PORTAL_DETECTION_NOTIFICATION_TITLE_WIRED" desc="Title for the system notification that current wired network is behind captive portal">
     Connect to network
   </message>
@@ -6443,32 +6445,11 @@ All users must sign out to continue.
   <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_DENY_BUTTON" desc="Label on the button to reject permissions.">
     Deny
   </message>
-  <message name="IDS_FLAGS_MTP_WRITE_SUPPORT_NAME" desc="Name of the option for mtp write support.">
-    MTP write support
-  </message>
-  <message name="IDS_FLAGS_MTP_WRITE_SUPPORT_DESCRIPTION" desc="Description of the option for mtp write support.">
-    MTP write support in File System API (and file manager). In-place editing operations are not supported.
-  </message>
   <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_NOTIFICATION_MESSAGE" desc="Message in a notification about granted read-only pemissions (read, write, delete, create files and directories) to a volume (eg. USB drive, SD card, MTP device) with the specified name to the extension.">
     Read-only access to <ph name="VOLUME_NAME">$1<ex>FooBar 4GB</ex></ph> has been granted.
   </message>
   <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_NOTIFICATION_WRITABLE_MESSAGE" desc="Message in a notification about granted full permissions (read, write, delete, create files and directories) to a volume (eg. USB drive, SD card, MTP device) with the specified name to the extension.">
     Read and write access to <ph name="VOLUME_NAME">$1<ex>FooBar 4GB</ex></ph> has been granted.
-  </message>
-  <message name="IDS_FLAGS_CROS_REGIONS_MODE_NAME" desc="Title for the flag to select cros-regions file handling mode.">
-    Cros-regions load mode
-  </message>
-  <message name="IDS_FLAGS_CROS_REGIONS_MODE_DESCRIPTION" desc="Description for the flag to select cros-regions file handling mode.">
-    This flag controls cros-regions load mode
-  </message>
-  <message name="IDS_FLAGS_CROS_REGIONS_MODE_DEFAULT" desc="Name of the value for cros-regions file handling mode for 'default' mode.">
-    Default
-  </message>
-  <message name="IDS_FLAGS_CROS_REGIONS_MODE_OVERRIDE" desc="Name of the value for cros-regions file handling mode for 'override' mode (values from region file replace matching VPD values).">
-    Override VPD values.
-  </message>
-  <message name="IDS_FLAGS_CROS_REGIONS_MODE_HIDE" desc="Name of the value for cros-regions file handling mode for 'hide' mode (VPD values are hidden, only cros-region values are used).">
-    Hide VPD values.
   </message>
 
   <!-- Webstore widget app -->
@@ -6489,12 +6470,6 @@ All users must sign out to continue.
   </message>
   <message name="IDS_WEBSTORE_WIDGET_INSTALLING_SPINNER_ALT" desc="Alt text for spinner shown in Chrome Web Store Gallery widget while an app is being installed from the widget. This is the text that will be read by screen reader when the spinner has focus. The string should be translated as a verb.">
     Installing
-  </message>
-  <message name="IDS_FLAGS_PRINTER_PROVIDER_SEARCH_APP_NAME" desc="Name of the flag used to enable launching Chrome Web Store Gallery widget app for searching for printer provider apps.">
-    Chrome Web Store Gallery app for printer drivers
-  </message>
-  <message name="IDS_FLAGS_PRINTER_PROVIDER_SEARCH_APP_DESCRIPTION" desc="Description of a flag in chrome://flags that enables launching Chrome Web Store Gallery widget app for searching for printer provider apps.">
-    Enables Chrome Web Store Gallery app for printer drivers. The app searches Chrome Web Store for extensions that support printing to a USB printer with specific USB ID.
   </message>
 
   <!-- Android Apps -->
@@ -6639,6 +6614,9 @@ All users must sign out to continue.
   <message name="IDS_ARC_ANDROID_MANAGEMENT_REQUIRED_ERROR" desc="Error message shown when Android management is required for an unmanaged Chrome OS user.">
     Your organization has not enabled Google Play Store for your account. Contact your administrator for more information.
   </message>
+  <message name="IDS_ARC_NETWORK_UNAVAILABLE_ERROR" desc="Error message shown when Android cannot set up network connection.">
+    Network connection cannot be established.
+  </message>
   <message name="IDS_ARC_CRITICALLY_LOW_DISK_NOTIFICATION_TITLE" desc="Title of the notification warning users that they are critically low on disk space and Android apps can not be launched.">
     Device disk space critically low
   </message>
@@ -6669,18 +6647,6 @@ All users must sign out to continue.
   <message name="IDS_ARC_OOBE_TERMS_POPUP_HELP_CLOSE_BUTTON" desc="Close button of the popup local help of Arc Play Store Terms OOBE dialog.">
     Close
   </message>
-  <message name="IDS_FLAGS_ARC_BOOT_COMPLETED" desc="Name of the flag for blocking the ACTION_BOOT_COMPLETED broadcast for third-party apps on ARC.">
-    Load Android apps automatically
-  </message>
-  <message name="IDS_FLAGS_ARC_BOOT_COMPLETED_DESCRIPTION" desc="Description for the flag for blocking ACTION_BOOT_COMPLETED broadcast for third-party apps.">
-    Allow Android apps to start automatically after signing in.
-  </message>
-  <message name="IDS_FLAGS_ENABLE_IME_MENU_NAME" desc="Name of the about: flag for enabling opt-in IME menu.">
-    Enable opt-in IME menu
-  </message>
-  <message name="IDS_FLAGS_ENABLE_IME_MENU_DESCRIPTION" desc="Description of the about: flag for enabling opt-in IME menu.">
-    Enable access to the new IME menu in the Language Settings page.
-  </message>
   <message name="IDS_LOW_DISK_NOTIFICATION_TITLE" desc="Title of the notification warning users that they are low on disk space.">
     Device is low on disk space
   </message>
@@ -6696,20 +6662,26 @@ All users must sign out to continue.
   <message name="IDS_LOW_DISK_NOTIFICATION_BUTTON" desc="Button on the low disk notification to open storage management.">
     Manage storage
   </message>
-  <message name="IDS_FLAGS_ENABLE_EHV_INPUT_NAME" desc="Name of the about: flag for enabling emoji, handwriting and voice input on opt-in IME menu.">
-    Emoji, handwriting and voice input on opt-in IME menu
-    </message>
-  <message name="IDS_FLAGS_ENABLE_EHV_INPUT_DESCRIPTION" desc="Description of the about: flag enabling emoji, handwriting and voice input on opt-in IME menu.">
-    Enable access to emoji, handwriting and voice input form opt-in IME menu.
-  </message>
   <message name="IDS_HATS_DONE_BUTTON_LABEL" desc="Label used for the done button at the end of survey">
     Done
   </message>
+  <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_TITLE" desc="Title of the notification to navigate the user to first update the device encryption before running Android apps.">
+    Install critical update
+  </message>
+  <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_MESSAGE" desc="Main message of the notification to navigate the user to first update the device encryption before running Android apps.">
+    To use Android apps, sign in again and update.
+  </message>
+  <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_LOW_BATTERY_MESSAGE" desc="Main message of the notification to navigate the user to first update the device encryption before running Android apps.">
+    To use Android apps, charge &amp; update your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+  </message>
+  <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_RESTART_BUTTON" desc="Label for the button in the notification that navigates the user to sign-out for completing the encryption update step.">
+    Sign out &amp; sign back in
+  </message>
+  <message name="IDS_ARC_MIGRATE_ENCRYPTION_SUCCESS_MESSAGE" desc="Message of the toast shown on the first sign-in after the successfully completed migration needed for using Android apps.">
+    Update successful. You can now use Android apps.
+  </message>
 
   <!-- Print Job Notification -->
-  <message name="IDS_PRINT_JOB_WAITING_NOTIFICATION_MESSAGE" desc="Message of the waiting-for-printing notification.">
-    Waiting to print <ph name="PAGE_NUMBER">$1<ex>5</ex></ph> pages to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
-  </message>
   <message name="IDS_PRINT_JOB_PRINTING_NOTIFICATION_MESSAGE" desc="Message of the printing-in-progress notification.">
     Now printing <ph name="PAGE_NUMBER">$1<ex>5</ex></ph> pages to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
   </message>

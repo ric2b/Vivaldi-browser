@@ -38,7 +38,7 @@
 <translation id="1580783302095112590">Correio enviado.</translation>
 <translation id="1646446875146297738">Se ativar a funcionalidade "Não monitorizar", será incluído um pedido no seu tráfego de navegação. Os possíveis efeitos dependerão da resposta ao pedido por parte de um Website e da forma como o pedido é interpretado.
 
-Por exemplo, alguns Websites poderão mostrar anúncios que não sejam baseados noutros Websites visitados por si como resposta a este pedido. Muitos Websites continuarão a recolher e utilizar os seus dados de navegação com o objetivo de melhorar a segurança, fornecer conteúdos, serviços, anúncios e recomendações nos seus Websites e gerar estatísticas de relatórios. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
+Por exemplo, alguns Sites poderão mostrar anúncios que não sejam baseados noutros Sites visitados por si como resposta a este pedido. Muitos Sites continuarão a recolher e utilizar os seus dados de navegação com o objetivo de melhorar a segurança, fornecer conteúdos, serviços, anúncios e recomendações nos seus Sites e gerar estatísticas de relatórios. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
 <translation id="1657011748321897393">A partilha falhou porque não está ligado à rede.</translation>
 <translation id="165877110639533037">Sem separadores abertos</translation>
 <translation id="1687475363370981210">Marcar tudo como lido</translation>
@@ -77,7 +77,6 @@ Por exemplo, alguns Websites poderão mostrar anúncios que não sejam baseados 
 <translation id="2381405137052800939">Noções básicas</translation>
 <translation id="2386793615875593361">1 selecionada</translation>
 <translation id="2435457462613246316">Mostrar palavra-passe</translation>
-<translation id="2467815441875554965">Pesquisa contextual</translation>
 <translation id="2572712655377361602">Uma política do dispositivo bloqueou o acesso às suas fotos</translation>
 <translation id="2584132361465095047">Adicionar conta...</translation>
 <translation id="2593774076813182497">Não é pos. impr. página.</translation>
@@ -101,6 +100,7 @@ Por exemplo, alguns Websites poderão mostrar anúncios que não sejam baseados 
 <translation id="2871695793448672541">Palavra-passe oculta</translation>
 <translation id="2898963176829412617">Nova pasta…</translation>
 <translation id="2903493209154104877">Endereços</translation>
+<translation id="2909437209446960244">Separ. recentes</translation>
 <translation id="291754862089661335">Posicione o código QR ou o código de barras nesta moldura</translation>
 <translation id="2921219216347069551">Impossível Partilhar Página</translation>
 <translation id="292639812446257861">Marcar como não lidas</translation>
@@ -129,6 +129,7 @@ Por exemplo, alguns Websites poderão mostrar anúncios que não sejam baseados 
 <translation id="3414292259312108062">O Chrome armazena esta informação nas suas <ph name="BEGIN_LINK" />palavras-passe guardadas do Google<ph name="END_LINK" /> e preenche-a automaticamente por si para que não a tenha de memorizar.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> min.</translation>
 <translation id="3448016392200048164">Vista dividida</translation>
+<translation id="3474624961160222204">Continuar como <ph name="NAME" /></translation>
 <translation id="3474649192738347024">Formulários preenchidos.</translation>
 <translation id="3478058380795961209">Mês de validade</translation>
 <translation id="3482959374254649722">A sincronizar os seus separadores...</translation>
@@ -140,14 +141,14 @@ Por exemplo, alguns Websites poderão mostrar anúncios que não sejam baseados 
 <translation id="3567664240939803299">Pretende que o Google Smart Lock guarde a palavra-passe p/ este site?</translation>
 <translation id="3588820906588687999">Abrir imagem num novo separador</translation>
 <translation id="3603009562372709545">Copiar URL do Link</translation>
-<translation id="360480449234699036">Saiba mais acerca dos tópicos nos Websites sem sair da página. A funcionalidade Tocar para pesquisar envia uma palavra e o respetivo contexto circundante para a Pesquisa Google, que devolve definições, imagens, resultados da pesquisa e outros detalhes.
+<translation id="360480449234699036">Saiba mais acerca dos tópicos nos Sites sem sair da página. A funcionalidade Tocar para pesquisar envia uma palavra e o respetivo contexto circundante para a Pesquisa Google, que devolve definições, imagens, resultados da pesquisa e outros detalhes.
 
 Para ajustar o termo de pesquisa, prima continuamente para selecionar. Para refinar a sua pesquisa, deslize lentamente o painel totalmente para cima e toque na caixa de pesquisa.</translation>
 <translation id="3607167657931203000">Dados de preenchimento automático</translation>
 <translation id="3608436266458100337">Modo de leitor</translation>
+<translation id="3628119975092896051">A sua lista de leitura está disponível offline. Para adicionar uma página à mesma, toque em <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Pré-carregar Páginas Web</translation>
 <translation id="3691593122358196899">Adicionado aos marcadores em <ph name="FOLDER_TITLE" /></translation>
-<translation id="3692781555820666866">Quando está ativada, a caixa geral inclui sugestões de páginas Web transmitidas por dispositivos perto de si.</translation>
 <translation id="3738139272394829648">Tocar para pesquisar</translation>
 <translation id="3771033907050503522">Sep. nav. anónima</translation>
 <translation id="3783017676699494206">Guardar Imagem</translation>
@@ -174,7 +175,6 @@ Para ajustar o termo de pesquisa, prima continuamente para selecionar. Para refi
 <translation id="4359125752503270327">Esta página abre noutra aplicação.</translation>
 <translation id="4378154925671717803">Telefone</translation>
 <translation id="441868831736628555">Aviso de Privacidade</translation>
-<translation id="4473991315115669931">Entrar no modo de navegação anónima</translation>
 <translation id="4526249700380860531">Ver e gerir as palavras-passe guardadas em <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Experimente iniciar sessão novamente.</translation>
 <translation id="4620246317052452550">Páginas lidas</translation>
@@ -187,6 +187,7 @@ Os dados estão encriptados com a sua frase de acesso de sincronização. Introd
 <translation id="4750394297954878236">Sugestões</translation>
 <translation id="4773461607542755386">Abrir esta página na aplicação <ph name="APP_NAME" />?</translation>
 <translation id="481968316161811770">Cookies, dados de sites</translation>
+<translation id="4860895144060829044">Telefonar</translation>
 <translation id="4875622588773761625">Pretende que o <ph name="PASSWORD_MANAGER_BRAND" /> atualize a sua palavra-passe para este site?</translation>
 <translation id="4881695831933465202">Abrir</translation>
 <translation id="4904877109095351937">Marcar como lidas</translation>
@@ -248,7 +249,6 @@ A Entrega também tem de estar ativada na secção Geral das Definições e os s
 <translation id="6042308850641462728">Mais</translation>
 <translation id="605721222689873409">AA</translation>
 <translation id="6066301408025741299">Toque para cancelar.</translation>
-<translation id="60851516108411750">A sua lista de leitura está disponível offline. Para adicionar uma página à mesma, toque em <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="6122191549521593678">Online</translation>
 <translation id="6127379762771434464">Item removido</translation>
 <translation id="6136914049981179737">Há segundos</translation>
@@ -267,6 +267,7 @@ A Entrega também tem de estar ativada na secção Geral das Definições e os s
 <translation id="6324669097367352121">Definições de início de sessão</translation>
 <translation id="6337234675334993532">Encriptação</translation>
 <translation id="633809752005859102">Algo correu muito mal. Estamos a tratar do assunto.</translation>
+<translation id="6342069812937806050">Mesmo agora</translation>
 <translation id="6344783595350022745">Limpar Texto</translation>
 <translation id="6362362396625799311">Sem separadores de navegação anónima</translation>
 <translation id="6380866119319257197">Se se esquecer da frase de acesso ou pretender alterar esta definição, <ph name="BEGIN_LINK" />reponha a sincronização<ph name="END_LINK" /></translation>
@@ -307,16 +308,17 @@ Os dados foram encriptados com a sua frase de acesso de sincronização em <ph n
 <translation id="7131892264600713844">A mostrar o histórico deste dispositivo. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
 <translation id="7133798577887235672">Nome completo</translation>
 <translation id="7136892417564438900">A câmara não está disponível</translation>
+<translation id="7159472599653637159">Pedir site para dispositivos móveis</translation>
 <translation id="7167621057293532233">Tipos de dados</translation>
 <translation id="7189598951263744875">Partilhar...</translation>
 <translation id="7203585745079012652">Ouvir Respostas</translation>
 <translation id="722055596168483966">Personalizar os serviços Google</translation>
-<translation id="7222245588540287464">Se a Pesquisa contextual está ou não ativada.</translation>
 <translation id="7336264872878993241"><ph name="PERCENT" /> por cento transferido</translation>
 <translation id="7346909386216857016">OK, compreendi</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7419187830569376338">Pesquisar esta imagem no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="7425346204213733349">As alterações aos marcadores, ao histórico, às palavras-passe e a outras definições deixam de ser sincronizadas com a Conta Google. Contudo, os dados existentes permanecem armazenados na Conta Google.</translation>
+<translation id="744343212394640790">Não é <ph name="EMAIL" /></translation>
 <translation id="7454057999980797137">Distrito/concelho</translation>
 <translation id="7456847797759667638">Abrir localização...</translation>
 <translation id="7464701184726199289">Esta ação limpa os dados sincronizados de todos os dispositivos. As definições de sites guardadas não são eliminadas e podem refletir os seus hábitos de navegação. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
@@ -364,7 +366,7 @@ Os dados foram encriptados com a sua frase de acesso de sincronização em <ph n
 <translation id="8428213095426709021">Definições</translation>
 <translation id="8433678324664858900">Mostrar Sugestões</translation>
 <translation id="8458397775385147834">1 item eliminado</translation>
-<translation id="8487700953926739672">Disponível off-line</translation>
+<translation id="8487700953926739672">Disponível offline</translation>
 <translation id="8503813439785031346">Nome de utilizador</translation>
 <translation id="8517375800490286174">Licenças de Código Aberto</translation>
 <translation id="8524799873541103884">Separadores <ph name="INCOGNITO" /> <ph name="FIRST_VISIBLE_TAB" /> a <ph name="LAST_VISIBLE_TAB" /> de <ph name="NUMBER_OF_OPEN_TABS" /></translation>
@@ -383,7 +385,6 @@ Os dados foram encriptados com a sua frase de acesso de sincronização em <ph n
 <translation id="8741995161408053644">A sua Conta Google pode ter outras formas do histórico de navegação em <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="8775144690796719618">URL inválido</translation>
 <translation id="8820817407110198400">Marcadores</translation>
-<translation id="882482397944455431">Sair do modo de navegação anónima</translation>
 <translation id="8840513115188359703">A sessão na sua Conta Google não é terminada.</translation>
 <translation id="8904976895050290827">Sincronização do Google Chrome</translation>
 <translation id="895541991026785598">Comunicar um problema</translation>

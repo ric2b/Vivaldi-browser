@@ -12,9 +12,6 @@ Polymer({
   is: 'settings-ca-trust-edit-dialog',
 
   properties: {
-    /** @private {!settings.CertificatesBrowserProxy} */
-    browserProxy_: Object,
-
     /** @type {!CertificateSubnode|!NewCertificateSubNode} */
     model: Object,
 
@@ -24,6 +21,9 @@ Polymer({
     /** @private {string} */
     explanationText_: String,
   },
+
+  /** @private {?settings.CertificatesBrowserProxy} */
+  browserProxy_: null,
 
   /** @override */
   ready: function() {
@@ -73,7 +73,7 @@ Polymer({
     /** @param {!CertificatesError} error */
     function(error) {
       /** @type {!CrDialogElement} */ (this.$.dialog).close();
-      this.fire('certificates-error', error);
+      this.fire('certificates-error', {error: error, anchor: null});
     }.bind(this));
   },
 });

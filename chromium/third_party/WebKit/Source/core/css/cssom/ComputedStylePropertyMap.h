@@ -6,7 +6,7 @@
 #define ComputedStylePropertyMap_h
 
 #include "core/css/CSSComputedStyleDeclaration.h"
-#include "core/css/cssom/ImmutableStylePropertyMap.h"
+#include "core/css/cssom/StylePropertyMapReadonly.h"
 #include "core/dom/Node.h"
 #include "core/layout/LayoutObject.h"
 
@@ -20,44 +20,45 @@ namespace blink {
 // them as CSSStyleValues. The IDL for this class is in StylePropertyMap.idl.
 // The computed StylePropertyMapReadOnly for an element is accessed via
 // window.getComputedStyleMap(element) (see WindowGetComputedStyle.idl/h)
-class CORE_EXPORT ComputedStylePropertyMap : public ImmutableStylePropertyMap {
+class CORE_EXPORT ComputedStylePropertyMap : public StylePropertyMapReadonly {
   WTF_MAKE_NONCOPYABLE(ComputedStylePropertyMap);
 
  public:
-  static ComputedStylePropertyMap* create(Node* node,
-                                          const String& pseudoElement) {
-    return new ComputedStylePropertyMap(node, pseudoElement);
+  static ComputedStylePropertyMap* Create(Node* node,
+                                          const String& pseudo_element) {
+    return new ComputedStylePropertyMap(node, pseudo_element);
   }
 
   Vector<String> getProperties() override;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(m_computedStyleDeclaration);
-    visitor->trace(m_node);
-    ImmutableStylePropertyMap::trace(visitor);
+    visitor->Trace(computed_style_declaration_);
+    visitor->Trace(node_);
+    StylePropertyMapReadonly::Trace(visitor);
   }
 
  private:
-  Node* node() const;
+  Node* GetNode() const;
 
  protected:
-  ComputedStylePropertyMap(Node* node, const String& pseudoElement = String())
-      : ImmutableStylePropertyMap(),
-        m_computedStyleDeclaration(
-            CSSComputedStyleDeclaration::create(node, false, pseudoElement)),
-        m_pseudoId(CSSSelector::parsePseudoId(pseudoElement)),
-        m_node(node) {}
+  ComputedStylePropertyMap(Node* node, const String& pseudo_element = String())
+      : StylePropertyMapReadonly(),
+        computed_style_declaration_(
+            CSSComputedStyleDeclaration::Create(node, false, pseudo_element)),
+        pseudo_id_(CSSSelector::ParsePseudoId(pseudo_element)),
+        node_(node) {}
 
-  CSSStyleValueVector getAllInternal(CSSPropertyID) override;
-  CSSStyleValueVector getAllInternal(AtomicString customPropertyName) override;
+  CSSStyleValueVector GetAllInternal(CSSPropertyID) override;
+  CSSStyleValueVector GetAllInternal(
+      AtomicString custom_property_name) override;
 
-  HeapVector<StylePropertyMapEntry> getIterationEntries() override {
+  HeapVector<StylePropertyMapEntry> GetIterationEntries() override {
     return HeapVector<StylePropertyMapEntry>();
   }
 
-  Member<CSSComputedStyleDeclaration> m_computedStyleDeclaration;
-  PseudoId m_pseudoId;
-  Member<Node> m_node;
+  Member<CSSComputedStyleDeclaration> computed_style_declaration_;
+  PseudoId pseudo_id_;
+  Member<Node> node_;
 };
 
 }  // namespace blink

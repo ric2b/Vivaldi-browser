@@ -22,8 +22,10 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "minidump/minidump_extensions.h"
 #include "minidump/minidump_stream_writer.h"
 #include "minidump/minidump_writable.h"
+#include "minidump/minidump_user_extension_stream_data_source.h"
 #include "snapshot/module_snapshot.h"
 
 namespace crashpad {
@@ -41,6 +43,14 @@ class MinidumpUserStreamWriter final : public internal::MinidumpStreamWriter {
   //! \note Valid in #kStateMutable.
   void InitializeFromSnapshot(const UserMinidumpStream* stream);
 
+  //! \brief Initializes a MINIDUMP_USER_STREAM based on \a data_source.
+  //!
+  //! \param[in] data_source The content and type of the stream.
+  //!
+  //! \note Valid in #kStateMutable.
+  void InitializeFromUserExtensionStream(
+      std::unique_ptr<MinidumpUserExtensionStreamDataSource> data_source);
+
  protected:
   // MinidumpWritable:
   bool Freeze() override;
@@ -52,22 +62,13 @@ class MinidumpUserStreamWriter final : public internal::MinidumpStreamWriter {
   MinidumpStreamType StreamType() const override;
 
  private:
-  class MemoryReader : public MemorySnapshot::Delegate {
-   public:
-    ~MemoryReader() override;
-    bool MemorySnapshotDelegateRead(void* data, size_t size) override;
+  class ContentsWriter;
+  class SnapshotContentsWriter;
+  class ExtensionStreamContentsWriter;
 
-    const void* data() const {
-      return reinterpret_cast<const void*>(data_.data());
-    }
-    size_t size() const { return data_.size(); }
+  std::unique_ptr<ContentsWriter> contents_writer_;
 
-   private:
-    std::vector<uint8_t> data_;
-  };
-
-  uint32_t stream_type_;
-  MemoryReader reader_;
+  MinidumpStreamType stream_type_;
 
   DISALLOW_COPY_AND_ASSIGN(MinidumpUserStreamWriter);
 };

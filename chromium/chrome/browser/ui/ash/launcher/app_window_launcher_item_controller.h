@@ -8,9 +8,9 @@
 #include <list>
 #include <string>
 
+#include "ash/public/cpp/shelf_item_delegate.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 #include "ui/aura/window_observer.h"
 
 namespace aura {
@@ -21,15 +21,13 @@ namespace ui {
 class BaseWindow;
 }
 
-class ChromeLauncherController;
-
-// This is a LauncherItemController for abstract app windows (extension or ARC).
+// This is a ShelfItemDelegate for abstract app windows (extension or ARC).
 // There is one instance per app, per launcher id. For apps with multiple
 // windows, each item controller keeps track of all windows associated with the
 // app and their activation order. Instances are owned by ash::ShelfModel.
 //
 // Tests are in chrome_launcher_controller_impl_browsertest.cc
-class AppWindowLauncherItemController : public LauncherItemController,
+class AppWindowLauncherItemController : public ash::ShelfItemDelegate,
                                         public aura::WindowObserver {
  public:
   using WindowList = std::list<ui::BaseWindow*>;
@@ -42,14 +40,13 @@ class AppWindowLauncherItemController : public LauncherItemController,
   void SetActiveWindow(aura::Window* window);
   ui::BaseWindow* GetAppWindow(aura::Window* window);
 
-  // LauncherItemController overrides:
+  // ash::ShelfItemDelegate overrides:
   AppWindowLauncherItemController* AsAppWindowLauncherItemController() override;
-  ash::ShelfAction ItemSelected(ui::EventType event_type,
-                                int event_flags,
-                                int64_t display_id,
-                                ash::ShelfLaunchSource source) override;
-  ash::ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
-  void ExecuteCommand(uint32_t command_id, int event_flags) override;
+  void ItemSelected(std::unique_ptr<ui::Event> event,
+                    int64_t display_id,
+                    ash::ShelfLaunchSource source,
+                    const ItemSelectedCallback& callback) override;
+  void ExecuteCommand(uint32_t command_id, int32_t event_flags) override;
   void Close() override;
 
   // aura::WindowObserver overrides:
@@ -66,9 +63,8 @@ class AppWindowLauncherItemController : public LauncherItemController,
   const WindowList& windows() const { return windows_; }
 
  protected:
-  AppWindowLauncherItemController(const std::string& app_id,
-                                  const std::string& launch_id,
-                                  ChromeLauncherController* controller);
+  explicit AppWindowLauncherItemController(
+      const ash::AppLaunchId& app_launch_id);
 
   // Called when app window is removed from controller.
   virtual void OnWindowRemoved(ui::BaseWindow* window) {}

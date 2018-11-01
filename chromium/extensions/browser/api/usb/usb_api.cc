@@ -14,6 +14,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/memory/ptr_util.h"
+#include "base/values.h"
 #include "device/base/device_client.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device_handle.h"
@@ -465,8 +466,8 @@ void UsbTransferFunction::OnCompleted(UsbTransferStatus status,
   transfer_info->SetInteger(kResultCodeKey, status);
 
   if (data) {
-    transfer_info->Set(kDataKey, base::BinaryValue::CreateWithCopiedBuffer(
-                                     data->data(), length));
+    transfer_info->Set(
+        kDataKey, base::Value::CreateWithCopiedBuffer(data->data(), length));
   } else {
     transfer_info->Set(kDataKey, new base::Value(base::Value::Type::BINARY));
   }
@@ -613,7 +614,7 @@ void UsbGetDevicesFunction::OnGetDevicesComplete(
   std::unique_ptr<base::ListValue> result(new base::ListValue());
   UsbGuidMap* guid_map = UsbGuidMap::Get(browser_context());
   for (const scoped_refptr<UsbDevice>& device : devices) {
-    if (UsbDeviceFilter::MatchesAny(device, filters_) &&
+    if (UsbDeviceFilter::MatchesAny(*device, filters_) &&
         HasDevicePermission(device)) {
       Device api_device;
       guid_map->GetApiDevice(device, &api_device);
@@ -1217,11 +1218,11 @@ void UsbIsochronousTransferFunction::OnCompleted(
       [](const size_t& a, const UsbDeviceHandle::IsochronousPacket& packet) {
         return a + packet.transferred_length;
       });
-  std::unique_ptr<char[]> buffer(new char[length]);
+  std::vector<char> buffer;
+  buffer.reserve(length);
 
   UsbTransferStatus status = device::USB_TRANSFER_COMPLETED;
-  size_t buffer_offset = 0;
-  size_t data_offset = 0;
+  const char* data_ptr = data ? data->data() : nullptr;
   for (const auto& packet : packets) {
     // Capture the error status of the first unsuccessful packet.
     if (status == device::USB_TRANSFER_COMPLETED &&
@@ -1230,18 +1231,16 @@ void UsbIsochronousTransferFunction::OnCompleted(
     }
 
     if (data) {
-      memcpy(&buffer[buffer_offset], data->data() + data_offset,
-             packet.transferred_length);
+      buffer.insert(buffer.end(), data_ptr,
+                    data_ptr + packet.transferred_length);
+      data_ptr += packet.length;
     }
-    buffer_offset += packet.transferred_length;
-    data_offset += packet.length;
   }
 
   std::unique_ptr<base::DictionaryValue> transfer_info(
       new base::DictionaryValue());
   transfer_info->SetInteger(kResultCodeKey, status);
-  transfer_info->Set(kDataKey, new base::BinaryValue(std::vector<char>(
-                                   buffer.get(), buffer.get() + length)));
+  transfer_info->Set(kDataKey, new base::Value(std::move(buffer)));
   if (status == device::USB_TRANSFER_COMPLETED) {
     Respond(OneArgument(std::move(transfer_info)));
   } else {

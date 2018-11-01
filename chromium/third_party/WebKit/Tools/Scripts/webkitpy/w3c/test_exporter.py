@@ -5,60 +5,114 @@
 import logging
 
 from webkitpy.w3c.local_wpt import LocalWPT
-from webkitpy.w3c.common import exportable_commits_since
-from webkitpy.w3c.wpt_github import WPTGitHub
+from webkitpy.w3c.common import exportable_commits_over_last_n_commits
+from webkitpy.w3c.gerrit import Gerrit
+from webkitpy.w3c.wpt_github import WPTGitHub, MergeError
 
 _log = logging.getLogger(__name__)
+
+PR_HISTORY_WINDOW = 100
+COMMIT_HISTORY_WINDOW = 5000
+WPT_URL = 'https://github.com/w3c/web-platform-tests/'
 
 
 class TestExporter(object):
 
-    def __init__(self, host, gh_user, gh_token, dry_run=False):
+    def __init__(self, host, gh_user, gh_token, gerrit_user, gerrit_token, dry_run=False):
         self.host = host
         self.wpt_github = WPTGitHub(host, gh_user, gh_token)
+
+        self.gerrit = Gerrit(self.host, gerrit_user, gerrit_token)
+
         self.dry_run = dry_run
         self.local_wpt = LocalWPT(self.host, gh_token)
         self.local_wpt.fetch()
 
     def run(self):
-        """Query in-flight pull requests, then merge PR or create one.
+        """For last n commits on Chromium master, create or try to merge a PR.
 
-        This script assumes it will be run on a regular interval. On
-        each invocation, it will either attempt to merge or attempt to
-        create a PR, never both.
+        The exporter will look in chronological order at every commit in Chromium.
         """
-        pull_requests = self.wpt_github.in_flight_pull_requests()
+        pull_requests = self.wpt_github.all_pull_requests(limit=PR_HISTORY_WINDOW)
+        open_gerrit_cls = self.gerrit.query_open_cls()
+        self.process_gerrit_cls(open_gerrit_cls, pull_requests)
 
-        if len(pull_requests) == 1:
-            self.merge_in_flight_pull_request(pull_requests.pop())
-        elif len(pull_requests) > 1:
-            _log.error(pull_requests)
-            # TODO(jeffcarp): Print links to PRs
-            raise Exception('More than two in-flight PRs!')
-        else:
-            self.export_first_exportable_commit()
+        exportable_commits = self.get_exportable_commits(limit=COMMIT_HISTORY_WINDOW)
+        for exportable_commit in exportable_commits:
+            pull_request = self.pr_with_position(exportable_commit.position, pull_requests)
+            if pull_request:
+                if pull_request.state == 'open':
+                    self.merge_pull_request(pull_request)
+                    # TODO(jeffcarp): if this was from Gerrit, comment back on the Gerrit CL that the PR was merged
+                else:
+                    _log.info('Pull request is not open: #%d %s', pull_request.number, pull_request.title)
+            else:
+                self.create_pull_request(exportable_commit)
 
-    def merge_in_flight_pull_request(self, pull_request):
-        """Attempt to merge an in-flight PR.
+    def process_gerrit_cls(self, gerrit_cls, pull_requests):
+        """Iterates through Gerrit CLs and prints their statuses.
 
-        Args:
-            pull_request: a PR object returned from the GitHub API.
+        Right now this method does nothing. In the future it will create PRs for CLs and help
+        transition them when they're landed.
         """
+        for cl in gerrit_cls:
+            cl_url = 'https://chromium-review.googlesource.com/c/%s' % cl['_number']
+            _log.info('Found Gerrit in-flight CL: "%s" %s', cl['subject'], cl_url)
 
-        _log.info('In-flight PR found: #%d', pull_request['number'])
-        _log.info(pull_request['title'])
+            # Check if CL already has a corresponding PR
+            pull_request = self.pr_with_change_id(cl['change_id'], pull_requests)
 
-        # TODO(jeffcarp): Check the PR status here (for Travis CI, etc.)
+            if pull_request:
+                pr_url = '{}pull/{}'.format(WPT_URL, pull_request.number)
+                _log.info('In-flight PR found: %s', pr_url)
+            else:
+                _log.info('No in-flight PR found for CL.')
+
+    def pr_with_position(self, position, pull_requests):
+        for pull_request in pull_requests:
+            pr_commit_position = self._extract_metadata('Cr-Commit-Position: ', pull_request.body)
+            if position == pr_commit_position:
+                return pull_request
+        return None
+
+    def pr_with_change_id(self, target_change_id, pull_requests):
+        for pull_request in pull_requests:
+            change_id = self._extract_metadata('Change-Id: ', pull_request.body)
+            if change_id == target_change_id:
+                return pull_request
+        return None
+
+    def _extract_metadata(self, tag, commit_body):
+        for line in commit_body.splitlines():
+            if line.startswith(tag):
+                return line[len(tag):]
+        return None
+
+    def get_exportable_commits(self, limit):
+        return exportable_commits_over_last_n_commits(limit, self.host, self.local_wpt)
+
+    def merge_pull_request(self, pull_request):
+        _log.info('In-flight PR found: %s', pull_request.title)
+        _log.info('https://github.com/w3c/web-platform-tests/pull/%d', pull_request.number)
 
         if self.dry_run:
             _log.info('[dry_run] Would have attempted to merge PR')
             return
 
-        _log.info('Merging...')
-        self.wpt_github.merge_pull_request(pull_request['number'])
-        _log.info('PR merged! Deleting branch.')
-        self.wpt_github.delete_remote_branch('chromium-export-try')
-        _log.info('Branch deleted!')
+        _log.info('Attempting to merge...')
+
+        # This is outside of the try block because if there's a problem communicating
+        # with the GitHub API, we should hard fail.
+        branch = self.wpt_github.get_pr_branch(pull_request.number)
+
+        try:
+            self.wpt_github.merge_pull_request(pull_request.number)
+
+            # This is in the try block because if a PR can't be merged, we shouldn't
+            # delete its branch.
+            self.wpt_github.delete_remote_branch(branch)
+        except MergeError:
+            _log.info('Could not merge PR.')
 
     def export_first_exportable_commit(self):
         """Looks for exportable commits in Chromium, creates PR if found."""
@@ -90,6 +144,9 @@ class TestExporter(object):
         _log.info('Picking the earliest commit and creating a PR')
         _log.info('- %s %s', outbound_commit.sha, outbound_commit.subject())
 
+        self.create_pull_request(outbound_commit)
+
+    def create_pull_request(self, outbound_commit):
         patch = outbound_commit.format_patch()
         message = outbound_commit.message()
         author = outbound_commit.author()
@@ -102,10 +159,11 @@ class TestExporter(object):
             _log.info(patch)
             return
 
-        remote_branch_name = self.local_wpt.create_branch_with_patch(message, patch, author)
+        branch_name = 'chromium-export-{sha}'.format(sha=outbound_commit.short_sha)
+        self.local_wpt.create_branch_with_patch(branch_name, message, patch, author)
 
         response_data = self.wpt_github.create_pr(
-            remote_branch_name=remote_branch_name,
+            remote_branch_name=branch_name,
             desc_title=outbound_commit.subject(),
             body=outbound_commit.body())
 
@@ -114,3 +172,5 @@ class TestExporter(object):
         if response_data:
             data, status_code = self.wpt_github.add_label(response_data['number'])
             _log.info('Add label response (status %s): %s', status_code, data)
+
+        return response_data

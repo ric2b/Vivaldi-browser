@@ -2,32 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_layout_manager.h"
 
-#include "ash/common/accelerators/accelerator_controller.h"
-#include "ash/common/accelerators/accelerator_table.h"
-#include "ash/common/focus_cycler.h"
-#include "ash/common/session/session_controller.h"
-#include "ash/common/shelf/shelf_constants.h"
-#include "ash/common/shelf/shelf_layout_manager_observer.h"
-#include "ash/common/shelf/shelf_view.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/system/status_area_widget.h"
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/system/tray/system_tray_item.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "ash/accelerators/accelerator_controller.h"
+#include "ash/accelerators/accelerator_table.h"
+#include "ash/focus_cycler.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/session/session_controller.h"
+#include "ash/shelf/shelf_constants.h"
+#include "ash/shelf/shelf_layout_manager_observer.h"
+#include "ash/shelf/shelf_view.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/system/status_area_widget.h"
+#include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_item.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_app_list_view_presenter_impl.h"
 #include "ash/test/test_system_tray_item.h"
 #include "ash/wm/lock_state_controller.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -293,14 +294,14 @@ class ShelfLayoutManagerTest : public test::AshTestBase {
   void LockScreen() {
     mojom::SessionInfoPtr info = mojom::SessionInfo::New();
     info->state = session_manager::SessionState::LOCKED;
-    ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+    ash::Shell::Get()->session_controller()->SetSessionInfo(std::move(info));
   }
 
   // Turn off the lock screen.
   void UnlockScreen() {
     mojom::SessionInfoPtr info = mojom::SessionInfo::New();
     info->state = session_manager::SessionState::ACTIVE;
-    ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+    ash::Shell::Get()->session_controller()->SetSessionInfo(std::move(info));
   }
 
   int64_t GetPrimaryDisplayId() {
@@ -685,7 +686,7 @@ TEST_F(ShelfLayoutManagerTest, ShelfUpdatedWhenStatusAreaChangesSize) {
 // Various assertions around auto-hide.
 TEST_F(ShelfLayoutManagerTest, AutoHide) {
   // TODO: investigate failure in mash, http://crbug.com/695686.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   ui::test::EventGenerator& generator(GetEventGenerator());
@@ -748,11 +749,13 @@ TEST_F(ShelfLayoutManagerTest, AutoHide) {
 // boundary between the primary and the secondary display.
 TEST_F(ShelfLayoutManagerTest, AutoHideShelfOnScreenBoundary) {
   // TODO: investigate failure in mash, http://crbug.com/695686.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   UpdateDisplay("800x600,800x600");
-  Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
+  // TODO: SetLayoutForCurrentDisplays() needs to ported to mash.
+  // http://crbug.com/698043.
+  Shell::Get()->display_manager()->SetLayoutForCurrentDisplays(
       display::test::CreateDisplayLayout(display_manager(),
                                          display::DisplayPlacement::RIGHT, 0));
   // Put the primary monitor's shelf on the display boundary.
@@ -843,7 +846,7 @@ TEST_F(ShelfLayoutManagerTest, VisibleWhenLoginScreenShowing) {
 
   mojom::SessionInfoPtr info = mojom::SessionInfo::New();
   info->state = session_manager::SessionState::LOGIN_PRIMARY;
-  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+  ash::Shell::Get()->session_controller()->SetSessionInfo(std::move(info));
 
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_BACKGROUND_OVERLAP, GetShelfWidget()->GetBackgroundType());
@@ -957,7 +960,7 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfVisibleState) {
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
   // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   // Show the app list and the shelf stays visible.
@@ -989,7 +992,7 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 
   // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   // Show the app list and the shelf should be temporarily visible.
@@ -1049,7 +1052,7 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   // The tested behavior relies on the app list presenter implementation.
   test::TestAppListViewPresenterImpl app_list_presenter_impl;
 
-  Shell::GetInstance()->UpdateShelfVisibility();
+  Shell::Get()->UpdateShelfVisibility();
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_2->GetVisibilityState());
@@ -1057,12 +1060,12 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_2->GetAutoHideState());
 
   // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   // Show the app list; only the shelf on the same display should be shown.
   app_list_presenter_impl.Show(GetPrimaryDisplayId());
-  Shell::GetInstance()->UpdateShelfVisibility();
+  Shell::Get()->UpdateShelfVisibility();
   EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf_1->GetAutoHideState());
@@ -1071,7 +1074,7 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
 
   // Hide the app list, both shelves should be hidden.
   app_list_presenter_impl.Dismiss();
-  Shell::GetInstance()->UpdateShelfVisibility();
+  Shell::Get()->UpdateShelfVisibility();
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_2->GetVisibilityState());
@@ -1097,7 +1100,7 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfHiddenState) {
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
   // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   // Show the app list and the shelf should be temporarily visible.
@@ -1126,11 +1129,10 @@ TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowSingleDisplay) {
   wm::ActivateWindow(window);
 
   // Enable system modal dialog, and make sure shelf is still hidden.
-  WmShell* wm_shell = WmShell::Get();
-  wm_shell->SimulateModalWindowOpenForTesting(true);
-  EXPECT_TRUE(wm_shell->IsSystemModalWindowOpen());
+  ShellPort::Get()->SimulateModalWindowOpenForTesting(true);
+  EXPECT_TRUE(ShellPort::Get()->IsSystemModalWindowOpen());
   EXPECT_FALSE(wm::CanActivateWindow(window));
-  Shell::GetInstance()->UpdateShelfVisibility();
+  Shell::Get()->UpdateShelfVisibility();
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 }
@@ -1172,12 +1174,11 @@ TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowDualDisplay) {
   EXPECT_TRUE(window_2->IsVisible());
 
   // Enable system modal dialog, and make sure both shelves are still hidden.
-  WmShell* wm_shell = WmShell::Get();
-  wm_shell->SimulateModalWindowOpenForTesting(true);
-  EXPECT_TRUE(wm_shell->IsSystemModalWindowOpen());
+  ShellPort::Get()->SimulateModalWindowOpenForTesting(true);
+  EXPECT_TRUE(ShellPort::Get()->IsSystemModalWindowOpen());
   EXPECT_FALSE(wm::CanActivateWindow(window_1));
   EXPECT_FALSE(wm::CanActivateWindow(window_2));
-  Shell::GetInstance()->UpdateShelfVisibility();
+  Shell::Get()->UpdateShelfVisibility();
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_1->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_2->GetVisibilityState());
@@ -1244,7 +1245,7 @@ TEST_F(ShelfLayoutManagerTest, FullscreenWindowOnSecondDisplay) {
 // Test for Pinned mode.
 TEST_F(ShelfLayoutManagerTest, PinnedWindowHidesShelf) {
   // TODO: investigate failure in mash, http://crbug.com/695686.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   WmShelf* shelf = GetPrimaryShelf();
@@ -1334,7 +1335,7 @@ TEST_F(ShelfLayoutManagerTest, SetAlignment) {
 
 TEST_F(ShelfLayoutManagerTest, GestureDrag) {
   // TODO: investigate failure in mash, http://crbug.com/695686.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   // Slop is an implementation detail of gesture recognition, and complicates
@@ -1522,7 +1523,7 @@ TEST_F(ShelfLayoutManagerTest, AutohideShelfForAutohideWhenActiveWindow) {
 
 TEST_F(ShelfLayoutManagerTest, ShelfFlickerOnTrayActivation) {
   // TODO: investigate failure in mash, http://crbug.com/695686.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   WmShelf* shelf = GetPrimaryShelf();
@@ -1536,7 +1537,7 @@ TEST_F(ShelfLayoutManagerTest, ShelfFlickerOnTrayActivation) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 
   // Show the status menu. That should make the shelf visible again.
-  WmShell::Get()->accelerator_controller()->PerformActionIfEnabled(
+  Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
       SHOW_SYSTEM_TRAY_BUBBLE);
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
@@ -1584,21 +1585,20 @@ TEST_F(ShelfLayoutManagerTest, WorkAreaChangeWorkspace) {
 }
 
 TEST_F(ShelfLayoutManagerTest, BackgroundTypeWhenLockingScreen) {
-  EXPECT_NE(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
+  // Creates a maximized window to have a background type other than default.
+  std::unique_ptr<aura::Window> window(CreateTestWindow());
+  window->Show();
+  wm::ActivateWindow(window.get());
+  EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
+  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
+  EXPECT_EQ(SHELF_BACKGROUND_MAXIMIZED, GetShelfWidget()->GetBackgroundType());
 
-  Shell::GetInstance()
-      ->lock_state_controller()
-      ->StartLockAnimationAndLockImmediately(false);
+  Shell::Get()->lock_state_controller()->StartLockAnimationAndLockImmediately(
+      false);
   EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
 }
 
 TEST_F(ShelfLayoutManagerTest, ShelfBackgroundColor) {
-  // TODO(bruthig|xiyuan): Move SessionState setup into AshTestBase or
-  // AshTestHelper.
-  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
-  info->state = session_manager::SessionState::ACTIVE;
-  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
-
   EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
 
   std::unique_ptr<aura::Window> w1(CreateTestWindow());
@@ -1631,12 +1631,6 @@ TEST_F(ShelfLayoutManagerTest, ShelfBackgroundColor) {
 // Verify that the shelf doesn't have the opaque background if it's auto-hide
 // status.
 TEST_F(ShelfLayoutManagerTest, ShelfBackgroundColorAutoHide) {
-  // TODO(bruthig|xiyuan): Move SessionState setup into AshTestBase or
-  // AshTestHelper.
-  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
-  info->state = session_manager::SessionState::ACTIVE;
-  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
-
   EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
 
   GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
@@ -1727,10 +1721,10 @@ TEST_F(ShelfLayoutManagerTest, ShutdownHandlesWindowActivation) {
 
 TEST_F(ShelfLayoutManagerTest, ShelfLayoutInUnifiedDesktop) {
   // TODO: requires unified desktop mode. http://crbug.com/581462.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
-  Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(true);
+  Shell::Get()->display_manager()->SetUnifiedDesktopEnabled(true);
   UpdateDisplay("500x400, 500x400");
 
   StatusAreaWidget* status_area_widget = GetShelfWidget()->status_area_widget();
@@ -1785,7 +1779,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest, ShelfChangeWorkAreaInNonStickyMode) {
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
   keyboard::SetAccessibilityKeyboardEnabled(true);
   InitKeyboardBounds();
-  Shell::GetInstance()->CreateKeyboard();
+  Shell::Get()->CreateKeyboard();
   keyboard::KeyboardController* kb_controller =
       keyboard::KeyboardController::GetInstance();
   gfx::Rect orig_work_area(
@@ -1823,7 +1817,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest,
 
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
   InitKeyboardBounds();
-  Shell::GetInstance()->CreateKeyboard();
+  Shell::Get()->CreateKeyboard();
   keyboard::KeyboardController* kb_controller =
       keyboard::KeyboardController::GetInstance();
   gfx::Rect orig_work_area(

@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Tapez un raccourci</translation>
 <translation id="2509495747794740764">Le facteur d'échelle doit être un nombre compris entre 10 et 200.</translation>
 <translation id="2509857212037838238">Installer <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Nombre de keepalive (pour extensions)</translation>
 <translation id="2550212893339833758">Mémoire Swap</translation>
 <translation id="2580924999637585241">Total : <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -202,7 +203,7 @@
 <translation id="3927932062596804919">Refuser</translation>
 <translation id="3936390757709632190">&amp;Ouvrir le fichier audio dans un nouvel onglet</translation>
 <translation id="3936999098172113189">En attente d’impression de <ph name="PAGE_NUMBER" /> pages vers <ph name="PRINTER_NAME" /></translation>
-<translation id="3943582379552582368">Page p&amp;écédente</translation>
+<translation id="3943582379552582368">Page pr&amp;écédente</translation>
 <translation id="3948116654032448504">Rechercher une &amp;image avec <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(Plantée)</translation>
 <translation id="3979395879372752341">Nouvelle extension (<ph name="EXTENSION_NAME" />) ajoutée</translation>
@@ -365,6 +366,7 @@
 <translation id="6273677812470008672">Qualité</translation>
 <translation id="6295855836753816081">Enregistrement…</translation>
 <translation id="6308937455967653460">Enregistrer le lie&amp;n sous...</translation>
+<translation id="6326855256003666642">Nombre de keepalive (pour extensions)</translation>
 <translation id="6348109281845364640">Impossible de configurer cette imprimante</translation>
 <translation id="6370021412472292592">Impossible de charger le manifeste.</translation>
 <translation id="6398765197997659313">Quitter le mode plein écran</translation>

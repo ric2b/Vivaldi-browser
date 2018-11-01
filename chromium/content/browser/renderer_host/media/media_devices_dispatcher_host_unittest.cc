@@ -25,6 +25,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/audio/audio_device_description.h"
+#include "media/audio/audio_system_impl.h"
 #include "media/audio/mock_audio_manager.h"
 #include "media/base/media_switches.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
@@ -35,6 +36,7 @@
 
 using testing::_;
 using testing::SaveArg;
+using testing::InvokeWithoutArgs;
 
 namespace content {
 
@@ -81,7 +83,9 @@ class MediaDevicesDispatcherHostTest : public testing::Test {
                            kNumFakeVideoDevices, kDefaultVideoDeviceID));
     audio_manager_.reset(
         new media::MockAudioManager(base::ThreadTaskRunnerHandle::Get()));
-    media_stream_manager_.reset(new MediaStreamManager(audio_manager_.get()));
+    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
+    media_stream_manager_ =
+        base::MakeUnique<MediaStreamManager>(audio_system_.get());
 
     MockResourceContext* mock_resource_context =
         static_cast<MockResourceContext*>(
@@ -132,6 +136,12 @@ class MediaDevicesDispatcherHostTest : public testing::Test {
       EXPECT_GT(capability->formats[1].frame_size.height(), 1);
       EXPECT_GT(capability->formats[1].frame_rate, 1);
     }
+  }
+
+  void VideoInputCapabilitiesUniqueOriginCallback(
+      std::vector<::mojom::VideoInputDeviceCapabilitiesPtr> capabilities) {
+    MockVideoInputCapabilitiesCallback();
+    EXPECT_EQ(0U, capabilities.size());
   }
 
  protected:
@@ -250,7 +260,9 @@ class MediaDevicesDispatcherHostTest : public testing::Test {
     host_->SetPermissionChecker(
         base::MakeUnique<MediaDevicesPermissionChecker>(has_permission));
     uint32_t subscription_id = 0u;
+    uint32_t unique_origin_subscription_id = 1u;
     url::Origin origin(GURL("http://localhost"));
+    url::Origin unique_origin;
     for (size_t i = 0; i < NUM_MEDIA_DEVICE_TYPES; ++i) {
       MediaDeviceType type = static_cast<MediaDeviceType>(i);
       host_->SubscribeDeviceChangeNotifications(type, subscription_id, origin);
@@ -261,6 +273,12 @@ class MediaDevicesDispatcherHostTest : public testing::Test {
       EXPECT_CALL(device_change_listener,
                   OnDevicesChanged(type, subscription_id, testing::_))
           .WillRepeatedly(SaveArg<2>(&changed_devices));
+      // The subscription with unique origin is ignored, so it should not get
+      // notifications.
+      EXPECT_CALL(
+          device_change_listener,
+          OnDevicesChanged(type, unique_origin_subscription_id, testing::_))
+          .Times(0);
 
       // Simulate device-change notification
       MediaDeviceInfoArray updated_devices = {
@@ -286,6 +304,7 @@ class MediaDevicesDispatcherHostTest : public testing::Test {
 
   std::unique_ptr<media::AudioManager, media::AudioManagerDeleter>
       audio_manager_;
+  std::unique_ptr<media::AudioSystem> audio_system_;
   content::TestBrowserContext browser_context_;
   MediaDeviceEnumeration physical_devices_;
   url::Origin origin_;
@@ -350,38 +369,37 @@ TEST_F(MediaDevicesDispatcherHostTest, EnumerateAllDevicesUniqueOrigin) {
   base::RunLoop().RunUntilIdle();
 
   // Verify that the callback for a valid origin does get called.
-  EXPECT_CALL(*this, ValidOriginCallback(testing::_));
+  base::RunLoop run_loop;
+  EXPECT_CALL(*this, ValidOriginCallback(testing::_))
+      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
   host_->EnumerateDevices(
       true, true, true, url::Origin(GURL("http://localhost")),
       base::Bind(&MediaDevicesDispatcherHostTest::ValidOriginCallback,
                  base::Unretained(this)));
-  base::RunLoop().RunUntilIdle();
-#if defined(OS_WIN)
-  // On Windows, the underlying MediaStreamManager uses a separate thread for
-  // video capture which must be flushed to guarantee that the callback bound to
-  // EnumerateDevices above is invoked before the end of this test's body.
-  media_stream_manager_->FlushVideoCaptureThreadForTesting();
-  base::RunLoop().RunUntilIdle();
-#endif
+  run_loop.Run();
 }
 
 TEST_F(MediaDevicesDispatcherHostTest, GetVideoInputCapabilities) {
-  EXPECT_CALL(*this, MockVideoInputCapabilitiesCallback());
+  base::RunLoop run_loop;
+  EXPECT_CALL(*this, MockVideoInputCapabilitiesCallback())
+      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
   host_->GetVideoInputCapabilities(
       origin_,
       base::Bind(
           &MediaDevicesDispatcherHostTest::VideoInputCapabilitiesCallback,
           base::Unretained(this)));
-  base::RunLoop().RunUntilIdle();
+  run_loop.Run();
+}
 
-#if defined(OS_WIN)
-  // On Windows, the underlying MediaStreamManager uses a separate thread for
-  // video capture which must be flushed to guarantee that the callback bound to
-  // GetVIdeoInputCapabilities above is invoked before the end of this test's
-  // body.
-  media_stream_manager_->FlushVideoCaptureThreadForTesting();
-  base::RunLoop().RunUntilIdle();
-#endif
+TEST_F(MediaDevicesDispatcherHostTest, GetVideoInputCapabilitiesUniqueOrigin) {
+  base::RunLoop run_loop;
+  EXPECT_CALL(*this, MockVideoInputCapabilitiesCallback())
+      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
+  host_->GetVideoInputCapabilities(
+      url::Origin(), base::Bind(&MediaDevicesDispatcherHostTest::
+                                    VideoInputCapabilitiesUniqueOriginCallback,
+                                base::Unretained(this)));
+  run_loop.Run();
 }
 
 };  // namespace content

@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">विस्तृत.</translation>
 <translation id="1025074108959230262">रोचक मोड अक्षम</translation>
 <translation id="1031961866430398710">नंतर</translation>
+<translation id="1038643060055067718">रेखा:</translation>
 <translation id="1038795173450935438">पृष्‍ठावरील आयटम मधून पुढे जाण्याकरिता, शोध + उजवा बाण किंवा परत मागे जाण्यासाठी शोध + डावा बाण दाबा. पुढील ओळीवर जाण्यासाठी, शोध + खाली बाण दाबा. मागील ओळीवर जाण्यासाठी शोध + वर बाण वापरा. आपण क्लिक करू इच्छित आयटमवर पोहचल्यास, शोध + Space दाबा.</translation>
 <translation id="1044777062731150180">कोणतेही शीर्षलेख नाहीत</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,7 @@
 <translation id="2110480898214777136">पृष्‍ठ, संवाद किंवा अन्य कंटेनरमध्ये प्रारंभापासून समाप्तीपर्यंत किंवा समाप्तीपासून प्रारंभापर्यंत पूर्ण करा</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">प्रवेश की:<ph name="KEY" /></translation>
-<translation id="2155457205053847599">खालील सूचीमधून एखादा पर्याय निवडून वर्तमान 6 बिंदू ब्रेल सारणी बदला.</translation>
+<translation id="2138345533858834403">स्क्रीनच्या वर ChromeVox पॅनेलमध्ये रीफ्रेश करता येण्यासारख्या ब्रेल प्रदर्शनाच्या आउटपुटची बतावणी करेल.</translation>
 <translation id="2169714232367507776">वर्तमान आयटमवर क्लिक करा</translation>
 <translation id="2179452035581866348">आपल्याला आवश्यक आणि अतिरिक्त माहिती देण्यासाठी ChromeVox ध्वनींचा वापर करते. प्रत्येक ध्वनीचा अर्थ काय आहे ते जाणून घेऊन अधिक जलद नेव्हिगेट करण्यासाठी आपण या ध्वनींचा वापर करू शकता. आपल्याला सोयीस्कर असल्यास, आपण उच्चारामधील अनावश्यक शाब्दिक वर्णने बंद करू शकता आणि पृष्‍ठाविषयी अतिरिक्त माहितीसाठी त्यांच्यावर अवलंबून राहू शकता. येथे संपूर्ण ध्वनींची आणि त्यांच्या अर्थाची सूची आहे.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{बंद कंस}one{# बंद कंस}other{# बंद कंस}}</translation>
@@ -124,6 +125,7 @@
 <translation id="2344193891939537199">तारीख वेळ नियंत्रण</translation>
 <translation id="2347456970887948350">एक दुवा</translation>
 <translation id="2359897517538099099">सारणी मोडमध्ये नाही.</translation>
+<translation id="2381733276052567791">भाषण सुरू किंवा बंद करा</translation>
 <translation id="2390264819538553347">पुढे जाण्यासाठी, enter दाबा; मागे जाण्यासाठी, backspace दाबा.</translation>
 <translation id="241124561063364910">च्या मागून येणारे</translation>
 <translation id="2416512023405990736">अनचेक केलेला चेकबॉक्स</translation>
@@ -166,6 +168,7 @@
 <translation id="2800204403141299078">आणखी भिन्न घटक नाहीत.</translation>
 <translation id="2800780099804980316">मागील स्‍तर 1 मथळा नाही.</translation>
 <translation id="280499067616661124">पृष्ठामध्ये ChromeVox शोधा</translation>
+<translation id="2808001342598757276">स्क्रीन चालू करा</translation>
 <translation id="2811019999044652585">टूलबार किंवा सिस्टीम ट्रे सारख्या स्क्रीनच्या अन्य भागांवर जाण्यासाठी, Control+पुढे जा की दाबा. Chromebook वर, पुढे जा की अंक 2 की च्या वर असते.</translation>
 <translation id="2811204574343810641">पंक्ती</translation>
 <translation id="2816654101880605877">पुढील स्‍लायडर नाही.</translation>
@@ -185,11 +188,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{1 टॅब}one{# टॅब}other{# टॅब}}</translation>
 <translation id="2972078295414139404">मागील भेट दिलेला दुवा .</translation>
 <translation id="2972205263822847197">साधन टीप</translation>
-<translation id="2978549349327282388">स्तंभ:</translation>
 <translation id="2998131015536248178">मागील वर्ण</translation>
 <translation id="2999559350546931576">पीच कमी करा</translation>
 <translation id="2999945368667127852">पुढील माध्यम विजेट नाही.</translation>
 <translation id="3012414509011670858">मागील निवड नाही.</translation>
+<translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">मेनू आयटम रेडिओ बटण</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{परोक्षसंबोधन}one{# परोक्षसंबोधने}other{# परोक्षसंबोधने}}</translation>
 <translation id="3040901448410802366">प्रगती निदर्शक</translation>
@@ -212,6 +215,7 @@
 <translation id="3138767756593758860">महत्त्वाच्या खूणांची सूची दर्शवा</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">पुढील रेखा</translation>
+<translation id="3153024374267644603">भाषण चालू</translation>
 <translation id="3155083529632865074">मागील बटण नाही.</translation>
 <translation id="3163593631834463955">रिक्त स्‍तंभ शीर्षलेख</translation>
 <translation id="316542773973815724">नेव्हिगेशन</translation>
@@ -223,6 +227,7 @@
 <translation id="3229375994964697375">भेट दिलेला दुवा</translation>
 <translation id="3232388865800379423">एक पॉप अप बटण</translation>
 <translation id="3241052487511142956">मागील भेट दिलेला दुवा</translation>
+<translation id="3241638166094654466">प्रत्येक रेषेतील सेल:</translation>
 <translation id="3286390186030710347">स्‍लायडर</translation>
 <translation id="3299925995433437805">पुढील भेट दिलेला दुवा नाही.</translation>
 <translation id="3307886118343381874">सारणीच्या शेवटी जा</translation>
@@ -379,6 +384,7 @@
 <translation id="4376316291247992553">ग्राफिक ब्रेल म्हणून पहा</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">रीसेट करा</translation>
+<translation id="4457472090507035117">विद्यमान आवाज निवडा:</translation>
 <translation id="4471074325120394300">कोणतेही दुवे नाहीत.</translation>
 <translation id="4476183483923481720">नवीन रेखा</translation>
 <translation id="4482330759234983253">मागील सारणी</translation>
@@ -452,7 +458,6 @@
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">मागील फॉर्म फील्‍ड नाही.</translation>
 <translation id="5111640677200759579">स्‍तंभ शीर्षलेख</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">मागील दुवा नाही.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="517143700877085897">, न निवडलेले</translation>
@@ -564,10 +569,10 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="5968607524793740041">संदर्भ मेनू दर्शवा</translation>
 <translation id="5983179082906765664">नेव्हिगेशन ग्रॅन्यूलॅरिटी वाढवा</translation>
 <translation id="5999630716831179808">व्हॉइस</translation>
-<translation id="6000417740266304866">खालील सूचीमधून एखादा पर्याय निवडून वर्तमान 8 बिंदू ब्रेल सारणी बदला.</translation>
 <translation id="6006050241733874051">फॉर्म</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{बॅकस्लॅश}one{# बॅकस्लॅश}other{# बॅकस्लॅश}}</translation>
 <translation id="6037602951055904232">अग्रेषित करणे पॅन करा</translation>
+<translation id="6044160928851315051">स्क्रीन बंद करा</translation>
 <translation id="6082768461603900813">मूलभूत नेव्हिगेशन</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">सेल समाप्त.</translation>
@@ -606,7 +611,6 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="6444046323172968959">सूचना संवाद</translation>
 <translation id="6459511626086141404">सपाट मुख्य नकाशा</translation>
 <translation id="6468049171101508116">पुढील बटण</translation>
-<translation id="6491972999578897419">खाली असलेल्या सूचीमधील पर्याय निवडून वर्तमान व्हॉइस बदला.</translation>
 <translation id="6493991254603208962">चकाकी कमी करा</translation>
 <translation id="6508059270146105198">पृष्ठाच्या तळाशी ब्रेल प्रदर्शन हलवा</translation>
 <translation id="6536864053412760904">Math ML टोकन</translation>
@@ -658,6 +662,7 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">शब्द प्रतिध्वनी</translation>
 <translation id="713824876195128146">पुढील ब्लॉक कोट</translation>
+<translation id="7143034430156387447">6 आणि 8 बिंदू ब्रेलमध्ये टॉगल करा</translation>
 <translation id="7161771961008409533">पॉप-अप बटण</translation>
 <translation id="7165714724802225287">वर्तमान प्रदर्शन शैली इंटरलीव आहे.</translation>
 <translation id="7167657087543110">वर्ण प्रतिध्वनी</translation>
@@ -668,6 +673,7 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">रेखा</translation>
 <translation id="7226216518520804442">lst</translation>
+<translation id="7229749224609077523">8-बिंदू ब्रेल सारणी निवडा:</translation>
 <translation id="72393384879519786">मथळा</translation>
 <translation id="7241683698754534149">एका नवीन टॅबमध्ये मोठे वर्णन उघडा</translation>
 <translation id="7248671827512403053">अनुप्रयोग</translation>
@@ -741,6 +747,7 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="7974390230414479278">मेनू आयटम</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{अवतरण चिन्ह}one{# अवतरण चिन्हे}other{# अवतरण चिन्हे}}</translation>
+<translation id="8017588669690167134">भाषण बंद</translation>
 <translation id="8033827949643255796">निवडलेले</translation>
 <translation id="8035962149453661158">कमाल:<ph name="X" /></translation>
 <translation id="8042761080832772327">मजकूर, शोध प्रविष्टी संपादित करा</translation>
@@ -759,7 +766,6 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="820417203470636242">रिक्त सेल.</translation>
 <translation id="8215202828671303819">एकाधिक निवड</translation>
 <translation id="8224171046658870249">ChromeVox Next वर स्विच केले</translation>
-<translation id="8259358278692921574">पंक्ती:</translation>
 <translation id="8276439074553447000">मागील फोकस करण्यायोग्य आयटमवर जा</translation>
 <translation id="8278417001922463147">मागील लेख नाही.</translation>
 <translation id="8283603667300770666">पुढील फॉर्म फील्‍ड</translation>
@@ -797,7 +803,6 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="8638532244051952400">वर्तमान कक्ष समन्वय घोषित करा</translation>
 <translation id="8650576015643545550">मागील सूची नाही.</translation>
 <translation id="8651481478098336970">आवाज निःशब्द करा</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">दुव्यांची सूची दर्शवा</translation>
 <translation id="8664519043722036194">सेकंद</translation>
 <translation id="867187640362843212">मथळा 5</translation>
@@ -817,6 +822,7 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="8856538297388979332">आदेशाचे पुनरावलोकन करण्यासाठी वर किंवा खाली दाबा, सक्रिय करण्यासाठी प्रविष्ट करा दाबा</translation>
 <translation id="8864099967139188018">पुढील स्‍तर 6 मथळा नाही.</translation>
 <translation id="8882002077197914455">पंक्ती शीर्षलेख</translation>
+<translation id="8883850400338911892">8 बिंदूचा url बनवला</translation>
 <translation id="8896347895970027998">ChromeVox सक्रिय किंवा निष्क्रिय टॉगल करा.</translation>
 <translation id="8898516272131543774">विरामचिन्ह प्रतिध्वनी आवर्तन</translation>
 <translation id="8900148057318340779">प्रत्यय की</translation>
@@ -830,6 +836,7 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="9027462562263121875">कोणत्याही सारण्‍या नाहीत.</translation>
 <translation id="9040132695316389094">मथळा 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" />%</translation>
+<translation id="9061884144798498064">8-बिंदू ब्रेल सारणी निवडा:</translation>
 <translation id="9065283790526219006">+पॉपअप</translation>
 <translation id="9077213568694924680">निवडीमधून काढले</translation>
 <translation id="9082874451376019682">मागील स्‍लायडर नाही.</translation>

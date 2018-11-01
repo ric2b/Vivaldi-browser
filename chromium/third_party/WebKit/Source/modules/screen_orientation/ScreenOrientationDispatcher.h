@@ -6,6 +6,7 @@
 #define ScreenOrientationDispatcher_h
 
 #include "core/frame/PlatformEventDispatcher.h"
+#include "device/screen_orientation/public/interfaces/screen_orientation.mojom-blink.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -19,12 +20,15 @@ namespace blink {
 // ScreenOrientationDispatcher is listening, that means that the platform should
 // be polling if required.
 class ScreenOrientationDispatcher final
-    : public GarbageCollected<ScreenOrientationDispatcher>,
+    : public GarbageCollectedFinalized<ScreenOrientationDispatcher>,
       public PlatformEventDispatcher {
   USING_GARBAGE_COLLECTED_MIXIN(ScreenOrientationDispatcher);
+  WTF_MAKE_NONCOPYABLE(ScreenOrientationDispatcher);
 
  public:
-  static ScreenOrientationDispatcher& instance();
+  static ScreenOrientationDispatcher& Instance();
+
+  ~ScreenOrientationDispatcher();
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -32,8 +36,10 @@ class ScreenOrientationDispatcher final
   ScreenOrientationDispatcher();
 
   // Inherited from PlatformEventDispatcher.
-  void startListening() override;
-  void stopListening() override;
+  void StartListening() override;
+  void StopListening() override;
+
+  device::mojom::blink::ScreenOrientationListenerPtr listener_;
 };
 
 }  // namespace blink

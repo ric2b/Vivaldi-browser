@@ -8,7 +8,7 @@
 #import <Foundation/Foundation.h>
 #include <memory>
 
-@class CRWSessionCertificatePolicyManager;
+@class CRWSessionCertificatePolicyCacheStorage;
 
 namespace web {
 class SerializableUserData;
@@ -18,12 +18,12 @@ class SerializableUserData;
 // TODO(crbug.com/685388): Investigate using code from the sessions component.
 @interface CRWSessionStorage : NSObject<NSCoding>
 
-@property(nonatomic, getter=isOpenedByDOM) BOOL openedByDOM;
-@property(nonatomic, assign) NSInteger currentNavigationIndex;
-@property(nonatomic, assign) NSInteger previousNavigationIndex;
+@property(nonatomic, assign) BOOL hasOpener;
+@property(nonatomic, assign) NSInteger lastCommittedItemIndex;
+@property(nonatomic, assign) NSInteger previousItemIndex;
 @property(nonatomic, copy) NSArray* itemStorages;
-@property(nonatomic, retain)
-    CRWSessionCertificatePolicyManager* sessionCertificatePolicyManager;
+@property(nonatomic, strong)
+    CRWSessionCertificatePolicyCacheStorage* certPolicyCacheStorage;
 @property(nonatomic, readonly) web::SerializableUserData* userData;
 
 // Setter for |userData|.  The receiver takes ownership of |userData|.

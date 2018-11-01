@@ -40,10 +40,6 @@ const int kMessageSize = 1024;
 const int kMessages = 100;
 const char kChannelName[] = "test_channel";
 
-ACTION_P(QuitRunLoop, run_loop) {
-  run_loop->Quit();
-}
-
 ACTION_P2(QuitRunLoopOnCounter, run_loop, counter) {
   --(*counter);
   EXPECT_GE(*counter, 0);
@@ -123,8 +119,8 @@ class IceTransportTest : public testing::Test {
                              nullptr, network_settings_, TransportRole::SERVER),
         &host_event_handler_));
     if (!host_authenticator_) {
-      host_authenticator_.reset(new FakeAuthenticator(
-          FakeAuthenticator::HOST, 0, FakeAuthenticator::ACCEPT, true));
+      host_authenticator_.reset(
+          new FakeAuthenticator(FakeAuthenticator::ACCEPT));
     }
 
     client_transport_.reset(new IceTransport(
@@ -133,8 +129,8 @@ class IceTransportTest : public testing::Test {
                              nullptr, network_settings_, TransportRole::CLIENT),
         &client_event_handler_));
     if (!client_authenticator_) {
-      client_authenticator_.reset(new FakeAuthenticator(
-          FakeAuthenticator::CLIENT, 0, FakeAuthenticator::ACCEPT, true));
+      client_authenticator_.reset(
+          new FakeAuthenticator(FakeAuthenticator::ACCEPT));
     }
 
     host_event_handler_.set_error_callback(base::Bind(
@@ -247,8 +243,8 @@ TEST_F(IceTransportTest, MuxDataStream) {
 
 TEST_F(IceTransportTest, FailedChannelAuth) {
   // Use host authenticator with one that rejects channel authentication.
-  host_authenticator_.reset(new FakeAuthenticator(
-      FakeAuthenticator::HOST, 0, FakeAuthenticator::REJECT_CHANNEL, true));
+  host_authenticator_.reset(
+      new FakeAuthenticator(FakeAuthenticator::REJECT_CHANNEL));
 
   InitializeConnection();
 

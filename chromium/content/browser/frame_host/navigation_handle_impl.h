@@ -17,7 +17,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/common/content_export.h"
@@ -92,7 +91,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool is_same_page,
       const base::TimeTicks& navigation_start,
       int pending_nav_entry_id,
-      bool started_from_context_menu);
+      bool started_from_context_menu,
+      CSPDisposition should_check_main_world_csp,
+      bool is_form_submission);
   ~NavigationHandleImpl() override;
 
   // Used to track the state the navigation is currently in.
@@ -128,7 +129,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool IsExternalProtocol() override;
   net::Error GetNetErrorCode() override;
   RenderFrameHostImpl* GetRenderFrameHost() override;
-  bool IsSamePage() override;
+  bool IsSameDocument() override;
   bool HasCommitted() override;
   bool IsErrorPage() override;
   bool HasSubframeNavigationEntryCommitted() override;
@@ -163,12 +164,18 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   const std::string& GetSearchableFormEncoding() override;
   ReloadType GetReloadType() override;
   RestoreType GetRestoreType() override;
+  const GURL& GetBaseURLForDataURL() override;
   const GlobalRequestID& GetGlobalRequestID() override;
 
   NavigationData* GetNavigationData() override;
 
   // Used in tests.
   State state_for_testing() const { return state_; }
+
+  // Whether or not the navigation has been initiated by a form submission.
+  // TODO(arthursonzogni): This value is correct only when PlzNavigate is
+  // enabled. Make it work in both modes.
+  bool is_form_submission() const { return is_form_submission_; }
 
   // The NavigatorDelegate to notify/query for various navigation events.
   // Normally this is the WebContents, except if this NavigationHandle was
@@ -350,6 +357,24 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
     response_headers_ = response_headers;
   }
 
+  void set_complete_callback_for_testing(
+      const ThrottleChecksFinishedCallback& callback) {
+    complete_callback_for_testing_ = callback;
+  }
+
+  void set_base_url_for_data_url(const GURL& url) {
+    base_url_for_data_url_ = url;
+  }
+
+  CSPDisposition should_check_main_world_csp() const {
+    return should_check_main_world_csp_;
+  }
+
+  const SourceLocation& source_location() const { return source_location_; }
+  void set_source_location(const SourceLocation& source_location) {
+    source_location_ = source_location;
+  }
+
  private:
   friend class NavigationHandleImplTest;
 
@@ -360,7 +385,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
                        bool is_same_page,
                        const base::TimeTicks& navigation_start,
                        int pending_nav_entry_id,
-                       bool started_from_context_menu);
+                       bool started_from_context_menu,
+                       CSPDisposition should_check_main_world_csp,
+                       bool is_form_submission);
 
   NavigationThrottle::ThrottleCheckResult CheckWillStartRequest();
   NavigationThrottle::ThrottleCheckResult CheckWillRedirectRequest();
@@ -452,8 +479,15 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // The mixed content context type for potential mixed content checks.
   blink::WebMixedContentContextType mixed_content_context_type_;
 
-  // This callback will be run when all throttle checks have been performed.
+  // This callback will be run when all throttle checks have been performed. Be
+  // careful about relying on it as the member may be removed as part of the
+  // PlzNavigate refactoring.
   ThrottleChecksFinishedCallback complete_callback_;
+
+  // This test-only callback will be run when all throttle checks have been
+  // performed.
+  // TODO(clamy): Revisit the unit test architecture when PlzNavigate ships.
+  ThrottleChecksFinishedCallback complete_callback_for_testing_;
 
   // PlzNavigate
   // Manages the lifetime of a pre-created ServiceWorkerProviderHost until a
@@ -505,8 +539,22 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   GURL previous_url_;
   GURL base_url_;
+  GURL base_url_for_data_url_;
   net::HostPortPair socket_address_;
   NavigationType navigation_type_;
+
+  // Whether or not the CSP of the main world should apply. When the navigation
+  // is initiated from a content script in an isolated world, the CSP defined
+  // in the main world should not apply.
+  CSPDisposition should_check_main_world_csp_;
+
+  // Whether or not the navigation results from the submission of a form.
+  bool is_form_submission_;
+
+  // PlzNavigate
+  // Information about the JavaScript that started the navigation. For
+  // navigations initiated by Javascript.
+  SourceLocation source_location_;
 
   base::WeakPtrFactory<NavigationHandleImpl> weak_factory_;
 

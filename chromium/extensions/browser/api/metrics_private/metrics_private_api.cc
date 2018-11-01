@@ -12,8 +12,8 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/metrics/user_metrics.h"
 #include "components/variations/variations_associated_data.h"
-#include "content/public/browser/user_metrics.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/metrics_private/metrics_private_delegate.h"
 #include "extensions/common/api/metrics_private.h"
@@ -52,8 +52,8 @@ ExtensionFunction::ResponseAction MetricsPrivateGetFieldTrialFunction::Run() {
   std::string name;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &name));
 
-  return RespondNow(OneArgument(base::MakeUnique<base::StringValue>(
-      base::FieldTrialList::FindFullName(name))));
+  return RespondNow(OneArgument(
+      base::MakeUnique<base::Value>(base::FieldTrialList::FindFullName(name))));
 }
 
 ExtensionFunction::ResponseAction
@@ -77,7 +77,7 @@ MetricsPrivateRecordUserActionFunction::Run() {
       RecordUserAction::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  content::RecordComputedAction(params->name);
+  base::RecordComputedAction(params->name);
   return RespondNow(NoArguments());
 }
 

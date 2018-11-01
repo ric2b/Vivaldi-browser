@@ -26,15 +26,16 @@
 #define LabelsNodeList_h
 
 #include "core/dom/LiveNodeList.h"
-#include "wtf/PassRefPtr.h"
+#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
 class LabelsNodeList final : public LiveNodeList {
  public:
-  static LabelsNodeList* create(ContainerNode& ownerNode, CollectionType type) {
-    DCHECK_EQ(type, LabelsNodeListType);
-    return new LabelsNodeList(ownerNode);
+  static LabelsNodeList* Create(ContainerNode& owner_node,
+                                CollectionType type) {
+    DCHECK_EQ(type, kLabelsNodeListType);
+    return new LabelsNodeList(owner_node);
   }
 
   virtual ~LabelsNodeList();
@@ -42,7 +43,7 @@ class LabelsNodeList final : public LiveNodeList {
  protected:
   explicit LabelsNodeList(ContainerNode&);
 
-  bool elementMatches(const Element&) const override;
+  bool ElementMatches(const Element&) const override;
 };
 
 }  // namespace blink

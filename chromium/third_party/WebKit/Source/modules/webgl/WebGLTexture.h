@@ -27,6 +27,7 @@
 #define WebGLTexture_h
 
 #include "modules/webgl/WebGLSharedPlatform3DObject.h"
+#include "public/platform/WebMediaPlayer.h"
 
 namespace blink {
 
@@ -36,28 +37,39 @@ class WebGLTexture final : public WebGLSharedPlatform3DObject {
  public:
   ~WebGLTexture() override;
 
-  static WebGLTexture* create(WebGLRenderingContextBase*);
+  static WebGLTexture* Create(WebGLRenderingContextBase*);
 
-  void setTarget(GLenum);
+  void SetTarget(GLenum);
 
-  GLenum getTarget() const { return m_target; }
+  GLenum GetTarget() const { return target_; }
 
-  static GLenum getValidFormatForInternalFormat(GLenum);
+  bool HasEverBeenBound() const { return Object() && target_; }
 
-  bool hasEverBeenBound() const { return object() && m_target; }
+  static GLint ComputeLevelCount(GLsizei width, GLsizei height, GLsizei depth);
 
-  static GLint computeLevelCount(GLsizei width, GLsizei height, GLsizei depth);
+  void UpdateLastUploadedVideo(WebMediaPlayer*);
+  unsigned lastUploadedVideoWidth() const { return last_uploaded_video_width_; }
+  unsigned lastUploadedVideoHeight() const {
+    return last_uploaded_video_height_;
+  }
+  double lastUploadedVideoTimestamp() const {
+    return last_uploaded_video_timestamp_;
+  }
 
  private:
   explicit WebGLTexture(WebGLRenderingContextBase*);
 
-  void deleteObjectImpl(gpu::gles2::GLES2Interface*) override;
+  void DeleteObjectImpl(gpu::gles2::GLES2Interface*) override;
 
-  bool isTexture() const override { return true; }
+  bool IsTexture() const override { return true; }
 
-  int mapTargetToIndex(GLenum) const;
+  int MapTargetToIndex(GLenum) const;
 
-  GLenum m_target;
+  GLenum target_;
+
+  unsigned last_uploaded_video_width_ = 0;
+  unsigned last_uploaded_video_height_ = 0;
+  double last_uploaded_video_timestamp_ = 0.0;
 };
 
 }  // namespace blink

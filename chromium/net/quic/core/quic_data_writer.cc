@@ -7,12 +7,21 @@
 #include <algorithm>
 #include <limits>
 
-using base::StringPiece;
+#include "net/quic/core/quic_flags.h"
+#include "net/quic/platform/api/quic_endian.h"
+#include "net/quic/platform/api/quic_logging.h"
 
 namespace net {
 
-QuicDataWriter::QuicDataWriter(size_t size, char* buffer)
-    : buffer_(buffer), capacity_(size), length_(0) {}
+#define ENDPOINT \
+  (perspective_ == Perspective::IS_SERVER ? "Server: " : "Client: ")
+
+QuicDataWriter::QuicDataWriter(size_t size,
+                               char* buffer,
+                               Perspective perspective)
+    : buffer_(buffer), capacity_(size), length_(0), perspective_(perspective) {
+  QUIC_DVLOG(1) << ENDPOINT << "QuicDataReader";
+}
 
 QuicDataWriter::~QuicDataWriter() {}
 
@@ -81,7 +90,7 @@ bool QuicDataWriter::WriteUFloat16(uint64_t value) {
   return WriteBytes(&result, sizeof(result));
 }
 
-bool QuicDataWriter::WriteStringPiece16(StringPiece val) {
+bool QuicDataWriter::WriteStringPiece16(QuicStringPiece val) {
   if (val.size() > std::numeric_limits<uint16_t>::max()) {
     return false;
   }
@@ -138,6 +147,18 @@ void QuicDataWriter::WritePadding() {
   }
   memset(buffer_ + length_, 0x00, capacity_ - length_);
   length_ = capacity_;
+}
+
+bool QuicDataWriter::WriteConnectionId(uint64_t connection_id) {
+  if (FLAGS_quic_restart_flag_quic_big_endian_connection_id) {
+    connection_id = QuicEndian::HostToNet64(connection_id);
+  }
+
+  return WriteUInt64(connection_id);
+}
+
+bool QuicDataWriter::WriteTag(uint32_t tag) {
+  return WriteBytes(&tag, sizeof(tag));
 }
 
 }  // namespace net

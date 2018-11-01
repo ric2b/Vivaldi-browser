@@ -17,6 +17,7 @@
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_str_cat.h"
+#include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_stream_peer.h"
@@ -28,7 +29,6 @@
 #include "net/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using base::StringPiece;
 using std::string;
 using testing::_;
 using testing::AtLeast;
@@ -101,7 +101,7 @@ class MockVisitor : public SpdyFramerVisitorInterface {
   MOCK_METHOD2(OnContinuation, void(SpdyStreamId stream_id, bool end));
   MOCK_METHOD3(OnAltSvc,
                void(SpdyStreamId stream_id,
-                    StringPiece origin,
+                    QuicStringPiece origin,
                     const SpdyAltSvcWireFormat::AlternativeServiceVector&
                         altsvc_vector));
   MOCK_METHOD4(OnPriority,
@@ -150,13 +150,11 @@ std::ostream& operator<<(std::ostream& os, Http2DecoderChoice v) {
   return os;
 }
 
-enum HpackDecoderChoice { HPACK_DECODER_SPDY, HPACK_DECODER2, HPACK_DECODER3 };
+enum HpackDecoderChoice { HPACK_DECODER_SPDY, HPACK_DECODER3 };
 std::ostream& operator<<(std::ostream& os, HpackDecoderChoice v) {
   switch (v) {
     case HPACK_DECODER_SPDY:
       return os << "SPDY";
-    case HPACK_DECODER2:
-      return os << "HPACK_DECODER2";
     case HPACK_DECODER3:
       return os << "HPACK_DECODER3";
   }
@@ -191,15 +189,9 @@ struct TestParams {
     }
     switch (hpack_decoder) {
       case HPACK_DECODER_SPDY:
-        FLAGS_chromium_http2_flag_spdy_use_hpack_decoder2 = false;
-        FLAGS_chromium_http2_flag_spdy_use_hpack_decoder3 = false;
-        break;
-      case HPACK_DECODER2:
-        FLAGS_chromium_http2_flag_spdy_use_hpack_decoder2 = true;
         FLAGS_chromium_http2_flag_spdy_use_hpack_decoder3 = false;
         break;
       case HPACK_DECODER3:
-        FLAGS_chromium_http2_flag_spdy_use_hpack_decoder2 = false;
         FLAGS_chromium_http2_flag_spdy_use_hpack_decoder3 = true;
         break;
     }
@@ -282,7 +274,7 @@ class QuicHeadersStreamTest : public ::testing::TestWithParam<TestParamsTuple> {
     return true;
   }
 
-  void SaveHeaderDataStringPiece(StringPiece data) {
+  void SaveHeaderDataStringPiece(QuicStringPiece data) {
     saved_header_data_.append(data.data(), data.length());
   }
 
@@ -407,13 +399,13 @@ class QuicHeadersStreamTest : public ::testing::TestWithParam<TestParamsTuple> {
 INSTANTIATE_TEST_CASE_P(
     Tests,
     QuicHeadersStreamTest,
-    ::testing::Combine(
-        ::testing::ValuesIn(AllSupportedVersions()),
-        ::testing::Values(Perspective::IS_CLIENT, Perspective::IS_SERVER),
-        ::testing::Values(HTTP2_DECODER_SPDY,
-                          HTTP2_DECODER_NESTED_SPDY,
-                          HTTP2_DECODER_NEW),
-        ::testing::Values(HPACK_DECODER_SPDY, HPACK_DECODER2, HPACK_DECODER3)));
+    ::testing::Combine(::testing::ValuesIn(AllSupportedVersions()),
+                       ::testing::Values(Perspective::IS_CLIENT,
+                                         Perspective::IS_SERVER),
+                       ::testing::Values(HTTP2_DECODER_SPDY,
+                                         HTTP2_DECODER_NESTED_SPDY,
+                                         HTTP2_DECODER_NEW),
+                       ::testing::Values(HPACK_DECODER_SPDY, HPACK_DECODER3)));
 
 TEST_P(QuicHeadersStreamTest, StreamId) {
   EXPECT_EQ(3u, headers_stream_->id());
@@ -755,9 +747,8 @@ TEST_P(QuicHeadersStreamTest, RespectHttp2SettingsFrameSupportedFields) {
   stream_frame_.data_buffer = frame.data();
   stream_frame_.data_length = frame.size();
   headers_stream_->OnStreamFrame(stream_frame_);
-  EXPECT_EQ(kTestHeaderTableSize,
-            QuicSpdySessionPeer::GetSpdyFramer(&session_)
-                .header_encoder_table_size());
+  EXPECT_EQ(kTestHeaderTableSize, QuicSpdySessionPeer::GetSpdyFramer(&session_)
+                                      .header_encoder_table_size());
 }
 
 TEST_P(QuicHeadersStreamTest, RespectHttp2SettingsFrameUnsupportedFields) {

@@ -74,6 +74,7 @@
 #include "components/policy/core/common/cloud/policy_header_service.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/prefs/pref_service.h"
+#include "components/previews/core/previews_io_data.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
@@ -118,12 +119,6 @@
 #include "extensions/browser/extension_throttle_manager.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/common/constants.h"
-#endif
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_service.h"
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -423,12 +418,6 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
 
   params->proxy_config_service = ProxyServiceFactory::CreateProxyConfigService(
       profile->GetProxyConfigTracker());
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  SupervisedUserService* supervised_user_service =
-      SupervisedUserServiceFactory::GetForProfile(profile);
-  params->supervised_user_url_filter =
-      supervised_user_service->GetURLFilterForIOThread();
-#endif
 #if defined(OS_CHROMEOS)
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   if (user_manager) {
@@ -544,8 +533,7 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   BrowserContext::EnsureResourceContextInitialized(profile);
 }
 
-ProfileIOData::MediaRequestContext::MediaRequestContext(
-    const std::string& name) {
+ProfileIOData::MediaRequestContext::MediaRequestContext(const char* name) {
   set_name(name);
 }
 
@@ -948,6 +936,11 @@ void ProfileIOData::set_data_reduction_proxy_io_data(
   data_reduction_proxy_io_data_ = std::move(data_reduction_proxy_io_data);
 }
 
+void ProfileIOData::set_previews_io_data(
+    std::unique_ptr<previews::PreviewsIOData> previews_io_data) const {
+  previews_io_data_ = std::move(previews_io_data);
+}
+
 ProfileIOData::ResourceContext::ResourceContext(ProfileIOData* io_data)
     : io_data_(io_data),
       host_resolver_(NULL),
@@ -1074,10 +1067,6 @@ void ProfileIOData::Init(
     resource_prefetch_predictor_observer_.reset(
         profile_params_->resource_prefetch_predictor_observer_.release());
   }
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  supervised_user_url_filter_ = profile_params_->supervised_user_url_filter;
-#endif
 
 #if defined(OS_CHROMEOS)
   username_hash_ = profile_params_->username_hash;

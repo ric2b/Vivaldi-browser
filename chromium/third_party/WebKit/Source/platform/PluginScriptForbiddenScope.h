@@ -6,8 +6,8 @@
 #define PluginScriptForbiddenScope_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -46,7 +46,7 @@ class PLATFORM_EXPORT PluginScriptForbiddenScope final {
   PluginScriptForbiddenScope();
   ~PluginScriptForbiddenScope();
 
-  static bool isForbidden();
+  static bool IsForbidden();
 };
 
 }  // namespace blink

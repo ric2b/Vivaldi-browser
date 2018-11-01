@@ -307,7 +307,7 @@ bool GetBypassListFromExtensionPref(const base::DictionaryValue* proxy_config,
   return JoinUrlList(bypass_list, ",", out, error, bad_message);
 }
 
-base::DictionaryValue* CreateProxyConfigDict(
+std::unique_ptr<base::DictionaryValue> CreateProxyConfigDict(
     ProxyPrefs::ProxyMode mode_enum,
     bool pac_mandatory,
     const std::string& pac_url,
@@ -315,7 +315,7 @@ base::DictionaryValue* CreateProxyConfigDict(
     const std::string& proxy_rules_string,
     const std::string& bypass_list,
     std::string* error) {
-  base::DictionaryValue* result_proxy_config = NULL;
+  std::unique_ptr<base::DictionaryValue> result_proxy_config;
   switch (mode_enum) {
     case ProxyPrefs::MODE_DIRECT:
       result_proxy_config = ProxyConfigDictionary::CreateDirect();
@@ -330,12 +330,12 @@ base::DictionaryValue* CreateProxyConfigDict(
       } else if (!pac_data.empty()) {
         if (!CreateDataURLFromPACScript(pac_data, &url)) {
           *error = "Internal error, at base64 encoding of 'pacScript.data'.";
-          return NULL;
+          return nullptr;
         }
       } else {
         *error = "Proxy mode 'pac_script' requires a 'pacScript' field with "
                  "either a 'url' field or a 'data' field.";
-        return NULL;
+        return nullptr;
       }
       result_proxy_config =
           ProxyConfigDictionary::CreatePacScript(url, pac_mandatory);
@@ -344,7 +344,7 @@ base::DictionaryValue* CreateProxyConfigDict(
     case ProxyPrefs::MODE_FIXED_SERVERS: {
       if (proxy_rules_string.empty()) {
         *error = "Proxy mode 'fixed_servers' requires a 'rules' field.";
-        return NULL;
+        return nullptr;
       }
       result_proxy_config = ProxyConfigDictionary::CreateFixedServers(
           proxy_rules_string, bypass_list);

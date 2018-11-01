@@ -13,9 +13,9 @@
 #include "modules/presentation/PresentationRequest.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/wtf/Vector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "v8/include/v8.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 namespace {
@@ -23,19 +23,19 @@ namespace {
 TEST(PresentationAvailabilityTest, NoPageVisibilityChangeAfterDetach) {
   V8TestingScope scope;
   WTF::Vector<KURL> urls;
-  urls.push_back(URLTestHelpers::toKURL("https://example.com"));
-  urls.push_back(URLTestHelpers::toKURL("https://another.com"));
+  urls.push_back(URLTestHelpers::ToKURL("https://example.com"));
+  urls.push_back(URLTestHelpers::ToKURL("https://another.com"));
 
   Persistent<PresentationAvailabilityProperty> resolver =
       new PresentationAvailabilityProperty(
-          scope.getExecutionContext(), nullptr,
-          PresentationAvailabilityProperty::Ready);
+          scope.GetExecutionContext(), nullptr,
+          PresentationAvailabilityProperty::kReady);
   Persistent<PresentationAvailability> availability =
-      PresentationAvailability::take(resolver, urls, false);
+      PresentationAvailability::Take(resolver, urls, false);
 
   // These two calls should not crash.
-  scope.frame().detach(FrameDetachType::Remove);
-  scope.page().setVisibilityState(PageVisibilityStateHidden, false);
+  scope.GetFrame().Detach(FrameDetachType::kRemove);
+  scope.GetPage().SetVisibilityState(kPageVisibilityStateHidden, false);
 }
 
 }  // anonymous namespace

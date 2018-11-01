@@ -21,20 +21,22 @@ GbmBufferBase::GbmBufferBase(const scoped_refptr<GbmDevice>& drm,
     : drm_(drm), bo_(bo) {
   if (flags & GBM_BO_USE_SCANOUT) {
     DCHECK(bo_);
-    // The framebuffer format might be different than the format:
-    // drm supports 24 bit color depth and formats with alpha will
-    // be converted to one without it.
-    framebuffer_pixel_format_ =
-        GetFourCCFormatForFramebuffer(GetBufferFormatFromFourCCFormat(format));
+    framebuffer_pixel_format_ = format;
+    opaque_framebuffer_pixel_format_ = GetFourCCFormatForOpaqueFramebuffer(
+        GetBufferFormatFromFourCCFormat(format));
+    format_modifier_ = modifier;
 
-    // TODO(dcastagna): Add multi-planar support.
     uint32_t handles[4] = {0};
-    handles[0] = gbm_bo_get_handle(bo).u32;
     uint32_t strides[4] = {0};
-    strides[0] = gbm_bo_get_stride(bo);
     uint32_t offsets[4] = {0};
     uint64_t modifiers[4] = {0};
-    modifiers[0] = modifier;
+
+    for (size_t i = 0; i < gbm_bo_get_num_planes(bo); ++i) {
+      handles[i] = gbm_bo_get_plane_handle(bo, i).u32;
+      strides[i] = gbm_bo_get_plane_stride(bo, i);
+      offsets[i] = gbm_bo_get_plane_offset(bo, i);
+      modifiers[i] = modifier;
+    }
 
     // AddFramebuffer2 only considers the modifiers if addfb_flags has
     // DRM_MODE_FB_MODIFIERS set. We only set that when we've created
@@ -43,16 +45,28 @@ GbmBufferBase::GbmBufferBase(const scoped_refptr<GbmDevice>& drm,
     drm_->AddFramebuffer2(gbm_bo_get_width(bo), gbm_bo_get_height(bo),
                           framebuffer_pixel_format_, handles, strides, offsets,
                           modifiers, &framebuffer_, addfb_flags);
+    if (opaque_framebuffer_pixel_format_ != framebuffer_pixel_format_) {
+      drm_->AddFramebuffer2(gbm_bo_get_width(bo), gbm_bo_get_height(bo),
+                            opaque_framebuffer_pixel_format_, handles, strides,
+                            offsets, modifiers, &opaque_framebuffer_,
+                            addfb_flags);
+    }
   }
 }
 
 GbmBufferBase::~GbmBufferBase() {
   if (framebuffer_)
     drm_->RemoveFramebuffer(framebuffer_);
+  if (opaque_framebuffer_)
+    drm_->RemoveFramebuffer(opaque_framebuffer_);
 }
 
 uint32_t GbmBufferBase::GetFramebufferId() const {
   return framebuffer_;
+}
+
+uint32_t GbmBufferBase::GetOpaqueFramebufferId() const {
+  return opaque_framebuffer_ ? opaque_framebuffer_ : framebuffer_;
 }
 
 uint32_t GbmBufferBase::GetHandle() const {
@@ -66,6 +80,16 @@ gfx::Size GbmBufferBase::GetSize() const {
 uint32_t GbmBufferBase::GetFramebufferPixelFormat() const {
   DCHECK(framebuffer_);
   return framebuffer_pixel_format_;
+}
+
+uint32_t GbmBufferBase::GetOpaqueFramebufferPixelFormat() const {
+  DCHECK(framebuffer_);
+  return opaque_framebuffer_pixel_format_;
+}
+
+uint64_t GbmBufferBase::GetFormatModifier() const {
+  DCHECK(framebuffer_);
+  return format_modifier_;
 }
 
 const DrmDevice* GbmBufferBase::GetDrmDevice() const {

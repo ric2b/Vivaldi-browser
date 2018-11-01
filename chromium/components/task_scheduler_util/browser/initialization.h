@@ -5,26 +5,16 @@
 #ifndef COMPONENTS_TASK_SCHEDULER_UTIL_BROWSER_INITIALIZATION_H_
 #define COMPONENTS_TASK_SCHEDULER_UTIL_BROWSER_INITIALIZATION_H_
 
-#include <stddef.h>
+#include <memory>
 
-#include <vector>
-
-#include "base/task_scheduler/scheduler_worker_pool_params.h"
-
-namespace base {
-class TaskTraits;
-}
+#include "base/task_scheduler/task_scheduler.h"
 
 namespace task_scheduler_util {
 
-// Gets a vector of SchedulerWorkerPoolParams to initialize TaskScheduler in the
-// browser based off variations. Returns an empty vector on failure.
-std::vector<base::SchedulerWorkerPoolParams>
-GetBrowserWorkerPoolParamsFromVariations();
-
-// Maps |traits| to the index of a browser worker pool vector provided by
-// GetBrowserWorkerPoolParamsFromVariations().
-size_t BrowserWorkerPoolIndexForTraits(const base::TaskTraits& traits);
+// Gets a TaskScheduler::InitParams object to initialize TaskScheduler in the
+// browser based off variations. Returns nullptr on failure.
+std::unique_ptr<base::TaskScheduler::InitParams>
+GetBrowserTaskSchedulerInitParamsFromVariations();
 
 // Redirects zero-to-many PostTask APIs to the browser task scheduler based off
 // variations.

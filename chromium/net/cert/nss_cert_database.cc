@@ -22,7 +22,6 @@
 #include "base/task_runner_util.h"
 #include "base/threading/worker_pool.h"
 #include "crypto/scoped_nss_types.h"
-#include "net/base/crypto_module.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_database.h"
 #include "net/cert/x509_certificate.h"
@@ -421,8 +420,13 @@ void NSSCertDatabase::ListCertsImpl(crypto::ScopedPK11Slot slot,
   CERTCertListNode* node;
   for (node = CERT_LIST_HEAD(cert_list); !CERT_LIST_END(node, cert_list);
        node = CERT_LIST_NEXT(node)) {
-    certs->push_back(X509Certificate::CreateFromHandle(
-        node->cert, X509Certificate::OSCertHandles()));
+    scoped_refptr<X509Certificate> cert = X509Certificate::CreateFromHandle(
+        node->cert, X509Certificate::OSCertHandles());
+    if (!cert) {
+      LOG(ERROR) << "X509Certificate::CreateFromHandle failed";
+      continue;
+    }
+    certs->push_back(cert);
   }
   CERT_DestroyCertList(cert_list);
 }

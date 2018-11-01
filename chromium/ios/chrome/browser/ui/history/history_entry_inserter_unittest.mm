@@ -96,7 +96,7 @@ TEST_F(HistoryEntryInserterTest, AddItems) {
 // sections.
 TEST_F(HistoryEntryInserterTest, AddSections) {
   base::Time today =
-      base::Time::Now().LocalMidnight() + base::TimeDelta::FromHours(1);
+      base::Time::Now().LocalMidnight() + base::TimeDelta::FromHours(12);
   base::TimeDelta day = base::TimeDelta::FromDays(1);
   base::TimeDelta minute = base::TimeDelta::FromMinutes(1);
   HistoryEntryItem* day1 = TestHistoryEntryItem(today, "day1");

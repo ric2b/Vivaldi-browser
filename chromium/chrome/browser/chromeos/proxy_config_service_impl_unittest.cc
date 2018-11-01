@@ -13,6 +13,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -323,19 +324,19 @@ class ProxyConfigServiceImplTest : public testing::Test {
     std::unique_ptr<base::DictionaryValue> new_config;
     switch (input.mode) {
       case MK_MODE(DIRECT):
-        new_config.reset(ProxyConfigDictionary::CreateDirect());
+        new_config = ProxyConfigDictionary::CreateDirect();
         break;
       case MK_MODE(AUTO_DETECT):
-        new_config.reset(ProxyConfigDictionary::CreateAutoDetect());
+        new_config = ProxyConfigDictionary::CreateAutoDetect();
         break;
       case MK_MODE(PAC_SCRIPT):
-        new_config.reset(
-            ProxyConfigDictionary::CreatePacScript(input.pac_url, false));
+        new_config =
+            ProxyConfigDictionary::CreatePacScript(input.pac_url, false);
         break;
       case MK_MODE(SINGLE_PROXY):
       case MK_MODE(PROXY_PER_SCHEME):
-        new_config.reset(ProxyConfigDictionary::CreateFixedServers(
-            input.server, input.bypass_rules));
+        new_config = ProxyConfigDictionary::CreateFixedServers(
+            input.server, input.bypass_rules);
         break;
     }
     result->Swap(new_config.get());
@@ -350,10 +351,11 @@ class ProxyConfigServiceImplTest : public testing::Test {
         NetworkHandler::Get()->network_state_handler();
     const NetworkState* network = network_state_handler->DefaultNetwork();
     ASSERT_TRUE(network);
-    DBusThreadManager::Get()->GetShillServiceClient()->GetTestInterface()->
-        SetServiceProperty(network->path(),
-                           shill::kProxyConfigProperty,
-                           base::StringValue(proxy_config));
+    DBusThreadManager::Get()
+        ->GetShillServiceClient()
+        ->GetTestInterface()
+        ->SetServiceProperty(network->path(), shill::kProxyConfigProperty,
+                             base::Value(proxy_config));
   }
 
   // Synchronously gets the latest proxy config.
@@ -453,9 +455,9 @@ TEST_F(ProxyConfigServiceImplTest, DynamicPrefsOverride) {
     // non-existent network proxy.
     SetUserConfigInShill(nullptr);
     pref_service_.SetManagedPref(::proxy_config::prefs::kProxy,
-                                 managed_config.DeepCopy());
+                                 managed_config.CreateDeepCopy());
     pref_service_.SetRecommendedPref(::proxy_config::prefs::kProxy,
-                                     recommended_config.DeepCopy());
+                                     recommended_config.CreateDeepCopy());
     net::ProxyConfig actual_config;
     SyncGetLatestProxyConfig(&actual_config);
     EXPECT_EQ(managed_params.auto_detect, actual_config.auto_detect());
@@ -482,7 +484,7 @@ TEST_F(ProxyConfigServiceImplTest, DynamicPrefsOverride) {
 
     // Managed proxy pref should take effect over network proxy.
     pref_service_.SetManagedPref(::proxy_config::prefs::kProxy,
-                                 managed_config.DeepCopy());
+                                 managed_config.CreateDeepCopy());
     SyncGetLatestProxyConfig(&actual_config);
     EXPECT_EQ(managed_params.auto_detect, actual_config.auto_detect());
     EXPECT_EQ(managed_params.pac_url, actual_config.pac_url());
@@ -522,9 +524,9 @@ TEST_F(ProxyConfigServiceImplTest, SharedEthernetAndUserPolicy) {
   network_configs->Append(std::move(ethernet_policy));
 
   profile_prefs_.SetUserPref(::proxy_config::prefs::kUseSharedProxies,
-                             new base::Value(false));
+                             base::MakeUnique<base::Value>(false));
   profile_prefs_.SetManagedPref(::onc::prefs::kOpenNetworkConfiguration,
-                                network_configs.release());
+                                std::move(network_configs));
 
   net::ProxyConfig actual_config;
   SyncGetLatestProxyConfig(&actual_config);

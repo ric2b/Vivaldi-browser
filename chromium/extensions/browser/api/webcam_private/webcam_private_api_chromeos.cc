@@ -205,7 +205,7 @@ void WebcamPrivateOpenSerialWebcamFunction::OnOpenWebcam(
     const std::string& webcam_id,
     bool success) {
   if (success) {
-    SetResult(base::MakeUnique<base::StringValue>(webcam_id));
+    SetResult(base::MakeUnique<base::Value>(webcam_id));
     SendResponse(true);
   } else {
     SetError(kOpenSerialWebcamError);
@@ -422,8 +422,8 @@ void WebcamPrivateResetFunction::OnResetWebcam(bool success) {
     SetError(kResetWebcamError);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<WebcamPrivateAPI>>
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<WebcamPrivateAPI>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<WebcamPrivateAPI>*

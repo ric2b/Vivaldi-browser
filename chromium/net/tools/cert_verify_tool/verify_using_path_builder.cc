@@ -134,7 +134,7 @@ void PrintResultPath(const net::CertPathBuilder::ResultPath* result_path,
                      size_t index,
                      bool is_best) {
   std::cout << "path " << index << " "
-            << (result_path->valid ? "valid" : "invalid")
+            << (result_path->IsValid() ? "valid" : "invalid")
             << (is_best ? " (best)" : "") << "\n";
 
   // Print the certificate chain.
@@ -155,10 +155,12 @@ void PrintResultPath(const net::CertPathBuilder::ResultPath* result_path,
               << SubjectFromTrustAnchor(trust_anchor.get()) << "\n";
   }
 
-  // Print the errors.
-  if (!result_path->errors.empty()) {
+  // Print the errors/warnings if there were any.
+  std::string errors_str =
+      result_path->errors.ToDebugString(result_path->path.certs);
+  if (!errors_str.empty()) {
     std::cout << "Errors:\n";
-    std::cout << result_path->errors.ToDebugString() << "\n";
+    std::cout << errors_str << "\n";
   }
 }
 
@@ -260,7 +262,8 @@ bool VerifyUsingPathBuilder(
   net::SimpleSignaturePolicy signature_policy(2048);
   net::CertPathBuilder::Result result;
   net::CertPathBuilder path_builder(target_cert, &trust_store,
-                                    &signature_policy, time, &result);
+                                    &signature_policy, time,
+                                    net::KeyPurpose::SERVER_AUTH, &result);
   path_builder.AddCertIssuerSource(&intermediate_cert_issuer_source);
 #if defined(USE_NSS_CERTS)
   net::CertIssuerSourceNSS cert_issuer_source_nss;

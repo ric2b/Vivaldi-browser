@@ -62,20 +62,23 @@ class WindowTreeClientDelegate : public aura::WindowTreeClientDelegate {
   DISALLOW_COPY_AND_ASSIGN(WindowTreeClientDelegate);
 };
 
-class WindowManagerTest : public service_manager::test::ServiceTest {
+// NOTE: this isn't named WindowManagerTest because gtest complains about tests
+// with the same name (there is already a WindowManagerTest in ash).
+class MusWindowManagerTest : public service_manager::test::ServiceTest {
  public:
-  WindowManagerTest() : service_manager::test::ServiceTest("mash_unittests") {}
-  ~WindowManagerTest() override {}
+  MusWindowManagerTest()
+      : service_manager::test::ServiceTest("mash_unittests") {}
+  ~MusWindowManagerTest() override {}
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(WindowManagerTest);
+  DISALLOW_COPY_AND_ASSIGN(MusWindowManagerTest);
 };
 
 void OnEmbed(bool success) {
   ASSERT_TRUE(success);
 }
 
-TEST_F(WindowManagerTest, OpenWindow) {
+TEST_F(MusWindowManagerTest, OpenWindow) {
   display::ScreenBase screen;
   screen.display_list().AddDisplay(
       display::Display(1, gfx::Rect(0, 0, 200, 200)),
@@ -84,18 +87,20 @@ TEST_F(WindowManagerTest, OpenWindow) {
 
   WindowTreeClientDelegate window_tree_delegate;
 
-  connector()->Connect(mojom::kServiceName);
+  connector()->StartService(mojom::kServiceName);
 
   // Connect to mus and create a new top level window. The request goes to
   // |ash|, but is async.
-  aura::WindowTreeClient client(connector(), &window_tree_delegate);
+  aura::WindowTreeClient client(connector(), &window_tree_delegate, nullptr,
+                                nullptr, nullptr, false);
   client.ConnectViaWindowTreeFactory();
   aura::test::EnvTestHelper().SetWindowTreeClient(&client);
   std::map<std::string, std::vector<uint8_t>> properties;
   properties[ui::mojom::WindowManager::kWindowType_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(ui::mojom::WindowType::WINDOW));
-  aura::WindowTreeHostMus window_tree_host_mus(&client, &properties);
+  aura::WindowTreeHostMus window_tree_host_mus(&client, cc::FrameSinkId(),
+                                               &properties);
   window_tree_host_mus.InitHost();
   aura::Window* child_window = new aura::Window(nullptr);
   child_window->Init(ui::LAYER_NOT_DRAWN);
@@ -107,7 +112,8 @@ TEST_F(WindowManagerTest, OpenWindow) {
   auto tree_client_request = MakeRequest(&tree_client);
   client.Embed(child_window, std::move(tree_client), 0u, base::Bind(&OnEmbed));
   aura::WindowTreeClient child_client(connector(), &window_tree_delegate,
-                                      nullptr, std::move(tree_client_request));
+                                      nullptr, std::move(tree_client_request),
+                                      nullptr, false);
   window_tree_delegate.WaitForEmbed();
   ASSERT_TRUE(!child_client.GetRoots().empty());
   window_tree_delegate.DestroyWindowTreeHost();

@@ -175,12 +175,12 @@ bool SynchronousCompositorFrameSink::BindToClient(
   constexpr bool child_support_is_root = false;
   constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
-  root_support_.reset(new cc::CompositorFrameSinkSupport(
+  root_support_ = cc::CompositorFrameSinkSupport::Create(
       this, surface_manager_.get(), kRootFrameSinkId, root_support_is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points));
-  child_support_.reset(new cc::CompositorFrameSinkSupport(
+      handles_frame_sink_id_invalidation, needs_sync_points);
+  child_support_ = cc::CompositorFrameSinkSupport::Create(
       this, surface_manager_.get(), kChildFrameSinkId, child_support_is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points));
+      handles_frame_sink_id_invalidation, needs_sync_points);
 
   cc::RendererSettings software_renderer_settings;
 
@@ -273,6 +273,7 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     // the CompositorFrameSink client too? (We'd have to do the same for
     // hardware frames in SurfacesInstance?)
     cc::CompositorFrame embed_frame;
+    embed_frame.metadata.begin_frame_ack = frame.metadata.begin_frame_ack;
     embed_frame.render_pass_list.push_back(cc::RenderPass::Create());
 
     // The embedding RenderPass covers the entire Display's area.
@@ -461,7 +462,10 @@ bool SynchronousCompositorFrameSink::CalledOnValidThread() const {
   return thread_checker_.CalledOnValidThread();
 }
 
-void SynchronousCompositorFrameSink::DidReceiveCompositorFrameAck() {}
+void SynchronousCompositorFrameSink::DidReceiveCompositorFrameAck(
+    const cc::ReturnedResourceArray& resources) {
+  ReclaimResources(resources);
+}
 
 void SynchronousCompositorFrameSink::OnBeginFrame(
     const cc::BeginFrameArgs& args) {}

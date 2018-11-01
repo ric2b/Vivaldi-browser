@@ -4,9 +4,8 @@
 
 #include "ash/wm/event_client_impl.h"
 
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ui/aura/window.h"
 #include "ui/keyboard/keyboard_util.h"
@@ -23,7 +22,7 @@ bool EventClientImpl::CanProcessEventsWithinSubtree(
   // remove this.
   const aura::Window* root_window = window ? window->GetRootWindow() : NULL;
   if (!root_window ||
-      !WmShell::Get()->GetSessionStateDelegate()->IsUserSessionBlocked()) {
+      !Shell::Get()->session_controller()->IsUserSessionBlocked()) {
     return true;
   }
 
@@ -50,7 +49,7 @@ bool EventClientImpl::CanProcessEventsWithinSubtree(
 }
 
 ui::EventTarget* EventClientImpl::GetToplevelEventTarget() {
-  return Shell::GetInstance();
+  return Shell::Get();
 }
 
 }  // namespace ash

@@ -20,6 +20,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
@@ -99,8 +100,8 @@ class TestStartupClientChannelListener : public IPC::Listener {
   bool OnMessageReceived(const IPC::Message& message) override { return false; }
 };
 
-void ConnectOnBlockingPool(mojo::ScopedMessagePipeHandle handle,
-                           mojo::edk::NamedPlatformHandle os_pipe) {
+void ConnectAsync(mojo::ScopedMessagePipeHandle handle,
+                  mojo::edk::NamedPlatformHandle os_pipe) {
   mojo::edk::ScopedPlatformHandle os_pipe_handle =
       mojo::edk::CreateClientHandle(os_pipe);
   if (!os_pipe_handle.is_valid())
@@ -470,9 +471,9 @@ base::Process CloudPrintProxyPolicyStartupTest::Launch(
           .release(),
       IPC::Channel::MODE_SERVER, this, IOTaskRunner());
 
-  base::Process process = SpawnChild(name);
-  EXPECT_TRUE(process.IsValid());
-  return process;
+  base::SpawnChildResult spawn_result = SpawnChild(name);
+  EXPECT_TRUE(spawn_result.process.IsValid());
+  return std::move(spawn_result.process);
 }
 
 void CloudPrintProxyPolicyStartupTest::WaitForConnect() {
@@ -481,9 +482,12 @@ void CloudPrintProxyPolicyStartupTest::WaitForConnect() {
   EXPECT_TRUE(base::ThreadTaskRunnerHandle::Get().get());
 
   mojo::MessagePipe pipe;
-  BrowserThread::PostBlockingPoolTask(
-      FROM_HERE, base::Bind(&ConnectOnBlockingPool, base::Passed(&pipe.handle1),
-                            GetServiceProcessChannel()));
+  base::PostTaskWithTraits(
+      FROM_HERE,
+      base::TaskTraits().MayBlock().WithPriority(
+          base::TaskPriority::BACKGROUND),
+      base::Bind(&ConnectAsync, base::Passed(&pipe.handle1),
+                 GetServiceProcessChannel()));
   ServiceProcessControl::GetInstance()->SetChannel(
       IPC::ChannelProxy::Create(IPC::ChannelMojo::CreateClientFactory(
                                     std::move(pipe.handle0), IOTaskRunner()),

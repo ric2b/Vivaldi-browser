@@ -39,7 +39,7 @@ class SkBitmap;
 namespace content {
 
 class LayoutTestBluetoothChooserFactory;
-class LayoutTestDevToolsFrontend;
+class LayoutTestDevToolsBindings;
 class RenderFrameHost;
 class RenderProcessHost;
 class Shell;
@@ -85,6 +85,7 @@ class BlinkTestResultPrinter {
   void PrintAudioBlock(const std::vector<unsigned char>& audio_data);
   void PrintAudioFooter();
 
+  void AddMessageToStderr(const std::string& message);
   void AddMessage(const std::string& message);
   void AddMessageRaw(const std::string& message);
   void AddErrorMessage(const std::string& message);
@@ -202,6 +203,7 @@ class BlinkTestController : public base::NonThreadSafe,
   void OnTextDump(const std::string& dump);
   void OnInitiateLayoutDump();
   void OnLayoutDumpResponse(RenderFrameHost* sender, const std::string& dump);
+  void OnPrintMessageToStderr(const std::string& message);
   void OnPrintMessage(const std::string& message);
   void OnOverridePreferences(const WebPreferences& prefs);
   void OnTestFinished();
@@ -230,6 +232,9 @@ class BlinkTestController : public base::NonThreadSafe,
   base::FilePath temp_path_;
 
   Shell* main_window_;
+  Shell* devtools_window_;
+
+  std::unique_ptr<LayoutTestDevToolsBindings> devtools_bindings_;
 
   // The PID of the render process of the render view host of main_window_.
   int current_pid_;
@@ -265,8 +270,6 @@ class BlinkTestController : public base::NonThreadSafe,
 
   const bool is_leak_detection_enabled_;
   bool crash_when_leak_found_;
-
-  LayoutTestDevToolsFrontend* devtools_frontend_;
 
   std::unique_ptr<LayoutTestBluetoothChooserFactory> bluetooth_chooser_factory_;
 

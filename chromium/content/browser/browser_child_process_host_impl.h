@@ -32,10 +32,6 @@ namespace base {
 class CommandLine;
 }
 
-namespace service_manager {
-class InterfaceProvider;
-}
-
 namespace content {
 
 class BrowserChildProcessHostIterator;
@@ -88,7 +84,8 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
   void OnChannelInitialized(IPC::Channel* channel) override;
   void OnChildDisconnected() override;
   const base::Process& GetProcess() const override;
-  service_manager::InterfaceProvider* GetRemoteInterfaces() override;
+  void BindInterface(const std::string& interface_name,
+                     mojo::ScopedMessagePipeHandle interface_pipe) override;
   bool OnMessageReceived(const IPC::Message& message) override;
   void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
@@ -100,9 +97,6 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
 
   // Removes this host from the host list. Calls ChildProcessHost::ForceShutdown
   void ForceShutdown();
-
-  // Callers can reduce the BrowserChildProcess' priority.
-  void SetBackgrounded(bool backgrounded);
 
   // Adds an IPC message filter.
   void AddFilter(BrowserMessageFilter* filter);

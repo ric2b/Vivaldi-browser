@@ -430,8 +430,9 @@ class SitePerProcessTextInputManagerTest : public InProcessBrowserTest {
 // creates a sequence of tab presses and verifies that after each key press, the
 // TextInputState.value reflects that of the focused input, i.e., the
 // TextInputManager is correctly tracking TextInputState across frames.
+// flaky: crbug.com/704994
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
-                       TrackStateWhenSwitchingFocusedFrames) {
+                       DISABLED_TrackStateWhenSwitchingFocusedFrames) {
   CreateIframePage("a(a,b,c(a,b,d(e, f)),g)");
   std::vector<std::string> values{
       "main",     "node_a",   "node_b",     "node_c",     "node_c_a",
@@ -871,8 +872,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
 
 // This test makes sure browser correctly tracks focused editable element inside
 // each RenderFrameHost.
+// Test is flaky. crbug.com/705203
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
-                       TrackingFocusedElementForAllFrames) {
+                       DISABLED_TrackingFocusedElementForAllFrames) {
   CreateIframePage("a(a, b(a))");
   std::vector<content::RenderFrameHost*> frames{
       GetFrame(IndexVector{}), GetFrame(IndexVector{0}),
@@ -912,8 +914,15 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
 // focused. Then the <input> inside frame is both focused and blurred and  and
 // in both cases the test verifies that WebContents is aware whether or not a
 // focused editable element exists on the page.
+// Test is flaky on ChromeOS. crbug.com/705289
+#if defined(OS_CHROMEOS)
+#define MAYBE_TrackPageFocusEditableElement \
+  DISABLED_TrackPageFocusEditableElement
+#else
+#define MAYBE_TrackPageFocusEditableElement TrackPageFocusEditableElement
+#endif
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
-                       TrackPageFocusEditableElement) {
+                       MAYBE_TrackPageFocusEditableElement) {
   CreateIframePage("a(a, b(a))");
   std::vector<content::RenderFrameHost*> frames{
       GetFrame(IndexVector{}), GetFrame(IndexVector{0}),
@@ -947,8 +956,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
 // WebContents knows about the focused editable element. Then it asks the
 // WebContents to clear focused element and verifies that there is no longer
 // a focused editable element on the page.
+// Test is flaky. crbug.com/705203
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
-                       ClearFocusedElementOnPage) {
+                       DISABLED_ClearFocusedElementOnPage) {
   CreateIframePage("a(a, b(a))");
   std::vector<content::RenderFrameHost*> frames{
       GetFrame(IndexVector{}), GetFrame(IndexVector{0}),
@@ -1273,8 +1283,9 @@ class TestBrowserClient : public ChromeContentBrowserClient {
 
 // This test verifies that requests for dictionary lookup based on selection
 // range are routed to the focused RenderWidgetHost.
+// Test is flaky: http://crbug.com/710842
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
-                       LookUpStringForRangeRoutesToFocusedWidget) {
+                       DISABLED_LookUpStringForRangeRoutesToFocusedWidget) {
   // TestBrowserClient needs to replace the ChromeContenBrowserClient after most
   // things are initialized but before the WebContents is created. Here we make
   // that happen by creating a new WebContents in a new tab. But before the test

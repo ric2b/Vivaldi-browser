@@ -33,11 +33,11 @@
 
 - (void)webStateList:(WebStateList*)webStateList
     didInsertWebState:(web::WebState*)webState
-              atIndex:(int)index {
-  DCHECK_GE(index, 0);
+              atIndex:(int)atIndex {
+  DCHECK_GE(atIndex, 0);
   [_tabModelObservers tabModel:_tabModel
                   didInsertTab:LegacyTabHelper::GetTabForWebState(webState)
-                       atIndex:static_cast<NSUInteger>(index)
+                       atIndex:static_cast<NSUInteger>(atIndex)
                   inForeground:NO];
   [_tabModelObservers tabModelDidChangeTabCount:_tabModel];
 }
@@ -57,21 +57,21 @@
 - (void)webStateList:(WebStateList*)webStateList
     didReplaceWebState:(web::WebState*)oldWebState
           withWebState:(web::WebState*)newWebState
-               atIndex:(int)index {
-  DCHECK_GE(index, 0);
+               atIndex:(int)atIndex {
+  DCHECK_GE(atIndex, 0);
   [_tabModelObservers tabModel:_tabModel
                  didReplaceTab:LegacyTabHelper::GetTabForWebState(oldWebState)
                        withTab:LegacyTabHelper::GetTabForWebState(newWebState)
-                       atIndex:static_cast<NSUInteger>(index)];
+                       atIndex:static_cast<NSUInteger>(atIndex)];
 }
 
 - (void)webStateList:(WebStateList*)webStateList
     didDetachWebState:(web::WebState*)webState
-              atIndex:(int)index {
-  DCHECK_GE(index, 0);
+              atIndex:(int)atIndex {
+  DCHECK_GE(atIndex, 0);
   [_tabModelObservers tabModel:_tabModel
                   didRemoveTab:LegacyTabHelper::GetTabForWebState(webState)
-                       atIndex:static_cast<NSUInteger>(index)];
+                       atIndex:static_cast<NSUInteger>(atIndex)];
   [_tabModelObservers tabModelDidChangeTabCount:_tabModel];
 }
 
@@ -94,6 +94,14 @@
             didChangeActiveTab:LegacyTabHelper::GetTabForWebState(newWebState)
                    previousTab:oldTab
                        atIndex:static_cast<NSUInteger>(atIndex)];
+}
+
+- (void)webStateList:(WebStateList*)webStateList
+    willDetachWebState:(web::WebState*)webState
+               atIndex:(int)atIndex {
+  DCHECK_GE(atIndex, 0);
+  [_tabModelObservers tabModel:_tabModel
+                 willRemoveTab:LegacyTabHelper::GetTabForWebState(webState)];
 }
 
 @end

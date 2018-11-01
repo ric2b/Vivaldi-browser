@@ -24,6 +24,7 @@ class WebApkUpdateManager {
   // WebAPK will be successfully updated.
   static void OnBuiltWebApk(const std::string& id,
                             WebApkInstallResult result,
+                            bool relax_updates,
                             const std::string& webapk_package);
 
  private:

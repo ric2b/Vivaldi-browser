@@ -23,13 +23,13 @@
 
 #include "platform/text/BidiCharacterRun.h"
 
-#include "wtf/allocator/Partitions.h"
+#include "platform/wtf/allocator/Partitions.h"
 
 using namespace WTF;
 
 namespace blink {
 void* BidiCharacterRun::operator new(size_t sz) {
-  return PartitionAlloc(Partitions::layoutPartition(), sz,
+  return PartitionAlloc(Partitions::LayoutPartition(), sz,
                         WTF_HEAP_PROFILER_TYPE_NAME(BidiCharacterRun));
 }
 

@@ -77,17 +77,31 @@ class ManageProfileHandlerTest : public testing::Test {
   std::unique_ptr<TestManageProfileHandler> handler_;
 };
 
-TEST_F(ManageProfileHandlerTest, HandleSetProfileIconAndName) {
-  base::ListValue list_args;
-  list_args.AppendString("chrome://theme/IDR_PROFILE_AVATAR_15");
-  list_args.AppendString("New Profile Name");
-  handler()->HandleSetProfileIconAndName(&list_args);
+TEST_F(ManageProfileHandlerTest, HandleSetProfileIconToGaiaAvatar) {
+  handler()->HandleSetProfileIconToGaiaAvatar(nullptr);
 
   PrefService* pref_service = profile()->GetPrefs();
+  EXPECT_FALSE(pref_service->GetBoolean(prefs::kProfileUsingDefaultAvatar));
+  EXPECT_TRUE(pref_service->GetBoolean(prefs::kProfileUsingGAIAAvatar));
+}
 
+TEST_F(ManageProfileHandlerTest, HandleSetProfileIconToDefaultAvatar) {
+  base::ListValue list_args;
+  list_args.AppendString("chrome://theme/IDR_PROFILE_AVATAR_15");
+  handler()->HandleSetProfileIconToDefaultAvatar(&list_args);
+
+  PrefService* pref_service = profile()->GetPrefs();
   EXPECT_EQ(15, pref_service->GetInteger(prefs::kProfileAvatarIndex));
   EXPECT_FALSE(pref_service->GetBoolean(prefs::kProfileUsingDefaultAvatar));
   EXPECT_FALSE(pref_service->GetBoolean(prefs::kProfileUsingGAIAAvatar));
+}
+
+TEST_F(ManageProfileHandlerTest, HandleSetProfileName) {
+  base::ListValue list_args;
+  list_args.AppendString("New Profile Name");
+  handler()->HandleSetProfileName(&list_args);
+
+  PrefService* pref_service = profile()->GetPrefs();
   EXPECT_EQ("New Profile Name", pref_service->GetString(prefs::kProfileName));
 }
 

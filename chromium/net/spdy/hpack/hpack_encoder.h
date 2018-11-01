@@ -10,15 +10,15 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
 #include "net/spdy/hpack/hpack_header_table.h"
 #include "net/spdy/hpack/hpack_output_stream.h"
+#include "net/spdy/platform/api/spdy_string.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 #include "net/spdy/spdy_protocol.h"
 
 // An HpackEncoder encodes header sets as outlined in
@@ -34,18 +34,16 @@ class HpackEncoderPeer;
 
 class NET_EXPORT_PRIVATE HpackEncoder {
  public:
-  using Representation = std::pair<base::StringPiece, base::StringPiece>;
+  using Representation = std::pair<SpdyStringPiece, SpdyStringPiece>;
   using Representations = std::vector<Representation>;
 
   // Callers may provide a HeaderListener to be informed of header name-value
   // pairs processed by this encoder.
-  typedef std::function<void(base::StringPiece, base::StringPiece)>
-      HeaderListener;
+  typedef std::function<void(SpdyStringPiece, SpdyStringPiece)> HeaderListener;
 
   // An indexing policy should return true if the provided header name-value
   // pair should be inserted into the HPACK dynamic table.
-  using IndexingPolicy =
-      std::function<bool(base::StringPiece, base::StringPiece)>;
+  using IndexingPolicy = std::function<bool(SpdyStringPiece, SpdyStringPiece)>;
 
   // |table| is an initialized HPACK Huffman table, having an
   // externally-managed lifetime which spans beyond HpackEncoder.
@@ -54,11 +52,11 @@ class NET_EXPORT_PRIVATE HpackEncoder {
 
   // Encodes a sequence of Representations into the given string.
   void EncodeHeaderSet(const Representations& representations,
-                       std::string* output);
+                       SpdyString* output);
 
   // Encodes the given header set into the given string. Returns
   // whether or not the encoding was successful.
-  bool EncodeHeaderSet(const SpdyHeaderBlock& header_set, std::string* output);
+  bool EncodeHeaderSet(const SpdyHeaderBlock& header_set, SpdyString* output);
 
   class NET_EXPORT_PRIVATE ProgressiveEncoder {
    public:
@@ -69,7 +67,7 @@ class NET_EXPORT_PRIVATE HpackEncoder {
 
     // Encodes up to max_encoded_bytes of the current header block into the
     // given output string.
-    virtual void Next(size_t max_encoded_bytes, std::string* output) = 0;
+    virtual void Next(size_t max_encoded_bytes, SpdyString* output) = 0;
   };
 
   // Returns a ProgressiveEncoder which must be outlived by both the given
@@ -111,7 +109,7 @@ class NET_EXPORT_PRIVATE HpackEncoder {
   class Encoderator;
 
   // Encodes a sequence of header name-value pairs as a single header block.
-  void EncodeRepresentations(RepresentationIterator* iter, std::string* output);
+  void EncodeRepresentations(RepresentationIterator* iter, SpdyString* output);
 
   // Emits a static/dynamic indexed representation (Section 7.1).
   void EmitIndex(const HpackEntry* entry);
@@ -122,7 +120,7 @@ class NET_EXPORT_PRIVATE HpackEncoder {
   void EmitLiteral(const Representation& representation);
 
   // Emits a Huffman or identity string (whichever is smaller).
-  void EmitString(base::StringPiece str);
+  void EmitString(SpdyStringPiece str);
 
   // Emits the current dynamic table size if the table size was recently
   // updated and we have not yet emitted it (Section 6.3).

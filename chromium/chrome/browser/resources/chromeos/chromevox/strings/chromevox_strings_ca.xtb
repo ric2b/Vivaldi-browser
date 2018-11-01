@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Amb abast.</translation>
 <translation id="1025074108959230262">S'ha desactivat el mode atractiu.</translation>
 <translation id="1031961866430398710">i, a continuació,</translation>
+<translation id="1038643060055067718">Línies:</translation>
 <translation id="1038795173450935438">Per avançar pels elements d'una pàgina, prem Cerca+fletxa dreta i per tornar enrere, Cerca+fletxa esquerra. Per anar a la línia següent, prem Cerca+fletxa avall i, per anar a la línia anterior, fes servir Cerca+fletxa amunt. Si vols fer clic a l'element en el qual et trobes, prem Cerca+espai.</translation>
 <translation id="1044777062731150180">No hi ha capçaleres.</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,7 @@
 <translation id="2110480898214777136">Vés del principi al final o viceversa dins d'una pàgina, d'un quadre de diàleg o d'un altre espai delimitat</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">clau d'accés: <ph name="KEY" /></translation>
-<translation id="2155457205053847599">Per canviar la taula actual de braille de sis punts, seleccioneu una de les opcions de la llista que hi ha a continuació.</translation>
+<translation id="2138345533858834403">Simula la sortida d'una pantalla per a braille que es pugui actualitzar al tauler de ChromeVox situat a la part superior de la pantalla.</translation>
 <translation id="2169714232367507776">Feu clic a l'element actual.</translation>
 <translation id="2179452035581866348">ChromeVox fa servir sons per donar-te informació essencial i addicional. Pots aprendre què signifiquen i així utilitzar-los per navegar més de pressa. Un cop t'hi familiaritzis, pots desactivar les descripcions en veu alta detallades i dependre dels sons per obtenir informació essencial de la pàgina. Aquí tens una llista completa dels sons i del que signifiquen.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{parèntesi de tancament}other{# parèntesis de tancament}}</translation>
@@ -124,6 +125,7 @@
 <translation id="2344193891939537199">Control de data i hora</translation>
 <translation id="2347456970887948350">Un enllaç</translation>
 <translation id="2359897517538099099">No teniu activat el mode de taula.</translation>
+<translation id="2381733276052567791">Activa o desactiva la veu</translation>
 <translation id="2390264819538553347">Prem Retorn per avançar i Retrocés per tornar enrere.</translation>
 <translation id="241124561063364910">i, tot seguit,</translation>
 <translation id="2416512023405990736">Una casella de selecció desmarcada</translation>
@@ -166,6 +168,7 @@
 <translation id="2800204403141299078">No hi ha més elements diferents.</translation>
 <translation id="2800780099804980316">No hi ha cap capçalera anterior del nivell 1.</translation>
 <translation id="280499067616661124">Cerca a la pàgina amb ChromeVox</translation>
+<translation id="2808001342598757276">Il·lumina la pantalla</translation>
 <translation id="2811019999044652585">Per desplaçar-te a altres parts de la pantalla, com ara les barres d'eines o la safata del sistema, prem Control+Endavant. A Chromebook, la tecla Endavant es troba just a sobre de la tecla del número dos.</translation>
 <translation id="2811204574343810641">Fila</translation>
 <translation id="2816654101880605877">No hi ha cap control lliscant més.</translation>
@@ -185,11 +188,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{tabulació}other{# tabulacions}}</translation>
 <translation id="2972078295414139404">No hi ha cap enllaç visitat anterior.</translation>
 <translation id="2972205263822847197">Descripció emergent</translation>
-<translation id="2978549349327282388">Columnes:</translation>
 <translation id="2998131015536248178">Caràcter anterior</translation>
 <translation id="2999559350546931576">Disminueix la presentació.</translation>
 <translation id="2999945368667127852">No hi ha cap widget multimèdia a continuació.</translation>
 <translation id="3012414509011670858">No hi ha cap secció anterior.</translation>
+<translation id="3014130421870723208">@ed 8punts</translation>
 <translation id="3030432017085518523">Botó d'opció de l'element del menú</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apòstrof}other{# apòstrofs}}</translation>
 <translation id="3040901448410802366">Indicador de progrés</translation>
@@ -212,6 +215,7 @@
 <translation id="3138767756593758860">Mostra la llista de punts de referència.</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">Línia següent</translation>
+<translation id="3153024374267644603">Activa la veu</translation>
 <translation id="3155083529632865074">No hi ha cap botó anterior.</translation>
 <translation id="3163593631834463955">La capçalera de la columna és buida.</translation>
 <translation id="316542773973815724">Navegació</translation>
@@ -224,6 +228,7 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="3229375994964697375">Enllaç visitat</translation>
 <translation id="3232388865800379423">Un botó emergent</translation>
 <translation id="3241052487511142956">Enllaç visitat anterior</translation>
+<translation id="3241638166094654466">Cel·les en cada línia:</translation>
 <translation id="3286390186030710347">Control lliscant</translation>
 <translation id="3299925995433437805">No hi ha cap enllaç visitat següent.</translation>
 <translation id="3307886118343381874">Vés al final de la taula</translation>
@@ -380,6 +385,7 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="4376316291247992553">Mostra el gràfic com a braille</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">restableix</translation>
+<translation id="4457472090507035117">Selecciona la veu actual:</translation>
 <translation id="4471074325120394300">No hi ha cap enllaç.</translation>
 <translation id="4476183483923481720">línia nova</translation>
 <translation id="4482330759234983253">Taula anterior</translation>
@@ -453,7 +459,6 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">No hi ha cap camp de formulari anterior.</translation>
 <translation id="5111640677200759579">Capçalera de la columna</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">No hi ha cap enllaç anterior.</translation>
 <translation id="513774504516943387">enllaç</translation>
 <translation id="517143700877085897">, no seleccionat</translation>
@@ -564,10 +569,10 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="5968607524793740041">Mostra el menú contextual</translation>
 <translation id="5983179082906765664">Augmenta la granularitat de la navegació</translation>
 <translation id="5999630716831179808">Veus</translation>
-<translation id="6000417740266304866">Per canviar la taula actual de braille de vuit punts, seleccioneu una de les opcions de la llista que hi ha a continuació.</translation>
 <translation id="6006050241733874051">Formulari</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{barra invertida}other{# barres invertides}}</translation>
 <translation id="6037602951055904232">Desplaça cap endavant.</translation>
+<translation id="6044160928851315051">Enfosqueix la pantalla</translation>
 <translation id="6082768461603900813">Navegació bàsica</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Fi de la cel·la.</translation>
@@ -606,7 +611,6 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="6444046323172968959">Diàleg d'alerta</translation>
 <translation id="6459511626086141404">Mapa de teclat pla</translation>
 <translation id="6468049171101508116">Botó següent</translation>
-<translation id="6491972999578897419">Podeu canviar la veu actual si seleccioneu una opció de la llista següent.</translation>
 <translation id="6493991254603208962">disminueix la brillantor</translation>
 <translation id="6508059270146105198">Mou la pantalla Braille a la part inferior de la pàgina.</translation>
 <translation id="6536864053412760904">Testimoni de MathML</translation>
@@ -658,6 +662,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">retorn de paraules</translation>
 <translation id="713824876195128146">Cita de bloc següent</translation>
+<translation id="7143034430156387447">Alterna entre braille de sis i vuit punts</translation>
 <translation id="7161771961008409533">Botó emergent</translation>
 <translation id="7165714724802225287">L'estil de pantalla actual és entrellaçat.</translation>
 <translation id="7167657087543110">retorn de caràcters</translation>
@@ -668,6 +673,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">línia</translation>
 <translation id="7226216518520804442">llista</translation>
+<translation id="7229749224609077523">Selecciona una taula de braille de sis punts:</translation>
 <translation id="72393384879519786">Capçalera</translation>
 <translation id="7241683698754534149">Obre la descripció llarga en una pestanya nova.</translation>
 <translation id="7248671827512403053">Aplicació</translation>
@@ -741,6 +747,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="7974390230414479278">Element del menú</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{cometes}other{# cometes}}</translation>
+<translation id="8017588669690167134">Desactiva la veu</translation>
 <translation id="8033827949643255796">seleccionats</translation>
 <translation id="8035962149453661158">màx.: <ph name="X" /></translation>
 <translation id="8042761080832772327">Edició de text, entrada de cerca</translation>
@@ -759,7 +766,6 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="820417203470636242">Cel·la buida</translation>
 <translation id="8215202828671303819">Selecció múltiple</translation>
 <translation id="8224171046658870249">S'ha passat a ChromeVox Next</translation>
-<translation id="8259358278692921574">Files:</translation>
 <translation id="8276439074553447000">Vés a l'element enfocable anterior</translation>
 <translation id="8278417001922463147">No hi ha cap article anterior.</translation>
 <translation id="8283603667300770666">Camp de formulari següent</translation>
@@ -797,7 +803,6 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="8638532244051952400">Anuncia les coordenades de la cel·la actual</translation>
 <translation id="8650576015643545550">No hi ha cap llista anterior.</translation>
 <translation id="8651481478098336970">activa el volum</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">Mostra la llista d'enllaços.</translation>
 <translation id="8664519043722036194">segons</translation>
 <translation id="867187640362843212">Capçalera 5</translation>
@@ -817,6 +822,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="8856538297388979332">Premeu la tecla cap amunt o cap avall per revisar les ordres o bé premeu retorn per activar.</translation>
 <translation id="8864099967139188018">No hi ha cap capçalera més del nivell 6.</translation>
 <translation id="8882002077197914455">Capçalera de fila</translation>
+<translation id="8883850400338911892">edurl 8punts</translation>
 <translation id="8896347895970027998">Activa o desactiva ChromeVox.</translation>
 <translation id="8898516272131543774">Retorn de la puntuació del cicle.</translation>
 <translation id="8900148057318340779">Tecla de prefix</translation>
@@ -830,6 +836,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="9027462562263121875">No hi ha cap taula.</translation>
 <translation id="9040132695316389094">Capçalera 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" />%</translation>
+<translation id="9061884144798498064">Selecciona una taula de braille de vuit punts:</translation>
 <translation id="9065283790526219006">+element emergent</translation>
 <translation id="9077213568694924680">s'ha suprimit de la selecció.</translation>
 <translation id="9082874451376019682">No hi ha cap control lliscant anterior.</translation>

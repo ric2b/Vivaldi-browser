@@ -45,6 +45,7 @@
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
@@ -211,16 +212,14 @@ class TestDownloadManagerDelegate : public ChromeDownloadManagerDelegate {
         item, dangerous_callback);
   }
 
-  static void SetDangerous(
-      const content::DownloadTargetCallback& callback,
-      const base::FilePath& target_path,
-      content::DownloadItem::TargetDisposition disp,
-      content::DownloadDangerType danger_type,
-      const base::FilePath& intermediate_path) {
-    callback.Run(target_path,
-                 disp,
-                 content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
-                 intermediate_path);
+  static void SetDangerous(const content::DownloadTargetCallback& callback,
+                           const base::FilePath& target_path,
+                           content::DownloadItem::TargetDisposition disp,
+                           content::DownloadDangerType danger_type,
+                           const base::FilePath& intermediate_path,
+                           content::DownloadInterruptReason reason) {
+    callback.Run(target_path, disp, content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
+                 intermediate_path, reason);
   }
 };
 
@@ -291,14 +290,12 @@ class BrowserCloseManagerBrowserTest
         observer.NumDownloadsSeenInState(content::DownloadItem::IN_PROGRESS));
   }
 
-  // Makes sure that hang monitor will not trigger RendererUnresponsive
-  // for that web content or browser. That must be called before close action
-  // when using |AcceptClose| or |CancelClose|, to ensure the timeout does not
-  // prevent the dialog from appearing. https://crbug.com/519646
+  // Makes sure that the beforeunload hang monitor will not trigger. That must
+  // be called before close action when using |AcceptClose| or |CancelClose|, to
+  // ensure the timeout does not prevent the dialog from appearing.
+  // https://crbug.com/519646
   void DisableHangMonitor(content::WebContents* web_contents) {
-    web_contents->GetRenderViewHost()
-        ->GetWidget()
-        ->DisableHangMonitorForTesting();
+    web_contents->GetMainFrame()->DisableBeforeUnloadHangMonitorForTesting();
   }
 
   void DisableHangMonitor(Browser* browser) {
@@ -1102,6 +1099,56 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
   EXPECT_TRUE(browser_shutdown::IsTryingToQuit());
   EXPECT_TRUE(BrowserList::GetInstance()->empty());
   EXPECT_EQ(0, DownloadService::NonMaliciousDownloadCountAllProfiles());
+}
+
+// Test shutdown with a download in progress in a regular profile an inconito
+// browser is opened and closed. While there are active downloads, closing the
+// incognito window shouldn't block on the active downloads which belong to the
+// parent profile.
+IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
+                       TestWithOffTheRecordWindowAndRegularDownload) {
+  Profile* otr_profile = browser()->profile()->GetOffTheRecordProfile();
+  SetDownloadPathForProfile(otr_profile);
+  Browser* otr_browser = CreateBrowser(otr_profile);
+  ASSERT_NO_FATAL_FAILURE(CreateStalledDownload(browser()));
+
+  content::TestNavigationObserver navigation_observer(
+      otr_browser->tab_strip_model()->GetActiveWebContents(), 1);
+  ui_test_utils::NavigateToURL(otr_browser, GURL("about:blank"));
+  navigation_observer.Wait();
+
+  int num_downloads_blocking = 0;
+  ASSERT_EQ(
+      Browser::DOWNLOAD_CLOSE_OK,
+      otr_browser->OkToCloseWithInProgressDownloads(&num_downloads_blocking));
+  ASSERT_EQ(0, num_downloads_blocking);
+
+  {
+    RepeatedNotificationObserver close_observer(
+        chrome::NOTIFICATION_BROWSER_CLOSED, 1);
+    otr_browser->window()->Close();
+    close_observer.Wait();
+  }
+
+  ASSERT_EQ(
+      Browser::DOWNLOAD_CLOSE_BROWSER_SHUTDOWN,
+      browser()->OkToCloseWithInProgressDownloads(&num_downloads_blocking));
+  ASSERT_EQ(1, num_downloads_blocking);
+
+  {
+    RepeatedNotificationObserver close_observer(
+        chrome::NOTIFICATION_BROWSER_CLOSED, 2);
+    TestBrowserCloseManager::AttemptClose(
+        TestBrowserCloseManager::USER_CHOICE_USER_ALLOWS_CLOSE);
+    close_observer.Wait();
+  }
+
+  EXPECT_TRUE(browser_shutdown::IsTryingToQuit());
+  EXPECT_TRUE(BrowserList::GetInstance()->empty());
+  if (browser_defaults::kBrowserAliveWithNoWindows)
+    EXPECT_EQ(1, DownloadService::NonMaliciousDownloadCountAllProfiles());
+  else
+    EXPECT_EQ(0, DownloadService::NonMaliciousDownloadCountAllProfiles());
 }
 
 // Test shutdown with a download in progress from one profile, where the only

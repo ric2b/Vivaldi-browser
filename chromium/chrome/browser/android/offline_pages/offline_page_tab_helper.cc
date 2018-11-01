@@ -5,10 +5,14 @@
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
 
 #include "base/bind.h"
+#include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/android/offline_pages/downloads/offline_page_infobar_delegate.h"
+#include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/android/offline_pages/offline_page_request_job.h"
-#include "chrome/browser/android/offline_pages/offline_page_utils.h"
+#include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
 #include "components/offline_pages/core/offline_page_item.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -56,7 +60,8 @@ void OfflinePageTabHelper::DidStartNavigation(
   provisional_offline_info_.Clear();
 
   // If not a fragment navigation, clear the cached offline info.
-  if (offline_info_.offline_page.get() && !navigation_handle->IsSamePage()) {
+  if (offline_info_.offline_page.get() &&
+      !navigation_handle->IsSameDocument()) {
     offline_info_.Clear();
   }
 }
@@ -70,7 +75,7 @@ void OfflinePageTabHelper::DidFinishNavigation(
   if (!navigation_handle->HasCommitted())
     return;
 
-  if (navigation_handle->IsSamePage())
+  if (navigation_handle->IsSameDocument())
     return;
 
   GURL navigated_url = navigation_handle->GetURL();
@@ -182,6 +187,67 @@ bool OfflinePageTabHelper::IsShowingOfflinePreview() const {
   // NavigationHandle instead of a back channel. crbug.com/658899
   return provisional_offline_info_.is_showing_offline_preview ||
          offline_info_.is_showing_offline_preview;
+}
+
+void OfflinePageTabHelper::ScheduleDownloadHelper(
+    content::WebContents* web_contents,
+    const std::string& name_space,
+    const GURL& url,
+    OfflinePageUtils::DownloadUIActionFlags ui_action) {
+  OfflinePageUtils::CheckDuplicateDownloads(
+      web_contents->GetBrowserContext(), url,
+      base::Bind(&OfflinePageTabHelper::DuplicateCheckDoneForScheduleDownload,
+                 weak_ptr_factory_.GetWeakPtr(), web_contents, name_space, url,
+                 ui_action));
+}
+
+void OfflinePageTabHelper::DuplicateCheckDoneForScheduleDownload(
+    content::WebContents* web_contents,
+    const std::string& name_space,
+    const GURL& url,
+    OfflinePageUtils::DownloadUIActionFlags ui_action,
+    OfflinePageUtils::DuplicateCheckResult result) {
+  if (result != OfflinePageUtils::DuplicateCheckResult::NOT_FOUND) {
+    if (static_cast<int>(ui_action) &
+        static_cast<int>(
+            OfflinePageUtils::DownloadUIActionFlags::PROMPT_DUPLICATE)) {
+      OfflinePageInfoBarDelegate::Create(
+          base::Bind(&OfflinePageTabHelper::DoDownloadPageLater,
+                     weak_ptr_factory_.GetWeakPtr(), web_contents, name_space,
+                     url, ui_action),
+          url,
+          result ==
+              OfflinePageUtils::DuplicateCheckResult::DUPLICATE_REQUEST_FOUND,
+          web_contents);
+      return;
+    }
+  }
+
+  DoDownloadPageLater(web_contents, name_space, url, ui_action);
+}
+
+void OfflinePageTabHelper::DoDownloadPageLater(
+    content::WebContents* web_contents,
+    const std::string& name_space,
+    const GURL& url,
+    OfflinePageUtils::DownloadUIActionFlags ui_action) {
+  offline_pages::RequestCoordinator* request_coordinator =
+      offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
+          web_contents->GetBrowserContext());
+  if (!request_coordinator)
+    return;
+
+  offline_pages::RequestCoordinator::SavePageLaterParams params;
+  params.url = url;
+  params.client_id = offline_pages::ClientId(name_space, base::GenerateGUID());
+  request_coordinator->SavePageLater(params);
+
+  if (static_cast<int>(ui_action) &
+      static_cast<int>(OfflinePageUtils::DownloadUIActionFlags::
+                           SHOW_TOAST_ON_NEW_DOWNLOAD)) {
+    android::OfflinePageNotificationBridge notification_bridge;
+    notification_bridge.ShowDownloadingToast();
+  }
 }
 
 }  // namespace offline_pages

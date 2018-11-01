@@ -4,10 +4,11 @@
 
 package org.chromium.net;
 
-import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 
@@ -199,12 +200,10 @@ public class CronetPerfTestActivity extends Activity {
             }
 
             try {
-                JSONObject quicParams = new JSONObject().put("host_whitelist", host);
                 JSONObject hostResolverParams =
                         CronetTestUtil.generateHostResolverRules(getConfigString("HOST_IP"));
                 JSONObject experimentalOptions =
                         new JSONObject()
-                                .put("QUIC", quicParams)
                                 .put("HostResolverRules", hostResolverParams);
                 cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
             } catch (JSONException e) {
@@ -238,8 +237,8 @@ public class CronetPerfTestActivity extends Activity {
             }
         }
 
-        // TODO(pauljensen): Remove @SuppressLint once crbug.com/501591 is fixed.
-        @SuppressLint("NewApi")
+        // NOTE(pauljensen): Sampling profiling won't work on KitKat and earlier devices.
+        @TargetApi(Build.VERSION_CODES.LOLLIPOP)
         private void startLogging() {
             if (getConfigBoolean("CAPTURE_NETLOG")) {
                 mCronetEngine.startNetLogToFile(

@@ -357,30 +357,12 @@ diff_match_patch.prototype = {
    * @param {string} text2
    * @return {!Array.<!{0: number, 1: string}>}
    */
-  diff_main: function(text1, text2) {}
-};
+  diff_main: function(text1, text2) {},
 
-/** @constructor */
-function Path2D() {
-}
-Path2D.prototype = {
   /**
-   * @param {number} x
-   * @param {number} y
-   * @param {number} w
-   * @param {number} h
+   * @param {!Array.<!{0: number, 1: string}>} diff
    */
-  rect: function(x, y, w, h) {},
-  /**
-   * @param {number} x
-   * @param {number} y
-   */
-  moveTo: function(x, y) {},
-  /**
-   * @param {number} x
-   * @param {number} y
-   */
-  lineTo: function(x, y) {}
+  diff_cleanupSemantic(diff) {}
 };
 
 /** @constructor */
@@ -554,6 +536,7 @@ CodeMirror.getMode = function(options, spec) {};
 CodeMirror.overlayMode = function(mode1, mode2, squashSpans) {};
 CodeMirror.defineMode = function(modeName, modeConstructor) {};
 CodeMirror.startState = function(mode) {};
+CodeMirror.copyState = function(mode, state) {};
 
 /** @typedef {{canceled: boolean, from: !CodeMirror.Pos, to: !CodeMirror.Pos, text: string, origin: string, cancel: function()}} */
 CodeMirror.BeforeChangeObject;
@@ -574,12 +557,6 @@ CodeMirror.Pos.prototype.ch;
  * @return {number}
  */
 CodeMirror.cmpPos = function(pos1, pos2) {};
-
-/**
- * @param {string} mode
- * @param {?} definition
- */
-CodeMirror.defineSimpleMode = function(mode, definition) {};
 
 /** @constructor */
 CodeMirror.StringStream = function(line) {
@@ -628,6 +605,12 @@ CodeMirror.keyMap;
 /** @type {{scrollLeft: number, scrollTop: number}} */
 CodeMirror.doc;
 
+/**
+ * @param {string} mime
+ * @param {string} mode
+ */
+CodeMirror.defineMIME = function(mime, mode) {};
+
 /** @type {boolean} */
 window.dispatchStandaloneTestRunnerMessages;
 
@@ -654,6 +637,13 @@ var acorn = {
    * @return {!ESTree.Node}
    */
   parse: function(text, options) {},
+
+  /**
+   * @param {string} text
+   * @param {Object.<string, boolean>} options
+   * @return {!ESTree.Node}
+   */
+  parse_dammit: function(text, options) {},
 
   /**
    * @param {string} text
@@ -740,6 +730,20 @@ ESTree.Node = function() {
   this.argument;
   /** @type {(string|undefined)} */
   this.operator;
+  /** @type {(!ESTree.Node|undefined)} */
+  this.right;
+  /** @type {(!ESTree.Node|undefined)} */
+  this.left;
+  /** @type {(string|undefined)} */
+  this.kind;
+  /** @type {(!ESTree.Node|undefined)} */
+  this.property;
+  /** @type {(!ESTree.Node|undefined)} */
+  this.object;
+  /** @type {(string|undefined)} */
+  this.raw;
+  /** @type {(boolean|undefined)} */
+  this.computed;
 };
 
 /**

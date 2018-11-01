@@ -30,6 +30,7 @@
 #include "chrome/browser/chromeos/login/easy_unlock/bootstrap_user_flow.h"
 #include "chrome/browser/chromeos/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/chromeos/login/helper.h"
+#include "chrome/browser/chromeos/login/screens/encryption_migration_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_token_initializer.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
@@ -57,6 +58,7 @@
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/arc/arc_util.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
@@ -77,7 +79,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/user_metrics.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/http/http_auth_cache.h"
@@ -175,6 +176,31 @@ bool CanShowDebuggingFeatures() {
 void RecordPasswordChangeFlow(LoginPasswordChangeFlow flow) {
   UMA_HISTOGRAM_ENUMERATION("Login.PasswordChangeFlow", flow,
                             LOGIN_PASSWORD_CHANGE_FLOW_COUNT);
+}
+
+bool ShouldForceDircrypto(const AccountId& account_id) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kDisableEncryptionMigration)) {
+    return false;
+  }
+  // If the device is not officially supported to run ARC, we don't need to
+  // force Ext4 dircrypto.
+  if (!arc::IsArcAvailable())
+    return false;
+
+  // In some login flows (e.g. when siging in supervised user), ARC can not
+  // start. For such cases, we don't need to force Ext4 dircrypto.
+  chromeos::UserFlow* user_flow =
+      chromeos::ChromeUserManager::Get()->GetUserFlow(account_id);
+  if (!user_flow || !user_flow->CanStartArc())
+    return false;
+
+  // When a user is signing in as a secondary user, we don't need to force Ext4
+  // dircrypto since the user can not run ARC.
+  if (UserAddingScreen::Get()->IsRunning())
+    return false;
+
+  return true;
 }
 
 }  // namespace
@@ -461,11 +487,23 @@ void ExistingUserController::PerformLogin(
       user_manager::kSupervisedUserDomain) {
     login_performer_->LoginAsSupervisedUser(user_context);
   } else {
-    login_performer_->PerformLogin(user_context, auth_mode);
-    RecordPasswordLoginEvent(user_context);
+    // If a regular user log in to a device which supports ARC, we should make
+    // sure that the user's cryptohome is encrypted in ext4 dircrypto to run the
+    // latest Android runtime.
+    UserContext new_user_context = user_context;
+    new_user_context.SetIsForcingDircrypto(
+        ShouldForceDircrypto(new_user_context.GetAccountId()));
+    login_performer_->PerformLogin(new_user_context, auth_mode);
+    RecordPasswordLoginEvent(new_user_context);
   }
   SendAccessibilityAlert(
       l10n_util::GetStringUTF8(IDS_CHROMEOS_ACC_LOGIN_SIGNING_IN));
+}
+
+void ExistingUserController::ContinuePerformLogin(
+    LoginPerformer::AuthorizationMode auth_mode,
+    const UserContext& user_context) {
+  login_performer_->PerformLogin(user_context, auth_mode);
 }
 
 void ExistingUserController::MigrateUserData(const std::string& old_password) {
@@ -596,6 +634,23 @@ void ExistingUserController::ShowKioskEnableScreen() {
 
 void ExistingUserController::ShowKioskAutolaunchScreen() {
   host_->StartWizard(OobeScreen::SCREEN_KIOSK_AUTOLAUNCH);
+}
+
+void ExistingUserController::ShowEncryptionMigrationScreen(
+    const UserContext& user_context,
+    bool has_incomplete_migration) {
+  host_->StartWizard(OobeScreen::SCREEN_ENCRYPTION_MIGRATION);
+
+  EncryptionMigrationScreen* migration_screen =
+      static_cast<EncryptionMigrationScreen*>(
+          host_->GetWizardController()->current_screen());
+  DCHECK(migration_screen);
+  migration_screen->SetUserContext(user_context);
+  migration_screen->SetShouldResume(has_incomplete_migration);
+  migration_screen->SetContinueLoginCallback(base::BindOnce(
+      &ExistingUserController::ContinuePerformLogin, weak_factory_.GetWeakPtr(),
+      login_performer_->auth_mode()));
+  migration_screen->SetupInitialView();
 }
 
 void ExistingUserController::ShowTPMError() {
@@ -833,6 +888,12 @@ void ExistingUserController::OnPasswordChangeDetected() {
   }
 
   ShowPasswordChangedDialog();
+}
+
+void ExistingUserController::OnOldEncryptionDetected(
+    const UserContext& user_context,
+    bool has_incomplete_migration) {
+  ShowEncryptionMigrationScreen(user_context, has_incomplete_migration);
 }
 
 void ExistingUserController::WhiteListCheckFailed(const std::string& email) {

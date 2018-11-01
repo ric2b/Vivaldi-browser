@@ -98,5 +98,60 @@ cr.define('settings_test', function() {
         assertEquals('Baz', options[2].textContent);
       });
     });
+
+    test('ignored elements are ignored', function() {
+      var text = 'hello';
+      document.body.innerHTML =
+          `<settings-section hidden-by-search>
+             <cr-events>${text}</cr-events>
+             <dialog>${text}</dialog>
+             <iron-icon>${text}</iron-icon>
+             <iron-list>${text}</iron-list>
+             <paper-icon-button>${text}</paper-icon-button>
+             <paper-ripple>${text}</paper-ripple>
+             <paper-slider>${text}</paper-slider>
+             <paper-spinner>${text}</paper-spinner>
+             <style>${text}</style>
+             <template>${text}</template>
+           </settings-section>`;
+
+      var section = document.querySelector('settings-section');
+      assertTrue(section.hiddenBySearch);
+
+      return searchManager.search(text, section).then(function() {
+        assertTrue(section.hiddenBySearch);
+      });
+    });
+
+    // Test that multiple requests for the same text correctly highlight their
+    // corresponding part of the tree without affecting other parts of the tree.
+    test('multiple simultaneous requests for the same text', function() {
+      document.body.innerHTML =
+          `<settings-section hidden-by-search>
+             <div><span>Hello there</span></div>
+           </settings-section>
+           <settings-section hidden-by-search>
+             <div><span>Hello over there</span></div>
+           </settings-section>
+           <settings-section hidden-by-search>
+             <div><span>Nothing</span></div>
+           </settings-section>`;
+
+      var sections = Array.prototype.slice.call(
+          document.querySelectorAll('settings-section'));
+
+      return Promise.all(
+        sections.map(function(section) {
+          return searchManager.search('there', section);
+        }),
+      ).then(function(requests) {
+        assertTrue(requests[0].didFindMatches());
+        assertFalse(sections[0].hiddenBySearch);
+        assertTrue(requests[1].didFindMatches());
+        assertFalse(sections[1].hiddenBySearch);
+        assertFalse(requests[2].didFindMatches());
+        assertTrue(sections[2].hiddenBySearch);
+      });
+    });
   });
 });

@@ -16,8 +16,8 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/math_util.h"
+#include "cc/benchmarks/micro_benchmark_impl.h"
 #include "cc/debug/debug_colors.h"
-#include "cc/debug/micro_benchmark_impl.h"
 #include "cc/debug/traced_value.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/solid_color_layer_impl.h"
@@ -109,6 +109,7 @@ PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
       only_used_low_res_last_append_quads_(false),
       mask_type_(mask_type),
       nearest_neighbor_(false),
+      use_transformed_rasterization_(false),
       is_directly_composited_image_(false) {
   layer_tree_impl()->RegisterPictureLayerImpl(this);
 }
@@ -145,6 +146,7 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->twin_layer_ = this;
 
   layer_impl->SetNearestNeighbor(nearest_neighbor_);
+  layer_impl->SetUseTransformedRasterization(use_transformed_rasterization_);
 
   // Solid color layers have no tilings.
   DCHECK(!raster_source_->IsSolidColor() || tilings_->num_tilings() == 0);
@@ -201,6 +203,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     return;
   }
 
+  float device_scale_factor =
+      layer_tree_impl() ? layer_tree_impl()->device_scale_factor() : 1;
   float max_contents_scale = MaximumTilingContentsScale();
   PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
                                 max_contents_scale);
@@ -213,7 +217,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     AppendDebugBorderQuad(
         render_pass, shared_quad_state->quad_layer_bounds, shared_quad_state,
         append_quads_data, DebugColors::DirectPictureBorderColor(),
-        DebugColors::DirectPictureBorderWidth(layer_tree_impl()));
+        DebugColors::DirectPictureBorderWidth(device_scale_factor));
 
     gfx::Rect geometry_rect = shared_quad_state->visible_quad_layer_rect;
     gfx::Rect opaque_rect = contents_opaque() ? geometry_rect : gfx::Rect();
@@ -249,7 +253,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
   AppendDebugBorderQuad(render_pass, shared_quad_state->quad_layer_bounds,
                         shared_quad_state, append_quads_data);
 
-  if (ShowDebugBorders()) {
+  if (ShowDebugBorders(DebugBorderType::LAYER)) {
     for (PictureLayerTilingSet::CoverageIterator iter(
              tilings_.get(), max_contents_scale,
              shared_quad_state->visible_quad_layer_rect, ideal_contents_scale_);
@@ -260,29 +264,29 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         TileDrawInfo::Mode mode = iter->draw_info().mode();
         if (mode == TileDrawInfo::SOLID_COLOR_MODE) {
           color = DebugColors::SolidColorTileBorderColor();
-          width = DebugColors::SolidColorTileBorderWidth(layer_tree_impl());
+          width = DebugColors::SolidColorTileBorderWidth(device_scale_factor);
         } else if (mode == TileDrawInfo::OOM_MODE) {
           color = DebugColors::OOMTileBorderColor();
-          width = DebugColors::OOMTileBorderWidth(layer_tree_impl());
+          width = DebugColors::OOMTileBorderWidth(device_scale_factor);
         } else if (iter->draw_info().has_compressed_resource()) {
           color = DebugColors::CompressedTileBorderColor();
-          width = DebugColors::CompressedTileBorderWidth(layer_tree_impl());
+          width = DebugColors::CompressedTileBorderWidth(device_scale_factor);
         } else if (iter.resolution() == HIGH_RESOLUTION) {
           color = DebugColors::HighResTileBorderColor();
-          width = DebugColors::HighResTileBorderWidth(layer_tree_impl());
+          width = DebugColors::HighResTileBorderWidth(device_scale_factor);
         } else if (iter.resolution() == LOW_RESOLUTION) {
           color = DebugColors::LowResTileBorderColor();
-          width = DebugColors::LowResTileBorderWidth(layer_tree_impl());
-        } else if (iter->contents_scale() > max_contents_scale) {
+          width = DebugColors::LowResTileBorderWidth(device_scale_factor);
+        } else if (iter->contents_scale_key() > max_contents_scale) {
           color = DebugColors::ExtraHighResTileBorderColor();
-          width = DebugColors::ExtraHighResTileBorderWidth(layer_tree_impl());
+          width = DebugColors::ExtraHighResTileBorderWidth(device_scale_factor);
         } else {
           color = DebugColors::ExtraLowResTileBorderColor();
-          width = DebugColors::ExtraLowResTileBorderWidth(layer_tree_impl());
+          width = DebugColors::ExtraLowResTileBorderWidth(device_scale_factor);
         }
       } else {
         color = DebugColors::MissingTileBorderColor();
-        width = DebugColors::MissingTileBorderWidth(layer_tree_impl());
+        width = DebugColors::MissingTileBorderWidth(device_scale_factor);
       }
 
       DebugBorderDrawQuad* debug_border_quad =
@@ -341,8 +345,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           // complete. But if a tile is ideal scale, we don't want to consider
           // it incomplete and trying to replace it with a tile at a worse
           // scale.
-          if (iter->contents_scale() != raster_contents_scale_ &&
-              iter->contents_scale() != ideal_contents_scale_ &&
+          if (iter->contents_scale_key() != raster_contents_scale_ &&
+              iter->contents_scale_key() != ideal_contents_scale_ &&
               geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
             append_quads_data->num_incomplete_tiles++;
           }
@@ -358,11 +362,16 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           break;
         }
         case TileDrawInfo::SOLID_COLOR_MODE: {
-          SolidColorDrawQuad* quad =
-              render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
-          quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
-                       draw_info.solid_color(), false);
-          ValidateQuadResources(quad);
+          float alpha =
+              (SkColorGetA(draw_info.solid_color()) * (1.0f / 255.0f)) *
+              shared_quad_state->opacity;
+          if (alpha >= std::numeric_limits<float>::epsilon()) {
+            SolidColorDrawQuad* quad =
+                render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+            quad->SetNew(shared_quad_state, geometry_rect,
+                         visible_geometry_rect, draw_info.solid_color(), false);
+            ValidateQuadResources(quad);
+          }
           has_draw_quad = true;
           break;
         }
@@ -374,7 +383,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     if (!has_draw_quad) {
       // Checkerboard.
       SkColor color = SafeOpaqueBackgroundColor();
-      if (ShowDebugBorders()) {
+      if (ShowDebugBorders(DebugBorderType::LAYER)) {
         // Fill the whole tile with the missing tile color.
         color = DebugColors::OOMTileBorderColor();
       }
@@ -642,14 +651,11 @@ bool PictureLayerImpl::RasterSourceUsesLCDText() const {
 }
 
 void PictureLayerImpl::NotifyTileStateChanged(const Tile* tile) {
-  if (layer_tree_impl()->IsActiveTree()) {
-    gfx::Rect layer_damage_rect = gfx::ScaleToEnclosingRect(
-        tile->content_rect(), 1.f / tile->contents_scale());
-    AddDamageRect(layer_damage_rect);
-  }
+  if (layer_tree_impl()->IsActiveTree())
+    AddDamageRect(tile->enclosing_layer_rect());
   if (tile->draw_info().NeedsRaster()) {
     PictureLayerTiling* tiling =
-        tilings_->FindTilingWithScaleKey(tile->contents_scale());
+        tilings_->FindTilingWithScaleKey(tile->contents_scale_key());
     if (tiling)
       tiling->set_all_tiles_done(false);
   }
@@ -722,7 +728,13 @@ const PictureLayerTiling* PictureLayerImpl::GetPendingOrActiveTwinTiling(
   PictureLayerImpl* twin_layer = GetPendingOrActiveTwinLayer();
   if (!twin_layer)
     return nullptr;
-  return twin_layer->tilings_->FindTilingWithScaleKey(tiling->contents_scale());
+  const PictureLayerTiling* twin_tiling =
+      twin_layer->tilings_->FindTilingWithScaleKey(
+          tiling->contents_scale_key());
+  DCHECK(tiling->raster_transform().translation() == gfx::Vector2dF());
+  DCHECK(!twin_tiling ||
+         twin_tiling->raster_transform().translation() == gfx::Vector2dF());
+  return twin_tiling;
 }
 
 bool PictureLayerImpl::RequiresHighResToDraw() const {
@@ -870,12 +882,21 @@ void PictureLayerImpl::SetNearestNeighbor(bool nearest_neighbor) {
   NoteLayerPropertyChanged();
 }
 
+void PictureLayerImpl::SetUseTransformedRasterization(bool use) {
+  if (use_transformed_rasterization_ == use)
+    return;
+
+  use_transformed_rasterization_ = use;
+  NoteLayerPropertyChanged();
+}
+
 PictureLayerTiling* PictureLayerImpl::AddTiling(float contents_scale) {
   DCHECK(CanHaveTilings());
   DCHECK_GE(contents_scale, MinimumContentsScale());
   DCHECK_LE(contents_scale, MaximumContentsScale());
   DCHECK(raster_source_->HasRecordings());
-  return tilings_->AddTiling(contents_scale, raster_source_);
+  return tilings_->AddTiling(
+      gfx::AxisTransform2d(contents_scale, gfx::Vector2dF()), raster_source_);
 }
 
 void PictureLayerImpl::RemoveAllTilings() {
@@ -1268,12 +1289,15 @@ void PictureLayerImpl::UpdateIdealScales() {
 void PictureLayerImpl::GetDebugBorderProperties(
     SkColor* color,
     float* width) const {
+  float device_scale_factor =
+      layer_tree_impl() ? layer_tree_impl()->device_scale_factor() : 1;
+
   if (is_directly_composited_image_) {
     *color = DebugColors::ImageLayerBorderColor();
-    *width = DebugColors::ImageLayerBorderWidth(layer_tree_impl());
+    *width = DebugColors::ImageLayerBorderWidth(device_scale_factor);
   } else {
     *color = DebugColors::TiledContentLayerBorderColor();
-    *width = DebugColors::TiledContentLayerBorderWidth(layer_tree_impl());
+    *width = DebugColors::TiledContentLayerBorderWidth(device_scale_factor);
   }
 }
 

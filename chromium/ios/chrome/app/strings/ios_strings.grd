@@ -549,6 +549,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CONTENT_SUGGESTIONS_DELETE" desc="The name of the Delete command in the Content Suggestions articles context menu">
         Delete
       </message>
+      <message name="IDS_IOS_CONTENT_SUGGESTIONS_FOOTER_TITLE" desc="The title of the footer of the sections of Content Suggestions">
+        More
+      </message>
       <message name="IDS_IOS_CONTENT_SETTINGS_TITLE" desc="Title for content settings dialog [Length: 29em] [iOS only]">
         Content Settings
       </message>
@@ -626,29 +629,14 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_IOS_FACETIME_BUTTON" desc="Text in the confirmation dialog button that will initiate a FaceTime call for the presented number. [Length: 10em] [iOS only]">
         FaceTime
       </message>
+      <message name="IDS_IOS_PHONE_CALL_BUTTON" desc="Text in the confirmation dialog button that will initiate a phone call for the presented number. [Length: 10em] [iOS only]">
+        Call
+      </message>
       <message name="IDS_IOS_FIRSTRUN_ACCOUNT_CONSISTENCY_SKIP_BUTTON" desc="Title of the button to skip the selection of an account on First Run when account consistency is enabled. [Length: 10em] [iOS only]">
         No thanks
       </message>
       <message name="IDS_IOS_FIRSTRUN_OPT_IN_ACCEPT_BUTTON" desc="User metrics opt-in acceptance button label [iOS only]">
         Accept &amp; Continue
-      </message>
-      <message name="IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_DESCRIPTION" desc="Description of about:flag option to control redirection to the task scheduler." translateable="false">
-        Enables redirection of some task posting APIs to the task scheduler.
-      </message>
-      <message name="IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_NAME" desc="Name of about:flag option to control redirection to the task scheduler." translateable="false">
-        Task Scheduler
-      </message>
-      <message name="IDS_IOS_FLAGS_CONTEXTUAL_SEARCH" desc="Title for the flag to enable Contextual Search.">
-        Contextual Search
-      </message>
-      <message name="IDS_IOS_FLAGS_CONTEXTUAL_SEARCH_DESCRIPTION" desc="Description for the flag to enable Contextual Search.">
-        Whether or not Contextual Search is enabled.
-      </message>
-      <message name="IDS_IOS_FLAGS_PHYSICAL_WEB" desc="Title for the flag to enable Physical Web in the omnibox.">
-        Physical Web
-      </message>
-      <message name="IDS_IOS_FLAGS_PHYSICAL_WEB_DESCRIPTION" desc="Description for the flag to enable Physical Web in the omnibox.">
-        When enabled, the omnibox will include suggestions for web pages broadcast by devices near you.
       </message>
       <message name="IDS_IOS_GENERATED_PASSWORD_ACCEPT" desc="The text of the button that accepts the generated password. [Length: 20em] [iOS only]">
         Use Password
@@ -1036,7 +1024,10 @@ Handoff must also be enabled in the General section of Settings, and your device
         Edit
       </message>
       <message name="IDS_IOS_READING_LIST_EMPTY_MESSAGE" desc="Message to explain to the user how to add entries to the reading list" meaning="[Length: unlimited]">
-        Your reading list is available offline. To add a page to your reading list, tap<ph name="SHARE_OPENING_ICON">SHARE_OPENING_ICON<ex>Menu > Share > Read Later</ex></ph>.
+        Your reading list is available offline. To add a page to your reading list, tap <ph name="SHARE_OPENING_ICON">SHARE_OPENING_ICON<ex>Menu > Share > Read Later</ex></ph>.
+      </message>
+      <message name="IDS_IOS_READING_LIST_JUST_NOW" desc="String indicating that an event (adding item, distillation) happened less than one minute ago. [Length: 25em]">
+        Just now
       </message>
       <message name="IDS_IOS_READING_LIST_MARK_ALL_BUTTON" desc="Label of the button to suggest options to mark all reading list entries read or unread [Length: 25em]" meaning="Display options letting the user mark all the entries as read or as unread. [Length: 25em]">
         Mark All…
@@ -1260,12 +1251,6 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SUGGESTIONS_DONE" desc="Label of the navigation bar button to close the view.">
         Done
       </message>
-      <message name="IDS_IOS_SWITCH_BROWSER_MODE_ENTER_INCOGNITO" desc="The accessibility label of the switch browser mode button to enter the Incognito mode [iOS only]">
-        Enter Incognito Mode
-      </message>
-      <message name="IDS_IOS_SWITCH_BROWSER_MODE_LEAVE_INCOGNITO" desc="The accessibility label of the switch browser mode button to leave the Incognito mode [iOS only]">
-        Leave Incognito Mode
-      </message>
       <message name="IDS_IOS_SYNC_AUTHENTICATION_ERROR_ALERT_VIEW_TITLE" desc="The title of the alert view displaying authentication errors. [Length: 20em] [iOS only]">
         Error
       </message>
@@ -1339,7 +1324,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_SYNC_LOGIN_INFO_OUT_OF_DATE" desc="The login information for the user is out of date - for example, the user changed their password and therefore signing in again is required.">
         Account sign-in details are out of date.
       </message>
-      <message name="IDS_IOS_SYNC_PASSPHRASE_ENCRYPTING" desc="The title for the passphrase page while it is encrypting. [Length: 20em] [iOS only]">
+      <message name="IDS_IOS_SYNC_PASSPHRASE_ENCRYPTING" desc="The title for the passphrase page while it is encrypting. [Length: 21em] [iOS only]">
         Encrypting…
       </message>
       <message name="IDS_IOS_SYNC_PASSPHRASE_RECOVER" desc="Message about how to recover from a lost passphrase. [Length:100em, may be multiple lines] [iOS only]">
@@ -1465,11 +1450,14 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_TOOLS_MENU_READING_LIST" desc="The iOS menu item for opening the reading list [Length: 15em] [iOS only]">
         Reading List
       </message>
-      <message name="IDS_IOS_TOOLS_MENU_RECENT_TABS" desc="The iOS menu item for opening the panel showing the recently closed tabs and the tabs from other devices. [Length: 15em] [iOS only]">
+      <message name="IDS_IOS_TOOLS_MENU_RECENT_TABS" desc="The iOS menu item for opening the panel showing the recently closed tabs and the tabs from other devices. [Length: 15em]" meaning="[In Title case] [iOS only]">
         Recent Tabs
       </message>
       <message name="IDS_IOS_TOOLS_MENU_REQUEST_DESKTOP_SITE" desc="The iOS menu item for requesting the desktop site [Length: 15em] [iOS only]">
         Request Desktop Site
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_REQUEST_MOBILE_SITE" desc="The iOS menu item for requesting the mobile site [Length: 25em] [iOS only]">
+        Request Mobile Site
       </message>
       <message name="IDS_IOS_TOOLS_MENU_SETTINGS" desc="The iOS menu item for opening the settings [Length: 15em] [iOS only]">
         Settings
@@ -1509,6 +1497,12 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       </message>
       <message name="IDS_IOS_VOICE_SEARCH_SETTING_TTS" desc="The label for setting switch enabling text-to-speech response after voice search [Length: 29em] [iOS only]">
         Speak Answers Back
+      </message>
+      <message name="IDS_IOS_SIGNIN_PROMO_CONTINUE_AS" desc="Button that the user can press to login without asking the password and continue using Chrome with this acccount. [Length: 9em]">
+        Continue as <ph name="NAME">$1<ex>John Doe</ex></ph>
+      </message>
+      <message name="IDS_IOS_SIGNIN_PROMO_NOT" desc="Button that the user can press if they are not the profile that Chrome found (opposite of 'Continue as Joe Doe').">
+        Not <ph name="EMAIL">$1<ex>john.doe@example.com</ex>?</ph>
       </message>
     </messages>
   </release>

@@ -8,11 +8,13 @@
 #include <vector>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_object_proxy.h"
 #include "chrome/browser/notifications/persistent_notification_delegate.h"
@@ -34,7 +36,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_notification_delegate.h"
 #include "content/public/browser/notification_event_dispatcher.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/notification_resources.h"
 #include "content/public/common/platform_notification_data.h"
 #include "extensions/features/features.h"
@@ -133,16 +134,16 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
   // TODO(peter): Change this to a CHECK() when Issue 555572 is resolved.
   // Also change this method to be const again.
   if (permission_status != blink::mojom::PermissionStatus::GRANTED) {
-    content::RecordAction(base::UserMetricsAction(
+    base::RecordAction(base::UserMetricsAction(
         "Notifications.Persistent.ClickedWithoutPermission"));
     return;
   }
 
   if (action_index == -1) {
-    content::RecordAction(base::UserMetricsAction(
-        "Notifications.Persistent.Clicked"));
+    base::RecordAction(
+        base::UserMetricsAction("Notifications.Persistent.Clicked"));
   } else {
-    content::RecordAction(base::UserMetricsAction(
+    base::RecordAction(base::UserMetricsAction(
         "Notifications.Persistent.ClickedActionButton"));
   }
 
@@ -155,6 +156,7 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
   }
 #endif
 
+  RecordSiteEngagement(browser_context, origin);
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNotificationClickEvent(
           browser_context, notification_id, origin, action_index, reply,
@@ -175,10 +177,10 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClose(
     return;
 
   if (by_user) {
-    content::RecordAction(base::UserMetricsAction(
-        "Notifications.Persistent.ClosedByUser"));
+    base::RecordAction(
+        base::UserMetricsAction("Notifications.Persistent.ClosedByUser"));
   } else {
-    content::RecordAction(base::UserMetricsAction(
+    base::RecordAction(base::UserMetricsAction(
         "Notifications.Persistent.ClosedProgrammatically"));
   }
   content::NotificationEventDispatcher::GetInstance()
@@ -361,8 +363,7 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
 
   GetNotificationDisplayService(profile)->Display(
       NotificationCommon::PERSISTENT, notification_id, notification);
-  content::RecordAction(
-      base::UserMetricsAction("Notifications.Persistent.Shown"));
+  base::RecordAction(base::UserMetricsAction("Notifications.Persistent.Shown"));
 }
 
 void PlatformNotificationServiceImpl::ClosePersistentNotification(
@@ -379,18 +380,20 @@ void PlatformNotificationServiceImpl::ClosePersistentNotification(
                                                 notification_id);
 }
 
-bool PlatformNotificationServiceImpl::GetDisplayedNotifications(
+void PlatformNotificationServiceImpl::GetDisplayedNotifications(
     BrowserContext* browser_context,
-    std::set<std::string>* displayed_notifications) {
-  DCHECK(displayed_notifications);
+    const DisplayedNotificationsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   Profile* profile = Profile::FromBrowserContext(browser_context);
-  if (!profile || profile->AsTestingProfile())
-    return false;  // Tests will not have a message center.
-
-  return GetNotificationDisplayService(profile)->GetDisplayed(
-      displayed_notifications);
+  // Tests will not have a message center.
+  if (!profile || profile->AsTestingProfile()) {
+    auto displayed_notifications = base::MakeUnique<std::set<std::string>>();
+    callback.Run(std::move(displayed_notifications),
+                 false /* supports_synchronization */);
+    return;
+  }
+  GetNotificationDisplayService(profile)->GetDisplayed(callback);
 }
 
 void PlatformNotificationServiceImpl::OnClickEventDispatchComplete(
@@ -528,4 +531,14 @@ base::string16 PlatformNotificationServiceImpl::DisplayNameForContextMessage(
 void PlatformNotificationServiceImpl::SetNotificationDisplayServiceForTesting(
     NotificationDisplayService* display_service) {
   test_display_service_ = display_service;
+}
+
+void PlatformNotificationServiceImpl::RecordSiteEngagement(
+    BrowserContext* browser_context,
+    const GURL& origin) {
+  // TODO(dominickn, peter): This would be better if the site engagement service
+  // could directly observe each notification.
+  SiteEngagementService* engagement_service =
+      SiteEngagementService::Get(Profile::FromBrowserContext(browser_context));
+  engagement_service->HandleNotificationInteraction(origin);
 }

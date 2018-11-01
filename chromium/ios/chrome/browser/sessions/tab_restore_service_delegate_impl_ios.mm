@@ -15,12 +15,11 @@
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_list.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "net/base/mac/url_conversions.h"
-
-using web::WebStateImpl;
 
 TabRestoreServiceDelegateImplIOS::TabRestoreServiceDelegateImplIOS(
     ios::ChromeBrowserState* browser_state)
@@ -79,16 +78,17 @@ sessions::LiveTab* TabRestoreServiceDelegateImplIOS::AddRestoredTab(
     const std::string& user_agent_override) {
   DCHECK_LT(selected_navigation, static_cast<int>(navigations.size()));
 
-  std::unique_ptr<WebStateImpl> webState(new WebStateImpl(browser_state_));
+  web::WebState::CreateParams params(browser_state_);
+  std::unique_ptr<web::WebStateImpl> web_state(new web::WebStateImpl(params));
   std::vector<std::unique_ptr<web::NavigationItem>> items =
       sessions::IOSSerializedNavigationBuilder::ToNavigationItems(navigations);
-  webState->GetNavigationManagerImpl().ReplaceSessionHistory(
+  web_state->GetNavigationManagerImpl().ReplaceSessionHistory(
       std::move(items), selected_navigation);
-  TabModel* tabModel = tab_model();
-  Tab* tab =
-      [tabModel insertTabWithWebState:std::move(webState) atIndex:tab_index];
+
+  WebStateList* web_state_list = [tab_model() webStateList];
+  web_state_list->InsertWebState(tab_index, std::move(web_state));
   // TODO(crbug.com/661636): Handle tab-switch animation somehow...
-  [tabModel setCurrentTab:tab];
+  web_state_list->ActivateWebStateAt(tab_index);
   return nullptr;
 }
 
@@ -112,5 +112,6 @@ sessions::LiveTab* TabRestoreServiceDelegateImplIOS::ReplaceRestoredTab(
 }
 
 void TabRestoreServiceDelegateImplIOS::CloseTab() {
-  [[tab_model() currentTab] close];
+  WebStateList* web_state_list = [tab_model() webStateList];
+  web_state_list->CloseWebStateAt(web_state_list->active_index());
 }

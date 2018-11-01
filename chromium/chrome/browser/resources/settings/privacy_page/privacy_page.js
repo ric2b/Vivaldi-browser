@@ -77,6 +77,12 @@ Polymer({
     /** @private */
     showClearBrowsingDataDialog_: Boolean,
 
+    /** @private */
+    showDoNotTrackDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
     /**
      * Used for HTML bindings. This is defined as a property rather than within
      * the ready callback, because the value needs to be available before
@@ -87,6 +93,35 @@ Polymer({
       type: Object,
       value: NetworkPredictionOptions,
     },
+
+    /** @private */
+    enableSafeBrowsingSubresourceFilter_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
+      }
+    },
+
+    /** @private {!Map<string, string>} */
+    focusConfig_: {
+      type: Object,
+      value: function() {
+        var map = new Map();
+// <if expr="use_nss_certs">
+        map.set(
+            settings.Route.CERTIFICATES.path,
+            '#manageCertificates .subpage-arrow');
+// </if>
+        map.set(
+            settings.Route.SITE_SETTINGS.path,
+            '#site-settings-subpage-trigger .subpage-arrow');
+        return map;
+      },
+    },
+  },
+
+  listeners: {
+    'doNotTrackDialogIf.dom-change': 'onDoNotTrackDomChange_',
   },
 
   ready: function() {
@@ -109,6 +144,68 @@ Polymer({
   currentRouteChanged: function() {
     this.showClearBrowsingDataDialog_ =
         settings.getCurrentRoute() == settings.Route.CLEAR_BROWSER_DATA;
+  },
+
+  /**
+   * @param {Event} event
+   * @private
+   */
+  onDoNotTrackDomChange_: function(event) {
+    if (this.showDoNotTrackDialog_)
+      this.maybeShowDoNotTrackDialog_();
+  },
+
+  /**
+   * Handles the change event for the do-not-track toggle. Shows a
+   * confirmation dialog when enabling the setting.
+   * @param {Event} event
+   * @private
+   */
+  onDoNotTrackChange_: function(event) {
+    var target = /** @type {!SettingsToggleButtonElement} */(event.target);
+    if (!target.checked) {
+      // Always allow disabling the pref.
+      target.sendPrefChange();
+      return;
+    }
+    this.showDoNotTrackDialog_ = true;
+    // If the dialog has already been stamped, show it. Otherwise it will be
+    // shown in onDomChange_.
+    this.maybeShowDoNotTrackDialog_();
+  },
+
+  /** @private */
+  maybeShowDoNotTrackDialog_: function() {
+    var dialog = this.$$('#confirmDoNotTrackDialog');
+    if (dialog && !dialog.open)
+      dialog.showModal();
+  },
+
+  /** @private */
+  closeDoNotTrackDialog_: function() {
+    this.$$('#confirmDoNotTrackDialog').close();
+    this.showDoNotTrackDialog_ = false;
+  },
+
+  /**
+   * Handles the shared proxy confirmation dialog 'Confirm' button.
+   * @private
+   */
+  onDoNotTrackDialogConfirm_: function() {
+    /** @type {!SettingsToggleButtonElement} */ (this.$.doNotTrack)
+        .sendPrefChange();
+    this.closeDoNotTrackDialog_();
+  },
+
+  /**
+   * Handles the shared proxy confirmation dialog 'Cancel' button or a cancel
+   * event.
+   * @private
+   */
+  onDoNotTrackDialogCancel_: function() {
+    /** @type {!SettingsToggleButtonElement} */ (this.$.doNotTrack)
+        .resetToPrefValue();
+    this.closeDoNotTrackDialog_();
   },
 
   /** @private */
@@ -145,6 +242,7 @@ Polymer({
   /** @private */
   onDialogClosed_: function() {
     settings.navigateToPreviousRoute();
+    this.$.clearBrowsingDataTrigger.focus();
   },
 
   /** @private */

@@ -162,17 +162,11 @@ UI.TextPrompt = class extends Common.Object {
   }
 
   /**
-   * @param {string} x
+   * @param {string} text
    */
-  setText(x) {
+  setText(text) {
     this.clearAutocomplete();
-    if (!x) {
-      // Append a break element instead of setting textContent to make sure the selection is inside the prompt.
-      this._element.removeChildren();
-      this._element.createChild('br');
-    } else {
-      this._element.textContent = x;
-    }
+    this._element.textContent = text;
     this._previousText = this.text();
 
     this.moveCaretToEndOfPrompt();
@@ -307,7 +301,7 @@ UI.TextPrompt = class extends Common.Object {
       this._queryRange.endColumn += text.length - this._previousText.length;
     this._refreshGhostText();
     this._previousText = text;
-    this.emit(new UI.TextPrompt.TextChangedEvent());
+    this.dispatchEventToListeners(UI.TextPrompt.Events.TextChanged);
 
     this.autoCompleteSoon();
   }
@@ -335,7 +329,7 @@ UI.TextPrompt = class extends Common.Object {
     this._refreshGhostText();
 
     if (beforeText !== this.textWithCurrentSuggestion())
-      this.emit(new UI.TextPrompt.TextChangedEvent());
+      this.dispatchEventToListeners(UI.TextPrompt.Events.TextChanged);
   }
 
   _refreshGhostText() {
@@ -487,10 +481,10 @@ UI.TextPrompt = class extends Common.Object {
     var beforeRange = this._createRange();
     beforeRange.setStart(this._element, 0);
     beforeRange.setEnd(fullWordRange.startContainer, fullWordRange.startOffset);
-    this._queryRange = new Common.TextRange(
+    this._queryRange = new TextUtils.TextRange(
         0, beforeRange.toString().length, 0, beforeRange.toString().length + fullWordRange.toString().length);
 
-    var shouldSelect = !this._disableDefaultSuggestionForEmptyInput || this.text();
+    var shouldSelect = !this._disableDefaultSuggestionForEmptyInput || !!this.text();
     if (this._suggestBox) {
       this._suggestBox.updateSuggestions(
           this._boxForAnchorAtStart(selection, fullWordRange), completions, shouldSelect, !this._isCaretAtEndOfPrompt(),
@@ -509,7 +503,7 @@ UI.TextPrompt = class extends Common.Object {
     this._currentSuggestion = suggestion;
     this._refreshGhostText();
     if (isIntermediateSuggestion)
-      this.emit(new UI.TextPrompt.TextChangedEvent());
+      this.dispatchEventToListeners(UI.TextPrompt.Events.TextChanged);
   }
 
   /**
@@ -532,7 +526,7 @@ UI.TextPrompt = class extends Common.Object {
         this._queryRange.startColumn + this._currentSuggestion.length);
 
     this.clearAutocomplete();
-    this.emit(new UI.TextPrompt.TextChangedEvent());
+    this.dispatchEventToListeners(UI.TextPrompt.Events.TextChanged);
 
     return true;
   }
@@ -623,10 +617,7 @@ UI.TextPrompt = class extends Common.Object {
    * @return {boolean}
    */
   tabKeyPressed(event) {
-    this.acceptAutoComplete();
-
-    // Consume the key.
-    return true;
+    return this.acceptAutoComplete();
   }
 
   /**
@@ -639,5 +630,7 @@ UI.TextPrompt = class extends Common.Object {
 
 UI.TextPrompt.DefaultAutocompletionTimeout = 250;
 
-/** @implements {Common.Emittable} */
-UI.TextPrompt.TextChangedEvent = class {};
+/** @enum {symbol} */
+UI.TextPrompt.Events = {
+  TextChanged: Symbol('TextChanged')
+};

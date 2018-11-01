@@ -22,14 +22,15 @@
 #include "core/xml/XMLSerializer.h"
 
 #include "core/editing/serializers/MarkupAccumulator.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 String XMLSerializer::serializeToString(Node* root) {
   DCHECK(root);
-  MarkupAccumulator accumulator(DoNotResolveURLs, SerializationType::ForcedXML);
-  return serializeNodes<EditingStrategy>(accumulator, *root, IncludeNode);
+  MarkupAccumulator accumulator(kDoNotResolveURLs,
+                                SerializationType::kForcedXML);
+  return SerializeNodes<EditingStrategy>(accumulator, *root, kIncludeNode);
 }
 
 }  // namespace blink

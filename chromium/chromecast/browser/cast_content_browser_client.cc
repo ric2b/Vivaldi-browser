@@ -57,7 +57,7 @@
 #include "content/public/common/web_preferences.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -69,10 +69,13 @@
 #endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
 
 #if defined(OS_ANDROID)
+#include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
-#else
-#include "chromecast/media/cdm/cast_cdm_factory.h"
 #endif  // defined(OS_ANDROID)
+
+#if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#include "chromecast/media/cdm/cast_cdm_factory.h"
+#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 
 namespace chromecast {
 namespace shell {
@@ -109,6 +112,7 @@ CastContentBrowserClient::~CastContentBrowserClient() {
 
 void CastContentBrowserClient::AppendExtraCommandLineSwitches(
     base::CommandLine* command_line) {
+#if defined(USE_AURA)
   std::string process_type =
       command_line->GetSwitchValueNative(switches::kProcessType);
   if (process_type == switches::kGpuProcess) {
@@ -122,7 +126,17 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
       command_line->AppendSwitchASCII(switches::kCastInitialScreenHeight,
                                       base::IntToString(res.height()));
     }
+    base::CommandLine* browser_command_line =
+        base::CommandLine::ForCurrentProcess();
+    for (auto* const switch_name : {switches::kUseDoubleBuffering}) {
+      if (browser_command_line->HasSwitch(switch_name)) {
+        command_line->AppendSwitchASCII(
+            switch_name,
+            browser_command_line->GetSwitchValueASCII(switch_name));
+      }
+    }
   }
+#endif  // defined(USE_AURA)
 }
 
 void CastContentBrowserClient::PreCreateThreads() {
@@ -143,7 +157,7 @@ media::VideoModeSwitcher* CastContentBrowserClient::GetVideoModeSwitcher() {
   return nullptr;
 }
 
-#if !defined(OS_ANDROID)
+#if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 media::VideoResolutionPolicy*
 CastContentBrowserClient::GetVideoResolutionPolicy() {
   return nullptr;
@@ -192,7 +206,7 @@ CastContentBrowserClient::CreateCdmFactory() {
 #endif  // defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return nullptr;
 }
-#endif  // !defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 
 media::MediaCapsImpl* CastContentBrowserClient::media_caps() {
   DCHECK(cast_browser_main_parts_);
@@ -231,6 +245,10 @@ void CastContentBrowserClient::RenderProcessWillLaunch(
                     url_request_context_factory_->GetSystemGetter())),
       base::Bind(&CastContentBrowserClient::AddNetworkHintsMessageFilter,
                  base::Unretained(this), host->GetID()));
+
+#if defined(OS_ANDROID)
+  host->AddFilter(new cdm::CdmMessageFilterAndroid());
+#endif  // defined(OS_ANDROID)
 }
 
 void CastContentBrowserClient::AddNetworkHintsMessageFilter(
@@ -452,7 +470,7 @@ bool CastContentBrowserClient::CanCreateWindow(
 }
 
 void CastContentBrowserClient::ExposeInterfacesToRenderer(
-    service_manager::InterfaceRegistry* registry,
+    service_manager::BinderRegistry* registry,
     content::RenderProcessHost* render_process_host) {
   registry->AddInterface(
       base::Bind(&media::MediaCapsImpl::AddBinding,
@@ -474,11 +492,15 @@ std::unique_ptr<base::Value>
 CastContentBrowserClient::GetServiceManifestOverlay(
     base::StringPiece service_name) {
   ResourceBundle& rb = ResourceBundle::GetSharedInstance();
-  if (service_name != content::mojom::kBrowserServiceName)
+  int id = -1;
+  if (service_name == content::mojom::kBrowserServiceName)
+    id = IDR_CAST_CONTENT_BROWSER_MANIFEST_OVERLAY;
+  else if (service_name == content::mojom::kPackagedServicesServiceName)
+    id = IDR_CAST_CONTENT_PACKAGED_SERVICES_MANIFEST_OVERLAY;
+  else
     return nullptr;
   base::StringPiece manifest_contents =
-      rb.GetRawDataResourceForScale(IDR_CAST_CONTENT_BROWSER_MANIFEST_OVERLAY,
-                                    ui::ScaleFactor::SCALE_FACTOR_NONE);
+      rb.GetRawDataResourceForScale(id, ui::ScaleFactor::SCALE_FACTOR_NONE);
   return base::JSONReader::Read(manifest_contents);
 }
 

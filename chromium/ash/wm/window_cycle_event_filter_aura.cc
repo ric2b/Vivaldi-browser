@@ -4,27 +4,26 @@
 
 #include "ash/wm/window_cycle_event_filter_aura.h"
 
-#include "ash/common/accelerators/debug_commands.h"
-#include "ash/common/wm/window_cycle_controller.h"
-#include "ash/common/wm/window_cycle_list.h"
-#include "ash/common/wm_shell.h"
+#include "ash/accelerators/debug_commands.h"
 #include "ash/shell.h"
+#include "ash/wm/window_cycle_controller.h"
+#include "ash/wm/window_cycle_list.h"
 #include "ui/events/event.h"
 
 namespace ash {
 
 WindowCycleEventFilterAura::WindowCycleEventFilterAura() {
-  Shell::GetInstance()->AddPreTargetHandler(this);
+  Shell::Get()->AddPreTargetHandler(this);
   // Handling release of "Alt" must come before other pretarget handlers
   // (specifically, the partial screenshot handler). See crbug.com/651939
   // We can't do all key event handling that early though because it prevents
   // other accelerators (like triggering a partial screenshot) from working.
-  Shell::GetInstance()->PrependPreTargetHandler(&alt_release_handler_);
+  Shell::Get()->PrependPreTargetHandler(&alt_release_handler_);
 }
 
 WindowCycleEventFilterAura::~WindowCycleEventFilterAura() {
-  Shell::GetInstance()->RemovePreTargetHandler(this);
-  Shell::GetInstance()->RemovePreTargetHandler(&alt_release_handler_);
+  Shell::Get()->RemovePreTargetHandler(this);
+  Shell::Get()->RemovePreTargetHandler(&alt_release_handler_);
 }
 
 void WindowCycleEventFilterAura::OnKeyEvent(ui::KeyEvent* event) {
@@ -43,14 +42,13 @@ void WindowCycleEventFilterAura::OnKeyEvent(ui::KeyEvent* event) {
                !repeat_timer_.IsRunning()) {
       repeat_timer_.Start(
           FROM_HERE, base::TimeDelta::FromMilliseconds(180),
-          base::Bind(
-              &WindowCycleController::HandleCycleWindow,
-              base::Unretained(WmShell::Get()->window_cycle_controller()),
-              event->IsShiftDown() ? WindowCycleController::BACKWARD
-                                   : WindowCycleController::FORWARD));
+          base::Bind(&WindowCycleController::HandleCycleWindow,
+                     base::Unretained(Shell::Get()->window_cycle_controller()),
+                     event->IsShiftDown() ? WindowCycleController::BACKWARD
+                                          : WindowCycleController::FORWARD));
     }
   } else if (event->key_code() == ui::VKEY_ESCAPE) {
-    WmShell::Get()->window_cycle_controller()->CancelCycling();
+    Shell::Get()->window_cycle_controller()->CancelCycling();
   }
 }
 
@@ -73,7 +71,7 @@ void WindowCycleEventFilterAura::AltReleaseHandler::OnKeyEvent(
   // Views uses VKEY_MENU for both left and right Alt keys.
   if (event->key_code() == ui::VKEY_MENU &&
       event->type() == ui::ET_KEY_RELEASED) {
-    WmShell::Get()->window_cycle_controller()->CompleteCycling();
+    Shell::Get()->window_cycle_controller()->CompleteCycling();
     // Warning: |this| will be deleted from here on.
   }
 }

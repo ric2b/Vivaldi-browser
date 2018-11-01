@@ -4,7 +4,7 @@
 
 #import "ios/web/public/crw_session_storage.h"
 
-#import "ios/web/navigation/crw_session_certificate_policy_manager.h"
+#import "ios/web/public/crw_session_certificate_policy_cache_storage.h"
 #import "ios/web/public/serializable_user_data_manager.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -13,11 +13,23 @@
 
 namespace {
 // Serialization keys used in NSCoding functions.
-NSString* const kCertificatePolicyManagerKey = @"certificatePolicyManager";
-NSString* const kCurrentNavigationIndexKey = @"currentNavigationIndex";
+NSString* const kCertificatePolicyCacheStorageKey =
+    @"certificatePolicyCacheStorage";
+NSString* const kCertificatePolicyCacheStorageDeprecatedKey =
+    @"certificatePolicyManager";
 NSString* const kItemStoragesKey = @"entries";
-NSString* const kOpenedByDOMKey = @"openedByDOM";
-NSString* const kPreviousNavigationIndexKey = @"previousNavigationIndex";
+NSString* const kHasOpenerKey = @"openedByDOM";
+NSString* const kLastCommittedItemIndexKey = @"lastCommittedItemIndex";
+NSString* const kPreviousItemIndexKey = @"previousItemIndex";
+
+// Deprecated, used for backward compatibility.
+// TODO(crbug.com/708795): Remove this key.
+NSString* const kLastCommittedItemIndexDeprecatedKey =
+    @"currentNavigationIndex";
+
+// Deprecated, used for backward compatibility.
+// TODO(crbug.com/708795): Remove this key.
+NSString* const kPreviousItemIndexDeprecatedKey = @"previousNavigationIndex";
 }
 
 @interface CRWSessionStorage () {
@@ -29,11 +41,11 @@ NSString* const kPreviousNavigationIndexKey = @"previousNavigationIndex";
 
 @implementation CRWSessionStorage
 
-@synthesize openedByDOM = _openedByDOM;
-@synthesize currentNavigationIndex = _currentNavigationIndex;
-@synthesize previousNavigationIndex = _previousNavigationIndex;
+@synthesize hasOpener = _hasOpener;
+@synthesize lastCommittedItemIndex = _lastCommittedItemIndex;
+@synthesize previousItemIndex = _previousItemIndex;
 @synthesize itemStorages = _itemStorages;
-@synthesize sessionCertificatePolicyManager = _sessionCertificatePolicyManager;
+@synthesize certPolicyCacheStorage = _certPolicyCacheStorage;
 
 #pragma mark - Accessors
 
@@ -51,21 +63,39 @@ NSString* const kPreviousNavigationIndexKey = @"previousNavigationIndex";
 - (instancetype)initWithCoder:(nonnull NSCoder*)decoder {
   self = [super init];
   if (self) {
-    _openedByDOM = [decoder decodeBoolForKey:kOpenedByDOMKey];
-    _currentNavigationIndex =
-        [decoder decodeIntForKey:kCurrentNavigationIndexKey];
-    _previousNavigationIndex =
-        [decoder decodeIntForKey:kPreviousNavigationIndexKey];
+    _hasOpener = [decoder decodeBoolForKey:kHasOpenerKey];
+
+    if ([decoder containsValueForKey:kLastCommittedItemIndexKey]) {
+      _lastCommittedItemIndex =
+          [decoder decodeIntForKey:kLastCommittedItemIndexKey];
+    } else {
+      // Backward compatibility.
+      _lastCommittedItemIndex =
+          [decoder decodeIntForKey:kLastCommittedItemIndexDeprecatedKey];
+    }
+
+    if ([decoder containsValueForKey:kPreviousItemIndexKey]) {
+      _previousItemIndex = [decoder decodeIntForKey:kPreviousItemIndexKey];
+    } else {
+      // Backward compatibility.
+      _previousItemIndex =
+          [decoder decodeIntForKey:kPreviousItemIndexDeprecatedKey];
+    }
+
     _itemStorages = [[NSMutableArray alloc]
         initWithArray:[decoder decodeObjectForKey:kItemStoragesKey]];
     // Prior to M34, 0 was used as "no index" instead of -1; adjust for that.
     if (!_itemStorages.count)
-      _currentNavigationIndex = -1;
-    _sessionCertificatePolicyManager =
-        [decoder decodeObjectForKey:kCertificatePolicyManagerKey];
-    if (!_sessionCertificatePolicyManager) {
-      _sessionCertificatePolicyManager =
-          [[CRWSessionCertificatePolicyManager alloc] init];
+      _lastCommittedItemIndex = -1;
+    _certPolicyCacheStorage =
+        [decoder decodeObjectForKey:kCertificatePolicyCacheStorageKey];
+    if (!_certPolicyCacheStorage) {
+      // If the cert policy cache was not found, attempt to decode using the
+      // deprecated serialization key.
+      // TODO(crbug.com/661633): Remove this deprecated key once we remove
+      // support for legacy class conversions.
+      _certPolicyCacheStorage = [decoder
+          decodeObjectForKey:kCertificatePolicyCacheStorageDeprecatedKey];
     }
     _userData = web::SerializableUserData::Create();
     _userData->Decode(decoder);
@@ -74,14 +104,13 @@ NSString* const kPreviousNavigationIndexKey = @"previousNavigationIndex";
 }
 
 - (void)encodeWithCoder:(NSCoder*)coder {
-  [coder encodeBool:self.openedByDOM forKey:kOpenedByDOMKey];
-  [coder encodeInt:self.currentNavigationIndex
-            forKey:kCurrentNavigationIndexKey];
-  [coder encodeInt:self.previousNavigationIndex
-            forKey:kPreviousNavigationIndexKey];
+  [coder encodeBool:self.hasOpener forKey:kHasOpenerKey];
+  [coder encodeInt:self.lastCommittedItemIndex
+            forKey:kLastCommittedItemIndexKey];
+  [coder encodeInt:self.previousItemIndex forKey:kPreviousItemIndexKey];
   [coder encodeObject:self.itemStorages forKey:kItemStoragesKey];
-  [coder encodeObject:self.sessionCertificatePolicyManager
-               forKey:kCertificatePolicyManagerKey];
+  [coder encodeObject:self.certPolicyCacheStorage
+               forKey:kCertificatePolicyCacheStorageKey];
   if (_userData)
     _userData->Encode(coder);
 }

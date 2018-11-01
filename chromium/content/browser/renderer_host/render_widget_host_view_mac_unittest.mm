@@ -42,9 +42,9 @@
 #import "third_party/ocmock/ocmock_extensions.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/web_input_event_traits.h"
-#include "ui/events/latency_info.h"
 #include "ui/events/test/cocoa_test_event_utils.h"
 #import "ui/gfx/test/ui_cocoa_test_helper.h"
+#include "ui/latency/latency_info.h"
 
 // Helper class with methods used to mock -[NSEvent phase], used by
 // |MockScrollWheelEventWithPhase()|.
@@ -91,7 +91,8 @@
 
 - (void)rendererHandledGestureScrollEvent:(const blink::WebGestureEvent&)event
                                  consumed:(BOOL)consumed {
-  if (!consumed && event.type() == blink::WebInputEvent::GestureScrollUpdate)
+  if (!consumed &&
+      event.GetType() == blink::WebInputEvent::kGestureScrollUpdate)
     unhandledWheelEventReceived_ = true;
 }
 
@@ -118,10 +119,55 @@ std::string GetInputMessageTypes(MockRenderProcessHost* process) {
     const blink::WebInputEvent* event = std::get<0>(params);
     if (i != 0)
       result += " ";
-    result += blink::WebInputEvent::GetName(event->type());
+    result += blink::WebInputEvent::GetName(event->GetType());
   }
   process->sink().ClearMessages();
   return result;
+}
+
+blink::WebPointerProperties::PointerType GetInputMessagePointerTypes(
+    MockRenderProcessHost* process) {
+  blink::WebPointerProperties::PointerType pointer_type;
+  DCHECK_LE(process->sink().message_count(), 1U);
+  for (size_t i = 0; i < process->sink().message_count(); ++i) {
+    const IPC::Message* message = process->sink().GetMessageAt(i);
+    EXPECT_EQ(InputMsg_HandleInputEvent::ID, message->type());
+    InputMsg_HandleInputEvent::Param params;
+    EXPECT_TRUE(InputMsg_HandleInputEvent::Read(message, &params));
+    const blink::WebInputEvent* event = std::get<0>(params);
+    if (blink::WebInputEvent::IsMouseEventType(event->GetType())) {
+      pointer_type =
+          static_cast<const blink::WebMouseEvent*>(event)->pointer_type;
+    }
+  }
+  process->sink().ClearMessages();
+  return pointer_type;
+}
+
+NSEvent* MockTabletEventWithParams(CGEventType type,
+                                   bool is_entering_proximity,
+                                   NSPointingDeviceType device_type) {
+  CGEventRef cg_event = CGEventCreate(NULL);
+  CGEventSetType(cg_event, type);
+  CGEventSetIntegerValueField(cg_event, kCGTabletProximityEventEnterProximity,
+                              is_entering_proximity);
+  CGEventSetIntegerValueField(cg_event, kCGTabletProximityEventPointerType,
+                              device_type);
+  NSEvent* event = [NSEvent eventWithCGEvent:cg_event];
+  CFRelease(cg_event);
+  return event;
+}
+
+NSEvent* MockMouseEventWithParams(CGEventType mouse_type,
+                                  CGPoint location,
+                                  CGMouseButton button,
+                                  CGEventMouseSubtype subtype) {
+  CGEventRef cg_event =
+      CGEventCreateMouseEvent(NULL, mouse_type, location, button);
+  CGEventSetIntegerValueField(cg_event, kCGMouseEventSubtype, subtype);
+  NSEvent* event = [NSEvent eventWithCGEvent:cg_event];
+  CFRelease(cg_event);
+  return event;
 }
 
 id MockGestureEvent(NSEventType type, double magnification) {
@@ -511,7 +557,7 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
   NSRange actual_range;
   rwhv_mac_->SelectionChanged(kDummyString, kDummyOffset, caret_range);
   params.anchor_rect = params.focus_rect = caret_rect;
-  params.anchor_dir = params.focus_dir = blink::WebTextDirectionLeftToRight;
+  params.anchor_dir = params.focus_dir = blink::kWebTextDirectionLeftToRight;
   rwhv_mac_->SelectionBoundsChanged(params);
   EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
         caret_range.ToNSRange(),
@@ -988,7 +1034,7 @@ TEST_F(RenderWidgetHostViewMacTest, ScrollWheelEndEventDelivery) {
 
   // Send an ACK for the first wheel event, so that the queue will be flushed.
   InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD,
-                    blink::WebInputEvent::MouseWheel,
+                    blink::WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_CONSUMED);
   std::unique_ptr<IPC::Message> response(
       new InputHostMsg_HandleInputEvent_ACK(0, ack));
@@ -1000,6 +1046,104 @@ TEST_F(RenderWidgetHostViewMacTest, ScrollWheelEndEventDelivery) {
   [NSApp postEvent:event2 atStart:NO];
   base::RunLoop().RunUntilIdle();
   ASSERT_EQ(1U, process_host->sink().message_count());
+
+  // Clean up.
+  host->ShutdownAndDestroyWidget(true);
+}
+
+TEST_F(RenderWidgetHostViewMacTest, PointerEventWithEraserType) {
+  // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
+  // the MockRenderProcessHost that is set up by the test harness which mocks
+  // out |OnMessageReceived()|.
+  TestBrowserContext browser_context;
+  MockRenderProcessHost* process_host =
+      new MockRenderProcessHost(&browser_context);
+  process_host->Init();
+  MockRenderWidgetHostDelegate delegate;
+  int32_t routing_id = process_host->GetNextRoutingID();
+  MockRenderWidgetHostImpl* host =
+      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  process_host->sink().ClearMessages();
+
+  // Send a NSEvent of NSTabletProximity type which has a device type of eraser.
+  NSEvent* event = MockTabletEventWithParams(kCGEventTabletProximity, true,
+                                             NSEraserPointingDevice);
+  [view->cocoa_view() tabletEvent:event];
+  // Flush and clear other messages (e.g. begin frames) the RWHVMac also sends.
+  base::RunLoop().RunUntilIdle();
+  process_host->sink().ClearMessages();
+
+  event =
+      MockMouseEventWithParams(kCGEventMouseMoved, {6, 9}, kCGMouseButtonLeft,
+                               kCGEventMouseSubtypeTabletPoint);
+  [view->cocoa_view() mouseEvent:event];
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kEraser,
+            GetInputMessagePointerTypes(process_host));
+
+  // Clean up.
+  host->ShutdownAndDestroyWidget(true);
+}
+
+TEST_F(RenderWidgetHostViewMacTest, PointerEventWithPenType) {
+  // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
+  // the MockRenderProcessHost that is set up by the test harness which mocks
+  // out |OnMessageReceived()|.
+  TestBrowserContext browser_context;
+  MockRenderProcessHost* process_host =
+      new MockRenderProcessHost(&browser_context);
+  process_host->Init();
+  MockRenderWidgetHostDelegate delegate;
+  int32_t routing_id = process_host->GetNextRoutingID();
+  MockRenderWidgetHostImpl* host =
+      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  process_host->sink().ClearMessages();
+
+  // Send a NSEvent of NSTabletProximity type which has a device type of pen.
+  NSEvent* event = MockTabletEventWithParams(kCGEventTabletProximity, true,
+                                             NSPenPointingDevice);
+  [view->cocoa_view() tabletEvent:event];
+  // Flush and clear other messages (e.g. begin frames) the RWHVMac also sends.
+  base::RunLoop().RunUntilIdle();
+  process_host->sink().ClearMessages();
+
+  event =
+      MockMouseEventWithParams(kCGEventMouseMoved, {6, 9}, kCGMouseButtonLeft,
+                               kCGEventMouseSubtypeTabletPoint);
+  [view->cocoa_view() mouseEvent:event];
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
+            GetInputMessagePointerTypes(process_host));
+
+  // Clean up.
+  host->ShutdownAndDestroyWidget(true);
+}
+
+TEST_F(RenderWidgetHostViewMacTest, PointerEventWithMouseType) {
+  // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
+  // the MockRenderProcessHost that is set up by the test harness which mocks
+  // out |OnMessageReceived()|.
+  TestBrowserContext browser_context;
+  MockRenderProcessHost* process_host =
+      new MockRenderProcessHost(&browser_context);
+  process_host->Init();
+  MockRenderWidgetHostDelegate delegate;
+  int32_t routing_id = process_host->GetNextRoutingID();
+  MockRenderWidgetHostImpl* host =
+      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  process_host->sink().ClearMessages();
+
+  // Send a NSEvent of a mouse type.
+  NSEvent* event =
+      MockMouseEventWithParams(kCGEventMouseMoved, {6, 9}, kCGMouseButtonLeft,
+                               kCGEventMouseSubtypeDefault);
+  [view->cocoa_view() mouseEvent:event];
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kMouse,
+            GetInputMessagePointerTypes(process_host));
 
   // Clean up.
   host->ShutdownAndDestroyWidget(true);
@@ -1034,7 +1178,7 @@ TEST_F(RenderWidgetHostViewMacTest,
 
   // Indicate that the wheel event was unhandled.
   InputEventAck unhandled_ack(InputEventAckSource::COMPOSITOR_THREAD,
-                              blink::WebInputEvent::MouseWheel,
+                              blink::WebInputEvent::kMouseWheel,
                               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   std::unique_ptr<IPC::Message> response1(
       new InputHostMsg_HandleInputEvent_ACK(0, unhandled_ack));
@@ -1043,7 +1187,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   process_host->sink().ClearMessages();
 
   InputEventAck unhandled_scroll_ack(InputEventAckSource::COMPOSITOR_THREAD,
-                                     blink::WebInputEvent::GestureScrollUpdate,
+                                     blink::WebInputEvent::kGestureScrollUpdate,
                                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   std::unique_ptr<IPC::Message> scroll_response1(
       new InputHostMsg_HandleInputEvent_ACK(0, unhandled_scroll_ack));
@@ -1127,11 +1271,13 @@ TEST_F(RenderWidgetHostViewMacTest, Background) {
       new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
 
-  EXPECT_TRUE(view->GetBackgroundOpaque());
+  EXPECT_NE(static_cast<unsigned>(SK_ColorTRANSPARENT),
+            view->background_color());
   EXPECT_TRUE([view->cocoa_view() isOpaque]);
 
   view->SetBackgroundColor(SK_ColorTRANSPARENT);
-  EXPECT_FALSE(view->GetBackgroundOpaque());
+  EXPECT_EQ(static_cast<unsigned>(SK_ColorTRANSPARENT),
+            view->background_color());
   EXPECT_FALSE([view->cocoa_view() isOpaque]);
 
   const IPC::Message* set_background;
@@ -1145,7 +1291,7 @@ TEST_F(RenderWidgetHostViewMacTest, Background) {
   // Try setting it back.
   process_host->sink().ClearMessages();
   view->SetBackgroundColor(SK_ColorWHITE);
-  EXPECT_TRUE(view->GetBackgroundOpaque());
+  EXPECT_EQ(static_cast<unsigned>(SK_ColorWHITE), view->background_color());
   EXPECT_TRUE([view->cocoa_view() isOpaque]);
   set_background = process_host->sink().GetUniqueMessageMatching(
       ViewMsg_SetBackgroundOpaque::ID);
@@ -1184,7 +1330,7 @@ class RenderWidgetHostViewMacPinchTest : public RenderWidgetHostViewMacTest {
     IPC::WebInputEventPointer ipc_event = std::get<0>(data);
     const blink::WebGestureEvent* gesture_event =
         static_cast<const blink::WebGestureEvent*>(ipc_event);
-    return gesture_event->data.pinchUpdate.zoomDisabled;
+    return gesture_event->data.pinch_update.zoom_disabled;
   }
 
   MockRenderProcessHost* process_host_;
@@ -1209,7 +1355,7 @@ TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
 
   // We'll use this IPC message to ack events.
   InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD,
-                    blink::WebInputEvent::GesturePinchUpdate,
+                    blink::WebInputEvent::kGesturePinchUpdate,
                     INPUT_EVENT_ACK_STATE_CONSUMED);
   std::unique_ptr<IPC::Message> response(
       new InputHostMsg_HandleInputEvent_ACK(0, ack));
@@ -1582,13 +1728,13 @@ TEST_F(InputMethodMacTest, MonitorCompositionRangeForActiveWidget) {
   // The tab's widget must have received an IPC regarding composition updates.
   const IPC::Message* composition_request_msg_for_tab =
       tab_sink().GetUniqueMessageMatching(
-          InputMsg_RequestCompositionUpdate::ID);
+          InputMsg_RequestCompositionUpdates::ID);
   EXPECT_TRUE(composition_request_msg_for_tab);
 
   // The message should ask for monitoring updates, but no immediate update.
-  InputMsg_RequestCompositionUpdate::Param tab_msg_params;
-  InputMsg_RequestCompositionUpdate::Read(composition_request_msg_for_tab,
-                                          &tab_msg_params);
+  InputMsg_RequestCompositionUpdates::Param tab_msg_params;
+  InputMsg_RequestCompositionUpdates::Read(composition_request_msg_for_tab,
+                                           &tab_msg_params);
   bool is_tab_msg_for_immediate_request = std::get<0>(tab_msg_params);
   bool is_tab_msg_for_monitor_request = std::get<1>(tab_msg_params);
   EXPECT_FALSE(is_tab_msg_for_immediate_request);
@@ -1601,13 +1747,13 @@ TEST_F(InputMethodMacTest, MonitorCompositionRangeForActiveWidget) {
 
   // The tab should receive another IPC for composition updates.
   composition_request_msg_for_tab = tab_sink().GetUniqueMessageMatching(
-      InputMsg_RequestCompositionUpdate::ID);
+      InputMsg_RequestCompositionUpdates::ID);
   EXPECT_TRUE(composition_request_msg_for_tab);
 
   // This time, the tab should have been asked to stop monitoring (and no
   // immediate updates).
-  InputMsg_RequestCompositionUpdate::Read(composition_request_msg_for_tab,
-                                          &tab_msg_params);
+  InputMsg_RequestCompositionUpdates::Read(composition_request_msg_for_tab,
+                                           &tab_msg_params);
   is_tab_msg_for_immediate_request = std::get<0>(tab_msg_params);
   is_tab_msg_for_monitor_request = std::get<1>(tab_msg_params);
   EXPECT_FALSE(is_tab_msg_for_immediate_request);
@@ -1617,14 +1763,14 @@ TEST_F(InputMethodMacTest, MonitorCompositionRangeForActiveWidget) {
   // The child too must have received an IPC for composition updates.
   const IPC::Message* composition_request_msg_for_child =
       child_sink().GetUniqueMessageMatching(
-          InputMsg_RequestCompositionUpdate::ID);
+          InputMsg_RequestCompositionUpdates::ID);
   EXPECT_TRUE(composition_request_msg_for_child);
 
   // Verify that the message is asking for monitoring to start; but no immediate
   // updates.
-  InputMsg_RequestCompositionUpdate::Param child_msg_params;
-  InputMsg_RequestCompositionUpdate::Read(composition_request_msg_for_child,
-                                          &child_msg_params);
+  InputMsg_RequestCompositionUpdates::Param child_msg_params;
+  InputMsg_RequestCompositionUpdates::Read(composition_request_msg_for_child,
+                                           &child_msg_params);
   bool is_child_msg_for_immediate_request = std::get<0>(child_msg_params);
   bool is_child_msg_for_monitor_request = std::get<1>(child_msg_params);
   EXPECT_FALSE(is_child_msg_for_immediate_request);
@@ -1636,12 +1782,12 @@ TEST_F(InputMethodMacTest, MonitorCompositionRangeForActiveWidget) {
 
   // Verify that the child received another IPC for composition updates.
   composition_request_msg_for_child = child_sink().GetUniqueMessageMatching(
-      InputMsg_RequestCompositionUpdate::ID);
+      InputMsg_RequestCompositionUpdates::ID);
   EXPECT_TRUE(composition_request_msg_for_child);
 
   // Verify that this IPC is asking for no monitoring or immediate updates.
-  InputMsg_RequestCompositionUpdate::Read(composition_request_msg_for_child,
-                                          &child_msg_params);
+  InputMsg_RequestCompositionUpdates::Read(composition_request_msg_for_child,
+                                           &child_msg_params);
   is_child_msg_for_immediate_request = std::get<0>(child_msg_params);
   is_child_msg_for_monitor_request = std::get<1>(child_msg_params);
   EXPECT_FALSE(is_child_msg_for_immediate_request);

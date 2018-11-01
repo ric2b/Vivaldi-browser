@@ -17,10 +17,10 @@
 namespace base {
 namespace {
 
-LazyInstance<std::vector<ActionCallback>> g_callbacks =
+LazyInstance<std::vector<ActionCallback>>::DestructorAtExit g_callbacks =
     LAZY_INSTANCE_INITIALIZER;
-LazyInstance<scoped_refptr<SingleThreadTaskRunner>> g_task_runner =
-    LAZY_INSTANCE_INITIALIZER;
+LazyInstance<scoped_refptr<SingleThreadTaskRunner>>::DestructorAtExit
+    g_task_runner = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -36,7 +36,7 @@ void RecordComputedAction(const std::string& action) {
 
   if (!g_task_runner.Get()->BelongsToCurrentThread()) {
     g_task_runner.Get()->PostTask(FROM_HERE,
-                                  Bind(&RecordComputedAction, action));
+                                  BindOnce(&RecordComputedAction, action));
     return;
   }
 

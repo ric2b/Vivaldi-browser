@@ -21,8 +21,6 @@
 #ifndef SVGFEImageElement_h
 #define SVGFEImageElement_h
 
-#include "core/SVGNames.h"
-#include "core/loader/resource/ImageResourceContent.h"
 #include "core/loader/resource/ImageResourceObserver.h"
 #include "core/svg/SVGAnimatedPreserveAspectRatio.h"
 #include "core/svg/SVGFilterPrimitiveStandardAttributes.h"
@@ -30,6 +28,8 @@
 #include "platform/heap/Handle.h"
 
 namespace blink {
+
+class ImageResourceContent;
 
 class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
                                 public SVGURIReference,
@@ -40,11 +40,11 @@ class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
  public:
   DECLARE_NODE_FACTORY(SVGFEImageElement);
 
-  bool currentFrameHasSingleSecurityOrigin() const;
+  bool CurrentFrameHasSingleSecurityOrigin() const;
 
   ~SVGFEImageElement() override;
   SVGAnimatedPreserveAspectRatio* preserveAspectRatio() {
-    return m_preserveAspectRatio.get();
+    return preserve_aspect_ratio_.Get();
   }
 
   // Promptly remove as a ImageResource client.
@@ -54,22 +54,24 @@ class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
  private:
   explicit SVGFEImageElement(Document&);
 
-  void svgAttributeChanged(const QualifiedName&) override;
-  void imageNotifyFinished(ImageResourceContent*) override;
-  String debugName() const override { return "SVGFEImageElement"; }
+  void SvgAttributeChanged(const QualifiedName&) override;
+  void ImageNotifyFinished(ImageResourceContent*) override;
+  String DebugName() const override { return "SVGFEImageElement"; }
 
-  FilterEffect* build(SVGFilterBuilder*, Filter*) override;
+  FilterEffect* Build(SVGFilterBuilder*, Filter*) override;
 
-  void clearResourceReferences();
-  void fetchImageResource();
+  void ClearResourceReferences();
+  void FetchImageResource();
+  void ClearImageResource();
 
-  void buildPendingResource() override;
-  InsertionNotificationRequest insertedInto(ContainerNode*) override;
-  void removedFrom(ContainerNode*) override;
+  void BuildPendingResource() override;
+  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
+  void RemovedFrom(ContainerNode*) override;
 
-  Member<SVGAnimatedPreserveAspectRatio> m_preserveAspectRatio;
+  Member<SVGAnimatedPreserveAspectRatio> preserve_aspect_ratio_;
 
-  Member<ImageResourceContent> m_cachedImage;
+  Member<ImageResourceContent> cached_image_;
+  Member<IdTargetObserver> target_id_observer_;
 };
 
 }  // namespace blink

@@ -30,37 +30,37 @@
 
 #include "platform/CrossThreadCopier.h"
 
-#include "platform/network/ResourceError.h"
-#include "platform/network/ResourceRequest.h"
-#include "platform/network/ResourceResponse.h"
-#include "platform/weborigin/KURL.h"
-#include "wtf/text/WTFString.h"
 #include <memory>
+#include "platform/loader/fetch/ResourceError.h"
+#include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/loader/fetch/ResourceResponse.h"
+#include "platform/weborigin/KURL.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
-CrossThreadCopier<KURL>::Type CrossThreadCopier<KURL>::copy(const KURL& url) {
-  return url.copy();
+CrossThreadCopier<KURL>::Type CrossThreadCopier<KURL>::Copy(const KURL& url) {
+  return url.Copy();
 }
 
-CrossThreadCopier<String>::Type CrossThreadCopier<String>::copy(
+CrossThreadCopier<String>::Type CrossThreadCopier<String>::Copy(
     const String& str) {
-  return str.isolatedCopy();
+  return str.IsolatedCopy();
 }
 
-CrossThreadCopier<ResourceError>::Type CrossThreadCopier<ResourceError>::copy(
+CrossThreadCopier<ResourceError>::Type CrossThreadCopier<ResourceError>::Copy(
     const ResourceError& error) {
-  return error.copy();
+  return error.Copy();
 }
 
 CrossThreadCopier<ResourceRequest>::Type
-CrossThreadCopier<ResourceRequest>::copy(const ResourceRequest& request) {
-  return WTF::passed(request.copyData());
+CrossThreadCopier<ResourceRequest>::Copy(const ResourceRequest& request) {
+  return WTF::Passed(request.CopyData());
 }
 
 CrossThreadCopier<ResourceResponse>::Type
-CrossThreadCopier<ResourceResponse>::copy(const ResourceResponse& response) {
-  return WTF::passed(response.copyData());
+CrossThreadCopier<ResourceResponse>::Copy(const ResourceResponse& response) {
+  return WTF::Passed(response.CopyData());
 }
 
 // Test CrossThreadCopier using static_assert.

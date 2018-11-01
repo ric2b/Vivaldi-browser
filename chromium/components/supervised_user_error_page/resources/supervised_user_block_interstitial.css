@@ -150,6 +150,8 @@ html {
   align-items: center;
   display: flex;
   font-size: 12px;
+  line-height: normal;
+  margin-top: 14px;
 }
 
 .custodian-name {

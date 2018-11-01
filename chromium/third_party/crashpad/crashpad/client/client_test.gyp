@@ -22,10 +22,11 @@
       'type': 'executable',
       'dependencies': [
         'client.gyp:crashpad_client',
+        '../compat/compat.gyp:crashpad_compat',
         '../handler/handler.gyp:crashpad_handler',
+        '../test/test.gyp:crashpad_gmock_main',
         '../test/test.gyp:crashpad_test',
         '../third_party/gtest/gmock.gyp:gmock',
-        '../third_party/gtest/gmock.gyp:gmock_main',
         '../third_party/gtest/gtest.gyp:gtest',
         '../third_party/mini_chromium/mini_chromium.gyp:base',
         '../util/util.gyp:crashpad_util',

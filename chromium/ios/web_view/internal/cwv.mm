@@ -10,13 +10,12 @@
 #import "base/mac/bind_objc_block.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/sys_string_conversions.h"
 #include "ios/web/public/app/web_main.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web_view/internal/web_view_web_main_delegate.h"
-#import "ios/web_view/public/cwv_delegate.h"
 #import "ios/web_view/public/cwv_web_view.h"
 #import "ios/web_view/public/cwv_web_view_configuration.h"
-#import "ios/web_view/public/cwv_website_data_store.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -30,18 +29,12 @@ CWV* g_criwv = nil;
   std::unique_ptr<ios_web_view::WebViewWebMainDelegate> _webMainDelegate;
   std::unique_ptr<web::WebMain> _webMain;
 }
-
-@property(nonatomic, weak) id<CWVDelegate> delegate;
-
-- (instancetype)initWithDelegate:(id<CWVDelegate>)delegate;
 @end
 
 @implementation CWV
 
-@synthesize delegate = _delegate;
-
-+ (void)configureWithDelegate:(id<CWVDelegate>)delegate {
-  g_criwv = [[CWV alloc] initWithDelegate:delegate];
++ (void)configureWithUserAgentProductName:(NSString*)productName {
+  g_criwv = [[CWV alloc] initWithUserAgentProductName:productName];
 }
 
 + (void)shutDown {
@@ -50,18 +43,16 @@ CWV* g_criwv = nil;
 
 + (CWVWebView*)webViewWithFrame:(CGRect)frame {
   CWVWebViewConfiguration* configuration =
-      [[CWVWebViewConfiguration alloc] init];
-  configuration.websiteDataStore = [CWVWebsiteDataStore defaultDataStore];
-
+      [CWVWebViewConfiguration defaultConfiguration];
   return [[CWVWebView alloc] initWithFrame:frame configuration:configuration];
 }
 
-- (instancetype)initWithDelegate:(id<CWVDelegate>)delegate {
+- (instancetype)initWithUserAgentProductName:(NSString*)productName {
   self = [super init];
   if (self) {
-    _delegate = delegate;
+    std::string userAgent = base::SysNSStringToUTF8(productName);
     _webMainDelegate =
-        base::MakeUnique<ios_web_view::WebViewWebMainDelegate>(_delegate);
+        base::MakeUnique<ios_web_view::WebViewWebMainDelegate>(userAgent);
     web::WebMainParams params(_webMainDelegate.get());
     _webMain = base::MakeUnique<web::WebMain>(params);
   }

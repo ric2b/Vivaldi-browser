@@ -5,19 +5,21 @@
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "content/browser/accessibility/browser_accessibility.h"
+#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/accessibility_browser_test_utils.h"
+#include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event.h"
-#include "ui/events/event_processor.h"
+#include "ui/events/event_sink.h"
 #include "ui/events/event_utils.h"
 
 namespace content {
@@ -34,24 +36,23 @@ class TouchAccessibilityBrowserTest : public ContentBrowserTest {
   }
 
   void NavigateToUrlAndWaitForAccessibilityTree(const GURL& url) {
-    AccessibilityNotificationWaiter waiter(
-        shell()->web_contents(),
-        ACCESSIBILITY_MODE_COMPLETE,
-        ui::AX_EVENT_LOAD_COMPLETE);
+    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                           kAccessibilityModeComplete,
+                                           ui::AX_EVENT_LOAD_COMPLETE);
     NavigateToURL(shell(), url);
     waiter.WaitForNotification();
   }
 
   void SendTouchExplorationEvent(int x, int y) {
     aura::Window* window = shell()->web_contents()->GetContentNativeView();
-    ui::EventProcessor* dispatcher = window->GetHost()->event_processor();
+    ui::EventSink* sink = window->GetHost()->event_sink();
     gfx::Rect bounds = window->GetBoundsInRootWindow();
     gfx::Point location(bounds.x() + x,  bounds.y() + y);
     int flags = ui::EF_TOUCH_ACCESSIBILITY;
     std::unique_ptr<ui::Event> mouse_move_event(
         new ui::MouseEvent(ui::ET_MOUSE_MOVED, location, location,
                            ui::EventTimeForNow(), flags, 0));
-    ignore_result(dispatcher->OnEventFromSource(mouse_move_event.get()));
+    ignore_result(sink->OnEventFromSource(mouse_move_event.get()));
   }
 
   DISALLOW_COPY_AND_ASSIGN(TouchAccessibilityBrowserTest);
@@ -93,7 +94,7 @@ IN_PROC_BROWSER_TEST_F(TouchAccessibilityBrowserTest,
   // touch exploration event in the center of that cell, and assert that we
   // get an accessibility hover event fired in the correct cell.
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ACCESSIBILITY_MODE_COMPLETE, ui::AX_EVENT_HOVER);
+      shell()->web_contents(), kAccessibilityModeComplete, ui::AX_EVENT_HOVER);
   for (int row = 0; row < 5; ++row) {
     for (int col = 0; col < 7; ++col) {
       std::string expected_cell_text = base::IntToString(row * 7 + col);
@@ -166,6 +167,11 @@ IN_PROC_BROWSER_TEST_F(TouchAccessibilityBrowserTest,
   BrowserAccessibilityManager* child_manager =
       child_frame->GetOrCreateBrowserAccessibilityManager();
   ASSERT_NE(nullptr, child_manager);
+
+  // If OOPIFs are enabled, wait until compositor frames are all properly
+  // displayed, otherwise the touch event will not get sent to the correct
+  // renderer process.
+  WaitForChildFrameSurfaceReady(child_frame);
 
   // Send a touch exploration event to the button in the first iframe.
   // A touch exploration event is just a mouse move event with

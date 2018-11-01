@@ -7,7 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -24,14 +24,14 @@ class CORE_EXPORT CustomElementReactionQueue final
 
   DECLARE_TRACE();
 
-  void add(CustomElementReaction*);
-  void invokeReactions(Element*);
-  bool isEmpty() { return m_reactions.isEmpty(); }
-  void clear();
+  void Add(CustomElementReaction*);
+  void InvokeReactions(Element*);
+  bool IsEmpty() { return reactions_.IsEmpty(); }
+  void Clear();
 
  private:
-  HeapVector<Member<CustomElementReaction>, 1> m_reactions;
-  size_t m_index;
+  HeapVector<Member<CustomElementReaction>, 1> reactions_;
+  size_t index_;
 };
 
 }  // namespace blink

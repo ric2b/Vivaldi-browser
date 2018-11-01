@@ -14,7 +14,7 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
-#include "cc/ipc/display_compositor.mojom.h"
+#include "cc/ipc/frame_sink_manager.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
@@ -49,7 +49,7 @@ class WindowServer : public ServerWindowDelegate,
                      public GpuHostDelegate,
                      public UserDisplayManagerDelegate,
                      public UserIdTrackerObserver,
-                     public cc::mojom::DisplayCompositorClient {
+                     public cc::mojom::FrameSinkManagerClient {
  public:
   explicit WindowServer(WindowServerDelegate* delegate);
   ~WindowServer() override;
@@ -91,7 +91,8 @@ class WindowServer : public ServerWindowDelegate,
   WindowTree* CreateTreeForWindowManager(
       const UserId& user_id,
       mojom::WindowTreeRequest window_tree_request,
-      mojom::WindowTreeClientPtr window_tree_client);
+      mojom::WindowTreeClientPtr window_tree_client,
+      bool automatically_create_display_roots);
   // Invoked when a WindowTree's connection encounters an error.
   void DestroyTree(WindowTree* tree);
 
@@ -142,7 +143,6 @@ class WindowServer : public ServerWindowDelegate,
   bool SetFocusedWindow(ServerWindow* window);
   ServerWindow* GetFocusedWindow();
 
-  bool IsActiveUserInHighContrastMode() const;
   void SetHighContrastMode(const UserId& user, bool enabled);
 
   // Returns a change id for the window manager that is associated with
@@ -167,9 +167,11 @@ class WindowServer : public ServerWindowDelegate,
 
   // These functions trivially delegate to all WindowTrees, which in
   // term notify their clients.
-  void ProcessWindowBoundsChanged(const ServerWindow* window,
-                                  const gfx::Rect& old_bounds,
-                                  const gfx::Rect& new_bounds);
+  void ProcessWindowBoundsChanged(
+      const ServerWindow* window,
+      const gfx::Rect& old_bounds,
+      const gfx::Rect& new_bounds,
+      const base::Optional<cc::LocalSurfaceId>& local_surface_id);
   void ProcessClientAreaChanged(
       const ServerWindow* window,
       const gfx::Insets& new_client_area,
@@ -187,7 +189,7 @@ class WindowServer : public ServerWindowDelegate,
                             const mojom::OrderDirection direction);
   void ProcessWindowDeleted(ServerWindow* window);
   void ProcessWillChangeWindowPredefinedCursor(ServerWindow* window,
-                                               mojom::Cursor cursor_id);
+                                               mojom::CursorType cursor_id);
 
   // Sends an |event| to all WindowTrees belonging to |user_id| that might be
   // observing events. Skips |ignore_tree| if it is non-null. |target_window| is
@@ -228,7 +230,7 @@ class WindowServer : public ServerWindowDelegate,
   WindowManagerState* GetWindowManagerStateForUser(const UserId& user_id);
 
   // ServerWindowDelegate:
-  cc::mojom::DisplayCompositor* GetDisplayCompositor() override;
+  cc::mojom::FrameSinkManager* GetFrameSinkManager() override;
 
   // UserDisplayManagerDelegate:
   bool GetFrameDecorationsForUser(
@@ -321,9 +323,9 @@ class WindowServer : public ServerWindowDelegate,
       const std::string& name,
       const std::vector<uint8_t>* new_data) override;
   void OnWindowPredefinedCursorChanged(ServerWindow* window,
-                                       mojom::Cursor cursor_id) override;
+                                       mojom::CursorType cursor_id) override;
   void OnWindowNonClientCursorChanged(ServerWindow* window,
-                                      mojom::Cursor cursor_id) override;
+                                      mojom::CursorType cursor_id) override;
   void OnWindowTextInputStateChanged(ServerWindow* window,
                                      const ui::TextInputState& state) override;
   void OnTransientWindowAdded(ServerWindow* window,
@@ -334,7 +336,7 @@ class WindowServer : public ServerWindowDelegate,
   // GpuHostDelegate:
   void OnGpuServiceInitialized() override;
 
-  // cc::mojom::DisplayCompositorClient:
+  // cc::mojom::FrameSinkManagerClient:
   void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override;
 
   // UserIdTrackerObserver:
@@ -381,10 +383,10 @@ class WindowServer : public ServerWindowDelegate,
 
   cc::SurfaceId root_surface_id_;
 
-  mojo::Binding<cc::mojom::DisplayCompositorClient>
-      display_compositor_client_binding_;
-  // State for rendering into a Surface.
-  cc::mojom::DisplayCompositorPtr display_compositor_;
+  // Provides interfaces to create and manage FrameSinks.
+  mojo::Binding<cc::mojom::FrameSinkManagerClient>
+      frame_sink_manager_client_binding_;
+  cc::mojom::FrameSinkManagerPtr frame_sink_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServer);
 };

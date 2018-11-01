@@ -36,6 +36,7 @@
 #include <mach/mach.h>
 
 #include "base/numerics/safe_math.h"
+#include "base/process/process_metrics.h"
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
@@ -387,31 +388,20 @@ bool GetDyldRegions(std::vector<VMRegion>* regions) {
   return true;
 }
 
-void PopulateByteStats(VMRegion* region, const vm_region_submap_info_64& info) {
-  uint32_t share_mode = info.share_mode;
-  if (share_mode == SM_COW && info.ref_count == 1)
-    share_mode = SM_PRIVATE;
-
-  uint64_t dirty_bytes = info.pages_dirtied * PAGE_SIZE;
-  uint64_t clean_bytes =
-      (info.pages_resident - info.pages_reusable - info.pages_dirtied) *
-      PAGE_SIZE;
-  switch (share_mode) {
+void PopulateByteStats(VMRegion* region,
+                       const vm_region_top_info_data_t& info) {
+  uint64_t dirty_bytes =
+      (info.private_pages_resident + info.shared_pages_resident) * PAGE_SIZE;
+  switch (info.share_mode) {
     case SM_LARGE_PAGE:
     case SM_PRIVATE:
-      region->byte_stats_private_dirty_resident = dirty_bytes;
-      region->byte_stats_private_clean_resident = clean_bytes;
-      break;
     case SM_COW:
       region->byte_stats_private_dirty_resident = dirty_bytes;
-      region->byte_stats_shared_clean_resident = clean_bytes;
-      break;
     case SM_SHARED:
     case SM_PRIVATE_ALIASED:
     case SM_TRUESHARED:
     case SM_SHARED_ALIASED:
       region->byte_stats_shared_dirty_resident = dirty_bytes;
-      region->byte_stats_shared_clean_resident = clean_bytes;
       break;
     case SM_EMPTY:
       break;
@@ -421,38 +411,45 @@ void PopulateByteStats(VMRegion* region, const vm_region_submap_info_64& info) {
   }
 }
 
-// Creates VMRegions from mach_vm_region_recurse. Returns whether the operation
+// Creates VMRegions using mach vm syscalls. Returns whether the operation
 // succeeded.
 bool GetAllRegions(std::vector<VMRegion>* regions) {
   const int pid = getpid();
   task_t task = mach_task_self();
   mach_vm_size_t size = 0;
-  vm_region_submap_info_64 info;
-  natural_t depth = 1;
-  mach_msg_type_number_t count = sizeof(info);
-  for (mach_vm_address_t address = MACH_VM_MIN_ADDRESS;; address += size) {
-    memset(&info, 0, sizeof(info));
-    kern_return_t kr = mach_vm_region_recurse(
-        task, &address, &size, &depth,
-        reinterpret_cast<vm_region_info_t>(&info), &count);
-    if (kr == KERN_INVALID_ADDRESS)  // nothing else left
-      break;
-    if (kr != KERN_SUCCESS)  // something bad
+  mach_vm_address_t address = MACH_VM_MIN_ADDRESS;
+  while (true) {
+    base::CheckedNumeric<mach_vm_address_t> next_address(address);
+    next_address += size;
+    if (!next_address.IsValid())
       return false;
-    if (info.is_submap) {
-      size = 0;
-      ++depth;
-      continue;
-    }
+    address = next_address.ValueOrDie();
+    mach_vm_address_t address_copy = address;
+
+    vm_region_top_info_data_t info;
+    base::MachVMRegionResult result =
+        base::GetTopInfo(task, &size, &address, &info);
+    if (result == base::MachVMRegionResult::Error)
+      return false;
+    if (result == base::MachVMRegionResult::Finished)
+      break;
+
+    vm_region_basic_info_64 basic_info;
+    mach_vm_size_t dummy_size = 0;
+    result = base::GetBasicInfo(task, &dummy_size, &address_copy, &basic_info);
+    if (result == base::MachVMRegionResult::Error)
+      return false;
+    if (result == base::MachVMRegionResult::Finished)
+      break;
 
     VMRegion region;
     PopulateByteStats(&region, info);
 
-    if (info.protection & VM_PROT_READ)
+    if (basic_info.protection & VM_PROT_READ)
       region.protection_flags |= VMRegion::kProtectionFlagsRead;
-    if (info.protection & VM_PROT_WRITE)
+    if (basic_info.protection & VM_PROT_WRITE)
       region.protection_flags |= VMRegion::kProtectionFlagsWrite;
-    if (info.protection & VM_PROT_EXECUTE)
+    if (basic_info.protection & VM_PROT_EXECUTE)
       region.protection_flags |= VMRegion::kProtectionFlagsExec;
 
     char buffer[MAXPATHLEN];
@@ -460,16 +457,12 @@ bool GetAllRegions(std::vector<VMRegion>* regions) {
     if (length != 0)
       region.mapped_file.assign(buffer, length);
 
-    region.byte_stats_swapped = info.pages_swapped_out * PAGE_SIZE;
+    // There's no way to get swapped or clean bytes without doing a
+    // very expensive syscalls that crawls every single page in the memory
+    // object.
     region.start_address = address;
     region.size_in_bytes = size;
     regions->push_back(region);
-
-    base::CheckedNumeric<mach_vm_address_t> numeric(address);
-    numeric += size;
-    if (!numeric.IsValid())
-      return false;
-    address = numeric.ValueOrDie();
   }
   return true;
 }
@@ -608,9 +601,24 @@ bool ProcessMetricsMemoryDumpProvider::OnMemoryDump(
 bool ProcessMetricsMemoryDumpProvider::DumpProcessTotals(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
-  const uint64_t rss_bytes = rss_bytes_for_testing
-                                 ? rss_bytes_for_testing
-                                 : process_metrics_->GetWorkingSetSize();
+#if defined(OS_MACOSX)
+  size_t private_bytes;
+  size_t shared_bytes;
+  size_t resident_bytes;
+  size_t locked_bytes;
+  if (!process_metrics_->GetMemoryBytes(&private_bytes, &shared_bytes,
+                                        &resident_bytes, &locked_bytes)) {
+    return false;
+  }
+  uint64_t rss_bytes = resident_bytes;
+  pmd->process_totals()->SetExtraFieldInBytes("private_bytes", private_bytes);
+  pmd->process_totals()->SetExtraFieldInBytes("shared_bytes", shared_bytes);
+  pmd->process_totals()->SetExtraFieldInBytes("locked_bytes", locked_bytes);
+#else
+  uint64_t rss_bytes = process_metrics_->GetWorkingSetSize();
+#endif  // defined(OS_MACOSX)
+  if (rss_bytes_for_testing)
+    rss_bytes = rss_bytes_for_testing;
 
   // rss_bytes will be 0 if the process ended while dumping.
   if (!rss_bytes)
@@ -637,12 +645,6 @@ bool ProcessMetricsMemoryDumpProvider::DumpProcessTotals(
     }
     close(clear_refs_fd);
   }
-#elif defined(MACOSX)
-  size_t private_bytes;
-  bool res = process_metrics_->GetMemoryBytes(&private_bytes,
-                                              nullptr /* shared_bytes */);
-  if (res)
-    pmd->process_totals()->SetExtraFieldInBytes("private_bytes", private_bytes);
 #elif defined(OS_WIN)
   if (args.level_of_detail ==
       base::trace_event::MemoryDumpLevelOfDetail::DETAILED) {

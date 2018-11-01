@@ -62,6 +62,8 @@ class MockDownloadItem : public DownloadItem {
   MOCK_CONST_METHOD0(GetTabReferrerUrl, const GURL&());
   MOCK_CONST_METHOD0(GetSuggestedFilename, std::string());
   MOCK_CONST_METHOD0(GetContentDisposition, std::string());
+  MOCK_CONST_METHOD0(GetResponseHeaders,
+                     const scoped_refptr<const net::HttpResponseHeaders>&());
   MOCK_CONST_METHOD0(GetMimeType, std::string());
   MOCK_CONST_METHOD0(GetOriginalMimeType, std::string());
   MOCK_CONST_METHOD0(GetReferrerCharset, std::string());
@@ -98,11 +100,14 @@ class MockDownloadItem : public DownloadItem {
   MOCK_CONST_METHOD0(GetOpenWhenComplete, bool());
   MOCK_METHOD0(GetAutoOpened, bool());
   MOCK_CONST_METHOD0(GetOpened, bool());
+  MOCK_CONST_METHOD0(GetLastAccessTime, base::Time());
+  MOCK_CONST_METHOD0(IsTransient, bool());
   MOCK_CONST_METHOD0(GetBrowserContext, BrowserContext*());
   MOCK_CONST_METHOD0(GetWebContents, WebContents*());
   MOCK_METHOD1(OnContentCheckCompleted, void(DownloadDangerType));
   MOCK_METHOD1(SetOpenWhenComplete, void(bool));
   MOCK_METHOD1(SetOpened, void(bool));
+  MOCK_METHOD1(SetLastAccessTime, void(base::Time));
   MOCK_METHOD1(SetDisplayName, void(const base::FilePath&));
   MOCK_CONST_METHOD1(DebugString, std::string(bool));
 

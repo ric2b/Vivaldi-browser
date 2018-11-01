@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hr">
 <translation id="1018656279737460067">Otkazano</translation>
+<translation id="1030173864176315846">Uspješno ispisano <ph name="PAGE_NUMBER" /> stranica na <ph name="PRINTER_NAME" /></translation>
 <translation id="1049795001945932310">&amp;Postavke jezika</translation>
 <translation id="1056898198331236512">Upozorenje</translation>
 <translation id="1084824384139382525">Kopiraj adresu &amp;veze</translation>
@@ -12,6 +13,7 @@
 <translation id="1181037720776840403">Ukloni</translation>
 <translation id="1187722533808055681">Buđenja iz stanja mirovanja</translation>
 <translation id="119944043368869598">Očisti sve</translation>
+<translation id="1218323606465324064">Ispisivanje <ph name="PAGE_NUMBER" /> stranice na <ph name="PRINTER_NAME" /></translation>
 <translation id="1244303850296295656">Pogreška proširenja</translation>
 <translation id="1368832886055348810">Slijeva udesno</translation>
 <translation id="1465176863081977902">K&amp;opiraj adresu audiozapisa</translation>
@@ -38,8 +40,10 @@
 <translation id="2076269580855484719">Sakrij ovaj dodatak</translation>
 <translation id="2087822576218954668">Ispis: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Ponovo učitaj &amp;okvir</translation>
+<translation id="2115291620696624944">Pogreška prilikom ispisa <ph name="PAGE_NUMBER" /> stranice na <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Ažurirajte dodatak</translation>
 <translation id="2147827593068025794">Sinkronizacija u pozadini</translation>
+<translation id="2148892889047469596">Emitiraj karticu</translation>
 <translation id="215753907730220065">Napusti potpuni ekran</translation>
 <translation id="2177950615300672361">Anonimna kartica: <ph name="TAB_NAME" /></translation>
 <translation id="2187317261103489799">Otkrij (zadano)</translation>
@@ -63,8 +67,10 @@
 <translation id="2550212893339833758">Zamijenjena memorija</translation>
 <translation id="2662876636500006917">Vivaldi web-trgovina</translation>
 <translation id="2678063897982469759">Ponovo omogući</translation>
+<translation id="2721037002783622288">&amp;Traži sliku uz <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Deskriptori datoteke</translation>
 <translation id="2809586584051668049">i još <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
+<translation id="2847759467426165163">Emitiranje na</translation>
 <translation id="2850541429955027218">Dodaj temu</translation>
 <translation id="2861941300086904918">Sigurnosni upravitelj izvornog klijenta</translation>
 <translation id="2868746137289129307">Proširenje je zastarjelo, pa su ga pravila tvrtke onemogućila. Možda će se automatski omogućiti kada postane dostupna novija verzija.</translation>
@@ -74,6 +80,7 @@
 <translation id="299483336428448530">Instalirao tvoj roditelj.</translation>
 <translation id="3003623123441819449">CSS predmemorija</translation>
 <translation id="3021678814754966447">&amp;Pogledaj izvor okvira</translation>
+<translation id="3031601332414921114">Nastavi s ispisom</translation>
 <translation id="3080207940057008665">Drugi program na vašem računalu dodao je temu koja može promijeniti način na koji radi Vivaldi.</translation>
 <translation id="3122464029669770682">Procesor (CPU)</translation>
 <translation id="3124111068741548686">Rukuje USER</translation>
@@ -99,6 +106,7 @@
 <translation id="3760460896538743390">Provjeri &amp;pozadinsku stranicu</translation>
 <translation id="3789841737615482174">Instaliraj</translation>
 <translation id="3798449238516105146">Verzija</translation>
+<translation id="3862134173397075045">Dobrodošli u iskustvo emitiranja u pregledniku Chrome!</translation>
 <translation id="3866249974567520381">Opis</translation>
 <translation id="3905761538810670789">Popravi aplikaciju</translation>
 <translation id="3908393983276948098">Dodatak <ph name="PLUGIN_NAME" /> zastario je</translation>
@@ -106,6 +114,7 @@
 <translation id="3909791450649380159">Iz&amp;reži</translation>
 <translation id="3927932062596804919">Odbij</translation>
 <translation id="3936390757709632190">&amp;Otvori audio na novoj kartici</translation>
+<translation id="3936999098172113189">Čekanje na ispis <ph name="PAGE_NUMBER" /> stranice na <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Natrag</translation>
 <translation id="3979395879372752341">Dodan je novi nastavak (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -127,6 +136,7 @@
 <translation id="4256316378292851214">Sp&amp;remi videozapis kao...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K izravno)</translation>
 <translation id="4312866146174492540">Blokiraj (zadano)</translation>
+<translation id="4363771538994847871">Nije pronađeno nijedno odredište za emitiranje. Trebate li pomoć?</translation>
 <translation id="4384652540891215547">Aktiviranje proširenja</translation>
 <translation id="4394049700291259645">Onemogući</translation>
 <translation id="4423482519432579560">&amp;Provjera pravopisa</translation>
@@ -135,11 +145,13 @@
 <translation id="4522570452068850558">Detalji</translation>
 <translation id="4552089082226364758">Bljeskalica</translation>
 <translation id="4557136421275541763">Upozorenje:</translation>
+<translation id="4579581181964204535">Ne može se emitirati <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Idi na <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacije i proširenja može mijenjati samo voditelj (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Proširenje je promijenilo stranicu koja se prikazuje kada otvorite novu karticu.</translation>
 <translation id="4643612240819915418">&amp;Otvori video na novoj kartici</translation>
 <translation id="4677772697204437347">Memorija grafičkog procesora</translation>
+<translation id="4688541352655220763">Pomoću te značajke možete prikazivati sadržaj iz Vivaldija na televizoru ili drugim uređajima.</translation>
 <translation id="4711638718396952945">Vrati postavke</translation>
 <translation id="4839303808932127586">Sp&amp;remi videozapis kao...</translation>
 <translation id="4851858059374029925">Želite li instalirati <ph name="PLUGIN_NAME" />? Instalirajte samo one dodatke koje smatrate pouzdanima.</translation>
@@ -158,6 +170,7 @@
 <translation id="5233019165164992427">Priključak za otklanjanje pogrešaka lokalnog klijenta</translation>
 <translation id="5233231016133573565">ID procesa</translation>
 <translation id="5233638681132016545">Nova kartica</translation>
+<translation id="5233736638227740678">&amp;Zalijepiti</translation>
 <translation id="52912272896845572">Datoteka osobnog ključa nije važeća.</translation>
 <translation id="5301954838959518834">U redu, shvaćam</translation>
 <translation id="5311260548612583999">Datoteka s os.klj. (neobav.)</translation>
@@ -191,10 +204,13 @@
 <translation id="5956585768868398362">Je li to stranica pretraživanja koju ste očekivali?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (najviše <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Upravlja i time koja se stranica prikazuje kada se klikne gumb Početna ili prilikom pretraživanja putem višenamjenskog okvira.</translation>
+<translation id="6040143037577758943">Zatvori</translation>
 <translation id="6101226222197207147">Dodana je nova aplikacija (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetskom vezom upravlja proširenje</translation>
 <translation id="6124650939968185064">O tom proširenju ovise sljedeća proširenja:</translation>
 <translation id="6156863943908443225">Predmemorija skripte</translation>
+<translation id="6169666352732958425">Emitiranje radne površine nije moguće.</translation>
+<translation id="6171948306033499786">Pauziraj ispis</translation>
 <translation id="6196854373336333322">Proširenje "<ph name="EXTENSION_NAME" />" preuzelo je kontrolu nad vašim postavkama proxyja, a to znači da može promijeniti, prekinuti ili prisluškivati sve što radite na mreži. Ako niste sigurni kako je došlo do te promjene, vjerojatno je ne želite.</translation>
 <translation id="6206311232642889873">Kop&amp;iraj sliku</translation>
 <translation id="6239558157302047471">Ponovo učitaj okvir</translation>
@@ -214,14 +230,17 @@
 <translation id="6550675742724504774">Opcije</translation>
 <translation id="6639554308659482635">SQLite memorija</translation>
 <translation id="6691936601825168937">&amp;Proslijedi</translation>
+<translation id="6700480081846086223">Emitiraj <ph name="HOST_NAME" /></translation>
 <translation id="6786747875388722282">Proširenja</translation>
 <translation id="6787839852456839824">Tipkovnički prečaci</translation>
 <translation id="6798954102094737107">Dodatak: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Zadrži promjene</translation>
+<translation id="682123305478866682">Emitiraj radnu površinu</translation>
 <translation id="6863910145616405334">Dodatak nije pronađen</translation>
 <translation id="6886871292305414135">Otvori vezu u novoj &amp;kartici</translation>
 <translation id="6900284862687837908">Aplikacija u pozadini: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Opozovi pristup datoteci</translation>
+<translation id="6943176775188458830">Otkazivanje ispisa</translation>
 <translation id="6974053822202609517">Zdesna ulijevo</translation>
 <translation id="7013485839273047434">Nabavi više proširenja</translation>
 <translation id="708060913198414444">K&amp;opiraj adresu audiozapisa</translation>
@@ -229,7 +248,9 @@
 <translation id="7144878232160441200">Pokušaj ponovo</translation>
 <translation id="7206693748120342859">Preuzimanje dodatka <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
+<translation id="7293919849802650062">Dobro došli u značajku emitiranja na Vivaldi!</translation>
 <translation id="7309257895202129721">Prikaži &amp;upravljačke gumbe</translation>
+<translation id="7346909386216857016">Dobro, shvaćam</translation>
 <translation id="7361297102842600584">Kliknite desnom tipkom da biste pokrenuli <ph name="PLUGIN_NAME" /></translation>
 <translation id="7401543881546089382">Izbriši prečac</translation>
 <translation id="7412226954991670867">Memorija grafičkog procesora</translation>
@@ -244,10 +265,12 @@
 <translation id="7685049629764448582">Memorija JavaScripta</translation>
 <translation id="7701869757853594372">Rukovanje USER</translation>
 <translation id="7704305437604973648">Zadatak</translation>
+<translation id="7710568461918838723">&amp;Prebaci...</translation>
 <translation id="7760004034676677601">Je li to početna stranica koju ste očekivali?</translation>
 <translation id="7786889348652477777">&amp;Ponovo učitaj aplikaciju</translation>
 <translation id="7791543448312431591">Dodaj</translation>
 <translation id="7800518121066352902">Zakreni u smjeru suprotnom od &amp;kretanja kazaljke na satu</translation>
+<translation id="7814458197256864873">&amp;Kopirati</translation>
 <translation id="7818135753970109980">Dodana je nova tema (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">K&amp;opiraj adresu videozapisa</translation>
 <translation id="7849264908733290972">Otvori &amp;sliku u novoj &amp;kartici</translation>
@@ -268,6 +291,7 @@ Ključna datoteka: <ph name="KEY_FILE" />
 Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih verzija proširenja.</translation>
 <translation id="8004582292198964060">Preglednik</translation>
 <translation id="8023801379949507775">Ažuriraj proširenja</translation>
+<translation id="8032244173881942855">Emitiranje kartice nije moguće.</translation>
 <translation id="8037357227543935929">Pitaj (zadano)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
 <translation id="8188120771410500975">&amp;Provjeri pravopis tekstnih polja</translation>
@@ -284,16 +308,20 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8584280235376696778">&amp;Otvori video na novoj kartici</translation>
 <translation id="8605428685123651449">SQLite memorija</translation>
 <translation id="8615618338313291042">Anonimna aplikacija: <ph name="APP_NAME" /></translation>
+<translation id="8627151598708688654">Odaberite izvor</translation>
 <translation id="862750493060684461">CSS predmemorija</translation>
 <translation id="8661290697478713397">Otvori vezu u anoni&amp;mnom prozoru</translation>
 <translation id="8664389313780386848">&amp;Pogledaj izvor stranice</translation>
 <translation id="8719653885894320876">Preuzimanje dodatka <ph name="PLUGIN_NAME" /> nije uspjelo</translation>
 <translation id="873545264931343897">Kada dodatak <ph name="PLUGIN_NAME" /> završi s ažuriranjem, ponovo učitajte stranicu da biste ga aktivirali</translation>
+<translation id="8757090071857742562">Nije moguće emitirati radnu površinu.  Provjerite jeste li potvrdili upit za početak dijeljenja zaslona.</translation>
 <translation id="8763204422633679667">Kada dodatak <ph name="PLUGIN_NAME" /> završi s instaliranjem, ponovo učitajte stranicu da biste ga aktivirali</translation>
 <translation id="8798099450830957504">Zadano</translation>
-<translation id="8808478386290700967">Web Store</translation>
+<translation id="8808478386290700967">Internet trgovina</translation>
+<translation id="8845001906332463065">Pomoć</translation>
 <translation id="8859174528519900719">Podokvir: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Otvori vezu u novom &amp;prozoru</translation>
+<translation id="8910146161325739742">Dijelite svoj zaslon</translation>
 <translation id="8916476537757519021">Anonimni podokvir: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Memorija JavaScripta</translation>
 <translation id="8962083179518285172">Sakrij pojedinosti</translation>

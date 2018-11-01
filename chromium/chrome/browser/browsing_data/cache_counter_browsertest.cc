@@ -15,7 +15,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/browsing_data/content/storage_partition_http_cache_data_remover.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -34,7 +33,7 @@ class CacheCounterTest : public InProcessBrowserTest {
  public:
   void SetUpOnMainThread() override {
     SetCacheDeletionPref(true);
-    SetDeletionPeriodPref(browsing_data::ALL_TIME);
+    SetDeletionPeriodPref(browsing_data::TimePeriod::ALL_TIME);
   }
 
   void SetCacheDeletionPref(bool value) {
@@ -183,7 +182,7 @@ IN_PROC_BROWSER_TEST_F(CacheCounterTest, Empty) {
 
   CacheCounter counter(profile);
   counter.Init(
-      profile->GetPrefs(),
+      profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
   counter.Restart();
 
@@ -198,7 +197,7 @@ IN_PROC_BROWSER_TEST_F(CacheCounterTest, NonEmpty) {
   Profile* profile = browser()->profile();
   CacheCounter counter(profile);
   counter.Init(
-      profile->GetPrefs(),
+      profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
   counter.Restart();
 
@@ -214,15 +213,13 @@ IN_PROC_BROWSER_TEST_F(CacheCounterTest, AfterDoom) {
   Profile* profile = browser()->profile();
   CacheCounter counter(profile);
   counter.Init(
-      profile->GetPrefs(),
+      profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
 
-  browsing_data::StoragePartitionHttpCacheDataRemover::CreateForRange(
-      content::BrowserContext::GetDefaultStoragePartition(browser()->profile()),
-      base::Time(),
-      base::Time::Max())->Remove(
-          base::Bind(&CacheCounter::Restart,
-          base::Unretained(&counter)));
+  content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+      ->ClearHttpAndMediaCaches(
+          base::Time(), base::Time::Max(), base::Callback<bool(const GURL&)>(),
+          base::Bind(&CacheCounter::Restart, base::Unretained(&counter)));
 
   WaitForIOThread();
   EXPECT_EQ(0u, GetResult());
@@ -236,7 +233,7 @@ IN_PROC_BROWSER_TEST_F(CacheCounterTest, PrefChanged) {
   Profile* profile = browser()->profile();
   CacheCounter counter(profile);
   counter.Init(
-      profile->GetPrefs(),
+      profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
   SetCacheDeletionPref(true);
 
@@ -251,26 +248,26 @@ IN_PROC_BROWSER_TEST_F(CacheCounterTest, PeriodChanged) {
   Profile* profile = browser()->profile();
   CacheCounter counter(profile);
   counter.Init(
-      profile->GetPrefs(),
+      profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
 
-  SetDeletionPeriodPref(browsing_data::LAST_HOUR);
+  SetDeletionPeriodPref(browsing_data::TimePeriod::LAST_HOUR);
   WaitForIOThread();
   browsing_data::BrowsingDataCounter::ResultInt result = GetResult();
 
-  SetDeletionPeriodPref(browsing_data::LAST_DAY);
+  SetDeletionPeriodPref(browsing_data::TimePeriod::LAST_DAY);
   WaitForIOThread();
   EXPECT_EQ(result, GetResult());
 
-  SetDeletionPeriodPref(browsing_data::LAST_WEEK);
+  SetDeletionPeriodPref(browsing_data::TimePeriod::LAST_WEEK);
   WaitForIOThread();
   EXPECT_EQ(result, GetResult());
 
-  SetDeletionPeriodPref(browsing_data::FOUR_WEEKS);
+  SetDeletionPeriodPref(browsing_data::TimePeriod::FOUR_WEEKS);
   WaitForIOThread();
   EXPECT_EQ(result, GetResult());
 
-  SetDeletionPeriodPref(browsing_data::ALL_TIME);
+  SetDeletionPeriodPref(browsing_data::TimePeriod::ALL_TIME);
   WaitForIOThread();
   EXPECT_EQ(result, GetResult());
   EXPECT_FALSE(IsUpperLimit());

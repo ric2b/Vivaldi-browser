@@ -6,8 +6,8 @@
 #define PresentationError_h
 
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Allocator.h"
 #include "public/platform/modules/presentation/WebPresentationError.h"
-#include "wtf/Allocator.h"
 
 namespace blink {
 
@@ -22,7 +22,7 @@ class PresentationError final {
   // For CallbackPromiseAdapter.
   using WebType = const WebPresentationError&;
 
-  static DOMException* take(const WebPresentationError&);
+  static DOMException* Take(const WebPresentationError&);
 };
 
 }  // namespace blink

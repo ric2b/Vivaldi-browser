@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
@@ -20,6 +21,7 @@
 #include "extensions/features/features.h"
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 class ChromeContentBrowserClientParts;
 
@@ -65,7 +67,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const content::MainFunctionParams& parameters) override;
   void PostAfterStartupTask(const tracked_objects::Location& from_here,
                             const scoped_refptr<base::TaskRunner>& task_runner,
-                            const base::Closure& task) override;
+                            base::OnceClosure task) override;
   bool IsBrowserStartupComplete() override;
   std::string GetStoragePartitionIdForSite(
       content::BrowserContext* browser_context,
@@ -222,7 +224,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                            content::WebPreferences* prefs) override;
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
   void ClearCache(content::RenderFrameHost* rfh) override;
-  void ClearCookies(content::RenderFrameHost* rfh) override;
   void ClearSiteData(content::BrowserContext* browser_context,
                      const url::Origin& origin,
                      bool remove_cookies,
@@ -282,7 +283,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       int sandbox_type) const override;
 #endif
   void ExposeInterfacesToRenderer(
-      service_manager::InterfaceRegistry* registry,
+      service_manager::BinderRegistry* registry,
       content::RenderProcessHost* render_process_host) override;
   void ExposeInterfacesToMediaService(
       service_manager::InterfaceRegistry* registry,
@@ -290,9 +291,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void RegisterRenderFrameMojoInterfaces(
       service_manager::InterfaceRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
-  void ExposeInterfacesToGpuProcess(
-      service_manager::InterfaceRegistry* registry,
-      content::GpuProcessHost* render_process_host) override;
+  void BindInterfaceRequest(
+      const service_manager::ServiceInfo& source_info,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
   void RegisterOutOfProcessServices(
       OutOfProcessServiceMap* services) override;
@@ -325,10 +327,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                           media::mojom::RemoterRequest request) final;
 #endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
 
-  void GetTaskSchedulerInitializationParams(
-      std::vector<base::SchedulerWorkerPoolParams>* params_vector,
-      base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
-          index_to_traits_callback) override;
+  std::unique_ptr<base::TaskScheduler::InitParams> GetTaskSchedulerInitParams()
+      override;
   void PerformExperimentalTaskSchedulerRedirections() override;
   bool ShouldRedirectDOMStorageTaskRunner() override;
   bool RedirectNonUINonIOBrowserThreadsToTaskScheduler() override;
@@ -384,6 +384,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   // Vector of additional ChromeContentBrowserClientParts.
   // Parts are deleted in the reverse order they are added.
   std::vector<ChromeContentBrowserClientParts*> extra_parts_;
+
+  service_manager::BinderRegistry gpu_binder_registry_;
 
   base::WeakPtrFactory<ChromeContentBrowserClient> weak_factory_;
 

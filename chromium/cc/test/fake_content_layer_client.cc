@@ -6,11 +6,11 @@
 
 #include <stddef.h>
 
+#include "cc/paint/clip_display_item.h"
+#include "cc/paint/drawing_display_item.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_recorder.h"
-#include "cc/playback/clip_display_item.h"
-#include "cc/playback/drawing_display_item.h"
-#include "cc/playback/transform_display_item.h"
+#include "cc/paint/transform_display_item.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
 
@@ -71,8 +71,7 @@ FakeContentLayerClient::PaintContentsToDisplayList(
     }
     PaintCanvas* canvas =
         recorder.beginRecording(it->image->width(), it->image->height());
-    canvas->drawImage(it->image.get(), it->point.x(), it->point.y(),
-                      &it->flags);
+    canvas->drawImage(it->image, it->point.x(), it->point.y(), &it->flags);
     display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
         PaintableRegion(), recorder.finishRecordingAsPicture());
     if (!it->transform.IsIdentity()) {

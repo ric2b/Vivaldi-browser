@@ -11,8 +11,6 @@ source_set("gbm") {
   sources = [
     "client_native_pixmap_factory_gbm.cc",
     "client_native_pixmap_factory_gbm.h",
-    "common/client_native_pixmap_dmabuf.cc",
-    "common/client_native_pixmap_dmabuf.h",
     "common/drm_util.cc",
     "common/drm_util.h",
     "common/scoped_drm_types.cc",
@@ -136,7 +134,6 @@ source_set("gbm") {
     "//ui/gl",
     "//ui/ozone:ozone_base",
     "//ui/ozone/common",
-    "//ui/ozone/gl",
     "//ui/ozone/public/interfaces",
     "//ui/platform_window",
   ]

@@ -213,6 +213,11 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // to this window.
   bool HasChildRenderingWindow();
 
+  void set_is_translucent(bool is_translucent) {
+    is_translucent_ = is_translucent;
+  }
+  bool is_translucent() const { return is_translucent_; }
+
  private:
   typedef std::set<DWORD> TouchIDs;
   enum class DwmFrameState { OFF, ON };
@@ -235,7 +240,10 @@ class VIEWS_EXPORT HWNDMessageHandler :
                              WPARAM w_param,
                              LPARAM l_param,
                              bool* handled) override;
-
+  LRESULT HandlePointerMessage(unsigned int message,
+                               WPARAM w_param,
+                               LPARAM l_param,
+                               bool* handled) override;
   LRESULT HandleScrollMessage(unsigned int message,
                               WPARAM w_param,
                               LPARAM l_param,
@@ -358,6 +366,11 @@ class VIEWS_EXPORT HWNDMessageHandler :
 
     // Pointer events.
     CR_MESSAGE_HANDLER_EX(WM_POINTERACTIVATE, OnPointerActivate)
+    CR_MESSAGE_HANDLER_EX(WM_POINTERDOWN, OnPointerEvent)
+    CR_MESSAGE_HANDLER_EX(WM_POINTERUP, OnPointerEvent)
+    CR_MESSAGE_HANDLER_EX(WM_POINTERUPDATE, OnPointerEvent)
+    CR_MESSAGE_HANDLER_EX(WM_POINTERENTER, OnPointerEvent)
+    CR_MESSAGE_HANDLER_EX(WM_POINTERLEAVE, OnPointerEvent)
 
     // Key events.
     CR_MESSAGE_HANDLER_EX(WM_KEYDOWN, OnKeyEvent)
@@ -460,6 +473,7 @@ class VIEWS_EXPORT HWNDMessageHandler :
   LRESULT OnMouseActivate(UINT message, WPARAM w_param, LPARAM l_param);
   LRESULT OnMouseRange(UINT message, WPARAM w_param, LPARAM l_param);
   LRESULT OnPointerActivate(UINT message, WPARAM w_param, LPARAM l_param);
+  LRESULT OnPointerEvent(UINT message, WPARAM w_param, LPARAM l_param);
   void OnMove(const gfx::Point& point);
   void OnMoving(UINT param, const RECT* new_bounds);
   LRESULT OnNCActivate(UINT message, WPARAM w_param, LPARAM l_param);
@@ -697,11 +711,16 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // fullscreen window which lost activation. Defaults to false.
   bool background_fullscreen_hack_;
 
+  // True if the window should have no border and its contents should be
+  // partially or fully transparent.
+  bool is_translucent_ = false;
+
   // This is a map of the HMONITOR to full screeen window instance. It is safe
   // to keep a raw pointer to the HWNDMessageHandler instance as we track the
   // window destruction and ensure that the map is cleaned up.
   using FullscreenWindowMonitorMap = std::map<HMONITOR, HWNDMessageHandler*>;
-  static base::LazyInstance<FullscreenWindowMonitorMap> fullscreen_monitor_map_;
+  static base::LazyInstance<FullscreenWindowMonitorMap>::DestructorAtExit
+      fullscreen_monitor_map_;
 
   // The WeakPtrFactories below must occur last in the class definition so they
   // get destroyed last.

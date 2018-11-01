@@ -8,6 +8,7 @@ group("all_tests") {
   testonly = true
   deps = [
     ":ios_chrome_device_check_egtests",
+    ":ios_chrome_external_url_egtests",
     ":ios_chrome_flaky_egtests",
     ":ios_chrome_integration_egtests",
     ":ios_chrome_multitasking_egtests",
@@ -135,6 +136,12 @@ chrome_ios_eg_test("ios_chrome_smoke_egtests") {
   libs = [ "XCTest.framework" ]
 }
 
+chrome_ios_eg_test("ios_chrome_external_url_egtests") {
+  deps = [
+    "//ios/chrome/browser/metrics:external_url_eg_tests",
+  ]
+}
+
 source_set("test_support") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
@@ -153,8 +160,6 @@ source_set("test_support") {
     "chrome_matchers.mm",
     "chrome_test_case.h",
     "chrome_test_case.mm",
-    "chrome_util.h",
-    "chrome_util.mm",
   ]
 
   deps = [
@@ -164,17 +169,20 @@ source_set("test_support") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view/cells",
+    "//ios/chrome/browser/ui/commands:commands",
     "//ios/chrome/browser/ui/omnibox:omnibox_internal",
     "//ios/chrome/browser/ui/static_content",
     "//ios/chrome/browser/ui/toolbar",
     "//ios/chrome/browser/ui/tools_menu",
     "//ios/chrome/test/app:test_support",
     "//ios/testing:ios_test_support",
+    "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/material_components_ios",
     "//ios/web",
     "//ios/web:earl_grey_test_support",
     "//ios/web:test_support",
     "//ui/base",
+    "//ui/base:test_support",
     "//url",
   ]
 

@@ -544,13 +544,15 @@ void UserImageManagerImpl::Job::UpdateLocalState() {
     return;
 
   std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
-  entry->Set(kImagePathNodeName, new base::StringValue(image_path_.value()));
-  entry->Set(kImageIndexNodeName, new base::Value(image_index_));
+  entry->Set(kImagePathNodeName,
+             base::MakeUnique<base::Value>(image_path_.value()));
+  entry->Set(kImageIndexNodeName, base::MakeUnique<base::Value>(image_index_));
   if (!image_url_.is_empty())
-    entry->Set(kImageURLNodeName, new base::StringValue(image_url_.spec()));
+    entry->Set(kImageURLNodeName,
+               base::MakeUnique<base::Value>(image_url_.spec()));
   DictionaryPrefUpdate update(g_browser_process->local_state(),
                               kUserImageProperties);
-  update->SetWithoutPathExpansion(user_id(), entry.release());
+  update->SetWithoutPathExpansion(user_id(), std::move(entry));
 
   parent_->user_manager_->NotifyLocalStateChanged();
 }
@@ -646,9 +648,9 @@ void UserImageManagerImpl::UserLoggedIn(bool user_is_new,
     if (!user_is_local)
       SetInitialUserImage();
   } else {
-    UMA_HISTOGRAM_ENUMERATION("UserImage.LoggedIn",
-                              ImageIndexToHistogramIndex(user->image_index()),
-                              default_user_image::kHistogramImagesCount);
+    UMA_HISTOGRAM_EXACT_LINEAR("UserImage.LoggedIn",
+                               ImageIndexToHistogramIndex(user->image_index()),
+                               default_user_image::kHistogramImagesCount);
   }
 
   // Reset the downloaded profile image as a new user logged in.

@@ -15,20 +15,17 @@
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 
-using base::StringPiece;
 using std::string;
 
 namespace net {
-
+namespace test {
 namespace {
 
 char* AsChars(unsigned char* data) {
   return reinterpret_cast<char*>(data);
 }
 
-}  // namespace
-
-namespace test {
+class CryptoFramerTest : public ::testing::TestWithParam<Perspective> {};
 
 class TestCryptoVisitor : public CryptoFramerVisitorInterface {
  public:
@@ -49,7 +46,7 @@ class TestCryptoVisitor : public CryptoFramerVisitorInterface {
   std::vector<CryptoHandshakeMessage> messages_;
 };
 
-TEST(CryptoFramerTest, ConstructHandshakeMessage) {
+TEST_P(CryptoFramerTest, ConstructHandshakeMessage) {
   CryptoHandshakeMessage message;
   message.set_tag(0xFFAA7733);
   message.SetStringPiece(0x12345678, "abcdef");
@@ -84,14 +81,15 @@ TEST(CryptoFramerTest, ConstructHandshakeMessage) {
   };
 
   CryptoFramer framer;
-  std::unique_ptr<QuicData> data(framer.ConstructHandshakeMessage(message));
+  std::unique_ptr<QuicData> data(
+      framer.ConstructHandshakeMessage(message, GetParam()));
   ASSERT_TRUE(data.get() != nullptr);
   test::CompareCharArraysWithHexError("constructed packet", data->data(),
                                       data->length(), AsChars(packet),
                                       arraysize(packet));
 }
 
-TEST(CryptoFramerTest, ConstructHandshakeMessageWithTwoKeys) {
+TEST_P(CryptoFramerTest, ConstructHandshakeMessageWithTwoKeys) {
   CryptoHandshakeMessage message;
   message.set_tag(0xFFAA7733);
   message.SetStringPiece(0x12345678, "abcdef");
@@ -119,7 +117,8 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageWithTwoKeys) {
   };
 
   CryptoFramer framer;
-  std::unique_ptr<QuicData> data(framer.ConstructHandshakeMessage(message));
+  std::unique_ptr<QuicData> data(
+      framer.ConstructHandshakeMessage(message, GetParam()));
   ASSERT_TRUE(data.get() != nullptr);
 
   test::CompareCharArraysWithHexError("constructed packet", data->data(),
@@ -127,7 +126,7 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageWithTwoKeys) {
                                       arraysize(packet));
 }
 
-TEST(CryptoFramerTest, ConstructHandshakeMessageZeroLength) {
+TEST_P(CryptoFramerTest, ConstructHandshakeMessageZeroLength) {
   CryptoHandshakeMessage message;
   message.set_tag(0xFFAA7733);
   message.SetStringPiece(0x12345678, "");
@@ -146,7 +145,8 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageZeroLength) {
   };
 
   CryptoFramer framer;
-  std::unique_ptr<QuicData> data(framer.ConstructHandshakeMessage(message));
+  std::unique_ptr<QuicData> data(
+      framer.ConstructHandshakeMessage(message, GetParam()));
   ASSERT_TRUE(data.get() != nullptr);
 
   test::CompareCharArraysWithHexError("constructed packet", data->data(),
@@ -154,7 +154,7 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageZeroLength) {
                                       arraysize(packet));
 }
 
-TEST(CryptoFramerTest, ConstructHandshakeMessageTooManyEntries) {
+TEST_P(CryptoFramerTest, ConstructHandshakeMessageTooManyEntries) {
   CryptoHandshakeMessage message;
   message.set_tag(0xFFAA7733);
   for (uint32_t key = 1; key <= kMaxEntries + 1; ++key) {
@@ -162,11 +162,12 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageTooManyEntries) {
   }
 
   CryptoFramer framer;
-  std::unique_ptr<QuicData> data(framer.ConstructHandshakeMessage(message));
+  std::unique_ptr<QuicData> data(
+      framer.ConstructHandshakeMessage(message, GetParam()));
   EXPECT_TRUE(data.get() == nullptr);
 }
 
-TEST(CryptoFramerTest, ConstructHandshakeMessageMinimumSize) {
+TEST_P(CryptoFramerTest, ConstructHandshakeMessageMinimumSize) {
   CryptoHandshakeMessage message;
   message.set_tag(0xFFAA7733);
   message.SetStringPiece(0x01020304, "test");
@@ -196,7 +197,8 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageMinimumSize) {
   };
 
   CryptoFramer framer;
-  std::unique_ptr<QuicData> data(framer.ConstructHandshakeMessage(message));
+  std::unique_ptr<QuicData> data(
+      framer.ConstructHandshakeMessage(message, GetParam()));
   ASSERT_TRUE(data.get() != nullptr);
 
   test::CompareCharArraysWithHexError("constructed packet", data->data(),
@@ -204,7 +206,7 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageMinimumSize) {
                                       arraysize(packet));
 }
 
-TEST(CryptoFramerTest, ConstructHandshakeMessageMinimumSizePadLast) {
+TEST_P(CryptoFramerTest, ConstructHandshakeMessageMinimumSizePadLast) {
   CryptoHandshakeMessage message;
   message.set_tag(0xFFAA7733);
   message.SetStringPiece(1, "");
@@ -232,7 +234,8 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageMinimumSizePadLast) {
   };
 
   CryptoFramer framer;
-  std::unique_ptr<QuicData> data(framer.ConstructHandshakeMessage(message));
+  std::unique_ptr<QuicData> data(
+      framer.ConstructHandshakeMessage(message, GetParam()));
   ASSERT_TRUE(data.get() != nullptr);
 
   test::CompareCharArraysWithHexError("constructed packet", data->data(),
@@ -240,7 +243,7 @@ TEST(CryptoFramerTest, ConstructHandshakeMessageMinimumSizePadLast) {
                                       arraysize(packet));
 }
 
-TEST(CryptoFramerTest, ProcessInput) {
+TEST_P(CryptoFramerTest, ProcessInput) {
   test::TestCryptoVisitor visitor;
   CryptoFramer framer;
   framer.set_visitor(&visitor);
@@ -266,8 +269,8 @@ TEST(CryptoFramerTest, ProcessInput) {
       'g', 'h', 'i', 'j', 'k',
   };
 
-  EXPECT_TRUE(
-      framer.ProcessInput(StringPiece(AsChars(input), arraysize(input))));
+  EXPECT_TRUE(framer.ProcessInput(
+      QuicStringPiece(AsChars(input), arraysize(input)), GetParam()));
   EXPECT_EQ(0u, framer.InputBytesRemaining());
   EXPECT_EQ(0, visitor.error_count_);
   ASSERT_EQ(1u, visitor.messages_.size());
@@ -278,7 +281,7 @@ TEST(CryptoFramerTest, ProcessInput) {
   EXPECT_EQ("ghijk", crypto_test_utils::GetValueForTag(message, 0x12345679));
 }
 
-TEST(CryptoFramerTest, ProcessInputWithThreeKeys) {
+TEST_P(CryptoFramerTest, ProcessInputWithThreeKeys) {
   test::TestCryptoVisitor visitor;
   CryptoFramer framer;
   framer.set_visitor(&visitor);
@@ -310,8 +313,8 @@ TEST(CryptoFramerTest, ProcessInputWithThreeKeys) {
       'l', 'm', 'n', 'o', 'p', 'q', 'r',
   };
 
-  EXPECT_TRUE(
-      framer.ProcessInput(StringPiece(AsChars(input), arraysize(input))));
+  EXPECT_TRUE(framer.ProcessInput(
+      QuicStringPiece(AsChars(input), arraysize(input)), GetParam()));
   EXPECT_EQ(0u, framer.InputBytesRemaining());
   EXPECT_EQ(0, visitor.error_count_);
   ASSERT_EQ(1u, visitor.messages_.size());
@@ -323,7 +326,7 @@ TEST(CryptoFramerTest, ProcessInputWithThreeKeys) {
   EXPECT_EQ("lmnopqr", crypto_test_utils::GetValueForTag(message, 0x1234567A));
 }
 
-TEST(CryptoFramerTest, ProcessInputIncrementally) {
+TEST_P(CryptoFramerTest, ProcessInputIncrementally) {
   test::TestCryptoVisitor visitor;
   CryptoFramer framer;
   framer.set_visitor(&visitor);
@@ -350,7 +353,8 @@ TEST(CryptoFramerTest, ProcessInputIncrementally) {
   };
 
   for (size_t i = 0; i < arraysize(input); i++) {
-    EXPECT_TRUE(framer.ProcessInput(StringPiece(AsChars(input) + i, 1)));
+    EXPECT_TRUE(framer.ProcessInput(QuicStringPiece(AsChars(input) + i, 1),
+                                    GetParam()));
   }
   EXPECT_EQ(0u, framer.InputBytesRemaining());
   ASSERT_EQ(1u, visitor.messages_.size());
@@ -361,7 +365,7 @@ TEST(CryptoFramerTest, ProcessInputIncrementally) {
   EXPECT_EQ("ghijk", crypto_test_utils::GetValueForTag(message, 0x12345679));
 }
 
-TEST(CryptoFramerTest, ProcessInputTagsOutOfOrder) {
+TEST_P(CryptoFramerTest, ProcessInputTagsOutOfOrder) {
   test::TestCryptoVisitor visitor;
   CryptoFramer framer;
   framer.set_visitor(&visitor);
@@ -383,13 +387,13 @@ TEST(CryptoFramerTest, ProcessInputTagsOutOfOrder) {
       0x02, 0x00, 0x00, 0x00,
   };
 
-  EXPECT_FALSE(
-      framer.ProcessInput(StringPiece(AsChars(input), arraysize(input))));
+  EXPECT_FALSE(framer.ProcessInput(
+      QuicStringPiece(AsChars(input), arraysize(input)), GetParam()));
   EXPECT_EQ(QUIC_CRYPTO_TAGS_OUT_OF_ORDER, framer.error());
   EXPECT_EQ(1, visitor.error_count_);
 }
 
-TEST(CryptoFramerTest, ProcessEndOffsetsOutOfOrder) {
+TEST_P(CryptoFramerTest, ProcessEndOffsetsOutOfOrder) {
   test::TestCryptoVisitor visitor;
   CryptoFramer framer;
   framer.set_visitor(&visitor);
@@ -411,13 +415,13 @@ TEST(CryptoFramerTest, ProcessEndOffsetsOutOfOrder) {
       0x00, 0x00, 0x00, 0x00,
   };
 
-  EXPECT_FALSE(
-      framer.ProcessInput(StringPiece(AsChars(input), arraysize(input))));
+  EXPECT_FALSE(framer.ProcessInput(
+      QuicStringPiece(AsChars(input), arraysize(input)), GetParam()));
   EXPECT_EQ(QUIC_CRYPTO_TAGS_OUT_OF_ORDER, framer.error());
   EXPECT_EQ(1, visitor.error_count_);
 }
 
-TEST(CryptoFramerTest, ProcessInputTooManyEntries) {
+TEST_P(CryptoFramerTest, ProcessInputTooManyEntries) {
   test::TestCryptoVisitor visitor;
   CryptoFramer framer;
   framer.set_visitor(&visitor);
@@ -431,13 +435,13 @@ TEST(CryptoFramerTest, ProcessInputTooManyEntries) {
       0x00, 0x00,
   };
 
-  EXPECT_FALSE(
-      framer.ProcessInput(StringPiece(AsChars(input), arraysize(input))));
+  EXPECT_FALSE(framer.ProcessInput(
+      QuicStringPiece(AsChars(input), arraysize(input)), GetParam()));
   EXPECT_EQ(QUIC_CRYPTO_TOO_MANY_ENTRIES, framer.error());
   EXPECT_EQ(1, visitor.error_count_);
 }
 
-TEST(CryptoFramerTest, ProcessInputZeroLength) {
+TEST_P(CryptoFramerTest, ProcessInputZeroLength) {
   test::TestCryptoVisitor visitor;
   CryptoFramer framer;
   framer.set_visitor(&visitor);
@@ -459,11 +463,11 @@ TEST(CryptoFramerTest, ProcessInputZeroLength) {
       0x05, 0x00, 0x00, 0x00,
   };
 
-  EXPECT_TRUE(
-      framer.ProcessInput(StringPiece(AsChars(input), arraysize(input))));
+  EXPECT_TRUE(framer.ProcessInput(
+      QuicStringPiece(AsChars(input), arraysize(input)), GetParam()));
   EXPECT_EQ(0, visitor.error_count_);
 }
 
+}  // namespace
 }  // namespace test
-
 }  // namespace net

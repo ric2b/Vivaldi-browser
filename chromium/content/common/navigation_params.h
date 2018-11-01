@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "content/common/content_security_policy/csp_disposition_enum.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/resource_request_body_impl.h"
 #include "content/public/common/page_state.h"
@@ -35,6 +36,21 @@ namespace content {
 // to the network stack. A request should not be sent for JavaScript URLs or
 // about:blank. In these cases, no request needs to be sent.
 bool CONTENT_EXPORT ShouldMakeNetworkRequestForURL(const GURL& url);
+
+// PlzNavigate
+// Struct keeping track of the Javascript SourceLocation that triggered the
+// navigation. This is initialized based on information from Blink at the start
+// of navigation, and passed back to Blink when the navigation commits.
+struct CONTENT_EXPORT SourceLocation {
+  SourceLocation();
+  SourceLocation(const std::string& url,
+                 unsigned int line_number,
+                 unsigned int column_number);
+  ~SourceLocation();
+  std::string url;
+  unsigned int line_number;
+  unsigned int column_number;
+};
 
 // The following structures hold parameters used during a navigation. In
 // particular they are used by FrameMsg_Navigate, FrameMsg_CommitNavigation and
@@ -59,7 +75,9 @@ struct CONTENT_EXPORT CommonNavigationParams {
       PreviewsState previews_state,
       const base::TimeTicks& navigation_start,
       std::string method,
-      const scoped_refptr<ResourceRequestBodyImpl>& post_data);
+      const scoped_refptr<ResourceRequestBodyImpl>& post_data,
+      base::Optional<SourceLocation> source_location,
+      CSPDisposition should_check_main_world_csp);
   CommonNavigationParams(const CommonNavigationParams& other);
   ~CommonNavigationParams();
 
@@ -120,6 +138,21 @@ struct CONTENT_EXPORT CommonNavigationParams {
 
   // Body of HTTP POST request.
   scoped_refptr<ResourceRequestBodyImpl> post_data;
+
+  // PlzNavigate
+  // Information about the Javascript source for this navigation. Used for
+  // providing information in console error messages triggered by the
+  // navigation. If the navigation was not caused by Javascript, this should
+  // not be set.
+  base::Optional<SourceLocation> source_location;
+
+  // Whether or not the CSP of the main world should apply. When the navigation
+  // is initiated from a content script in an isolated world, the CSP defined
+  // in the main world should not apply.
+  // TODO(arthursonzogni): Instead of this boolean, the origin of the isolated
+  // world which has initiated the navigation should be passed.
+  // See https://crbug.com/702540
+  CSPDisposition should_check_main_world_csp;
 };
 
 // Provided by the renderer ----------------------------------------------------
@@ -142,6 +175,7 @@ struct CONTENT_EXPORT BeginNavigationParams {
       bool skip_service_worker,
       RequestContextType request_context_type,
       blink::WebMixedContentContextType mixed_content_context_type,
+      bool is_form_submission,
       const base::Optional<url::Origin>& initiator_origin);
   BeginNavigationParams(const BeginNavigationParams& other);
   ~BeginNavigationParams();
@@ -163,6 +197,9 @@ struct CONTENT_EXPORT BeginNavigationParams {
 
   // The mixed content context type for potential mixed content checks.
   blink::WebMixedContentContextType mixed_content_context_type;
+
+  // Whether or not the navigation has been initiated by a form submission.
+  bool is_form_submission;
 
   // See WebSearchableFormData for a description of these.
   GURL searchable_form_url;

@@ -8,6 +8,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "media/base/video_color_space.h"
 
 namespace media {
 
@@ -96,28 +97,38 @@ std::string GetProfileName(VideoCodecProfile profile) {
 
 bool ParseNewStyleVp9CodecID(const std::string& codec_id,
                              VideoCodecProfile* profile,
-                             uint8_t* level_idc) {
+                             uint8_t* level_idc,
+                             VideoColorSpace* color_space) {
+  // Initialize optional fields to their defaults.
+  *color_space = VideoColorSpace::REC709();
+
   std::vector<std::string> fields = base::SplitString(
       codec_id, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
 
-  // TODO(kqyang): The spec specifies 8 fields. We do not allow missing or extra
-  // fields. See crbug.com/667834.
-  if (fields.size() != 8)
+  // First four fields are mandatory. No more than 9 fields are expected.
+  if (fields.size() < 4 || fields.size() > 9) {
+    DVLOG(3) << __func__ << " Invalid number of fields (" << fields.size()
+             << ")";
     return false;
+  }
 
-  if (fields[0] != "vp09")
+  if (fields[0] != "vp09") {
+    DVLOG(3) << __func__ << " Invalid 4CC (" << fields[0] << ")";
     return false;
+  }
 
   std::vector<int> values;
   for (size_t i = 1; i < fields.size(); ++i) {
     // Missing value is not allowed.
-    if (fields[i] == "")
+    if (fields[i] == "") {
+      DVLOG(3) << __func__ << " Invalid missing field (position:" << i << ")";
       return false;
+    }
     int value;
-    if (!base::StringToInt(fields[i], &value))
+    if (!base::StringToInt(fields[i], &value) || value < 0) {
+      DVLOG(3) << __func__ << " Invalid field value (" << value << ")";
       return false;
-    if (value < 0)
-      return false;
+    }
     values.push_back(value);
   }
 
@@ -136,31 +147,88 @@ bool ParseNewStyleVp9CodecID(const std::string& codec_id,
       *profile = VP9PROFILE_PROFILE3;
       break;
     default:
+      DVLOG(3) << __func__ << " Invalid profile (" << profile_idc << ")";
       return false;
   }
 
   *level_idc = values[1];
-  // TODO(kqyang): Check if |level_idc| is valid. See crbug.com/667834.
+  switch (*level_idc) {
+    case 10:
+    case 11:
+    case 20:
+    case 21:
+    case 30:
+    case 31:
+    case 40:
+    case 41:
+    case 50:
+    case 51:
+    case 52:
+    case 60:
+    case 61:
+    case 62:
+      break;
+    default:
+      DVLOG(3) << __func__ << " Invalid level (" << *level_idc << ")";
+      return false;
+  }
 
   const int bit_depth = values[2];
-  if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12)
+  if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
+    DVLOG(3) << __func__ << " Invalid bit-depth (" << bit_depth << ")";
     return false;
+  }
 
-  const int color_space = values[3];
-  if (color_space > 7)
+  if (values.size() < 4)
+    return true;
+  const int chroma_subsampling = values[3];
+  if (chroma_subsampling > 3) {
+    DVLOG(3) << __func__ << " Invalid chroma subsampling ("
+             << chroma_subsampling << ")";
     return false;
+  }
 
-  const int chroma_subsampling = values[4];
-  if (chroma_subsampling > 3)
+  if (values.size() < 5)
+    return true;
+  color_space->primaries = VideoColorSpace::GetPrimaryID(values[4]);
+  if (color_space->primaries == VideoColorSpace::PrimaryID::INVALID) {
+    DVLOG(3) << __func__ << " Invalid color primaries (" << values[4] << ")";
     return false;
+  }
 
-  const int transfer_function = values[5];
-  if (transfer_function > 1)
+  if (values.size() < 6)
+    return true;
+  color_space->transfer = VideoColorSpace::GetTransferID(values[5]);
+  if (color_space->transfer == VideoColorSpace::TransferID::INVALID) {
+    DVLOG(3) << __func__ << " Invalid transfer function (" << values[5] << ")";
     return false;
+  }
 
-  const int video_full_range_flag = values[6];
-  if (video_full_range_flag > 1)
+  if (values.size() < 7)
+    return true;
+  color_space->matrix = VideoColorSpace::GetMatrixID(values[6]);
+  if (color_space->matrix == VideoColorSpace::MatrixID::INVALID) {
+    DVLOG(3) << __func__ << " Invalid matrix coefficients (" << values[6]
+             << ")";
     return false;
+  }
+  if (color_space->matrix == VideoColorSpace::MatrixID::RGB &&
+      chroma_subsampling != 3) {
+    DVLOG(3) << __func__ << " Invalid combination of chroma_subsampling ("
+             << ") and matrix coefficients (" << values[6] << ")";
+  }
+
+  if (values.size() < 8)
+    return true;
+  const int video_full_range_flag = values[7];
+  if (video_full_range_flag > 1) {
+    DVLOG(3) << __func__ << " Invalid full range flag ("
+             << video_full_range_flag << ")";
+    return false;
+  }
+  color_space->range = video_full_range_flag == 1
+                           ? gfx::ColorSpace::RangeID::FULL
+                           : gfx::ColorSpace::RangeID::LIMITED;
 
   return true;
 }
@@ -532,11 +600,14 @@ VideoCodec StringToVideoCodec(const std::string& codec_id) {
       codec_id, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (elem.empty())
     return kUnknownVideoCodec;
+
   VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
   uint8_t level = 0;
+  VideoColorSpace color_space;
+
   if (codec_id == "vp8" || codec_id == "vp8.0")
     return kCodecVP8;
-  if (ParseNewStyleVp9CodecID(codec_id, &profile, &level) ||
+  if (ParseNewStyleVp9CodecID(codec_id, &profile, &level, &color_space) ||
       ParseLegacyVp9CodecID(codec_id, &profile, &level)) {
     return kCodecVP9;
   }

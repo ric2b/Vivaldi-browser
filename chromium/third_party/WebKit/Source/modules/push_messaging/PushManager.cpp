@@ -19,104 +19,104 @@
 #include "modules/push_messaging/PushSubscriptionOptions.h"
 #include "modules/push_messaging/PushSubscriptionOptionsInit.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 #include "public/platform/modules/push_messaging/WebPushClient.h"
 #include "public/platform/modules/push_messaging/WebPushProvider.h"
 #include "public/platform/modules/push_messaging/WebPushSubscriptionOptions.h"
-#include "wtf/Assertions.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 namespace {
 
-WebPushProvider* pushProvider() {
-  WebPushProvider* webPushProvider = Platform::current()->pushProvider();
-  DCHECK(webPushProvider);
-  return webPushProvider;
+WebPushProvider* PushProvider() {
+  WebPushProvider* web_push_provider = Platform::Current()->PushProvider();
+  DCHECK(web_push_provider);
+  return web_push_provider;
 }
 
 }  // namespace
 
 PushManager::PushManager(ServiceWorkerRegistration* registration)
-    : m_registration(registration) {
+    : registration_(registration) {
   DCHECK(registration);
 }
 
-ScriptPromise PushManager::subscribe(ScriptState* scriptState,
+ScriptPromise PushManager::subscribe(ScriptState* script_state,
                                      const PushSubscriptionOptionsInit& options,
-                                     ExceptionState& exceptionState) {
-  if (!m_registration->active())
-    return ScriptPromise::rejectWithDOMException(
-        scriptState,
-        DOMException::create(AbortError,
+                                     ExceptionState& exception_state) {
+  if (!registration_->active())
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        DOMException::Create(kAbortError,
                              "Subscription failed - no active Service Worker"));
 
-  const WebPushSubscriptionOptions& webOptions =
-      PushSubscriptionOptions::toWeb(options, exceptionState);
-  if (exceptionState.hadException())
+  const WebPushSubscriptionOptions& web_options =
+      PushSubscriptionOptions::ToWeb(options, exception_state);
+  if (exception_state.HadException())
     return ScriptPromise();
 
-  ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  ScriptPromise promise = resolver->promise();
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  ScriptPromise promise = resolver->Promise();
 
   // The document context is the only reasonable context from which to ask the
   // user for permission to use the Push API. The embedder should persist the
   // permission so that later calls in different contexts can succeed.
-  if (scriptState->getExecutionContext()->isDocument()) {
-    Document* document = toDocument(scriptState->getExecutionContext());
-    if (!document->domWindow() || !document->frame())
-      return ScriptPromise::rejectWithDOMException(
-          scriptState,
-          DOMException::create(InvalidStateError,
+  if (ExecutionContext::From(script_state)->IsDocument()) {
+    Document* document = ToDocument(ExecutionContext::From(script_state));
+    if (!document->domWindow() || !document->GetFrame())
+      return ScriptPromise::RejectWithDOMException(
+          script_state,
+          DOMException::Create(kInvalidStateError,
                                "Document is detached from window."));
-    PushController::clientFrom(document->frame())
-        .subscribe(m_registration->webRegistration(), webOptions,
-                   WTF::makeUnique<PushSubscriptionCallbacks>(resolver,
-                                                              m_registration));
+    PushController::ClientFrom(document->GetFrame())
+        .Subscribe(registration_->WebRegistration(), web_options,
+                   WTF::MakeUnique<PushSubscriptionCallbacks>(resolver,
+                                                              registration_));
   } else {
-    pushProvider()->subscribe(
-        m_registration->webRegistration(), webOptions,
-        WTF::makeUnique<PushSubscriptionCallbacks>(resolver, m_registration));
+    PushProvider()->Subscribe(
+        registration_->WebRegistration(), web_options,
+        WTF::MakeUnique<PushSubscriptionCallbacks>(resolver, registration_));
   }
 
   return promise;
 }
 
-ScriptPromise PushManager::getSubscription(ScriptState* scriptState) {
-  ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  ScriptPromise promise = resolver->promise();
+ScriptPromise PushManager::getSubscription(ScriptState* script_state) {
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  ScriptPromise promise = resolver->Promise();
 
-  pushProvider()->getSubscription(
-      m_registration->webRegistration(),
-      WTF::makeUnique<PushSubscriptionCallbacks>(resolver, m_registration));
+  PushProvider()->GetSubscription(
+      registration_->WebRegistration(),
+      WTF::MakeUnique<PushSubscriptionCallbacks>(resolver, registration_));
   return promise;
 }
 
 ScriptPromise PushManager::permissionState(
-    ScriptState* scriptState,
+    ScriptState* script_state,
     const PushSubscriptionOptionsInit& options,
-    ExceptionState& exceptionState) {
-  if (scriptState->getExecutionContext()->isDocument()) {
-    Document* document = toDocument(scriptState->getExecutionContext());
-    if (!document->domWindow() || !document->frame())
-      return ScriptPromise::rejectWithDOMException(
-          scriptState,
-          DOMException::create(InvalidStateError,
+    ExceptionState& exception_state) {
+  if (ExecutionContext::From(script_state)->IsDocument()) {
+    Document* document = ToDocument(ExecutionContext::From(script_state));
+    if (!document->domWindow() || !document->GetFrame())
+      return ScriptPromise::RejectWithDOMException(
+          script_state,
+          DOMException::Create(kInvalidStateError,
                                "Document is detached from window."));
   }
 
-  ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  ScriptPromise promise = resolver->promise();
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  ScriptPromise promise = resolver->Promise();
 
-  pushProvider()->getPermissionStatus(
-      m_registration->webRegistration(),
-      PushSubscriptionOptions::toWeb(options, exceptionState),
-      WTF::makeUnique<PushPermissionStatusCallbacks>(resolver));
+  PushProvider()->GetPermissionStatus(
+      registration_->WebRegistration(),
+      PushSubscriptionOptions::ToWeb(options, exception_state),
+      WTF::MakeUnique<PushPermissionStatusCallbacks>(resolver));
   return promise;
 }
 
 DEFINE_TRACE(PushManager) {
-  visitor->trace(m_registration);
+  visitor->Trace(registration_);
 }
 
 }  // namespace blink

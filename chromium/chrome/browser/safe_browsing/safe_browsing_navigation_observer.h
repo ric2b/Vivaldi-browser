@@ -17,8 +17,8 @@ namespace safe_browsing {
 class SafeBrowsingNavigationObserverManager;
 
 // Struct to record the details of a navigation event for any frame.
-// This information will be used to fill |url_chain| field in safe browsing
-// download pings.
+// This information will be used to fill referrer chain info in various Safe
+// Browsing requests and reports.
 struct NavigationEvent {
   NavigationEvent();
   NavigationEvent(NavigationEvent&& nav_event);
@@ -98,6 +98,14 @@ class SafeBrowsingNavigationObserver : public base::SupportsUserData::Data,
       const content::ResourceRequestDetails& details) override;
   void DidGetUserInteraction(const blink::WebInputEvent::Type type) override;
   void WebContentsDestroyed() override;
+  void DidOpenRequestedURL(content::WebContents* new_contents,
+                           content::RenderFrameHost* source_render_frame_host,
+                           const GURL& url,
+                           const content::Referrer& referrer,
+                           WindowOpenDisposition disposition,
+                           ui::PageTransition transition,
+                           bool started_from_context_menu,
+                           bool renderer_initiated) override;
 
   // Map keyed on NavigationHandle* to keep track of all the ongoing navigation
   // events. NavigationHandle pointers are owned by RenderFrameHost. Since a

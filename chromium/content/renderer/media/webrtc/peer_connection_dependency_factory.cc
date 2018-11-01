@@ -261,7 +261,8 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
   factory_options.disable_sctp_data_channels = false;
   factory_options.disable_encryption =
       cmd_line->HasSwitch(switches::kDisableWebRtcEncryption);
-
+  factory_options.crypto_options.enable_gcm_crypto_suites =
+      cmd_line->HasSwitch(switches::kEnableWebRtcSrtpAesGcm);
   pc_factory_->SetOptions(factory_options);
 
   event->Signal();
@@ -310,9 +311,9 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
     port_config.enable_nonproxied_udp = true;
     VLOG(3) << "WebRTC routing preferences will not be enforced";
   } else {
-    if (web_frame && web_frame->view()) {
+    if (web_frame && web_frame->View()) {
       RenderViewImpl* renderer_view_impl =
-          RenderViewImpl::FromWebView(web_frame->view());
+          RenderViewImpl::FromWebView(web_frame->View());
       if (renderer_view_impl) {
         // TODO(guoweis): |enable_multiple_routes| should be renamed to
         // |request_multiple_routes|. Whether local IP addresses could be
@@ -374,7 +375,7 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
   }
 
   const GURL& requesting_origin =
-      GURL(web_frame->document().url()).GetOrigin();
+      GURL(web_frame->GetDocument().Url()).GetOrigin();
 
   std::unique_ptr<rtc::NetworkManager> network_manager;
   if (port_config.enable_multiple_routes) {

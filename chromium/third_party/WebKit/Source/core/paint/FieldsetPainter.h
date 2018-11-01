@@ -5,7 +5,7 @@
 #ifndef FieldsetPainter_h
 #define FieldsetPainter_h
 
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -17,14 +17,14 @@ class FieldsetPainter {
   STACK_ALLOCATED();
 
  public:
-  FieldsetPainter(const LayoutFieldset& layoutFieldset)
-      : m_layoutFieldset(layoutFieldset) {}
+  FieldsetPainter(const LayoutFieldset& layout_fieldset)
+      : layout_fieldset_(layout_fieldset) {}
 
-  void paintBoxDecorationBackground(const PaintInfo&, const LayoutPoint&);
-  void paintMask(const PaintInfo&, const LayoutPoint&);
+  void PaintBoxDecorationBackground(const PaintInfo&, const LayoutPoint&);
+  void PaintMask(const PaintInfo&, const LayoutPoint&);
 
  private:
-  const LayoutFieldset& m_layoutFieldset;
+  const LayoutFieldset& layout_fieldset_;
 };
 
 }  // namespace blink

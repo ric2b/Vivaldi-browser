@@ -22,6 +22,7 @@
 #include "content/public/browser/android/compositor.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/ipc/common/surface_handle.h"
+#include "gpu/vulkan/features.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/android/resources/resource_manager_impl.h"
@@ -43,6 +44,7 @@ class VulkanContextProvider;
 
 namespace content {
 class CompositorClient;
+class FrameSinkManagerHost;
 
 // -----------------------------------------------------------------------------
 // Browser-side compositor that manages a tree of content and UI layers.
@@ -60,6 +62,7 @@ class CONTENT_EXPORT CompositorImpl
   static bool IsInitialized();
 
   static cc::SurfaceManager* GetSurfaceManager();
+  static FrameSinkManagerHost* GetFrameSinkManagerHost();
   static cc::FrameSinkId AllocateFrameSinkId();
 
   // ui::ResourceProvider implementation.
@@ -88,6 +91,8 @@ class CONTENT_EXPORT CompositorImpl
                            const gfx::Vector2dF& elastic_overscroll_delta,
                            float page_scale,
                            float top_controls_delta) override {}
+  void RecordWheelAndTouchScrollingCount(bool has_scrolled_by_wheel,
+                                         bool has_scrolled_by_touch) override {}
   void RequestNewCompositorFrameSink() override;
   void DidInitializeCompositorFrameSink() override;
   void DidFailToInitializeCompositorFrameSink() override;
@@ -96,6 +101,7 @@ class CONTENT_EXPORT CompositorImpl
   void DidCommitAndDrawFrame() override {}
   void DidReceiveCompositorFrameAck() override;
   void DidCompletePageScaleAnimation() override {}
+  bool IsForSubframe() override;
 
   // LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override;
@@ -115,7 +121,7 @@ class CONTENT_EXPORT CompositorImpl
 
   void HandlePendingCompositorFrameSinkRequest();
 
-#if defined(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN)
   void CreateVulkanOutputSurface();
 #endif
   void OnGpuChannelEstablished(

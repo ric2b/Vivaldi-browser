@@ -24,6 +24,7 @@
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_aurax11.h"
+#include "ui/base/layout.h"
 #include "ui/base/x/selection_utils.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/base/x/x11_window_event_manager.h"
@@ -897,11 +898,10 @@ void DesktopDragDropClientAuraX11::OnMouseMovement(
     int flags,
     base::TimeTicks event_time) {
   if (drag_widget_.get()) {
-    display::Display display =
-        display::Screen::GetScreen()->GetDisplayNearestWindow(
-            drag_widget_->GetNativeWindow());
-    gfx::Point scaled_point = gfx::ScaleToRoundedPoint(
-        screen_point, 1.f / display.device_scale_factor());
+    float scale_factor =
+        ui::GetScaleFactorForNativeView(drag_widget_->GetNativeWindow());
+    gfx::Point scaled_point =
+        gfx::ScaleToRoundedPoint(screen_point, 1.f / scale_factor);
     drag_widget_->SetBounds(
         gfx::Rect(scaled_point - drag_widget_offset_, drag_image_size_));
     drag_widget_->StackAtTop();
@@ -1323,7 +1323,10 @@ void DesktopDragDropClientAuraX11::CreateDragWidget(
     const gfx::ImageSkia& image) {
   Widget* widget = new Widget;
   Widget::InitParams params(Widget::InitParams::TYPE_DRAG);
-  params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
+  if (ui::IsCompositingManagerPresent())
+    params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
+  else
+    params.opacity = Widget::InitParams::OPAQUE_WINDOW;
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.accept_events = false;
 
@@ -1333,7 +1336,8 @@ void DesktopDragDropClientAuraX11::CreateDragWidget(
   widget->set_focus_on_creation(false);
   widget->set_frame_type(Widget::FRAME_TYPE_FORCE_NATIVE);
   widget->Init(params);
-  widget->SetOpacity(kDragWidgetOpacity);
+  if (params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW)
+    widget->SetOpacity(kDragWidgetOpacity);
   widget->GetNativeWindow()->SetName("DragWindow");
 
   drag_image_size_ = image.size();

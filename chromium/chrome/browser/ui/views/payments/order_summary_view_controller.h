@@ -7,31 +7,41 @@
 
 #include "base/macros.h"
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
-#include "components/payments/content/payment_request.h"
+#include "components/payments/content/payment_request_spec.h"
+#include "components/payments/content/payment_request_state.h"
+
+namespace views {
+class Button;
+}
 
 namespace payments {
 
-class PaymentRequest;
 class PaymentRequestDialogView;
 
 // The PaymentRequestSheetController subtype for the Order Summary screen of the
 // Payment Request flow.
 class OrderSummaryViewController : public PaymentRequestSheetController,
-                                   public PaymentRequest::Observer {
+                                   public PaymentRequestSpec::Observer,
+                                   public PaymentRequestState::Observer {
  public:
   // Does not take ownership of the arguments, which should outlive this object.
-  OrderSummaryViewController(PaymentRequest* request,
+  OrderSummaryViewController(PaymentRequestSpec* spec,
+                             PaymentRequestState* state,
                              PaymentRequestDialogView* dialog);
   ~OrderSummaryViewController() override;
 
-  // PaymentRequestSheetController:
-  std::unique_ptr<views::View> CreateView() override;
-  std::unique_ptr<views::Button> CreatePrimaryButton() override;
+  // PaymentRequestSpec::Observer:
+  void OnInvalidSpecProvided() override {}
+  void OnSpecUpdated() override;
 
-  // PaymentRequest::Observer:
+  // PaymentRequestState::Observer:
   void OnSelectedInformationChanged() override;
 
  private:
+  // PaymentRequestSheetController:
+  std::unique_ptr<views::Button> CreatePrimaryButton() override;
+  base::string16 GetSheetTitle() override;
+  void FillContentView(views::View* content_view) override;
   void UpdatePayButtonState(bool enabled);
 
   views::Button* pay_button_;

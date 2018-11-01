@@ -15,6 +15,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
@@ -24,16 +25,24 @@
 #include "components/ntp_snippets/category_rankers/category_ranker.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
 #include "components/ntp_snippets/user_classifier.h"
 #include "components/signin/core/browser/signin_manager.h"
 
 class PrefService;
 class PrefRegistrySimple;
 
+namespace favicon {
+class LargeIconService;
+}  // namespace favicon
+
+namespace favicon_base {
+struct LargeIconImageResult;
+}  // namespace favicon_base
+
 namespace ntp_snippets {
 
 class RemoteSuggestionsProvider;
-class RemoteSuggestionsScheduler;
 
 // Retrieves suggestions from a number of ContentSuggestionsProviders and serves
 // them grouped into categories. There can be at most one provider per category.
@@ -50,11 +59,10 @@ class ContentSuggestionsService : public KeyedService,
     // data is then available through |GetSuggestionsForCategory(category)|.
     virtual void OnNewSuggestions(Category category) = 0;
 
-    // Fired when the status of a suggestions category changed. When the status
-    // changes to an unavailable status, the suggestions of the respective
-    // category have been invalidated, which means that they must no longer be
-    // displayed to the user. The UI must immediately clear any suggestions of
-    // that category.
+    // Fired when the status of a suggestions category changed. Note that for
+    // some status changes, the UI must update immediately (e.g. to remove
+    // invalidated suggestions). See comments on the individual CategoryStatus
+    // values for details.
     virtual void OnCategoryStatusChanged(Category category,
                                          CategoryStatus new_status) = 0;
 
@@ -87,11 +95,18 @@ class ContentSuggestionsService : public KeyedService,
     DISABLED,
   };
 
-  ContentSuggestionsService(State state,
-                            SigninManagerBase* signin_manager,
-                            history::HistoryService* history_service,
-                            PrefService* pref_service,
-                            std::unique_ptr<CategoryRanker> category_ranker);
+  ContentSuggestionsService(
+      State state,
+      SigninManagerBase* signin_manager,         // Can be nullptr in unittests.
+      history::HistoryService* history_service,  // Can be nullptr in unittests.
+      // Can be nullptr in unittests.
+      favicon::LargeIconService* large_icon_service,
+      PrefService* pref_service,
+      std::unique_ptr<CategoryRanker> category_ranker,
+      std::unique_ptr<UserClassifier> user_classifier,
+      std::unique_ptr<RemoteSuggestionsScheduler>
+          remote_suggestions_scheduler  // Can be nullptr in unittests.
+      );
   ~ContentSuggestionsService() override;
 
   // Inherited from KeyedService.
@@ -124,6 +139,16 @@ class ContentSuggestionsService : public KeyedService,
   // synchronously.
   void FetchSuggestionImage(const ContentSuggestion::ID& suggestion_id,
                             const ImageFetchedCallback& callback);
+
+  // Fetches the favicon from local cache (if larger than or equal to
+  // |minimum_size_in_pixel|) or from Google server (if there is no icon in the
+  // cache) and returns the results in the callback. If that suggestion doesn't
+  // exist or the fetch fails, the callback gets an empty image. The callback
+  // will not be called synchronously.
+  void FetchSuggestionFavicon(const ContentSuggestion::ID& suggestion_id,
+                              int minimum_size_in_pixel,
+                              int desired_size_in_pixel,
+                              const ImageFetchedCallback& callback);
 
   // Dismisses the suggestion with the given |suggestion_id|, if it exists.
   // This will not trigger an update through the observers (i.e. providers must
@@ -206,6 +231,19 @@ class ContentSuggestionsService : public KeyedService,
   // supports it).
   void ClearDismissedSuggestionsForDebugging(Category category);
 
+  // Enables or disables the remote suggestions provider.
+  void SetRemoteSuggestionsEnabled(bool enabled);
+
+  // Returns true if the remote suggestions provider is enabled.
+  bool AreRemoteSuggestionsEnabled() const;
+
+  // Returns true if the remote provider is managed by an adminstrator's policy.
+  bool AreRemoteSuggestionsManaged() const;
+
+  // Returns true if the remote provider is managed by the guardian/parent of a
+  // child account.
+  bool AreRemoteSuggestionsManagedByCustodian() const;
+
   // The reference to the RemoteSuggestionsProvider provider should
   // only be set by the factory and only used for debugging.
   // TODO(jkrcal) The way we deal with the circular dependency feels wrong.
@@ -222,18 +260,17 @@ class ContentSuggestionsService : public KeyedService,
     return remote_suggestions_provider_;
   }
 
-  // The reference to RemoteSuggestionsScheduler should only be set by the
-  // factory. The interface is suited for informing about external events that
-  // have influence on scheduling remote fetches.
-  void set_remote_suggestions_scheduler(
-      ntp_snippets::RemoteSuggestionsScheduler* remote_suggestions_scheduler) {
-    remote_suggestions_scheduler_ = remote_suggestions_scheduler;
-  }
+  // The interface is suited for informing about external events that have
+  // influence on scheduling remote fetches. Can be nullptr in tests.
   RemoteSuggestionsScheduler* remote_suggestions_scheduler() {
-    return remote_suggestions_scheduler_;
+    return remote_suggestions_scheduler_.get();
   }
 
-  UserClassifier* user_classifier() { return &user_classifier_; }
+  // Can be nullptr in tests.
+  // TODO(jkrcal): The getter is only used from the bridge and from
+  // snippets-internals. Can we get rid of it with the metrics refactoring?
+  UserClassifier* user_classifier() { return user_classifier_.get(); }
+
   CategoryRanker* category_ranker() { return category_ranker_.get(); }
 
  private:
@@ -291,6 +328,23 @@ class ContentSuggestionsService : public KeyedService,
   void RestoreDismissedCategoriesFromPrefs();
   void StoreDismissedCategoriesToPrefs();
 
+  // Get the domain of the suggestion suitable for fetching the favicon.
+  GURL GetFaviconDomain(const ContentSuggestion::ID& suggestion_id);
+  // Callbacks for fetching favicons.
+  void OnGetFaviconFromCacheFinished(
+      const GURL& publisher_url,
+      int minimum_size_in_pixel,
+      int desired_size_in_pixel,
+      const ImageFetchedCallback& callback,
+      bool continue_to_google_server,
+      const favicon_base::LargeIconImageResult& result);
+  void OnGetFaviconFromGoogleServerFinished(
+      const GURL& publisher_url,
+      int minimum_size_in_pixel,
+      int desired_size_in_pixel,
+      const ImageFetchedCallback& callback,
+      bool success);
+
   // Whether the content suggestions feature is enabled.
   State state_;
 
@@ -336,18 +390,23 @@ class ContentSuggestionsService : public KeyedService,
 
   const std::vector<ContentSuggestion> no_suggestions_;
 
+  base::CancelableTaskTracker favicons_task_tracker_;
+
   // Keep a direct reference to this special provider to redirect debugging
   // calls to it. If the RemoteSuggestionsProvider is loaded, it is also present
   // in |providers_|, otherwise this is a nullptr.
   RemoteSuggestionsProvider* remote_suggestions_provider_;
 
-  // Interface for informing about external events that have influence on
-  // scheduling remote fetches. Not owned.
-  RemoteSuggestionsScheduler* remote_suggestions_scheduler_;
+  favicon::LargeIconService* large_icon_service_;
 
   PrefService* pref_service_;
 
-  UserClassifier user_classifier_;
+  // Interface for informing about external events that have influence on
+  // scheduling remote fetches.
+  std::unique_ptr<RemoteSuggestionsScheduler> remote_suggestions_scheduler_;
+
+  // Classifies the user on the basis of long-term user interactions.
+  std::unique_ptr<UserClassifier> user_classifier_;
 
   // Provides order for categories.
   std::unique_ptr<CategoryRanker> category_ranker_;

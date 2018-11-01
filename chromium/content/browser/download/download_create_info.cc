@@ -9,6 +9,7 @@
 #include "base/format_macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "net/http/http_response_headers.h"
 
 namespace content {
 
@@ -20,11 +21,14 @@ DownloadCreateInfo::DownloadCreateInfo(
     : download_id(DownloadItem::kInvalidId),
       start_time(start_time),
       total_bytes(0),
+      offset(0),
       has_user_gesture(false),
+      transient(false),
       result(DOWNLOAD_INTERRUPT_REASON_NONE),
       save_info(std::move(save_info)),
       request_net_log(net_log),
       accept_range(false),
+      connection_info(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN),
       open_when_finished(open_when_done) {}
 
 DownloadCreateInfo::DownloadCreateInfo()

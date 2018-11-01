@@ -6,14 +6,15 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/importer/importer_lock_dialog.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
-#include "content/public/browser/user_metrics.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/layout_constants.h"
@@ -27,7 +28,7 @@ void ShowImportLockDialog(gfx::NativeWindow parent,
                           const base::Callback<void(bool)>& callback,
                           base::string16 importer_locktext) {
   ImportLockDialogView::Show(parent, callback, importer_locktext);
-  content::RecordAction(UserMetricsAction("ImportLockDialogView_Shown"));
+  base::RecordAction(UserMetricsAction("ImportLockDialogView_Shown"));
 }
 
 }  // namespace importer
@@ -60,7 +61,9 @@ gfx::Size ImportLockDialogView::GetPreferredSize() const {
 
 void ImportLockDialogView::Layout() {
   gfx::Rect bounds(GetLocalBounds());
-  bounds.Inset(views::kButtonHEdgeMargin, views::kPanelVertMargin);
+  bounds.Inset(views::kButtonHEdgeMarginNew,
+               ChromeLayoutProvider::Get()->GetDistanceMetric(
+                   DISTANCE_PANEL_CONTENT_MARGIN));
   description_label_->SetBoundsRect(bounds);
 }
 

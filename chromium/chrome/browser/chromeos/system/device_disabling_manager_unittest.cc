@@ -95,6 +95,7 @@ void DeviceDisablingManagerTestBase::CreateDeviceDisablingManager() {
       this,
       CrosSettings::Get(),
       &fake_user_manager_));
+  device_disabling_manager_->Init();
 }
 
 void DeviceDisablingManagerTestBase::DestroyDeviceDisablingManager() {
@@ -110,11 +111,11 @@ void DeviceDisablingManagerTestBase::SetUnowned() {
 }
 
 void DeviceDisablingManagerTestBase::SetEnterpriseOwned() {
-  GetInstallAttributes()->SetEnterprise(kEnrollmentDomain, "fake-id");
+  GetInstallAttributes()->SetCloudManaged(kEnrollmentDomain, "fake-id");
 }
 
 void DeviceDisablingManagerTestBase::SetConsumerOwned() {
-  GetInstallAttributes()->SetConsumer();
+  GetInstallAttributes()->SetConsumerOwned();
 }
 
 chromeos::StubInstallAttributes*

@@ -8,9 +8,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <string>
+#include <map>
+#include <memory>
 
-#include "base/strings/string_piece.h"
+#include "net/spdy/platform/api/spdy_string.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 #include "net/spdy/server_push_delegate.h"
 #include "net/spdy/spdy_bug_tracker.h"
 #include "net/spdy/spdy_header_block.h"
@@ -25,39 +27,40 @@ namespace net {
 class HashValue;
 class TransportSecurityState;
 
-inline bool operator==(base::StringPiece x,
+inline bool operator==(SpdyStringPiece x,
                        const SpdyHeaderBlock::ValueProxy& y) {
   return x == y.as_string();
 }
 
 namespace test {
 
-std::string HexDumpWithMarks(const unsigned char* data, int length,
-                             const bool* marks, int mark_length);
+SpdyString HexDumpWithMarks(const unsigned char* data,
+                            int length,
+                            const bool* marks,
+                            int mark_length);
 
-void CompareCharArraysWithHexError(
-    const std::string& description,
-    const unsigned char* actual,
-    const int actual_len,
-    const unsigned char* expected,
-    const int expected_len);
+void CompareCharArraysWithHexError(const SpdyString& description,
+                                   const unsigned char* actual,
+                                   const int actual_len,
+                                   const unsigned char* expected,
+                                   const int expected_len);
 
 void SetFrameFlags(SpdySerializedFrame* frame, uint8_t flags);
 
 void SetFrameLength(SpdySerializedFrame* frame, size_t length);
 
-std::string a2b_hex(const char* hex_data);
+SpdyString a2b_hex(const char* hex_data);
 
 // Returns a SHA1 HashValue in which each byte has the value |label|.
 HashValue GetTestHashValue(uint8_t label);
 
 // Returns SHA1 pinning header for the of the base64 encoding of
 // GetTestHashValue(|label|).
-std::string GetTestPin(uint8_t label);
+SpdyString GetTestPin(uint8_t label);
 
 // Adds a pin for |host| to |state|.
 void AddPin(TransportSecurityState* state,
-            const std::string& host,
+            const SpdyString& host,
             uint8_t primary_label,
             uint8_t backup_label);
 
@@ -69,7 +72,7 @@ class TestHeadersHandler : public SpdyHeadersHandlerInterface {
 
   void OnHeaderBlockStart() override;
 
-  void OnHeader(base::StringPiece name, base::StringPiece value) override;
+  void OnHeader(SpdyStringPiece name, SpdyStringPiece value) override;
 
   void OnHeaderBlockEnd(size_t header_bytes_parsed) override;
 
@@ -90,7 +93,7 @@ class TestHeadersHandler : public SpdyHeadersHandlerInterface {
 // request and provides a interface to cancel the push given url.
 class TestServerPushDelegate : public ServerPushDelegate {
  public:
-  explicit TestServerPushDelegate();
+  TestServerPushDelegate();
   ~TestServerPushDelegate() override;
 
   void OnPush(std::unique_ptr<ServerPushHelper> push_helper,

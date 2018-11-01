@@ -26,6 +26,7 @@
 
 #include "core/dom/SelectorQuery.h"
 
+#include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/css/SelectorChecker.h"
@@ -34,20 +35,41 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/Node.h"
+#include "core/dom/NthIndexCache.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
 using namespace HTMLNames;
 
+#if DCHECK_IS_ON()
+static SelectorQuery::QueryStats& CurrentQueryStats() {
+  DEFINE_STATIC_LOCAL(SelectorQuery::QueryStats, stats, ());
+  return stats;
+}
+
+SelectorQuery::QueryStats SelectorQuery::LastQueryStats() {
+  return CurrentQueryStats();
+}
+
+#define QUERY_STATS_INCREMENT(name) \
+  (void)(CurrentQueryStats().total_count++, CurrentQueryStats().name++);
+#define QUERY_STATS_RESET() (void)(CurrentQueryStats() = {});
+
+#else
+
+#define QUERY_STATS_INCREMENT(name)
+#define QUERY_STATS_RESET()
+
+#endif
+
 struct SingleElementSelectorQueryTrait {
   typedef Element* OutputType;
-  static const bool shouldOnlyMatchFirstElement = true;
-  ALWAYS_INLINE static void appendElement(OutputType& output,
+  static const bool kShouldOnlyMatchFirstElement = true;
+  ALWAYS_INLINE static void AppendElement(OutputType& output,
                                           Element& element) {
     DCHECK(!output);
     output = &element;
@@ -56,373 +78,261 @@ struct SingleElementSelectorQueryTrait {
 
 struct AllElementsSelectorQueryTrait {
   typedef HeapVector<Member<Element>> OutputType;
-  static const bool shouldOnlyMatchFirstElement = false;
-  ALWAYS_INLINE static void appendElement(OutputType& output,
+  static const bool kShouldOnlyMatchFirstElement = false;
+  ALWAYS_INLINE static void AppendElement(OutputType& output,
                                           Element& element) {
     output.push_back(&element);
   }
 };
 
-enum ClassElementListBehavior { AllElements, OnlyRoots };
-
-template <ClassElementListBehavior onlyRoots>
-class ClassElementList {
-  STACK_ALLOCATED();
-
- public:
-  ClassElementList(ContainerNode& rootNode, const AtomicString& className)
-      : m_className(className),
-        m_rootNode(&rootNode),
-        m_currentElement(
-            nextInternal(ElementTraversal::firstWithin(rootNode))) {}
-
-  bool isEmpty() const { return !m_currentElement; }
-
-  Element* next() {
-    Element* current = m_currentElement;
-    DCHECK(current);
-    if (onlyRoots)
-      m_currentElement = nextInternal(ElementTraversal::nextSkippingChildren(
-          *m_currentElement, m_rootNode));
-    else
-      m_currentElement =
-          nextInternal(ElementTraversal::next(*m_currentElement, m_rootNode));
-    return current;
-  }
-
- private:
-  Element* nextInternal(Element* element) {
-    for (; element; element = ElementTraversal::next(*element, m_rootNode)) {
-      if (element->hasClass() && element->classNames().contains(m_className))
-        return element;
-    }
-    return nullptr;
-  }
-
-  const AtomicString& m_className;
-  Member<ContainerNode> m_rootNode;
-  Member<Element> m_currentElement;
-};
-
-void SelectorDataList::initialize(const CSSSelectorList& selectorList) {
-  DCHECK(m_selectors.isEmpty());
-
-  unsigned selectorCount = 0;
-  for (const CSSSelector* selector = selectorList.first(); selector;
-       selector = CSSSelectorList::next(*selector))
-    selectorCount++;
-
-  m_usesDeepCombinatorOrShadowPseudo = false;
-  m_needsUpdatedDistribution = false;
-  m_selectors.reserveInitialCapacity(selectorCount);
-  for (const CSSSelector* selector = selectorList.first(); selector;
-       selector = CSSSelectorList::next(*selector)) {
-    if (selector->matchesPseudoElement())
-      continue;
-    m_selectors.uncheckedAppend(selector);
-    m_usesDeepCombinatorOrShadowPseudo |=
-        selector->hasDeepCombinatorOrShadowPseudo();
-    m_needsUpdatedDistribution |= selector->needsUpdatedDistribution();
-  }
+// TODO(esprehn): Move this to Element and update callers elsewhere.
+inline bool HasClassName(const Element& element,
+                         const AtomicString& class_name) {
+  return element.HasClass() && element.ClassNames().Contains(class_name);
 }
 
-inline bool SelectorDataList::selectorMatches(
-    const CSSSelector& selector,
-    Element& element,
-    const ContainerNode& rootNode) const {
+inline bool SelectorMatches(const CSSSelector& selector,
+                            Element& element,
+                            const ContainerNode& root_node) {
   SelectorChecker::Init init;
-  init.mode = SelectorChecker::QueryingRules;
-  init.isQuerySelector = true;
+  init.mode = SelectorChecker::kQueryingRules;
   SelectorChecker checker(init);
   SelectorChecker::SelectorCheckingContext context(
-      &element, SelectorChecker::VisitedMatchDisabled);
+      &element, SelectorChecker::kVisitedMatchDisabled);
   context.selector = &selector;
-  context.scope = &rootNode;
-  return checker.match(context);
+  context.scope = &root_node;
+  return checker.Match(context);
 }
 
-bool SelectorDataList::matches(Element& targetElement) const {
-  if (m_needsUpdatedDistribution)
-    targetElement.updateDistribution();
-
-  for (const auto& selector : m_selectors) {
-    if (selectorMatches(*selector, targetElement, targetElement))
-      return true;
-  }
-
-  return false;
+bool SelectorQuery::Matches(Element& target_element) const {
+  QUERY_STATS_RESET();
+  if (needs_updated_distribution_)
+    target_element.UpdateDistribution();
+  return SelectorListMatches(target_element, target_element);
 }
 
-Element* SelectorDataList::closest(Element& targetElement) const {
-  if (m_selectors.size() == 0)
+Element* SelectorQuery::Closest(Element& target_element) const {
+  QUERY_STATS_RESET();
+  if (selectors_.IsEmpty())
     return nullptr;
-  if (m_needsUpdatedDistribution)
-    targetElement.updateDistribution();
+  if (needs_updated_distribution_)
+    target_element.UpdateDistribution();
 
-  for (Element* currentElement = &targetElement; currentElement;
-       currentElement = currentElement->parentElement()) {
-    for (const auto& selector : m_selectors) {
-      if (selectorMatches(*selector, *currentElement, targetElement))
-        return currentElement;
-    }
+  for (Element* current_element = &target_element; current_element;
+       current_element = current_element->parentElement()) {
+    if (SelectorListMatches(target_element, *current_element))
+      return current_element;
   }
   return nullptr;
 }
 
-StaticElementList* SelectorDataList::queryAll(ContainerNode& rootNode) const {
+StaticElementList* SelectorQuery::QueryAll(ContainerNode& root_node) const {
+  QUERY_STATS_RESET();
+  NthIndexCache nth_index_cache(root_node.GetDocument());
   HeapVector<Member<Element>> result;
-  execute<AllElementsSelectorQueryTrait>(rootNode, result);
-  return StaticElementList::adopt(result);
+  Execute<AllElementsSelectorQueryTrait>(root_node, result);
+  return StaticElementList::Adopt(result);
 }
 
-Element* SelectorDataList::queryFirst(ContainerNode& rootNode) const {
-  Element* matchedElement = nullptr;
-  execute<SingleElementSelectorQueryTrait>(rootNode, matchedElement);
-  return matchedElement;
+Element* SelectorQuery::QueryFirst(ContainerNode& root_node) const {
+  QUERY_STATS_RESET();
+  NthIndexCache nth_index_cache(root_node.GetDocument());
+  Element* matched_element = nullptr;
+  Execute<SingleElementSelectorQueryTrait>(root_node, matched_element);
+  return matched_element;
 }
 
 template <typename SelectorQueryTrait>
-void SelectorDataList::collectElementsByClassName(
-    ContainerNode& rootNode,
-    const AtomicString& className,
-    typename SelectorQueryTrait::OutputType& output) const {
-  for (Element& element : ElementTraversal::descendantsOf(rootNode)) {
-    if (element.hasClass() && element.classNames().contains(className)) {
-      SelectorQueryTrait::appendElement(output, element);
-      if (SelectorQueryTrait::shouldOnlyMatchFirstElement)
-        return;
-    }
+static void CollectElementsByClassName(
+    ContainerNode& root_node,
+    const AtomicString& class_name,
+    const CSSSelector* selector,
+    typename SelectorQueryTrait::OutputType& output) {
+  for (Element& element : ElementTraversal::DescendantsOf(root_node)) {
+    QUERY_STATS_INCREMENT(fast_class);
+    if (!HasClassName(element, class_name))
+      continue;
+    if (selector && !SelectorMatches(*selector, element, root_node))
+      continue;
+    SelectorQueryTrait::AppendElement(output, element);
+    if (SelectorQueryTrait::kShouldOnlyMatchFirstElement)
+      return;
   }
 }
 
-inline bool matchesTagName(const QualifiedName& tagName,
+inline bool MatchesTagName(const QualifiedName& tag_name,
                            const Element& element) {
-  if (tagName == anyQName())
+  if (tag_name == AnyQName())
     return true;
-  if (element.hasLocalName(tagName.localName()))
+  if (element.HasLocalName(tag_name.LocalName()))
     return true;
   // Non-html elements in html documents are normalized to their camel-cased
   // version during parsing if applicable. Yet, type selectors are lower-cased
   // for selectors in html documents. Compare the upper case converted names
   // instead to allow matching SVG elements like foreignObject.
-  if (!element.isHTMLElement() && element.document().isHTMLDocument())
-    return element.tagQName().localNameUpper() == tagName.localNameUpper();
+  if (!element.IsHTMLElement() && element.GetDocument().IsHTMLDocument())
+    return element.TagQName().LocalNameUpper() == tag_name.LocalNameUpper();
   return false;
 }
 
 template <typename SelectorQueryTrait>
-void SelectorDataList::collectElementsByTagName(
-    ContainerNode& rootNode,
-    const QualifiedName& tagName,
-    typename SelectorQueryTrait::OutputType& output) const {
-  DCHECK_EQ(tagName.namespaceURI(), starAtom);
-  for (Element& element : ElementTraversal::descendantsOf(rootNode)) {
-    if (matchesTagName(tagName, element)) {
-      SelectorQueryTrait::appendElement(output, element);
-      if (SelectorQueryTrait::shouldOnlyMatchFirstElement)
+static void CollectElementsByTagName(
+    ContainerNode& root_node,
+    const QualifiedName& tag_name,
+    typename SelectorQueryTrait::OutputType& output) {
+  DCHECK_EQ(tag_name.NamespaceURI(), g_star_atom);
+  for (Element& element : ElementTraversal::DescendantsOf(root_node)) {
+    QUERY_STATS_INCREMENT(fast_tag_name);
+    if (MatchesTagName(tag_name, element)) {
+      SelectorQueryTrait::AppendElement(output, element);
+      if (SelectorQueryTrait::kShouldOnlyMatchFirstElement)
         return;
     }
   }
 }
 
-inline bool SelectorDataList::canUseFastQuery(
-    const ContainerNode& rootNode) const {
-  if (m_usesDeepCombinatorOrShadowPseudo)
+inline bool SelectorQuery::CanUseFastQuery(
+    const ContainerNode& root_node) const {
+  if (uses_deep_combinator_or_shadow_pseudo_)
     return false;
-  if (m_needsUpdatedDistribution)
+  if (needs_updated_distribution_)
     return false;
-  if (rootNode.document().inQuirksMode())
+  if (root_node.GetDocument().InQuirksMode())
     return false;
-  if (!rootNode.isConnected())
+  if (!root_node.isConnected())
     return false;
-  return m_selectors.size() == 1;
+  return selectors_.size() == 1;
 }
 
-inline bool ancestorHasClassName(ContainerNode& rootNode,
-                                 const AtomicString& className) {
-  if (!rootNode.isElementNode())
+inline bool AncestorHasClassName(ContainerNode& root_node,
+                                 const AtomicString& class_name) {
+  if (!root_node.IsElementNode())
     return false;
 
-  for (Element* element = &toElement(rootNode); element;
+  for (Element* element = &ToElement(root_node); element;
        element = element->parentElement()) {
-    if (element->hasClass() && element->classNames().contains(className))
+    if (HasClassName(*element, class_name))
       return true;
   }
   return false;
 }
 
-// If returns true, traversalRoots has the elements that may match the selector
-// query.
-//
-// If returns false, traversalRoots has the rootNode parameter or descendants of
-// rootNode representing the subtree for which we can limit the querySelector
-// traversal.
-//
-// The travseralRoots may be empty, regardless of the returned bool value, if
-// this method finds that the selectors won't match any element.
 template <typename SelectorQueryTrait>
-void SelectorDataList::findTraverseRootsAndExecute(
-    ContainerNode& rootNode,
+void SelectorQuery::FindTraverseRootsAndExecute(
+    ContainerNode& root_node,
     typename SelectorQueryTrait::OutputType& output) const {
   // We need to return the matches in document order. To use id lookup while
   // there is possiblity of multiple matches we would need to sort the
   // results. For now, just traverse the document in that case.
-  DCHECK_EQ(m_selectors.size(), 1u);
+  DCHECK_EQ(selectors_.size(), 1u);
 
-  bool isRightmostSelector = true;
-  bool startFromParent = false;
+  bool is_rightmost_selector = true;
+  bool start_from_parent = false;
 
-  for (const CSSSelector* selector = m_selectors[0]; selector;
-       selector = selector->tagHistory()) {
-    if (selector->match() == CSSSelector::Id && rootNode.isInTreeScope() &&
-        !rootNode.containingTreeScope().containsMultipleElementsWithId(
-            selector->value())) {
+  for (const CSSSelector* selector = selectors_[0]; selector;
+       selector = selector->TagHistory()) {
+    if (selector->Match() == CSSSelector::kId &&
+        !root_node.ContainingTreeScope().ContainsMultipleElementsWithId(
+            selector->Value())) {
+      // Id selectors in the right most selector are handled by the caller,
+      // we should never hit them here.
+      DCHECK(!is_rightmost_selector);
       Element* element =
-          rootNode.containingTreeScope().getElementById(selector->value());
-      ContainerNode* adjustedNode = &rootNode;
-      if (element &&
-          (isTreeScopeRoot(rootNode) || element->isDescendantOf(&rootNode)))
-        adjustedNode = element;
-      else if (!element || isRightmostSelector)
-        adjustedNode = nullptr;
-      if (isRightmostSelector) {
-        executeForTraverseRoot<SelectorQueryTrait>(
-            *m_selectors[0], adjustedNode, MatchesTraverseRoots, rootNode,
-            output);
+          root_node.ContainingTreeScope().GetElementById(selector->Value());
+      if (!element)
         return;
-      }
-
-      if (startFromParent && adjustedNode)
-        adjustedNode = adjustedNode->parentNode();
-
-      executeForTraverseRoot<SelectorQueryTrait>(*m_selectors[0], adjustedNode,
-                                                 DoesNotMatchTraverseRoots,
-                                                 rootNode, output);
+      ContainerNode* start = &root_node;
+      if (element->IsDescendantOf(&root_node))
+        start = element;
+      if (start_from_parent)
+        start = start->parentNode();
+      if (!start)
+        return;
+      ExecuteForTraverseRoot<SelectorQueryTrait>(*start, root_node, output);
       return;
     }
 
     // If we have both CSSSelector::Id and CSSSelector::Class at the same time,
     // we should use Id to find traverse root.
-    if (!SelectorQueryTrait::shouldOnlyMatchFirstElement && !startFromParent &&
-        selector->match() == CSSSelector::Class) {
-      if (isRightmostSelector) {
-        ClassElementList<AllElements> traverseRoots(rootNode,
-                                                    selector->value());
-        executeForTraverseRoots<SelectorQueryTrait>(
-            *m_selectors[0], traverseRoots, MatchesTraverseRoots, rootNode,
-            output);
+    if (!SelectorQueryTrait::kShouldOnlyMatchFirstElement &&
+        !start_from_parent && selector->Match() == CSSSelector::kClass) {
+      if (is_rightmost_selector) {
+        CollectElementsByClassName<SelectorQueryTrait>(
+            root_node, selector->Value(), selectors_[0], output);
         return;
       }
       // Since there exists some ancestor element which has the class name, we
       // need to see all children of rootNode.
-      if (ancestorHasClassName(rootNode, selector->value())) {
-        executeForTraverseRoot<SelectorQueryTrait>(*m_selectors[0], &rootNode,
-                                                   DoesNotMatchTraverseRoots,
-                                                   rootNode, output);
-        return;
-      }
+      if (AncestorHasClassName(root_node, selector->Value()))
+        break;
 
-      ClassElementList<OnlyRoots> traverseRoots(rootNode, selector->value());
-      executeForTraverseRoots<SelectorQueryTrait>(
-          *m_selectors[0], traverseRoots, DoesNotMatchTraverseRoots, rootNode,
-          output);
+      const AtomicString& class_name = selector->Value();
+      Element* element = ElementTraversal::FirstWithin(root_node);
+      while (element) {
+        QUERY_STATS_INCREMENT(fast_class);
+        if (HasClassName(*element, class_name)) {
+          ExecuteForTraverseRoot<SelectorQueryTrait>(*element, root_node,
+                                                     output);
+          element =
+              ElementTraversal::NextSkippingChildren(*element, &root_node);
+        } else {
+          element = ElementTraversal::Next(*element, &root_node);
+        }
+      }
       return;
     }
 
-    if (selector->relation() == CSSSelector::SubSelector)
+    if (selector->Relation() == CSSSelector::kSubSelector)
       continue;
-    isRightmostSelector = false;
-    if (selector->relation() == CSSSelector::DirectAdjacent ||
-        selector->relation() == CSSSelector::IndirectAdjacent)
-      startFromParent = true;
+    is_rightmost_selector = false;
+    if (selector->Relation() == CSSSelector::kDirectAdjacent ||
+        selector->Relation() == CSSSelector::kIndirectAdjacent)
+      start_from_parent = true;
     else
-      startFromParent = false;
+      start_from_parent = false;
   }
 
-  executeForTraverseRoot<SelectorQueryTrait>(
-      *m_selectors[0], &rootNode, DoesNotMatchTraverseRoots, rootNode, output);
+  ExecuteForTraverseRoot<SelectorQueryTrait>(root_node, root_node, output);
 }
 
 template <typename SelectorQueryTrait>
-void SelectorDataList::executeForTraverseRoot(
-    const CSSSelector& selector,
-    ContainerNode* traverseRoot,
-    MatchTraverseRootState matchTraverseRoot,
-    ContainerNode& rootNode,
+void SelectorQuery::ExecuteForTraverseRoot(
+    ContainerNode& traverse_root,
+    ContainerNode& root_node,
     typename SelectorQueryTrait::OutputType& output) const {
-  if (!traverseRoot)
-    return;
+  DCHECK_EQ(selectors_.size(), 1u);
 
-  if (matchTraverseRoot) {
-    if (selectorMatches(selector, toElement(*traverseRoot), rootNode))
-      SelectorQueryTrait::appendElement(output, toElement(*traverseRoot));
-    return;
-  }
+  const CSSSelector& selector = *selectors_[0];
 
-  for (Element& element : ElementTraversal::descendantsOf(*traverseRoot)) {
-    if (selectorMatches(selector, element, rootNode)) {
-      SelectorQueryTrait::appendElement(output, element);
-      if (SelectorQueryTrait::shouldOnlyMatchFirstElement)
+  for (Element& element : ElementTraversal::DescendantsOf(traverse_root)) {
+    QUERY_STATS_INCREMENT(fast_scan);
+    if (SelectorMatches(selector, element, root_node)) {
+      SelectorQueryTrait::AppendElement(output, element);
+      if (SelectorQueryTrait::kShouldOnlyMatchFirstElement)
         return;
     }
   }
 }
 
-template <typename SelectorQueryTrait, typename SimpleElementListType>
-void SelectorDataList::executeForTraverseRoots(
-    const CSSSelector& selector,
-    SimpleElementListType& traverseRoots,
-    MatchTraverseRootState matchTraverseRoots,
-    ContainerNode& rootNode,
-    typename SelectorQueryTrait::OutputType& output) const {
-  if (traverseRoots.isEmpty())
-    return;
-
-  if (matchTraverseRoots) {
-    while (!traverseRoots.isEmpty()) {
-      Element& element = *traverseRoots.next();
-      if (selectorMatches(selector, element, rootNode)) {
-        SelectorQueryTrait::appendElement(output, element);
-        if (SelectorQueryTrait::shouldOnlyMatchFirstElement)
-          return;
-      }
-    }
-    return;
-  }
-
-  while (!traverseRoots.isEmpty()) {
-    for (Element& element :
-         ElementTraversal::descendantsOf(*traverseRoots.next())) {
-      if (selectorMatches(selector, element, rootNode)) {
-        SelectorQueryTrait::appendElement(output, element);
-        if (SelectorQueryTrait::shouldOnlyMatchFirstElement)
-          return;
-      }
-    }
-  }
-}
-
-template <typename SelectorQueryTrait>
-bool SelectorDataList::selectorListMatches(
-    ContainerNode& rootNode,
-    Element& element,
-    typename SelectorQueryTrait::OutputType& output) const {
-  for (const auto& selector : m_selectors) {
-    if (selectorMatches(*selector, element, rootNode)) {
-      SelectorQueryTrait::appendElement(output, element);
+bool SelectorQuery::SelectorListMatches(ContainerNode& root_node,
+                                        Element& element) const {
+  for (const auto& selector : selectors_) {
+    if (SelectorMatches(*selector, element, root_node))
       return true;
-    }
   }
   return false;
 }
 
 template <typename SelectorQueryTrait>
-void SelectorDataList::executeSlow(
-    ContainerNode& rootNode,
+void SelectorQuery::ExecuteSlow(
+    ContainerNode& root_node,
     typename SelectorQueryTrait::OutputType& output) const {
-  for (Element& element : ElementTraversal::descendantsOf(rootNode)) {
-    if (selectorListMatches<SelectorQueryTrait>(rootNode, element, output) &&
-        SelectorQueryTrait::shouldOnlyMatchFirstElement)
+  for (Element& element : ElementTraversal::DescendantsOf(root_node)) {
+    QUERY_STATS_INCREMENT(slow_scan);
+    if (!SelectorListMatches(root_node, element))
+      continue;
+    SelectorQueryTrait::AppendElement(output, element);
+    if (SelectorQueryTrait::kShouldOnlyMatchFirstElement)
       return;
   }
 }
@@ -430,222 +340,221 @@ void SelectorDataList::executeSlow(
 // FIXME: Move the following helper functions, authorShadowRootOf,
 // firstWithinTraversingShadowTree, nextTraversingShadowTree to the best place,
 // e.g. NodeTraversal.
-static ShadowRoot* authorShadowRootOf(const ContainerNode& node) {
-  if (!node.isElementNode() || !isShadowHost(&node))
+static ShadowRoot* AuthorShadowRootOf(const ContainerNode& node) {
+  if (!node.IsElementNode())
+    return nullptr;
+  ElementShadow* shadow = ToElement(node).Shadow();
+  if (!shadow)
     return nullptr;
 
-  ElementShadow* shadow = toElement(node).shadow();
-  DCHECK(shadow);
-  for (ShadowRoot* shadowRoot = &shadow->oldestShadowRoot(); shadowRoot;
-       shadowRoot = shadowRoot->youngerShadowRoot()) {
-    if (shadowRoot->type() == ShadowRootType::V0 ||
-        shadowRoot->type() == ShadowRootType::Open)
-      return shadowRoot;
+  for (ShadowRoot* shadow_root = &shadow->OldestShadowRoot(); shadow_root;
+       shadow_root = shadow_root->YoungerShadowRoot()) {
+    if (shadow_root->IsOpenOrV0())
+      return shadow_root;
   }
   return nullptr;
 }
 
-static ContainerNode* firstWithinTraversingShadowTree(
-    const ContainerNode& rootNode) {
-  if (ShadowRoot* shadowRoot = authorShadowRootOf(rootNode))
-    return shadowRoot;
-  return ElementTraversal::firstWithin(rootNode);
-}
-
-static ContainerNode* nextTraversingShadowTree(const ContainerNode& node,
-                                               const ContainerNode* rootNode) {
-  if (ShadowRoot* shadowRoot = authorShadowRootOf(node))
-    return shadowRoot;
+static ContainerNode* NextTraversingShadowTree(const ContainerNode& node,
+                                               const ContainerNode* root_node) {
+  if (ShadowRoot* shadow_root = AuthorShadowRootOf(node))
+    return shadow_root;
 
   const ContainerNode* current = &node;
   while (current) {
-    if (Element* next = ElementTraversal::next(*current, rootNode))
+    if (Element* next = ElementTraversal::Next(*current, root_node))
       return next;
 
-    if (!current->isInShadowTree())
+    if (!current->IsInShadowTree())
       return nullptr;
 
-    ShadowRoot* shadowRoot = current->containingShadowRoot();
-    if (shadowRoot == rootNode)
+    ShadowRoot* shadow_root = current->ContainingShadowRoot();
+    if (shadow_root == root_node)
       return nullptr;
-    if (ShadowRoot* youngerShadowRoot = shadowRoot->youngerShadowRoot()) {
-      // Should not obtain any elements in closed or user-agent shadow root.
-      DCHECK(youngerShadowRoot->type() == ShadowRootType::V0 ||
-             youngerShadowRoot->type() == ShadowRootType::Open);
-      return youngerShadowRoot;
+    if (ShadowRoot* younger_shadow_root = shadow_root->YoungerShadowRoot()) {
+      DCHECK(younger_shadow_root->IsOpenOrV0());
+      return younger_shadow_root;
     }
 
-    current = &shadowRoot->host();
+    current = &shadow_root->host();
   }
   return nullptr;
 }
 
 template <typename SelectorQueryTrait>
-void SelectorDataList::executeSlowTraversingShadowTree(
-    ContainerNode& rootNode,
+void SelectorQuery::ExecuteSlowTraversingShadowTree(
+    ContainerNode& root_node,
     typename SelectorQueryTrait::OutputType& output) const {
-  for (ContainerNode* node = firstWithinTraversingShadowTree(rootNode); node;
-       node = nextTraversingShadowTree(*node, &rootNode)) {
-    if (!node->isElementNode())
+  for (ContainerNode* node = NextTraversingShadowTree(root_node, &root_node);
+       node; node = NextTraversingShadowTree(*node, &root_node)) {
+    if (!node->IsElementNode())
       continue;
-    Element* element = toElement(node);
-    if (selectorListMatches<SelectorQueryTrait>(rootNode, *element, output) &&
-        SelectorQueryTrait::shouldOnlyMatchFirstElement)
+    QUERY_STATS_INCREMENT(slow_traversing_shadow_tree_scan);
+    Element* element = ToElement(node);
+    if (!SelectorListMatches(root_node, *element))
+      continue;
+    SelectorQueryTrait::AppendElement(output, *element);
+    if (SelectorQueryTrait::kShouldOnlyMatchFirstElement)
       return;
   }
 }
 
-static const CSSSelector* selectorForIdLookup(
-    const CSSSelector& firstSelector) {
-  for (const CSSSelector* selector = &firstSelector; selector;
-       selector = selector->tagHistory()) {
-    if (selector->match() == CSSSelector::Id)
+static const CSSSelector* SelectorForIdLookup(
+    const CSSSelector& first_selector) {
+  for (const CSSSelector* selector = &first_selector; selector;
+       selector = selector->TagHistory()) {
+    if (selector->Match() == CSSSelector::kId)
       return selector;
     // We only use the fast path when in standards mode where #id selectors
     // are case sensitive, so we need the same behavior for [id=value].
-    if (selector->match() == CSSSelector::AttributeExact &&
-        selector->attribute() == idAttr &&
-        selector->attributeMatch() == CSSSelector::CaseSensitive)
+    if (selector->Match() == CSSSelector::kAttributeExact &&
+        selector->Attribute() == idAttr &&
+        selector->AttributeMatch() == CSSSelector::kCaseSensitive)
       return selector;
-    if (selector->relation() != CSSSelector::SubSelector)
+    if (selector->Relation() != CSSSelector::kSubSelector)
       break;
   }
   return nullptr;
 }
 
 template <typename SelectorQueryTrait>
-void SelectorDataList::execute(
-    ContainerNode& rootNode,
+void SelectorQuery::Execute(
+    ContainerNode& root_node,
     typename SelectorQueryTrait::OutputType& output) const {
-  if (m_selectors.isEmpty())
+  if (selectors_.IsEmpty())
     return;
 
-  if (!canUseFastQuery(rootNode)) {
-    if (m_needsUpdatedDistribution)
-      rootNode.updateDistribution();
-    if (m_usesDeepCombinatorOrShadowPseudo) {
-      executeSlowTraversingShadowTree<SelectorQueryTrait>(rootNode, output);
+  if (!CanUseFastQuery(root_node)) {
+    if (needs_updated_distribution_)
+      root_node.UpdateDistribution();
+    if (uses_deep_combinator_or_shadow_pseudo_) {
+      ExecuteSlowTraversingShadowTree<SelectorQueryTrait>(root_node, output);
     } else {
-      executeSlow<SelectorQueryTrait>(rootNode, output);
+      ExecuteSlow<SelectorQueryTrait>(root_node, output);
     }
     return;
   }
 
-  DCHECK_EQ(m_selectors.size(), 1u);
-  DCHECK(!rootNode.document().inQuirksMode());
+  DCHECK_EQ(selectors_.size(), 1u);
+  DCHECK(!root_node.GetDocument().InQuirksMode());
 
-  const CSSSelector& selector = *m_selectors[0];
-  const CSSSelector& firstSelector = selector;
+  const CSSSelector& selector = *selectors_[0];
+  const CSSSelector& first_selector = selector;
 
   // Fast path for querySelector*('#id'), querySelector*('tag#id'),
   // querySelector*('tag[id=example]').
-  if (const CSSSelector* idSelector = selectorForIdLookup(firstSelector)) {
-    const AtomicString& idToMatch = idSelector->value();
-    if (rootNode.treeScope().containsMultipleElementsWithId(idToMatch)) {
+  if (const CSSSelector* id_selector = SelectorForIdLookup(first_selector)) {
+    const AtomicString& id_to_match = id_selector->Value();
+    if (root_node.GetTreeScope().ContainsMultipleElementsWithId(id_to_match)) {
       const HeapVector<Member<Element>>& elements =
-          rootNode.treeScope().getAllElementsById(idToMatch);
+          root_node.GetTreeScope().GetAllElementsById(id_to_match);
       for (const auto& element : elements) {
-        if (!(isTreeScopeRoot(rootNode) || element->isDescendantOf(&rootNode)))
+        if (!element->IsDescendantOf(&root_node))
           continue;
-        if (selectorMatches(selector, *element, rootNode)) {
-          SelectorQueryTrait::appendElement(output, *element);
-          if (SelectorQueryTrait::shouldOnlyMatchFirstElement)
+        QUERY_STATS_INCREMENT(fast_id);
+        if (SelectorMatches(selector, *element, root_node)) {
+          SelectorQueryTrait::AppendElement(output, *element);
+          if (SelectorQueryTrait::kShouldOnlyMatchFirstElement)
             return;
         }
       }
       return;
     }
-    Element* element = rootNode.treeScope().getElementById(idToMatch);
-    if (!element ||
-        !(isTreeScopeRoot(rootNode) || element->isDescendantOf(&rootNode)))
+    Element* element = root_node.GetTreeScope().GetElementById(id_to_match);
+    if (!element)
       return;
-    if (selectorMatches(selector, *element, rootNode))
-      SelectorQueryTrait::appendElement(output, *element);
+    if (!element->IsDescendantOf(&root_node))
+      return;
+    QUERY_STATS_INCREMENT(fast_id);
+    if (SelectorMatches(selector, *element, root_node))
+      SelectorQueryTrait::AppendElement(output, *element);
     return;
   }
 
-  if (!firstSelector.tagHistory()) {
+  if (!first_selector.TagHistory()) {
     // Fast path for querySelector*('.foo'), and querySelector*('div').
-    switch (firstSelector.match()) {
-      case CSSSelector::Class:
-        collectElementsByClassName<SelectorQueryTrait>(
-            rootNode, firstSelector.value(), output);
+    switch (first_selector.Match()) {
+      case CSSSelector::kClass:
+        CollectElementsByClassName<SelectorQueryTrait>(
+            root_node, first_selector.Value(), nullptr, output);
         return;
-      case CSSSelector::Tag:
-        if (firstSelector.tagQName().namespaceURI() == starAtom) {
-          collectElementsByTagName<SelectorQueryTrait>(
-              rootNode, firstSelector.tagQName(), output);
+      case CSSSelector::kTag:
+        if (first_selector.TagQName().NamespaceURI() == g_star_atom) {
+          CollectElementsByTagName<SelectorQueryTrait>(
+              root_node, first_selector.TagQName(), output);
           return;
         }
         // querySelector*() doesn't allow namespace prefix resolution and
         // throws before we get here, but we still may have selectors for
         // elements without a namespace.
-        DCHECK_EQ(firstSelector.tagQName().namespaceURI(), nullAtom);
+        DCHECK_EQ(first_selector.TagQName().NamespaceURI(), g_null_atom);
         break;
       default:
         break;  // If we need another fast path, add here.
     }
   }
 
-  findTraverseRootsAndExecute<SelectorQueryTrait>(rootNode, output);
+  FindTraverseRootsAndExecute<SelectorQueryTrait>(root_node, output);
 }
 
-std::unique_ptr<SelectorQuery> SelectorQuery::adopt(
-    CSSSelectorList selectorList) {
-  return WTF::wrapUnique(new SelectorQuery(std::move(selectorList)));
+std::unique_ptr<SelectorQuery> SelectorQuery::Adopt(
+    CSSSelectorList selector_list) {
+  return WTF::WrapUnique(new SelectorQuery(std::move(selector_list)));
 }
 
-SelectorQuery::SelectorQuery(CSSSelectorList selectorList) {
-  m_selectorList = std::move(selectorList);
-  m_selectors.initialize(m_selectorList);
+SelectorQuery::SelectorQuery(CSSSelectorList selector_list)
+    : selector_list_(std::move(selector_list)),
+      uses_deep_combinator_or_shadow_pseudo_(false),
+      needs_updated_distribution_(false) {
+  selectors_.ReserveInitialCapacity(selector_list_.ComputeLength());
+  for (const CSSSelector* selector = selector_list_.First(); selector;
+       selector = CSSSelectorList::Next(*selector)) {
+    if (selector->MatchesPseudoElement())
+      continue;
+    selectors_.UncheckedAppend(selector);
+    uses_deep_combinator_or_shadow_pseudo_ |=
+        selector->HasDeepCombinatorOrShadowPseudo();
+    needs_updated_distribution_ |= selector->NeedsUpdatedDistribution();
+  }
 }
 
-bool SelectorQuery::matches(Element& element) const {
-  return m_selectors.matches(element);
-}
-
-Element* SelectorQuery::closest(Element& element) const {
-  return m_selectors.closest(element);
-}
-
-StaticElementList* SelectorQuery::queryAll(ContainerNode& rootNode) const {
-  return m_selectors.queryAll(rootNode);
-}
-
-Element* SelectorQuery::queryFirst(ContainerNode& rootNode) const {
-  return m_selectors.queryFirst(rootNode);
-}
-
-SelectorQuery* SelectorQueryCache::add(const AtomicString& selectors,
+SelectorQuery* SelectorQueryCache::Add(const AtomicString& selectors,
                                        const Document& document,
-                                       ExceptionState& exceptionState) {
-  HashMap<AtomicString, std::unique_ptr<SelectorQuery>>::iterator it =
-      m_entries.find(selectors);
-  if (it != m_entries.end())
-    return it->value.get();
-
-  CSSSelectorList selectorList = CSSParser::parseSelector(
-      CSSParserContext::create(document, KURL(), emptyString,
-                               CSSParserContext::StaticProfile),
-      nullptr, selectors);
-
-  if (!selectorList.first()) {
-    exceptionState.throwDOMException(
-        SyntaxError, "'" + selectors + "' is not a valid selector.");
+                                       ExceptionState& exception_state) {
+  if (selectors.IsEmpty()) {
+    exception_state.ThrowDOMException(kSyntaxError,
+                                      "The provided selector is empty.");
     return nullptr;
   }
 
-  const unsigned maximumSelectorQueryCacheSize = 256;
-  if (m_entries.size() == maximumSelectorQueryCacheSize)
-    m_entries.remove(m_entries.begin());
+  HashMap<AtomicString, std::unique_ptr<SelectorQuery>>::iterator it =
+      entries_.Find(selectors);
+  if (it != entries_.end())
+    return it->value.get();
 
-  return m_entries
-      .insert(selectors, SelectorQuery::adopt(std::move(selectorList)))
-      .storedValue->value.get();
+  CSSSelectorList selector_list = CSSParser::ParseSelector(
+      CSSParserContext::Create(document, document.BaseURL(),
+                               document.GetReferrerPolicy(), g_empty_string,
+                               CSSParserContext::kStaticProfile),
+      nullptr, selectors);
+
+  if (!selector_list.First()) {
+    exception_state.ThrowDOMException(
+        kSyntaxError, "'" + selectors + "' is not a valid selector.");
+    return nullptr;
+  }
+
+  const unsigned kMaximumSelectorQueryCacheSize = 256;
+  if (entries_.size() == kMaximumSelectorQueryCacheSize)
+    entries_.erase(entries_.begin());
+
+  return entries_
+      .insert(selectors, SelectorQuery::Adopt(std::move(selector_list)))
+      .stored_value->value.get();
 }
 
-void SelectorQueryCache::invalidate() {
-  m_entries.clear();
+void SelectorQueryCache::Invalidate() {
+  entries_.Clear();
 }
 
 }  // namespace blink

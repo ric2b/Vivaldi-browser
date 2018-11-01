@@ -30,6 +30,12 @@
     web::TestChangeLoadingProgressInfo* changeLoadingProgressInfo;
 // Arguments passed to |webStateDidChangeTitle:|.
 @property(nonatomic, readonly) web::TestTitleWasSetInfo* titleWasSetInfo;
+// Arguments passed to |webStateDidChangeVisibleSecurityState:|.
+@property(nonatomic, readonly) web::TestDidChangeVisibleSecurityStateInfo*
+    didChangeVisibleSecurityStateInfo;
+// Arguments passed to |webStateDidSuppressDialog:|.
+@property(nonatomic, readonly)
+    web::TestDidSuppressDialogInfo* didSuppressDialogInfo;
 // Arguments passed to |webState:didSubmitDocumentWithFormNamed:userInitiated:|.
 @property(nonatomic, readonly) web::TestSubmitDocumentInfo* submitDocumentInfo;
 // Arguments passed to

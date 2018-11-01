@@ -122,8 +122,8 @@ api::webstore_private::Result WebstoreInstallHelperResultToApiResult(
   return api::webstore_private::RESULT_NONE;
 }
 
-static base::LazyInstance<PendingApprovals> g_pending_approvals =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<PendingApprovals>::DestructorAtExit
+    g_pending_approvals = LAZY_INSTANCE_INITIALIZER;
 
 // A preference set by the web store to indicate login information for
 // purchased apps.
@@ -545,7 +545,7 @@ ExtensionFunction::ResponseAction WebstorePrivateSetStoreLoginFunction::Run() {
 
 WebstorePrivateGetWebGLStatusFunction::WebstorePrivateGetWebGLStatusFunction()
     : feature_checker_(content::GpuFeatureChecker::Create(
-          gpu::GPU_FEATURE_TYPE_WEBGL,
+          gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL,
           base::Bind(&WebstorePrivateGetWebGLStatusFunction::OnFeatureCheck,
                      base::Unretained(this)))) {}
 

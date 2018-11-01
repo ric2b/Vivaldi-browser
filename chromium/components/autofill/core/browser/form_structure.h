@@ -18,6 +18,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
@@ -37,6 +38,10 @@ namespace rappor {
 class RapporServiceImpl;
 }
 
+namespace ukm {
+class UkmService;
+}
+
 namespace autofill {
 
 struct FormData;
@@ -50,8 +55,9 @@ class FormStructure {
   virtual ~FormStructure();
 
   // Runs several heuristics against the form fields to determine their possible
-  // types.
-  void DetermineHeuristicTypes();
+  // types. If |ukm_service| is specified, logs UKM for the form structure
+  // corresponding to |source_url_|.
+  void DetermineHeuristicTypes(ukm::UkmService* ukm_service);
 
   // Encodes the proto |upload| request from this FormStructure.
   // In some cases, a |login_form_signature| is included as part of the upload.
@@ -116,7 +122,8 @@ class FormStructure {
   bool ShouldBeCrowdsourced() const;
 
   // Sets the field types to be those set for |cached_form|.
-  void UpdateFromCache(const FormStructure& cached_form);
+  void UpdateFromCache(const FormStructure& cached_form,
+                       const bool apply_is_autofilled);
 
   // Logs quality metrics for |this|, which should be a user-submitted form.
   // This method should only be called after the possible field types have been
@@ -126,12 +133,16 @@ class FormStructure {
   // indicates whether this method is called as a result of observing a
   // submission event (otherwise, it may be that an upload was triggered after
   // a form was unfocused or a navigation occurred).
-  void LogQualityMetrics(const base::TimeTicks& load_time,
-                         const base::TimeTicks& interaction_time,
-                         const base::TimeTicks& submission_time,
-                         rappor::RapporServiceImpl* rappor_service,
-                         bool did_show_suggestions,
-                         bool observed_submission) const;
+  // TODO(sebsg): We log more than quality metrics. Maybe rename or split
+  // function?
+  void LogQualityMetrics(
+      const base::TimeTicks& load_time,
+      const base::TimeTicks& interaction_time,
+      const base::TimeTicks& submission_time,
+      rappor::RapporServiceImpl* rappor_service,
+      AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
+      bool did_show_suggestions,
+      bool observed_submission) const;
 
   // Log the quality of the heuristics and server predictions for this form
   // structure, if autocomplete attributes are present on the fields (they are
@@ -201,10 +212,16 @@ class FormStructure {
 
   const GURL& target_url() const { return target_url_; }
 
-  bool has_author_specified_types() { return has_author_specified_types_; }
+  bool has_author_specified_types() const {
+    return has_author_specified_types_;
+  }
 
-  bool has_author_specified_sections() {
+  bool has_author_specified_sections() const {
     return has_author_specified_sections_;
+  }
+
+  bool has_author_specified_upi_vpa_hint() const {
+    return has_author_specified_upi_vpa_hint_;
   }
 
   void set_upload_required(UploadRequired required) {
@@ -213,6 +230,11 @@ class FormStructure {
   UploadRequired upload_required() const { return upload_required_; }
 
   bool all_fields_are_passwords() const { return all_fields_are_passwords_; }
+
+  bool is_signin_upload() const { return is_signin_upload_; }
+  void set_is_signin_upload(bool is_signin_upload) {
+    is_signin_upload_ = is_signin_upload;
+  }
 
   FormSignature form_signature() const { return form_signature_; }
 
@@ -292,6 +314,10 @@ class FormStructure {
   // author, via the autocomplete attribute.
   bool has_author_specified_sections_;
 
+  // Whether the form includes a field that explicitly sets it autocomplete
+  // type to "upi-vpa".
+  bool has_author_specified_upi_vpa_hint_;
+
   // Whether the form was parsed for autocomplete attribute, thus assigning
   // the real values of |has_author_specified_types_| and
   // |has_author_specified_sections_|.
@@ -308,6 +334,10 @@ class FormStructure {
 
   // True if all form fields are password fields.
   bool all_fields_are_passwords_;
+
+  // True if the form is submitted and has 2 fields: one text and one password
+  // field.
+  bool is_signin_upload_;
 
   // The unique signature for this form, composed of the target url domain,
   // the form name, and the form field names in a 64-bit hash.

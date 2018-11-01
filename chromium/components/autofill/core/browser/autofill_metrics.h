@@ -7,17 +7,16 @@
 
 #include <stddef.h>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/form_field_data.h"
-
-namespace base {
-class TimeDelta;
-}  // namespace base
 
 namespace ukm {
 class UkmService;
@@ -27,9 +26,54 @@ namespace internal {
 // Name constants are exposed here so they can be referenced from tests.
 extern const char kUKMCardUploadDecisionEntryName[];
 extern const char kUKMCardUploadDecisionMetricName[];
+extern const char kUKMDeveloperEngagementEntryName[];
+extern const char kUKMDeveloperEngagementMetricName[];
+
+// Each form interaction event has a separate |UkmEntry|.
+
+// The first form event |UkmEntry| contains metrics for metadata that apply
+// to all subsequent events.
+extern const char kUKMInteractedWithFormEntryName[];
+extern const char kUKMIsForCreditCardMetricName[];
+extern const char kUKMLocalRecordTypeCountMetricName[];
+extern const char kUKMServerRecordTypeCountMetricName[];
+
+// |UkmEntry| when we show suggestions.
+extern const char kUKMSuggestionsShownEntryName[];
+
+// |UkmEntry| when user selects a masked server credit card.
+extern const char kUKMSelectedMaskedServerCardEntryName[];
+
+// Each |UkmEntry|, except the first interaction with the form, has a metric for
+// time elapsed, in milliseconds, since we loaded the form.
+extern const char kUKMMillisecondsSinceFormLoadedMetricName[];
+
+// |FormEvent| for FORM_EVENT_*_SUGGESTION_FILLED in credit card forms include a
+// |CreditCard| |record_type()| to indicate if the suggestion was for a local
+// card, masked server card or full server card. Similarly, address/profile
+// forms include a |AutofillProfile| |record_type()| to indicate if the
+// profile was a local profile or server profile.
+extern const char kUKMSuggestionFilledEntryName[];
+extern const char kUKMRecordTypeMetricName[];
+
+// |UkmEntry| for user editing text field. Metrics contain field's attributes.
+extern const char kUKMTextFieldDidChangeEntryName[];
+extern const char kUKMFieldTypeGroupMetricName[];
+extern const char kUKMHeuristicTypeMetricName[];
+extern const char kUKMServerTypeMetricName[];
+extern const char kUKMHtmlFieldTypeMetricName[];
+extern const char kUKMHtmlFieldModeMetricName[];
+extern const char kUKMIsAutofilledMetricName[];
+extern const char kUKMIsEmptyMetricName[];
+
+// |UkmEntry| for |AutofillFormSubmittedState|.
+extern const char kUKMFormSubmittedEntryName[];
+extern const char kUKMAutofillFormSubmittedStateMetricName[];
 }  // namespace internal
 
 namespace autofill {
+
+class AutofillField;
 
 class AutofillMetrics {
  public:
@@ -80,16 +124,23 @@ class AutofillMetrics {
     // were otherwise valid nor whether we would have been able to get upload
     // details.
     UPLOAD_NOT_OFFERED_CONFLICTING_NAMES,
+    // No CVC was detected, but valid addresses and names were.  Upload is still
+    // possible if the user manually enters CVC, so upload was offered.
+    UPLOAD_OFFERED_NO_CVC,
     NUM_CARD_UPLOAD_DECISION_METRICS,
   };
 
   enum DeveloperEngagementMetric {
-    // Parsed a form that is potentially autofillable.
-    FILLABLE_FORM_PARSED = 0,
+    // Parsed a form that is potentially autofillable and does not contain any
+    // web developer-specified field type hint.
+    FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS = 0,
     // Parsed a form that is potentially autofillable and contains at least one
     // web developer-specified field type hint, a la
     // http://is.gd/whatwg_autocomplete
-    FILLABLE_FORM_CONTAINS_TYPE_HINTS,
+    FILLABLE_FORM_PARSED_WITH_TYPE_HINTS,
+    // Parsed a form that is potentially autofillable and contains at least one
+    // UPI Virtual Payment Address hint (upi-vpa)
+    FORM_CONTAINS_UPI_VPA_HINT,
     NUM_DEVELOPER_ENGAGEMENT_METRICS,
   };
 
@@ -256,6 +307,7 @@ class AutofillMetrics {
     SAVE_CARD_PROMPT_DISMISS_CLICK_LEARN_MORE,
     // The prompt was dismissed because the user clicked a legal message link.
     SAVE_CARD_PROMPT_DISMISS_CLICK_LEGAL_MESSAGE,
+
     NUM_SAVE_CARD_PROMPT_METRICS,
   };
 
@@ -264,9 +316,27 @@ class AutofillMetrics {
   // the heuristic prediction, for the crowd-sourced prediction, and for the
   // overall prediction.
   enum FieldTypeQualityMetric {
-    TYPE_UNKNOWN = 0,  // Offered no prediction.
-    TYPE_MATCH,        // Predicted correctly.
-    TYPE_MISMATCH,     // Predicted incorrectly.
+    // The field was found to be of type T, but autofill made no prediction.
+    TYPE_UNKNOWN = 0,
+    // The field was found to be of type T, which matches the predicted type.
+    TYPE_MATCH,
+    // The field was found to be of type T, autofill predicted some other type.
+    TYPE_MISMATCH,
+    // The field was left empty and autofil predicted that the field type would
+    // be UNKNOWN.
+    TYPE_MATCH_EMPTY,
+    // The field was populated with data that did not match any part of the
+    // user's profile (it's type could not be determined). Autofill predicted
+    // the field's type would be UNKNOWN.
+    TYPE_MATCH_UNKNOWN,
+    // The field was left empty, autofill predicted the user would populate it
+    // with autofillable data.
+    TYPE_MISMATCH_EMPTY,
+    // The field was populated with data that did not match any part of the
+    // user's profile (it's type could not be determined). Autofill predicted
+    // the user would populate it with autofillable data.
+    TYPE_MISMATCH_UNKNOWN,
+    // This must be the last value.
     NUM_FIELD_TYPE_QUALITY_METRICS,
   };
 
@@ -345,6 +415,10 @@ class AutofillMetrics {
     USER_DID_EDIT_AUTOFILLED_FIELD,
     // Same as above, but only logged once per page load.
     USER_DID_EDIT_AUTOFILLED_FIELD_ONCE,
+
+    // User entered form data that appears to be a UPI Virtual Payment Address.
+    USER_DID_ENTER_UPI_VPA,
+
     NUM_USER_HAPPINESS_METRICS,
   };
 
@@ -537,6 +611,39 @@ class AutofillMetrics {
     NUM_CONVERTED_ADDRESS_CONVERSION_TYPES
   };
 
+  // Utility to log URL keyed form interaction events.
+  class FormInteractionsUkmLogger {
+   public:
+    explicit FormInteractionsUkmLogger(ukm::UkmService* ukm_service);
+
+    const GURL& url() const { return url_; }
+
+    void OnFormsLoaded(const GURL& url);
+    void LogInteractedWithForm(bool is_for_credit_card,
+                               size_t local_record_type_count,
+                               size_t server_record_type_count);
+    void LogSuggestionsShown();
+    void LogSelectedMaskedServerCard();
+    void LogDidFillSuggestion(int record_type);
+    void LogTextFieldDidChange(const AutofillField& field);
+    void LogFormSubmitted(AutofillFormSubmittedState state);
+
+    // We initialize |url_| with the form's URL when we log the first form
+    // interaction. Later, we may update |url_| with the |source_url()| for the
+    // submitted form.
+    void UpdateSourceURL(const GURL& url);
+
+   private:
+    bool CanLog() const;
+    int64_t MillisecondsSinceFormLoaded() const;
+    void GetNewSourceID();
+
+    ukm::UkmService* ukm_service_;  // Weak reference.
+    int32_t source_id_ = -1;
+    GURL url_;
+    base::TimeTicks form_loaded_timestamp_;
+  };
+
   static void LogCardUploadDecisionMetric(CardUploadDecisionMetric metric);
   static void LogCreditCardInfoBarMetric(InfoBarMetric metric,
                                          bool is_uploading);
@@ -663,7 +770,9 @@ class AutofillMetrics {
 
   // This should be called at each form submission to indicate the autofilled
   // state of the form.
-  static void LogAutofillFormSubmittedState(AutofillFormSubmittedState state);
+  static void LogAutofillFormSubmittedState(
+      AutofillFormSubmittedState state,
+      FormInteractionsUkmLogger* form_interactions_ukm_logger);
 
   // This should be called when determining the heuristic types for a form's
   // fields.
@@ -697,25 +806,33 @@ class AutofillMetrics {
       const GURL& url,
       AutofillMetrics::CardUploadDecisionMetric upload_decision);
 
+  // Logs the developer engagement ukm for the specified |url| and autofill
+  // fields in the form structure.
+  static void LogDeveloperEngagementUkm(
+      ukm::UkmService* ukm_service,
+      const GURL& url,
+      std::vector<AutofillMetrics::DeveloperEngagementMetric> metrics);
+
   // Logs the the |ukm_entry_name| with the specified |url| and the specified
   // |metrics|. Returns whether the ukm was sucessfully logged.
   static bool LogUkm(ukm::UkmService* ukm_service,
                      const GURL& url,
                      const std::string& ukm_entry_name,
-                     const std::map<std::string, int>& metrics);
+                     const std::vector<std::pair<const char*, int>>& metrics);
 
-  // Utility to autofill form events in the relevant histograms depending on
+  // Utility to log autofill form events in the relevant histograms depending on
   // the presence of server and/or local data.
   class FormEventLogger {
    public:
-    FormEventLogger(bool is_for_credit_card);
+    FormEventLogger(bool is_for_credit_card,
+                    FormInteractionsUkmLogger* form_interactions_ukm_logger);
 
-    inline void set_is_server_data_available(bool is_server_data_available) {
-      is_server_data_available_ = is_server_data_available;
+    inline void set_server_record_type_count(size_t server_record_type_count) {
+      server_record_type_count_ = server_record_type_count;
     }
 
-    inline void set_is_local_data_available(bool is_local_data_available) {
-      is_local_data_available_ = is_local_data_available;
+    inline void set_local_record_type_count(size_t local_record_type_count) {
+      local_record_type_count_ = local_record_type_count;
     }
 
     inline void set_is_context_secure(bool is_context_secure) {
@@ -744,8 +861,8 @@ class AutofillMetrics {
     void Log(FormEvent event) const;
 
     bool is_for_credit_card_;
-    bool is_server_data_available_;
-    bool is_local_data_available_;
+    size_t server_record_type_count_;
+    size_t local_record_type_count_;
     bool is_context_secure_;
     bool has_logged_interacted_;
     bool has_logged_suggestions_shown_;
@@ -758,6 +875,9 @@ class AutofillMetrics {
 
     // The last field that was polled for suggestions.
     FormFieldData last_polled_field_;
+
+    FormInteractionsUkmLogger*
+        form_interactions_ukm_logger_;  // Weak reference.
   };
 
  private:

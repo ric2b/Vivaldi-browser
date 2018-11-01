@@ -8,10 +8,12 @@
 
 #include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/browser/autofill_profile.h"
+#include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/payments/cells/autofill_profile_item.h"
 #import "ios/chrome/browser/payments/cells/payments_text_item.h"
+#include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_util.h"
 #import "ios/chrome/browser/payments/shipping_address_selection_view_controller_actions.h"
 #import "ios/chrome/browser/ui/autofill/cells/status_item.h"
@@ -32,10 +34,10 @@
 
 namespace {
 using ::payment_request_util::GetNameLabelFromAutofillProfile;
-using ::payment_request_util::GetAddressLabelFromAutofillProfile;
+using ::payment_request_util::GetShippingAddressLabelFromAutofillProfile;
 using ::payment_request_util::GetPhoneNumberLabelFromAutofillProfile;
-using ::payment_request_util::GetShippingAddressSelectorTitle;
-using ::payment_request_util::GetShippingAddressSelectorInfoMessage;
+using ::payments::GetShippingAddressSelectorInfoMessage;
+using ::payments::GetShippingAddressSectionString;
 
 NSString* const kShippingAddressSelectionCollectionViewID =
     @"kShippingAddressSelectionCollectionViewID";
@@ -57,9 +59,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 @interface ShippingAddressSelectionViewController ()<
     ShippingAddressSelectionViewControllerActions> {
-  // The PaymentRequest object owning an instance of web::PaymentRequest as
-  // provided by the page invoking the Payment Request API. This is a weak
-  // pointer and should outlive this class.
+  // The PaymentRequest object having a copy of web::PaymentRequest as provided
+  // by the page invoking the Payment Request API. This is a weak pointer and
+  // should outlive this class.
   PaymentRequest* _paymentRequest;
 
   // The currently selected item. May be nil.
@@ -77,7 +79,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest {
   DCHECK(paymentRequest);
   if ((self = [super initWithStyle:CollectionViewControllerStyleAppBar])) {
-    self.title = GetShippingAddressSelectorTitle(*paymentRequest);
+    self.title = base::SysUTF16ToNSString(
+        GetShippingAddressSectionString(paymentRequest->shipping_type()));
 
     // Set up leading (return) button.
     UIBarButtonItem* returnButton =
@@ -119,7 +122,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
     messageItem.text = _errorMessage;
     messageItem.image = NativeImage(IDR_IOS_PAYMENTS_WARNING);
   } else {
-    messageItem.text = GetShippingAddressSelectorInfoMessage(*_paymentRequest);
+    messageItem.text =
+        base::SysUTF16ToNSString(GetShippingAddressSelectorInfoMessage(
+            _paymentRequest->shipping_type()));
   }
   [model addItem:messageItem
       toSectionWithIdentifier:SectionIdentifierShippingAddress];
@@ -130,7 +135,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
         [[AutofillProfileItem alloc] initWithType:ItemTypeShippingAddress];
     item.accessibilityTraits |= UIAccessibilityTraitButton;
     item.name = GetNameLabelFromAutofillProfile(*shippingAddress);
-    item.address = GetAddressLabelFromAutofillProfile(*shippingAddress);
+    item.address = GetShippingAddressLabelFromAutofillProfile(*shippingAddress);
     item.phoneNumber = GetPhoneNumberLabelFromAutofillProfile(*shippingAddress);
     if (_paymentRequest->selected_shipping_profile() == shippingAddress) {
       item.accessoryType = MDCCollectionViewCellAccessoryCheckmark;

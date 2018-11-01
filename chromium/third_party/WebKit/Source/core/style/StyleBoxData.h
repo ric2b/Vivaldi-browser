@@ -28,66 +28,66 @@
 #include "core/CoreExport.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/Length.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefCounted.h"
 
 namespace blink {
 
 // TODO(sashab): Move this into a private class on ComputedStyle, and remove
 // all methods on it, merging them into copy/creation methods on ComputedStyle
 // instead. Keep the allocation logic, only allocating a new object if needed.
-class CORE_EXPORT StyleBoxData : public RefCounted<StyleBoxData> {
+class CORE_EXPORT StyleBoxData : public RefCountedCopyable<StyleBoxData> {
  public:
-  static PassRefPtr<StyleBoxData> create() {
-    return adoptRef(new StyleBoxData);
+  static PassRefPtr<StyleBoxData> Create() {
+    return AdoptRef(new StyleBoxData);
   }
-  PassRefPtr<StyleBoxData> copy() const {
-    return adoptRef(new StyleBoxData(*this));
+  PassRefPtr<StyleBoxData> Copy() const {
+    return AdoptRef(new StyleBoxData(*this));
   }
 
   bool operator==(const StyleBoxData&) const;
   bool operator!=(const StyleBoxData& o) const { return !(*this == o); }
 
-  const Length& width() const { return m_width; }
-  const Length& height() const { return m_height; }
+  const Length& Width() const { return width_; }
+  const Length& Height() const { return height_; }
 
-  const Length& minWidth() const { return m_minWidth; }
-  const Length& minHeight() const { return m_minHeight; }
+  const Length& MinWidth() const { return min_width_; }
+  const Length& MinHeight() const { return min_height_; }
 
-  const Length& maxWidth() const { return m_maxWidth; }
-  const Length& maxHeight() const { return m_maxHeight; }
+  const Length& MaxWidth() const { return max_width_; }
+  const Length& MaxHeight() const { return max_height_; }
 
-  const Length& verticalAlign() const { return m_verticalAlign; }
+  const Length& VerticalAlign() const { return vertical_align_; }
 
-  int zIndex() const { return m_zIndex; }
-  bool hasAutoZIndex() const { return m_hasAutoZIndex; }
+  int ZIndex() const { return z_index_; }
+  bool HasAutoZIndex() const { return has_auto_z_index_; }
 
-  EBoxSizing boxSizing() const { return static_cast<EBoxSizing>(m_boxSizing); }
-  EBoxDecorationBreak boxDecorationBreak() const {
-    return static_cast<EBoxDecorationBreak>(m_boxDecorationBreak);
+  EBoxSizing BoxSizing() const { return static_cast<EBoxSizing>(box_sizing_); }
+  EBoxDecorationBreak BoxDecorationBreak() const {
+    return static_cast<EBoxDecorationBreak>(box_decoration_break_);
   }
 
  private:
   friend class ComputedStyle;
 
   StyleBoxData();
-  StyleBoxData(const StyleBoxData&);
+  StyleBoxData(const StyleBoxData&) = default;
 
-  Length m_width;
-  Length m_height;
+  Length width_;
+  Length height_;
 
-  Length m_minWidth;
-  Length m_maxWidth;
+  Length min_width_;
+  Length max_width_;
 
-  Length m_minHeight;
-  Length m_maxHeight;
+  Length min_height_;
+  Length max_height_;
 
-  Length m_verticalAlign;
+  Length vertical_align_;
 
-  int m_zIndex;
-  unsigned m_hasAutoZIndex : 1;
-  unsigned m_boxSizing : 1;           // EBoxSizing
-  unsigned m_boxDecorationBreak : 1;  // EBoxDecorationBreak
+  int z_index_;
+  unsigned has_auto_z_index_ : 1;
+  unsigned box_sizing_ : 1;            // EBoxSizing
+  unsigned box_decoration_break_ : 1;  // EBoxDecorationBreak
 };
 
 }  // namespace blink

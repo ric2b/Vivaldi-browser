@@ -7,7 +7,6 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/user_metrics_action.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -17,7 +16,6 @@
 
 #include "content/public/browser/web_contents_delegate.h"
 
-using base::UserMetricsAction;
 using content::DownloadItemAction;
 
 namespace guest_view {
@@ -25,7 +23,6 @@ class GuestViewBase;
 }
 
 using guest_view::GuestViewBase;
-
 
 namespace extensions {
 

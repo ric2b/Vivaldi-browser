@@ -16,6 +16,7 @@
 #include "base/nix/xdg_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/sys_info.h"
 #include "chromeos/audio/audio_device.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "media/audio/audio_device_description.h"
@@ -49,6 +50,10 @@ const int kDefaultInputBufferSize = 1024;
 const char kBeamformingOnDeviceId[] = "default-beamforming-on";
 const char kBeamformingOffDeviceId[] = "default-beamforming-off";
 
+const char kInternalInputVirtualDevice[] = "Built-in mic";
+const char kInternalOutputVirtualDevice[] = "Built-in speaker";
+const char kHeadphoneLineOutVirtualDevice[] = "Headphone/Line Out";
+
 enum CrosBeamformingDeviceState {
   BEAMFORMING_DEFAULT_ENABLED = 0,
   BEAMFORMING_USER_ENABLED,
@@ -81,6 +86,27 @@ std::string MicPositions() {
     }
   }
   return "";
+}
+
+// Process |device_list| that two shares the same dev_index by creating a
+// virtual device name for them.
+void ProcessVirtualDeviceName(AudioDeviceNames* device_names,
+                              const chromeos::AudioDeviceList& device_list) {
+  DCHECK_EQ(2, device_list.size());
+  if (device_list[0].type == chromeos::AUDIO_TYPE_LINEOUT ||
+      device_list[1].type == chromeos::AUDIO_TYPE_LINEOUT) {
+    device_names->emplace_back(kHeadphoneLineOutVirtualDevice,
+                               base::Uint64ToString(device_list[0].id));
+  } else if (device_list[0].type == chromeos::AUDIO_TYPE_INTERNAL_SPEAKER ||
+             device_list[1].type == chromeos::AUDIO_TYPE_INTERNAL_SPEAKER) {
+    device_names->emplace_back(kInternalOutputVirtualDevice,
+                               base::Uint64ToString(device_list[0].id));
+  } else {
+    DCHECK(device_list[0].type == chromeos::AUDIO_TYPE_INTERNAL_MIC ||
+           device_list[1].type == chromeos::AUDIO_TYPE_INTERNAL_MIC);
+    device_names->emplace_back(kInternalInputVirtualDevice,
+                               base::Uint64ToString(device_list[0].id));
+  }
 }
 
 }  // namespace
@@ -164,10 +190,25 @@ void AudioManagerCras::GetAudioDeviceNamesImpl(bool is_input,
   if (base::FeatureList::IsEnabled(features::kEnumerateAudioDevices)) {
     chromeos::AudioDeviceList devices;
     chromeos::CrasAudioHandler::Get()->GetAudioDevices(&devices);
+
+    // |dev_idx_map| is a map of dev_index and their audio devices.
+    std::map<int, chromeos::AudioDeviceList> dev_idx_map;
     for (const auto& device : devices) {
-      if (device.is_input == is_input && device.is_for_simple_usage()) {
+      if (device.is_input != is_input || !device.is_for_simple_usage())
+        continue;
+
+      dev_idx_map[dev_index_of(device.id)].push_back(device);
+    }
+
+    for (const auto& item : dev_idx_map) {
+      if (1 == item.second.size()) {
+        const chromeos::AudioDevice& device = item.second.front();
         device_names->emplace_back(device.display_name,
                                    base::Uint64ToString(device.id));
+      } else {
+        // Create virtual device name for audio nodes that share the same device
+        // index.
+        ProcessVirtualDeviceName(device_names, item.second);
       }
     }
   }
@@ -265,12 +306,23 @@ AudioInputStream* AudioManagerCras::MakeLowLatencyInputStream(
   return MakeInputStream(params, device_id);
 }
 
+int AudioManagerCras::GetMinimumOutputBufferSizePerBoard() {
+  // On faster boards we can use smaller buffer size for lower latency.
+  // On slower boards we should use larger buffer size to prevent underrun.
+  std::string board = base::SysInfo::GetLsbReleaseBoard();
+  if (board == "kevin")
+    return 768;
+  else if (board == "samus")
+    return 256;
+  return kMinimumOutputBufferSize;
+}
+
 AudioParameters AudioManagerCras::GetPreferredOutputStreamParameters(
     const std::string& output_device_id,
     const AudioParameters& input_params) {
   ChannelLayout channel_layout = CHANNEL_LAYOUT_STEREO;
   int sample_rate = kDefaultSampleRate;
-  int buffer_size = kMinimumOutputBufferSize;
+  int buffer_size = GetMinimumOutputBufferSizePerBoard();
   int bits_per_sample = 16;
   if (input_params.IsValid()) {
     sample_rate = input_params.sample_rate();

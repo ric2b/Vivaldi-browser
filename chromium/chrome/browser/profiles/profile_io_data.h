@@ -46,7 +46,6 @@ class HostContentSettingsMap;
 class MediaDeviceIDSalt;
 class NetHttpSessionParamsObserver;
 class ProtocolHandlerRegistry;
-class SupervisedUserURLFilter;
 
 namespace chromeos {
 class CertificateProvider;
@@ -96,6 +95,10 @@ class PolicyCertVerifier;
 class PolicyHeaderIOHelper;
 class URLBlacklistManager;
 }  // namespace policy
+
+namespace previews {
+class PreviewsIOData;
+}
 
 // Conceptually speaking, the ProfileIOData represents data that lives on the IO
 // thread that is owned by a Profile, such as, but not limited to, network
@@ -216,12 +219,6 @@ class ProfileIOData {
     return policy_header_helper_.get();
   }
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  const SupervisedUserURLFilter* supervised_user_url_filter() const {
-    return supervised_user_url_filter_.get();
-  }
-#endif
-
   // Initialize the member needed to track the metrics enabled state. This is
   // only to be called on the UI thread.
   void InitializeMetricsEnabledStateOnUIThread();
@@ -239,6 +236,10 @@ class ProfileIOData {
   data_reduction_proxy::DataReductionProxyIOData*
   data_reduction_proxy_io_data() const {
     return data_reduction_proxy_io_data_.get();
+  }
+
+  previews::PreviewsIOData* previews_io_data() const {
+    return previews_io_data_.get();
   }
 
   // This function is to be used to check if the |url| is defined in
@@ -264,7 +265,7 @@ class ProfileIOData {
     // |name| is used to describe this context. Currently there are two kinds of
     // media request context -- main media request context ("main_meda") and
     // isolated app media request context ("isolated_media").
-    explicit MediaRequestContext(const std::string& name);
+    explicit MediaRequestContext(const char* name);
 
     void SetHttpTransactionFactory(
         std::unique_ptr<net::HttpTransactionFactory> http_factory);
@@ -334,10 +335,6 @@ class ProfileIOData {
     // and needs to be on the main thread.
     std::unique_ptr<net::ProxyConfigService> proxy_config_service;
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-    scoped_refptr<const SupervisedUserURLFilter> supervised_user_url_filter;
-#endif
-
 #if defined(OS_CHROMEOS)
     std::string username_hash;
     bool use_system_key_slot;
@@ -382,6 +379,9 @@ class ProfileIOData {
   void set_data_reduction_proxy_io_data(
       std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
           data_reduction_proxy_io_data) const;
+
+  void set_previews_io_data(
+      std::unique_ptr<previews::PreviewsIOData> previews_io_data) const;
 
   net::ProxyService* proxy_service() const {
     return proxy_service_.get();
@@ -481,7 +481,7 @@ class ProfileIOData {
   virtual net::URLRequestContext* InitializeMediaRequestContext(
       net::URLRequestContext* original_context,
       const StoragePartitionDescriptor& details,
-      const std::string& name) const = 0;
+      const char* name) const = 0;
 
   // These functions are used to transfer ownership of the lazily initialized
   // context from ProfileIOData to the URLRequestContextGetter.
@@ -554,6 +554,8 @@ class ProfileIOData {
   mutable scoped_refptr<extensions::InfoMap> extension_info_map_;
 #endif
 
+  mutable std::unique_ptr<previews::PreviewsIOData> previews_io_data_;
+
   mutable std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
       data_reduction_proxy_io_data_;
 
@@ -603,11 +605,6 @@ class ProfileIOData {
 
   mutable std::unique_ptr<ChromeHttpUserAgentSettings>
       chrome_http_user_agent_settings_;
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  mutable scoped_refptr<const SupervisedUserURLFilter>
-      supervised_user_url_filter_;
-#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Is NULL if switches::kDisableExtensionsHttpThrottling is on.

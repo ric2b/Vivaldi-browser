@@ -6,11 +6,11 @@
 #define LockOrientationCallback_h
 
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/modules/screen_orientation/WebLockOrientationCallback.h"
 #include "public/platform/modules/screen_orientation/WebScreenOrientationType.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -27,11 +27,11 @@ class LockOrientationCallback final : public WebLockOrientationCallback {
   explicit LockOrientationCallback(ScriptPromiseResolver*);
   ~LockOrientationCallback() override;
 
-  void onSuccess() override;
-  void onError(WebLockOrientationError) override;
+  void OnSuccess() override;
+  void OnError(WebLockOrientationError) override;
 
  private:
-  Persistent<ScriptPromiseResolver> m_resolver;
+  Persistent<ScriptPromiseResolver> resolver_;
 };
 
 }  // namespace blink

@@ -10,7 +10,7 @@
 #include "core/css/parser/MediaQueryBlockWatcher.h"
 #include "core/css/parser/MediaQueryParser.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -23,17 +23,17 @@ class CORE_EXPORT SizesAttributeParser {
   float length();
 
  private:
-  bool parse(CSSParserTokenRange);
-  float effectiveSize();
-  bool calculateLengthInPixels(CSSParserTokenRange, float& result);
-  bool mediaConditionMatches(const MediaQuerySet& mediaCondition);
-  float effectiveSizeDefaultValue();
+  bool Parse(CSSParserTokenRange);
+  float EffectiveSize();
+  bool CalculateLengthInPixels(CSSParserTokenRange, float& result);
+  bool MediaConditionMatches(const MediaQuerySet& media_condition);
+  float EffectiveSizeDefaultValue();
 
-  RefPtr<MediaQuerySet> m_mediaCondition;
-  Member<MediaValues> m_mediaValues;
-  float m_length;
-  bool m_lengthWasSet;
-  bool m_isValid;
+  RefPtr<MediaQuerySet> media_condition_;
+  Member<MediaValues> media_values_;
+  float length_;
+  bool length_was_set_;
+  bool is_valid_;
 };
 
 }  // namespace blink

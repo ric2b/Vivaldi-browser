@@ -8,6 +8,7 @@
 
 #include <string>
 
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -100,7 +101,7 @@ void SessionStartupPref::SetStartupPref(PrefService* prefs,
     url_pref_list->Clear();
     for (size_t i = 0; i < pref.urls.size(); ++i) {
       url_pref_list->Set(static_cast<int>(i),
-                         new base::StringValue(pref.urls[i].spec()));
+                         base::MakeUnique<base::Value>(pref.urls[i].spec()));
     }
   }
 }

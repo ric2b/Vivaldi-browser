@@ -25,11 +25,15 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/lazy_background_task_queue.h"
 #include "extensions/common/error_utils.h"
+#include "extensions/common/image_util.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/ui/accessibility_focus_ring_controller.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager_client.h"
+
 using chromeos::AccessibilityFocusRingController;
 #endif
 
@@ -79,6 +83,16 @@ AccessibilityPrivateSetFocusRingFunction::Run() {
     rects.push_back(gfx::Rect(left, top, width, height));
   }
 
+  std::string color_str;
+  if (args_->GetSize() >= 2 && args_->GetString(1, &color_str)) {
+    SkColor color;
+    if (!extensions::image_util::ParseHexColorString(color_str, &color))
+      return RespondNow(Error("Could not parse hex color"));
+    AccessibilityFocusRingController::GetInstance()->SetFocusRingColor(color);
+  } else {
+    AccessibilityFocusRingController::GetInstance()->ResetFocusRingColor();
+  }
+
   // Move the visible focus ring to cover all of these rects.
   AccessibilityFocusRingController::GetInstance()->SetFocusRing(
       rects, AccessibilityFocusRingController::PERSIST_FOCUS_RING);
@@ -124,6 +138,27 @@ AccessibilityPrivateSetKeyboardListenerFunction::Run() {
                                             details.GetProfile());
     manager->set_keyboard_listener_capture(false);
   }
+  return RespondNow(NoArguments());
+#endif  // defined OS_CHROMEOS
+
+  return RespondNow(Error(kErrorNotSupported));
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateDarkenScreenFunction::Run() {
+  ChromeExtensionFunctionDetails details(this);
+  CHECK(extension());
+
+#if defined(OS_CHROMEOS)
+  bool darken;
+  EXTENSION_FUNCTION_VALIDATE(args_->GetBoolean(0, &darken));
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+
+  // Called twice to ensure the cros end of the dbus message is in a good
+  // state.
+  client->SetBacklightsForcedOff(!darken);
+  client->SetBacklightsForcedOff(darken);
   return RespondNow(NoArguments());
 #endif  // defined OS_CHROMEOS
 

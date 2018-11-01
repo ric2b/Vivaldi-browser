@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "cc/ipc/display_compositor.mojom.h"
+#include "cc/ipc/frame_sink_manager.mojom.h"
 #include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
@@ -74,6 +74,10 @@ class ServerWindow {
 
   const cc::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
+  const base::Optional<cc::LocalSurfaceId>& current_local_surface_id() const {
+    return current_local_surface_id_;
+  }
+
   void Add(ServerWindow* child);
   void Remove(ServerWindow* child);
   void Reorder(ServerWindow* relative, mojom::OrderDirection diretion);
@@ -83,7 +87,9 @@ class ServerWindow {
   const gfx::Rect& bounds() const { return bounds_; }
   // Sets the bounds. If the size changes this implicitly resets the client
   // area to fill the whole bounds.
-  void SetBounds(const gfx::Rect& bounds);
+  void SetBounds(const gfx::Rect& bounds,
+                 const base::Optional<cc::LocalSurfaceId>& local_surface_id =
+                     base::nullopt);
 
   const std::vector<gfx::Rect>& additional_client_areas() const {
     return additional_client_areas_;
@@ -99,8 +105,8 @@ class ServerWindow {
   bool can_accept_drops() const { return accepts_drops_; }
   void SetCanAcceptDrops(bool accepts_drags);
 
-  ui::mojom::Cursor cursor() const { return cursor_id_; }
-  ui::mojom::Cursor non_client_cursor() const {
+  ui::mojom::CursorType cursor() const { return cursor_id_; }
+  ui::mojom::CursorType non_client_cursor() const {
     return non_client_cursor_id_;
   }
 
@@ -131,8 +137,8 @@ class ServerWindow {
 
   const Windows& transient_children() const { return transient_children_; }
 
-  bool is_modal() const { return is_modal_; }
-  void SetModal();
+  ModalType modal_type() const { return modal_type_; }
+  void SetModalType(ModalType modal_type);
 
   // Returns true if this contains |window| or is |window|.
   bool Contains(const ServerWindow* window) const;
@@ -145,8 +151,8 @@ class ServerWindow {
   float opacity() const { return opacity_; }
   void SetOpacity(float value);
 
-  void SetPredefinedCursor(ui::mojom::Cursor cursor_id);
-  void SetNonClientCursor(ui::mojom::Cursor cursor_id);
+  void SetPredefinedCursor(ui::mojom::CursorType cursor_id);
+  void SetNonClientCursor(ui::mojom::CursorType cursor_id);
 
   const gfx::Transform& transform() const { return transform_; }
   void SetTransform(const gfx::Transform& transform);
@@ -227,6 +233,8 @@ class ServerWindow {
   ServerWindowDelegate* delegate_;
   const WindowId id_;
   cc::FrameSinkId frame_sink_id_;
+  base::Optional<cc::LocalSurfaceId> current_local_surface_id_;
+
   ServerWindow* parent_;
   Windows children_;
 
@@ -237,15 +245,15 @@ class ServerWindow {
   ServerWindow* transient_parent_;
   Windows transient_children_;
 
-  bool is_modal_;
+  ModalType modal_type_;
   bool visible_;
   gfx::Rect bounds_;
   gfx::Insets client_area_;
   std::vector<gfx::Rect> additional_client_areas_;
   std::unique_ptr<ServerWindowCompositorFrameSinkManager>
       compositor_frame_sink_manager_;
-  mojom::Cursor cursor_id_;
-  mojom::Cursor non_client_cursor_id_;
+  mojom::CursorType cursor_id_;
+  mojom::CursorType non_client_cursor_id_;
   float opacity_;
   bool can_focus_;
   mojom::EventTargetingPolicy event_targeting_policy_ =

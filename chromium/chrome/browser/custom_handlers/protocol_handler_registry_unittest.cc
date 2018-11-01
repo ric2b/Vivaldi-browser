@@ -28,6 +28,7 @@
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_renderer_host.h"
 #include "net/base/request_priority.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,8 +42,8 @@ void AssertInterceptedIO(
     net::URLRequestJobFactory* interceptor) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext context;
-  std::unique_ptr<net::URLRequest> request(
-      context.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr));
+  std::unique_ptr<net::URLRequest> request(context.CreateRequest(
+      url, net::DEFAULT_PRIORITY, nullptr, TRAFFIC_ANNOTATION_FOR_TESTS));
   std::unique_ptr<net::URLRequestJob> job(
       interceptor->MaybeCreateJobWithProtocolHandler(
           url.scheme(), request.get(), context.network_delegate()));
@@ -62,8 +63,8 @@ void AssertIntercepted(
 }
 
 // FakeURLRequestJobFactory returns NULL for all job creation requests and false
-// for all IsHandled*() requests. FakeURLRequestJobFactory can be chained to
-// ProtocolHandlerRegistry::JobInterceptorFactory so the result of
+// for all IsHandledProtocol() requests. FakeURLRequestJobFactory can be chained
+// to ProtocolHandlerRegistry::JobInterceptorFactory so the result of
 // MaybeCreateJobWithProtocolHandler() indicates whether the
 // ProtocolHandlerRegistry properly handled a job creation request.
 class FakeURLRequestJobFactory : public net::URLRequestJobFactory {
@@ -91,7 +92,6 @@ class FakeURLRequestJobFactory : public net::URLRequestJobFactory {
   bool IsHandledProtocol(const std::string& scheme) const override {
     return false;
   }
-  bool IsHandledURL(const GURL& url) const override { return false; }
   bool IsSafeRedirectTarget(const GURL& location) const override {
     return true;
   }

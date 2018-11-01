@@ -66,6 +66,10 @@ if (is_win) {
     inputs += [
       "$root_out_dir/vivaldi.dll",
       "$root_out_dir/vivaldi.exe",
+      "$root_out_dir/update_notifier.exe",
+    ]
+    deps+= [
+      "//vivaldi/update_notifier",
     ]
     sign_executables =
         defined(invoker.sign_executables) && invoker.sign_executables
@@ -114,4 +118,11 @@ if (is_win) {
     binary_name = "vivaldi_child.dll"
   }
 
+}
+
+# Write compiler path to win_toolchain.json file used by PGO benchmark script
+if (is_win) {
+  import("//build/config/win/visual_studio_version.gni")
+  write_file("$root_build_dir/win_toolchain.json",
+      "{ \"path\":\""+ rebase_path(visual_studio_path) +"\" }")
 }

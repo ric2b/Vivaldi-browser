@@ -13,7 +13,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
-#include "cc/debug/lap_timer.h"
+#include "cc/base/lap_timer.h"
 #include "cc/layers/nine_patch_layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/texture_layer.h"
@@ -59,10 +59,8 @@ class LayerTreeHostPerfTest : public LayerTreeTest {
   }
 
   void BeginMainFrame(const BeginFrameArgs& args) override {
-    if (begin_frame_driven_drawing_ && !TestEnded()) {
-      layer_tree_host()->SetNeedsAnimate();
-      layer_tree_host()->SetNextCommitForcesRedraw();
-    }
+    if (begin_frame_driven_drawing_ && !TestEnded())
+      layer_tree_host()->SetNeedsCommitWithForcedRedraw();
   }
 
   void BeginCommitOnThread(LayerTreeHostImpl* host_impl) override {
@@ -309,9 +307,9 @@ class BrowserCompositorInvalidateLayerTreePerfTest
     clean_up_started_ = true;
     MainThreadTaskRunner()->PostTask(
         FROM_HERE,
-        base::Bind(&BrowserCompositorInvalidateLayerTreePerfTest::
-                        CleanUpAndEndTestOnMainThread,
-                   base::Unretained(this)));
+        base::BindOnce(&BrowserCompositorInvalidateLayerTreePerfTest::
+                           CleanUpAndEndTestOnMainThread,
+                       base::Unretained(this)));
   }
 
   void CleanUpAndEndTestOnMainThread() {

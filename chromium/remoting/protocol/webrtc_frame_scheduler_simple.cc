@@ -132,6 +132,7 @@ WebrtcFrameSchedulerSimple::~WebrtcFrameSchedulerSimple() {}
 
 void WebrtcFrameSchedulerSimple::OnKeyFrameRequested() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  encoder_ready_ = true;
   key_frame_request_ = true;
   ScheduleNextFrame(base::TimeTicks::Now());
 }
@@ -178,14 +179,22 @@ bool WebrtcFrameSchedulerSimple::OnFrameCaptured(
 
   base::TimeTicks now = base::TimeTicks::Now();
 
-  if ((!frame || frame->updated_region().is_empty()) && !top_off_is_active_ &&
-      !key_frame_request_) {
-    frame_pending_ = false;
-    ScheduleNextFrame(now);
-    return false;
+  if ((!frame || frame->updated_region().is_empty())) {
+    // If we've failed to capture a frame or captured an empty frame we still
+    // need to encode and send the previous frame when top-off is active or a
+    // key-frame was requested. But it makes sense only when we have a frame to
+    // send, i.e. there is nothing to send if first capture request failed.
+    bool resend_last_frame =
+        captured_first_frame_ && (top_off_is_active_ || key_frame_request_);
+    if (!resend_last_frame) {
+      frame_pending_ = false;
+      ScheduleNextFrame(now);
+      return false;
+    }
   }
 
   if (frame) {
+    captured_first_frame_ = true;
     encoder_bitrate_.SetFrameSize(frame->size());
   }
 
@@ -266,8 +275,8 @@ void WebrtcFrameSchedulerSimple::OnFrameEncoded(
 void WebrtcFrameSchedulerSimple::ScheduleNextFrame(base::TimeTicks now) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (paused_ || pacing_bucket_.rate() == 0 || capture_callback_.is_null() ||
-      frame_pending_) {
+  if (!encoder_ready_ || paused_ || pacing_bucket_.rate() == 0 ||
+      capture_callback_.is_null() || frame_pending_) {
     return;
   }
 

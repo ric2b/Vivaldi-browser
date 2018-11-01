@@ -32,8 +32,8 @@
 #define SubtreeLayoutScope_h
 
 #include "core/inspector/InspectorTraceEvents.h"
-#include "wtf/Allocator.h"
-#include "wtf/HashSet.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/HashSet.h"
 
 // This is the way to mark a subtree as needing layout during layout,
 // e.g. for the purposes of doing a multipass layout.
@@ -55,18 +55,18 @@ class SubtreeLayoutScope {
   SubtreeLayoutScope(LayoutObject& root);
   ~SubtreeLayoutScope();
 
-  void setNeedsLayout(LayoutObject* descendant,
+  void SetNeedsLayout(LayoutObject* descendant,
                       LayoutInvalidationReasonForTracing);
-  void setChildNeedsLayout(LayoutObject* descendant);
+  void SetChildNeedsLayout(LayoutObject* descendant);
 
-  LayoutObject& root() { return m_root; }
-  void recordObjectMarkedForLayout(LayoutObject*);
+  LayoutObject& Root() { return root_; }
+  void RecordObjectMarkedForLayout(LayoutObject*);
 
  private:
-  LayoutObject& m_root;
+  LayoutObject& root_;
 
 #if DCHECK_IS_ON()
-  HashSet<LayoutObject*> m_layoutObjectsToLayout;
+  HashSet<LayoutObject*> layout_objects_to_layout_;
 #endif
 };
 

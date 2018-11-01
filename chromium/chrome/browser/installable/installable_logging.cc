@@ -50,9 +50,9 @@ static const char kNoAcceptableIconMessage[] =
     "a %spx square icon is required, but no supplied icon meets this "
     "requirement";
 static const char kCannotDownloadIconMessage[] =
-    "could not download the specified icon";
+    "could not download a required icon from the manifest";
 static const char kNoIconAvailableMessage[] =
-    "no icon available to display";
+    "icon downloaded from the manifest was empty or corrupted";
 static const char kPlatformNotSupportedOnAndroidMessage[] =
     "the specified application platform is not supported on Android";
 static const char kNoIdSpecifiedMessage[] =
@@ -64,7 +64,7 @@ static const char kUrlNotSupportedForWebApkMessage[] =
     "a URL in the web manifest contains a username, password, or port";
 static const char kInIncognitoMessage[] =
     "the page is loaded in an incognito window";
-
+static const char kNotOfflineCapable[] = "the page does not work offline";
 }  // namespace
 
 void LogErrorToConsole(content::WebContents* web_contents,
@@ -150,6 +150,9 @@ void LogErrorToConsole(content::WebContents* web_contents,
       break;
     case IN_INCOGNITO:
       pattern = kInIncognitoMessage;
+      break;
+    case NOT_OFFLINE_CAPABLE:
+      pattern = kNotOfflineCapable;
       break;
   }
 

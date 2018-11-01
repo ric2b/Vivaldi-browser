@@ -136,17 +136,17 @@ class MEDIA_BLINK_EXPORT BufferedResourceLoader
   bool range_supported();
 
   // blink::WebURLLoaderClient implementation.
-  bool willFollowRedirect(const blink::WebURLRequest& newRequest,
+  bool WillFollowRedirect(const blink::WebURLRequest& newRequest,
                           const blink::WebURLResponse& redirectResponse) override;
-  void didSendData(unsigned long long bytesSent,
+  void DidSendData(unsigned long long bytesSent,
       unsigned long long totalBytesToBeSent) override;
-  void didReceiveResponse(const blink::WebURLResponse& response) override;
-  void didDownloadData(int data_length) override;
-  void didReceiveData(const char* data,
+  void DidReceiveResponse(const blink::WebURLResponse& response) override;
+  void DidDownloadData(int data_length) override;
+  void DidReceiveData(const char* data,
                       int data_length) override;
-  void didReceiveCachedMetadata(const char* data, int dataLength) override;
-  void didFinishLoading(double finishTime) override;
-  void didFail(const blink::WebURLError&) override;
+  void DidReceiveCachedMetadata(const char* data, int dataLength) override;
+  void DidFinishLoading(double finishTime) override;
+  void DidFail(const blink::WebURLError&) override;
 
   // Returns true if the media resource has a single origin, false otherwise.
   // Only valid to call after Start() has completed.

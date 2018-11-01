@@ -5,17 +5,16 @@
 #ifndef NGLayoutOpportunityTreeNode_h
 #define NGLayoutOpportunityTreeNode_h
 
-#include "core/layout/ng/ng_units.h"
-#include "platform/heap/Handle.h"
+#include "core/layout/ng/geometry/ng_edge.h"
+#include "core/layout/ng/geometry/ng_logical_rect.h"
+#include "core/layout/ng/ng_exclusion.h"
 
 namespace blink {
-
 
 // 3 node R-Tree that represents available space(left, bottom, right) or
 // layout opportunity after the parent spatial rectangle is split by the
 // exclusion rectangle.
-struct CORE_EXPORT NGLayoutOpportunityTreeNode
-    : public GarbageCollected<NGLayoutOpportunityTreeNode> {
+struct CORE_EXPORT NGLayoutOpportunityTreeNode {
  public:
   // Default constructor.
   // Creates a Layout Opportunity tree node that is limited by it's own edge
@@ -30,9 +29,9 @@ struct CORE_EXPORT NGLayoutOpportunityTreeNode
                               NGEdge exclusion_edge);
 
   // Children of the node.
-  Member<NGLayoutOpportunityTreeNode> left;
-  Member<NGLayoutOpportunityTreeNode> bottom;
-  Member<NGLayoutOpportunityTreeNode> right;
+  std::unique_ptr<NGLayoutOpportunityTreeNode> left;
+  std::unique_ptr<NGLayoutOpportunityTreeNode> bottom;
+  std::unique_ptr<NGLayoutOpportunityTreeNode> right;
 
   // The top layout opportunity associated with this node.
   NGLogicalRect opportunity;
@@ -40,15 +39,29 @@ struct CORE_EXPORT NGLayoutOpportunityTreeNode
   // Edge that limits this layout opportunity from above.
   NGEdge exclusion_edge;
 
-  // Exclusion that splits apart this layout opportunity.
-  const NGExclusion* exclusion;  // Not owned.
+  // Exclusions that splits apart this layout opportunity.
+  Vector<const NGExclusion*> exclusions;  // Not owned.
+
+  // Exclusion that represent all combined exclusions that
+  // split this node.
+  std::unique_ptr<NGExclusion> combined_exclusion;
 
   // Whether this node is a leaf node.
-  // The node is a leaf if it doesn't have an exclusion that splits it apart.
-  bool IsLeafNode() const { return !exclusion; }
+  // The node is a leaf if it doesn't have exclusions that split it apart.
+  bool IsLeafNode() const { return exclusions.IsEmpty(); }
 
-  DECLARE_TRACE();
+  String ToString() const;
 };
+
+inline std::ostream& operator<<(std::ostream& stream,
+                                const NGLayoutOpportunityTreeNode& value) {
+  return stream << value.ToString();
+}
+
+inline std::ostream& operator<<(std::ostream& out,
+                                const NGLayoutOpportunityTreeNode* value) {
+  return out << (value ? value->ToString() : "(null)");
+}
 
 }  // namespace blink
 #endif  // NGLayoutOpportunityTreeNode_h

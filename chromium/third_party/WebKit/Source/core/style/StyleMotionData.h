@@ -9,7 +9,7 @@
 #include "core/style/StylePath.h"
 #include "platform/Length.h"
 #include "platform/LengthPoint.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -22,22 +22,22 @@ class StyleMotionData {
                   StylePath* path,
                   const Length& distance,
                   StyleOffsetRotation rotation)
-      : m_anchor(anchor),
-        m_position(position),
-        m_path(path),
-        m_distance(distance),
-        m_rotation(rotation) {}
+      : anchor_(anchor),
+        position_(position),
+        path_(path),
+        distance_(distance),
+        rotation_(rotation) {}
 
   bool operator==(const StyleMotionData&) const;
 
   bool operator!=(const StyleMotionData& o) const { return !(*this == o); }
 
   // Must be public for SET_VAR in ComputedStyle.h
-  LengthPoint m_anchor;
-  LengthPoint m_position;
-  RefPtr<StylePath> m_path;  // nullptr indicates path is 'none'
-  Length m_distance;
-  StyleOffsetRotation m_rotation;
+  LengthPoint anchor_;
+  LengthPoint position_;
+  RefPtr<StylePath> path_;  // nullptr indicates path is 'none'
+  Length distance_;
+  StyleOffsetRotation rotation_;
 };
 
 }  // namespace blink

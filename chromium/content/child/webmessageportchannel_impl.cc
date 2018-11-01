@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannelClient.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 
@@ -20,7 +21,7 @@ using blink::WebString;
 namespace content {
 
 WebMessagePortChannelImpl::~WebMessagePortChannelImpl() {
-  setClient(nullptr);
+  SetClient(nullptr);
 }
 
 WebMessagePortChannelImpl::WebMessagePortChannelImpl(
@@ -30,11 +31,14 @@ WebMessagePortChannelImpl::WebMessagePortChannelImpl(
 
 // static
 void WebMessagePortChannelImpl::CreatePair(
-    blink::WebMessagePortChannel** channel1,
-    blink::WebMessagePortChannel** channel2) {
+    std::unique_ptr<blink::WebMessagePortChannel>* channel1,
+    std::unique_ptr<blink::WebMessagePortChannel>* channel2) {
   mojo::MessagePipe pipe;
-  *channel1 = new WebMessagePortChannelImpl(std::move(pipe.handle0));
-  *channel2 = new WebMessagePortChannelImpl(std::move(pipe.handle1));
+  // Constructor is private, so use WrapUnique here.
+  *channel1 =
+      base::WrapUnique(new WebMessagePortChannelImpl(std::move(pipe.handle0)));
+  *channel2 =
+      base::WrapUnique(new WebMessagePortChannelImpl(std::move(pipe.handle1)));
 }
 
 // static
@@ -82,31 +86,30 @@ WebMessagePortChannelImpl::WebMessagePortChannelImpl(
     : port_(std::move(handle)) {
 }
 
-void WebMessagePortChannelImpl::setClient(WebMessagePortChannelClient* client) {
+void WebMessagePortChannelImpl::SetClient(WebMessagePortChannelClient* client) {
   if (client) {
-    port_.SetCallback(
-        base::Bind(&WebMessagePortChannelClient::messageAvailable,
-                   base::Unretained(client)));
+    port_.SetCallback(base::Bind(&WebMessagePortChannelClient::MessageAvailable,
+                                 base::Unretained(client)));
   } else {
     port_.ClearCallback();
   }
 }
 
-void WebMessagePortChannelImpl::postMessage(
+void WebMessagePortChannelImpl::PostMessage(
     const WebString& encoded_message,
     WebMessagePortChannelArray channels) {
   std::vector<MessagePort> ports;
-  if (!channels.isEmpty()) {
+  if (!channels.IsEmpty()) {
     ports.resize(channels.size());
     for (size_t i = 0; i < channels.size(); ++i) {
       ports[i] = static_cast<WebMessagePortChannelImpl*>(channels[i].get())->
           ReleaseMessagePort();
     }
   }
-  port_.PostMessage(encoded_message.utf16(), std::move(ports));
+  port_.PostMessage(encoded_message.Utf16(), std::move(ports));
 }
 
-bool WebMessagePortChannelImpl::tryGetMessage(
+bool WebMessagePortChannelImpl::TryGetMessage(
     WebString* encoded_message,
     WebMessagePortChannelArray& channels) {
   base::string16 buffer;
@@ -114,7 +117,7 @@ bool WebMessagePortChannelImpl::tryGetMessage(
   if (!port_.GetMessage(&buffer, &ports))
     return false;
 
-  *encoded_message = WebString::fromUTF16(buffer);
+  *encoded_message = WebString::FromUTF16(buffer);
 
   if (!ports.empty()) {
     channels = WebMessagePortChannelArray(ports.size());

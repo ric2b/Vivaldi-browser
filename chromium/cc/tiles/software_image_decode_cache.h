@@ -20,10 +20,10 @@
 #include "base/numerics/safe_math.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_provider.h"
-#include "cc/base/cc_export.h"
-#include "cc/playback/decoded_draw_image.h"
-#include "cc/playback/draw_image.h"
+#include "cc/cc_export.h"
+#include "cc/paint/draw_image.h"
 #include "cc/resources/resource_format.h"
+#include "cc/tiles/decoded_draw_image.h"
 #include "cc/tiles/image_decode_cache.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/rect.h"
@@ -45,8 +45,10 @@ class CC_EXPORT ImageDecodeCacheKey {
     // decodes are the same, so if we can use the original decode, return true.
     // If not, then we have to compare every field.
     return image_id_ == other.image_id_ &&
-           can_use_original_decode_ == other.can_use_original_decode_ &&
-           (can_use_original_decode_ ||
+           can_use_original_size_decode_ ==
+               other.can_use_original_size_decode_ &&
+           target_color_space_ == other.target_color_space_ &&
+           (can_use_original_size_decode_ ||
             (src_rect_ == other.src_rect_ &&
              target_size_ == other.target_size_ &&
              filter_quality_ == other.filter_quality_));
@@ -60,8 +62,13 @@ class CC_EXPORT ImageDecodeCacheKey {
   SkFilterQuality filter_quality() const { return filter_quality_; }
   gfx::Rect src_rect() const { return src_rect_; }
   gfx::Size target_size() const { return target_size_; }
+  const gfx::ColorSpace& target_color_space() const {
+    return target_color_space_;
+  }
 
-  bool can_use_original_decode() const { return can_use_original_decode_; }
+  bool can_use_original_size_decode() const {
+    return can_use_original_size_decode_;
+  }
   bool should_use_subrect() const { return should_use_subrect_; }
   size_t get_hash() const { return hash_; }
 
@@ -81,15 +88,17 @@ class CC_EXPORT ImageDecodeCacheKey {
   ImageDecodeCacheKey(uint32_t image_id,
                       const gfx::Rect& src_rect,
                       const gfx::Size& size,
+                      const gfx::ColorSpace& target_color_space,
                       SkFilterQuality filter_quality,
-                      bool can_use_original_decode,
+                      bool can_use_original_size_decode,
                       bool should_use_subrect);
 
   uint32_t image_id_;
   gfx::Rect src_rect_;
   gfx::Size target_size_;
+  gfx::ColorSpace target_color_space_;
   SkFilterQuality filter_quality_;
-  bool can_use_original_decode_;
+  bool can_use_original_size_decode_;
   bool should_use_subrect_;
   size_t hash_;
 };
@@ -130,6 +139,7 @@ class CC_EXPORT SoftwareImageDecodeCache
   // Software doesn't keep outstanding images pinned, so this is a no-op.
   void SetShouldAggressivelyFreeResources(
       bool aggressively_free_resources) override {}
+  void ClearCache() override;
 
   // Decode the given image and store it in the cache. This is only called by an
   // image decode task from a worker thread.
@@ -142,6 +152,8 @@ class CC_EXPORT SoftwareImageDecodeCache
   // MemoryDumpProvider overrides.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
+
+  size_t GetNumCacheEntriesForTesting() const { return decoded_images_.size(); }
 
  private:
   // DecodedImage is a convenience storage for discardable memory. It can also
@@ -237,18 +249,20 @@ class CC_EXPORT SoftwareImageDecodeCache
   DecodedDrawImage GetDecodedImageForDrawInternal(const ImageKey& key,
                                                   const DrawImage& draw_image);
 
-  // GetOriginalImageDecode is called by DecodeImageInternal when the quality
-  // does not scale the image. Like DecodeImageInternal, it should be called
-  // with no lock acquired and it returns nullptr if the decoding failed.
-  std::unique_ptr<DecodedImage> GetOriginalImageDecode(
+  // GetOriginalSizeImageDecode is called by DecodeImageInternal when the
+  // quality does not scale the image. Like DecodeImageInternal, it should be
+  // called with no lock acquired and it returns nullptr if the decoding failed.
+  std::unique_ptr<DecodedImage> GetOriginalSizeImageDecode(
+      const ImageKey& key,
       sk_sp<const SkImage> image);
 
-  // GetSubrectImageDecode is similar to GetOriginalImageDecode in that no scale
-  // is performed on the image. However, we extract a subrect (copy it out) and
-  // only return this subrect in order to cache a smaller amount of memory. Note
-  // that this uses GetOriginalImageDecode to get the initial data, which
-  // ensures that we cache an unlocked version of the original image in case we
-  // need to extract multiple subrects (as would be the case in an atlas).
+  // GetSubrectImageDecode is similar to GetOriginalSizeImageDecode in that no
+  // scale is performed on the image. However, we extract a subrect (copy it
+  // out) and only return this subrect in order to cache a smaller amount of
+  // memory. Note that this uses GetOriginalSizeImageDecode to get the initial
+  // data, which ensures that we cache an unlocked version of the original image
+  // in case we need to extract multiple subrects (as would be the case in an
+  // atlas).
   std::unique_ptr<DecodedImage> GetSubrectImageDecode(
       const ImageKey& key,
       sk_sp<const SkImage> image);
@@ -261,7 +275,6 @@ class CC_EXPORT SoftwareImageDecodeCache
       const ImageKey& key,
       sk_sp<const SkImage> image);
 
-  void SanityCheckState(int line, bool lock_acquired);
   void RefImage(const ImageKey& key);
   void RefAtRasterImage(const ImageKey& key);
   void UnrefAtRasterImage(const ImageKey& key);

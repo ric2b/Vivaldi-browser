@@ -22,6 +22,7 @@
 #include "gpu/command_buffer/service/command_executor.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
@@ -89,46 +90,54 @@ class CommandBufferSetup {
   CommandBufferSetup()
       : atexit_manager_(),
         sync_point_manager_(new SyncPointManager()),
-        sync_point_order_data_(SyncPointOrderData::Create()),
+        sync_point_order_data_(sync_point_manager_->CreateSyncPointOrderData()),
         mailbox_manager_(new gles2::MailboxManagerImpl),
         share_group_(new gl::GLShareGroup),
         command_buffer_id_(CommandBufferId::FromUnsafeValue(1)) {
     logging::SetMinLogLevel(logging::LOG_FATAL);
     base::CommandLine::Init(0, NULL);
 
-#if defined(GPU_FUZZER_USE_ANGLE)
     auto* command_line = base::CommandLine::ForCurrentProcess();
+    ALLOW_UNUSED_LOCAL(command_line);
+
+#if defined(GPU_FUZZER_USE_PASSTHROUGH_CMD_DECODER)
+    command_line->AppendSwitch(switches::kUsePassthroughCmdDecoder);
+    gpu_preferences_.use_passthrough_cmd_decoder = true;
+    recreate_context_ = true;
+#endif
+
+#if defined(GPU_FUZZER_USE_ANGLE)
     command_line->AppendSwitchASCII(switches::kUseGL,
                                     gl::kGLImplementationANGLEName);
     command_line->AppendSwitchASCII(switches::kUseANGLE,
                                     gl::kANGLEImplementationNullName);
     gl::init::InitializeGLOneOffImplementation(gl::kGLImplementationEGLGLES2,
                                                false, false, false);
+
     surface_ = new gl::PbufferGLSurfaceEGL(gfx::Size());
     surface_->Initialize();
-
-    context_ = new gl::GLContextEGL(share_group_.get());
-    context_->Initialize(surface_.get(), gl::GLContextAttribs());
+    if (!recreate_context_) {
+      InitContext();
+    }
 #else
     surface_ = new gl::GLSurfaceStub;
-    scoped_refptr<gl::GLContextStub> context_stub =
-        new gl::GLContextStub(share_group_.get());
-    context_stub->SetGLVersionString("OpenGL ES 3.1");
-    context_stub->SetExtensionsString(kExtensions);
-    context_stub->SetUseStubApi(true);
-    context_ = context_stub;
+    InitContext();
     gl::GLSurfaceTestSupport::InitializeOneOffWithMockBindings();
 #endif
 
-    sync_point_client_ = base::MakeUnique<SyncPointClient>(
-        sync_point_manager_.get(), sync_point_order_data_,
-        CommandBufferNamespace::IN_PROCESS, command_buffer_id_);
+    sync_point_client_state_ = sync_point_manager_->CreateSyncPointClientState(
+        CommandBufferNamespace::IN_PROCESS, command_buffer_id_,
+        sync_point_order_data_->sequence_id());
 
     translator_cache_ = new gles2::ShaderTranslatorCache(gpu_preferences_);
     completeness_cache_ = new gles2::FramebufferCompletenessCache;
   }
 
   void InitDecoder() {
+    if (recreate_context_) {
+      InitContext();
+    }
+
     context_->MakeCurrent(surface_.get());
     scoped_refptr<gles2::FeatureInfo> feature_info =
         new gles2::FeatureInfo();
@@ -183,14 +192,21 @@ class CommandBufferSetup {
   void ResetDecoder() {
     decoder_->Destroy(true);
     decoder_.reset();
+    if (recreate_context_) {
+      context_->ReleaseCurrent(nullptr);
+      context_ = nullptr;
+    }
     command_buffer_.reset();
   }
 
   ~CommandBufferSetup() {
-    sync_point_client_ = nullptr;
     if (sync_point_order_data_) {
       sync_point_order_data_->Destroy();
       sync_point_order_data_ = nullptr;
+    }
+    if (sync_point_client_state_) {
+      sync_point_client_state_->Destroy();
+      sync_point_client_state_ = nullptr;
     }
   }
 
@@ -223,8 +239,8 @@ class CommandBufferSetup {
       return;
     }
 
-    uint32_t order_num = sync_point_order_data_->GenerateUnprocessedOrderNumber(
-        sync_point_manager_.get());
+    uint32_t order_num =
+        sync_point_order_data_->GenerateUnprocessedOrderNumber();
     sync_point_order_data_->BeginProcessingOrderNumber(order_num);
 
     executor_->PutChanged();
@@ -237,8 +253,8 @@ class CommandBufferSetup {
   }
 
   void OnFenceSyncRelease(uint64_t release) {
-    CHECK(sync_point_client_);
-    sync_point_client_->ReleaseFenceSync(release);
+    CHECK(sync_point_client_state_);
+    sync_point_client_state_->ReleaseFenceSync(release);
   }
 
   bool OnWaitSyncToken(const SyncToken& sync_token) {
@@ -269,17 +285,32 @@ class CommandBufferSetup {
     CreateTransferBuffer(kTinyTransferBufferSize, 5);
   }
 
+  void InitContext() {
+#if defined(GPU_FUZZER_USE_ANGLE)
+    context_ = new gl::GLContextEGL(share_group_.get());
+    context_->Initialize(surface_.get(), gl::GLContextAttribs());
+#else
+    scoped_refptr<gl::GLContextStub> context_stub =
+        new gl::GLContextStub(share_group_.get());
+    context_stub->SetGLVersionString("OpenGL ES 3.1");
+    context_stub->SetExtensionsString(kExtensions);
+    context_stub->SetUseStubApi(true);
+    context_ = context_stub;
+#endif
+  }
+
   base::AtExitManager atexit_manager_;
 
   GpuPreferences gpu_preferences_;
 
   std::unique_ptr<SyncPointManager> sync_point_manager_;
   scoped_refptr<SyncPointOrderData> sync_point_order_data_;
-  std::unique_ptr<SyncPointClient> sync_point_client_;
+  scoped_refptr<SyncPointClientState> sync_point_client_state_;
   scoped_refptr<gles2::MailboxManager> mailbox_manager_;
   scoped_refptr<gl::GLShareGroup> share_group_;
   const gpu::CommandBufferId command_buffer_id_;
 
+  bool recreate_context_ = false;
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
 

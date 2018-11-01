@@ -6,16 +6,16 @@
 
 #include <memory>
 
+#include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_delegate.h"
-#include "ash/common/accelerators/accelerator_controller.h"
-#include "ash/common/test/test_session_state_delegate.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_screenshot_delegate.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,7 +36,7 @@ typedef AshTestBase AcceleratorFilterTest;
 // Tests if AcceleratorFilter works without a focused window.
 TEST_F(AcceleratorFilterTest, TestFilterWithoutFocus) {
   // TODO: mash doesn't support ScreenshotDelgate yet. http://crbug.com/632111.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   const TestScreenshotDelegate* delegate = GetScreenshotDelegate();
@@ -54,7 +54,7 @@ TEST_F(AcceleratorFilterTest, TestFilterWithoutFocus) {
 // Tests if AcceleratorFilter works as expected with a focused window.
 TEST_F(AcceleratorFilterTest, TestFilterWithFocus) {
   // TODO: mash doesn't support ScreenshotDelgate yet. http://crbug.com/632111.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   aura::test::TestWindowDelegate test_delegate;
@@ -80,7 +80,7 @@ TEST_F(AcceleratorFilterTest, TestFilterWithFocus) {
 // Tests if AcceleratorFilter ignores the flag for Caps Lock.
 TEST_F(AcceleratorFilterTest, TestCapsLockMask) {
   // TODO: mash doesn't support ScreenshotDelgate yet. http://crbug.com/632111.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   const TestScreenshotDelegate* delegate = GetScreenshotDelegate();
@@ -149,27 +149,29 @@ TEST_F(AcceleratorFilterTest, CanConsumeSystemKeys) {
 }
 
 TEST_F(AcceleratorFilterTest, SearchKeyShortcutsAreAlwaysHandled) {
-  TestSessionStateDelegate* session_state_delegate =
-      AshTestHelper::GetTestSessionStateDelegate();
-  EXPECT_FALSE(session_state_delegate->IsScreenLocked());
+  SessionController* const session_controller =
+      Shell::Get()->session_controller();
+  EXPECT_FALSE(session_controller->IsScreenLocked());
 
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
 
   // We can lock the screen (Search+L) if a window is not present.
   generator.PressKey(ui::VKEY_L, ui::EF_COMMAND_DOWN);
   generator.ReleaseKey(ui::VKEY_L, ui::EF_COMMAND_DOWN);
-  EXPECT_TRUE(session_state_delegate->IsScreenLocked());
+  session_controller->FlushMojoForTest();  // LockScreen is an async mojo call.
+  EXPECT_TRUE(session_controller->IsScreenLocked());
   UnblockUserSession();
-  EXPECT_FALSE(session_state_delegate->IsScreenLocked());
+  EXPECT_FALSE(session_controller->IsScreenLocked());
 
   // Search+L is processed when the app_list target visibility is false.
-  WmShell::Get()->DismissAppList();
-  EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
+  Shell::Get()->DismissAppList();
+  EXPECT_FALSE(Shell::Get()->GetAppListTargetVisibility());
   generator.PressKey(ui::VKEY_L, ui::EF_COMMAND_DOWN);
   generator.ReleaseKey(ui::VKEY_L, ui::EF_COMMAND_DOWN);
-  EXPECT_TRUE(session_state_delegate->IsScreenLocked());
+  session_controller->FlushMojoForTest();  // LockScreen is an async mojo call.
+  EXPECT_TRUE(session_controller->IsScreenLocked());
   UnblockUserSession();
-  EXPECT_FALSE(session_state_delegate->IsScreenLocked());
+  EXPECT_FALSE(session_controller->IsScreenLocked());
 
   // Search+L is also processed when there is a full screen window.
   aura::test::TestWindowDelegate window_delegate;
@@ -178,9 +180,10 @@ TEST_F(AcceleratorFilterTest, SearchKeyShortcutsAreAlwaysHandled) {
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
   generator.PressKey(ui::VKEY_L, ui::EF_COMMAND_DOWN);
   generator.ReleaseKey(ui::VKEY_L, ui::EF_COMMAND_DOWN);
-  EXPECT_TRUE(session_state_delegate->IsScreenLocked());
+  session_controller->FlushMojoForTest();  // LockScreen is an async mojo call.
+  EXPECT_TRUE(session_controller->IsScreenLocked());
   UnblockUserSession();
-  EXPECT_FALSE(session_state_delegate->IsScreenLocked());
+  EXPECT_FALSE(session_controller->IsScreenLocked());
 }
 
 }  // namespace test

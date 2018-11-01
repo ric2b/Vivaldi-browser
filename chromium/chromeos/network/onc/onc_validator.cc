@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chromeos/network/onc/onc_signature.h"
@@ -244,7 +245,7 @@ bool Validator::ValidateRecommendedField(
   std::unique_ptr<base::ListValue> repaired_recommended(new base::ListValue);
   for (const auto& entry : *recommended_list) {
     std::string field_name;
-    if (!entry->GetAsString(&field_name)) {
+    if (!entry.GetAsString(&field_name)) {
       NOTREACHED();  // The types of field values are already verified.
       continue;
     }
@@ -315,8 +316,7 @@ namespace {
 
 std::string JoinStringRange(const std::vector<const char*>& strings,
                             const std::string& separator) {
-  std::vector<std::string> string_vector;
-  std::copy(strings.begin(), strings.end(), std::back_inserter(string_vector));
+  std::vector<base::StringPiece> string_vector(strings.begin(), strings.end());
   return base::JoinString(string_vector, separator);
 }
 
@@ -404,7 +404,7 @@ bool Validator::ListFieldContainsValidValues(
     path_.push_back(field_name);
     for (const auto& entry : *list) {
       std::string value;
-      if (!entry->GetAsString(&value)) {
+      if (!entry.GetAsString(&value)) {
         NOTREACHED();  // The types of field values are already verified.
         continue;
       }

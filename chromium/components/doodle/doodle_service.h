@@ -10,20 +10,40 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
+#include "base/time/clock.h"
+#include "base/time/tick_clock.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "components/doodle/doodle_fetcher.h"
 #include "components/doodle/doodle_types.h"
+#include "components/keyed_service/core/keyed_service.h"
+
+class PrefRegistrySimple;
+class PrefService;
 
 namespace doodle {
 
-class DoodleService {
+class DoodleService : public KeyedService {
  public:
   class Observer {
    public:
     virtual void OnDoodleConfigUpdated(const base::Optional<DoodleConfig>&) = 0;
   };
 
-  DoodleService(std::unique_ptr<DoodleFetcher> fetcher);
-  ~DoodleService();
+  static void RegisterProfilePrefs(PrefRegistrySimple* pref_registry);
+
+  // All pointer parameters must be non-null. If |min_refresh_interval| doesn't
+  // have a value, the default value is used.
+  DoodleService(PrefService* pref_service,
+                std::unique_ptr<DoodleFetcher> fetcher,
+                std::unique_ptr<base::OneShotTimer> expiry_timer,
+                std::unique_ptr<base::Clock> clock,
+                std::unique_ptr<base::TickClock> tick_clock,
+                base::Optional<base::TimeDelta> override_min_refresh_interval);
+  ~DoodleService() override;
+
+  // KeyedService implementation.
+  void Shutdown() override;
 
   // Returns the current (cached) config, if any.
   const base::Optional<DoodleConfig>& config() const { return cached_config_; }
@@ -42,14 +62,66 @@ class DoodleService {
   void Refresh();
 
  private:
-  void DoodleFetched(DoodleState state,
+  // Note: Keep in sync with the corresponding enum in histograms.xml. Never
+  // remove values, and only insert new values at the end.
+  enum DownloadOutcome {
+    OUTCOME_NEW_DOODLE = 0,
+    OUTCOME_REVALIDATED_DOODLE = 1,
+    OUTCOME_CHANGED_DOODLE = 2,
+    OUTCOME_NO_DOODLE = 3,
+    OUTCOME_EXPIRED = 4,
+    OUTCOME_DOWNLOAD_ERROR = 5,
+    OUTCOME_PARSING_ERROR = 6,
+    OUTCOME_REFRESH_INTERVAL_NOT_PASSED = 7,
+    // Insert new values here!
+    OUTCOME_COUNT = 8
+  };
+
+  static bool DownloadOutcomeIsSuccess(DownloadOutcome outcome);
+  static void RecordDownloadMetrics(DownloadOutcome outcome,
+                                    base::TimeDelta download_time);
+
+  static DownloadOutcome DetermineDownloadOutcome(
+      const base::Optional<DoodleConfig>& old_config,
+      const base::Optional<DoodleConfig>& new_config,
+      DoodleState state,
+      bool expired);
+
+  // Callback for the fetcher.
+  void DoodleFetched(base::TimeTicks start_time,
+                     DoodleState state,
+                     base::TimeDelta time_to_live,
                      const base::Optional<DoodleConfig>& doodle_config);
+
+  DownloadOutcome HandleNewConfig(
+      DoodleState state,
+      base::TimeDelta time_to_live,
+      const base::Optional<DoodleConfig>& doodle_config);
+
+  void UpdateCachedConfig(base::TimeDelta time_to_live,
+                          const base::Optional<DoodleConfig>& new_config);
+
+  // Callback for the expiry timer.
+  void DoodleExpired();
+
+  PrefService* pref_service_;
 
   // The fetcher for getting fresh DoodleConfigs from the network.
   std::unique_ptr<DoodleFetcher> fetcher_;
 
+  std::unique_ptr<base::OneShotTimer> expiry_timer_;
+  std::unique_ptr<base::Clock> clock_;
+  std::unique_ptr<base::TickClock> tick_clock_;
+
+  // The minimum interval between server fetches. After a successful fetch,
+  // refresh requests are ignored for this period.
+  const base::TimeDelta min_refresh_interval_;
+
   // The result of the last network fetch.
   base::Optional<DoodleConfig> cached_config_;
+
+  // The time of the most recent successful fetch.
+  base::TimeTicks last_successful_fetch_;
 
   // The list of observers to be notified when the DoodleConfig changes.
   base::ObserverList<Observer> observers_;

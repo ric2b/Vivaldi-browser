@@ -2,233 +2,178 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ======                        New Architecture                         =====
-// =         This code is only used in the new iOS Chrome architecture.       =
-// ============================================================================
-
 #import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_view_controller.h"
 
 #include "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_panel_collection_view_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_panel_overlay_view.h"
 #import "ios/clean/chrome/browser/ui/actions/settings_actions.h"
 #import "ios/clean/chrome/browser/ui/actions/tab_grid_actions.h"
 #import "ios/clean/chrome/browser/ui/commands/settings_commands.h"
-#import "ios/clean/chrome/browser/ui/commands/tab_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tab_grid_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
+#import "ios/clean/chrome/browser/ui/tab_collection/tab_collection_data_source.h"
+#import "ios/clean/chrome/browser/ui/tab_collection/tab_collection_tab_cell.h"
 #import "ios/clean/chrome/browser/ui/tab_grid/mdc_floating_button+cr_tab_grid.h"
 #import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_collection_view_layout.h"
-#import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_tab_cell.h"
-#import "ios/clean/chrome/browser/ui/tab_grid/ui_stack_view+cr_tab_grid.h"
+#import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_toolbar.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-namespace {
-// Height of toolbar in tab grid.
-const CGFloat kToolbarHeight = 64.0f;
-}
-
-@interface TabGridViewController ()<SettingsActions,
-                                    TabGridActions,
-                                    UICollectionViewDataSource,
-                                    UICollectionViewDelegate,
-                                    SessionCellDelegate>
-@property(nonatomic, weak) UICollectionView* grid;
+@interface TabGridViewController ()<SettingsActions, TabGridActions>
 @property(nonatomic, weak) UIView* noTabsOverlay;
-@property(nonatomic, strong) MDCFloatingButton* floatingNewTabButton;
+@property(nonatomic, weak) TabGridToolbar* toolbar;
+@property(nonatomic, weak) MDCFloatingButton* floatingNewTabButton;
 @end
 
 @implementation TabGridViewController
-
-@synthesize dataSource = _dataSource;
-@synthesize settingsCommandHandler = _settingsCommandHandler;
-@synthesize tabGridCommandHandler = _tabGridCommandHandler;
-@synthesize tabCommandHandler = _tabCommandHandler;
-@synthesize grid = _grid;
+@synthesize dispatcher = _dispatcher;
 @synthesize noTabsOverlay = _noTabsOverlay;
+@synthesize toolbar = _toolbar;
 @synthesize floatingNewTabButton = _floatingNewTabButton;
 
+#pragma mark - Required subclass override
+
+- (UICollectionViewLayout*)collectionViewLayout {
+  return [[TabGridCollectionViewLayout alloc] init];
+}
+
+- (void)showTabAtIndex:(int)index {
+  [self.dispatcher showTabGridTabAtIndex:index];
+}
+
+- (void)closeTabAtIndex:(int)index {
+  [self.dispatcher closeTabGridTabAtIndex:index];
+}
+
+#pragma mark - View lifecyle
+
 - (void)viewDidLoad {
-  UIView* toolbar = [UIStackView cr_tabGridToolbarStackView];
-  [self.view addSubview:toolbar];
+  [super viewDidLoad];
 
-  toolbar.translatesAutoresizingMaskIntoConstraints = NO;
+  TabGridToolbar* toolbar = [[TabGridToolbar alloc] init];
+  self.toolbar = toolbar;
+  [self.view addSubview:self.toolbar];
+  self.toolbar.translatesAutoresizingMaskIntoConstraints = NO;
   [NSLayoutConstraint activateConstraints:@[
-    [toolbar.heightAnchor constraintEqualToConstant:kToolbarHeight],
-    [toolbar.widthAnchor constraintEqualToAnchor:self.view.widthAnchor],
-    [toolbar.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-    [toolbar.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor]
-  ]];
-
-  TabGridCollectionViewLayout* layout =
-      [[TabGridCollectionViewLayout alloc] init];
-  UICollectionView* grid = [[UICollectionView alloc] initWithFrame:CGRectZero
-                                              collectionViewLayout:layout];
-  grid.translatesAutoresizingMaskIntoConstraints = NO;
-  grid.backgroundColor = [UIColor blackColor];
-
-  [self.view addSubview:grid];
-  self.grid = grid;
-  self.grid.dataSource = self;
-  self.grid.delegate = self;
-  [self.grid registerClass:[TabGridTabCell class]
-      forCellWithReuseIdentifier:[TabGridTabCell identifier]];
-
-  [NSLayoutConstraint activateConstraints:@[
-    [self.grid.topAnchor constraintEqualToAnchor:toolbar.bottomAnchor],
-    [self.grid.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-    [self.grid.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-    [self.grid.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+    [self.toolbar.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+    [self.toolbar.heightAnchor
+        constraintEqualToAnchor:self.topLayoutGuide.heightAnchor
+                       constant:self.toolbar.intrinsicContentSize.height],
+    [self.toolbar.leadingAnchor
+        constraintEqualToAnchor:self.view.leadingAnchor],
+    [self.toolbar.trailingAnchor
+        constraintEqualToAnchor:self.view.trailingAnchor]
   ]];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
-  self.floatingNewTabButton = [MDCFloatingButton cr_tabGridNewTabButton];
+  [super viewWillAppear:animated];
+  MDCFloatingButton* floatingNewTabButton =
+      [MDCFloatingButton cr_tabGridNewTabButton];
+  self.floatingNewTabButton = floatingNewTabButton;
   [self.floatingNewTabButton
       setFrame:[MDCFloatingButton
                    cr_frameForTabGridNewTabButtonInRect:self.view.bounds]];
   [self.view addSubview:self.floatingNewTabButton];
 }
 
-- (UIStatusBarStyle)preferredStatusBarStyle {
-  return UIStatusBarStyleLightContent;
-}
-
-#pragma mark - UICollectionViewDataSource methods
-
-- (NSInteger)numberOfSectionsInCollectionView:
-    (UICollectionView*)collectionView {
-  return 1;
-}
-
-- (NSInteger)collectionView:(UICollectionView*)collectionView
-     numberOfItemsInSection:(NSInteger)section {
-  NSInteger items = [self.dataSource numberOfTabsInTabGrid];
-  // HACK: Do not make showing noTabsOverlay a side effect of the dataSource
-  // callback.
-  if (items) {
-    [self removeNoTabsOverlay];
-  } else {
-    [self showNoTabsOverlay];
-  }
-  return items;
-}
-
-- (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
-                 cellForItemAtIndexPath:(nonnull NSIndexPath*)indexPath {
-  TabGridTabCell* cell =
-      base::mac::ObjCCastStrict<TabGridTabCell>([collectionView
-          dequeueReusableCellWithReuseIdentifier:[TabGridTabCell identifier]
-                                    forIndexPath:indexPath]);
-  cell.delegate = self;
-  [cell setSessionType:TabSwitcherSessionType::REGULAR_SESSION];
-  [cell setAppearanceForTabTitle:[self.dataSource titleAtIndex:indexPath.item]
-                         favicon:nil
-                        cellSize:CGSizeZero];
-  [cell setSelected:(indexPath.item == [self.dataSource indexOfActiveTab])];
-  return cell;
-}
-
-#pragma mark - UICollectionViewDelegate methods
-
-- (BOOL)collectionView:(UICollectionView*)collectionView
-    shouldSelectItemAtIndexPath:(NSIndexPath*)indexPath {
-  // Prevent user selection of items.
-  return NO;
-}
-
-#pragma mark - ZoomTransitionDelegate methods
-
-- (CGRect)rectForZoomWithKey:(NSObject*)key inView:(UIView*)view {
-  NSIndexPath* cellPath = base::mac::ObjCCastStrict<NSIndexPath>(key);
-  if (!key)
-    return CGRectNull;
-  UICollectionViewCell* cell = [self.grid cellForItemAtIndexPath:cellPath];
-  return [view convertRect:cell.bounds fromView:cell];
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  self.tabs.contentInset =
+      UIEdgeInsetsMake(CGRectGetMaxY(self.toolbar.frame), 0, 0, 0);
 }
 
 #pragma mark - SettingsActions
 
 - (void)showSettings:(id)sender {
-  [self.settingsCommandHandler showSettings];
+  [self.dispatcher showSettings];
+}
+
+#pragma mark - ToolsMenuActions
+
+- (void)showToolsMenu:(id)sender {
+  [self.dispatcher showToolsMenu];
 }
 
 #pragma mark - TabGridActions
 
 - (void)showTabGrid:(id)sender {
-  [self.tabGridCommandHandler showTabGrid];
+  [self.dispatcher showTabGrid];
 }
 
 - (void)createNewTab:(id)sender {
-  // PLACEHOLDER: The new WebStateList data structure will have implications
-  // on how new tabs are created.
-  NSInteger index = [self.grid numberOfItemsInSection:0];
-  NSIndexPath* indexPath = [NSIndexPath indexPathForItem:index inSection:0];
-  auto updateBlock = ^{
-    // Unselect current selected item.
-    NSInteger selectedIndex = [self.dataSource indexOfActiveTab];
-    NSIndexPath* selectedIndexPath =
-        [NSIndexPath indexPathForItem:selectedIndex inSection:0];
-    [self.grid reloadItemsAtIndexPaths:@[ selectedIndexPath ]];
-
-    // Create and show new tab.
-    [self.tabCommandHandler createNewTabAtIndexPath:indexPath];
-    [self.tabCommandHandler showTabAtIndexPath:indexPath];
-    [self.grid insertItemsAtIndexPaths:@[ indexPath ]];
-  };
-  [self.grid performBatchUpdates:updateBlock completion:nil];
+  [self.dispatcher createAndShowNewTabInTabGrid];
 }
 
-#pragma mark - SessionCellDelegate
+#pragma mark - ZoomTransitionDelegate methods
 
-- (TabSwitcherCache*)tabSwitcherCache {
-  // PLACEHOLDER: return image cache.
-  return nil;
-}
-
-- (void)cellPressed:(UICollectionViewCell*)cell {
-  NSInteger selectedIndex = [self.dataSource indexOfActiveTab];
-  NSIndexPath* newSelectedIndexPath = [self.grid indexPathForCell:cell];
-  [self.tabCommandHandler showTabAtIndexPath:newSelectedIndexPath];
-  if (newSelectedIndexPath.item != selectedIndex) {
-    NSIndexPath* selectedIndexPath =
-        [NSIndexPath indexPathForItem:selectedIndex inSection:0];
-    [self.grid
-        reloadItemsAtIndexPaths:@[ selectedIndexPath, newSelectedIndexPath ]];
+- (CGRect)rectForZoomWithKey:(NSObject*)key inView:(UIView*)view {
+  // If key is nil we return a CGRect based on the toolbar position, if not it
+  // was set by the TabGrid and we return a CGRect based on the IndexPath of the
+  // key.
+  if (!key) {
+    return [self.toolbar rectForZoomWithKey:key inView:view];
   }
+
+  NSIndexPath* cellPath = base::mac::ObjCCastStrict<NSIndexPath>(key);
+  UICollectionViewCell* cell = [self.tabs cellForItemAtIndexPath:cellPath];
+  return [view convertRect:cell.bounds fromView:cell];
 }
 
-- (void)deleteButtonPressedForCell:(UICollectionViewCell*)cell {
-  auto updateBlock = ^{
-    NSIndexPath* indexPath = [self.grid indexPathForCell:cell];
-    [self.tabCommandHandler closeTabAtIndexPath:indexPath];
-    [self.grid deleteItemsAtIndexPaths:@[ indexPath ]];
-  };
-  [self.grid performBatchUpdates:updateBlock completion:nil];
+#pragma mark - MenuPresentationDelegate
+
+- (CGRect)frameForMenuPresentation:(UIPresentationController*)presentation {
+  CGSize menuSize = presentation.presentedView.frame.size;
+  CGRect menuRect;
+  menuRect.size = menuSize;
+
+  CGRect menuOriginRect = [self rectForZoomWithKey:nil inView:self.view];
+  if (CGRectIsNull(menuOriginRect)) {
+    menuRect.origin = CGPointMake(50, 50);
+    return menuRect;
+  }
+  // Calculate which corner of the menu the origin rect is in. This is
+  // determined by comparing frames, and thus is RTL-independent.
+  if (CGRectGetMinX(menuOriginRect) - CGRectGetMinX(self.view.bounds) <
+      CGRectGetMaxX(self.view.bounds) - CGRectGetMaxX(menuOriginRect)) {
+    // Origin rect is closer to the left edge of |self.view| than to the right.
+    menuRect.origin.x = CGRectGetMinX(menuOriginRect);
+  } else {
+    // Origin rect is closer to the right edge of |self.view| than to the left.
+    menuRect.origin.x = CGRectGetMaxX(menuOriginRect) - menuSize.width;
+  }
+
+  if (CGRectGetMinY(menuOriginRect) - CGRectGetMinY(self.view.bounds) <
+      CGRectGetMaxY(self.view.bounds) - CGRectGetMaxY(menuOriginRect)) {
+    // Origin rect is closer to the top edge of |self.view| than to the bottom.
+    menuRect.origin.y = CGRectGetMinY(menuOriginRect);
+  } else {
+    // Origin rect is closer to the bottom edge of |self.view| than to the top.
+    menuRect.origin.y = CGRectGetMaxY(menuOriginRect) - menuSize.height;
+  }
+
+  return menuRect;
 }
 
-#pragma mark - Private
+#pragma mark - TabGridConsumer methods
 
-// Shows an overlay covering the entire tab grid that informs the user that
-// there are no tabs.
-- (void)showNoTabsOverlay {
+- (void)addNoTabsOverlay {
   // PLACEHOLDER: The new tab grid will have a completely different zero tab
   // overlay from the tab switcher. Also, the overlay will be above the recent
   // tabs section.
   TabSwitcherPanelOverlayView* overlayView =
-      [[TabSwitcherPanelOverlayView alloc] initWithFrame:self.grid.bounds
+      [[TabSwitcherPanelOverlayView alloc] initWithFrame:self.tabs.bounds
                                             browserState:nil];
   overlayView.overlayType =
       TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_NO_OPEN_TABS;
   overlayView.autoresizingMask =
       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  [self.grid addSubview:overlayView];
+  [self.tabs addSubview:overlayView];
   self.noTabsOverlay = overlayView;
 }
 
-// Removes the noTabsOverlay covering the entire tab grid.
 - (void)removeNoTabsOverlay {
   [self.noTabsOverlay removeFromSuperview];
 }

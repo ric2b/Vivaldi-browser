@@ -38,7 +38,8 @@ Audits.AuditController = class {
    */
   constructor(auditsPanel) {
     this._auditsPanel = auditsPanel;
-    SDK.targetManager.addEventListener(SDK.TargetManager.Events.Load, this._didMainResourceLoad, this);
+    SDK.targetManager.addModelListener(
+        SDK.ResourceTreeModel, SDK.ResourceTreeModel.Events.Load, this._didMainResourceLoad, this);
     SDK.targetManager.addModelListener(
         SDK.NetworkManager, SDK.NetworkManager.Events.RequestFinished, this._didLoadResource, this);
   }
@@ -70,8 +71,8 @@ Audits.AuditController = class {
       resultCallback(mainResourceURL, results);
     }
 
-    var networkLog = SDK.NetworkLog.fromTarget(target);
-    var requests = networkLog ? networkLog.requests().slice() : [];
+    var networkManager = target.model(SDK.NetworkManager);
+    var requests = networkManager ? NetworkLog.networkLog.requestsForManager(networkManager).slice() : [];
     var compositeProgress = new Common.CompositeProgress(this._progress);
     var subprogresses = [];
     for (var i = 0; i < categories.length; ++i)
@@ -142,7 +143,7 @@ Audits.AuditController = class {
    */
   _reloadResources(callback) {
     this._pageReloadCallback = callback;
-    SDK.targetManager.reloadPage();
+    SDK.ResourceTreeModel.reloadAllPages();
   }
 
   _didLoadResource() {
@@ -150,7 +151,12 @@ Audits.AuditController = class {
       this._pageReloadCallback();
   }
 
-  _didMainResourceLoad() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _didMainResourceLoad(event) {
+    if (event.data.resourceTreeModel.target() !== SDK.targetManager.mainTarget())
+      return;
     if (this._pageReloadCallback) {
       var callback = this._pageReloadCallback;
       delete this._pageReloadCallback;

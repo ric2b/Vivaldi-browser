@@ -7,7 +7,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
@@ -238,7 +240,7 @@ class SiteDetailsBrowserTest : public ExtensionBrowserTest {
 
     const Extension* extension = LoadExtension(dir->UnpackedPath());
     EXPECT_TRUE(extension);
-    temp_dirs_.push_back(dir.release());
+    temp_dirs_.push_back(std::move(dir));
     return extension;
   }
 
@@ -282,7 +284,7 @@ class SiteDetailsBrowserTest : public ExtensionBrowserTest {
 
     const Extension* extension = LoadExtension(dir->UnpackedPath());
     EXPECT_TRUE(extension);
-    temp_dirs_.push_back(dir.release());
+    temp_dirs_.push_back(std::move(dir));
   }
 
   const Extension* CreateHostedApp(const std::string& name,
@@ -304,7 +306,7 @@ class SiteDetailsBrowserTest : public ExtensionBrowserTest {
 
     const Extension* extension = LoadExtension(dir->UnpackedPath());
     EXPECT_TRUE(extension);
-    temp_dirs_.push_back(dir.release());
+    temp_dirs_.push_back(std::move(dir));
     return extension;
   }
 
@@ -353,7 +355,7 @@ class SiteDetailsBrowserTest : public ExtensionBrowserTest {
   }
 
  private:
-  ScopedVector<TestExtensionDir> temp_dirs_;
+  std::vector<std::unique_ptr<TestExtensionDir>> temp_dirs_;
   DISALLOW_COPY_AND_ASSIGN(SiteDetailsBrowserTest);
 };
 
@@ -656,8 +658,8 @@ IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, ManyIframes) {
   EXPECT_FALSE(IsInTrial("SiteIsolationExtensionsActive"));
 }
 
-// Flaky on Windows. crbug.com/671891
-#if defined(OS_WIN)
+// Flaky on Windows and Mac. crbug.com/671891
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_IsolateExtensions DISABLED_IsolateExtensions
 #else
 #define MAYBE_IsolateExtensions IsolateExtensions

@@ -20,24 +20,28 @@
 #include "core/xml/DOMParser.h"
 
 #include "core/dom/DOMImplementation.h"
-#include "wtf/text/WTFString.h"
+#include "platform/weborigin/SecurityOrigin.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 Document* DOMParser::parseFromString(const String& str, const String& type) {
   Document* doc = DOMImplementation::createDocument(
-      type, DocumentInit(KURL(), nullptr, m_contextDocument), false);
-  doc->setContent(str);
-  if (m_contextDocument)
-    doc->setSecurityOrigin(m_contextDocument->getSecurityOrigin());
+      type, DocumentInit(KURL(), nullptr, context_document_), false);
+  doc->SetContent(str);
+  doc->SetMimeType(AtomicString(type));
+  if (context_document_) {
+    doc->SetURL(context_document_->Url());
+    doc->SetSecurityOrigin(context_document_->GetSecurityOrigin());
+  }
   return doc;
 }
 
 DOMParser::DOMParser(Document& document)
-    : m_contextDocument(document.contextDocument()) {}
+    : context_document_(document.ContextDocument()) {}
 
 DEFINE_TRACE(DOMParser) {
-  visitor->trace(m_contextDocument);
+  visitor->Trace(context_document_);
 }
 
 }  // namespace blink

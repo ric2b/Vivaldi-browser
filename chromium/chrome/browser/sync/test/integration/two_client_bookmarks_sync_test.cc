@@ -174,7 +174,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SimultaneousURLChanges) {
   ASSERT_TRUE(BookmarksMatchChecker().Wait());
 }
 
-// Test Scribe ID - 370558.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_AddFirstFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -183,7 +182,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_AddFirstFolder) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370559.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_AddFirstBMWithoutFavicon) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -193,7 +191,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370489.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_AddFirstBMWithFavicon) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -331,7 +328,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370560.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_AddNonHTTPBMs) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -342,7 +338,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_AddNonHTTPBMs) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370561.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_AddFirstBMUnderFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -354,7 +349,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370562.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_AddSeveralBMsUnderBMBarAndOtherBM) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -369,7 +363,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370563.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_AddSeveralBMsAndFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -401,7 +394,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370641.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DuplicateBMWithDifferentURLSameName) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -414,7 +406,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 370639 - Add bookmarks with different name and same URL.
+// Add bookmarks with different name and same URL.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DuplicateBookmarksWithSameURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -427,7 +419,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371817.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMName) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -442,7 +433,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMName) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371822.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -457,8 +447,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMURL) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-
-// Test Scribe ID - 371818 - Renaming the same bookmark name twice.
+// Renaming the same bookmark name twice.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_TwiceRenamingBookmarkName) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -477,7 +466,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371823 - Renaming the same bookmark URL twice.
+// Renaming the same bookmark URL twice.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_TwiceRenamingBookmarkURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -496,7 +485,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371824.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -511,7 +499,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMFolder) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371825.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameEmptyBMFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -525,7 +512,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameEmptyBMFolder) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371826.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_RenameBMFolderWithLongHierarchy) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -551,7 +537,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371827.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_RenameBMFolderThatHasParentAndChildren) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -583,7 +568,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371828.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMNameAndURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -602,7 +586,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_RenameBMNameAndURL) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371832.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DeleteBMEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -615,7 +598,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371833.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelBMNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -632,7 +614,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371835.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelFirstBMUnderBMFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -651,7 +632,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371836.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelLastBMUnderBMFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -670,7 +650,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371856.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelMiddleBMUnderBMFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -689,7 +668,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371857.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelBMsUnderBMFoldEmptyFolderAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -711,7 +689,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371858.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelEmptyBMFoldEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -724,7 +701,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371869.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelEmptyBMFoldNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -747,7 +723,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371879.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelBMFoldWithBMsNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -777,7 +752,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371880.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelBMFoldWithBMsAndBMFoldsNonEmptyACAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -826,7 +800,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371882.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_DelBMFoldWithParentAndChildrenBMsAndBMFolds) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -858,7 +831,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371931.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_ReverseTheOrderOfTwoBMs) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -878,7 +850,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371933.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_ReverseTheOrderOf10BMs) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -894,7 +865,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_ReverseTheOrderOf10BMs) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371954.
 // flaky on Windows: http://crbug.com/412169
 #if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_SC_MovingBMsFromBMBarToBMFolder \
@@ -927,7 +897,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   }
 }
 
-// Test Scribe ID - 371957.
 // flaky on Windows and Mac: http://crbug.com/412169
 #if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_SC_MovingBMsFromBMFoldToBMBar \
@@ -958,7 +927,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   }
 }
 
-// Test Scribe ID - 371961.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_MovingBMsFromParentBMFoldToChildBMFold) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -988,7 +956,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371964.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_MovingBMsFromChildBMFoldToParentBMFold) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1018,7 +985,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371967.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_HoistBMs10LevelUp) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1056,7 +1022,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_HoistBMs10LevelUp) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371968.
 // Flaky. http://crbug.com/107744.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_SinkBMs10LevelDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1094,7 +1059,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, SC_SinkBMs10LevelDown) {
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371980.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_SinkEmptyBMFold5LevelsDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1124,7 +1088,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 371997.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_SinkNonEmptyBMFold5LevelsDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1158,7 +1121,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 372006.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_HoistFolder5LevelsUp) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1192,7 +1154,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 372026.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_ReverseTheOrderOfTwoBMFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1214,7 +1175,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 372028.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        SC_ReverseTheOrderOfTenBMFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1236,7 +1196,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 }
 
-// Test Scribe ID - 373379.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_BiDirectionalPushAddingBM) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1255,7 +1214,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// Test Scribe ID - 373503.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_BiDirectionalPush_AddingSameBMs) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1273,7 +1231,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(BookmarksMatchChecker().Wait());
 }
 
-// Test Scribe ID - 373506.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_BootStrapEmptyStateEverywhere) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1281,7 +1238,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
-// Test Scribe ID - 373505.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_Merge_CaseInsensitivity_InNames) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1304,7 +1260,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// Test Scribe ID - 373508.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_SimpleMergeOfDifferentBMModels) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1331,7 +1286,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// Test Scribe ID - 386586.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_MergeSimpleBMHierarchyUnderBMBar) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1355,7 +1309,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// Test Scribe ID - 386589.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_MergeSimpleBMHierarchyEqualSetsUnderBMBar) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1373,7 +1326,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// Test Scribe ID - 373504 - Merge bookmark folders with different bookmarks.
+// Merge bookmark folders with different bookmarks.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_MergeBMFoldersWithDifferentBMs) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1396,7 +1349,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// Test Scribe ID - 373509 - Merge moderately complex bookmark models.
+// Merge moderately complex bookmark models.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_MergeDifferentBMModelsModeratelyComplex) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1437,7 +1390,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// TCM ID - 3675271 - Merge simple bookmark subset under bookmark folder.
+// Merge simple bookmark subset under bookmark folder.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_MergeSimpleBMHierarchySubsetUnderBMFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1462,7 +1415,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// TCM ID - 3727284 - Merge subsets of bookmark under bookmark bar.
+// Merge subsets of bookmark under bookmark bar.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_MergeSimpleBMHierarchySubsetUnderBookmarkBar) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1486,7 +1439,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(1));
 }
 
-// TCM ID - 3659294 - Merge simple bookmark hierarchy under bookmark folder.
+// Merge simple bookmark hierarchy under bookmark folder.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_Merge_SimpleBMHierarchy_Under_BMFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1516,7 +1469,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// TCM ID - 3711273 - Merge disjoint sets of bookmark hierarchy under bookmark
+// Merge disjoint sets of bookmark hierarchy under bookmark
 // folder.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_Merge_SimpleBMHierarchy_DisjointSets_Under_BMFolder) {
@@ -1546,8 +1499,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// TCM ID - 3639296 - Merge disjoint sets of bookmark hierarchy under bookmark
-// bar.
+// Merge disjoint sets of bookmark hierarchy under bookmark bar.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
     MC_Merge_SimpleBMHierarchy_DisjointSets_Under_BookmarkBar) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1570,7 +1522,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// TCM ID - 3616282 - Merge sets of duplicate bookmarks under bookmark bar.
+// Merge sets of duplicate bookmarks under bookmark bar.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_Merge_SimpleBMHierarchy_DuplicateBMs_Under_BMBar) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -1601,7 +1553,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   }
 }
 
-// TCM ID - 6593872.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, DisableBookmarks) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1615,7 +1566,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, DisableBookmarks) {
   ASSERT_TRUE(BookmarksMatchChecker().Wait());
 }
 
-// TCM ID - 7343544.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, DisableSync) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1632,8 +1582,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, DisableSync) {
   ASSERT_TRUE(BookmarksMatchChecker().Wait());
 }
 
-// TCM ID - 3662298 - Test adding duplicate folder - Both with different BMs
-// underneath.
+// Test adding duplicate folder - Both with different BMs underneath.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, MC_DuplicateFolders) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
@@ -1689,8 +1638,8 @@ IN_PROC_BROWSER_TEST_F(LegacyTwoClientBookmarksSyncTest, MC_DeleteBookmark) {
   ASSERT_TRUE(HasNodeWithURL(1, other_url));
 }
 
-// TCM ID - 3719307 - Test a scenario of updating the name of the same bookmark
-// from two clients at the same time.
+// Test a scenario of updating the name of the same bookmark from two clients at
+// the same time.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_BookmarkNameChangeConflict) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1714,8 +1663,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// TCM ID - 3672299 - Test a scenario of updating the URL of the same bookmark
-// from two clients at the same time.
+// Test a scenario of updating the URL of the same bookmark from two clients at
+// the same time.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_BookmarkURLChangeConflict) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1741,8 +1690,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
   ASSERT_FALSE(ContainsDuplicateBookmarks(0));
 }
 
-// TCM ID - 3699290 - Test a scenario of updating the BM Folder name from two
-// clients at the same time.
+// Test a scenario of updating the BM Folder name from two clients at the same
+// time.
 IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest,
                        MC_FolderNameChangeConflict) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";

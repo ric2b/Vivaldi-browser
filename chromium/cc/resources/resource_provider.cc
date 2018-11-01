@@ -48,27 +48,41 @@ using gpu::gles2::GLES2Interface;
 
 namespace cc {
 
-class IdAllocator {
+class TextureIdAllocator {
  public:
-  virtual ~IdAllocator() {}
-
-  virtual GLuint NextId() = 0;
-
- protected:
-  IdAllocator(GLES2Interface* gl, size_t id_allocation_chunk_size)
+  TextureIdAllocator(GLES2Interface* gl,
+                     size_t texture_id_allocation_chunk_size)
       : gl_(gl),
-        id_allocation_chunk_size_(id_allocation_chunk_size),
-        ids_(new GLuint[id_allocation_chunk_size]),
-        next_id_index_(id_allocation_chunk_size) {
+        id_allocation_chunk_size_(texture_id_allocation_chunk_size),
+        ids_(new GLuint[texture_id_allocation_chunk_size]),
+        next_id_index_(texture_id_allocation_chunk_size) {
     DCHECK(id_allocation_chunk_size_);
     DCHECK_LE(id_allocation_chunk_size_,
               static_cast<size_t>(std::numeric_limits<int>::max()));
   }
 
+  ~TextureIdAllocator() {
+    gl_->DeleteTextures(
+        static_cast<int>(id_allocation_chunk_size_ - next_id_index_),
+        ids_.get() + next_id_index_);
+  }
+
+  GLuint NextId() {
+    if (next_id_index_ == id_allocation_chunk_size_) {
+      gl_->GenTextures(static_cast<int>(id_allocation_chunk_size_), ids_.get());
+      next_id_index_ = 0;
+    }
+
+    return ids_[next_id_index_++];
+  }
+
+ private:
   GLES2Interface* gl_;
   const size_t id_allocation_chunk_size_;
   std::unique_ptr<GLuint[]> ids_;
   size_t next_id_index_;
+
+  DISALLOW_COPY_AND_ASSIGN(TextureIdAllocator);
 };
 
 namespace {
@@ -159,55 +173,6 @@ class ScopedSetActiveTexture {
   GLenum unit_;
 };
 
-class TextureIdAllocator : public IdAllocator {
- public:
-  TextureIdAllocator(GLES2Interface* gl,
-                     size_t texture_id_allocation_chunk_size)
-      : IdAllocator(gl, texture_id_allocation_chunk_size) {}
-  ~TextureIdAllocator() override {
-    gl_->DeleteTextures(
-        static_cast<int>(id_allocation_chunk_size_ - next_id_index_),
-        ids_.get() + next_id_index_);
-  }
-
-  // Overridden from IdAllocator:
-  GLuint NextId() override {
-    if (next_id_index_ == id_allocation_chunk_size_) {
-      gl_->GenTextures(static_cast<int>(id_allocation_chunk_size_), ids_.get());
-      next_id_index_ = 0;
-    }
-
-    return ids_[next_id_index_++];
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TextureIdAllocator);
-};
-
-class BufferIdAllocator : public IdAllocator {
- public:
-  BufferIdAllocator(GLES2Interface* gl, size_t buffer_id_allocation_chunk_size)
-      : IdAllocator(gl, buffer_id_allocation_chunk_size) {}
-  ~BufferIdAllocator() override {
-    gl_->DeleteBuffers(
-        static_cast<int>(id_allocation_chunk_size_ - next_id_index_),
-        ids_.get() + next_id_index_);
-  }
-
-  // Overridden from IdAllocator:
-  GLuint NextId() override {
-    if (next_id_index_ == id_allocation_chunk_size_) {
-      gl_->GenBuffers(static_cast<int>(id_allocation_chunk_size_), ids_.get());
-      next_id_index_ = 0;
-    }
-
-    return ids_[next_id_index_++];
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BufferIdAllocator);
-};
-
 // Generates process-unique IDs to use for tracing a ResourceProvider's
 // resources.
 base::StaticAtomicSequenceNumber g_next_resource_provider_tracing_id;
@@ -256,6 +221,7 @@ ResourceProvider::Resource::Resource(GLuint texture_id,
       hint(hint),
       type(type),
       usage(gfx::BufferUsage::GPU_READ_CPU_READ_WRITE),
+      buffer_format(gfx::BufferFormat::RGBA_8888),
       format(format),
       shared_bitmap(nullptr) {
 }
@@ -296,6 +262,7 @@ ResourceProvider::Resource::Resource(uint8_t* pixels,
       bound_image_id(0),
       hint(TEXTURE_HINT_IMMUTABLE),
       type(RESOURCE_TYPE_BITMAP),
+      buffer_format(gfx::BufferFormat::RGBA_8888),
       format(RGBA_8888),
       shared_bitmap(bitmap) {
   DCHECK(origin == DELEGATED || pixels);
@@ -338,6 +305,7 @@ ResourceProvider::Resource::Resource(const SharedBitmapId& bitmap_id,
       bound_image_id(0),
       hint(TEXTURE_HINT_IMMUTABLE),
       type(RESOURCE_TYPE_BITMAP),
+      buffer_format(gfx::BufferFormat::RGBA_8888),
       format(RGBA_8888),
       shared_bitmap_id(bitmap_id),
       shared_bitmap(nullptr) {
@@ -407,11 +375,11 @@ ResourceProvider::Settings::Settings(
     ContextProvider* compositor_context_provider,
     bool delegated_sync_points_required,
     bool use_gpu_memory_buffer_resources,
-    bool enable_color_correct_rendering)
+    bool enable_color_correct_rasterization)
     : default_resource_type(use_gpu_memory_buffer_resources
                                 ? RESOURCE_TYPE_GPU_MEMORY_BUFFER
                                 : RESOURCE_TYPE_GL_TEXTURE),
-      enable_color_correct_rendering(enable_color_correct_rendering),
+      enable_color_correct_rasterization(enable_color_correct_rasterization),
       delegated_sync_points_required(delegated_sync_points_required) {
   if (!compositor_context_provider) {
     default_resource_type = RESOURCE_TYPE_BITMAP;
@@ -454,12 +422,12 @@ ResourceProvider::ResourceProvider(
     size_t id_allocation_chunk_size,
     bool delegated_sync_points_required,
     bool use_gpu_memory_buffer_resources,
-    bool enable_color_correct_rendering,
+    bool enable_color_correct_rasterization,
     const BufferToTextureTargetMap& buffer_to_texture_target_map)
     : settings_(compositor_context_provider,
                 delegated_sync_points_required,
                 use_gpu_memory_buffer_resources,
-                enable_color_correct_rendering),
+                enable_color_correct_rasterization),
       compositor_context_provider_(compositor_context_provider),
       shared_bitmap_manager_(shared_bitmap_manager),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
@@ -484,12 +452,9 @@ ResourceProvider::ResourceProvider(
     return;
 
   DCHECK(!texture_id_allocator_);
-  DCHECK(!buffer_id_allocator_);
   GLES2Interface* gl = ContextGL();
   texture_id_allocator_.reset(
       new TextureIdAllocator(gl, id_allocation_chunk_size));
-  buffer_id_allocator_.reset(
-      new BufferIdAllocator(gl, id_allocation_chunk_size));
 }
 
 ResourceProvider::~ResourceProvider() {
@@ -518,11 +483,10 @@ ResourceProvider::~ResourceProvider() {
 #endif  // DCHECK_IS_ON()
 
   texture_id_allocator_ = nullptr;
-  buffer_id_allocator_ = nullptr;
   gl->Finish();
 }
 
-bool ResourceProvider::IsResourceFormatSupported(ResourceFormat format) const {
+bool ResourceProvider::IsTextureFormatSupported(ResourceFormat format) const {
   gpu::Capabilities caps;
   if (compositor_context_provider_)
     caps = compositor_context_provider_->ContextCapabilities();
@@ -541,13 +505,41 @@ bool ResourceProvider::IsResourceFormatSupported(ResourceFormat format) const {
     case RED_8:
       return caps.texture_rg;
     case LUMINANCE_F16:
+    case RGBA_F16:
       return caps.texture_half_float_linear;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
+bool ResourceProvider::IsRenderBufferFormatSupported(
+    ResourceFormat format) const {
+  gpu::Capabilities caps;
+  if (compositor_context_provider_)
+    caps = compositor_context_provider_->ContextCapabilities();
+
+  switch (format) {
+    case RGBA_4444:
+    case RGBA_8888:
+    case RGB_565:
+      return true;
+    case BGRA_8888:
+      return caps.render_buffer_format_bgra8888;
     case RGBA_F16:
       // TODO(ccameron): This will always return false on pixel tests, which
       // makes it un-test-able until we upgrade Mesa.
       // https://crbug.com/687720
       return caps.texture_half_float_linear &&
              caps.color_buffer_half_float_rgba;
+    case LUMINANCE_8:
+    case ALPHA_8:
+    case RED_8:
+    case ETC1:
+    case LUMINANCE_F16:
+      // We don't currently render into these formats. If we need to render into
+      // these eventually, we should expand this logic.
+      return false;
   }
 
   NOTREACHED();
@@ -587,8 +579,8 @@ ResourceId ResourceProvider::CreateResource(
   DCHECK(!size.IsEmpty());
   switch (settings_.default_resource_type) {
     case RESOURCE_TYPE_GPU_MEMORY_BUFFER:
-      // GPU memory buffers don't support LUMINANCE_F16 or RGBA_F16 yet.
-      if (format != LUMINANCE_F16 && format != RGBA_F16) {
+      // GPU memory buffers don't support LUMINANCE_F16 yet.
+      if (format != LUMINANCE_F16) {
         return CreateGLTexture(
             size, hint, RESOURCE_TYPE_GPU_MEMORY_BUFFER, format,
             gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, color_space);
@@ -880,11 +872,11 @@ ResourceProvider::TextureHint ResourceProvider::GetTextureHint(ResourceId id) {
   return GetResource(id)->hint;
 }
 
-sk_sp<SkColorSpace> ResourceProvider::GetResourceSkColorSpace(
+gfx::ColorSpace ResourceProvider::GetResourceColorSpaceForRaster(
     const Resource* resource) const {
-  if (!settings_.enable_color_correct_rendering)
-    return nullptr;
-  return resource->color_space.ToSkColorSpace();
+  if (!settings_.enable_color_correct_rasterization)
+    return gfx::ColorSpace();
+  return resource->color_space;
 }
 
 void ResourceProvider::CopyToResource(ResourceId id,
@@ -908,8 +900,7 @@ void ResourceProvider::CopyToResource(ResourceId id,
     DCHECK(resource->allocated);
     DCHECK_EQ(RGBA_8888, resource->format);
     SkImageInfo source_info =
-        SkImageInfo::MakeN32Premul(image_size.width(), image_size.height(),
-                                   GetResourceSkColorSpace(resource));
+        SkImageInfo::MakeN32Premul(image_size.width(), image_size.height());
     size_t image_stride = image_size.width() * 4;
 
     ScopedWriteLockSoftware lock(this, id);
@@ -1070,10 +1061,14 @@ void ResourceProvider::UnlockForRead(ResourceId id) {
       // The resource belongs to this ResourceProvider, so it can be destroyed.
       DeleteResourceInternal(it, NORMAL);
     } else {
-      ChildMap::iterator child_it = children_.find(resource->child_id);
-      ResourceIdArray unused;
-      unused.push_back(id);
-      DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL, unused);
+      if (batch_return_resources_) {
+        batched_returning_resources_[resource->child_id].push_back(id);
+      } else {
+        ChildMap::iterator child_it = children_.find(resource->child_id);
+        ResourceIdArray unused;
+        unused.push_back(id);
+        DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL, unused);
+      }
     }
   }
 }
@@ -1098,6 +1093,11 @@ bool ResourceProvider::CanLockForWrite(ResourceId id) {
 bool ResourceProvider::IsOverlayCandidate(ResourceId id) {
   Resource* resource = GetResource(id);
   return resource->is_overlay_candidate;
+}
+
+gfx::BufferFormat ResourceProvider::GetBufferFormat(ResourceId id) {
+  Resource* resource = GetResource(id);
+  return resource->buffer_format;
 }
 
 #if defined(OS_ANDROID)
@@ -1184,7 +1184,7 @@ ResourceProvider::ScopedWriteLockGL::ScopedWriteLockGL(
   format_ = resource->format;
   size_ = resource->size;
   mailbox_ = resource->mailbox();
-  sk_color_space_ = resource_provider->GetResourceSkColorSpace(resource);
+  color_space_ = resource_provider->GetResourceColorSpaceForRaster(resource);
 }
 
 ResourceProvider::ScopedWriteLockGL::~ScopedWriteLockGL() {
@@ -1252,8 +1252,7 @@ ResourceProvider::ScopedSkSurfaceProvider::ScopedSkSurfaceProvider(
         SkSurfaceProps(flags, SkSurfaceProps::kLegacyFontHost_InitType);
   }
   sk_surface_ = SkSurface::MakeFromBackendTextureAsRenderTarget(
-      context_provider->GrContext(), desc, resource_lock->sk_color_space(),
-      &surface_props);
+      context_provider->GrContext(), desc, nullptr, &surface_props);
 }
 
 ResourceProvider::ScopedSkSurfaceProvider::~ScopedSkSurfaceProvider() {
@@ -1266,9 +1265,8 @@ ResourceProvider::ScopedSkSurfaceProvider::~ScopedSkSurfaceProvider() {
 void ResourceProvider::PopulateSkBitmapWithResource(SkBitmap* sk_bitmap,
                                                     const Resource* resource) {
   DCHECK_EQ(RGBA_8888, resource->format);
-  SkImageInfo info = SkImageInfo::MakeN32Premul(
-      resource->size.width(), resource->size.height(),
-      GetResourceSkColorSpace(resource));
+  SkImageInfo info = SkImageInfo::MakeN32Premul(resource->size.width(),
+                                                resource->size.height());
   sk_bitmap->installPixels(info, resource->pixels, info.minRowBytes());
 }
 
@@ -1301,8 +1299,7 @@ ResourceProvider::ScopedReadLockSkImage::ScopedReadLockSkImage(
     desc.fTextureHandle = skia::GrGLTextureInfoToGrBackendObject(texture_info);
     sk_image_ = SkImage::MakeFromTexture(
         resource_provider->compositor_context_provider_->GrContext(), desc,
-        kPremul_SkAlphaType,
-        resource_provider->GetResourceSkColorSpace(resource), nullptr, nullptr);
+        kPremul_SkAlphaType);
   } else if (resource->pixels) {
     SkBitmap sk_bitmap;
     resource_provider->PopulateSkBitmapWithResource(&sk_bitmap, resource);
@@ -1329,7 +1326,7 @@ ResourceProvider::ScopedWriteLockSoftware::ScopedWriteLockSoftware(
     : resource_provider_(resource_provider), resource_id_(resource_id) {
   Resource* resource = resource_provider->LockForWrite(resource_id);
   resource_provider->PopulateSkBitmapWithResource(&sk_bitmap_, resource);
-  sk_color_space_ = resource_provider->GetResourceSkColorSpace(resource);
+  color_space_ = resource_provider->GetResourceColorSpaceForRaster(resource);
   DCHECK(valid());
 }
 
@@ -1352,6 +1349,7 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
   usage_ = resource->usage;
   gpu_memory_buffer_ = std::move(resource->gpu_memory_buffer);
   resource->gpu_memory_buffer = nullptr;
+  color_space_ = resource_provider->GetResourceColorSpaceForRaster(resource);
 }
 
 ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
@@ -1360,7 +1358,8 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
   Resource* resource = resource_provider_->GetResource(resource_id_);
   DCHECK(resource);
   if (gpu_memory_buffer_) {
-    if (resource_provider_->settings_.enable_color_correct_rendering)
+    // Note that this impacts overlay compositing, not rasterization.
+    if (resource_provider_->settings_.enable_color_correct_rasterization)
       gpu_memory_buffer_->SetColorSpaceForScanout(resource->color_space);
     DCHECK(!resource->gpu_memory_buffer);
     resource_provider_->LazyCreate(resource);
@@ -1386,6 +1385,16 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::GetGpuMemoryBuffer() {
             size_, BufferFormat(format_), usage_, gpu::kNullSurfaceHandle);
   }
   return gpu_memory_buffer_.get();
+}
+
+ResourceProvider::ScopedBatchReturnResources::ScopedBatchReturnResources(
+    ResourceProvider* resource_provider)
+    : resource_provider_(resource_provider) {
+  resource_provider_->SetBatchReturnResources(true);
+}
+
+ResourceProvider::ScopedBatchReturnResources::~ScopedBatchReturnResources() {
+  resource_provider_->SetBatchReturnResources(false);
 }
 
 ResourceProvider::SynchronousFence::SynchronousFence(
@@ -1596,6 +1605,7 @@ void ResourceProvider::ReceiveFromChild(
                              it->mailbox_holder.texture_target, it->filter,
                              TEXTURE_HINT_IMMUTABLE, RESOURCE_TYPE_GL_TEXTURE,
                              it->format));
+      resource->buffer_format = it->buffer_format;
       resource->set_mailbox(TextureMailbox(it->mailbox_holder.mailbox,
                                            it->mailbox_holder.sync_token,
                                            it->mailbox_holder.texture_target));
@@ -1695,6 +1705,19 @@ void ResourceProvider::ReceiveReturnsFromParent(
   }
 }
 
+void ResourceProvider::SetBatchReturnResources(bool batch) {
+  DCHECK_NE(batch_return_resources_, batch);
+  batch_return_resources_ = batch;
+  if (!batch) {
+    for (const auto& resources : batched_returning_resources_) {
+      ChildMap::iterator child_it = children_.find(resources.first);
+      DCHECK(child_it != children_.end());
+      DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL, resources.second);
+    }
+    batched_returning_resources_.clear();
+  }
+}
+
 #if defined(OS_ANDROID)
 void ResourceProvider::SendPromotionHints(
     const OverlayCandidateList::PromotionHintInfoMap& promotion_hints) {
@@ -1761,6 +1784,7 @@ void ResourceProvider::TransferResource(Resource* source,
   DCHECK(source->allocated);
   resource->id = id;
   resource->format = source->format;
+  resource->buffer_format = source->buffer_format;
   resource->mailbox_holder.texture_target = source->target;
   resource->filter = source->filter;
   resource->size = source->size;
@@ -1987,8 +2011,9 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
         gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
             size, BufferFormat(format), resource->usage,
             gpu::kNullSurfaceHandle);
+    // Note that this impacts overlay compositing, not rasterization.
     if (resource->gpu_memory_buffer &&
-        settings_.enable_color_correct_rendering) {
+        settings_.enable_color_correct_rasterization) {
       resource->gpu_memory_buffer->SetColorSpaceForScanout(
           resource->color_space);
     }

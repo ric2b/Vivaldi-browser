@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fa">
 <translation id="1018656279737460067">لغو شده</translation>
+<translation id="1030173864176315846">چاپ صفحه‌ی <ph name="PAGE_NUMBER" /> ازطریق <ph name="PRINTER_NAME" /> با موفقیت انجام گرفت</translation>
 <translation id="1049795001945932310">&amp;تنظیمات زبان</translation>
 <translation id="1056898198331236512">اخطار</translation>
 <translation id="1084824384139382525">کپی آدر&amp;س پیوند</translation>
@@ -12,6 +13,7 @@
 <translation id="1181037720776840403">حذف</translation>
 <translation id="1187722533808055681">تعداد خروج از حالت بی‌حرکت</translation>
 <translation id="119944043368869598">پاک کردن همه</translation>
+<translation id="1218323606465324064">درحال چاپ صفحه‌ی <ph name="PAGE_NUMBER" /> از طریق <ph name="PRINTER_NAME" /></translation>
 <translation id="1244303850296295656">خطای افزونه</translation>
 <translation id="1278049586634282054">بررسی مشاهدات:</translation>
 <translation id="1317502925920562130">آیا این همان صفحه اصلی مورد انتظار شماست؟</translation>
@@ -52,6 +54,7 @@
 <translation id="2076269580855484719">پنهان کردن این افزایه</translation>
 <translation id="2087822576218954668">چاپ: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">تازه‌سازی &amp;قاب</translation>
+<translation id="2115291620696624944">بروز خطا در چاپ صفحه‌ی <ph name="PAGE_NUMBER" /> از طریق <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">به‌روزرسانی افزایه</translation>
 <translation id="2147827593068025794">همگام‌سازی پس‌زمینه</translation>
 <translation id="215753907730220065">خروج از حالت تمام صفحه</translation>
@@ -83,6 +86,7 @@
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
 <translation id="2809586584051668049">و <ph name="NUMBER_ADDITIONAL_DISABLED" /> مورد دیگر</translation>
 <translation id="2844111009524261443">اجرا با کلیک</translation>
+<translation id="2847759467426165163">Cast to</translation>
 <translation id="2850541429955027218">افزودن طرح زمینه</translation>
 <translation id="2861941300086904918">‏مدیر امنیت Native Client</translation>
 <translation id="2868746137289129307">این افزونه قدیمی است و خط‌مشی شرکت آن را غیرفعال کرده است. شاید وقتی یک نسخه جدیدتر در دسترس قرار گیرد به صورت خودکار فعال شود.</translation>
@@ -96,6 +100,7 @@
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">&amp;مشاهده‌ی منبع قاب</translation>
 <translation id="302620147503052030">نمایش دکمه</translation>
+<translation id="3031601332414921114">ادامه‌ی چاپ</translation>
 <translation id="3080207940057008665">‏برنامه‌ای دیگر بر روی رایانه شما یک طرح زمینه را اضافه کرده است که ممکن است نحوه کارکرد Vivaldi را تغییر دهد.</translation>
 <translation id="3084548735795614657">برای نصب رها کنید</translation>
 <translation id="3122464029669770682">CPU</translation>
@@ -142,6 +147,7 @@
 <translation id="3925842537050977900">باز کردن سنجاق از قفسه</translation>
 <translation id="3927932062596804919">ردکردن</translation>
 <translation id="3936390757709632190">&amp;باز کردن فایل صوتی در برگهٔ جدید</translation>
+<translation id="3936999098172113189">در انتظار چاپ صفحه‌ی <ph name="PAGE_NUMBER" /> ازطریق <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;برگشت</translation>
 <translation id="3978267865113951599">(از کار افتاده)</translation>
 <translation id="3979395879372752341">افزودنه‌های جدید اضافه شد (<ph name="EXTENSION_NAME" />)</translation>
@@ -244,6 +250,7 @@
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> اوج مصرف)</translation>
 <translation id="5965661248935608907">‏این برنامه افزودنی همچنین صفحه‌ای را که هنگام کلیک کردن روی دکمه صفحه اصلی یا جستجو از Omnibox نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="6025215716629925253">ردیابی پشته</translation>
+<translation id="6040143037577758943">بستن</translation>
 <translation id="6082651258230788217">نمایش در نوار ابزار</translation>
 <translation id="6086814797483779854">اجرا با کلیک</translation>
 <translation id="6086846494333236931">نصب شده توسط مدیر شما</translation>
@@ -251,6 +258,7 @@
 <translation id="6122081475643980456">اتصال اینترنت شما کنترل می‌شود</translation>
 <translation id="6124650939968185064">افزودنه‌های زیر به این برنامه افزودنی وابسته هستند:</translation>
 <translation id="6156863943908443225">حافظهٔ پنهان اسکریپت</translation>
+<translation id="6171948306033499786">توقف چاپ</translation>
 <translation id="6196854373336333322">افزونه «<ph name="EXTENSION_NAME" />»، کنترل تنظیمات پروکسی شما را در اختیار گرفته است یعنی می‌تواند هر چیزی که در حالت آنلاین انجام می‌دهید تغییر دهد، خراب کند یا استراق سمع کند. اگر مطمئن نیستید چرا این تغییر انجام شده است، احتمالاً این افزونه را نمی‌خواهید.</translation>
 <translation id="6206311232642889873">&amp;کپی تصویر</translation>
 <translation id="6220413761270491930">خطا در بارگذاری افزونه</translation>
@@ -289,6 +297,7 @@
 <translation id="6900284862687837908">برنامه پس‌زمینه: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ابطال دسترسی به فایل</translation>
 <translation id="6916590542764765824">مدیریت افزونه‌ها</translation>
+<translation id="6943176775188458830">لغو چاپ</translation>
 <translation id="6955446738988643816">بررسی بالاپرها</translation>
 <translation id="6974053822202609517">راست به چپ</translation>
 <translation id="6985276906761169321">شناسه:</translation>
@@ -379,6 +388,7 @@
 <translation id="8795916974678578410">پنجره‌ی جدید</translation>
 <translation id="8798099450830957504">پیش‌فرض</translation>
 <translation id="8808478386290700967">Web Store</translation>
+<translation id="8845001906332463065">دریافت راهنمایی</translation>
 <translation id="8859174528519900719">قاب فرعی: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899285681604219177">افزونه‌های پشتیبانی نشده غیرفعال هستند.</translation>
 <translation id="8899851313684471736">باز کردن پیوند در &amp;پنجره جدید</translation>

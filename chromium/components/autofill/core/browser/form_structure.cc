@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <map>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
@@ -27,6 +28,7 @@
 #include "components/autofill/core/browser/field_candidates.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_field.h"
+#include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
@@ -36,6 +38,7 @@
 #include "components/autofill/core/common/signatures_util.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
+#include "components/ukm/ukm_service.h"
 
 namespace autofill {
 namespace {
@@ -268,6 +271,9 @@ HtmlFieldType FieldTypeFromAutocompleteAttributeValue(
   if (autocomplete_attribute_value == "email")
     return HTML_TYPE_EMAIL;
 
+  if (autocomplete_attribute_value == "upi-vpa")
+    return HTML_TYPE_UPI_VPA;
+
   return HTML_TYPE_UNRECOGNIZED;
 }
 
@@ -300,11 +306,13 @@ FormStructure::FormStructure(const FormData& form)
       upload_required_(USE_UPLOAD_RATES),
       has_author_specified_types_(false),
       has_author_specified_sections_(false),
+      has_author_specified_upi_vpa_hint_(false),
       was_parsed_for_autocomplete_attributes_(false),
       has_password_field_(false),
       is_form_tag_(form.is_form_tag),
       is_formless_checkout_(form.is_formless_checkout),
-      all_fields_are_passwords_(true) {
+      all_fields_are_passwords_(true),
+      is_signin_upload_(false) {
   // Copy the form fields.
   std::map<base::string16, size_t> unique_names;
   for (const FormFieldData& field : form.fields) {
@@ -332,7 +340,7 @@ FormStructure::FormStructure(const FormData& form)
 
 FormStructure::~FormStructure() {}
 
-void FormStructure::DetermineHeuristicTypes() {
+void FormStructure::DetermineHeuristicTypes(ukm::UkmService* ukm_service) {
   const auto determine_heuristic_types_start_time = base::TimeTicks::Now();
 
   // First, try to detect field types based on each field's |autocomplete|
@@ -357,14 +365,24 @@ void FormStructure::DetermineHeuristicTypes() {
   UpdateAutofillCount();
   IdentifySections(has_author_specified_sections_);
 
+  std::vector<AutofillMetrics::DeveloperEngagementMetric> metrics;
   if (IsAutofillable()) {
-    AutofillMetrics::LogDeveloperEngagementMetric(
-        AutofillMetrics::FILLABLE_FORM_PARSED);
-    if (has_author_specified_types_) {
-      AutofillMetrics::LogDeveloperEngagementMetric(
-          AutofillMetrics::FILLABLE_FORM_CONTAINS_TYPE_HINTS);
-    }
+    AutofillMetrics::DeveloperEngagementMetric metric =
+        has_author_specified_types_
+            ? AutofillMetrics::FILLABLE_FORM_PARSED_WITH_TYPE_HINTS
+            : AutofillMetrics::FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS;
+    metrics.push_back(metric);
+    AutofillMetrics::LogDeveloperEngagementMetric(metric);
   }
+
+  if (has_author_specified_upi_vpa_hint_) {
+    AutofillMetrics::LogDeveloperEngagementMetric(
+        AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT);
+    metrics.push_back(AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT);
+  }
+
+  AutofillMetrics::LogDeveloperEngagementUkm(ukm_service, source_url(),
+                                             metrics);
 
   AutofillMetrics::LogDetermineHeuristicTypesTiming(
       base::TimeTicks::Now() - determine_heuristic_types_start_time);
@@ -600,7 +618,7 @@ bool FormStructure::ShouldBeParsed() const {
   if (active_field_count() < kRequiredFieldsForPredictionRoutines &&
       (!all_fields_are_passwords() ||
        active_field_count() < kRequiredFieldsForFormsWithOnlyPasswordFields) &&
-      !has_author_specified_types_) {
+      !is_signin_upload_ && !has_author_specified_types_) {
     return false;
   }
 
@@ -624,17 +642,16 @@ bool FormStructure::ShouldBeCrowdsourced() const {
          ShouldBeParsed();
 }
 
-void FormStructure::UpdateFromCache(const FormStructure& cached_form) {
+void FormStructure::UpdateFromCache(const FormStructure& cached_form,
+                                    const bool apply_is_autofilled) {
   // Map from field signatures to cached fields.
-  std::map<std::string, const AutofillField*> cached_fields;
+  std::map<base::string16, const AutofillField*> cached_fields;
   for (size_t i = 0; i < cached_form.field_count(); ++i) {
     auto* const field = cached_form.field(i);
-    cached_fields[field->FieldSignatureAsStr()] = field;
+    cached_fields[field->unique_name()] = field;
   }
-
   for (auto& field : *this) {
-    std::map<std::string, const AutofillField*>::const_iterator cached_field =
-        cached_fields.find(field->FieldSignatureAsStr());
+    const auto& cached_field = cached_fields.find(field->unique_name());
     if (cached_field != cached_fields.end()) {
       if (field->form_control_type != "select-one" &&
           field->value == cached_field->second->value) {
@@ -649,6 +666,9 @@ void FormStructure::UpdateFromCache(const FormStructure& cached_form) {
       field->set_server_type(cached_field->second->server_type());
       field->SetHtmlType(cached_field->second->html_type(),
                          cached_field->second->html_mode());
+      if (apply_is_autofilled) {
+        field->is_autofilled = cached_field->second->is_autofilled;
+      }
       field->set_previously_autofilled(
           cached_field->second->previously_autofilled());
       field->set_section(cached_field->second->section());
@@ -662,24 +682,30 @@ void FormStructure::UpdateFromCache(const FormStructure& cached_form) {
   // rearranged via JavaScript between page load and form submission, so we
   // copy over the |form_signature_field_names_| corresponding to the query
   // request.
-  DCHECK_EQ(cached_form.form_name_, form_name_);
-  DCHECK_EQ(cached_form.source_url_, source_url_);
-  DCHECK_EQ(cached_form.target_url_, target_url_);
   form_signature_ = cached_form.form_signature_;
 }
 
-void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
-                                      const base::TimeTicks& interaction_time,
-                                      const base::TimeTicks& submission_time,
-                                      rappor::RapporServiceImpl* rappor_service,
-                                      bool did_show_suggestions,
-                                      bool observed_submission) const {
+void FormStructure::LogQualityMetrics(
+    const base::TimeTicks& load_time,
+    const base::TimeTicks& interaction_time,
+    const base::TimeTicks& submission_time,
+    rappor::RapporServiceImpl* rappor_service,
+    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
+    bool did_show_suggestions,
+    bool observed_submission) const {
   size_t num_detected_field_types = 0;
   size_t num_server_mismatches = 0;
   size_t num_heuristic_mismatches = 0;
   size_t num_edited_autofilled_fields = 0;
   bool did_autofill_all_possible_fields = true;
   bool did_autofill_some_possible_fields = false;
+
+  // Determine the correct suffix for the metric, depending on whether or
+  // not a submission was observed.
+  const AutofillMetrics::QualityMetricType metric_type =
+      observed_submission ? AutofillMetrics::TYPE_SUBMISSION
+                          : AutofillMetrics::TYPE_NO_SUBMISSION;
+
   for (size_t i = 0; i < field_count(); ++i) {
     auto* const field = this->field(i);
 
@@ -689,17 +715,51 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
     if (field->form_control_type == "password")
       continue;
 
+    if (IsUPIVirtualPaymentAddress(field->value)) {
+      AutofillMetrics::LogUserHappinessMetric(
+          AutofillMetrics::USER_DID_ENTER_UPI_VPA);
+    }
     // We count fields that were autofilled but later modified, regardless of
     // whether the data now in the field is recognized.
     if (field->previously_autofilled())
       num_edited_autofilled_fields++;
 
-    // No further logging for empty fields nor for fields where the entered data
-    // does not appear to already exist in the user's stored Autofill data.
+    // Aliases for the field types predicted by heuristics, server and overall.
+    ServerFieldType heuristic_type =
+        AutofillType(field->heuristic_type()).GetStorableType();
+    ServerFieldType server_type =
+        AutofillType(field->server_type()).GetStorableType();
+    ServerFieldType predicted_type = field->Type().GetStorableType();
+
     const ServerFieldTypeSet& field_types = field->possible_types();
     DCHECK(!field_types.empty());
-    if (field_types.count(EMPTY_TYPE) || field_types.count(UNKNOWN_TYPE))
+
+    // If the field data is empty, or unrecognized, log whether or not autofill
+    // predicted that it would be populated with an autofillable data type.
+    bool has_empty_data = field_types.count(EMPTY_TYPE) != 0;
+    bool has_unrecognized_data = field_types.count(UNKNOWN_TYPE) != 0;
+    if (has_empty_data || has_unrecognized_data) {
+      AutofillMetrics::FieldTypeQualityMetric match_empty_or_unknown =
+          has_empty_data ? AutofillMetrics::TYPE_MATCH_EMPTY
+                         : AutofillMetrics::TYPE_MATCH_UNKNOWN;
+      AutofillMetrics::FieldTypeQualityMetric mismatch_empty_or_unknown =
+          has_empty_data ? AutofillMetrics::TYPE_MISMATCH_EMPTY
+                         : AutofillMetrics::TYPE_MISMATCH_UNKNOWN;
+      ServerFieldType field_type = has_empty_data ? EMPTY_TYPE : UNKNOWN_TYPE;
+      AutofillMetrics::LogHeuristicTypePrediction(
+          (heuristic_type == UNKNOWN_TYPE ? match_empty_or_unknown
+                                          : mismatch_empty_or_unknown),
+          field_type, metric_type);
+      AutofillMetrics::LogServerTypePrediction(
+          (server_type == NO_SERVER_DATA ? match_empty_or_unknown
+                                         : mismatch_empty_or_unknown),
+          field_type, metric_type);
+      AutofillMetrics::LogOverallTypePrediction(
+          (predicted_type == UNKNOWN_TYPE ? match_empty_or_unknown
+                                          : mismatch_empty_or_unknown),
+          field_type, metric_type);
       continue;
+    }
 
     ++num_detected_field_types;
     if (field->is_autofilled)
@@ -726,17 +786,7 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
     if (collapsed_field_types.size() == 1)
       field_type = *collapsed_field_types.begin();
 
-    ServerFieldType heuristic_type =
-        AutofillType(field->heuristic_type()).GetStorableType();
-    ServerFieldType server_type =
-        AutofillType(field->server_type()).GetStorableType();
-    ServerFieldType predicted_type = field->Type().GetStorableType();
-
-    // Log heuristic, server, and overall type quality metrics, independently of
-    // whether the field was autofilled.
-    const AutofillMetrics::QualityMetricType metric_type =
-        observed_submission ? AutofillMetrics::TYPE_SUBMISSION
-                            : AutofillMetrics::TYPE_NO_SUBMISSION;
+    // Log heuristic, server, and overall type quality metrics.
     if (heuristic_type == UNKNOWN_TYPE) {
       AutofillMetrics::LogHeuristicTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
                                                   field_type, metric_type);
@@ -779,24 +829,20 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
   // We log "submission" and duration metrics if we are here after observing a
   // submission event.
   if (observed_submission) {
+    AutofillMetrics::AutofillFormSubmittedState state;
     if (num_detected_field_types < kRequiredFieldsForPredictionRoutines) {
-      AutofillMetrics::LogAutofillFormSubmittedState(
-          AutofillMetrics::NON_FILLABLE_FORM_OR_NEW_DATA);
+      state = AutofillMetrics::NON_FILLABLE_FORM_OR_NEW_DATA;
     } else {
       if (did_autofill_all_possible_fields) {
-        AutofillMetrics::LogAutofillFormSubmittedState(
-            AutofillMetrics::FILLABLE_FORM_AUTOFILLED_ALL);
+        state = AutofillMetrics::FILLABLE_FORM_AUTOFILLED_ALL;
       } else if (did_autofill_some_possible_fields) {
-        AutofillMetrics::LogAutofillFormSubmittedState(
-            AutofillMetrics::FILLABLE_FORM_AUTOFILLED_SOME);
+        state = AutofillMetrics::FILLABLE_FORM_AUTOFILLED_SOME;
       } else if (!did_show_suggestions) {
-        AutofillMetrics::LogAutofillFormSubmittedState(
-            AutofillMetrics::
-                FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS);
+        state = AutofillMetrics::
+            FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS;
       } else {
-        AutofillMetrics::LogAutofillFormSubmittedState(
-            AutofillMetrics::
-                FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS);
+        state =
+            AutofillMetrics::FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS;
       }
 
       // Log some RAPPOR metrics for problematic cases.
@@ -843,6 +889,10 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
         }
       }
     }
+    if (form_interactions_ukm_logger->url() != source_url())
+      form_interactions_ukm_logger->UpdateSourceURL(source_url());
+    AutofillMetrics::LogAutofillFormSubmittedState(
+        state, form_interactions_ukm_logger);
   }
 }
 
@@ -888,6 +938,7 @@ void FormStructure::ParseFieldTypesFromAutocompleteAttributes() {
 
   has_author_specified_types_ = false;
   has_author_specified_sections_ = false;
+  has_author_specified_upi_vpa_hint_ = false;
   for (const auto& field : fields_) {
     // To prevent potential section name collisions, add a default suffix for
     // other fields.  Without this, 'autocomplete' attribute values
@@ -925,6 +976,11 @@ void FormStructure::ParseFieldTypesFromAutocompleteAttributes() {
     tokens.pop_back();
     HtmlFieldType field_type =
         FieldTypeFromAutocompleteAttributeValue(field_type_token, *field);
+    if (field_type == HTML_TYPE_UPI_VPA) {
+      has_author_specified_upi_vpa_hint_ = true;
+      // TODO(crbug/702223): Flesh out support for UPI-VPA.
+      field_type = HTML_TYPE_UNRECOGNIZED;
+    }
     if (field_type == HTML_TYPE_UNSPECIFIED)
       continue;
 

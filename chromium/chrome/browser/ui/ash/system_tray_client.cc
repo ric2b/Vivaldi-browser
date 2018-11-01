@@ -4,17 +4,18 @@
 
 #include "chrome/browser/ui/ash/system_tray_client.h"
 
-#include "ash/common/login_status.h"
-#include "ash/common/wm_shell.h"
+#include "ash/login_status.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/shell.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/metrics/user_metrics.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
+#include "chrome/browser/chromeos/bluetooth/bluetooth_pairing_dialog.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/options/network_config_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -37,8 +38,8 @@
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/service_manager_connection.h"
+#include "device/bluetooth/bluetooth_device.h"
 #include "extensions/browser/api/vpn_provider/vpn_service.h"
 #include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
 #include "net/base/escape.h"
@@ -49,8 +50,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
+using chromeos::BluetoothPairingDialog;
 using chromeos::DBusThreadManager;
 using chromeos::LoginState;
+using device::BluetoothDevice;
 using views::Widget;
 
 namespace {
@@ -213,8 +216,30 @@ void SystemTrayClient::ShowSettings() {
   ShowSettingsSubPageForActiveUser(std::string());
 }
 
+void SystemTrayClient::ShowBluetoothSettings() {
+  base::RecordAction(base::UserMetricsAction("ShowBluetoothSettingsPage"));
+  ShowSettingsSubPageForActiveUser(chrome::kBluetoothSubPage);
+}
+
+void SystemTrayClient::ShowBluetoothPairingDialog(
+    const std::string& address,
+    const base::string16& name_for_display,
+    bool paired,
+    bool connected) {
+  std::string canonical_address = BluetoothDevice::CanonicalizeAddress(address);
+  if (canonical_address.empty())  // Address was invalid.
+    return;
+
+  base::RecordAction(
+      base::UserMetricsAction("StatusArea_Bluetooth_Connect_Unknown"));
+  BluetoothPairingDialog* dialog = new BluetoothPairingDialog(
+      canonical_address, name_for_display, paired, connected);
+  // The dialog deletes itself on close.
+  dialog->ShowInContainer(GetDialogParentContainerId());
+}
+
 void SystemTrayClient::ShowDateSettings() {
-  content::RecordAction(base::UserMetricsAction("ShowDateOptions"));
+  base::RecordAction(base::UserMetricsAction("ShowDateOptions"));
   // Everybody can change the time zone (even though it is a device setting).
   chrome::ShowSettingsSubPageForProfile(ProfileManager::GetActiveUserProfile(),
                                         chrome::kDateTimeSubPage);
@@ -225,12 +250,12 @@ void SystemTrayClient::ShowSetTimeDialog() {
 }
 
 void SystemTrayClient::ShowDisplaySettings() {
-  content::RecordAction(base::UserMetricsAction("ShowDisplayOptions"));
+  base::RecordAction(base::UserMetricsAction("ShowDisplayOptions"));
   ShowSettingsSubPageForActiveUser(chrome::kDisplaySubPage);
 }
 
 void SystemTrayClient::ShowPowerSettings() {
-  content::RecordAction(base::UserMetricsAction("Tray_ShowPowerOptions"));
+  base::RecordAction(base::UserMetricsAction("Tray_ShowPowerOptions"));
   ShowSettingsSubPageForActiveUser(chrome::kPowerSubPage);
 }
 
@@ -241,7 +266,7 @@ void SystemTrayClient::ShowChromeSlow() {
 }
 
 void SystemTrayClient::ShowIMESettings() {
-  content::RecordAction(base::UserMetricsAction("OpenLanguageOptionsDialog"));
+  base::RecordAction(base::UserMetricsAction("OpenLanguageOptionsDialog"));
   ShowSettingsSubPageForActiveUser(chrome::kLanguageOptionsSubPage);
 }
 
@@ -257,7 +282,7 @@ void SystemTrayClient::ShowAccessibilityHelp() {
 }
 
 void SystemTrayClient::ShowAccessibilitySettings() {
-  content::RecordAction(base::UserMetricsAction("ShowAccessibilitySettings"));
+  base::RecordAction(base::UserMetricsAction("ShowAccessibilitySettings"));
   ShowSettingsSubPageForActiveUser(chrome::kAccessibilitySubPage);
 }
 
@@ -269,7 +294,7 @@ void SystemTrayClient::ShowPaletteHelp() {
 }
 
 void SystemTrayClient::ShowPaletteSettings() {
-  content::RecordAction(base::UserMetricsAction("ShowPaletteOptions"));
+  base::RecordAction(base::UserMetricsAction("ShowPaletteOptions"));
   ShowSettingsSubPageForActiveUser(chrome::kStylusSubPage);
 }
 
@@ -327,7 +352,7 @@ void SystemTrayClient::ShowNetworkSettings(const std::string& network_id) {
       page = chrome::kNetworkDetailSubPage;
     page += "?guid=" + net::EscapeUrlEncodedData(network_id, true);
   }
-  content::RecordAction(base::UserMetricsAction("OpenInternetOptionsDialog"));
+  base::RecordAction(base::UserMetricsAction("OpenInternetOptionsDialog"));
   ShowSettingsSubPageForActiveUser(page);
 }
 
@@ -355,7 +380,10 @@ void SystemTrayClient::RequestRestartForUpdate() {
 void SystemTrayClient::HandleUpdateAvailable() {
   // Show an update icon for Chrome updates and Flash component updates.
   UpgradeDetector* detector = UpgradeDetector::GetInstance();
-  DCHECK(detector->notify_upgrade() || flash_update_available_);
+  bool update_available = detector->notify_upgrade() || flash_update_available_;
+  DCHECK(update_available);
+  if (!update_available)
+    return;
 
   // Get the Chrome update severity.
   ash::mojom::UpdateSeverity severity = GetUpdateSeverity(detector);
@@ -364,7 +392,14 @@ void SystemTrayClient::HandleUpdateAvailable() {
   if (flash_update_available_)
     severity = std::max(severity, ash::mojom::UpdateSeverity::LOW);
 
-  system_tray_->ShowUpdateIcon(severity, detector->is_factory_reset_required());
+  // Show a string specific to updating flash player if there is no system
+  // update.
+  ash::mojom::UpdateType update_type = detector->notify_upgrade()
+                                           ? ash::mojom::UpdateType::SYSTEM
+                                           : ash::mojom::UpdateType::FLASH;
+
+  system_tray_->ShowUpdateIcon(severity, detector->is_factory_reset_required(),
+                               update_type);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -30,57 +30,53 @@
 
 #include "web/LocalFileSystemClient.h"
 
+#include <memory>
 #include "core/dom/Document.h"
+#include "core/frame/ContentSettingsClient.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/ContentSettingCallbacks.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "public/platform/WebContentSettingCallbacks.h"
-#include "public/web/WebContentSettingsClient.h"
+#include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/text/WTFString.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WorkerContentSettingsClient.h"
-#include "wtf/PtrUtil.h"
-#include "wtf/text/WTFString.h"
-#include <memory>
 
 namespace blink {
 
-std::unique_ptr<FileSystemClient> LocalFileSystemClient::create() {
-  return WTF::wrapUnique(
+std::unique_ptr<FileSystemClient> LocalFileSystemClient::Create() {
+  return WTF::WrapUnique(
       static_cast<FileSystemClient*>(new LocalFileSystemClient()));
 }
 
 LocalFileSystemClient::~LocalFileSystemClient() {}
 
-bool LocalFileSystemClient::requestFileSystemAccessSync(
+bool LocalFileSystemClient::RequestFileSystemAccessSync(
     ExecutionContext* context) {
   DCHECK(context);
-  if (context->isDocument()) {
+  if (context->IsDocument()) {
     NOTREACHED();
     return false;
   }
 
-  DCHECK(context->isWorkerGlobalScope());
-  return WorkerContentSettingsClient::from(*toWorkerGlobalScope(context))
-      ->requestFileSystemAccessSync();
+  DCHECK(context->IsWorkerGlobalScope());
+  return WorkerContentSettingsClient::From(*ToWorkerGlobalScope(context))
+      ->RequestFileSystemAccessSync();
 }
 
-void LocalFileSystemClient::requestFileSystemAccessAsync(
+void LocalFileSystemClient::RequestFileSystemAccessAsync(
     ExecutionContext* context,
     std::unique_ptr<ContentSettingCallbacks> callbacks) {
   DCHECK(context);
-  if (!context->isDocument()) {
+  if (!context->IsDocument()) {
     NOTREACHED();
     return;
   }
 
-  Document* document = toDocument(context);
-  WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(document->frame());
-  if (!webFrame->contentSettingsClient()) {
-    callbacks->onAllowed();
-    return;
-  }
-  webFrame->contentSettingsClient()->requestFileSystemAccessAsync(
-      std::move(callbacks));
+  Document* document = ToDocument(context);
+  DCHECK(document->GetFrame());
+  document->GetFrame()
+      ->GetContentSettingsClient()
+      ->RequestFileSystemAccessAsync(std::move(callbacks));
 }
 
 LocalFileSystemClient::LocalFileSystemClient() {}

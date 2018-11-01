@@ -43,7 +43,10 @@ template <typename T>
 void UmaHistogramEnumeration(const std::string& name, T sample, T max) {
   static_assert(std::is_enum<T>::value,
                 "Non enum passed to UmaHistogramEnumeration");
-  return UmaHistogramExactLinear(name, static_cast<int>(sample), max);
+  DCHECK_LE(static_cast<uintmax_t>(max), static_cast<uintmax_t>(INT_MAX));
+  DCHECK_LE(static_cast<uintmax_t>(sample), static_cast<uintmax_t>(max));
+  return UmaHistogramExactLinear(name, static_cast<int>(sample),
+                                 static_cast<int>(max));
 }
 
 // For adding boolean sample to histogram.
@@ -59,7 +62,7 @@ BASE_EXPORT void UmaHistogramPercentage(const std::string& name, int percent);
 
 // For adding counts histogram.
 // Sample usage:
-//   base::UmaHistogramCounts("My.Counts", some_value, 1, 600, 30)
+//   base::UmaHistogramCustomCounts("My.Counts", some_value, 1, 600, 30)
 BASE_EXPORT void UmaHistogramCustomCounts(const std::string& name,
                                           int sample,
                                           int min,

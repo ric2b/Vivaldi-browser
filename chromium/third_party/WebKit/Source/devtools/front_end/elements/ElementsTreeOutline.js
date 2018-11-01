@@ -75,8 +75,8 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
 
     this._visible = false;
 
-    this._popoverHelper = new UI.PopoverHelper(this._element);
-    this._popoverHelper.initializeCallbacks(this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
+    this._popoverHelper = new UI.PopoverHelper(this._element, this._getPopoverRequest.bind(this));
+    this._popoverHelper.setHasPadding(true);
     this._popoverHelper.setTimeout(0, 100);
 
     /** @type {!Map<!SDK.DOMNode, !Elements.ElementsTreeOutline.UpdateRecord>} */
@@ -127,7 +127,7 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
   }
 
   /**
-   * @param {?UI.InplaceEditor.Controller} multilineEditing
+   * @param {?Elements.MultilineEditorController} multilineEditing
    */
   setMultilineEditing(multilineEditing) {
     this._multilineEditing = multilineEditing;
@@ -146,7 +146,7 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
   setVisibleWidth(width) {
     this._visibleWidth = width;
     if (this._multilineEditing)
-      this._multilineEditing.setWidth(this._visibleWidth);
+      this._multilineEditing.resize();
   }
 
   /**
@@ -236,7 +236,7 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
     if (this._clipboardNodeData.isCut && (node === targetNode || node.isAncestor(targetNode)))
       return false;
 
-    if (targetNode.target() !== node.target())
+    if (targetNode.domModel() !== node.domModel())
       return false;
     return true;
   }
@@ -521,36 +521,51 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
   }
 
   /**
-   * @param {!Element} element
    * @param {!Event} event
-   * @return {!Element|!AnchorBox|undefined}
+   * @return {?UI.PopoverRequest}
    */
-  _getPopoverAnchor(element, event) {
-    var link = element;
+  _getPopoverRequest(event) {
+    var link = event.target;
     while (link && !link[Elements.ElementsTreeElement.HrefSymbol])
       link = link.parentElementOrShadowHost();
-    return link ? link : undefined;
+    if (!link)
+      return null;
+
+    return {
+      box: link.boxInWindow(),
+      show: async popover => {
+        var listItem = link.enclosingNodeOrSelfWithNodeName('li');
+        var node = /** @type {!Elements.ElementsTreeElement} */ (listItem.treeElement).node();
+        var precomputedFeatures = await this._loadDimensionsForNode(node);
+        var preview = await Components.DOMPresentationUtils.buildImagePreviewContents(
+            node.domModel().target(), link[Elements.ElementsTreeElement.HrefSymbol], true, precomputedFeatures);
+        if (preview)
+          popover.contentElement.appendChild(preview);
+        return !!preview;
+      }
+    };
   }
 
   /**
    * @param {!SDK.DOMNode} node
-   * @param {function()} callback
+   * @return {!Promise<!Object|undefined>}
    */
-  _loadDimensionsForNode(node, callback) {
-    if (!node.nodeName() || node.nodeName().toLowerCase() !== 'img') {
-      callback();
-      return;
-    }
+  _loadDimensionsForNode(node) {
+    if (!node.nodeName() || node.nodeName().toLowerCase() !== 'img')
+      return Promise.resolve();
 
+    var fulfill;
+    var promise = new Promise(x => fulfill = x);
     node.resolveToObject('', resolvedNode);
+    return promise;
 
     function resolvedNode(object) {
       if (!object) {
-        callback();
+        fulfill();
         return;
       }
 
-      object.callFunctionJSON(features, undefined, callback);
+      object.callFunctionJSON(features, undefined, fulfill);
       object.release();
 
       /**
@@ -567,29 +582,6 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
           currentSrc: this.currentSrc
         };
       }
-    }
-  }
-
-  /**
-   * @param {!Element} link
-   * @param {!UI.Popover} popover
-   */
-  _showPopover(link, popover) {
-    var listItem = link.enclosingNodeOrSelfWithNodeName('li');
-    var node = /** @type {!Elements.ElementsTreeElement} */ (listItem.treeElement).node();
-    this._loadDimensionsForNode(
-        node, Components.DOMPresentationUtils.buildImagePreviewContents.bind(
-                  Components.DOMPresentationUtils, node.target(), link[Elements.ElementsTreeElement.HrefSymbol], true,
-                  showPopover));
-
-    /**
-     * @param {!Element=} contents
-     */
-    function showPopover(contents) {
-      if (!contents)
-        return;
-      popover.setCanShrink(false);
-      popover.showForAnchor(contents, link);
     }
   }
 
@@ -1575,7 +1567,6 @@ Elements.ElementsTreeOutline.UpdateRecord = class {
 
 /**
  * @implements {Common.Renderer}
- * @unrestricted
  */
 Elements.ElementsTreeOutline.Renderer = class {
   /**
@@ -1591,19 +1582,13 @@ Elements.ElementsTreeOutline.Renderer = class {
      * @param {function(!Error)} reject
      */
     function renderPromise(resolve, reject) {
-      if (object instanceof SDK.DOMNode) {
+      if (object instanceof SDK.DOMNode)
         onNodeResolved(/** @type {!SDK.DOMNode} */ (object));
-      } else if (object instanceof SDK.DeferredDOMNode) {
+      else if (object instanceof SDK.DeferredDOMNode)
         (/** @type {!SDK.DeferredDOMNode} */ (object)).resolve(onNodeResolved);
-      } else if (object instanceof SDK.RemoteObject) {
-        var domModel = SDK.DOMModel.fromTarget((/** @type {!SDK.RemoteObject} */ (object)).target());
-        if (domModel)
-          domModel.pushObjectAsNodeToFrontend(object, onNodeResolved);
-        else
-          reject(new Error('No dom model for given JS object target found.'));
-      } else {
+      else
         reject(new Error('Can\'t reveal not a node.'));
-      }
+
 
       /**
        * @param {?SDK.DOMNode} node

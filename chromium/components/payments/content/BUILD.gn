@@ -4,62 +4,85 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-mojom("payment_request") {
+static_library("content") {
   sources = [
-    "payment_request.mojom",
+    "payment_request.cc",
+    "payment_request.h",
+    "payment_request_dialog.h",
+    "payment_request_spec.cc",
+    "payment_request_spec.h",
+    "payment_request_state.cc",
+    "payment_request_state.h",
+    "payment_request_web_contents_manager.cc",
+    "payment_request_web_contents_manager.h",
+    "payment_response_helper.cc",
+    "payment_response_helper.h",
   ]
 
-  public_deps = [
-    "//mojo/common:common_custom_types",
+  deps = [
+    ":mojom",
+    ":utils",
+    "//components/autofill/core/browser",
+    "//components/payments/core",
+    "//content/public/browser",
+    "//mojo/public/cpp/bindings",
+    "//third_party/libphonenumber",
   ]
 }
 
-mojom("payment_app") {
+mojom("mojom") {
+  sources = [
+    "payment_request.mojom",
+  ]
+}
+
+mojom("mojom_parser") {
+  sources = [
+    "payment_manifest_parser.mojom",
+  ]
+
+  public_deps = [
+    "//url/mojo:url_mojom_gurl",
+  ]
+}
+
+mojom("mojom_payment_app") {
   sources = [
     "payment_app.mojom",
   ]
 
   public_deps = [
-    ":payment_request",
+    ":mojom",
     "//mojo/common:common_custom_types",
     "//url/mojo:url_mojom_gurl",
   ]
 }
 
-static_library("payment_request_impl") {
-  sources = [
-    "payment_request.cc",
-    "payment_request.h",
-    "payment_request_delegate.h",
-    "payment_request_dialog.h",
-    "payment_request_web_contents_manager.cc",
-    "payment_request_web_contents_manager.h",
-  ]
-
-  deps = [
-    ":payment_request",
-    ":payment_validation",
-    "//components/autofill/core/browser",
-    "//components/payments/core",
-    "//content/public/browser",
-    "//mojo/public/cpp/bindings",
-  ]
-}
-
-static_library("payment_validation") {
+static_library("utils") {
   sources = [
     "payment_details_validation.cc",
     "payment_details_validation.h",
+    "payment_manifest_downloader.cc",
+    "payment_manifest_downloader.h",
+    "payment_manifest_parser_host.cc",
+    "payment_manifest_parser_host.h",
     "payments_validators.cc",
     "payments_validators.h",
   ]
 
   deps = [
-    ":payment_request",
+    ":mojom",
+    ":mojom_parser",
     "//base",
     "//components/autofill/core/browser",
+    "//components/data_use_measurement/core",
+    "//components/link_header_util",
     "//components/payments/core",
+    "//components/strings",
+    "//content/public/browser",
+    "//net",
     "//third_party/re2",
+    "//ui/base",
     "//url",
   ]
 
@@ -72,14 +95,24 @@ static_library("payment_validation") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "payments_validators_test.cc",
+    "payment_manifest_downloader_unittest.cc",
+    "payment_request_spec_unittest.cc",
+    "payment_request_state_unittest.cc",
+    "payment_response_helper_unittest.cc",
+    "payments_validators_unittest.cc",
   ]
 
   deps = [
-    ":payment_validation",
+    ":content",
+    ":mojom",
+    ":utils",
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/browser",
+    "//components/autofill/core/browser:test_support",
+    "//components/payments/core",
+    "//content/test:test_support",
+    "//net:test_support",
     "//testing/gtest",
     "//third_party/icu",
     "//third_party/libaddressinput:test_support",

@@ -151,17 +151,20 @@
         55
       </message>
 
-      <if expr="is_win or is_linux or chromeos">
-        <!-- The width of the ash/ChromeOS system tray menu in pixels. -->
-        <message name="IDS_SYSTEM_TRAY_MENU_BUBBLE_WIDTH_PIXELS" use_name_for_id="true">
-          300
-        </message>
-      </if>
-
       <if expr="is_win">
         <!-- The width of the Conflicting Module bubble in characters (See above). -->
         <message name="IDS_CONFLICTING_MODULE_BUBBLE_WIDTH_CHARS" use_name_for_id="true">
           46
+        </message>
+        
+        <!-- The width of the Text on the save password Desktop iOS promotion bubble. -->
+        <message name="IDS_DESKTOP_IOS_PROMOTION_SAVE_PASSWORDS_BUBBLE_TEXT_WIDTH_CHARS" use_name_for_id="true">
+          55
+        </message>
+
+        <!-- The width of the Text on the Desktop iOS promotion bubble. -->
+        <message name="IDS_DESKTOP_IOS_PROMOTION_TEXT_WIDTH_CHARS" use_name_for_id="true">
+          41
         </message>
       </if>
 

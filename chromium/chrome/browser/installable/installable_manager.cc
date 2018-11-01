@@ -61,6 +61,11 @@ bool DoesManifestContainRequiredIcon(const content::Manifest& manifest) {
   return false;
 }
 
+// Returns true if |params| specifies a full PWA check.
+bool IsParamsForPwaCheck(const InstallableParams& params) {
+  return params.check_installable && params.fetch_valid_primary_icon;
+}
+
 }  // namespace
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(InstallableManager);
@@ -94,13 +99,16 @@ struct InstallableManager::IconProperty {
   DISALLOW_COPY_AND_ASSIGN(IconProperty);
 };
 
-
 InstallableManager::InstallableManager(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       manifest_(new ManifestProperty()),
       installable_(new InstallableProperty()),
+      page_status_(InstallabilityCheckStatus::NOT_STARTED),
+      menu_open_count_(0),
+      menu_item_add_to_homescreen_count_(0),
       is_active_(false),
-      weak_factory_(this) { }
+      is_pwa_check_complete_(false),
+      weak_factory_(this) {}
 
 InstallableManager::~InstallableManager() = default;
 
@@ -137,7 +145,60 @@ void InstallableManager::GetData(const InstallableParams& params,
     return;
 
   is_active_ = true;
+  if (page_status_ == InstallabilityCheckStatus::NOT_STARTED)
+    page_status_ = InstallabilityCheckStatus::NOT_COMPLETED;
   StartNextTask();
+}
+
+void InstallableManager::RecordMenuOpenHistogram() {
+  if (is_pwa_check_complete_)
+    InstallableMetrics::RecordMenuOpenHistogram(page_status_);
+  else
+    ++menu_open_count_;
+}
+
+void InstallableManager::RecordMenuItemAddToHomescreenHistogram() {
+  if (is_pwa_check_complete_)
+    InstallableMetrics::RecordMenuItemAddToHomescreenHistogram(page_status_);
+  else
+    ++menu_item_add_to_homescreen_count_;
+}
+
+void InstallableManager::RecordQueuedMetricsOnTaskCompletion(
+    const InstallableParams& params,
+    bool check_passed) {
+  // Don't do anything if we've:
+  //  - already finished the PWA check, or
+  //  - we passed the check AND it was not for the full PWA params.
+  // In the latter case (i.e. the check passed but we weren't checking
+  // everything), we don't yet know if the site is installable. However, if the
+  // check didn't pass, we know for sure the site isn't installable, regardless
+  // of how much we checked.
+  //
+  // Once a full check is completed, metrics will be directly recorded in
+  // Record*Histogram since |is_pwa_check_complete_| will be true.
+  if (is_pwa_check_complete_ || (check_passed && !IsParamsForPwaCheck(params)))
+    return;
+
+  is_pwa_check_complete_ = true;
+  page_status_ =
+      check_passed
+          ? InstallabilityCheckStatus::COMPLETE_PROGRESSIVE_WEB_APP
+          : InstallabilityCheckStatus::COMPLETE_NON_PROGRESSIVE_WEB_APP;
+
+  // Compute what the status would have been for any queued calls to
+  // Record*Histogram, and record appropriately.
+  InstallabilityCheckStatus prev_status =
+      check_passed
+          ? InstallabilityCheckStatus::IN_PROGRESS_PROGRESSIVE_WEB_APP
+          : InstallabilityCheckStatus::IN_PROGRESS_NON_PROGRESSIVE_WEB_APP;
+  for (; menu_open_count_ > 0; --menu_open_count_)
+    InstallableMetrics::RecordMenuOpenHistogram(prev_status);
+
+  for (; menu_item_add_to_homescreen_count_ > 0;
+       --menu_item_add_to_homescreen_count_) {
+    InstallableMetrics::RecordMenuItemAddToHomescreenHistogram(prev_status);
+  }
 }
 
 InstallableManager::IconParams InstallableManager::ParamsForPrimaryIcon(
@@ -177,7 +238,16 @@ InstallableStatusCode InstallableManager::GetErrorCode(
       return icon.error;
   }
 
-  // Do not report badge icon's error because badge icon is optional.
+  if (params.fetch_valid_badge_icon) {
+    IconProperty& icon = icons_[ParamsForBadgeIcon(params)];
+
+    // If the error is NO_ACCEPTABLE_ICON, there is no icon suitable as a badge
+    // in the manifest. Ignore this case since we only want to fail the check if
+    // there was a suitable badge icon specified and we couldn't fetch it.
+    if (icon.error != NO_ERROR_DETECTED && icon.error != NO_ACCEPTABLE_ICON)
+      return icon.error;
+  }
+
   return NO_ERROR_DETECTED;
 }
 
@@ -232,6 +302,21 @@ void InstallableManager::Reset() {
   tasks_.clear();
   icons_.clear();
 
+  // We may have reset prior to completion, in which case |menu_open_count_| or
+  // |menu_item_add_to_homescreen_count_| might be nonzero and |page_status_| is
+  // one of NOT_STARTED or NOT_COMPLETED. If we completed, then these values
+  // cannot be anything except 0.
+  is_pwa_check_complete_ = false;
+
+  for (; menu_open_count_ > 0; --menu_open_count_)
+    InstallableMetrics::RecordMenuOpenHistogram(page_status_);
+
+  for (; menu_item_add_to_homescreen_count_ > 0;
+       --menu_item_add_to_homescreen_count_) {
+    InstallableMetrics::RecordMenuItemAddToHomescreenHistogram(page_status_);
+  }
+
+  page_status_ = InstallabilityCheckStatus::NOT_STARTED;
   manifest_.reset(new ManifestProperty());
   installable_.reset(new InstallableProperty());
 
@@ -292,7 +377,9 @@ void InstallableManager::WorkOnTask() {
   const InstallableParams& params = task.first;
 
   InstallableStatusCode code = GetErrorCode(params);
-  if (code != NO_ERROR_DETECTED || IsComplete(params)) {
+  bool check_passed = (code == NO_ERROR_DETECTED);
+  if (!check_passed || IsComplete(params)) {
+    RecordQueuedMetricsOnTaskCompletion(params, check_passed);
     RunCallback(task, code);
     tasks_.erase(tasks_.begin());
     StartNextTask();
@@ -301,11 +388,11 @@ void InstallableManager::WorkOnTask() {
 
   if (!manifest_->fetched) {
     FetchManifest();
-  } else if (params.check_installable && !installable_->fetched) {
-    CheckInstallable();
   } else if (params.fetch_valid_primary_icon &&
              !IsIconFetched(ParamsForPrimaryIcon(params))) {
     CheckAndFetchBestIcon(ParamsForPrimaryIcon(params));
+  } else if (params.check_installable && !installable_->fetched) {
+    CheckInstallable();
   } else if (params.fetch_valid_badge_icon &&
              !IsIconFetched(ParamsForBadgeIcon(params))) {
     CheckAndFetchBestIcon(ParamsForBadgeIcon(params));
@@ -377,8 +464,8 @@ bool InstallableManager::IsManifestValidForWebApp(
   // TODO(dominickn,mlamouri): when Chrome supports "minimal-ui", it should be
   // accepted. If we accept it today, it would fallback to "browser" and make
   // this check moot. See https://crbug.com/604390.
-  if (manifest.display != blink::WebDisplayModeStandalone &&
-      manifest.display != blink::WebDisplayModeFullscreen) {
+  if (manifest.display != blink::kWebDisplayModeStandalone &&
+      manifest.display != blink::kWebDisplayModeFullscreen) {
     installable_->error = MANIFEST_DISPLAY_NOT_SUPPORTED;
     return false;
   }
@@ -412,15 +499,23 @@ void InstallableManager::CheckServiceWorker() {
                  weak_factory_.GetWeakPtr()));
 }
 
-void InstallableManager::OnDidCheckHasServiceWorker(bool has_service_worker) {
+void InstallableManager::OnDidCheckHasServiceWorker(
+    content::ServiceWorkerCapability capability) {
   if (!GetWebContents())
     return;
 
-  if (has_service_worker) {
-    installable_->installable = true;
-  } else {
-    installable_->installable = false;
-    installable_->error = NO_MATCHING_SERVICE_WORKER;
+  switch (capability) {
+    case content::ServiceWorkerCapability::SERVICE_WORKER_WITH_FETCH_HANDLER:
+      installable_->installable = true;
+      break;
+    case content::ServiceWorkerCapability::SERVICE_WORKER_NO_FETCH_HANDLER:
+      installable_->installable = false;
+      installable_->error = NOT_OFFLINE_CAPABLE;
+      break;
+    case content::ServiceWorkerCapability::NO_SERVICE_WORKER:
+      installable_->installable = false;
+      installable_->error = NO_MATCHING_SERVICE_WORKER;
+      break;
   }
 
   installable_->fetched = true;
@@ -477,7 +572,7 @@ void InstallableManager::OnIconFetched(
 void InstallableManager::DidFinishNavigation(
     content::NavigationHandle* handle) {
   if (handle->IsInMainFrame() && handle->HasCommitted() &&
-      !handle->IsSamePage()) {
+      !handle->IsSameDocument()) {
     Reset();
   }
 }

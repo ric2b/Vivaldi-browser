@@ -30,6 +30,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/favicon_base/favicon_usage_data.h"
@@ -282,7 +283,7 @@ class HistoryBackendTestBase : public testing::Test {
   URLsModifiedList urls_modified_notifications_;
   URLsDeletedList urls_deleted_notifications_;
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::FilePath test_dir_;
 
   DISALLOW_COPY_AND_ASSIGN(HistoryBackendTestBase);
@@ -1964,6 +1965,7 @@ TEST_F(HistoryBackendTest, SetFaviconsReplaceBitmapData) {
       GetOnlyFaviconBitmap(original_favicon_id, &original_favicon_bitmap));
   EXPECT_TRUE(
       BitmapColorEqual(SK_ColorBLUE, original_favicon_bitmap.bitmap_data));
+  EXPECT_NE(base::Time(), original_favicon_bitmap.last_updated);
 
   // Call SetFavicons() with completely identical data.
   bitmaps[0] = CreateBitmap(SK_ColorBLUE, kSmallEdgeSize);
@@ -1978,6 +1980,7 @@ TEST_F(HistoryBackendTest, SetFaviconsReplaceBitmapData) {
       GetOnlyFaviconBitmap(updated_favicon_id, &updated_favicon_bitmap));
   EXPECT_TRUE(
       BitmapColorEqual(SK_ColorBLUE, updated_favicon_bitmap.bitmap_data));
+  EXPECT_NE(base::Time(), updated_favicon_bitmap.last_updated);
 
   // Call SetFavicons() with a different bitmap of the same size.
   bitmaps[0] = CreateBitmap(SK_ColorWHITE, kSmallEdgeSize);
@@ -2066,6 +2069,96 @@ TEST_F(HistoryBackendTest, SetFaviconsSameFaviconURLForTwoPages) {
   EXPECT_TRUE(backend_->thumbnail_db_->GetFaviconBitmaps(favicon_id,
                                                          &favicon_bitmaps));
   EXPECT_EQ(2u, favicon_bitmaps.size());
+}
+
+// Tests calling SetLastResortFavicons(). Neither |page_url| nor |icon_url| are
+// known to the database.
+TEST_F(HistoryBackendTest, SetLastResortFaviconsForEmptyDB) {
+  GURL page_url("http://www.google.com");
+  GURL icon_url("http:/www.google.com/favicon.ico");
+
+  std::vector<SkBitmap> bitmaps;
+  bitmaps.push_back(CreateBitmap(SK_ColorRED, kSmallEdgeSize));
+
+  // Call SetLastResortFavicons() with a different icon URL and bitmap data.
+  EXPECT_TRUE(backend_->SetLastResortFavicons(page_url, favicon_base::FAVICON,
+                                              icon_url, bitmaps));
+
+  favicon_base::FaviconID favicon_id =
+      backend_->thumbnail_db_->GetFaviconIDForFaviconURL(
+          icon_url, favicon_base::FAVICON, NULL);
+  EXPECT_NE(0, favicon_id);
+
+  FaviconBitmap favicon_bitmap;
+  ASSERT_TRUE(GetOnlyFaviconBitmap(favicon_id, &favicon_bitmap));
+  // The original bitmap should have been retrieved.
+  EXPECT_TRUE(BitmapColorEqual(SK_ColorRED, favicon_bitmap.bitmap_data));
+  // The favicon should not be marked as expired.
+  EXPECT_EQ(base::Time(), favicon_bitmap.last_updated);
+}
+
+// Tests calling SetLastResortFavicons(). |page_url| is known to the database
+// but |icon_url| is not (the second should be irrelevant though).
+TEST_F(HistoryBackendTest, SetLastResortFaviconsForPageInDB) {
+  GURL page_url("http://www.google.com");
+  GURL icon_url1("http:/www.google.com/favicon1.ico");
+  GURL icon_url2("http:/www.google.com/favicon2.ico");
+  std::vector<SkBitmap> bitmaps;
+  bitmaps.push_back(CreateBitmap(SK_ColorBLUE, kSmallEdgeSize));
+
+  // Add bitmap to the database.
+  backend_->SetFavicons(page_url, favicon_base::FAVICON, icon_url1, bitmaps);
+  favicon_base::FaviconID original_favicon_id =
+      backend_->thumbnail_db_->GetFaviconIDForFaviconURL(
+          icon_url1, favicon_base::FAVICON, NULL);
+  ASSERT_NE(0, original_favicon_id);
+
+  // Call SetLastResortFavicons() with a different icon URL and bitmap data.
+  bitmaps[0] = CreateBitmap(SK_ColorWHITE, kSmallEdgeSize);
+  EXPECT_FALSE(backend_->SetLastResortFavicons(page_url, favicon_base::FAVICON,
+                                               icon_url2, bitmaps));
+  EXPECT_EQ(0, backend_->thumbnail_db_->GetFaviconIDForFaviconURL(
+                   icon_url2, favicon_base::FAVICON, NULL));
+
+  FaviconBitmap favicon_bitmap;
+  ASSERT_TRUE(GetOnlyFaviconBitmap(original_favicon_id, &favicon_bitmap));
+  // The original bitmap should have been retrieved.
+  EXPECT_TRUE(BitmapColorEqual(SK_ColorBLUE, favicon_bitmap.bitmap_data));
+  // The favicon should not be marked as expired.
+  EXPECT_NE(base::Time(), favicon_bitmap.last_updated);
+}
+
+// Tests calling SetLastResortFavicons(). |page_url| is not known to the
+// database but |icon_url| is.
+TEST_F(HistoryBackendTest, SetLastResortFaviconsForIconInDB) {
+  const GURL old_page_url("http://www.google.com/old");
+  const GURL page_url("http://www.google.com/");
+  const GURL icon_url("http://www.google.com/icon");
+  std::vector<SkBitmap> bitmaps;
+  bitmaps.push_back(CreateBitmap(SK_ColorBLUE, kSmallEdgeSize));
+
+  // Add bitmap to the database.
+  backend_->SetFavicons(old_page_url, favicon_base::FAVICON, icon_url, bitmaps);
+  favicon_base::FaviconID original_favicon_id =
+      backend_->thumbnail_db_->GetFaviconIDForFaviconURL(
+          icon_url, favicon_base::FAVICON, NULL);
+  ASSERT_NE(0, original_favicon_id);
+
+  // Call SetLastResortFavicons() with a different bitmap.
+  bitmaps[0] = CreateBitmap(SK_ColorWHITE, kSmallEdgeSize);
+  EXPECT_FALSE(backend_->SetLastResortFavicons(page_url, favicon_base::FAVICON,
+                                               icon_url, bitmaps));
+
+  EXPECT_EQ(original_favicon_id,
+            backend_->thumbnail_db_->GetFaviconIDForFaviconURL(
+                icon_url, favicon_base::FAVICON, NULL));
+
+  FaviconBitmap favicon_bitmap;
+  ASSERT_TRUE(GetOnlyFaviconBitmap(original_favicon_id, &favicon_bitmap));
+  // The original bitmap should have been retrieved.
+  EXPECT_TRUE(BitmapColorEqual(SK_ColorBLUE, favicon_bitmap.bitmap_data));
+  // The favicon should not be marked as expired.
+  EXPECT_NE(base::Time(), favicon_bitmap.last_updated);
 }
 
 // Test repeatedly calling MergeFavicon(). |page_url| is initially not known
@@ -3582,10 +3675,13 @@ TEST_F(HistoryBackendTest, DeleteFTSIndexDatabases) {
   // Setup dummy index database files.
   const char* data = "Dummy";
   const size_t data_len = 5;
-  ASSERT_TRUE(base::WriteFile(db1, data, data_len));
-  ASSERT_TRUE(base::WriteFile(db1_journal, data, data_len));
-  ASSERT_TRUE(base::WriteFile(db1_wal, data, data_len));
-  ASSERT_TRUE(base::WriteFile(db2_actual, data, data_len));
+  ASSERT_EQ(static_cast<int>(data_len), base::WriteFile(db1, data, data_len));
+  ASSERT_EQ(static_cast<int>(data_len),
+            base::WriteFile(db1_journal, data, data_len));
+  ASSERT_EQ(static_cast<int>(data_len),
+            base::WriteFile(db1_wal, data, data_len));
+  ASSERT_EQ(static_cast<int>(data_len),
+            base::WriteFile(db2_actual, data, data_len));
 #if defined(OS_POSIX)
   EXPECT_TRUE(base::CreateSymbolicLink(db2_actual, db2_symlink));
 #endif

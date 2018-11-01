@@ -80,8 +80,11 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   typedef std::vector<Window*> Windows;
 
-  explicit Window(WindowDelegate* delegate);
-  Window(WindowDelegate* delegate, std::unique_ptr<WindowPort> port);
+  explicit Window(WindowDelegate* delegate,
+                  ui::wm::WindowType type = ui::wm::WINDOW_TYPE_UNKNOWN);
+  Window(WindowDelegate* delegate,
+         std::unique_ptr<WindowPort> port,
+         ui::wm::WindowType type = ui::wm::WINDOW_TYPE_UNKNOWN);
   ~Window() override;
 
   // Initializes the window. This creates the window's layer.
@@ -260,9 +263,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // purposes of event targeting.
   Window* GetEventHandlerForPoint(const gfx::Point& local_point);
 
-  // Returns the topmost Window with a delegate containing |local_point|.
-  Window* GetTopWindowContainingPoint(const gfx::Point& local_point);
-
   // Returns this window's toplevel window (the highest-up-the-tree ancestor
   // that has a delegate set).  The toplevel window may be |this|.
   Window* GetToplevelWindow();
@@ -350,12 +350,8 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Schedules a paint for the Window's entire bounds.
   void SchedulePaint();
 
-  // Asks the delegate to paint the window and invokes PaintLayerlessChildren()
-  // to paint any children with no layers.
+  // Asks the delegate to paint the window.
   void Paint(const ui::PaintContext& context);
-
-  // Paints any layerless children to |canvas|.
-  void PaintLayerlessChildren(const ui::PaintContext& context);
 
   // Gets a Window (either this one or a subwindow) containing |local_point|.
   // If |return_tightest| is true, returns the tightest-containing (i.e.

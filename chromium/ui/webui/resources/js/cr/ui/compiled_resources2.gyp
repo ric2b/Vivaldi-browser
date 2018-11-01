@@ -28,6 +28,13 @@
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'dialogs',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'drag_wrapper',
       'dependencies': [
         '../../compiled_resources2.gyp:assert',
@@ -66,7 +73,40 @@
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'list',
+      'dependencies': [
+        'array_data_model',
+        'list_item',
+        'list_selection_controller',
+        'list_selection_model',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'list_item',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'list_selection_controller',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+        'list_selection_model',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'list_selection_model',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+        '../compiled_resources2.gyp:event_target',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'list_single_selection_model',
       'dependencies': [
         '../../compiled_resources2.gyp:cr',
         '../compiled_resources2.gyp:event_target',
@@ -118,6 +158,25 @@
       'target_name': 'position_util',
       'dependencies': [
         '../../compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'splitter',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+        '../compiled_resources2.gyp:ui',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'table',
+      'dependencies': [
+        'list',
+        'list_single_selection_model',
+        'table/compiled_resources2.gyp:table_column_model',
+        'table/compiled_resources2.gyp:table_header',
+        'table/compiled_resources2.gyp:table_list',
       ],
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

@@ -31,6 +31,7 @@
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_source_type.h"
 #include "net/socket/socket_net_log_params.h"
+#include "net/socket/socket_options.h"
 #include "net/socket/socket_posix.h"
 
 // If we don't have a definition for TCPI_OPT_SYN_DATA, create one.
@@ -293,6 +294,21 @@ int TCPSocketPosix::Read(IOBuffer* buf,
   return rv;
 }
 
+int TCPSocketPosix::ReadIfReady(IOBuffer* buf,
+                                int buf_len,
+                                const CompletionCallback& callback) {
+  DCHECK(socket_);
+  DCHECK(!callback.is_null());
+
+  int rv =
+      socket_->ReadIfReady(buf, buf_len,
+                           base::Bind(&TCPSocketPosix::ReadIfReadyCompleted,
+                                      base::Unretained(this), callback));
+  if (rv != ERR_IO_PENDING)
+    rv = HandleReadCompleted(buf, rv);
+  return rv;
+}
+
 int TCPSocketPosix::Write(IOBuffer* buf,
                           int buf_len,
                           const CompletionCallback& callback) {
@@ -386,39 +402,17 @@ void TCPSocketPosix::SetDefaultOptionsForClient() {
 int TCPSocketPosix::SetAddressReuse(bool allow) {
   DCHECK(socket_);
 
-  // SO_REUSEADDR is useful for server sockets to bind to a recently unbound
-  // port. When a socket is closed, the end point changes its state to TIME_WAIT
-  // and wait for 2 MSL (maximum segment lifetime) to ensure the remote peer
-  // acknowledges its closure. For server sockets, it is usually safe to
-  // bind to a TIME_WAIT end point immediately, which is a widely adopted
-  // behavior.
-  //
-  // Note that on *nix, SO_REUSEADDR does not enable the TCP socket to bind to
-  // an end point that is already bound by another socket. To do that one must
-  // set SO_REUSEPORT instead. This option is not provided on Linux prior
-  // to 3.9.
-  //
-  // SO_REUSEPORT is provided in MacOS X and iOS.
-  int boolean_value = allow ? 1 : 0;
-  int rv = setsockopt(socket_->socket_fd(), SOL_SOCKET, SO_REUSEADDR,
-                      &boolean_value, sizeof(boolean_value));
-  if (rv < 0)
-    return MapSystemError(errno);
-  return OK;
+  return SetReuseAddr(socket_->socket_fd(), allow);
 }
 
 int TCPSocketPosix::SetReceiveBufferSize(int32_t size) {
   DCHECK(socket_);
-  int rv = setsockopt(socket_->socket_fd(), SOL_SOCKET, SO_RCVBUF,
-                      reinterpret_cast<const char*>(&size), sizeof(size));
-  return (rv == 0) ? OK : MapSystemError(errno);
+  return SetSocketReceiveBufferSize(socket_->socket_fd(), size);
 }
 
 int TCPSocketPosix::SetSendBufferSize(int32_t size) {
   DCHECK(socket_);
-  int rv = setsockopt(socket_->socket_fd(), SOL_SOCKET, SO_SNDBUF,
-                      reinterpret_cast<const char*>(&size), sizeof(size));
-  return (rv == 0) ? OK : MapSystemError(errno);
+  return SetSocketSendBufferSize(socket_->socket_fd(), size);
 }
 
 bool TCPSocketPosix::SetKeepAlive(bool enable, int delay) {
@@ -428,7 +422,7 @@ bool TCPSocketPosix::SetKeepAlive(bool enable, int delay) {
 
 bool TCPSocketPosix::SetNoDelay(bool no_delay) {
   DCHECK(socket_);
-  return SetTCPNoDelay(socket_->socket_fd(), no_delay);
+  return SetTCPNoDelay(socket_->socket_fd(), no_delay) == OK;
 }
 
 void TCPSocketPosix::Close() {
@@ -586,10 +580,37 @@ void TCPSocketPosix::ReadCompleted(const scoped_refptr<IOBuffer>& buf,
                                    const CompletionCallback& callback,
                                    int rv) {
   DCHECK_NE(ERR_IO_PENDING, rv);
+
   callback.Run(HandleReadCompleted(buf.get(), rv));
 }
 
+void TCPSocketPosix::ReadIfReadyCompleted(const CompletionCallback& callback,
+                                          int rv) {
+  DCHECK_NE(ERR_IO_PENDING, rv);
+  DCHECK_GE(OK, rv);
+
+  HandleReadCompletedHelper(rv);
+  callback.Run(rv);
+}
+
 int TCPSocketPosix::HandleReadCompleted(IOBuffer* buf, int rv) {
+  HandleReadCompletedHelper(rv);
+
+  if (rv < 0)
+    return rv;
+
+  // Notify the watcher only if at least 1 byte was read.
+  if (rv > 0)
+    NotifySocketPerformanceWatcher();
+
+  net_log_.AddByteTransferEvent(NetLogEventType::SOCKET_BYTES_RECEIVED, rv,
+                                buf->data());
+  NetworkActivityMonitor::GetInstance()->IncrementBytesReceived(rv);
+
+  return rv;
+}
+
+void TCPSocketPosix::HandleReadCompletedHelper(int rv) {
   if (tcp_fastopen_write_attempted_ && !tcp_fastopen_connected_) {
     // A TCP FastOpen connect-with-write was attempted. This read was a
     // subsequent read, which either succeeded or failed. If the read
@@ -610,18 +631,7 @@ int TCPSocketPosix::HandleReadCompleted(IOBuffer* buf, int rv) {
   if (rv < 0) {
     net_log_.AddEvent(NetLogEventType::SOCKET_READ_ERROR,
                       CreateNetLogSocketErrorCallback(rv, errno));
-    return rv;
   }
-
-  // Notify the watcher only if at least 1 byte was read.
-  if (rv > 0)
-    NotifySocketPerformanceWatcher();
-
-  net_log_.AddByteTransferEvent(NetLogEventType::SOCKET_BYTES_RECEIVED, rv,
-                                buf->data());
-  NetworkActivityMonitor::GetInstance()->IncrementBytesReceived(rv);
-
-  return rv;
 }
 
 void TCPSocketPosix::WriteCompleted(const scoped_refptr<IOBuffer>& buf,

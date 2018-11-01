@@ -11,12 +11,16 @@ static_library("doodle") {
     "doodle_service.h",
     "doodle_types.cc",
     "doodle_types.h",
+    "pref_names.cc",
+    "pref_names.h",
   ]
 
   deps = [
     "//base",
     "//components/data_use_measurement/core",
     "//components/google/core/browser",
+    "//components/keyed_service/core",
+    "//components/prefs",
     "//net",
   ]
 }
@@ -26,11 +30,13 @@ source_set("unit_tests") {
   sources = [
     "doodle_fetcher_impl_unittest.cc",
     "doodle_service_unittest.cc",
+    "doodle_types_unittest.cc",
   ]
 
   deps = [
     ":doodle",
     "//components/google/core/browser",
+    "//components/prefs:test_support",
     "//net:test_support",
     "//ui/base",
   ]

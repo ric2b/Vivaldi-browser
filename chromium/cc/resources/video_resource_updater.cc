@@ -14,12 +14,14 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
 #include "cc/output/gl_renderer.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/resource_util.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "media/base/video_frame.h"
 #include "media/renderers/skcanvas_video_renderer.h"
+#include "media/video/half_float_maker.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/libyuv/include/libyuv.h"
@@ -297,138 +299,12 @@ static gfx::Size SoftwarePlaneDimension(media::VideoFrame* input_frame,
   return gfx::Size(plane_width, plane_height);
 }
 
-namespace {
-// By OR-ing with 0x3800, 10-bit numbers become half-floats in the
-// range [0.5..1) and 9-bit numbers get the range [0.5..0.75).
-//
-// Half-floats are evaluated as:
-// float value = pow(2.0, exponent - 25) * (0x400 + fraction);
-//
-// In our case the exponent is 14 (since we or with 0x3800) and
-// pow(2.0, 14-25) * 0x400 evaluates to 0.5 (our offset) and
-// pow(2.0, 14-25) * fraction is [0..0.49951171875] for 10-bit and
-// [0..0.24951171875] for 9-bit.
-//
-// https://en.wikipedia.org/wiki/Half-precision_floating-point_format
-class HalfFloatMaker_xor : public VideoResourceUpdater::HalfFloatMaker {
- public:
-  explicit HalfFloatMaker_xor(int bits_per_channel)
-      : bits_per_channel_(bits_per_channel) {}
-  float Offset() const override { return 0.5; }
-  float Multiplier() const override {
-    int max_input_value = (1 << bits_per_channel_) - 1;
-    // 2 << 11 = 2048 would be 1.0 with our exponent.
-    return 2048.0 / max_input_value;
-  }
-  void MakeHalfFloats(const uint16_t* src, size_t num, uint16_t* dst) override {
-    // Micro-benchmarking indicates that the compiler does
-    // a good enough job of optimizing this loop that trying
-    // to manually operate on one uint64 at a time is not
-    // actually helpful.
-    // Note to future optimizers: Benchmark your optimizations!
-    for (size_t i = 0; i < num; i++)
-      dst[i] = src[i] | 0x3800;
-  }
-
- private:
-  int bits_per_channel_;
-};
-
-class HalfFloatMaker_libyuv : public VideoResourceUpdater::HalfFloatMaker {
- public:
-  explicit HalfFloatMaker_libyuv(int bits_per_channel) {
-    int max_value = (1 << bits_per_channel) - 1;
-    // For less than 15 bits, we can give libyuv a multiplier of
-    // 1.0, which is faster on some platforms. If bits is 16 or larger,
-    // a multiplier of 1.0 would cause overflows. However, a multiplier
-    // of 1/max_value would cause subnormal floats, which perform
-    // very poorly on some platforms.
-    if (bits_per_channel <= 15) {
-      libyuv_multiplier_ = 1.0f;
-    } else {
-      // This multiplier makes sure that we avoid subnormal values.
-      libyuv_multiplier_ = 1.0f / 4096.0f;
-    }
-    resource_multiplier_ = 1.0f / libyuv_multiplier_ / max_value;
-  }
-  float Offset() const override { return 0.0f; }
-  float Multiplier() const override { return resource_multiplier_; }
-  void MakeHalfFloats(const uint16_t* src, size_t num, uint16_t* dst) override {
-    // Source and dest stride can be zero since we're only copying
-    // one row at a time.
-    int stride = 0;
-    int rows = 1;
-    libyuv::HalfFloatPlane(src, stride, dst, stride, libyuv_multiplier_, num,
-                           rows);
-  }
-
- private:
-  float libyuv_multiplier_;
-  float resource_multiplier_;
-};
-
-}  // namespace
-
-std::unique_ptr<VideoResourceUpdater::HalfFloatMaker>
-VideoResourceUpdater::NewHalfFloatMaker(int bits_per_channel) {
-  if (bits_per_channel < 11) {
-    return std::unique_ptr<VideoResourceUpdater::HalfFloatMaker>(
-        new HalfFloatMaker_xor(bits_per_channel));
-  } else {
-    return std::unique_ptr<VideoResourceUpdater::HalfFloatMaker>(
-        new HalfFloatMaker_libyuv(bits_per_channel));
-  }
-}
-
 VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     scoped_refptr<media::VideoFrame> video_frame) {
   TRACE_EVENT0("cc", "VideoResourceUpdater::CreateForSoftwarePlanes");
   const media::VideoPixelFormat input_frame_format = video_frame->format();
 
-  // TODO(hubbe): Make this a video frame method.
-  int bits_per_channel = 0;
-  switch (input_frame_format) {
-    case media::PIXEL_FORMAT_UNKNOWN:
-      NOTREACHED();
-    // Fall through!
-    case media::PIXEL_FORMAT_I420:
-    case media::PIXEL_FORMAT_YV12:
-    case media::PIXEL_FORMAT_YV16:
-    case media::PIXEL_FORMAT_YV12A:
-    case media::PIXEL_FORMAT_YV24:
-    case media::PIXEL_FORMAT_NV12:
-    case media::PIXEL_FORMAT_NV21:
-    case media::PIXEL_FORMAT_UYVY:
-    case media::PIXEL_FORMAT_YUY2:
-    case media::PIXEL_FORMAT_ARGB:
-    case media::PIXEL_FORMAT_XRGB:
-    case media::PIXEL_FORMAT_RGB24:
-    case media::PIXEL_FORMAT_RGB32:
-    case media::PIXEL_FORMAT_MJPEG:
-    case media::PIXEL_FORMAT_MT21:
-    case media::PIXEL_FORMAT_Y8:
-    case media::PIXEL_FORMAT_I422:
-      bits_per_channel = 8;
-      break;
-    case media::PIXEL_FORMAT_YUV420P9:
-    case media::PIXEL_FORMAT_YUV422P9:
-    case media::PIXEL_FORMAT_YUV444P9:
-      bits_per_channel = 9;
-      break;
-    case media::PIXEL_FORMAT_YUV420P10:
-    case media::PIXEL_FORMAT_YUV422P10:
-    case media::PIXEL_FORMAT_YUV444P10:
-      bits_per_channel = 10;
-      break;
-    case media::PIXEL_FORMAT_YUV420P12:
-    case media::PIXEL_FORMAT_YUV422P12:
-    case media::PIXEL_FORMAT_YUV444P12:
-      bits_per_channel = 12;
-      break;
-    case media::PIXEL_FORMAT_Y16:
-      bits_per_channel = 16;
-      break;
-  }
+  int bits_per_channel = video_frame->BitsPerChannel(input_frame_format);
 
   // Only YUV and Y16 software video frames are supported.
   DCHECK(media::IsYuvPlanar(input_frame_format) ||
@@ -437,10 +313,12 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
   const bool software_compositor = context_provider_ == NULL;
 
   ResourceFormat output_resource_format;
+  gfx::ColorSpace output_color_space = video_frame->ColorSpace();
   if (input_frame_format == media::PIXEL_FORMAT_Y16) {
     // Unable to display directly as yuv planes so convert it to RGBA for
     // compositing.
     output_resource_format = RGBA_8888;
+    output_color_space = output_color_space.GetAsFullRangeRGB();
   } else {
     // Can be composited directly from yuv planes.
     output_resource_format =
@@ -491,9 +369,8 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
     const bool is_immutable = true;
     ResourceList::iterator resource_it = RecycleOrAllocateResource(
-        output_plane_resource_size, output_resource_format,
-        video_frame->ColorSpace(), software_compositor, is_immutable,
-        video_frame->unique_id(), i);
+        output_plane_resource_size, output_resource_format, output_color_space,
+        software_compositor, is_immutable, video_frame->unique_id(), i);
 
     resource_it->add_ref();
     plane_resources.push_back(resource_it);
@@ -517,7 +394,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
         ResourceProvider::ScopedWriteLockSoftware lock(
             resource_provider_, plane_resource.resource_id());
-        PaintCanvas canvas(lock.sk_bitmap());
+        SkiaPaintCanvas canvas(lock.sk_bitmap());
         // This is software path, so canvas and video_frame are always backed
         // by software.
         video_renderer_->Copy(video_frame, &canvas, media::Context3D());
@@ -550,7 +427,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
       TextureMailbox mailbox(plane_resource.mailbox(), gpu::SyncToken(),
                              resource_provider_->GetResourceTextureTarget(
                                  plane_resource.resource_id()));
-      mailbox.set_color_space(video_frame->ColorSpace());
+      mailbox.set_color_space(output_color_space);
       external_resources.mailboxes.push_back(mailbox);
       external_resources.release_callbacks.push_back(base::Bind(
           &RecycleResource, AsWeakPtr(), plane_resource.resource_id()));
@@ -559,10 +436,11 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     return external_resources;
   }
 
-  std::unique_ptr<HalfFloatMaker> half_float_maker;
+  std::unique_ptr<media::HalfFloatMaker> half_float_maker;
   if (resource_provider_->YuvResourceFormat(bits_per_channel) ==
       LUMINANCE_F16) {
-    half_float_maker = NewHalfFloatMaker(bits_per_channel);
+    half_float_maker =
+        media::HalfFloatMaker::NewHalfFloatMaker(bits_per_channel);
     external_resources.offset = half_float_maker->Offset();
     external_resources.multiplier = half_float_maker->Multiplier();
   }
@@ -574,7 +452,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
               resource_provider_->YuvResourceFormat(bits_per_channel));
 
     if (!plane_resource.Matches(video_frame->unique_id(), i)) {
-      // TODO(hubbe): Move all conversion (and upload?) code to media/.
+      // TODO(hubbe): Move upload code to media/.
       // We need to transfer data from |video_frame| to the plane resource.
       // TODO(reveman): Can use GpuMemoryBuffers here to improve performance.
 
@@ -652,7 +530,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     TextureMailbox mailbox(plane_resource.mailbox(), gpu::SyncToken(),
                            resource_provider_->GetResourceTextureTarget(
                                plane_resource.resource_id()));
-    mailbox.set_color_space(video_frame->ColorSpace());
+    mailbox.set_color_space(output_color_space);
     external_resources.mailboxes.push_back(mailbox);
     external_resources.release_callbacks.push_back(base::Bind(
         &RecycleResource, AsWeakPtr(), plane_resource.resource_id()));
@@ -685,6 +563,7 @@ void VideoResourceUpdater::ReturnTexture(
 // texture.
 void VideoResourceUpdater::CopyPlaneTexture(
     media::VideoFrame* video_frame,
+    const gfx::ColorSpace& resource_color_space,
     const gpu::MailboxHolder& mailbox_holder,
     VideoFrameExternalResources* external_resources) {
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
@@ -700,7 +579,7 @@ void VideoResourceUpdater::CopyPlaneTexture(
   const int no_plane_index = -1;  // Do not recycle referenced textures.
   VideoResourceUpdater::ResourceList::iterator resource =
       RecycleOrAllocateResource(output_plane_resource_size, copy_target_format,
-                                video_frame->ColorSpace(), false, is_immutable,
+                                resource_color_space, false, is_immutable,
                                 no_unique_id, no_plane_index);
   resource->add_ref();
 
@@ -726,7 +605,7 @@ void VideoResourceUpdater::CopyPlaneTexture(
   // sync token is not required.
   TextureMailbox mailbox(resource->mailbox(), gpu::SyncToken(), GL_TEXTURE_2D,
                          video_frame->coded_size(), false, false);
-  mailbox.set_color_space(video_frame->ColorSpace());
+  mailbox.set_color_space(resource_color_space);
   external_resources->mailboxes.push_back(mailbox);
 
   external_resources->release_callbacks.push_back(
@@ -745,6 +624,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
           media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED)) {
     external_resources.read_lock_fences_enabled = true;
   }
+  gfx::ColorSpace resource_color_space = video_frame->ColorSpace();
 
   external_resources.type = ResourceTypeForVideoFrame(video_frame.get());
   if (external_resources.type == VideoFrameExternalResources::NONE) {
@@ -752,6 +632,8 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
                 << media::VideoPixelFormatToString(video_frame->format());
     return external_resources;
   }
+  if (external_resources.type == VideoFrameExternalResources::RGB_RESOURCE)
+    resource_color_space = resource_color_space.GetAsFullRangeRGB();
 
   const size_t num_planes = media::VideoFrame::NumPlanes(video_frame->format());
   for (size_t i = 0; i < num_planes; ++i) {
@@ -761,7 +643,8 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
 
     if (video_frame->metadata()->IsTrue(
             media::VideoFrameMetadata::COPY_REQUIRED)) {
-      CopyPlaneTexture(video_frame.get(), mailbox_holder, &external_resources);
+      CopyPlaneTexture(video_frame.get(), resource_color_space, mailbox_holder,
+                       &external_resources);
     } else {
       TextureMailbox mailbox(mailbox_holder.mailbox, mailbox_holder.sync_token,
                              mailbox_holder.texture_target,
@@ -769,7 +652,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
                              video_frame->metadata()->IsTrue(
                                  media::VideoFrameMetadata::ALLOW_OVERLAY),
                              false);
-      mailbox.set_color_space(video_frame->ColorSpace());
+      mailbox.set_color_space(resource_color_space);
 #if defined(OS_ANDROID)
       mailbox.set_is_backed_by_surface_texture(video_frame->metadata()->IsTrue(
           media::VideoFrameMetadata::SURFACE_TEXTURE));

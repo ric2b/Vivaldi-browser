@@ -41,13 +41,11 @@ config("skia_config") {
     "//third_party/skia/include/utils",
   ]
 
-  defines = [
-    "SK_IGNORE_DW_GRAY_FIX",
-    "SK_IGNORE_DIRECTWRITE_GASP_FIX",
-  ]
-  defines += skia_for_chromium_defines
+  defines = skia_for_chromium_defines
 
-  defines += []
+  if (is_win || is_android) {
+    defines += [ "SK_FREETYPE_MINIMUM_RUNTIME_VERSION=(((FREETYPE_MAJOR) * 0x01000000) | ((FREETYPE_MINOR) * 0x00010000) | ((FREETYPE_PATCH) * 0x00000100))" ]
+  }
 
   if (is_component_build) {
     defines += [
@@ -196,37 +194,63 @@ component("skia") {
     "config/sk_ref_cnt_ext_debug.h",
     "config/sk_ref_cnt_ext_release.h",
     "ext/SkDiscardableMemory_chrome.cc",
+    "ext/SkDiscardableMemory_chrome.h",
     "ext/SkMemory_new_handler.cpp",
     "ext/analysis_canvas.cc",
+    "ext/analysis_canvas.h",
     "ext/benchmarking_canvas.cc",
+    "ext/benchmarking_canvas.h",
     "ext/convolver.cc",
+    "ext/convolver.h",
     "ext/event_tracer_impl.cc",
+    "ext/event_tracer_impl.h",
     "ext/fontmgr_default_android.cc",
+    "ext/fontmgr_default_android.h",
     "ext/fontmgr_default_linux.cc",
+    "ext/fontmgr_default_linux.h",
     "ext/fontmgr_default_win.cc",
+    "ext/fontmgr_default_win.h",
     "ext/google_logging.cc",
     "ext/image_operations.cc",
+    "ext/image_operations.h",
     "ext/opacity_filter_canvas.cc",
+    "ext/opacity_filter_canvas.h",
     "ext/recursive_gaussian_convolution.cc",
+    "ext/recursive_gaussian_convolution.h",
     "ext/skia_encode_image.cc",
     "ext/skia_encode_image.h",
     "ext/skia_histogram.cc",
+    "ext/skia_histogram.h",
     "ext/skia_memory_dump_provider.cc",
+    "ext/skia_memory_dump_provider.h",
     "ext/skia_trace_memory_dump_impl.cc",
+    "ext/skia_trace_memory_dump_impl.h",
     "ext/skia_utils_base.cc",
+    "ext/skia_utils_base.h",
     "ext/skia_utils_ios.h",
     "ext/skia_utils_ios.mm",
+    "ext/skia_utils_mac.h",
     "ext/skia_utils_mac.mm",
     "ext/skia_utils_win.cc",
+    "ext/skia_utils_win.h",
   ]
 
   if (!is_ios) {
-    sources += [ "ext/platform_canvas.cc" ]
+    sources += [
+      "ext/platform_canvas.cc",
+      "ext/platform_canvas.h",
+    ]
   }
   if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
-    sources += [ "ext/convolver_SSE2.cc" ]
+    sources += [
+      "ext/convolver_SSE2.cc",
+      "ext/convolver_SSE2.h",
+    ]
   } else if (current_cpu == "mipsel" && mips_dsp_rev >= 2) {
-    sources += [ "ext/convolver_mips_dspr2.cc" ]
+    sources += [
+      "ext/convolver_mips_dspr2.cc",
+      "ext/convolver_mips_dspr2.h",
+    ]
   }
 
   # The imported Skia gni source paths are made absolute by gn.
@@ -260,12 +284,10 @@ component("skia") {
 
   # Remove unused util sources.
   sources -= [
-    "//third_party/skia/src/utils/SkBoundaryPatch.cpp",
     "//third_party/skia/src/utils/SkCamera.cpp",
     "//third_party/skia/src/utils/SkDumpCanvas.cpp",
     "//third_party/skia/src/utils/SkFrontBufferedStream.cpp",
     "//third_party/skia/src/utils/SkInterpolator.cpp",
-    "//third_party/skia/src/utils/SkMeshUtils.cpp",
     "//third_party/skia/src/utils/SkOSPath.cpp",
     "//third_party/skia/src/utils/SkParsePath.cpp",
 
@@ -296,7 +318,10 @@ component("skia") {
   }
 
   if (is_android && (!enable_basic_printing && !enable_print_preview)) {
-    sources -= [ "ext/skia_utils_base.cc" ]
+    sources -= [
+      "ext/skia_utils_base.cc",
+      "ext/skia_utils_base.h",
+    ]
   }
 
   # Select Skia ports.
@@ -337,9 +362,6 @@ component("skia") {
 
   if (is_linux || is_android) {
     sources += [
-      "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
-      "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
-
       # Retain the files for the SkFontMgr_Android on linux to emulate android
       # fonts. See content/zygote/zygote_main_linux.cc
       # Note that this requires expat.
@@ -348,9 +370,22 @@ component("skia") {
     ]
   }
 
-  # Select the right BitmapPlatformDevice.
+  if (is_linux || is_android || is_win) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
+      "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
+    ]
+  }
+
   if (is_win) {
-    sources += [ "ext/raster_handle_allocator_win.cc" ]
+    sources += [
+      # Add the custom FreeType font manager to instantiate variable fonts on Windows.
+      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
+
+      # Select the right BitmapPlatformDevice.
+      "ext/raster_handle_allocator_win.cc",
+    ]
   }
 
   if (is_clang && !is_nacl) {
@@ -379,8 +414,8 @@ component("skia") {
       configs += [ "//build/config/linux/pangocairo" ]
     }
     deps += [
+      "//build/config/freetype",
       "//build/linux:fontconfig",
-      "//build/linux:freetype2",
       "//third_party/expat",
       "//third_party/icu:icuuc",
     ]
@@ -390,8 +425,11 @@ component("skia") {
     deps += [
       "//third_party/android_tools:cpu_features",
       "//third_party/expat",
-      "//third_party/freetype-android:freetype",
     ]
+  }
+
+  if (is_win || is_android) {
+    deps += [ "//build/config/freetype" ]
   }
 
   if (skia_support_pdf) {

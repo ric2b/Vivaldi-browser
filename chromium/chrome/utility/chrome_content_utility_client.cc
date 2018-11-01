@@ -13,36 +13,28 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "build/build_config.h"
-#include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/file_patcher.mojom.h"
-#include "chrome/common/safe_browsing/zip_analyzer.h"
-#include "chrome/common/safe_browsing/zip_analyzer_results.h"
 #include "chrome/utility/utility_message_handler.h"
+#include "components/payments/content/utility/payment_manifest_parser.h"
 #include "components/safe_json/utility/safe_json_parser_mojo_impl.h"
-#include "content/public/child/image_decoder_utils.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_info.h"
 #include "content/public/utility/utility_thread.h"
 #include "courgette/courgette.h"
 #include "courgette/third_party/bsdiff/bsdiff.h"
 #include "extensions/features/features.h"
-#include "ipc/ipc_channel.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "printing/features/features.h"
-#include "services/image_decoder/image_decoder_service.h"
-#include "services/image_decoder/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
 #include "third_party/zlib/google/zip.h"
-#include "ui/gfx/geometry/size.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/common/resource_usage_reporter.mojom.h"
+#include "chrome/utility/media_router/dial_device_description_parser_impl.h"
 #include "chrome/utility/profile_import_handler.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/proxy/mojo_proxy_resolver_factory_impl.h"
 #include "net/proxy/proxy_resolver_v8.h"
-#endif
+#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
 #include "chrome/common/zip_file_creator.mojom.h"
@@ -62,8 +54,13 @@
 #include "chrome/utility/printing_handler.h"
 #endif
 
-#if defined(OS_MACOSX) && defined(FULL_SAFE_BROWSING)
+#if defined(FULL_SAFE_BROWSING)
+#include "chrome/common/safe_archive_analyzer.mojom.h"
+#include "chrome/common/safe_browsing/zip_analyzer.h"
+#include "chrome/common/safe_browsing/zip_analyzer_results.h"
+#if defined(OS_MACOSX)
 #include "chrome/utility/safe_browsing/mac/dmg_analyzer.h"
+#endif
 #endif
 
 namespace {
@@ -84,6 +81,10 @@ class FilePatcherImpl : public chrome::mojom::FilePatcher {
                        base::File patch_file,
                        base::File output_file,
                        const PatchFileBsdiffCallback& callback) override {
+    DCHECK(input_file.IsValid());
+    DCHECK(patch_file.IsValid());
+    DCHECK(output_file.IsValid());
+
     const int patch_result_status = bsdiff::ApplyBinaryPatch(
         std::move(input_file), std::move(patch_file), std::move(output_file));
     callback.Run(patch_result_status);
@@ -93,6 +94,10 @@ class FilePatcherImpl : public chrome::mojom::FilePatcher {
                           base::File patch_file,
                           base::File output_file,
                           const PatchFileCourgetteCallback& callback) override {
+    DCHECK(input_file.IsValid());
+    DCHECK(patch_file.IsValid());
+    DCHECK(output_file.IsValid());
+
     const int patch_result_status = courgette::ApplyEnsemblePatch(
         std::move(input_file), std::move(patch_file), std::move(output_file));
     callback.Run(patch_result_status);
@@ -135,6 +140,47 @@ class ZipFileCreatorImpl : public chrome::mojom::ZipFileCreator {
 };
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(FULL_SAFE_BROWSING)
+class SafeArchiveAnalyzerImpl : public chrome::mojom::SafeArchiveAnalyzer {
+ public:
+  SafeArchiveAnalyzerImpl() = default;
+  ~SafeArchiveAnalyzerImpl() override = default;
+
+  static void Create(chrome::mojom::SafeArchiveAnalyzerRequest request) {
+    mojo::MakeStrongBinding(base::MakeUnique<SafeArchiveAnalyzerImpl>(),
+                            std::move(request));
+  }
+
+ private:
+  // chrome::mojom::SafeArchiveAnalyzer:
+  void AnalyzeZipFile(base::File zip_file,
+                      base::File temporary_file,
+                      const AnalyzeZipFileCallback& callback) override {
+    DCHECK(temporary_file.IsValid());
+    DCHECK(zip_file.IsValid());
+
+    safe_browsing::zip_analyzer::Results results;
+    safe_browsing::zip_analyzer::AnalyzeZipFile(
+        std::move(zip_file), std::move(temporary_file), &results);
+    callback.Run(results);
+  }
+
+  void AnalyzeDmgFile(base::File dmg_file,
+                      const AnalyzeDmgFileCallback& callback) override {
+#if defined(OS_MACOSX)
+    DCHECK(dmg_file.IsValid());
+    safe_browsing::zip_analyzer::Results results;
+    safe_browsing::dmg::AnalyzeDMGFile(std::move(dmg_file), &results);
+    callback.Run(results);
+#else
+    NOTREACHED();
+#endif
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(SafeArchiveAnalyzerImpl);
+};
+#endif  // defined(FULL_SAFE_BROWSING)
+
 #if !defined(OS_ANDROID)
 void CreateProxyResolverFactory(
     net::interfaces::ProxyResolverFactoryRequest request) {
@@ -170,26 +216,21 @@ void CreateResourceUsageReporter(
 }
 #endif  // !defined(OS_ANDROID)
 
-std::unique_ptr<service_manager::Service> CreateImageDecoderService() {
-  content::UtilityThread::Get()->EnsureBlinkInitialized();
-  return image_decoder::ImageDecoderService::Create();
-}
-
 }  // namespace
 
 ChromeContentUtilityClient::ChromeContentUtilityClient()
     : utility_process_running_elevated_(false) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  handlers_.push_back(new extensions::ExtensionsHandler());
+  handlers_.push_back(base::MakeUnique<extensions::ExtensionsHandler>());
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) || \
     (BUILDFLAG(ENABLE_BASIC_PRINTING) && defined(OS_WIN))
-  handlers_.push_back(new printing::PrintingHandler());
+  handlers_.push_back(base::MakeUnique<printing::PrintingHandler>());
 #endif
 
 #if defined(OS_WIN)
-  handlers_.push_back(new IPCShellHandler());
+  handlers_.push_back(base::MakeUnique<IPCShellHandler>());
 #endif
 }
 
@@ -197,7 +238,7 @@ ChromeContentUtilityClient::~ChromeContentUtilityClient() = default;
 
 void ChromeContentUtilityClient::UtilityThreadStarted() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::UtilityHandler::UtilityThreadStarted();
+  extensions::utility_handler::UtilityThreadStarted();
 #endif
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -210,23 +251,7 @@ bool ChromeContentUtilityClient::OnMessageReceived(
   if (utility_process_running_elevated_)
     return false;
 
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(ChromeContentUtilityClient, message)
-#if defined(FULL_SAFE_BROWSING)
-    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_AnalyzeZipFileForDownloadProtection,
-                        OnAnalyzeZipFileForDownloadProtection)
-#if defined(OS_MACOSX)
-    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_AnalyzeDmgFileForDownloadProtection,
-                        OnAnalyzeDmgFileForDownloadProtection)
-#endif  // defined(OS_MACOSX)
-#endif  // defined(FULL_SAFE_BROWSING)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-
-  if (handled)
-    return true;
-
-  for (auto* handler : handlers_) {
+  for (const auto& handler : handlers_) {
     if (handler->OnMessageReceived(message))
       return true;
   }
@@ -239,9 +264,11 @@ void ChromeContentUtilityClient::ExposeInterfacesToBrowser(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::ExtensionsHandler::ExposeInterfacesToBrowser(
       registry, utility_process_running_elevated_);
+  extensions::utility_handler::ExposeInterfacesToBrowser(
+      registry, utility_process_running_elevated_);
 #endif
   // If our process runs with elevated privileges, only add elevated Mojo
-  // services to the interface registry.
+  // interfaces to the interface registry.
   if (utility_process_running_elevated_)
     return;
 
@@ -251,7 +278,10 @@ void ChromeContentUtilityClient::ExposeInterfacesToBrowser(
       base::Bind(CreateProxyResolverFactory));
   registry->AddInterface(base::Bind(CreateResourceUsageReporter));
   registry->AddInterface(base::Bind(&ProfileImportHandler::Create));
-#endif
+  registry->AddInterface(
+      base::Bind(&media_router::DialDeviceDescriptionParserImpl::Create));
+#endif  // !defined(OS_ANDROID)
+  registry->AddInterface(base::Bind(&payments::PaymentManifestParser::Create));
   registry->AddInterface(
       base::Bind(&safe_json::SafeJsonParserMojoImpl::Create));
 #if defined(OS_WIN)
@@ -260,13 +290,9 @@ void ChromeContentUtilityClient::ExposeInterfacesToBrowser(
 #if defined(OS_CHROMEOS)
   registry->AddInterface(base::Bind(&ZipFileCreatorImpl::Create));
 #endif
-}
-
-void ChromeContentUtilityClient::RegisterServices(StaticServiceMap* services) {
-  content::ServiceInfo image_decoder_info;
-  image_decoder_info.factory = base::Bind(&CreateImageDecoderService);
-  services->insert(
-      std::make_pair(image_decoder::mojom::kServiceName, image_decoder_info));
+#if defined(FULL_SAFE_BROWSING)
+  registry->AddInterface(base::Bind(&SafeArchiveAnalyzerImpl::Create));
+#endif
 }
 
 // static
@@ -275,32 +301,3 @@ void ChromeContentUtilityClient::PreSandboxStartup() {
   extensions::ExtensionsHandler::PreSandboxStartup();
 #endif
 }
-
-#if defined(FULL_SAFE_BROWSING)
-void ChromeContentUtilityClient::OnAnalyzeZipFileForDownloadProtection(
-    const IPC::PlatformFileForTransit& zip_file,
-    const IPC::PlatformFileForTransit& temp_file) {
-  safe_browsing::zip_analyzer::Results results;
-  safe_browsing::zip_analyzer::AnalyzeZipFile(
-      IPC::PlatformFileForTransitToFile(zip_file),
-      IPC::PlatformFileForTransitToFile(temp_file), &results);
-  content::UtilityThread::Get()->Send(
-      new ChromeUtilityHostMsg_AnalyzeZipFileForDownloadProtection_Finished(
-          results));
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
-}
-
-#if defined(OS_MACOSX)
-void ChromeContentUtilityClient::OnAnalyzeDmgFileForDownloadProtection(
-    const IPC::PlatformFileForTransit& dmg_file) {
-  safe_browsing::zip_analyzer::Results results;
-  safe_browsing::dmg::AnalyzeDMGFile(
-      IPC::PlatformFileForTransitToFile(dmg_file), &results);
-  content::UtilityThread::Get()->Send(
-      new ChromeUtilityHostMsg_AnalyzeDmgFileForDownloadProtection_Finished(
-          results));
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
-}
-#endif  // defined(OS_MACOSX)
-
-#endif  // defined(FULL_SAFE_BROWSING)

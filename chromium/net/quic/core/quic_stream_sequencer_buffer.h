@@ -28,11 +28,11 @@
 // Expected Use:
 //  QuicStreamSequencerBuffer buffer(2.5 * 8 * 1024);
 //  std::string source(1024, 'a');
-//  base::StringPiece std::string_piece(source.data(), source.size());
+//  QuicStringPiece std::string_piece(source.data(), source.size());
 //  size_t written = 0;
 //  buffer.OnStreamData(800, std::string_piece, GetEpollClockNow(), &written);
 //  source = std::string{800, 'b'};
-//  base::StringPiece std::string_piece1(source.data(), 800);
+//  QuicStringPiece std::string_piece1(source.data(), 800);
 //  // Try to write to [1, 801), but should fail due to overlapping,
 //  // res should be QUIC_INVALID_STREAM_DATA
 //  auto res = buffer.OnStreamData(1, std::string_piece1, &written));
@@ -67,6 +67,7 @@
 #include "base/macros.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/platform/api/quic_export.h"
+#include "net/quic/platform/api/quic_string_piece.h"
 
 namespace net {
 
@@ -117,7 +118,7 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencerBuffer {
   // bytes buffered in |bytes_buffered|. Returns an error otherwise.
   // |timestamp| is the time the data arrived.
   QuicErrorCode OnStreamData(QuicStreamOffset offset,
-                             base::StringPiece data,
+                             QuicStringPiece data,
                              QuicTime timestamp,
                              size_t* bytes_buffered,
                              std::string* error_details);
@@ -165,10 +166,6 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencerBuffer {
 
   // Count how many bytes are in buffer at this moment.
   size_t BytesBuffered() const;
-
-  bool reduce_sequencer_buffer_memory_life_time() const {
-    return reduce_sequencer_buffer_memory_life_time_;
-  }
 
  private:
   friend class test::QuicStreamSequencerBufferPeer;
@@ -236,10 +233,6 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencerBuffer {
 
   // Contains Gaps which represents currently missing data.
   std::list<Gap> gaps_;
-
-  // If true, allocate buffer memory upon the first frame arrival and release
-  // the memory when stream is read closed.
-  bool reduce_sequencer_buffer_memory_life_time_;
 
   // An ordered, variable-length list of blocks, with the length limited
   // such that the number of blocks never exceeds blocks_count_.

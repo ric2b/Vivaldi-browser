@@ -12,7 +12,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/strings/string_piece.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
@@ -168,8 +167,6 @@ class PluginInfoMessageFilter : public content::BrowserMessageFilter {
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
   const int32_t ukm_source_id_;
-
-  base::WeakPtrFactory<PluginInfoMessageFilter> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PluginInfoMessageFilter);
 };

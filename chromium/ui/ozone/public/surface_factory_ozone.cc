@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #include "base/command_line.h"
-#include "ui/ozone/public/native_pixmap.h"
+#include "ui/gfx/native_pixmap.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 
 namespace ui {
@@ -18,7 +18,7 @@ SurfaceFactoryOzone::~SurfaceFactoryOzone() {}
 
 std::vector<gl::GLImplementation>
 SurfaceFactoryOzone::GetAllowedGLImplementations() {
-  return std::vector<gl::GLImplementation>{gl::kGLImplementationOSMesaGL};
+  return std::vector<gl::GLImplementation>();
 }
 
 GLOzone* SurfaceFactoryOzone::GetGLOzone(gl::GLImplementation implementation) {
@@ -35,7 +35,7 @@ std::vector<gfx::BufferFormat> SurfaceFactoryOzone::GetScanoutFormats(
   return std::vector<gfx::BufferFormat>();
 }
 
-scoped_refptr<ui::NativePixmap> SurfaceFactoryOzone::CreateNativePixmap(
+scoped_refptr<gfx::NativePixmap> SurfaceFactoryOzone::CreateNativePixmap(
     gfx::AcceleratedWidget widget,
     gfx::Size size,
     gfx::BufferFormat format,
@@ -43,7 +43,7 @@ scoped_refptr<ui::NativePixmap> SurfaceFactoryOzone::CreateNativePixmap(
   return nullptr;
 }
 
-scoped_refptr<ui::NativePixmap>
+scoped_refptr<gfx::NativePixmap>
 SurfaceFactoryOzone::CreateNativePixmapFromHandle(
     gfx::AcceleratedWidget widget,
     gfx::Size size,

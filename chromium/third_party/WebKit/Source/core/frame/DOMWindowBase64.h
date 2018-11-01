@@ -33,7 +33,7 @@
 #ifndef DOMWindowBase64_h
 #define DOMWindowBase64_h
 
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -41,8 +41,8 @@ class ExceptionState;
 
 class DOMWindowBase64 {
  public:
-  String btoa(const String& stringToEncode, ExceptionState&);
-  String atob(const String& encodedString, ExceptionState&);
+  String btoa(const String& string_to_encode, ExceptionState&);
+  String atob(const String& encoded_string, ExceptionState&);
 };
 
 }  // namespace blink

@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/pattern.h"
@@ -204,6 +205,11 @@ void AssignOptionalValue(const std::unique_ptr<T>& source,
   if (source.get()) {
     destination.reset(new T(*source));
   }
+}
+
+void ReportRequestedWindowState(windows::WindowState state) {
+  UMA_HISTOGRAM_ENUMERATION("TabsApi.RequestedWindowState", state,
+                            windows::WINDOW_STATE_LAST + 1);
 }
 
 ui::WindowShowState ConvertToWindowShowState(windows::WindowState state) {
@@ -498,6 +504,10 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   std::string extension_id;
 
   if (create_data) {
+    // Report UMA stats to decide when to remove the deprecated "docked" windows
+    // state (crbug.com/703733).
+    ReportRequestedWindowState(create_data->state);
+
     // Figure out window type before figuring out bounds so that default
     // bounds can be set according to the window type.
     switch (create_data->type) {
@@ -664,7 +674,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
       !browser_context()->IsOffTheRecord() && !include_incognito()) {
     // Don't expose incognito windows if extension itself works in non-incognito
     // profile and CanCrossIncognito isn't allowed.
-    result = base::Value::CreateNullValue();
+    result = base::MakeUnique<base::Value>();
   } else {
     result = controller->CreateWindowValueWithTabs(extension());
   }
@@ -684,6 +694,10 @@ ExtensionFunction::ResponseAction WindowsUpdateFunction::Run() {
           &controller, &error)) {
     return RespondNow(Error(error));
   }
+
+  // Report UMA stats to decide when to remove the deprecated "docked" windows
+  // state (crbug.com/703733).
+  ReportRequestedWindowState(params->update_info.state);
 
   ui::WindowShowState show_state =
       ConvertToWindowShowState(params->update_info.state);
@@ -1704,7 +1718,7 @@ void TabsCaptureVisibleTabFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     return;
   }
 
-  SetResult(base::MakeUnique<base::StringValue>(base64_result));
+  SetResult(base::MakeUnique<base::Value>(base64_result));
   SendResponse(true);
 }
 
@@ -1816,7 +1830,7 @@ void TabsDetectLanguageFunction::Observe(
 }
 
 void TabsDetectLanguageFunction::GotLanguage(const std::string& language) {
-  SetResult(base::MakeUnique<base::StringValue>(language.c_str()));
+  SetResult(base::MakeUnique<base::Value>(language));
   SendResponse(true);
 
   Release();  // Balanced in Run()

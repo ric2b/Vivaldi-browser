@@ -6,11 +6,13 @@
 #define CONTENT_COMMON_PRESENTATION_PRESENTATION_STRUCT_TRAITS_H_
 
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/strings/string_util.h"
-#include "content/public/common/presentation_session.h"
-#include "mojo/common/common_custom_types_struct_traits.h"
+#include "content/public/common/presentation_connection_message.h"
+#include "content/public/common/presentation_info.h"
 #include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
 #include "url/mojo/url.mojom.h"
 
@@ -24,8 +26,9 @@ struct EnumTraits<blink::mojom::PresentationErrorType,
     switch (input) {
       case content::PRESENTATION_ERROR_NO_AVAILABLE_SCREENS:
         return blink::mojom::PresentationErrorType::NO_AVAILABLE_SCREENS;
-      case content::PRESENTATION_ERROR_SESSION_REQUEST_CANCELLED:
-        return blink::mojom::PresentationErrorType::SESSION_REQUEST_CANCELLED;
+      case content::PRESENTATION_ERROR_PRESENTATION_REQUEST_CANCELLED:
+        return blink::mojom::PresentationErrorType::
+            PRESENTATION_REQUEST_CANCELLED;
       case content::PRESENTATION_ERROR_NO_PRESENTATION_FOUND:
         return blink::mojom::PresentationErrorType::NO_PRESENTATION_FOUND;
       case content::PRESENTATION_ERROR_PREVIOUS_START_IN_PROGRESS:
@@ -44,8 +47,8 @@ struct EnumTraits<blink::mojom::PresentationErrorType,
       case blink::mojom::PresentationErrorType::NO_AVAILABLE_SCREENS:
         *output = content::PRESENTATION_ERROR_NO_AVAILABLE_SCREENS;
         return true;
-      case blink::mojom::PresentationErrorType::SESSION_REQUEST_CANCELLED:
-        *output = content::PRESENTATION_ERROR_SESSION_REQUEST_CANCELLED;
+      case blink::mojom::PresentationErrorType::PRESENTATION_REQUEST_CANCELLED:
+        *output = content::PRESENTATION_ERROR_PRESENTATION_REQUEST_CANCELLED;
         return true;
       case blink::mojom::PresentationErrorType::NO_PRESENTATION_FOUND:
         *output = content::PRESENTATION_ERROR_NO_PRESENTATION_FOUND;
@@ -139,34 +142,19 @@ struct EnumTraits<blink::mojom::PresentationConnectionCloseReason,
 };
 
 template <>
-struct StructTraits<blink::mojom::PresentationSessionInfoDataView,
-                    content::PresentationSessionInfo> {
-  static const GURL& url(const content::PresentationSessionInfo& session_info) {
-    return session_info.presentation_url;
+struct StructTraits<blink::mojom::PresentationInfoDataView,
+                    content::PresentationInfo> {
+  static const GURL& url(const content::PresentationInfo& presentation_info) {
+    return presentation_info.presentation_url;
   }
 
   static const std::string& id(
-      const content::PresentationSessionInfo& session_info) {
-    return session_info.presentation_id;
+      const content::PresentationInfo& presentation_info) {
+    return presentation_info.presentation_id;
   }
 
-  static bool Read(blink::mojom::PresentationSessionInfoDataView data,
-                   content::PresentationSessionInfo* out) {
-    if (!data.ReadUrl(&(out->presentation_url)))
-      return false;
-
-    if (!data.ReadId(&(out->presentation_id)))
-      return false;
-
-    if (out->presentation_id.empty() ||
-        !base::IsStringASCII(out->presentation_id) ||
-        out->presentation_id.length() >
-            content::PresentationSessionInfo::kMaxIdLength) {
-      return false;
-    }
-
-    return true;
-  }
+  static bool Read(blink::mojom::PresentationInfoDataView data,
+                   content::PresentationInfo* out);
 };
 
 template <>
@@ -182,19 +170,34 @@ struct StructTraits<blink::mojom::PresentationErrorDataView,
   }
 
   static bool Read(blink::mojom::PresentationErrorDataView data,
-                   content::PresentationError* out) {
-    if (!data.ReadErrorType(&(out->error_type)))
-      return false;
+                   content::PresentationError* out);
+};
 
-    if (!data.ReadMessage(&(out->message)))
-      return false;
-
-    if (!base::IsStringUTF8(out->message) ||
-        out->message.length() > content::PresentationError::kMaxMessageLength)
-      return false;
-
-    return true;
+template <>
+struct UnionTraits<blink::mojom::PresentationConnectionMessageDataView,
+                   content::PresentationConnectionMessage> {
+  static blink::mojom::PresentationConnectionMessageDataView::Tag GetTag(
+      const content::PresentationConnectionMessage& message) {
+    return message.is_binary()
+               ? blink::mojom::PresentationConnectionMessageDataView::Tag::DATA
+               : blink::mojom::PresentationConnectionMessageDataView::Tag::
+                     MESSAGE;
   }
+
+  static const std::string& message(
+      const content::PresentationConnectionMessage& message) {
+    DCHECK(!message.is_binary());
+    return message.message.value();
+  }
+
+  static const std::vector<uint8_t>& data(
+      const content::PresentationConnectionMessage& message) {
+    DCHECK(message.is_binary());
+    return message.data.value();
+  }
+
+  static bool Read(blink::mojom::PresentationConnectionMessageDataView data,
+                   content::PresentationConnectionMessage* out);
 };
 
 }  // namespace mojo

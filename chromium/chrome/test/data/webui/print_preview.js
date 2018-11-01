@@ -375,6 +375,10 @@ function getCddTemplate(printerId) {
   };
 }
 
+function isPrintAsImageEnabled() {
+  return !cr.isWindows && !cr.isMac;
+}
+
 // Test restore settings with one destination.
 TEST_F('PrintPreviewWebUITest', 'TestPrintPreviewRestoreLocalDestination',
     function() {
@@ -555,8 +559,8 @@ TEST_F('PrintPreviewWebUITest', 'PrintToPDFSelectedCapabilities', function() {
   var otherOptions = $('other-options-settings');
   // If rasterization is an option, other options should be visible. If not,
   // there should be no available other options.
-  checkSectionVisible(otherOptions, !cr.isWindows && !cr.isMac);
-  if (!cr.isWindows && !cr.isMac) {
+  checkSectionVisible(otherOptions, isPrintAsImageEnabled());
+  if (isPrintAsImageEnabled()) {
     checkElementDisplayed(
         otherOptions.querySelector('#fit-to-page-container'), false);
     checkElementDisplayed(
@@ -578,8 +582,7 @@ TEST_F('PrintPreviewWebUITest', 'SourceIsHTMLCapabilities', function() {
   var otherOptions = $('other-options-settings');
   var fitToPage = otherOptions.querySelector('#fit-to-page-container');
   var rasterize;
-  var rasterizeEnabled = !cr.isWindows && !cr.isMac;
-  if (rasterizeEnabled)
+  if (isPrintAsImageEnabled())
     rasterize = otherOptions.querySelector('#rasterize-container');
   var mediaSize = $('media-size-settings');
   var scalingSettings = $('scaling-settings');
@@ -588,7 +591,7 @@ TEST_F('PrintPreviewWebUITest', 'SourceIsHTMLCapabilities', function() {
   // available).
   checkSectionVisible(otherOptions, true);
   checkElementDisplayed(fitToPage, false);
-  if (rasterizeEnabled)
+  if (isPrintAsImageEnabled())
     checkElementDisplayed(rasterize, false);
   checkSectionVisible(mediaSize, false);
   checkSectionVisible(scalingSettings, false);
@@ -596,7 +599,7 @@ TEST_F('PrintPreviewWebUITest', 'SourceIsHTMLCapabilities', function() {
   this.expandMoreSettings();
 
   checkElementDisplayed(fitToPage, false);
-  if (rasterizeEnabled)
+  if (isPrintAsImageEnabled())
     checkElementDisplayed(rasterize, false);
   checkSectionVisible(mediaSize, true);
   checkSectionVisible(scalingSettings, true);
@@ -616,21 +619,20 @@ TEST_F('PrintPreviewWebUITest', 'SourceIsPDFCapabilities', function() {
   var scalingSettings = $('scaling-settings');
   var fitToPageContainer =
       otherOptions.querySelector('#fit-to-page-container');
-  var rasterizeEnabled = !cr.isWindows && !cr.isMac;
   var rasterizeContainer;
-  if (rasterizeEnabled) {
+  if (isPrintAsImageEnabled()) {
     rasterizeContainer =
       otherOptions.querySelector('#rasterize-container');
   }
 
   checkSectionVisible(otherOptions, true);
   checkElementDisplayed(fitToPageContainer, true);
-  if (rasterizeEnabled)
+  if (isPrintAsImageEnabled())
     checkElementDisplayed(rasterizeContainer, false);
   expectTrue(
       fitToPageContainer.querySelector('.checkbox').checked);
   this.expandMoreSettings();
-  if (rasterizeEnabled) {
+  if (isPrintAsImageEnabled()) {
     checkElementDisplayed(rasterizeContainer, true);
     expectFalse(
         rasterizeContainer.querySelector('.checkbox').checked);
@@ -869,6 +871,46 @@ TEST_F('PrintPreviewWebUITest',
   this.waitForAnimationToEnd('more-settings');
 });
 
+// Check header footer availability with small (label) page size.
+TEST_F('PrintPreviewWebUITest', 'SmallPaperSizeHeaderFooter', function() {
+  this.setInitialSettings();
+  this.setLocalDestinations();
+  var device = getCddTemplate("FooDevice");
+  device.capabilities.printer.media_size = {
+    "option": [
+      {"name": "SmallLabel", "width_microns": 38100, "height_microns": 12700,
+        "is_default": false},
+      {"name": "BigLabel", "width_microns": 50800, "height_microns": 76200,
+        "is_default": true}
+    ]
+  };
+  this.setCapabilities(device);
+
+  var otherOptions = $('other-options-settings');
+  var headerFooter = otherOptions.querySelector('#header-footer-container');
+
+  // Check that options are collapsed (section is visible, because duplex is
+  // available).
+  checkSectionVisible(otherOptions, true);
+  checkElementDisplayed(headerFooter, false);
+
+  this.expandMoreSettings();
+
+  // Big label should have header/footer
+  checkElementDisplayed(headerFooter, true);
+
+  // Small label should not
+  printPreview.printTicketStore_.mediaSize.updateValue(
+      device.capabilities.printer.media_size.option[0]);
+  checkElementDisplayed(headerFooter, false);
+
+  // Oriented in landscape, there should be enough space for header/footer.
+  printPreview.printTicketStore_.landscape.updateValue(true);
+  checkElementDisplayed(headerFooter, true);
+
+  this.waitForAnimationToEnd('more-settings');
+});
+
 // Test that the color settings, one option, standard monochrome.
 TEST_F('PrintPreviewWebUITest', 'TestColorSettingsMonochrome', function() {
   this.setInitialSettings();
@@ -1062,7 +1104,7 @@ TEST_F('PrintPreviewWebUITest', 'TestPrinterChangeUpdatesPreview', function() {
 
   // The number of settings that can change due to a change in the destination
   // that will therefore dispatch ticket item change events.
-  previewGenerator.expects(exactly(7)).requestPreview();
+  previewGenerator.expects(exactly(9)).requestPreview();
 
   var barDestination;
   var destinations = printPreview.destinationStore_.destinations();

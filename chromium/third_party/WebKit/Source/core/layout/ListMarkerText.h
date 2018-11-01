@@ -25,8 +25,8 @@
 #define ListMarkerText_h
 
 #include "core/style/ComputedStyleConstants.h"
-#include "wtf/text/Unicode.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/Unicode.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -37,11 +37,11 @@ namespace ListMarkerText {
 
 // Returns the suffix character, such as '.', for the given list type and
 // item count number.
-UChar suffix(EListStyleType, int count);
+UChar Suffix(EListStyleType, int count);
 
 // Returns the text, such as arabic or roman numerals, for the given list
 // type and item count number. Does not include any suffix character.
-String text(EListStyleType, int count);
+String GetText(EListStyleType, int count);
 
 }  // namespace ListMarkerText
 

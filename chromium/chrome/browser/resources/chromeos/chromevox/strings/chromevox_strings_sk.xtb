@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Rozšírené</translation>
 <translation id="1025074108959230262">Rýchly režim bol zakázaný</translation>
 <translation id="1031961866430398710">a potom</translation>
+<translation id="1038643060055067718">Riadky:</translation>
 <translation id="1038795173450935438">Ak chcete prechádzať medzi položkami na stránke smerom dopredu, stlačte kombináciu klávesov Hľadať + šípka doprava. Ak chcete prechádzať smerom dozadu, stlačte kombináciu klávesov Hľadať + šípka doľava. Ak chcete prejsť na ďalší riadok, stlačte kombináciu klávesov Hľadať + šípka hore. Keď prejdete na položku, na ktorú chcete kliknúť, stlačte kombináciu klávesov Hľadať + medzerník.</translation>
 <translation id="1044777062731150180">Žiadne hlavičky</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,7 @@
 <translation id="2110480898214777136">Prejsť od začiatku do konca alebo od konca po začiatok v rámci stránky, dialógového okna alebo iného kontajnera.</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">prístupový kľúč:<ph name="KEY" /></translation>
-<translation id="2155457205053847599">Zmeniť aktuálnu tabuľku šesťbodového Braillovho písma na možnosť zo zoznamu uvedeného nižšie.</translation>
+<translation id="2138345533858834403">Simuluje výstup obnoviteľného hmatového displeja na paneli ChromeVox v hornej časti obrazovky.</translation>
 <translation id="2169714232367507776">Kliknúť na aktuálnu položku</translation>
 <translation id="2179452035581866348">ChromeVox vám poskytuje základné aj dodatočné informácie pomocou zvukov. Môžete ich použiť na rýchlejšiu navigáciu. Stačí sa naučiť, čo jednotlivé zvuky znamenajú. Keď si prácu osvojíte, môžete vypnúť podrobné hlasové popisy a základné informácie o stránke vyvodzovať zo zvukov. Nižšie nájdete úplný zoznam zvukov aj ich definícií.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{pravá zátvorka}few{# pravé zátvorky}many{# close parens}other{# pravých zátvoriek}}</translation>
@@ -124,6 +125,7 @@
 <translation id="2344193891939537199">Ovládanie dátumu a času</translation>
 <translation id="2347456970887948350">Odkaz</translation>
 <translation id="2359897517538099099">Nie ste v režime tabuľky.</translation>
+<translation id="2381733276052567791">Zapnúť alebo vypnúť hlasovú odozvu</translation>
 <translation id="2390264819538553347">Ak chcete pokračovať, stlačte Enter. Vrátite sa pomocou klávesa Backspace.</translation>
 <translation id="241124561063364910">a potom zadajte</translation>
 <translation id="2416512023405990736">Nezačiarknuté políčko</translation>
@@ -166,6 +168,7 @@
 <translation id="2800204403141299078">Žiadne ďalšie odlišné prvky</translation>
 <translation id="2800780099804980316">Žiadny predchádzajúci nadpis 1. úrovne</translation>
 <translation id="280499067616661124">Vyhľadávanie ChromeVox na stránke</translation>
+<translation id="2808001342598757276">Zrušiť stmavenie obrazovky</translation>
 <translation id="2811019999044652585">Ak chcete preskočiť na ďalšie časti obrazovky, napríklad na panel s nástrojmi alebo oblasť oznámení, stlačte kombináciu klávesov Ctrl + Dopredu. Kláves Dopredu sa na Chromebooku nachádza priamo nad klávesom s číslicou 2.</translation>
 <translation id="2811204574343810641">Riadok</translation>
 <translation id="2816654101880605877">Žiadny ďalší posúvač</translation>
@@ -185,11 +188,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{tabulátor}few{# tabulátory}many{# tabs}other{# tabulátorov}}</translation>
 <translation id="2972078295414139404">Žiadny predchádzajúci navštívený odkaz</translation>
 <translation id="2972205263822847197">Popis</translation>
-<translation id="2978549349327282388">Stĺpce:</translation>
 <translation id="2998131015536248178">Predchádzajúci znak</translation>
 <translation id="2999559350546931576">Znížiť výšku hlasu</translation>
 <translation id="2999945368667127852">Žiadna ďalšia miniaplikácia pre médiá</translation>
 <translation id="3012414509011670858">Žiadna predchádzajúca sekcia</translation>
+<translation id="3014130421870723208">@upr osembodové</translation>
 <translation id="3030432017085518523">Prepínač položky ponuky</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}few{# apostrofy}many{# apostrophes}other{# apostrofov}}</translation>
 <translation id="3040901448410802366">Indikátor priebehu</translation>
@@ -212,6 +215,7 @@
 <translation id="3138767756593758860">Zobraziť zoznam orientačných bodov</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">Ďalší riadok</translation>
+<translation id="3153024374267644603">Hlasová odozva je zapnutá</translation>
 <translation id="3155083529632865074">Žiadne predchádzajúce tlačidlo</translation>
 <translation id="3163593631834463955">Prázdna hlavička stĺpca</translation>
 <translation id="316542773973815724">Navigácia</translation>
@@ -224,6 +228,7 @@ Ak ste už s návodom skončili, prejdite pomocou čítačky ChromeVox na tlač
 <translation id="3229375994964697375">Navštívený odkaz</translation>
 <translation id="3232388865800379423">Kontextové tlačidlo</translation>
 <translation id="3241052487511142956">Predchádzajúci navštívený odkaz</translation>
+<translation id="3241638166094654466">Bunky v každom riadku:</translation>
 <translation id="3286390186030710347">Posuvník</translation>
 <translation id="3299925995433437805">Žiadny ďalší navštívený odkaz</translation>
 <translation id="3307886118343381874">Prejsť na koniec tabuľky</translation>
@@ -380,6 +385,7 @@ Ak ste už s návodom skončili, prejdite pomocou čítačky ChromeVox na tlač
 <translation id="4376316291247992553">Zobraziť obrázok na braillovej obrazovke</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">obnovenie</translation>
+<translation id="4457472090507035117">Vybrať aktuálny hlas:</translation>
 <translation id="4471074325120394300">Žiadne odkazy</translation>
 <translation id="4476183483923481720">nový riadok</translation>
 <translation id="4482330759234983253">Predchádzajúca tabuľka</translation>
@@ -453,7 +459,6 @@ Ak ste už s návodom skončili, prejdite pomocou čítačky ChromeVox na tlač
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">Žiadne predchádzajúce pole formulára</translation>
 <translation id="5111640677200759579">Hlavička stĺpca</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">Žiadny predchádzajúci odkaz</translation>
 <translation id="513774504516943387">odkaz</translation>
 <translation id="517143700877085897">, nevybrané</translation>
@@ -564,10 +569,10 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="5968607524793740041">Zobraziť kontextovú ponuku</translation>
 <translation id="5983179082906765664">Zvýšiť podrobnosť navigácie</translation>
 <translation id="5999630716831179808">Hlasy</translation>
-<translation id="6000417740266304866">Zmeniť aktuálnu tabuľku osembodového Braillovho písma na možnosť zo zoznamu uvedeného nižšie.</translation>
 <translation id="6006050241733874051">Formulár</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{opačná lomka}few{# opačné lomky}many{# backslashes}other{# opačných lomiek}}</translation>
 <translation id="6037602951055904232">Posunúť zobrazenie dopredu</translation>
+<translation id="6044160928851315051">Stmaviť obrazovku</translation>
 <translation id="6082768461603900813">Základná navigácia</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Koniec bunky</translation>
@@ -606,7 +611,6 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="6444046323172968959">Dialógové okno s upozornením</translation>
 <translation id="6459511626086141404">Plochá mapa klávesov</translation>
 <translation id="6468049171101508116">Ďalšie tlačidlo</translation>
-<translation id="6491972999578897419">Ak chcete zmeniť aktuálny hlas, vyberte možnosť zo zoznamu nižšie.</translation>
 <translation id="6493991254603208962">Zníženie jasu</translation>
 <translation id="6508059270146105198">Presunúť zobrazenie Braillovho písma do dolnej časti stránky</translation>
 <translation id="6536864053412760904">Token jazyka Math ML</translation>
@@ -658,6 +662,7 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">zvuková odozva na slová</translation>
 <translation id="713824876195128146">Ďalší blok citácie</translation>
+<translation id="7143034430156387447">Prepínanie medzi 6 a 8-bodovým Braillovým písmom</translation>
 <translation id="7161771961008409533">Kontextové tlačidlo</translation>
 <translation id="7165714724802225287">Aktuálny štýl zobrazenia je prekladaný.</translation>
 <translation id="7167657087543110">zvuková odozva na znaky</translation>
@@ -668,6 +673,7 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">riadok</translation>
 <translation id="7226216518520804442">zoznam</translation>
+<translation id="7229749224609077523">Vyberte šesťbodovú Braillovu tabuľku:</translation>
 <translation id="72393384879519786">Nadpis</translation>
 <translation id="7241683698754534149">Otvoriť dlhý popis na novej karte</translation>
 <translation id="7248671827512403053">Aplikácia</translation>
@@ -741,6 +747,7 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="7974390230414479278">Položka ponuky</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{úvodzovka}few{# úvodzovky}many{# quotes}other{# úvodzoviek}}</translation>
+<translation id="8017588669690167134">Hlasová odozva je vypnutá</translation>
 <translation id="8033827949643255796">vybrané</translation>
 <translation id="8035962149453661158">max:<ph name="X" /></translation>
 <translation id="8042761080832772327">Upraviť text, vstup vyhľadávania</translation>
@@ -759,7 +766,6 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="820417203470636242">Prázdna bunka</translation>
 <translation id="8215202828671303819">Hromadný výber</translation>
 <translation id="8224171046658870249">Prepnuté na čítačku ChromeVox Next</translation>
-<translation id="8259358278692921574">Riadky:</translation>
 <translation id="8276439074553447000">Prejsť na predchádzajúcu zamerateľnú položku</translation>
 <translation id="8278417001922463147">Žiadny predchádzajúci článok</translation>
 <translation id="8283603667300770666">Ďalšie pole formulára</translation>
@@ -797,7 +803,6 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="8638532244051952400">Oznámiť aktuálne súradnice bunky</translation>
 <translation id="8650576015643545550">Žiadny predchádzajúci zoznam</translation>
 <translation id="8651481478098336970">stlmenie hlasitosti</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">Zobraziť zoznam odkazov</translation>
 <translation id="8664519043722036194">sekundy</translation>
 <translation id="867187640362843212">Nadpis 5</translation>
@@ -817,6 +822,7 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="8856538297388979332">Stlačením tlačidiel hore alebo dole si prehliadnete príkazy a tlačidlom Enter ich aktivujete</translation>
 <translation id="8864099967139188018">Žiadny ďalší nadpis 6. úrovne</translation>
 <translation id="8882002077197914455">Hlavička riadka</translation>
+<translation id="8883850400338911892">upravené URL – osembodové</translation>
 <translation id="8896347895970027998">Aktivácia a deaktivácia rozšírenia ChromeVox.</translation>
 <translation id="8898516272131543774">Cyklicky striedať zvukovú odozvu na interpunkciu</translation>
 <translation id="8900148057318340779">Kľúč predpony</translation>
@@ -830,6 +836,7 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="9027462562263121875">Žiadne tabuľky</translation>
 <translation id="9040132695316389094">Nadpis 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" /> %</translation>
+<translation id="9061884144798498064">Vyberte osembodovú Braillovu tabuľku</translation>
 <translation id="9065283790526219006">+kontextové okno</translation>
 <translation id="9077213568694924680">odstránené z výberu</translation>
 <translation id="9082874451376019682">Žiadny predchádzajúci posúvač</translation>

@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -23,7 +24,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -157,8 +157,7 @@ void ResetSettingsHandler::OnResetProfileSettingsDone(
     std::string callback_id,
     bool send_feedback,
     reset_report::ChromeResetReport::ResetRequestOrigin request_origin) {
-  ResolveJavascriptCallback(
-      base::StringValue(callback_id), *base::Value::CreateNullValue());
+  ResolveJavascriptCallback(base::Value(callback_id), base::Value());
   if (send_feedback && setting_snapshot_) {
     ResettableSettingsSnapshot current_snapshot(profile_);
     int difference = setting_snapshot_->FindDifferentFields(current_snapshot);
@@ -192,7 +191,7 @@ void ResetSettingsHandler::HandleGetReportedSettings(
 void ResetSettingsHandler::OnGetReportedSettingsDone(std::string callback_id) {
   std::unique_ptr<base::ListValue> list =
       GetReadableFeedbackForSnapshot(profile_, *setting_snapshot_);
-  ResolveJavascriptCallback(base::StringValue(callback_id), *list);
+  ResolveJavascriptCallback(base::Value(callback_id), *list);
 }
 
 void ResetSettingsHandler::OnShowResetProfileDialog(
@@ -252,7 +251,7 @@ void ResetSettingsHandler::ResetProfile(
       base::Bind(&ResetSettingsHandler::OnResetProfileSettingsDone,
                  weak_ptr_factory_.GetWeakPtr(), callback_id, send_settings,
                  request_origin));
-  content::RecordAction(base::UserMetricsAction("ResetProfile"));
+  base::RecordAction(base::UserMetricsAction("ResetProfile"));
   UMA_HISTOGRAM_BOOLEAN("ProfileReset.SendFeedback", send_settings);
   UMA_HISTOGRAM_ENUMERATION(
       "ProfileReset.ResetRequestOrigin", request_origin,
@@ -294,7 +293,7 @@ void ResetSettingsHandler::HandleGetTriggeredResetToolName(
         IDS_TRIGGERED_RESET_PROFILE_SETTINGS_DEFAULT_TOOL_NAME);
   }
 
-  base::StringValue string_value(reset_tool_name);
+  base::Value string_value(reset_tool_name);
   ResolveJavascriptCallback(*callback_id, string_value);
 }
 

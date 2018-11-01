@@ -111,6 +111,7 @@ const char kChromeUINativeBookmarksURL[] = "chrome-native://bookmarks/";
 const char kChromeUINativePhysicalWebDiagnosticsURL[] =
     "chrome-native://physical-web-diagnostics/";
 const char kChromeUINativeRecentTabsURL[] = "chrome-native://recent-tabs/";
+const char kChromeUINativeHistoryURL[] = "chrome-native://history/";
 const char kChromeUIWebApksURL[] = "chrome://webapks/";
 #endif
 
@@ -140,6 +141,7 @@ const char kChromeUIMdCupsSettingsURL[] = "chrome://md-settings/cupsPrinters";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
+const char kChromeUICleanupToolURL[] = "chrome://cleanup/";
 const char kChromeUIMetroFlowURL[] = "chrome://make-metro/";
 #endif
 
@@ -230,6 +232,7 @@ const char kChromeUIOmniboxHost[] = "omnibox";
 const char kChromeUIPasswordManagerInternalsHost[] =
     "password-manager-internals";
 const char kChromeUIPhysicalWebHost[] = "physical-web";
+const char kChromeUIPrefsInternalsHost[] = "prefs-internals";
 const char kChromeUIComponentsHost[] = "components";
 const char kChromeUIPolicyHost[] = "policy";
 const char kChromeUIMdUserManagerHost[] = "md-user-manager";
@@ -278,6 +281,9 @@ const char kChromeUIPrintHost[] = "print";
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 const char kChromeUILinuxProxyConfigHost[] = "linux-proxy-config";
+#endif
+
+#if defined(OS_LINUX) || defined(OS_ANDROID)
 const char kChromeUISandboxHost[] = "sandbox";
 #endif
 
@@ -288,10 +294,6 @@ const char kChromeUIPhysicalWebDiagnosticsHost[] = "physical-web-diagnostics";
 const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
 const char kChromeUIWebApksHost[] = "webapks";
-#endif
-
-#if defined(ENABLE_WEBVR)
-const char kChromeUIVrShellUIHost[] = "vr-shell-ui";
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -334,6 +336,7 @@ const char kChromeOSAssetPath[] = "/usr/share/chromeos-assets/";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
+const char kChromeUICleanupToolHost[] = "cleanup";
 const char kChromeUIMetroFlowHost[] = "make-metro";
 #endif
 
@@ -555,13 +558,13 @@ const char kChromiumProjectURL[] = "https://www.chromium.org/";
 const char kLearnMoreReportingURL[] =
     "https://support.google.com/chrome/?p=ui_usagestat";
 
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGINS)
 const char kOutdatedPluginLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ib_outdated_plugin";
-#endif
 
 const char kBlockedPluginLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ib_blocked_plugin";
+#endif
 
 const char kHotwordLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ui_hotword_search";
@@ -583,6 +586,11 @@ const char kDownloadInterruptedLearnMoreURL[] =
 
 const char kSyncEverythingLearnMoreURL[] =
     "https://support.google.com/chrome/?p=settings_sync_all";
+
+#if defined(OS_CHROMEOS)
+const char kCrosPrintingLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=chromebook_printing";
+#endif
 
 const char kCloudPrintLearnMoreURL[] =
 #if defined(OS_CHROMEOS)
@@ -723,6 +731,8 @@ const char* const kChromeHostURLs[] = {
 #endif
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
     kChromeUILinuxProxyConfigHost,
+#endif
+#if defined(OS_LINUX) || defined(OS_ANDROID)
     kChromeUISandboxHost,
 #endif
 #if defined(OS_WIN)
@@ -747,6 +757,7 @@ const char* const kChromeHostURLs[] = {
 const size_t kNumberOfChromeHostURLs = arraysize(kChromeHostURLs);
 
 const char* const kChromeDebugURLs[] = {content::kChromeUIBadCastCrashURL,
+                                        content::kChromeUIBrowserCrashURL,
                                         content::kChromeUICrashURL,
                                         content::kChromeUIDumpURL,
                                         content::kChromeUIKillURL,

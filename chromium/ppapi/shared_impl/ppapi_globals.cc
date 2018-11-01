@@ -15,7 +15,7 @@ namespace ppapi {
 namespace {
 // Thread-local globals for testing. See SetPpapiGlobalsOnThreadForTest for more
 // information.
-base::LazyInstance<base::ThreadLocalPointer<PpapiGlobals> >::Leaky
+base::LazyInstance<base::ThreadLocalPointer<PpapiGlobals>>::Leaky
     tls_ppapi_globals_for_test = LAZY_INSTANCE_INITIALIZER;
 }  // namespace
 
@@ -65,8 +65,6 @@ void PpapiGlobals::ResetMainThreadMessageLoopForTesting() {
 bool PpapiGlobals::IsHostGlobals() const { return false; }
 
 bool PpapiGlobals::IsPluginGlobals() const { return false; }
-
-void PpapiGlobals::MarkPluginIsActive() {}
 
 // static
 PpapiGlobals* PpapiGlobals::GetThreadLocalPointer() {

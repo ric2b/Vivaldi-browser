@@ -20,9 +20,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "cc/base/cc_export.h"
-#include "cc/debug/micro_benchmark.h"
-#include "cc/debug/micro_benchmark_controller.h"
+#include "cc/benchmarks/micro_benchmark.h"
+#include "cc/benchmarks/micro_benchmark_controller.h"
+#include "cc/cc_export.h"
 #include "cc/input/browser_controls_state.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/input_handler.h"
@@ -44,6 +44,8 @@
 #include "cc/trees/target_property.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
+
+class SkImage;
 
 namespace cc {
 class HeadsUpDisplayLayer;
@@ -191,7 +193,7 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   // Requests a main frame (including layer updates) and ensures that this main
   // frame results in a redraw for the complete viewport when producing the
   // CompositorFrame.
-  void SetNextCommitForcesRedraw();
+  void SetNeedsCommitWithForcedRedraw();
 
   // Input Handling ---------------------------------------------
 
@@ -312,9 +314,14 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   void SetContentSourceId(uint32_t);
   uint32_t content_source_id() const { return content_source_id_; }
 
-  void SetDeviceColorSpace(const gfx::ColorSpace& device_color_space);
-  const gfx::ColorSpace& device_color_space() const {
-    return device_color_space_;
+  // If this LayerTreeHost needs a valid LocalSurfaceId then commits will be
+  // deferred until a valid LocalSurfaceId is provided.
+  void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id);
+  const LocalSurfaceId& local_surface_id() const { return local_surface_id_; }
+
+  void SetRasterColorSpace(const gfx::ColorSpace& raster_color_space);
+  const gfx::ColorSpace& raster_color_space() const {
+    return raster_color_space_;
   }
 
   // Used externally by blink for setting the PropertyTrees when
@@ -338,12 +345,6 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   void RemoveLayerShouldPushProperties(Layer* layer);
   std::unordered_set<Layer*>& LayersThatShouldPushProperties();
   bool LayerNeedsPushPropertiesForTesting(Layer* layer) const;
-
-  virtual void SetNeedsMetaInfoRecomputation(
-      bool needs_meta_info_recomputation);
-  bool needs_meta_info_recomputation() const {
-    return needs_meta_info_recomputation_;
-  }
 
   void SetPageScaleFromImplSide(float page_scale);
   void SetElasticOverscrollFromImplSide(gfx::Vector2dF elastic_overscroll);
@@ -457,6 +458,9 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   gfx::ScrollOffset GetScrollOffsetForAnimation(
       ElementId element_id) const override;
 
+  void QueueImageDecode(sk_sp<const SkImage> image,
+                        const base::Callback<void(bool)>& callback);
+
  protected:
   LayerTreeHost(InitParams* params, CompositorMode mode);
 
@@ -496,15 +500,13 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   enum { kNumFramesToConsiderBeforeGpuRasterization = 60 };
 
   void ApplyViewportDeltas(ScrollAndScaleSet* info);
+  void RecordWheelAndTouchScrollingCount(ScrollAndScaleSet* info);
   void ApplyPageScaleDeltaFromImplSide(float page_scale_delta);
   void InitializeProxy(std::unique_ptr<Proxy> proxy);
 
   bool DoUpdateLayers(Layer* root_layer);
-  void UpdateHudLayer();
 
-  bool AnimateLayersRecursive(Layer* current, base::TimeTicks time);
-
-  void CalculateLCDTextMetricsCallback(Layer* layer);
+  void UpdateDeferCommitsInternal();
 
   const CompositorMode compositor_mode_;
 
@@ -571,9 +573,11 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   float page_scale_factor_ = 1.f;
   float min_page_scale_factor_ = 1.f;
   float max_page_scale_factor_ = 1.f;
-  gfx::ColorSpace device_color_space_;
+  gfx::ColorSpace raster_color_space_;
 
   uint32_t content_source_id_;
+  LocalSurfaceId local_surface_id_;
+  bool defer_commits_ = false;
 
   SkColor background_color_ = SK_ColorWHITE;
   bool has_transparent_background_ = false;
@@ -591,7 +595,6 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   PropertyTrees property_trees_;
 
   bool needs_full_tree_sync_ = true;
-  bool needs_meta_info_recomputation_ = true;
 
   gfx::Vector2dF elastic_overscroll_;
 
@@ -609,6 +612,11 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   bool in_update_property_trees_ = false;
 
   MutatorHost* mutator_host_;
+
+  std::vector<std::pair<sk_sp<const SkImage>, base::Callback<void(bool)>>>
+      queued_image_decodes_;
+
+  bool did_navigate_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHost);
 };

@@ -28,7 +28,7 @@
 #define GraphicsLayerUpdater_h
 
 #include "platform/graphics/GraphicsLayer.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -42,27 +42,28 @@ class GraphicsLayerUpdater {
   ~GraphicsLayerUpdater();
 
   enum UpdateType {
-    DoNotForceUpdate,
-    ForceUpdate,
+    kDoNotForceUpdate,
+    kForceUpdate,
   };
 
-  void update(PaintLayer&, Vector<PaintLayer*>& layersNeedingPaintInvalidation);
+  void Update(PaintLayer&,
+              Vector<PaintLayer*>& layers_needing_paint_invalidation);
 
-  bool needsRebuildTree() const { return m_needsRebuildTree; }
+  bool NeedsRebuildTree() const { return needs_rebuild_tree_; }
 
 #if DCHECK_IS_ON()
-  static void assertNeedsToUpdateGraphicsLayerBitsCleared(PaintLayer&);
+  static void AssertNeedsToUpdateGraphicsLayerBitsCleared(PaintLayer&);
 #endif
 
  private:
   class UpdateContext;
 
-  void updateRecursive(PaintLayer&,
+  void UpdateRecursive(PaintLayer&,
                        UpdateType,
                        const UpdateContext&,
-                       Vector<PaintLayer*>& layersNeedingPaintInvalidation);
+                       Vector<PaintLayer*>& layers_needing_paint_invalidation);
 
-  bool m_needsRebuildTree;
+  bool needs_rebuild_tree_;
 };
 
 }  // namespace blink

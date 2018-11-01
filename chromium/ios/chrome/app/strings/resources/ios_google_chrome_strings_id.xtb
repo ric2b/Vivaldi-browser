@@ -16,6 +16,7 @@
 <translation id="3196546062792660320">Chrome menghemat waktu Anda dengan membawa akun ke web. Anda dapat menambahkan atau menghapus akun di Setelan.</translation>
 <translation id="3282568296779691940">Masuk ke Chrome</translation>
 <translation id="3345341804167540816">Gunakan Chrome di Mana Saja</translation>
+<translation id="3531621179462011934">Untuk mendapatkan setelan di semua perangkat Anda, login ke Chrome.</translation>
 <translation id="3601960512121168237">Suka Chrome? <ph name="BEGIN_LINK" />Pindahkan ke dok<ph name="END_LINK" /></translation>
 <translation id="3678774398092457402">Ingin Chrome menyimpan sandi untuk situs ini?</translation>
 <translation id="384394811301901750">Google Chrome saat ini tidak dapat menggunakan kamera</translation>
@@ -25,7 +26,7 @@
 <translation id="4099578267706723511">Bantu penyempurnaan Chrome dengan mengirimkan statistik penggunaan dan laporan kerusakan ke Google.</translation>
 <translation id="415767770115540173">Dapatkan pengalaman Google yang lebih baik di Chrome berdasarkan lokasi Anda.</translation>
 <translation id="424864128008805179">Keluar dari Chrome?</translation>
-<translation id="4523886039239821078">Beberapa pengaya (pengaya) menyebabkan Chrome mogok. Copot pemasangan:</translation>
+<translation id="4523886039239821078">Beberapa pengaya (pengaya) menyebabkan Chrome mogok. Uninstal:</translation>
 <translation id="4615174829807303908">Anda keluar dari akun yang dikelola oleh <ph name="SIGNOUT_MANAGED_DOMAIN" />. Tindakan ini akan menghapus data Chrome dari perangkat ini, namun data ini akan tetap tersedia di Akun Google.</translation>
 <translation id="5389212809648216794">Google Chrome tidak dapat menggunakan kamera karena sedang digunakan aplikasi lain</translation>
 <translation id="5566557026214762153">Dengan digunakannya apps, Anda menyetujui <ph name="BEGIN_LINK" />Persyaratan Layanan<ph name="END_LINK" /> Chrome.</translation>
@@ -47,7 +48,7 @@
 <translation id="7437998757836447326">Keluar dari Chrome</translation>
 <translation id="756809126120519699">Data Chrome telah dihapus</translation>
 <translation id="7626032353295482388">Selamat Menggunakan Chrome</translation>
-<translation id="840168496893712993">Beberapa pengaya (pengaya) menyebabkan Chrome mogok. Coba copot pemasangannya.</translation>
+<translation id="840168496893712993">Beberapa add-on telah menyebabkan Chrome berhenti bekerja. Harap coba uninstal.</translation>
 <translation id="8459495907675268833">Data yang dipilih telah dihapus dari Chrome dan perangkat yang disinkronkan. Akun Google Anda mungkin memiliki bentuk riwayat penjelajahan lain seperti penelusuran dan aktivitas dari layanan Google lainnya di history.google.com.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8606668294522778825">Google Chrome dapat menggunakan layanan web untuk meningkatkan pengalaman penjelajahan Anda. Anda dapat memilih untuk menonaktifkan layanan ini. <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" /></translation>

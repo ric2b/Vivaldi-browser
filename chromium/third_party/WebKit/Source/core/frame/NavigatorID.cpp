@@ -32,9 +32,9 @@
 #include "core/frame/NavigatorID.h"
 
 #if !OS(MACOSX) && !OS(WIN)
-#include "wtf/ThreadSpecific.h"
-#include "wtf/Threading.h"
 #include <sys/utsname.h>
+#include "platform/wtf/ThreadSpecific.h"
+#include "platform/wtf/Threading.h"
 #endif
 
 namespace blink {
@@ -50,7 +50,7 @@ String NavigatorID::appName() {
 String NavigatorID::appVersion() {
   // Version is everything in the user agent string past the "Mozilla/" prefix.
   const String& agent = userAgent();
-  return agent.substring(agent.find('/') + 1);
+  return agent.Substring(agent.Find('/') + 1);
 }
 
 String NavigatorID::platform() {
@@ -62,15 +62,15 @@ String NavigatorID::platform() {
   return "Win32";
 #else  // Unix-like systems
   struct utsname osname;
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<String>, platformName,
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<String>, platform_name,
                                   new ThreadSpecific<String>());
-  if (platformName->isNull()) {
-    *platformName = String(uname(&osname) >= 0
-                               ? String(osname.sysname) + String(" ") +
-                                     String(osname.machine)
-                               : emptyString);
+  if (platform_name->IsNull()) {
+    *platform_name =
+        String(uname(&osname) >= 0 ? String(osname.sysname) + String(" ") +
+                                         String(osname.machine)
+                                   : g_empty_string);
   }
-  return *platformName;
+  return *platform_name;
 #endif
 }
 

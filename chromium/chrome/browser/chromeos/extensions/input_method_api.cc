@@ -98,7 +98,7 @@ InputMethodPrivateGetCurrentInputMethodFunction::Run() {
 #else
   chromeos::input_method::InputMethodManager* manager =
       chromeos::input_method::InputMethodManager::Get();
-  return RespondNow(OneArgument(base::MakeUnique<base::StringValue>(
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
       manager->GetActiveIMEState()->GetCurrentInputMethod().id())));
 #endif
 }
@@ -257,7 +257,7 @@ InputMethodPrivateShowInputViewFunction::Run() {
   // Forcibly enables the a11y onscreen keyboard if there is on keyboard enabled
   // for now. And re-disables it after showing once.
   keyboard::SetAccessibilityKeyboardEnabled(true);
-  ash::Shell::GetInstance()->CreateKeyboard();
+  ash::Shell::Get()->CreateKeyboard();
   keyboard_controller = keyboard::KeyboardController::GetInstance();
   if (!keyboard_controller) {
     keyboard::SetAccessibilityKeyboardEnabled(false);
@@ -367,8 +367,9 @@ void InputMethodAPI::OnListenerAdded(
   }
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<InputMethodAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<InputMethodAPI>>::DestructorAtExit g_factory =
+    LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<InputMethodAPI>*

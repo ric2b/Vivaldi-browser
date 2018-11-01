@@ -27,7 +27,7 @@ const char kJsScreenPath[] = "login.ResetScreen";
 
 namespace chromeos {
 
-ResetScreenHandler::ResetScreenHandler() {
+ResetScreenHandler::ResetScreenHandler() : BaseScreenHandler(kScreenId) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -41,7 +41,7 @@ void ResetScreenHandler::Show() {
     show_on_init_ = true;
     return;
   }
-  ShowScreen(OobeScreen::SCREEN_OOBE_RESET);
+  ShowScreen(kScreenId);
 }
 
 void ResetScreenHandler::Hide() {
@@ -52,6 +52,8 @@ void ResetScreenHandler::DeclareLocalizedValues(
   builder->Add("resetScreenTitle", IDS_RESET_SCREEN_TITLE);
   builder->Add("resetScreenAccessibleTitle", IDS_RESET_SCREEN_TITLE);
   builder->Add("resetScreenIconTitle", IDS_RESET_SCREEN_ICON_TITLE);
+  builder->Add("resetScreenIllustrationTitle",
+               IDS_RESET_SCREEN_ILLUSTRATION_TITLE);
   builder->Add("cancelButton", IDS_CANCEL);
 
   builder->Add("resetButtonRestart", IDS_RELAUNCH_BUTTON);

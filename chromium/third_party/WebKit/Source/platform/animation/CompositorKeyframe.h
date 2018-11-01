@@ -6,7 +6,7 @@
 #define CompositorKeyframe_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/PassRefPtr.h"
+#include "platform/wtf/PassRefPtr.h"
 
 namespace cc {
 class TimingFunction;
@@ -20,12 +20,12 @@ class PLATFORM_EXPORT CompositorKeyframe {
  public:
   virtual ~CompositorKeyframe() {}
 
-  virtual double time() const = 0;
+  virtual double Time() const = 0;
 
-  PassRefPtr<TimingFunction> getTimingFunctionForTesting() const;
+  PassRefPtr<TimingFunction> GetTimingFunctionForTesting() const;
 
  private:
-  virtual const cc::TimingFunction* ccTimingFunction() const = 0;
+  virtual const cc::TimingFunction* CcTimingFunction() const = 0;
 };
 
 }  // namespace blink

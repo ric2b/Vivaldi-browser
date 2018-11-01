@@ -29,17 +29,19 @@ class CompositorFrameSink : public cc::CompositorFrameSinkSupportClient,
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
   void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
+  void BeginFrameDidNotSwap(const cc::BeginFrameAck& begin_frame_ack) override;
   void EvictFrame() override;
 
   // Overridden from cc::CompositorFrameSinkSupportClient:
-  void DidReceiveCompositorFrameAck() override;
+  void DidReceiveCompositorFrameAck(
+      const cc::ReturnedResourceArray& resources) override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
   void WillDrawSurface(const cc::LocalSurfaceId& local_surface_id,
-                       const gfx::Rect& damage_rect) override;
+                       const gfx::Rect& damage_rect) override {}
 
  private:
-  cc::CompositorFrameSinkSupport support_;
+  std::unique_ptr<cc::CompositorFrameSinkSupport> support_;
   CompositorFrameSinkHolder* const client_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositorFrameSink);

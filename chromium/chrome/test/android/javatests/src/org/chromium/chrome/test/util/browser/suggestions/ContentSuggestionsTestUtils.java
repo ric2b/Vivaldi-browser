@@ -10,8 +10,8 @@ import org.chromium.chrome.browser.ntp.cards.TreeNode;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout;
-import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout.ContentSuggestionsCardLayoutEnum;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +45,10 @@ public final class ContentSuggestionsTestUtils {
             @CategoryInt int category, int suggestionCount) {
         // Important: showIfEmpty flag to true.
         SuggestionsCategoryInfo categoryInfo =
-                new CategoryInfoBuilder(category).withFetchAction().showIfEmpty().build();
+                new CategoryInfoBuilder(category)
+                        .withAction(ContentSuggestionsAdditionalAction.FETCH)
+                        .showIfEmpty()
+                        .build();
         return registerCategory(suggestionsSource, categoryInfo, suggestionCount);
     }
 
@@ -99,28 +102,21 @@ public final class ContentSuggestionsTestUtils {
     public static class CategoryInfoBuilder {
         @CategoryInt
         private final int mCategory;
-        private boolean mHasFetchAction;
-        private boolean mHasViewAllAction;
+        private int mAdditionalAction;
         private boolean mShowIfEmpty;
         private String mTitle = "";
         private String mNoSuggestionsMessage = "";
-        @ContentSuggestionsCardLayoutEnum
+        @ContentSuggestionsCardLayout
         private int mCardLayout = ContentSuggestionsCardLayout.FULL_CARD;
 
         public CategoryInfoBuilder(@CategoryInt int category) {
             mCategory = category;
         }
 
-        public CategoryInfoBuilder withFetchAction() {
-            mHasFetchAction = true;
+        public CategoryInfoBuilder withAction(@ContentSuggestionsAdditionalAction int action) {
+            mAdditionalAction = action;
             return this;
         }
-
-        public CategoryInfoBuilder withViewAllAction() {
-            mHasViewAllAction = true;
-            return this;
-        }
-
         public CategoryInfoBuilder showIfEmpty() {
             mShowIfEmpty = true;
             return this;
@@ -136,15 +132,14 @@ public final class ContentSuggestionsTestUtils {
             return this;
         }
 
-        public CategoryInfoBuilder withCardLayout(
-                @ContentSuggestionsCardLayoutEnum int cardLayout) {
+        public CategoryInfoBuilder withCardLayout(@ContentSuggestionsCardLayout int cardLayout) {
             mCardLayout = cardLayout;
             return this;
         }
 
         public SuggestionsCategoryInfo build() {
-            return new SuggestionsCategoryInfo(mCategory, mTitle, mCardLayout, mHasFetchAction,
-                    mHasViewAllAction, mShowIfEmpty, mNoSuggestionsMessage);
+            return new SuggestionsCategoryInfo(mCategory, mTitle, mCardLayout, mAdditionalAction,
+                    mShowIfEmpty, mNoSuggestionsMessage);
         }
     }
 

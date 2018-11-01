@@ -69,7 +69,7 @@ Profiler.CPUProfileView = class extends Profiler.ProfileView {
    * @return {!PerfUI.FlameChartDataProvider}
    */
   createFlameChartDataProvider() {
-    return new Profiler.CPUFlameChartDataProvider(this.profile, this._profileHeader.target());
+    return new Profiler.CPUFlameChartDataProvider(this.profile, this._profileHeader._cpuProfilerModel);
   }
 };
 
@@ -81,14 +81,17 @@ Profiler.CPUProfileType = class extends Profiler.ProfileType {
     super(Profiler.CPUProfileType.TypeId, Common.UIString('Record JavaScript CPU Profile'));
     this._recording = false;
 
-    this._nextAnonymousConsoleProfileNumber = 1;
-    this._anonymousConsoleProfileIdToTitle = {};
-
     Profiler.CPUProfileType.instance = this;
     SDK.targetManager.addModelListener(
-        SDK.CPUProfilerModel, SDK.CPUProfilerModel.Events.ConsoleProfileStarted, this._consoleProfileStarted, this);
-    SDK.targetManager.addModelListener(
         SDK.CPUProfilerModel, SDK.CPUProfilerModel.Events.ConsoleProfileFinished, this._consoleProfileFinished, this);
+  }
+
+  /**
+   * @override
+   * @return {?Profiler.CPUProfileHeader}
+   */
+  profileBeingRecorded() {
+    return /** @type {?Profiler.CPUProfileHeader} */ (super.profileBeingRecorded());
   }
 
   /**
@@ -136,63 +139,19 @@ Profiler.CPUProfileType = class extends Profiler.ProfileType {
   /**
    * @param {!Common.Event} event
    */
-  _consoleProfileStarted(event) {
-    var data = /** @type {!SDK.CPUProfilerModel.EventData} */ (event.data);
-    var resolvedTitle = data.title;
-    if (!resolvedTitle) {
-      resolvedTitle = Common.UIString('Profile %s', this._nextAnonymousConsoleProfileNumber++);
-      this._anonymousConsoleProfileIdToTitle[data.id] = resolvedTitle;
-    }
-    this._addMessageToConsole(
-        SDK.ConsoleMessage.MessageType.Profile, data.scriptLocation,
-        Common.UIString('Profile \'%s\' started.', resolvedTitle));
-  }
-
-  /**
-   * @param {!Common.Event} event
-   */
   _consoleProfileFinished(event) {
     var data = /** @type {!SDK.CPUProfilerModel.EventData} */ (event.data);
     var cpuProfile = /** @type {!Protocol.Profiler.Profile} */ (data.cpuProfile);
-    var resolvedTitle = data.title;
-    if (typeof resolvedTitle === 'undefined') {
-      resolvedTitle = this._anonymousConsoleProfileIdToTitle[data.id];
-      delete this._anonymousConsoleProfileIdToTitle[data.id];
-    }
-    var profile = new Profiler.CPUProfileHeader(data.scriptLocation.debuggerModel.target(), this, resolvedTitle);
+    var profile = new Profiler.CPUProfileHeader(data.cpuProfilerModel, this, data.title);
     profile.setProtocolProfile(cpuProfile);
     this.addProfile(profile);
-    this._addMessageToConsole(
-        SDK.ConsoleMessage.MessageType.ProfileEnd, data.scriptLocation,
-        Common.UIString('Profile \'%s\' finished.', resolvedTitle));
-  }
-
-  /**
-   * @param {string} type
-   * @param {!SDK.DebuggerModel.Location} scriptLocation
-   * @param {string} messageText
-   */
-  _addMessageToConsole(type, scriptLocation, messageText) {
-    var script = scriptLocation.script();
-    var target = scriptLocation.debuggerModel.target();
-    var message = new SDK.ConsoleMessage(
-        target, SDK.ConsoleMessage.MessageSource.ConsoleAPI, SDK.ConsoleMessage.MessageLevel.Verbose, messageText, type,
-        undefined, undefined, undefined, undefined, [{
-          functionName: '',
-          scriptId: scriptLocation.scriptId,
-          url: script ? script.contentURL() : '',
-          lineNumber: scriptLocation.lineNumber,
-          columnNumber: scriptLocation.columnNumber || 0
-        }]);
-
-    target.consoleModel.addMessage(message);
   }
 
   startRecordingProfile() {
     var cpuProfilerModel = UI.context.flavor(SDK.CPUProfilerModel);
     if (this.profileBeingRecorded() || !cpuProfilerModel)
       return;
-    var profile = new Profiler.CPUProfileHeader(cpuProfilerModel.target(), this);
+    var profile = new Profiler.CPUProfileHeader(cpuProfilerModel, this);
     this.setProfileBeingRecorded(profile);
     SDK.targetManager.suspendAllTargets();
     this.addProfile(profile);
@@ -202,41 +161,22 @@ Profiler.CPUProfileType = class extends Profiler.ProfileType {
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.ProfilesCPUProfileTaken);
   }
 
-  stopRecordingProfile() {
+  async stopRecordingProfile() {
     this._recording = false;
-    if (!this.profileBeingRecorded() || !this.profileBeingRecorded().target())
+    if (!this.profileBeingRecorded() || !this.profileBeingRecorded()._cpuProfilerModel)
       return;
 
-    var recordedProfile;
-
-    /**
-     * @param {?Protocol.Profiler.Profile} profile
-     * @this {Profiler.CPUProfileType}
-     */
-    function didStopProfiling(profile) {
-      if (!this.profileBeingRecorded())
-        return;
+    var profile = await this.profileBeingRecorded()._cpuProfilerModel.stopRecording();
+    var recordedProfile = this.profileBeingRecorded();
+    if (recordedProfile) {
       console.assert(profile);
-      this.profileBeingRecorded().setProtocolProfile(profile);
-      this.profileBeingRecorded().updateStatus('');
-      recordedProfile = this.profileBeingRecorded();
+      recordedProfile.setProtocolProfile(profile);
+      recordedProfile.updateStatus('');
       this.setProfileBeingRecorded(null);
     }
 
-    /**
-     * @this {Profiler.CPUProfileType}
-     */
-    function fireEvent() {
-      this.dispatchEventToListeners(Profiler.ProfileType.Events.ProfileComplete, recordedProfile);
-    }
-
-    this.profileBeingRecorded()
-        .target()
-        .model(SDK.CPUProfilerModel)
-        .stopRecording()
-        .then(didStopProfiling.bind(this))
-        .then(SDK.targetManager.resumeAllTargets.bind(SDK.targetManager))
-        .then(fireEvent.bind(this));
+    await SDK.targetManager.resumeAllTargets();
+    this.dispatchEventToListeners(Profiler.ProfileType.Events.ProfileComplete, recordedProfile);
   }
 
   /**
@@ -263,12 +203,13 @@ Profiler.CPUProfileType.TypeId = 'CPU';
  */
 Profiler.CPUProfileHeader = class extends Profiler.WritableProfileHeader {
   /**
-   * @param {?SDK.Target} target
+   * @param {?SDK.CPUProfilerModel} cpuProfilerModel
    * @param {!Profiler.CPUProfileType} type
    * @param {string=} title
    */
-  constructor(target, type, title) {
-    super(target, type, title);
+  constructor(cpuProfilerModel, type, title) {
+    super(cpuProfilerModel && cpuProfilerModel.debuggerModel(), type, title);
+    this._cpuProfilerModel = cpuProfilerModel;
   }
 
   /**
@@ -292,6 +233,9 @@ Profiler.CPUProfileHeader = class extends Profiler.WritableProfileHeader {
  * @unrestricted
  */
 Profiler.CPUProfileView.NodeFormatter = class {
+  /**
+   * @param {!Profiler.CPUProfileView} profileView
+   */
   constructor(profileView) {
     this._profileView = profileView;
   }
@@ -302,7 +246,7 @@ Profiler.CPUProfileView.NodeFormatter = class {
    * @return {string}
    */
   formatValue(value) {
-    return Common.UIString('%.1f\u2009ms', value);
+    return Common.UIString('%.1f\xa0ms', value);
   }
 
   /**
@@ -312,7 +256,7 @@ Profiler.CPUProfileView.NodeFormatter = class {
    * @return {string}
    */
   formatPercent(value, node) {
-    return node.profileNode === this._profileView.profile.idleNode ? '' : Common.UIString('%.2f\u2009%%', value);
+    return node.profileNode === this._profileView.profile.idleNode ? '' : Common.UIString('%.2f\xa0%%', value);
   }
 
   /**
@@ -321,8 +265,9 @@ Profiler.CPUProfileView.NodeFormatter = class {
    * @return {?Element}
    */
   linkifyNode(node) {
+    var cpuProfilerModel = this._profileView._profileHeader._cpuProfilerModel;
     return this._profileView.linkifier().maybeLinkifyConsoleCallFrame(
-        this._profileView.target(), node.profileNode.callFrame, 'profile-node-file');
+        cpuProfilerModel ? cpuProfilerModel.target() : null, node.profileNode.callFrame, 'profile-node-file');
   }
 };
 
@@ -332,12 +277,12 @@ Profiler.CPUProfileView.NodeFormatter = class {
 Profiler.CPUFlameChartDataProvider = class extends Profiler.ProfileFlameChartDataProvider {
   /**
    * @param {!SDK.CPUProfileDataModel} cpuProfile
-   * @param {?SDK.Target} target
+   * @param {?SDK.CPUProfilerModel} cpuProfilerModel
    */
-  constructor(cpuProfile, target) {
+  constructor(cpuProfile, cpuProfilerModel) {
     super();
     this._cpuProfile = cpuProfile;
-    this._target = target;
+    this._cpuProfilerModel = cpuProfilerModel;
   }
 
   /**
@@ -387,7 +332,7 @@ Profiler.CPUFlameChartDataProvider = class extends Profiler.ProfileFlameChartDat
       entrySelfTimes[i] = entry.selfTime;
     }
 
-    this._maxStackDepth = maxDepth;
+    this._maxStackDepth = maxDepth + 1;
 
     this._timelineData = new PerfUI.FlameChart.TimelineData(entryLevels, entryTotalTimes, entryStartTimes, null);
 
@@ -425,7 +370,7 @@ Profiler.CPUFlameChartDataProvider = class extends Profiler.ProfileFlameChartDat
       if (ms === 0)
         return '0';
       if (ms < 1000)
-        return Common.UIString('%.1f\u2009ms', ms);
+        return Common.UIString('%.1f\xa0ms', ms);
       return Number.secondsToString(ms / 1000, true);
     }
     var name = UI.beautifyFunctionName(node.functionName);
@@ -435,7 +380,8 @@ Profiler.CPUFlameChartDataProvider = class extends Profiler.ProfileFlameChartDat
     pushEntryInfoRow(Common.UIString('Self time'), selfTime);
     pushEntryInfoRow(Common.UIString('Total time'), totalTime);
     var linkifier = new Components.Linkifier();
-    var link = linkifier.maybeLinkifyConsoleCallFrame(this._target, node.callFrame);
+    var link = linkifier.maybeLinkifyConsoleCallFrame(
+        this._cpuProfilerModel && this._cpuProfilerModel.target(), node.callFrame);
     if (link)
       pushEntryInfoRow(Common.UIString('URL'), link.textContent);
     linkifier.dispose();

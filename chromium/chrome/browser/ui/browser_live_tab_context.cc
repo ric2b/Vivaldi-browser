@@ -15,6 +15,10 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/session_storage_namespace.h"
 
+#if BUILDFLAG(ENABLE_SESSION_SERVICE)
+#include "chrome/browser/sessions/tab_loader.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 
 using content::NavigationController;
@@ -82,6 +86,24 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
       select, pin, from_last_session, storage_namespace, user_agent_override,
       ext_data);
 
+#if BUILDFLAG(ENABLE_SESSION_SERVICE)
+  // The focused tab will be loaded by Browser, and TabLoader will load the
+  // rest.
+  if (!select) {
+    // Regression check: make sure that the tab hasn't started to load
+    // immediately.
+    DCHECK(web_contents->GetController().NeedsReload());
+    DCHECK(!web_contents->IsLoading());
+  }
+  std::vector<TabLoader::RestoredTab> restored_tabs;
+  restored_tabs.emplace_back(web_contents, select, !extension_app_id.empty(),
+                             pin);
+  TabLoader::RestoreTabs(restored_tabs, base::TimeTicks::Now());
+#else   // BUILDFLAG(ENABLE_SESSION_SERVICE)
+  // Load the tab manually if there is no TabLoader.
+  web_contents->GetController().LoadIfNecessary();
+#endif  // BUILDFLAG(ENABLE_SESSION_SERVICE)
+
   return sessions::ContentLiveTab::GetForWebContents(web_contents);
 }
 
@@ -114,11 +136,12 @@ void BrowserLiveTabContext::CloseTab() {
 // static
 sessions::LiveTabContext* BrowserLiveTabContext::Create(
     Profile* profile,
-    const std::string& app_name) {
+    const std::string& app_name, const std::string& ext_data) {
   Browser* browser;
   if (app_name.empty()) {
     Browser::CreateParams params(profile, true);
     params.is_vivaldi = vivaldi::IsVivaldiRunning();
+    params.ext_data = ext_data;
     browser = new Browser(params);
   } else {
     // Only trusted app popup windows should ever be restored.

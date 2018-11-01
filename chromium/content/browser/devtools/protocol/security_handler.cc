@@ -25,15 +25,15 @@ namespace {
 std::string SecurityStyleToProtocolSecurityState(
     blink::WebSecurityStyle security_style) {
   switch (security_style) {
-    case blink::WebSecurityStyleUnknown:
+    case blink::kWebSecurityStyleUnknown:
       return Security::SecurityStateEnum::Unknown;
-    case blink::WebSecurityStyleUnauthenticated:
+    case blink::kWebSecurityStyleNeutral:
       return Security::SecurityStateEnum::Neutral;
-    case blink::WebSecurityStyleAuthenticationBroken:
+    case blink::kWebSecurityStyleInsecure:
       return Security::SecurityStateEnum::Insecure;
-    case blink::WebSecurityStyleWarning:
+    case blink::kWebSecurityStyleWarning:
       return Security::SecurityStateEnum::Warning;
-    case blink::WebSecurityStyleAuthenticated:
+    case blink::kWebSecurityStyleSecure:
       return Security::SecurityStateEnum::Secure;
     default:
       NOTREACHED();
@@ -109,10 +109,10 @@ void SecurityHandler::DidChangeVisibleSecurityState() {
 
   std::unique_ptr<Explanations> explanations = Explanations::create();
   AddExplanations(Security::SecurityStateEnum::Insecure,
-                  security_style_explanations.broken_explanations,
+                  security_style_explanations.insecure_explanations,
                   explanations.get());
   AddExplanations(Security::SecurityStateEnum::Neutral,
-                  security_style_explanations.unauthenticated_explanations,
+                  security_style_explanations.neutral_explanations,
                   explanations.get());
   AddExplanations(Security::SecurityStateEnum::Secure,
                   security_style_explanations.secure_explanations,
@@ -126,6 +126,8 @@ void SecurityHandler::DidChangeVisibleSecurityState() {
           .SetRanMixedContent(security_style_explanations.ran_mixed_content)
           .SetDisplayedMixedContent(
               security_style_explanations.displayed_mixed_content)
+          .SetContainedMixedForm(
+              security_style_explanations.contained_mixed_form)
           .SetRanContentWithCertErrors(
               security_style_explanations.ran_content_with_cert_errors)
           .SetDisplayedContentWithCertErrors(
@@ -134,8 +136,7 @@ void SecurityHandler::DidChangeVisibleSecurityState() {
               security_style_explanations.ran_insecure_content_style))
           .SetDisplayedInsecureContentStyle(
               SecurityStyleToProtocolSecurityState(
-                  security_style_explanations
-                      .displayed_insecure_content_style))
+                  security_style_explanations.displayed_insecure_content_style))
           .Build();
 
   frontend_->SecurityStateChanged(
@@ -144,6 +145,32 @@ void SecurityHandler::DidChangeVisibleSecurityState() {
       std::move(explanations),
       std::move(insecure_status),
       Maybe<std::string>(security_style_explanations.summary));
+}
+
+void SecurityHandler::DidFinishNavigation(NavigationHandle* navigation_handle) {
+  if (certificate_errors_overriden_)
+    FlushPendingCertificateErrorNotifications();
+}
+
+void SecurityHandler::FlushPendingCertificateErrorNotifications() {
+  for (auto callback : cert_error_callbacks_)
+    callback.second.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_CANCEL);
+  cert_error_callbacks_.clear();
+}
+
+bool SecurityHandler::NotifyCertificateError(int cert_error,
+                                             const GURL& request_url,
+                                             CertErrorCallback handler) {
+  if (!enabled_)
+    return false;
+  frontend_->CertificateError(++last_cert_error_id_,
+                              net::ErrorToShortString(cert_error),
+                              request_url.spec());
+  if (!certificate_errors_overriden_) {
+    return false;
+  }
+  cert_error_callbacks_[last_cert_error_id_] = handler;
+  return true;
 }
 
 Response SecurityHandler::Enable() {
@@ -156,7 +183,9 @@ Response SecurityHandler::Enable() {
 
 Response SecurityHandler::Disable() {
   enabled_ = false;
+  certificate_errors_overriden_ = false;
   WebContentsObserver::Observe(nullptr);
+  FlushPendingCertificateErrorNotifications();
   return Response::OK();
 }
 
@@ -170,6 +199,37 @@ Response SecurityHandler::ShowCertificateViewer() {
     return Response::Error("Could not find certificate");
   web_contents->GetDelegate()->ShowCertificateViewerInDevTools(
       web_contents, certificate);
+  return Response::OK();
+}
+
+Response SecurityHandler::HandleCertificateError(int event_id,
+                                                 const String& action) {
+  if (cert_error_callbacks_.find(event_id) == cert_error_callbacks_.end()) {
+    return Response::Error(
+        String("Unknown event id: " + std::to_string(event_id)));
+  }
+  content::CertificateRequestResultType type =
+      content::CERTIFICATE_REQUEST_RESULT_TYPE_CANCEL;
+  Response response = Response::OK();
+  if (action == Security::CertificateErrorActionEnum::Continue) {
+    type = content::CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE;
+  } else if (action == Security::CertificateErrorActionEnum::Cancel) {
+    type = content::CERTIFICATE_REQUEST_RESULT_TYPE_CANCEL;
+  } else {
+    response =
+        Response::Error(String("Unknown Certificate Error Action: " + action));
+  }
+  cert_error_callbacks_[event_id].Run(type);
+  cert_error_callbacks_.erase(event_id);
+  return response;
+}
+
+Response SecurityHandler::SetOverrideCertificateErrors(bool override) {
+  if (override && !enabled_)
+    return Response::Error("Security domain not enabled");
+  certificate_errors_overriden_ = override;
+  if (!override)
+    FlushPendingCertificateErrorNotifications();
   return Response::OK();
 }
 

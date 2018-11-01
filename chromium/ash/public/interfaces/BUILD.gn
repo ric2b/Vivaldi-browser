@@ -15,6 +15,7 @@ mojom("interfaces_internal") {
     "accelerator_controller.mojom",
     "cast_config.mojom",
     "constants.mojom",
+    "event_properties.mojom",
     "locale.mojom",
     "media.mojom",
     "new_window.mojom",
@@ -27,11 +28,16 @@ mojom("interfaces_internal") {
     "volume.mojom",
     "vpn_list.mojom",
     "wallpaper.mojom",
+    "window_pin_type.mojom",
+    "window_style.mojom",
   ]
 
   public_deps = [
     "//components/signin/public/interfaces",
+    "//mojo/common:common_custom_types",
     "//skia/public/interfaces",
+    "//ui/events/mojo:interfaces",
+    "//ui/gfx/image/mojo:interfaces",
   ]
 
   export_class_attribute = "ASH_PUBLIC_EXPORT"

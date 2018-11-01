@@ -55,6 +55,15 @@ class TestWebStateObserver : public WebStateObserver {
   web::TestTitleWasSetInfo* title_was_set_info() {
     return title_was_set_info_.get();
   }
+  // Arguments passed to |DidChangeVisibleSecurityState|.
+  web::TestDidChangeVisibleSecurityStateInfo*
+  did_change_visible_security_state_info() {
+    return did_change_visible_security_state_info_.get();
+  }
+  // Arguments passed to |DidSuppressDialog|.
+  web::TestDidSuppressDialogInfo* did_suppress_dialog_info() {
+    return did_suppress_dialog_info_.get();
+  }
   // Arguments passed to |DocumentSubmitted|.
   web::TestSubmitDocumentInfo* submit_document_info() {
     return submit_document_info_.get();
@@ -96,6 +105,8 @@ class TestWebStateObserver : public WebStateObserver {
   void NavigationItemChanged() override;
   void DidFinishNavigation(NavigationContext* context) override;
   void TitleWasSet() override;
+  void DidChangeVisibleSecurityState() override;
+  void DidSuppressDialog() override;
   void DocumentSubmitted(const std::string& form_name,
                          bool user_initiated) override;
   void FormActivityRegistered(const std::string& form_name,
@@ -122,6 +133,9 @@ class TestWebStateObserver : public WebStateObserver {
       navigation_item_changed_info_;
   std::unique_ptr<web::TestDidFinishNavigationInfo> did_finish_navigation_info_;
   std::unique_ptr<web::TestTitleWasSetInfo> title_was_set_info_;
+  std::unique_ptr<web::TestDidChangeVisibleSecurityStateInfo>
+      did_change_visible_security_state_info_;
+  std::unique_ptr<web::TestDidSuppressDialogInfo> did_suppress_dialog_info_;
   std::unique_ptr<web::TestSubmitDocumentInfo> submit_document_info_;
   std::unique_ptr<web::TestFormActivityInfo> form_activity_info_;
   std::unique_ptr<web::TestUpdateFaviconUrlCandidatesInfo>

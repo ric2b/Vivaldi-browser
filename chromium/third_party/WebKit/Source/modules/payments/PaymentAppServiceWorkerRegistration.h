@@ -11,7 +11,7 @@
 
 namespace blink {
 
-class PaymentAppManager;
+class PaymentManager;
 class ScriptState;
 class ServiceWorkerRegistration;
 
@@ -23,20 +23,20 @@ class PaymentAppServiceWorkerRegistration final
 
  public:
   virtual ~PaymentAppServiceWorkerRegistration();
-  static PaymentAppServiceWorkerRegistration& from(ServiceWorkerRegistration&);
+  static PaymentAppServiceWorkerRegistration& From(ServiceWorkerRegistration&);
 
-  static PaymentAppManager* paymentAppManager(ScriptState*,
-                                              ServiceWorkerRegistration&);
-  PaymentAppManager* paymentAppManager(ScriptState*);
+  static PaymentManager* paymentManager(ScriptState*,
+                                        ServiceWorkerRegistration&);
+  PaymentManager* paymentManager(ScriptState*);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit PaymentAppServiceWorkerRegistration(ServiceWorkerRegistration*);
-  static const char* supplementName();
+  static const char* SupplementName();
 
-  Member<ServiceWorkerRegistration> m_registration;
-  Member<PaymentAppManager> m_paymentAppManager;
+  Member<ServiceWorkerRegistration> registration_;
+  Member<PaymentManager> payment_manager_;
 };
 
 }  // namespace blink

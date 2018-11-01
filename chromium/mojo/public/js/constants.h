@@ -8,6 +8,7 @@
 namespace mojo {
 
 // JavaScript module names:
+extern const char kAssociatedBindingsModuleName[];
 extern const char kBindingsModuleName[];
 extern const char kBufferModuleName[];
 extern const char kCodecModuleName[];
@@ -15,7 +16,12 @@ extern const char kConnectorModuleName[];
 extern const char kControlMessageHandlerModuleName[];
 extern const char kControlMessageProxyModuleName[];
 extern const char kInterfaceControlMessagesMojom[];
+extern const char kInterfaceEndpointClientModuleName[];
+extern const char kInterfaceEndpointHandleModuleName[];
 extern const char kInterfaceTypesModuleName[];
+extern const char kPipeControlMessageHandlerModuleName[];
+extern const char kPipeControlMessageProxyModuleName[];
+extern const char kPipeControlMessagesMojom[];
 extern const char kRouterModuleName[];
 extern const char kUnicodeModuleName[];
 extern const char kValidatorModuleName[];

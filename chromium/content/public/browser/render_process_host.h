@@ -16,6 +16,7 @@
 #include "base/process/process_handle.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
+#include "content/public/common/bind_interface_helpers.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_sender.h"
 #include "media/media_features.h"
@@ -32,14 +33,11 @@ namespace media {
 class AudioOutputController;
 }
 
-namespace service_manager {
-class InterfaceProvider;
-}
-
 namespace content {
 class BrowserContext;
 class BrowserMessageFilter;
 class RenderProcessHostObserver;
+class RenderWidgetHost;
 class StoragePartition;
 struct GlobalRequestID;
 
@@ -197,12 +195,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Adds a message filter to the IPC channel.
   virtual void AddFilter(BrowserMessageFilter* filter) = 0;
 
-  // Try to shutdown the associated render process as fast as possible
+  // Try to shutdown the associated render process as fast as possible.
   virtual bool FastShutdownForPageCount(size_t count) = 0;
 
-  // TODO(ananta)
-  // Revisit whether the virtual functions declared from here on need to be
-  // part of the interface.
+  // Sets whether input events should be ignored for this process.
   virtual void SetIgnoreInputEvents(bool ignore_input_events) = 0;
   virtual bool IgnoreInputEvents() const = 0;
 
@@ -214,6 +210,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // process from exiting.
   virtual void AddPendingView() = 0;
   virtual void RemovePendingView() = 0;
+
+  // Adds and removes the widgets owned by this process.
+  virtual void AddWidget(RenderWidgetHost* widget) = 0;
+  virtual void RemoveWidget(RenderWidgetHost* widget) = 0;
 
   // Sets a flag indicating that the process can be abnormally terminated.
   virtual void SetSuddenTerminationAllowed(bool allowed) = 0;
@@ -245,6 +245,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // process. If no recording was in progress, this call will return false.
   virtual bool StopWebRTCEventLog() = 0;
 
+  // Enables or disables WebRTC's echo canceller AEC3. Disabled implies
+  // selecting the older AEC2.
+  // Note: This will be removed once the AEC3 is fully rolled out and the old
+  // AEC is deprecated.
+  virtual void SetEchoCanceller3(bool enable) = 0;
+
   // When set, |callback| receives log messages regarding, for example, media
   // devices (webcams, mics, etc) that were initially requested in the render
   // process associated with this RenderProcessHost.
@@ -273,10 +279,9 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // transferring it to a new renderer process.
   virtual void ResumeDeferredNavigation(const GlobalRequestID& request_id) = 0;
 
-  // Returns the service_manager::InterfaceProvider the browser process can use
-  // to bind
-  // interfaces exposed to it from the renderer.
-  virtual service_manager::InterfaceProvider* GetRemoteInterfaces() = 0;
+  // Binds interfaces exposed to the browser process from the renderer.
+  virtual void BindInterface(const std::string& interface_name,
+                             mojo::ScopedMessagePipeHandle interface_pipe) = 0;
 
   // Extracts any persistent-memory-allocator used for renderer metrics.
   // Ownership is passed to the caller. To support sharing of histogram data

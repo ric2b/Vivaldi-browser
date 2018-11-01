@@ -314,6 +314,7 @@ public class UrlBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
      */
     @SmallTest
     @Feature({"Omnibox"})
+    @RetryOnFailure
     public void testAutocompleteAllowedWhenReplacingText()
             throws InterruptedException, TimeoutException {
         startMainActivityOnBlankPage();
@@ -783,6 +784,7 @@ public class UrlBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
     @SmallTest
     @Feature({"Omnibox"})
+    @RetryOnFailure
     public void testCutHuge() throws InterruptedException {
         startMainActivityWithURL(HUGE_URL);
         OmniboxTestUtils.toggleUrlBarFocus(getUrlBar(), true);

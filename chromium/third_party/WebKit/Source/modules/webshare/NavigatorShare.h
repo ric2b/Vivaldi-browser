@@ -13,8 +13,8 @@
 #include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/HashSet.h"
 #include "public/platform/modules/webshare/webshare.mojom-blink.h"
-#include "wtf/HashSet.h"
 
 namespace blink {
 
@@ -30,7 +30,7 @@ class NavigatorShare final : public GarbageCollectedFinalized<NavigatorShare>,
 
   // Gets, or creates, NavigatorShare supplement on Navigator.
   // See platform/Supplementable.h
-  static NavigatorShare& from(Navigator&);
+  static NavigatorShare& From(Navigator&);
 
   // Navigator partial interface
   ScriptPromise share(ScriptState*, const ShareData&);
@@ -42,13 +42,13 @@ class NavigatorShare final : public GarbageCollectedFinalized<NavigatorShare>,
   class ShareClientImpl;
 
   NavigatorShare();
-  static const char* supplementName();
+  static const char* SupplementName();
 
-  void onConnectionError();
+  void OnConnectionError();
 
-  blink::mojom::blink::ShareServicePtr m_service;
+  blink::mojom::blink::ShareServicePtr service_;
 
-  HeapHashSet<Member<ShareClientImpl>> m_clients;
+  HeapHashSet<Member<ShareClientImpl>> clients_;
 };
 
 }  // namespace blink

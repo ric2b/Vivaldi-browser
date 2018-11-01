@@ -190,7 +190,7 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
     // If we have gotten more than one frame ahead of GL, wait for the previous
     // frame to complete.
     if (previous_frame_fence_) {
-      TRACE_EVENT0("gpu", "ImageTransportSurfaceOverlayMac::ClientWait");
+      TRACE_EVENT0("gpu", "ClientWait");
 
       // Ensure we are using the context with which the fence was created.
       gl::ScopedCGLSetCurrentContext scoped_set_current(fence_context_obj_);
@@ -222,8 +222,11 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
                              base::scoped_policy::RETAIN);
 
     // A glFlush is necessary to ensure correct content appears.
-    glFlush();
-    CheckGLErrors("After fence/flush");
+    {
+      TRACE_EVENT0("gpu", "glFlush");
+      glFlush();
+      CheckGLErrors("After fence/flush");
+    }
 
     after_flush_before_commit_time = base::TimeTicks::Now();
     UMA_HISTOGRAM_TIMES("GPU.IOSurface.GLFlushTime",
@@ -231,7 +234,7 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
   } else {
     // GLFence isn't supported - issue a glFinish on each frame to ensure
     // there is backpressure from GL.
-    TRACE_EVENT0("gpu", "ImageTransportSurfaceOverlayMac::glFinish");
+    TRACE_EVENT0("gpu", "glFinish");
     CheckGLErrors("Before finish");
     glFinish();
     CheckGLErrors("After finish");
@@ -239,8 +242,11 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
   }
 
   bool fullscreen_low_power_layer_valid = false;
-  ca_layer_tree_coordinator_->CommitPendingTreesToCA(
-      pixel_damage_rect, &fullscreen_low_power_layer_valid);
+  {
+    TRACE_EVENT0("gpu", "CommitPendingTreesToCA");
+    ca_layer_tree_coordinator_->CommitPendingTreesToCA(
+        pixel_damage_rect, &fullscreen_low_power_layer_valid);
+  }
 
   base::TimeTicks after_transaction_time = base::TimeTicks::Now();
   UMA_HISTOGRAM_TIMES("GPU.IOSurface.CATransactionTime",
@@ -336,8 +342,19 @@ bool ImageTransportSurfaceOverlayMac::ScheduleOverlayPlane(
     DLOG(ERROR) << "Not an IOSurface image.";
     return false;
   }
-  return ca_layer_tree_coordinator_->SetPendingGLRendererBackbuffer(
-      io_surface_image->io_surface());
+  const ui::CARendererLayerParams overlay_as_calayer_params(
+      false,        // is_clipped
+      gfx::Rect(),  // clip_rect
+      0,            // sorting_context_id
+      gfx::Transform(), image,
+      crop_rect,            // contents_rect
+      pixel_frame_rect,     // rect
+      SK_ColorTRANSPARENT,  // background_color
+      0,                    // edge_aa_mask
+      1.f,                  // opacity
+      GL_LINEAR);           // filter;
+  return ca_layer_tree_coordinator_->GetPendingCARendererLayerTree()
+      ->ScheduleCALayer(overlay_as_calayer_params);
 }
 
 bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(

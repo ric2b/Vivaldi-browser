@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/web_contents.h"
@@ -115,10 +116,11 @@ void WebContentsDelegate::ViewSourceForTab(WebContents* source,
   // It suffers from http://crbug.com/523 and that is why browser overrides
   // it with proper implementation.
   GURL url = GURL(kViewSourceScheme + std::string(":") + page_url.spec());
-  OpenURLFromTab(
-      source,
-      OpenURLParams(url, Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                    ui::PAGE_TRANSITION_LINK, false));
+  OpenURLParams params(url, Referrer(),
+                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                       ui::PAGE_TRANSITION_LINK, false);
+  params.source_site_instance = source->GetSiteInstance();
+  OpenURLFromTab(source, params);
 }
 
 void WebContentsDelegate::ViewSourceForFrame(WebContents* source,
@@ -126,17 +128,18 @@ void WebContentsDelegate::ViewSourceForFrame(WebContents* source,
                                              const PageState& page_state) {
   // Same as ViewSourceForTab, but for given subframe.
   GURL url = GURL(kViewSourceScheme + std::string(":") + frame_url.spec());
-  OpenURLFromTab(
-      source,
-      OpenURLParams(url, Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                    ui::PAGE_TRANSITION_LINK, false));
+  OpenURLParams params(url, Referrer(),
+                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                       ui::PAGE_TRANSITION_LINK, false);
+  params.source_site_instance = source->GetSiteInstance();
+
+  OpenURLFromTab(source, params);
 }
 
-bool WebContentsDelegate::PreHandleKeyboardEvent(
+KeyboardEventProcessingResult WebContentsDelegate::PreHandleKeyboardEvent(
     WebContents* source,
-    const NativeWebKeyboardEvent& event,
-    bool* is_keyboard_shortcut) {
-  return false;
+    const NativeWebKeyboardEvent& event) {
+  return KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool WebContentsDelegate::PreHandleGestureEvent(
@@ -193,7 +196,7 @@ bool WebContentsDelegate::IsFullscreenForTabOrPending(
 
 blink::WebDisplayMode WebContentsDelegate::GetDisplayMode(
     const WebContents* web_contents) const {
-  return blink::WebDisplayModeBrowser;
+  return blink::kWebDisplayModeBrowser;
 }
 
 content::ColorChooser* WebContentsDelegate::OpenColorChooser(
@@ -229,12 +232,6 @@ std::string WebContentsDelegate::GetDefaultMediaDeviceID(
 }
 
 #if defined(OS_ANDROID)
-void WebContentsDelegate::RequestMediaDecodePermission(
-    WebContents* web_contents,
-    const base::Callback<void(bool)>& callback) {
-  callback.Run(false);
-}
-
 base::android::ScopedJavaLocalRef<jobject>
 WebContentsDelegate::GetContentVideoViewEmbedder() {
   return base::android::ScopedJavaLocalRef<jobject>();
@@ -287,7 +284,7 @@ bool WebContentsDelegate::SaveFrame(const GURL& url, const Referrer& referrer) {
 blink::WebSecurityStyle WebContentsDelegate::GetSecurityStyle(
     WebContents* web_contents,
     SecurityStyleExplanations* security_style_explanations) {
-  return blink::WebSecurityStyleUnknown;
+  return blink::kWebSecurityStyleUnknown;
 }
 
 DownloadInformation::DownloadInformation(

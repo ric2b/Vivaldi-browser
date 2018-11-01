@@ -10,10 +10,10 @@
 
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/string_util.h"
 #include "components/subresource_filter/core/common/first_party_origin.h"
 #include "components/subresource_filter/core/common/ngram_extractor.h"
 #include "components/subresource_filter/core/common/url_pattern.h"
-#include "components/subresource_filter/core/common/url_pattern_matching.h"
 #include "third_party/flatbuffers/src/include/flatbuffers/flatbuffers.h"
 
 namespace subresource_filter {
@@ -21,6 +21,26 @@ namespace subresource_filter {
 namespace {
 
 using FlatStringOffset = flatbuffers::Offset<flatbuffers::String>;
+using FlatDomains = flatbuffers::Vector<FlatStringOffset>;
+using FlatDomainsOffset = flatbuffers::Offset<FlatDomains>;
+
+base::StringPiece ToStringPiece(const flatbuffers::String* string) {
+  DCHECK(string);
+  return base::StringPiece(string->c_str(), string->size());
+}
+
+// Performs three-way comparison between two domains. In the total order defined
+// by this predicate, the lengths of domains will be monotonically decreasing.
+int CompareDomains(base::StringPiece lhs_domain, base::StringPiece rhs_domain) {
+  if (lhs_domain.size() != rhs_domain.size())
+    return lhs_domain.size() > rhs_domain.size() ? -1 : 1;
+  return lhs_domain.compare(rhs_domain);
+}
+
+bool HasNoUpperAscii(base::StringPiece string) {
+  return std::none_of(string.begin(), string.end(),
+                      [](char c) { return base::IsAsciiUpper(c); });
+}
 
 // Checks whether a URL |rule| can be converted to its FlatBuffers equivalent,
 // and performs the actual conversion.
@@ -31,7 +51,8 @@ class UrlRuleFlatBufferConverter {
   // |rule| to FlatBuffer, are initialized (|options|, |anchor_right|, etc.).
   UrlRuleFlatBufferConverter(const proto::UrlRule& rule) : rule_(rule) {
     is_convertible_ = InitializeOptions() && InitializeElementTypes() &&
-                      InitializeActivationTypes() && InitializeUrlPattern();
+                      InitializeActivationTypes() && InitializeUrlPattern() &&
+                      IsMeaningful();
   }
 
   // Returns whether the |rule| can be converted to its FlatBuffers equivalent.
@@ -39,40 +60,67 @@ class UrlRuleFlatBufferConverter {
   // this client version.
   bool is_convertible() const { return is_convertible_; }
 
+  bool has_element_types() const { return !!element_types_; }
+  bool has_activation_types() const { return !!activation_types_; }
+
   // Writes the URL |rule| to the FlatBuffer using the |builder|, and returns
   // the offset to the serialized rule.
   flatbuffers::Offset<flat::UrlRule> SerializeConvertedRule(
       flatbuffers::FlatBufferBuilder* builder) const {
     DCHECK(is_convertible());
 
-    flatbuffers::Offset<flatbuffers::Vector<FlatStringOffset>> domains_offset;
+    FlatDomainsOffset domains_included_offset;
+    FlatDomainsOffset domains_excluded_offset;
     if (rule_.domains_size()) {
-      std::vector<FlatStringOffset> domains;
-      domains.reserve(rule_.domains_size());
+      // TODO(pkalinnikov): Consider sharing the vectors between rules.
+      std::vector<FlatStringOffset> domains_included;
+      std::vector<FlatStringOffset> domains_excluded;
+      // Reserve only for |domains_included| because it is expected to be the
+      // one used more frequently.
+      domains_included.reserve(rule_.domains_size());
 
-      std::string domain;
       for (const auto& domain_list_item : rule_.domains()) {
-        domain.clear();
-        domain.reserve(domain_list_item.domain().size() + 1);
+        // Note: The |domain| can have non-ASCII UTF-8 characters, but
+        // ToLowerASCII leaves these intact.
+        // TODO(pkalinnikov): Convert non-ASCII characters to lower case too.
+        // TODO(pkalinnikov): Possibly convert Punycode to IDN here or directly
+        // assume this is done in the proto::UrlRule.
+        const std::string& domain = domain_list_item.domain();
+        auto offset = builder->CreateSharedString(
+            HasNoUpperAscii(domain) ? domain : base::ToLowerASCII(domain));
+
         if (domain_list_item.exclude())
-          domain += '~';
-        domain += domain_list_item.domain();
-        domains.push_back(builder->CreateString(domain));
+          domains_excluded.push_back(offset);
+        else
+          domains_included.push_back(offset);
       }
-      domains_offset = builder->CreateVector(domains);
+
+      // The comparator ensuring the domains order necessary for fast matching.
+      auto precedes = [&builder](FlatStringOffset lhs, FlatStringOffset rhs) {
+        return CompareDomains(ToStringPiece(flatbuffers::GetTemporaryPointer(
+                                  *builder, lhs)),
+                              ToStringPiece(flatbuffers::GetTemporaryPointer(
+                                  *builder, rhs))) < 0;
+      };
+
+      // The domains are stored in sorted order to support fast matching.
+      if (!domains_included.empty()) {
+        // TODO(pkalinnikov): Don't sort if it is already sorted offline.
+        std::sort(domains_included.begin(), domains_included.end(), precedes);
+        domains_included_offset = builder->CreateVector(domains_included);
+      }
+      if (!domains_excluded.empty()) {
+        std::sort(domains_excluded.begin(), domains_excluded.end(), precedes);
+        domains_excluded_offset = builder->CreateVector(domains_excluded);
+      }
     }
 
     auto url_pattern_offset = builder->CreateString(rule_.url_pattern());
 
-    std::vector<uint8_t> failure_function;
-    BuildFailureFunction(UrlPattern(rule_), &failure_function);
-    auto failure_function_offset =
-        builder->CreateVector(failure_function.data(), failure_function.size());
-
-    return flat::CreateUrlRule(*builder, options_, element_types_,
-                               activation_types_, url_pattern_type_,
-                               anchor_left_, anchor_right_, domains_offset,
-                               url_pattern_offset, failure_function_offset);
+    return flat::CreateUrlRule(
+        *builder, options_, element_types_, activation_types_,
+        url_pattern_type_, anchor_left_, anchor_right_, domains_included_offset,
+        domains_excluded_offset, url_pattern_offset);
   }
 
  private:
@@ -126,15 +174,18 @@ class UrlRuleFlatBufferConverter {
     static_assert(
         proto::ELEMENT_TYPE_ALL <= std::numeric_limits<uint16_t>::max(),
         "Element types can not be stored in uint16_t.");
-    if ((rule_.element_types() & proto::ELEMENT_TYPE_ALL) !=
-        rule_.element_types()) {
-      return false;  // Unsupported element types.
-    }
     element_types_ = static_cast<uint16_t>(rule_.element_types());
+
     // Note: Normally we can not distinguish between the main plugin resource
     // and any other loads it makes. We treat them both as OBJECT requests.
     if (element_types_ & proto::ELEMENT_TYPE_OBJECT_SUBREQUEST)
       element_types_ |= proto::ELEMENT_TYPE_OBJECT;
+
+    // Ignore unknown element types.
+    element_types_ &= proto::ELEMENT_TYPE_ALL;
+    // Filtering popups is not supported.
+    element_types_ &= ~proto::ELEMENT_TYPE_POPUP;
+
     return true;
   }
 
@@ -142,22 +193,18 @@ class UrlRuleFlatBufferConverter {
     static_assert(
         proto::ACTIVATION_TYPE_ALL <= std::numeric_limits<uint8_t>::max(),
         "Activation types can not be stored in uint8_t.");
-    if ((rule_.activation_types() & proto::ACTIVATION_TYPE_ALL) !=
-        rule_.activation_types()) {
-      return false;  // Unsupported activation types.
-    }
     activation_types_ = static_cast<uint8_t>(rule_.activation_types());
+
+    // Ignore unknown activation types.
+    activation_types_ &= proto::ACTIVATION_TYPE_ALL;
+    // No need in CSS activation, because the CSS rules are not supported.
+    activation_types_ &=
+        ~(proto::ACTIVATION_TYPE_ELEMHIDE | proto::ACTIVATION_TYPE_GENERICHIDE);
+
     return true;
   }
 
   bool InitializeUrlPattern() {
-    if (rule_.url_pattern().size() >
-        static_cast<size_t>(std::numeric_limits<uint8_t>::max())) {
-      // Failure function can not always be stored as an array of uint8_t in
-      // case the pattern's length exceeds 255.
-      return false;
-    }
-
     switch (rule_.url_pattern_type()) {
       case proto::URL_PATTERN_TYPE_SUBSTRING:
         url_pattern_type_ = flat::UrlPatternType_SUBSTRING;
@@ -165,10 +212,9 @@ class UrlRuleFlatBufferConverter {
       case proto::URL_PATTERN_TYPE_WILDCARDED:
         url_pattern_type_ = flat::UrlPatternType_WILDCARDED;
         break;
-      case proto::URL_PATTERN_TYPE_REGEXP:
-        url_pattern_type_ = flat::UrlPatternType_REGEXP;
-        break;
 
+      // TODO(pkalinnikov): Implement REGEXP rules matching.
+      case proto::URL_PATTERN_TYPE_REGEXP:
       default:
         return false;  // Unsupported URL pattern type.
     }
@@ -182,6 +228,9 @@ class UrlRuleFlatBufferConverter {
 
     return true;
   }
+
+  // Returns whether the rule is not a no-op after all the modifications above.
+  bool IsMeaningful() const { return element_types_ || activation_types_; }
 
   const proto::UrlRule& rule_;
 
@@ -200,7 +249,7 @@ class UrlRuleFlatBufferConverter {
 // RulesetIndexer --------------------------------------------------------------
 
 // static
-const int RulesetIndexer::kIndexedFormatVersion = 11;
+const int RulesetIndexer::kIndexedFormatVersion = 17;
 
 RulesetIndexer::MutableUrlPatternIndex::MutableUrlPatternIndex() = default;
 RulesetIndexer::MutableUrlPatternIndex::~MutableUrlPatternIndex() = default;
@@ -212,23 +261,27 @@ bool RulesetIndexer::AddUrlRule(const proto::UrlRule& rule) {
   UrlRuleFlatBufferConverter converter(rule);
   if (!converter.is_convertible())
     return false;
+  DCHECK_NE(rule.url_pattern_type(), proto::URL_PATTERN_TYPE_REGEXP);
   auto rule_offset = converter.SerializeConvertedRule(&builder_);
 
-  MutableUrlPatternIndex* index_part =
-      (rule.semantics() == proto::RULE_SEMANTICS_BLACKLIST ? &blacklist_
-                                                           : &whitelist_);
+  auto add_rule_to_index = [&rule, rule_offset](MutableUrlPatternIndex* index) {
+    NGram ngram =
+        GetMostDistinctiveNGram(index->ngram_index, rule.url_pattern());
+    if (ngram) {
+      index->ngram_index[ngram].push_back(rule_offset);
+    } else {
+      // TODO(pkalinnikov): Index fallback rules as well.
+      index->fallback_rules.push_back(rule_offset);
+    }
+  };
 
-  NGram ngram = 0;
-  if (rule.url_pattern_type() != proto::URL_PATTERN_TYPE_REGEXP) {
-    ngram =
-        GetMostDistinctiveNGram(index_part->ngram_index, rule.url_pattern());
-  }
-
-  if (ngram) {
-    index_part->ngram_index[ngram].push_back(rule_offset);
+  if (rule.semantics() == proto::RULE_SEMANTICS_BLACKLIST) {
+    add_rule_to_index(&blacklist_);
   } else {
-    // TODO(pkalinnikov): Index fallback rules as well.
-    index_part->fallback_rules.push_back(rule_offset);
+    if (converter.has_element_types())
+      add_rule_to_index(&whitelist_);
+    if (converter.has_activation_types())
+      add_rule_to_index(&activation_);
   }
 
   return true;
@@ -237,12 +290,14 @@ bool RulesetIndexer::AddUrlRule(const proto::UrlRule& rule) {
 void RulesetIndexer::Finish() {
   auto blacklist_offset = SerializeUrlPatternIndex(blacklist_);
   auto whitelist_offset = SerializeUrlPatternIndex(whitelist_);
+  auto activation_offset = SerializeUrlPatternIndex(activation_);
 
-  auto url_rules_index_offset =
-      flat::CreateIndexedRuleset(builder_, blacklist_offset, whitelist_offset);
+  auto url_rules_index_offset = flat::CreateIndexedRuleset(
+      builder_, blacklist_offset, whitelist_offset, activation_offset);
   builder_.Finish(url_rules_index_offset);
 }
 
+// static
 NGram RulesetIndexer::GetMostDistinctiveNGram(
     const MutableNGramIndex& ngram_index,
     base::StringPiece pattern) {
@@ -304,73 +359,108 @@ using FlatUrlRuleList = flatbuffers::Vector<flatbuffers::Offset<flat::UrlRule>>;
 using FlatNGramIndex =
     flatbuffers::Vector<flatbuffers::Offset<flat::NGramToRules>>;
 
-// Returns whether the |origin| matches the list of |domains|. A match means
-// that the longest domain in |domains| that |origin| is a sub-domain of is not
-// an exception OR all the |domains| are exceptions and neither matches the
-// |origin|. Thus, domain filters with more domain components trump filters with
-// fewer domain components, i.e. the more specific a filter is, the higher the
-// priority.
+// Returns the size of the longest (sub-)domain of |origin| matching one of the
+// |domains| in the list.
+//
+// The |domains| should be sorted in descending order of their length, and
+// ascending alphabetical order within the groups of same-length domains.
+size_t GetLongestMatchingSubdomain(const url::Origin& origin,
+                                   const FlatDomains& domains) {
+  // If the |domains| list is short, then the simple strategy is usually faster.
+  if (domains.size() <= 5) {
+    for (auto* domain : domains) {
+      const base::StringPiece domain_piece = ToStringPiece(domain);
+      if (origin.DomainIs(domain_piece))
+        return domain_piece.size();
+    }
+    return 0;
+  }
+  // Otherwise look for each subdomain of the |origin| using binary search.
+
+  DCHECK(!origin.unique());
+  base::StringPiece canonicalized_host(origin.host());
+  if (canonicalized_host.empty())
+    return 0;
+
+  // If the host name ends with a dot, then ignore it.
+  if (canonicalized_host.back() == '.')
+    canonicalized_host.remove_suffix(1);
+
+  // The |left| bound of the search is shared between iterations, because
+  // subdomains are considered in decreasing order of their lengths, therefore
+  // each consecutive lower_bound will be at least as far as the previous.
+  flatbuffers::uoffset_t left = 0;
+  for (size_t position = 0;; ++position) {
+    const base::StringPiece subdomain = canonicalized_host.substr(position);
+
+    flatbuffers::uoffset_t right = domains.size();
+    while (left + 1 < right) {
+      auto middle = left + (right - left) / 2;
+      DCHECK_LT(middle, domains.size());
+      if (CompareDomains(ToStringPiece(domains[middle]), subdomain) <= 0)
+        left = middle;
+      else
+        right = middle;
+    }
+
+    DCHECK_LT(left, domains.size());
+    if (ToStringPiece(domains[left]) == subdomain)
+      return subdomain.size();
+
+    position = canonicalized_host.find('.', position);
+    if (position == base::StringPiece::npos)
+      break;
+  }
+
+  return 0;
+}
+
+// Returns whether the |origin| matches the domain list of the |rule|. A match
+// means that the longest domain in |domains| that |origin| is a sub-domain of
+// is not an exception OR all the |domains| are exceptions and neither matches
+// the |origin|. Thus, domain filters with more domain components trump filters
+// with fewer domain components, i.e. the more specific a filter is, the higher
+// the priority.
 //
 // A rule whose domain list is empty or contains only negative domains is still
 // considered a "generic" rule. Therefore, if |disable_generic_rules| is set,
-// this function will always return false for such |domains| lists.
-//
-// TODO(pkalinnikov): Make it fast.
-bool DoesInitiatorMatchDomainList(
-    const url::Origin& initiator,
-    const flatbuffers::Vector<FlatStringOffset>& domains,
-    bool disable_generic_rules) {
-  if (!domains.size())
-    return !disable_generic_rules;
-  // Unique |initiator| matches lists of exception domains only.
-  if (initiator.unique()) {
-    for (const flatbuffers::String* domain_filter : domains) {
-      DCHECK_GT(domain_filter->size(), 0u);
-      if (domain_filter->Get(0) != '~')
-        return false;
-    }
-    return !disable_generic_rules;
+// this function will always return false for such rules.
+bool DoesOriginMatchDomainList(const url::Origin& origin,
+                               const flat::UrlRule& rule,
+                               bool disable_generic_rules) {
+  const bool is_generic = !rule.domains_included();
+  DCHECK(is_generic || rule.domains_included()->size());
+  if (disable_generic_rules && is_generic)
+    return false;
+
+  // Unique |origin| matches lists of exception domains only.
+  if (origin.unique())
+    return is_generic;
+
+  size_t longest_matching_included_domain_length = 1;
+  if (!is_generic) {
+    longest_matching_included_domain_length =
+        GetLongestMatchingSubdomain(origin, *rule.domains_included());
   }
-
-  size_t max_domain_length = 0;
-  bool is_positive = true;
-  bool negatives_only = true;
-
-  for (flatbuffers::uoffset_t i = 0, size = domains.size(); i != size; ++i) {
-    const flatbuffers::String* domain_filter = domains.Get(i);
-    if (domain_filter->Length() <= max_domain_length)
-      continue;
-
-    base::StringPiece filter_piece(domain_filter->c_str(),
-                                   domain_filter->Length());
-    const bool is_negative = (domain_filter->Get(0) == '~');
-    if (is_negative) {
-      filter_piece.remove_prefix(1);
-      if (filter_piece.length() == max_domain_length)
-        continue;
-    } else {
-      negatives_only = false;
-    }
-
-    if (!initiator.DomainIs(filter_piece))
-      continue;
-    max_domain_length = filter_piece.length();
-    is_positive = !is_negative;
+  if (longest_matching_included_domain_length && rule.domains_excluded()) {
+    return GetLongestMatchingSubdomain(origin, *rule.domains_excluded()) <
+           longest_matching_included_domain_length;
   }
-
-  return max_domain_length ? is_positive
-                           : negatives_only && !disable_generic_rules;
+  return !!longest_matching_included_domain_length;
 }
 
-// Returns true iff the request to |url| of type |element_type| requested by
-// |initiator| matches the |rule|'s metadata: resource type, first/third party,
-// domain list.
-bool DoesRuleMetadataMatch(const flat::UrlRule& rule,
-                           const url::Origin& initiator,
-                           proto::ElementType element_type,
-                           proto::ActivationType activation_type,
-                           bool is_third_party,
-                           bool disable_generic_rules) {
+// Returns whether the request matches flags of the specified URL |rule|. Takes
+// into account:
+//  - |element_type| of the requested resource, if not *_UNSPECIFIED.
+//  - |activation_type| for a subdocument request, if not *_UNSPECIFIED.
+//  - Whether the resource |is_third_party| w.r.t. its embedding document.
+bool DoesRuleFlagsMatch(const flat::UrlRule& rule,
+                        proto::ElementType element_type,
+                        proto::ActivationType activation_type,
+                        bool is_third_party) {
+  DCHECK(element_type == proto::ELEMENT_TYPE_UNSPECIFIED ||
+         activation_type == proto::ACTIVATION_TYPE_UNSPECIFIED);
+
   if (element_type != proto::ELEMENT_TYPE_UNSPECIFIED &&
       !(rule.element_types() & element_type)) {
     return false;
@@ -389,14 +479,12 @@ bool DoesRuleMetadataMatch(const flat::UrlRule& rule,
     return false;
   }
 
-  return rule.domains() ? DoesInitiatorMatchDomainList(
-                              initiator, *rule.domains(), disable_generic_rules)
-                        : !disable_generic_rules;
+  return true;
 }
 
 bool MatchesAny(const FlatUrlRuleList* rules,
                 const GURL& url,
-                const url::Origin& initiator,
+                const url::Origin& document_origin,
                 proto::ElementType element_type,
                 proto::ActivationType activation_type,
                 bool is_third_party,
@@ -405,19 +493,16 @@ bool MatchesAny(const FlatUrlRuleList* rules,
     return false;
   for (const flat::UrlRule* rule : *rules) {
     DCHECK_NE(rule, nullptr);
-
-    if (rule->url_pattern_type() != flat::UrlPatternType_REGEXP) {
-      const uint8_t* begin = rule->failure_function()->data();
-      const uint8_t* end = begin + rule->failure_function()->size();
-      if (!IsUrlPatternMatch(url, UrlPattern(*rule), begin, end))
-        continue;
-    } else {
-      // TODO(pkalinnikov): Implement REGEXP rules matching.
+    DCHECK_NE(rule->url_pattern_type(), flat::UrlPatternType_REGEXP);
+    if (!DoesRuleFlagsMatch(*rule, element_type, activation_type,
+                            is_third_party)) {
       continue;
     }
+    if (!UrlPattern(*rule).MatchesUrl(url))
+      continue;
 
-    if (DoesRuleMetadataMatch(*rule, initiator, element_type, activation_type,
-                              is_third_party, disable_generic_rules)) {
+    if (DoesOriginMatchDomainList(document_origin, *rule,
+                                  disable_generic_rules)) {
       return true;
     }
   }
@@ -426,10 +511,11 @@ bool MatchesAny(const FlatUrlRuleList* rules,
 }
 
 // Returns whether the network request matches a particular part of the index.
-// |is_third_party| should reflect the relation between |url| and |initiator|.
+// |is_third_party| should reflect the relation between |url| and
+// |document_origin|.
 bool IsMatch(const flat::UrlPatternIndex* index,
              const GURL& url,
-             const url::Origin& initiator,
+             const url::Origin& document_origin,
              proto::ElementType element_type,
              proto::ActivationType activation_type,
              bool is_third_party,
@@ -457,14 +543,14 @@ bool IsMatch(const flat::UrlPatternIndex* index,
     const flat::NGramToRules* entry = hash_table->Get(slot_index);
     if (entry == empty_slot)
       continue;
-    if (MatchesAny(entry->rule_list(), url, initiator, element_type,
+    if (MatchesAny(entry->rule_list(), url, document_origin, element_type,
                    activation_type, is_third_party, disable_generic_rules)) {
       return true;
     }
   }
 
   const FlatUrlRuleList* rules = index->fallback_rules();
-  return MatchesAny(rules, url, initiator, element_type, activation_type,
+  return MatchesAny(rules, url, document_origin, element_type, activation_type,
                     is_third_party, disable_generic_rules);
 }
 
@@ -493,7 +579,7 @@ bool IndexedRulesetMatcher::ShouldDisableFilteringForDocument(
     return false;
   }
   return IsMatch(
-      root_->whitelist_index(), document_url, parent_document_origin,
+      root_->activation_index(), document_url, parent_document_origin,
       proto::ELEMENT_TYPE_UNSPECIFIED, activation_type,
       FirstPartyOrigin::IsThirdParty(document_url, parent_document_origin),
       false);

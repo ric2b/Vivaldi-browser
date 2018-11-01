@@ -62,11 +62,27 @@ Polymer({
         return loadTimeData.getBoolean('enableAdjustableLargeCursor');
       },
     },
+
+    /** @private */
+    isGuest_: {
+      type: Boolean,
+      value: function() { return loadTimeData.getBoolean('isGuest'); }
+    },
   },
 
   /** @private */
   onChromeVoxSettingsTap_: function() {
     chrome.send('showChromeVoxSettings');
+  },
+
+  /** @private */
+  onSelectToSpeakSettingsTap_: function() {
+    chrome.send('showSelectToSpeakSettings');
+  },
+
+  /** @private */
+  onSwitchAccessSettingsTap_: function() {
+    chrome.send('showSwitchAccessSettings');
   },
 
   /** @private */

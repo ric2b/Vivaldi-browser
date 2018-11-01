@@ -8,31 +8,49 @@ typedef (long or ConstrainLongRange) ConstrainLong;
 typedef (double or ConstrainDoubleRange) ConstrainDouble;
 typedef (boolean or ConstrainBooleanParameters) ConstrainBoolean;
 typedef (DOMString or sequence<DOMString> or ConstrainDOMStringParameters) ConstrainDOMString;
+typedef (sequence<Point2D> or ConstrainPoint2DParameters) ConstrainPoint2D;
 
 dictionary MediaTrackConstraintSet {
-    [RuntimeEnabled=MediaConstraints] ConstrainLong width;
-    [RuntimeEnabled=MediaConstraints] ConstrainLong height;
-    [RuntimeEnabled=MediaConstraints] ConstrainDouble aspectRatio;
-    [RuntimeEnabled=MediaConstraints] ConstrainDouble frameRate;
-    [RuntimeEnabled=MediaConstraints] ConstrainDOMString facingMode;
-    [RuntimeEnabled=MediaConstraints] ConstrainDouble volume;
-    [RuntimeEnabled=MediaConstraints] ConstrainLong sampleRate;
-    [RuntimeEnabled=MediaConstraints] ConstrainLong sampleSize;
-    [RuntimeEnabled=MediaConstraints] ConstrainBoolean echoCancellation;
-    [RuntimeEnabled=MediaConstraints] ConstrainDouble latency;
-    [RuntimeEnabled=MediaConstraints] ConstrainLong channelCount;
-    [RuntimeEnabled=MediaConstraints] ConstrainDOMString deviceId;
-    [RuntimeEnabled=MediaConstraints] ConstrainDOMString groupId;
+    ConstrainLong width;
+    ConstrainLong height;
+    ConstrainDouble aspectRatio;
+    ConstrainDouble frameRate;
+    ConstrainDOMString facingMode;
+    ConstrainDouble volume;
+    ConstrainLong sampleRate;
+    ConstrainLong sampleSize;
+    ConstrainBoolean echoCancellation;
+    ConstrainDouble latency;
+    ConstrainLong channelCount;
+    ConstrainDOMString deviceId;
+    ConstrainDOMString groupId;
     // Media Capture Depth Stream Extensions
     // https://w3c.github.io/mediacapture-depth/#mediatrackconstraints
     // TODO(aleksandar.stojiljkovic): videoKind, depthNear, depthFar,
     // focalLengthX and focalLengthY attributes should be declared as partial
     // dictionary but IDL parser can't support it yet. http://crbug.com/579896.
-    [RuntimeEnabled=MediaConstraints,MediaCaptureDepth] ConstrainDOMString videoKind;
-    [RuntimeEnabled=MediaConstraints,MediaCaptureDepth] ConstrainDouble depthNear;
-    [RuntimeEnabled=MediaConstraints,MediaCaptureDepth] ConstrainDouble depthFar;
-    [RuntimeEnabled=MediaConstraints,MediaCaptureDepth] ConstrainDouble focalLengthX;
-    [RuntimeEnabled=MediaConstraints,MediaCaptureDepth] ConstrainDouble focalLengthY;
+    [RuntimeEnabled=MediaCaptureDepth] ConstrainDOMString videoKind;
+    [RuntimeEnabled=MediaCaptureDepth] ConstrainDouble depthNear;
+    [RuntimeEnabled=MediaCaptureDepth] ConstrainDouble depthFar;
+    [RuntimeEnabled=MediaCaptureDepth] ConstrainDouble focalLengthX;
+    [RuntimeEnabled=MediaCaptureDepth] ConstrainDouble focalLengthY;
+    // W3C Image Capture API
+    // https://w3c.github.io/mediacapture-image/#mediatrackconstraintset-section
+    // TODO(mcasas) move out when partial dictionaries are supported
+    // http://crbug.com/579896.
+    [RuntimeEnabled=ImageCapture] ConstrainDOMString whiteBalanceMode;
+    [RuntimeEnabled=ImageCapture] ConstrainDOMString exposureMode;
+    [RuntimeEnabled=ImageCapture] ConstrainDOMString focusMode;
+    [RuntimeEnabled=ImageCapture] ConstrainPoint2D   pointsOfInterest;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    exposureCompensation;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    colorTemperature;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    iso;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    brightness;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    contrast;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    saturation;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    sharpness;
+    [RuntimeEnabled=ImageCapture] ConstrainDouble    zoom;
+    [RuntimeEnabled=ImageCapture] ConstrainBoolean   torch;
     // The "mandatory" and "_optional" members are retained for conformance
     // with https://www.w3.org/TR/2013/WD-mediacapture-streams-20130903/
     Dictionary mandatory;

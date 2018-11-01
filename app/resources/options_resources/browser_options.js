@@ -729,6 +729,12 @@ cr.define('options', function() {
 
       // Accessibility section (CrOS only).
       if (cr.isChromeOS) {
+        if (!loadTimeData.getBoolean('cupsPrintDisabled')) {
+          $('cups-printers-section').hidden = false;
+          $('cupsPrintersManageButton').onclick = function() {
+            chrome.send('showCupsPrintDevicesPage');
+          }
+        }
         var updateAccessibilitySettingsSection = function() {
           $('accessibility-settings').hidden =
               !($('accessibility-spoken-feedback-check').checked);

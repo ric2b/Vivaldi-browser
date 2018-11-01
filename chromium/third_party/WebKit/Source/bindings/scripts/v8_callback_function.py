@@ -11,18 +11,19 @@ from v8_globals import includes  # pylint: disable=W0403
 import v8_utilities  # pylint: disable=W0403
 
 CALLBACK_FUNCTION_H_INCLUDES = frozenset([
+    'bindings/core/v8/NativeValueTraits.h',
     'bindings/core/v8/ScriptWrappable.h',
     'bindings/core/v8/TraceWrapperV8Reference.h',
     'platform/heap/Handle.h',
-    'wtf/text/WTFString.h',
+    'platform/wtf/text/WTFString.h',
 ])
 CALLBACK_FUNCTION_CPP_INCLUDES = frozenset([
     'bindings/core/v8/ExceptionState.h',
     'bindings/core/v8/ScriptState.h',
-    'bindings/core/v8/ToV8.h',
+    'bindings/core/v8/ToV8ForCore.h',
     'bindings/core/v8/V8Binding.h',
     'core/dom/ExecutionContext.h',
-    'wtf/Assertions.h',
+    'platform/wtf/Assertions.h',
 ])
 
 
@@ -38,6 +39,11 @@ def callback_function_context(callback_function):
         argument.idl_type.add_includes_for_type(callback_function.extended_attributes)
 
     context = {
+        # While both |callback_function_name| and |cpp_class| are identical at
+        # the moment, the two are being defined because their values may change
+        # in the future (e.g. if we support [ImplementedAs=] in callback
+        # functions).
+        'callback_function_name': callback_function.name,
         'cpp_class': callback_function.name,
         'cpp_includes': sorted(includes),
         'forward_declarations': sorted(forward_declarations),
@@ -51,7 +57,7 @@ def callback_function_context(callback_function):
             'return_value': idl_type.v8_value_to_local_cpp_value(
                 callback_function.extended_attributes,
                 'v8ReturnValue', 'cppValue',
-                isolate='m_scriptState->isolate()',
+                isolate='m_scriptState->GetIsolate()',
                 bailout_return_value='false'),
         })
 
@@ -64,8 +70,8 @@ def arguments_context(arguments, return_cpp_type):
         return {
             'argument_name': '%sArgument' % argument.name,
             'cpp_value_to_v8_value': argument.idl_type.cpp_value_to_v8_value(
-                argument.name, isolate='m_scriptState->isolate()',
-                creation_context='m_scriptState->context()->Global()'),
+                argument.name, isolate='m_scriptState->GetIsolate()',
+                creation_context='m_scriptState->GetContext()->Global()'),
         }
 
     argument_declarations = [

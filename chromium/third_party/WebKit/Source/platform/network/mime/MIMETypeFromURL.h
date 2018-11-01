@@ -28,14 +28,14 @@
 #define MIMETypeFromURL_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
 class KURL;
 
-PLATFORM_EXPORT String mimeTypeFromDataURL(const String& url);
-PLATFORM_EXPORT String mimeTypeFromURL(const KURL&);
+PLATFORM_EXPORT String MimeTypeFromDataURL(const String& url);
+PLATFORM_EXPORT String MimeTypeFromURL(const KURL&);
 
 }  // namespace blink
 

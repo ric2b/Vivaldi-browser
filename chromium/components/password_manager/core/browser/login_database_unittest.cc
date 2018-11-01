@@ -30,6 +30,8 @@
 #include "url/origin.h"
 
 using autofill::PasswordForm;
+using autofill::PossibleUsernamePair;
+using autofill::PossibleUsernamesVector;
 using base::ASCIIToUTF16;
 using ::testing::Eq;
 using ::testing::Pointee;
@@ -130,8 +132,9 @@ MATCHER(IsBasicAuthAccount, "") {
 }  // namespace
 
 // Serialization routines for vectors implemented in login_database.cc.
-base::Pickle SerializeVector(const std::vector<base::string16>& vec);
-std::vector<base::string16> DeserializeVector(const base::Pickle& pickle);
+base::Pickle SerializePossibleUsernamePairs(const PossibleUsernamesVector& vec);
+PossibleUsernamesVector DeserializePossibleUsernamePairs(
+    const base::Pickle& pickle);
 
 class LoginDatabaseTest : public testing::Test {
  protected:
@@ -426,6 +429,37 @@ TEST_F(LoginDatabaseTest, TestFederatedMatching) {
   form.is_public_suffix_match = true;
   form2.is_public_suffix_match = false;
   EXPECT_THAT(result, UnorderedElementsAre(Pointee(form), Pointee(form2)));
+}
+
+TEST_F(LoginDatabaseTest, TestFederatedMatchingLocalhost) {
+  PasswordForm form;
+  form.origin = GURL("http://localhost/");
+  form.signon_realm = "federation://localhost/accounts.google.com";
+  form.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
+  form.username_value = ASCIIToUTF16("test@gmail.com");
+  form.type = PasswordForm::TYPE_API;
+  form.scheme = PasswordForm::SCHEME_HTML;
+
+  PasswordForm form_with_port(form);
+  form_with_port.origin = GURL("http://localhost:8080/");
+  form_with_port.signon_realm = "federation://localhost/accounts.google.com";
+
+  EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
+  EXPECT_EQ(AddChangeForForm(form_with_port), db().AddLogin(form_with_port));
+
+  // Match twice.
+  PasswordStore::FormDigest form_request(PasswordForm::SCHEME_HTML,
+                                         "http://localhost/",
+                                         GURL("http://localhost/"));
+  std::vector<std::unique_ptr<PasswordForm>> result;
+  EXPECT_TRUE(db().GetLogins(form_request, &result));
+  EXPECT_THAT(result, UnorderedElementsAre(Pointee(form)));
+
+  // Match against the mobile site.
+  form_request.origin = GURL("http://localhost:8080/");
+  form_request.signon_realm = "http://localhost:8080/";
+  EXPECT_TRUE(db().GetLogins(form_request, &result));
+  EXPECT_THAT(result, UnorderedElementsAre(Pointee(form_with_port)));
 }
 
 TEST_F(LoginDatabaseTest, TestPublicSuffixDisabledForNonHTMLForms) {
@@ -963,18 +997,21 @@ TEST_F(LoginDatabaseTest, BlacklistedLogins) {
 
 TEST_F(LoginDatabaseTest, VectorSerialization) {
   // Empty vector.
-  std::vector<base::string16> vec;
-  base::Pickle temp = SerializeVector(vec);
-  std::vector<base::string16> output = DeserializeVector(temp);
+  PossibleUsernamesVector vec;
+  base::Pickle temp = SerializePossibleUsernamePairs(vec);
+  PossibleUsernamesVector output = DeserializePossibleUsernamePairs(temp);
   EXPECT_THAT(output, Eq(vec));
 
   // Normal data.
-  vec.push_back(ASCIIToUTF16("first"));
-  vec.push_back(ASCIIToUTF16("second"));
-  vec.push_back(ASCIIToUTF16("third"));
+  vec.push_back(
+      PossibleUsernamePair(ASCIIToUTF16("first"), ASCIIToUTF16("id1")));
+  vec.push_back(
+      PossibleUsernamePair(ASCIIToUTF16("second"), ASCIIToUTF16("id2")));
+  vec.push_back(
+      PossibleUsernamePair(ASCIIToUTF16("third"), ASCIIToUTF16("id3")));
 
-  temp = SerializeVector(vec);
-  output = DeserializeVector(temp);
+  temp = SerializePossibleUsernamePairs(vec);
+  output = DeserializePossibleUsernamePairs(temp);
   EXPECT_THAT(output, Eq(vec));
 }
 
@@ -1149,7 +1186,8 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.action = GURL("http://accounts.google.com/login");
   form.password_value = ASCIIToUTF16("my_new_password");
   form.preferred = false;
-  form.other_possible_usernames.push_back(ASCIIToUTF16("my_new_username"));
+  form.other_possible_usernames.push_back(autofill::PossibleUsernamePair(
+      ASCIIToUTF16("my_new_username"), ASCIIToUTF16("new_username_id")));
   form.times_used = 20;
   form.submit_element = ASCIIToUTF16("submit_element");
   form.date_synced = base::Time::Now();

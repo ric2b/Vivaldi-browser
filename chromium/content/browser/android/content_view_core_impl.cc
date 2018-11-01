@@ -53,6 +53,7 @@
 #include "jni/ContentViewCore_jni.h"
 #include "jni/DragEvent_jni.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -75,6 +76,7 @@ using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
+using blink::WebContextMenuData;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
 using ui::MotionEventAndroid;
@@ -122,54 +124,43 @@ ScopedJavaLocalRef<jobject> CreateJavaRect(
 
 int ToGestureEventType(WebInputEvent::Type type) {
   switch (type) {
-    case WebInputEvent::GestureScrollBegin:
+    case WebInputEvent::kGestureScrollBegin:
       return GESTURE_EVENT_TYPE_SCROLL_START;
-    case WebInputEvent::GestureScrollEnd:
+    case WebInputEvent::kGestureScrollEnd:
       return GESTURE_EVENT_TYPE_SCROLL_END;
-    case WebInputEvent::GestureScrollUpdate:
+    case WebInputEvent::kGestureScrollUpdate:
       return GESTURE_EVENT_TYPE_SCROLL_BY;
-    case WebInputEvent::GestureFlingStart:
+    case WebInputEvent::kGestureFlingStart:
       return GESTURE_EVENT_TYPE_FLING_START;
-    case WebInputEvent::GestureFlingCancel:
+    case WebInputEvent::kGestureFlingCancel:
       return GESTURE_EVENT_TYPE_FLING_CANCEL;
-    case WebInputEvent::GestureShowPress:
+    case WebInputEvent::kGestureShowPress:
       return GESTURE_EVENT_TYPE_SHOW_PRESS;
-    case WebInputEvent::GestureTap:
+    case WebInputEvent::kGestureTap:
       return GESTURE_EVENT_TYPE_SINGLE_TAP_CONFIRMED;
-    case WebInputEvent::GestureTapUnconfirmed:
+    case WebInputEvent::kGestureTapUnconfirmed:
       return GESTURE_EVENT_TYPE_SINGLE_TAP_UNCONFIRMED;
-    case WebInputEvent::GestureTapDown:
+    case WebInputEvent::kGestureTapDown:
       return GESTURE_EVENT_TYPE_TAP_DOWN;
-    case WebInputEvent::GestureTapCancel:
+    case WebInputEvent::kGestureTapCancel:
       return GESTURE_EVENT_TYPE_TAP_CANCEL;
-    case WebInputEvent::GestureDoubleTap:
+    case WebInputEvent::kGestureDoubleTap:
       return GESTURE_EVENT_TYPE_DOUBLE_TAP;
-    case WebInputEvent::GestureLongPress:
+    case WebInputEvent::kGestureLongPress:
       return GESTURE_EVENT_TYPE_LONG_PRESS;
-    case WebInputEvent::GestureLongTap:
+    case WebInputEvent::kGestureLongTap:
       return GESTURE_EVENT_TYPE_LONG_TAP;
-    case WebInputEvent::GesturePinchBegin:
+    case WebInputEvent::kGesturePinchBegin:
       return GESTURE_EVENT_TYPE_PINCH_BEGIN;
-    case WebInputEvent::GesturePinchEnd:
+    case WebInputEvent::kGesturePinchEnd:
       return GESTURE_EVENT_TYPE_PINCH_END;
-    case WebInputEvent::GesturePinchUpdate:
+    case WebInputEvent::kGesturePinchUpdate:
       return GESTURE_EVENT_TYPE_PINCH_BY;
-    case WebInputEvent::GestureTwoFingerTap:
+    case WebInputEvent::kGestureTwoFingerTap:
     default:
       NOTREACHED() << "Invalid source gesture type: "
                    << WebInputEvent::GetName(type);
       return -1;
-  }
-}
-
-void RecordToolTypeForActionDown(MotionEventAndroid& event) {
-  MotionEventAndroid::Action action = event.GetAction();
-  if (action == MotionEventAndroid::ACTION_DOWN ||
-      action == MotionEventAndroid::ACTION_POINTER_DOWN ||
-      action == MotionEventAndroid::ACTION_BUTTON_PRESS) {
-    UMA_HISTOGRAM_ENUMERATION("Event.AndroidActionDown.ToolType",
-                              event.GetToolType(0),
-                              MotionEventAndroid::TOOL_TYPE_LAST + 1);
   }
 }
 
@@ -526,8 +517,8 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
   if (j_obj.is_null())
     return;
 
-  switch (event.type()) {
-    case WebInputEvent::GestureFlingStart:
+  switch (event.GetType()) {
+    case WebInputEvent::kGestureFlingStart:
       if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED) {
         // The view expects the fling velocity in pixels/s.
         Java_ContentViewCore_onFlingStartEventConsumed(env, j_obj);
@@ -538,30 +529,30 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
         Java_ContentViewCore_onScrollEndEventAck(env, j_obj);
       }
       break;
-    case WebInputEvent::GestureFlingCancel:
+    case WebInputEvent::kGestureFlingCancel:
       Java_ContentViewCore_onFlingCancelEventAck(env, j_obj);
       break;
-    case WebInputEvent::GestureScrollBegin:
+    case WebInputEvent::kGestureScrollBegin:
       Java_ContentViewCore_onScrollBeginEventAck(env, j_obj);
       break;
-    case WebInputEvent::GestureScrollUpdate:
+    case WebInputEvent::kGestureScrollUpdate:
       if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED)
         Java_ContentViewCore_onScrollUpdateGestureConsumed(env, j_obj);
       break;
-    case WebInputEvent::GestureScrollEnd:
+    case WebInputEvent::kGestureScrollEnd:
       Java_ContentViewCore_onScrollEndEventAck(env, j_obj);
       break;
-    case WebInputEvent::GesturePinchBegin:
+    case WebInputEvent::kGesturePinchBegin:
       Java_ContentViewCore_onPinchBeginEventAck(env, j_obj);
       break;
-    case WebInputEvent::GesturePinchEnd:
+    case WebInputEvent::kGesturePinchEnd:
       Java_ContentViewCore_onPinchEndEventAck(env, j_obj);
       break;
-    case WebInputEvent::GestureTap:
+    case WebInputEvent::kGestureTap:
       Java_ContentViewCore_onSingleTapEventAck(
           env, j_obj, ack_result == INPUT_EVENT_ACK_STATE_CONSUMED);
       break;
-    case WebInputEvent::GestureLongPress:
+    case WebInputEvent::kGestureLongPress:
       if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED)
         Java_ContentViewCore_performLongPressHapticFeedback(env, j_obj);
       break;
@@ -571,10 +562,10 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
 }
 
 bool ContentViewCoreImpl::FilterInputEvent(const blink::WebInputEvent& event) {
-  if (event.type() != WebInputEvent::GestureTap &&
-      event.type() != WebInputEvent::GestureDoubleTap &&
-      event.type() != WebInputEvent::GestureLongTap &&
-      event.type() != WebInputEvent::GestureLongPress)
+  if (event.GetType() != WebInputEvent::kGestureTap &&
+      event.GetType() != WebInputEvent::kGestureLongTap &&
+      event.GetType() != WebInputEvent::kGestureLongPress &&
+      event.GetType() != WebInputEvent::kMouseDown)
     return false;
 
   JNIEnv* env = AttachCurrentThread();
@@ -582,9 +573,14 @@ bool ContentViewCoreImpl::FilterInputEvent(const blink::WebInputEvent& event) {
   if (j_obj.is_null())
     return false;
 
+  Java_ContentViewCore_requestFocus(env, j_obj);
+
+  if (event.GetType() == WebInputEvent::kMouseDown)
+    return false;
+
   const blink::WebGestureEvent& gesture =
       static_cast<const blink::WebGestureEvent&>(event);
-  int gesture_type = ToGestureEventType(event.type());
+  int gesture_type = ToGestureEventType(event.GetType());
   return Java_ContentViewCore_filterTapOrPressEvent(env, j_obj, gesture_type,
                                                     gesture.x * dpi_scale(),
                                                     gesture.y * dpi_scale());
@@ -641,8 +637,11 @@ bool ContentViewCoreImpl::ShowPastePopup(const ContextMenuParams& params) {
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return false;
+  const bool can_select_all =
+      !!(params.edit_flags & WebContextMenuData::kCanSelectAll);
   Java_ContentViewCore_showPastePopup(env, obj, params.selection_start.x(),
-                                      params.selection_start.y());
+                                      params.selection_start.y(),
+                                      can_select_all);
   return true;
 }
 
@@ -876,159 +875,6 @@ void ContentViewCoreImpl::SendOrientationChangeEvent(
   }
 }
 
-jboolean ContentViewCoreImpl::OnTouchEvent(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& motion_event,
-    jlong time_ms,
-    jint android_action,
-    jint pointer_count,
-    jint history_size,
-    jint action_index,
-    jfloat pos_x_0,
-    jfloat pos_y_0,
-    jfloat pos_x_1,
-    jfloat pos_y_1,
-    jint pointer_id_0,
-    jint pointer_id_1,
-    jfloat touch_major_0,
-    jfloat touch_major_1,
-    jfloat touch_minor_0,
-    jfloat touch_minor_1,
-    jfloat orientation_0,
-    jfloat orientation_1,
-    jfloat tilt_0,
-    jfloat tilt_1,
-    jfloat raw_pos_x,
-    jfloat raw_pos_y,
-    jint android_tool_type_0,
-    jint android_tool_type_1,
-    jint android_button_state,
-    jint android_meta_state,
-    jboolean is_touch_handle_event) {
-  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
-  // Avoid synthesizing a touch event if it cannot be forwarded.
-  if (!rwhv)
-    return false;
-
-  MotionEventAndroid::Pointer pointer0(pointer_id_0,
-                                       pos_x_0,
-                                       pos_y_0,
-                                       touch_major_0,
-                                       touch_minor_0,
-                                       orientation_0,
-                                       tilt_0,
-                                       android_tool_type_0);
-  MotionEventAndroid::Pointer pointer1(pointer_id_1,
-                                       pos_x_1,
-                                       pos_y_1,
-                                       touch_major_1,
-                                       touch_minor_1,
-                                       orientation_1,
-                                       tilt_1,
-                                       android_tool_type_1);
-  MotionEventAndroid event(1.f / dpi_scale(),
-                           env,
-                           motion_event,
-                           time_ms,
-                           android_action,
-                           pointer_count,
-                           history_size,
-                           action_index,
-                           android_button_state,
-                           android_meta_state,
-                           raw_pos_x - pos_x_0,
-                           raw_pos_y - pos_y_0,
-                           &pointer0,
-                           &pointer1);
-
-  RecordToolTypeForActionDown(event);
-
-  return is_touch_handle_event ? rwhv->OnTouchHandleEvent(event)
-                               : rwhv->OnTouchEvent(event);
-}
-
-jboolean ContentViewCoreImpl::SendMouseEvent(JNIEnv* env,
-                                             const JavaParamRef<jobject>& obj,
-                                             jlong time_ms,
-                                             jint android_action,
-                                             jfloat x,
-                                             jfloat y,
-                                             jint pointer_id,
-                                             jfloat pressure,
-                                             jfloat orientation,
-                                             jfloat tilt,
-                                             jint android_action_button,
-                                             jint android_button_state,
-                                             jint android_meta_state,
-                                             jint android_tool_type) {
-  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
-  if (!rwhv)
-    return false;
-
-  // Construct a motion_event object minimally, only to convert the raw
-  // parameters to ui::MotionEvent values. Since we used only the cached values
-  // at index=0, it is okay to even pass a null event to the constructor.
-  MotionEventAndroid::Pointer pointer0(
-      pointer_id, x, y, 0.0f /* touch_major */, 0.0f /* touch_minor */,
-      orientation, tilt, android_tool_type);
-
-  MotionEventAndroid motion_event(1.f / dpi_scale(),
-      env,
-      nullptr /* event */,
-      time_ms,
-      android_action,
-      1 /* pointer_count */,
-      0 /* history_size */,
-      0 /* action_index */,
-      android_button_state,
-      android_meta_state,
-      0 /* raw_offset_x_pixels */,
-      0 /* raw_offset_y_pixels */,
-      &pointer0,
-      nullptr);
-
-  RecordToolTypeForActionDown(motion_event);
-
-  // Note: This relies on identical button enum values in MotionEvent and
-  // MotionEventAndroid.
-  rwhv->SendMouseEvent(motion_event, android_action_button);
-
-  return true;
-}
-
-jboolean ContentViewCoreImpl::SendMouseWheelEvent(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jlong time_ms,
-    jfloat x,
-    jfloat y,
-    jfloat ticks_x,
-    jfloat ticks_y,
-    jfloat pixels_per_tick) {
-  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
-  if (!rwhv)
-    return false;
-
-  if (!ticks_x && !ticks_y)
-    return false;
-
-  // Compute Event.Latency.OS.MOUSE_WHEEL histogram.
-  base::TimeTicks current_time = ui::EventTimeForNow();
-  base::TimeTicks event_time = base::TimeTicks() +
-      base::TimeDelta::FromMilliseconds(time_ms);
-  base::TimeDelta delta = current_time - event_time;
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.OS.MOUSE_WHEEL",
-      delta.InMicroseconds(), 1, 1000000, 50);
-
-  blink::WebMouseWheelEvent event = WebMouseWheelEventBuilder::Build(
-      ticks_x, ticks_y, pixels_per_tick / dpi_scale(), time_ms / 1000.0,
-      x / dpi_scale(), y / dpi_scale());
-
-  rwhv->SendMouseWheelEvent(event);
-  return true;
-}
-
 WebGestureEvent ContentViewCoreImpl::MakeGestureEvent(WebInputEvent::Type type,
                                                       int64_t time_ms,
                                                       float x,
@@ -1052,11 +898,11 @@ void ContentViewCoreImpl::ScrollBegin(JNIEnv* env,
                                       jfloat hintx,
                                       jfloat hinty,
                                       jboolean target_viewport) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GestureScrollBegin, time_ms, x, y);
-  event.data.scrollBegin.deltaXHint = hintx / dpi_scale();
-  event.data.scrollBegin.deltaYHint = hinty / dpi_scale();
-  event.data.scrollBegin.targetViewport = target_viewport;
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGestureScrollBegin, time_ms, x, y);
+  event.data.scroll_begin.delta_x_hint = hintx / dpi_scale();
+  event.data.scroll_begin.delta_y_hint = hinty / dpi_scale();
+  event.data.scroll_begin.target_viewport = target_viewport;
 
   SendGestureEvent(event);
 }
@@ -1064,8 +910,8 @@ void ContentViewCoreImpl::ScrollBegin(JNIEnv* env,
 void ContentViewCoreImpl::ScrollEnd(JNIEnv* env,
                                     const JavaParamRef<jobject>& obj,
                                     jlong time_ms) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GestureScrollEnd, time_ms, 0, 0);
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGestureScrollEnd, time_ms, 0, 0);
   SendGestureEvent(event);
 }
 
@@ -1076,10 +922,10 @@ void ContentViewCoreImpl::ScrollBy(JNIEnv* env,
                                    jfloat y,
                                    jfloat dx,
                                    jfloat dy) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GestureScrollUpdate, time_ms, x, y);
-  event.data.scrollUpdate.deltaX = -dx / dpi_scale();
-  event.data.scrollUpdate.deltaY = -dy / dpi_scale();
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGestureScrollUpdate, time_ms, x, y);
+  event.data.scroll_update.delta_x = -dx / dpi_scale();
+  event.data.scroll_update.delta_y = -dy / dpi_scale();
 
   SendGestureEvent(event);
 }
@@ -1092,11 +938,11 @@ void ContentViewCoreImpl::FlingStart(JNIEnv* env,
                                      jfloat vx,
                                      jfloat vy,
                                      jboolean target_viewport) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GestureFlingStart, time_ms, x, y);
-  event.data.flingStart.velocityX = vx / dpi_scale();
-  event.data.flingStart.velocityY = vy / dpi_scale();
-  event.data.flingStart.targetViewport = target_viewport;
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGestureFlingStart, time_ms, x, y);
+  event.data.fling_start.velocity_x = vx / dpi_scale();
+  event.data.fling_start.velocity_y = vy / dpi_scale();
+  event.data.fling_start.target_viewport = target_viewport;
 
   SendGestureEvent(event);
 }
@@ -1104,29 +950,11 @@ void ContentViewCoreImpl::FlingStart(JNIEnv* env,
 void ContentViewCoreImpl::FlingCancel(JNIEnv* env,
                                       const JavaParamRef<jobject>& obj,
                                       jlong time_ms) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GestureFlingCancel, time_ms, 0, 0);
-  event.data.flingCancel.preventBoosting = true;
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGestureFlingCancel, time_ms, 0, 0);
+  event.data.fling_cancel.prevent_boosting = true;
 
   SendGestureEvent(event);
-}
-
-void ContentViewCoreImpl::SingleTap(JNIEnv* env,
-                                    const JavaParamRef<jobject>& obj,
-                                    jlong time_ms,
-                                    jfloat x,
-                                    jfloat y) {
-  // Tap gestures should always be preceded by a TapDown, ensuring consistency
-  // with the touch-based gesture detection pipeline.
-  WebGestureEvent tap_down_event = MakeGestureEvent(
-      WebInputEvent::GestureTapDown, time_ms, x, y);
-  tap_down_event.data.tap.tapCount = 1;
-  SendGestureEvent(tap_down_event);
-
-  WebGestureEvent tap_event = MakeGestureEvent(
-      WebInputEvent::GestureTap, time_ms, x, y);
-  tap_event.data.tap.tapCount = 1;
-  SendGestureEvent(tap_event);
 }
 
 void ContentViewCoreImpl::DoubleTap(JNIEnv* env,
@@ -1134,24 +962,29 @@ void ContentViewCoreImpl::DoubleTap(JNIEnv* env,
                                     jlong time_ms,
                                     jfloat x,
                                     jfloat y) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GestureDoubleTap, time_ms, x, y);
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGestureDoubleTap, time_ms, x, y);
   // Set the tap count to 1 even for DoubleTap, in order to be consistent with
   // double tap behavior on a mobile viewport. See crbug.com/234986 for context.
-  event.data.tap.tapCount = 1;
+  event.data.tap.tap_count = 1;
 
   SendGestureEvent(event);
 }
 
-void ContentViewCoreImpl::LongPress(JNIEnv* env,
-                                    const JavaParamRef<jobject>& obj,
-                                    jlong time_ms,
-                                    jfloat x,
-                                    jfloat y) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GestureLongPress, time_ms, x, y);
+void ContentViewCoreImpl::ResolveTapDisambiguation(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong time_ms,
+    jfloat x,
+    jfloat y,
+    jboolean is_long_press) {
+  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
+  if (!rwhv)
+    return;
 
-  SendGestureEvent(event);
+  rwhv->ResolveTapDisambiguation(time_ms / 1000.0,
+                                 gfx::Point(x / dpi_scale_, y / dpi_scale_),
+                                 is_long_press);
 }
 
 void ContentViewCoreImpl::PinchBegin(JNIEnv* env,
@@ -1159,16 +992,16 @@ void ContentViewCoreImpl::PinchBegin(JNIEnv* env,
                                      jlong time_ms,
                                      jfloat x,
                                      jfloat y) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GesturePinchBegin, time_ms, x, y);
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGesturePinchBegin, time_ms, x, y);
   SendGestureEvent(event);
 }
 
 void ContentViewCoreImpl::PinchEnd(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj,
                                    jlong time_ms) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GesturePinchEnd, time_ms, 0, 0);
+  WebGestureEvent event =
+      MakeGestureEvent(WebInputEvent::kGesturePinchEnd, time_ms, 0, 0);
   SendGestureEvent(event);
 }
 
@@ -1178,9 +1011,9 @@ void ContentViewCoreImpl::PinchBy(JNIEnv* env,
                                   jfloat anchor_x,
                                   jfloat anchor_y,
                                   jfloat delta) {
-  WebGestureEvent event = MakeGestureEvent(
-      WebInputEvent::GesturePinchUpdate, time_ms, anchor_x, anchor_y);
-  event.data.pinchUpdate.scale = delta;
+  WebGestureEvent event = MakeGestureEvent(WebInputEvent::kGesturePinchUpdate,
+                                           time_ms, anchor_x, anchor_y);
+  event.data.pinch_update.scale = delta;
 
   SendGestureEvent(event);
 }
@@ -1218,6 +1051,15 @@ void ContentViewCoreImpl::SetMultiTouchZoomSupportEnabled(
   RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
   if (rwhv)
     rwhv->SetMultiTouchZoomSupportEnabled(enabled);
+}
+
+void ContentViewCoreImpl::OnTouchDown(
+    const base::android::ScopedJavaLocalRef<jobject>& event) {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return;
+  Java_ContentViewCore_onTouchDown(env, obj, event);
 }
 
 void ContentViewCoreImpl::SetAllowJavascriptInterfacesInspection(
@@ -1361,8 +1203,9 @@ void ContentViewCoreImpl::SetAccessibilityEnabledInternal(bool enabled) {
     // explicitly disallowed by a command-line flag, then enable it for
     // this WebContents if that succeeded.
     accessibility_state->OnScreenReaderDetected();
-    if (accessibility_state->IsAccessibleBrowser() && web_contents_)
-      web_contents_->AddAccessibilityMode(ACCESSIBILITY_MODE_COMPLETE);
+    if (accessibility_state->IsAccessibleBrowser() && web_contents_) {
+      web_contents_->AddAccessibilityMode(kAccessibilityModeComplete);
+    }
   } else {
     accessibility_state->ResetAccessibilityMode();
     if (web_contents_) {
@@ -1506,6 +1349,7 @@ jlong Init(JNIEnv* env,
       "A ContentViewCoreImpl should be created with a valid WebContents.";
   ui::ViewAndroid* view_android = web_contents->GetView()->GetNativeView();
   view_android->SetDelegate(jview_android_delegate);
+  view_android->SetLayout(ui::ViewAndroid::LayoutParams::MatchParent());
 
   ui::WindowAndroid* window_android =
         reinterpret_cast<ui::WindowAndroid*>(jwindow_android);

@@ -9,6 +9,8 @@
 
 #include <memory>
 #include <queue>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
@@ -76,6 +78,9 @@ class WindowManagerState : public EventDispatcherDelegate,
 
   void AddSystemModalWindow(ServerWindow* window);
 
+  // Deletes the WindowManagerDisplayRoot whose root is |display_root|.
+  void DeleteWindowManagerDisplayRoot(ServerWindow* display_root);
+
   // Returns the ServerWindow corresponding to an orphaned root with the
   // specified id. See |orphaned_window_manager_display_roots_| for details on
   // what on orphaned root is.
@@ -100,7 +105,9 @@ class WindowManagerState : public EventDispatcherDelegate,
   void OnEventAck(mojom::WindowTree* tree, mojom::EventResult result);
 
   // Called when the WindowManager acks an accelerator.
-  void OnAcceleratorAck(mojom::EventResult result);
+  void OnAcceleratorAck(
+      mojom::EventResult result,
+      const std::unordered_map<std::string, std::vector<uint8_t>>& properties);
 
  private:
   class ProcessedEventTarget;

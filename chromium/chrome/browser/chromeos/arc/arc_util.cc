@@ -6,9 +6,11 @@
 
 #include <linux/magic.h>
 #include <sys/statfs.h>
+#include <set>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
@@ -29,8 +31,24 @@ namespace arc {
 
 namespace {
 
+constexpr char kLsbReleaseArcVersionKey[] = "CHROMEOS_ARC_ANDROID_SDK_VERSION";
+constexpr char kAndroidMSdkVersion[] = "23";
+
 // Let IsAllowedForProfile() return "false" for any profile.
 bool g_disallow_for_testing = false;
+
+// TODO(kinaba): Temporary workaround for crbug.com/729034.
+//
+// Some type of accounts don't have user prefs. As a short-term workaround,
+// store the compatibility info from them on memory, ignoring the defect that
+// it cannot survive browser crash and restart.
+//
+// This will be removed once the forced migration for ARC Kiosk user is
+// implemented. After it's done such types of accounts cannot even sign-in
+// with incompatible filesystem. Hence it'll be safe to always regard compatible
+// for them then.
+base::LazyInstance<std::set<AccountId>>::DestructorAtExit
+    g_known_compatible_users = LAZY_INSTANCE_INITIALIZER;
 
 // Returns whether ARC can run on the filesystem mounted at |path|.
 // This function should run only on threads where IO operations are allowed.
@@ -44,6 +62,14 @@ bool IsArcCompatibleFilesystem(const base::FilePath& path) {
   return statfs_buf.f_type != ECRYPTFS_SUPER_MAGIC;
 }
 
+FileSystemCompatibilityState GetFileSystemCompatibilityPref(
+    const AccountId& account_id) {
+  int pref_value = kFileSystemIncompatible;
+  user_manager::known_user::GetIntegerPref(
+      account_id, prefs::kArcCompatibleFilesystemChosen, &pref_value);
+  return static_cast<FileSystemCompatibilityState>(pref_value);
+}
+
 // Stores the result of IsArcCompatibleFilesystem posted back from the blocking
 // task runner.
 void StoreCompatibilityCheckResult(const AccountId& account_id,
@@ -53,21 +79,36 @@ void StoreCompatibilityCheckResult(const AccountId& account_id,
     user_manager::known_user::SetIntegerPref(
         account_id, prefs::kArcCompatibleFilesystemChosen,
         arc::kFileSystemCompatible);
+
+    // TODO(kinaba): Remove this code for accounts without user prefs.
+    // See the comment for |g_known_compatible_users| for the detail.
+    if (GetFileSystemCompatibilityPref(account_id) !=
+        arc::kFileSystemCompatible) {
+      g_known_compatible_users.Get().insert(account_id);
+    }
   }
   callback.Run();
-}
-
-FileSystemCompatibilityState GetFileSystemCompatibilityPref(
-    const AccountId& account_id) {
-  int pref_value = kFileSystemIncompatible;
-  user_manager::known_user::GetIntegerPref(
-      account_id, prefs::kArcCompatibleFilesystemChosen, &pref_value);
-  return static_cast<FileSystemCompatibilityState>(pref_value);
 }
 
 }  // namespace
 
 bool IsArcAllowedForProfile(const Profile* profile) {
+  if (!IsArcAllowedInAppListForProfile(profile))
+    return false;
+
+  if (base::SysInfo::IsRunningOnChromeOS()) {
+    // Do not allow newer version of ARC on old filesystem.
+    // Check this condition only on real Chrome OS devices. Test runs on Linux
+    // workstation does not have expected /etc/lsb-release field nor profile
+    // creation step.
+    if (!IsArcCompatibleFileSystemUsedForProfile(profile))
+      return false;
+  }
+
+  return true;
+}
+
+bool IsArcAllowedInAppListForProfile(const Profile* profile) {
   if (g_disallow_for_testing) {
     VLOG(1) << "ARC is disallowed for testing.";
     return false;
@@ -137,6 +178,39 @@ bool IsArcAllowedForProfile(const Profile* profile) {
   return true;
 }
 
+bool IsArcCompatibleFileSystemUsedForProfile(const Profile* profile) {
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+
+  // Returns false for profiles not associated with users (like sign-in profile)
+  if (!user)
+    return false;
+
+  // chromeos::UserSessionManager does the actual file system check and stores
+  // the result to prefs, so that it survives crash-restart.
+  FileSystemCompatibilityState filesystem_compatibility =
+      GetFileSystemCompatibilityPref(user->GetAccountId());
+  const bool is_filesystem_compatible =
+      filesystem_compatibility != kFileSystemIncompatible ||
+      g_known_compatible_users.Get().count(user->GetAccountId()) != 0;
+  std::string arc_sdk_version;
+  const bool is_M = base::SysInfo::GetLsbReleaseValue(kLsbReleaseArcVersionKey,
+                                                      &arc_sdk_version) &&
+                    arc_sdk_version == kAndroidMSdkVersion;
+
+  // To run ARC we want to make sure either
+  // - Underlying file system is compatible with ARC, or
+  // - SDK version is M.
+  if (!is_filesystem_compatible && !is_M) {
+    VLOG(1)
+        << "Users with SDK version (" << arc_sdk_version
+        << ") are not supported when they postponed to migrate to dircrypto.";
+    return false;
+  }
+
+  return true;
+}
+
 void DisallowArcForTesting() {
   g_disallow_for_testing = true;
 }
@@ -176,6 +250,13 @@ void SetArcPlayStoreEnabledForProfile(Profile* profile, bool enabled) {
   profile->GetPrefs()->SetBoolean(prefs::kArcEnabled, enabled);
 }
 
+bool AreArcAllOptInPreferencesManagedForProfile(const Profile* profile) {
+  return profile->GetPrefs()->IsManagedPreference(
+             prefs::kArcBackupRestoreEnabled) &&
+         profile->GetPrefs()->IsManagedPreference(
+             prefs::kArcLocationServiceEnabled);
+}
+
 void UpdateArcFileSystemCompatibilityPrefIfNeeded(
     const AccountId& account_id,
     const base::FilePath& profile_path,
@@ -183,7 +264,11 @@ void UpdateArcFileSystemCompatibilityPrefIfNeeded(
   DCHECK(!callback.is_null());
 
   // If ARC is not available, skip the check.
-  if (!IsArcAvailable()) {
+  // This shortcut is just for merginally improving the log-in performance on
+  // old devices without ARC. We can always safely remove the following 4 lines
+  // without changing any functionality when, say, the code clarity becomes
+  // more important in the future.
+  if (!IsArcAvailable() && !IsArcKioskAvailable()) {
     callback.Run();
     return;
   }

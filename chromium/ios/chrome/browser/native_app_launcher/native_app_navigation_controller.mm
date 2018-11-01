@@ -15,16 +15,20 @@
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/installation_notifier.h"
 #include "ios/chrome/browser/native_app_launcher/native_app_infobar_delegate.h"
+#import "ios/chrome/browser/native_app_launcher/native_app_navigation_controller_protocol.h"
 #include "ios/chrome/browser/native_app_launcher/native_app_navigation_util.h"
 #import "ios/chrome/browser/open_url_util.h"
+#import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
+#import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/native_app_launcher/native_app_metadata.h"
 #import "ios/public/provider/chrome/browser/native_app_launcher/native_app_types.h"
 #import "ios/public/provider/chrome/browser/native_app_launcher/native_app_whitelist_manager.h"
+#include "ios/web/public/browser_state.h"
 #include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state_observer_bridge.h"
 #include "ios/web/public/web_thread.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
 #import "net/base/mac/url_conversions.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -33,7 +37,9 @@
 
 using base::UserMetricsAction;
 
-@interface NativeAppNavigationController ()
+@interface NativeAppNavigationController ()<
+    CRWWebStateObserver,
+    NativeAppNavigationControllerProtocol>
 // Shows a native app infobar by looking at the page's URL and by checking
 // wheter that infobar should be bypassed or not.
 - (void)showInfoBarIfNecessary;
@@ -48,36 +54,29 @@ using base::UserMetricsAction;
 @end
 
 @implementation NativeAppNavigationController {
-  // WebState provides access to the *TabHelper objects. This will eventually
-  // replace the need to have |_tab| in this object.
+  // WebState provides access to the *TabHelper objects.
   web::WebState* _webState;
   // ImageFetcher needed to fetch the icons.
   std::unique_ptr<image_fetcher::IOSImageDataFetcherWrapper> _imageFetcher;
-  // DEPRECATED: Tab hosting the infobar and is also used for accessing Tab
-  // states such as navigation manager and whether it is a pre-rendered tab.
-  // Use |webState| whenever possible.
-  __weak Tab* _tab;
   id<NativeAppMetadata> _metadata;
   // A set of appIds encoded as NSStrings.
   NSMutableSet* _appsPossiblyBeingInstalled;
+  // Allows this class to subscribe for CRWWebStateObserver callbacks.
+  std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
 }
 
 // Designated initializer. Use this instead of -init.
-- (instancetype)initWithWebState:(web::WebState*)webState
-            requestContextGetter:(net::URLRequestContextGetter*)context
-                             tab:(Tab*)tab {
+- (instancetype)initWithWebState:(web::WebState*)webState {
   self = [super init];
   if (self) {
-    DCHECK(context);
-    _imageFetcher = base::MakeUnique<image_fetcher::IOSImageDataFetcherWrapper>(
-        context, web::WebThread::GetBlockingPool());
     DCHECK(webState);
     _webState = webState;
-    // Allows |tab| to be nil for unit testing. If not nil, it should have the
-    // same webState.
-    DCHECK(!tab || [tab webState] == webState);
-    _tab = tab;
+    _imageFetcher = base::MakeUnique<image_fetcher::IOSImageDataFetcherWrapper>(
+        _webState->GetBrowserState()->GetRequestContext(),
+        web::WebThread::GetBlockingPool());
     _appsPossiblyBeingInstalled = [[NSMutableSet alloc] init];
+    _webStateObserver =
+        base::MakeUnique<web::WebStateObserverBridge>(webState, self);
   }
   return self;
 }
@@ -159,8 +158,7 @@ using base::UserMetricsAction;
   }
 }
 
-#pragma mark -
-#pragma mark NativeAppNavigationControllerProtocol methods
+#pragma mark - NativeAppNavigationControllerProtocol methods
 
 - (NSString*)appId {
   return [_metadata appId];
@@ -188,9 +186,9 @@ using base::UserMetricsAction;
     return;
   DCHECK(![_appsPossiblyBeingInstalled containsObject:appIdString]);
   [_appsPossiblyBeingInstalled addObject:appIdString];
-  // TODO(crbug.com/684063): Preferred method is to add a helper object to
-  // WebState and use the helper object to launch Store Kit.
-  [_tab openAppStore:appIdString];
+  StoreKitTabHelper* tabHelper = StoreKitTabHelper::FromWebState(_webState);
+  if (tabHelper)
+    tabHelper->OpenAppStore(appIdString);
 }
 
 - (void)launchApp:(const GURL&)URL {
@@ -206,17 +204,20 @@ using base::UserMetricsAction;
   [_metadata updateWithUserAction:userAction];
 }
 
-#pragma mark -
-#pragma mark CRWWebControllerObserver methods
+#pragma mark - CRWWebStateObserver methods
 
-- (void)pageLoaded:(CRWWebController*)webController {
-  if (![_tab isPrerenderTab])
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
+  Tab* tab = LegacyTabHelper::GetTabForWebState(_webState);
+  if (success && ![tab isPrerenderTab])
     [self showInfoBarIfNecessary];
 }
 
-- (void)webControllerWillClose:(CRWWebController*)webController {
-  [webController removeObserver:self];
+- (void)webStateDestroyed:(web::WebState*)webState {
+  _webState = nullptr;
+  _webStateObserver.reset();
 }
+
+#pragma mark - Private methods
 
 - (void)appDidInstall:(NSNotification*)notification {
   [self removeAppFromNotification:notification];

@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.ntp.snippets;
 import android.graphics.BitmapFactory;
 import android.support.test.filters.MediumTest;
 import android.util.TypedValue;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -20,13 +19,14 @@ import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
-import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetricsReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
+import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
@@ -47,7 +47,7 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
 
     private SuggestionsUiDelegate mUiDelegate;
     private FakeSuggestionsSource mSnippetsSource;
-    private NewTabPageRecyclerView mRecyclerView;
+    private SuggestionsRecyclerView mRecyclerView;
     private NewTabPageAdapter mAdapter;
 
     private FrameLayout mContentView;
@@ -71,14 +71,10 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
 
                 getActivity().setContentView(mContentView);
 
-                mRecyclerView = (NewTabPageRecyclerView) getActivity().getLayoutInflater()
-                        .inflate(R.layout.new_tab_page_recycler_view, mContentView, false);
+                mRecyclerView = new SuggestionsRecyclerView(getActivity());
                 mContentView.addView(mRecyclerView);
 
-                View aboveTheFold = new View(getActivity());
-
-                mRecyclerView.setAboveTheFoldView(aboveTheFold);
-                mAdapter = new NewTabPageAdapter(mUiDelegate, aboveTheFold, mUiConfig,
+                mAdapter = new NewTabPageAdapter(mUiDelegate, /* aboveTheFold = */ null, mUiConfig,
                         OfflinePageBridge.getForProfile(Profile.getLastUsedProfile()),
                         /* contextMenuManager = */ null, /* tileGroupDelegate = */ null);
                 mAdapter.refreshSuggestions();
@@ -160,22 +156,20 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                 10f, // Score
                 1466634774); // Fetch timestamp
 
-        mSnippetsSource.setInfoForCategory(
-                fullCategory, new SuggestionsCategoryInfo(fullCategory, "Section Title",
-                                      ContentSuggestionsCardLayout.FULL_CARD,
-                                      /*has_fetch_action=*/false,
-                                      /*has_view_all_action=*/false,
-                                      /*show_if_empty=*/true, "No suggestions"));
+        mSnippetsSource.setInfoForCategory(fullCategory,
+                new SuggestionsCategoryInfo(fullCategory, "Section Title",
+                        ContentSuggestionsCardLayout.FULL_CARD,
+                        ContentSuggestionsAdditionalAction.NONE,
+                        /*show_if_empty=*/true, "No suggestions"));
         mSnippetsSource.setStatusForCategory(fullCategory, CategoryStatus.AVAILABLE);
         mSnippetsSource.setSuggestionsForCategory(
                 fullCategory, Arrays.asList(shortSnippet, longSnippet));
 
-        mSnippetsSource.setInfoForCategory(
-                minimalCategory, new SuggestionsCategoryInfo(minimalCategory, "Section Title",
-                                         ContentSuggestionsCardLayout.MINIMAL_CARD,
-                                         /* has_fetch_action = */ false,
-                                         /* has_view_all_action = */ false,
-                                         /* show_if_empty = */ true, "No suggestions"));
+        mSnippetsSource.setInfoForCategory(minimalCategory,
+                new SuggestionsCategoryInfo(minimalCategory, "Section Title",
+                        ContentSuggestionsCardLayout.MINIMAL_CARD,
+                        ContentSuggestionsAdditionalAction.NONE,
+                        /* show_if_empty = */ true, "No suggestions"));
         mSnippetsSource.setStatusForCategory(minimalCategory, CategoryStatus.AVAILABLE);
         mSnippetsSource.setSuggestionsForCategory(
                 minimalCategory, Arrays.asList(minimalSnippet, minimalSnippet2));

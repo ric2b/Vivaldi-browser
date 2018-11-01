@@ -1,0 +1,48 @@
+// This file is generated from {{input_file}}
+
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+{% set sink_class = (name | to_singular) + "Sink" %}
+{% set export_symbol = config["settings"]["export_symbol"] %}
+
+#ifndef {{sink_class}}_h
+#define {{sink_class}}_h
+
+#include "platform/heap/HeapAllocator.h"
+
+namespace blink {
+
+{% for agent in agents %}
+class {{ agent | agent_name_to_class }};
+{% endfor %}
+
+class {{export_symbol}} {{sink_class}} : public GarbageCollected<{{sink_class}}> {
+  WTF_MAKE_NONCOPYABLE({{sink_class}});
+
+ public:
+  {{sink_class}}();
+  DECLARE_TRACE();
+
+{% for agent in agents %}
+{% set class_name = agent | agent_name_to_class %}
+{% set getter_name = class_name | to_lower_case %}
+  bool has{{class_name}}s() const { return m_has{{class_name}}s; }
+  const HeapHashSet<Member<{{class_name}}>>& {{getter_name}}s() const { return m_{{getter_name}}s; }
+  void add{{class_name}}({{class_name}}* agent);
+  void remove{{class_name}}({{class_name}}* agent);
+
+{% endfor %}
+ private:
+{% for agent in agents %}
+{% set class_name = agent | agent_name_to_class %}
+{% set getter_name = class_name | to_lower_case %}
+  HeapHashSet<Member<{{class_name}}>> m_{{getter_name}}s;
+  bool m_has{{class_name}}s = false;
+{% endfor %}
+};
+
+} // namespace blink
+
+#endif // !defined({{sink_class}}_h)

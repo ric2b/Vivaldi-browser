@@ -2,21 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/wm/window_state.h"
+#include "ash/wm/window_state.h"
 
 #include <utility>
 
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm/window_state_util.h"
-#include "ash/common/wm/wm_event.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
+#include "ash/wm/window_state_util.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/wm_event.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
-#include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 
 namespace ash {
@@ -61,7 +60,7 @@ TEST_F(WindowStateTest, SnapWindowBasic) {
   const gfx::Rect kPrimaryDisplayWorkAreaBounds =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
   const gfx::Rect kSecondaryDisplayWorkAreaBounds =
-      display_manager()->GetSecondaryDisplay().work_area();
+      GetSecondaryDisplay().work_area();
 
   std::unique_ptr<aura::Window> window(
       CreateTestWindowInShellWithBounds(gfx::Rect(100, 100, 100, 100)));
@@ -80,8 +79,7 @@ TEST_F(WindowStateTest, SnapWindowBasic) {
   EXPECT_EQ(expected.ToString(), window->GetBoundsInScreen().ToString());
 
   // Move the window to the secondary display.
-  window->SetBoundsInScreen(gfx::Rect(600, 0, 100, 100),
-                            display_manager()->GetSecondaryDisplay());
+  window->SetBoundsInScreen(gfx::Rect(600, 0, 100, 100), GetSecondaryDisplay());
 
   window_state->OnWMEvent(&snap_right);
   expected = gfx::Rect(kSecondaryDisplayWorkAreaBounds.x() +

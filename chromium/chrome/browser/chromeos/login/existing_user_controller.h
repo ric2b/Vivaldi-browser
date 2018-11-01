@@ -163,6 +163,8 @@ class ExistingUserController
   void OnAuthSuccess(const UserContext& user_context) override;
   void OnOffTheRecordAuthSuccess() override;
   void OnPasswordChangeDetected() override;
+  void OnOldEncryptionDetected(const UserContext& user_context,
+                               bool has_incomplete_migration) override;
   void WhiteListCheckFailed(const std::string& email) override;
   void PolicyLoadFailed() override;
   void SetAuthFlowOffline(bool offline) override;
@@ -206,6 +208,10 @@ class ExistingUserController
   // Shows "kiosk auto-launch permission" screen.
   void ShowKioskAutolaunchScreen();
 
+  // Shows "filesystem encryption migration" screen.
+  void ShowEncryptionMigrationScreen(const UserContext& user_context,
+                                     bool has_incomplete_migration);
+
   // Shows "critical TPM error" screen.
   void ShowTPMError();
 
@@ -215,6 +221,10 @@ class ExistingUserController
   // Creates |login_performer_| if necessary and calls login() on it.
   void PerformLogin(const UserContext& user_context,
                     LoginPerformer::AuthorizationMode auth_mode);
+
+  // calls login() on previously-used |login_performer|.
+  void ContinuePerformLogin(LoginPerformer::AuthorizationMode auth_mode,
+                            const UserContext& user_context);
 
   // Updates the |login_display_| attached to this controller.
   void UpdateLoginDisplay(const user_manager::UserList& users);

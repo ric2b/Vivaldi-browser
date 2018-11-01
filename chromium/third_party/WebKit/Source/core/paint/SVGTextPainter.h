@@ -5,7 +5,7 @@
 #ifndef SVGTextPainter_h
 #define SVGTextPainter_h
 
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -16,12 +16,12 @@ class SVGTextPainter {
   STACK_ALLOCATED();
 
  public:
-  SVGTextPainter(const LayoutSVGText& layoutSVGText)
-      : m_layoutSVGText(layoutSVGText) {}
-  void paint(const PaintInfo&);
+  SVGTextPainter(const LayoutSVGText& layout_svg_text)
+      : layout_svg_text_(layout_svg_text) {}
+  void Paint(const PaintInfo&);
 
  private:
-  const LayoutSVGText& m_layoutSVGText;
+  const LayoutSVGText& layout_svg_text_;
 };
 
 }  // namespace blink

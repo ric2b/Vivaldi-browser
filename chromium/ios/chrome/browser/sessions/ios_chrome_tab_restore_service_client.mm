@@ -71,7 +71,7 @@ IOSChromeTabRestoreServiceClient::~IOSChromeTabRestoreServiceClient() {}
 
 sessions::LiveTabContext*
 IOSChromeTabRestoreServiceClient::CreateLiveTabContext(
-    const std::string& app_name) {
+    const std::string& app_name, const std::string& ext_data) {
   return TabRestoreServiceDelegateImplIOSFactory::GetForBrowserState(
       browser_state_);
 }

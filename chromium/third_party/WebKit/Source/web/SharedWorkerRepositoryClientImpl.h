@@ -31,11 +31,11 @@
 #ifndef SharedWorkerRepositoryClientImpl_h
 #define SharedWorkerRepositoryClientImpl_h
 
-#include "core/workers/SharedWorkerRepositoryClient.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/PtrUtil.h"
 #include <memory>
+#include "core/workers/SharedWorkerRepositoryClient.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -47,23 +47,23 @@ class SharedWorkerRepositoryClientImpl final
   USING_FAST_MALLOC(SharedWorkerRepositoryClientImpl);
 
  public:
-  static std::unique_ptr<SharedWorkerRepositoryClientImpl> create(
+  static std::unique_ptr<SharedWorkerRepositoryClientImpl> Create(
       WebSharedWorkerRepositoryClient* client) {
-    return WTF::wrapUnique(new SharedWorkerRepositoryClientImpl(client));
+    return WTF::WrapUnique(new SharedWorkerRepositoryClientImpl(client));
   }
 
   ~SharedWorkerRepositoryClientImpl() override {}
 
-  void connect(SharedWorker*,
-               WebMessagePortChannelUniquePtr,
+  void Connect(SharedWorker*,
+               std::unique_ptr<WebMessagePortChannel>,
                const KURL&,
                const String& name) override;
-  void documentDetached(Document*) override;
+  void DocumentDetached(Document*) override;
 
  private:
   explicit SharedWorkerRepositoryClientImpl(WebSharedWorkerRepositoryClient*);
 
-  WebSharedWorkerRepositoryClient* m_client;
+  WebSharedWorkerRepositoryClient* client_;
 };
 
 }  // namespace blink

@@ -27,6 +27,7 @@ class WebMouseWheelEvent;
 
 namespace content {
 
+struct CursorInfo;
 class RenderProcessHost;
 class RenderWidgetHostIterator;
 class RenderWidgetHostView;
@@ -189,11 +190,6 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // warning too soon.
   virtual void RestartHangMonitorTimeoutIfNecessary() = 0;
 
-  // Stops and disables hang monitor. This avoids flakiness in tests that need
-  // to observe things like beforeunload dialogs, which could fail if the
-  // timeout skips the dialog.
-  virtual void DisableHangMonitorForTesting() = 0;
-
   virtual void SetIgnoreInputEvents(bool ignore_input_events) = 0;
 
   // Called to notify the RenderWidget that it has been resized.
@@ -268,6 +264,9 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
 
   // Filters drop data before it is passed to RenderWidgetHost.
   virtual void FilterDropData(DropData* drop_data) {}
+
+  // Sets cursor to a specified one when it is over this widget.
+  virtual void SetCursor(const CursorInfo& cursor_info) {}
 };
 
 }  // namespace content

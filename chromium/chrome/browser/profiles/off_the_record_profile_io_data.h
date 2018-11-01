@@ -22,7 +22,6 @@ class Profile;
 
 namespace net {
 class CookieStore;
-class SdchOwner;
 class URLRequestContext;
 }  // namespace net
 
@@ -127,7 +126,7 @@ class OffTheRecordProfileIOData : public ProfileIOData {
   net::URLRequestContext* InitializeMediaRequestContext(
       net::URLRequestContext* original_context,
       const StoragePartitionDescriptor& partition_descriptor,
-      const std::string& name) const override;
+      const char* name) const override;
   net::URLRequestContext* AcquireMediaRequestContext() const override;
   net::URLRequestContext* AcquireIsolatedAppRequestContext(
       net::URLRequestContext* main_context,
@@ -144,8 +143,6 @@ class OffTheRecordProfileIOData : public ProfileIOData {
   mutable std::unique_ptr<net::CookieStore> extensions_cookie_store_;
 
   mutable std::unique_ptr<net::URLRequestJobFactory> extensions_job_factory_;
-
-  mutable std::unique_ptr<net::SdchOwner> sdch_policy_;
 
   DISALLOW_COPY_AND_ASSIGN(OffTheRecordProfileIOData);
 };

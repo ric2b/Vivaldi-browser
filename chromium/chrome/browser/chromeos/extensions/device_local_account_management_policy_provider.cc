@@ -433,10 +433,9 @@ const char* const kSafePermissionStrings[] = {
 
     "certificateProvider",
 
-    // This is risky, but blocking extensions just because they declare
-    // clipboardRead is unfortunate. Options: (1) Make clipboardRead return
-    // empty string (2) confirmation dialog.
-    // "clipboardRead",
+    // clipboardRead is restricted to return an empty string (except for
+    // whitelisted extensions - ie. Chrome RDP client).
+    "clipboardRead",
 
     // Writing to clipboard is safe.
     "clipboardWrite",
@@ -763,7 +762,7 @@ bool IsSafeForPublicSession(const extensions::Extension* extension) {
       for (auto it2 = list_value->begin(); it2 != list_value->end(); ++it2) {
         // Try to read as dictionary.
         const base::DictionaryValue *dict_value;
-        if ((*it2)->GetAsDictionary(&dict_value)) {
+        if (it2->GetAsDictionary(&dict_value)) {
           if (dict_value->size() != 1) {
             LOG(ERROR) << extension->id()
                        << " has dict in permission list with size "
@@ -785,7 +784,7 @@ bool IsSafeForPublicSession(const extensions::Extension* extension) {
         }
         // Try to read as string.
         std::string permission_string;
-        if (!(*it2)->GetAsString(&permission_string)) {
+        if (!it2->GetAsString(&permission_string)) {
           LOG(ERROR) << extension->id() << ": " << it.key()
                      << " contains a token that's neither a string nor a dict.";
           safe = false;
@@ -889,6 +888,12 @@ DeviceLocalAccountManagementPolicyProvider::
     ~DeviceLocalAccountManagementPolicyProvider() {
 }
 
+// static
+bool DeviceLocalAccountManagementPolicyProvider::IsWhitelisted(
+    const extensions::Extension* extension) {
+  return ArrayContains(kPublicSessionWhitelist, extension->id());
+}
+
 std::string DeviceLocalAccountManagementPolicyProvider::
     GetDebugPolicyProviderName() const {
 #if defined(NDEBUG)
@@ -916,7 +921,7 @@ bool DeviceLocalAccountManagementPolicyProvider::UserMayLoad(
 
     // Allow extension if its specific ID is whitelisted for use in public
     // sessions.
-    if (ArrayContains(kPublicSessionWhitelist, extension->id())) {
+    if (IsWhitelisted(extension)) {
       return true;
     }
 

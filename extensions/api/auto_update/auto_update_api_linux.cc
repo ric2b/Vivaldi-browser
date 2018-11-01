@@ -32,6 +32,4 @@ bool AutoUpdateDisableUpdateNotifierFunction::RunAsync() {
   return true;
 }
 
-void AutoUpdateDisableUpdateNotifierFunction::FinishClosingUpdateNotifiers() {}
-
 }  // namespace extensions

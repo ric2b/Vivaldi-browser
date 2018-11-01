@@ -4,8 +4,6 @@
 
 #include "ui/display/manager/chromeos/update_display_configuration_task.h"
 
-#include <algorithm>
-
 #include "ui/display/manager/chromeos/configure_displays_task.h"
 #include "ui/display/manager/chromeos/display_layout_manager.h"
 #include "ui/display/manager/chromeos/display_util.h"
@@ -32,36 +30,40 @@ UpdateDisplayConfigurationTask::UpdateDisplayConfigurationTask(
       force_configure_(force_configure),
       callback_(callback),
       force_dpms_(false),
+      requesting_displays_(false),
       weak_ptr_factory_(this) {
   delegate_->GrabServer();
+  delegate_->AddObserver(this);
 }
 
 UpdateDisplayConfigurationTask::~UpdateDisplayConfigurationTask() {
+  delegate_->RemoveObserver(this);
   delegate_->UngrabServer();
 }
 
 void UpdateDisplayConfigurationTask::Run() {
+  requesting_displays_ = true;
   delegate_->GetDisplays(
       base::Bind(&UpdateDisplayConfigurationTask::OnDisplaysUpdated,
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void UpdateDisplayConfigurationTask::SetVirtualDisplaySnapshots(
-    const std::vector<std::unique_ptr<DisplaySnapshot>>& snapshots) {
-  virtual_display_snapshots_.resize(snapshots.size());
-  std::transform(
-      snapshots.cbegin(), snapshots.cend(), virtual_display_snapshots_.begin(),
-      [](const std::unique_ptr<DisplaySnapshot>& item) { return item.get(); });
+void UpdateDisplayConfigurationTask::OnConfigurationChanged() {}
+
+void UpdateDisplayConfigurationTask::OnDisplaySnapshotsInvalidated() {
+  cached_displays_.clear();
+  if (!requesting_displays_ && weak_ptr_factory_.HasWeakPtrs()) {
+    // This task has already been run and getting the displays request is not in
+    // flight. We need to re-run it to get updated displays snapshots.
+    weak_ptr_factory_.InvalidateWeakPtrs();
+    Run();
+  }
 }
 
 void UpdateDisplayConfigurationTask::OnDisplaysUpdated(
     const std::vector<DisplaySnapshot*>& displays) {
   cached_displays_ = displays;
-
-  // Add virtual displays after retrieving the physical displays from the NDD.
-  cached_displays_.insert(cached_displays_.end(),
-                          virtual_display_snapshots_.begin(),
-                          virtual_display_snapshots_.end());
+  requesting_displays_ = false;
 
   if (cached_displays_.size() > 1 && background_color_argb_)
     delegate_->SetBackgroundColor(background_color_argb_);

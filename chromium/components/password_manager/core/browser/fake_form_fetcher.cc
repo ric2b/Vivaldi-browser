@@ -19,6 +19,10 @@ void FakeFormFetcher::AddConsumer(Consumer* consumer) {
   consumers_.insert(consumer);
 }
 
+void FakeFormFetcher::RemoveConsumer(Consumer* consumer) {
+  consumers_.erase(consumer);
+}
+
 FormFetcher::State FakeFormFetcher::GetState() const {
   return state_;
 }
@@ -44,6 +48,10 @@ void FakeFormFetcher::SetNonFederated(
 
 void FakeFormFetcher::Fetch() {
   state_ = State::WAITING;
+}
+
+std::unique_ptr<FormFetcher> FakeFormFetcher::Clone() {
+  return nullptr;
 }
 
 }  // namespace password_manager

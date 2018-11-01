@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -122,7 +123,8 @@ class MockProfileDelegate : public Profile::Delegate {
 void CreatePrefsFileInDirectory(const base::FilePath& directory_path) {
   base::FilePath pref_path(directory_path.Append(chrome::kPreferencesFilename));
   std::string data("{}");
-  ASSERT_TRUE(base::WriteFile(pref_path, data.c_str(), data.size()));
+  ASSERT_EQ(static_cast<int>(data.size()),
+            base::WriteFile(pref_path, data.c_str(), data.size()));
 }
 
 void CheckChromeVersion(Profile *profile, bool is_new) {
@@ -350,6 +352,13 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, CreateNewProfileSynchronous) {
     std::unique_ptr<Profile> profile(CreateProfile(
         temp_dir.GetPath(), &delegate, Profile::CREATE_MODE_SYNCHRONOUS));
     CheckChromeVersion(profile.get(), true);
+
+#if defined(OS_CHROMEOS)
+    // Make sure session is marked as initialized.
+    user_manager::User* user =
+        chromeos::ProfileHelper::Get()->GetUserByProfile(profile.get());
+    EXPECT_TRUE(user->profile_ever_initialized());
+#endif
   }
 
   FlushIoTaskRunnerAndSpinThreads();
@@ -396,6 +405,12 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
     // Wait for the profile to be created.
     observer.Wait();
     CheckChromeVersion(profile.get(), true);
+#if defined(OS_CHROMEOS)
+    // Make sure session is marked as initialized.
+    user_manager::User* user =
+        chromeos::ProfileHelper::Get()->GetUserByProfile(profile.get());
+    EXPECT_TRUE(user->profile_ever_initialized());
+#endif
   }
 
   FlushIoTaskRunnerAndSpinThreads();
@@ -677,6 +692,11 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
     // Flush the profile data to disk for all loaded profiles.
     profile->SetExitType(Profile::EXIT_CRASHED);
     profile->GetPrefs()->CommitPendingWrite();
+    if (base::FeatureList::IsEnabled(features::kPrefService)) {
+      FlushTaskRunner(content::BrowserThread::GetTaskRunnerForThread(
+                          content::BrowserThread::IO)
+                          .get());
+    }
     FlushTaskRunner(profile->GetIOTaskRunner().get());
 
     // Make sure that the prefs file was written with the expected key/value.

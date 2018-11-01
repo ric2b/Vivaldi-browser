@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace banners {
 
@@ -39,9 +40,20 @@ class AppBannerManagerAndroid
   const base::android::ScopedJavaGlobalRef<jobject>& GetJavaBannerManager()
       const;
 
-  // Returns true if this object is currently active.
+  // Returns true if the banner pipeline is currently running.
   bool IsActiveForTesting(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& jobj);
+
+  // Informs the InstallableManager for the WebContents we are attached to that
+  // the add to homescreen menu item has been tapped.
+  void RecordMenuItemAddToHomescreen(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj);
+
+  // Informs the InstallableManager for the WebContents we are attached to that
+  // the menu has been opened.
+  void RecordMenuOpen(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& jobj);
 
   // Called when the Java-side has retrieved information for the app.
   // Returns |false| if an icon fetch couldn't be kicked off.
@@ -105,7 +117,7 @@ class AppBannerManagerAndroid
   GURL badge_icon_url_;
 
   // The badge icon object.
-  std::unique_ptr<SkBitmap> badge_icon_;
+  SkBitmap badge_icon_;
 
   // The Java-side AppBannerManager.
   base::android::ScopedJavaGlobalRef<jobject> java_banner_manager_;

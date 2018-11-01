@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/json/json_reader.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
@@ -45,12 +46,14 @@ std::string BuildRequestData(const std::string& api_key, const GURL& url) {
 }
 
 // Creates a URLFetcher to call the SafeSearch API for |url|.
-std::unique_ptr<net::URLFetcher> CreateFetcher(URLFetcherDelegate* delegate,
-                                               URLRequestContextGetter* context,
-                                               const std::string& api_key,
-                                               const GURL& url) {
-  std::unique_ptr<net::URLFetcher> fetcher =
-      URLFetcher::Create(0, GURL(kApiUrl), URLFetcher::POST, delegate);
+std::unique_ptr<net::URLFetcher> CreateFetcher(
+    URLFetcherDelegate* delegate,
+    URLRequestContextGetter* context,
+    const std::string& api_key,
+    const GURL& url,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
+  std::unique_ptr<net::URLFetcher> fetcher = URLFetcher::Create(
+      0, GURL(kApiUrl), URLFetcher::POST, delegate, traffic_annotation);
   fetcher->SetUploadData(kDataContentType, BuildRequestData(api_key, url));
   fetcher->SetRequestContext(context);
   fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
@@ -115,12 +118,17 @@ SafeSearchURLChecker::CheckResult::CheckResult(Classification classification,
       uncertain(uncertain),
       timestamp(base::TimeTicks::Now()) {}
 
-SafeSearchURLChecker::SafeSearchURLChecker(URLRequestContextGetter* context)
-    : SafeSearchURLChecker(context, kDefaultCacheSize) {}
+SafeSearchURLChecker::SafeSearchURLChecker(
+    URLRequestContextGetter* context,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation)
+    : SafeSearchURLChecker(context, traffic_annotation, kDefaultCacheSize) {}
 
-SafeSearchURLChecker::SafeSearchURLChecker(URLRequestContextGetter* context,
-                                           size_t cache_size)
+SafeSearchURLChecker::SafeSearchURLChecker(
+    URLRequestContextGetter* context,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation,
+    size_t cache_size)
     : context_(context),
+      traffic_annotation_(traffic_annotation),
       cache_(cache_size),
       cache_timeout_(
           base::TimeDelta::FromSeconds(kDefaultCacheTimeoutSeconds)) {}
@@ -160,7 +168,7 @@ bool SafeSearchURLChecker::CheckURL(const GURL& url,
   }
 
   // See if we already have a check in progress for this URL.
-  for (Check* check : checks_in_progress_) {
+  for (const auto& check : checks_in_progress_) {
     if (check->url == url) {
       DVLOG(1) << "Adding to pending check for " << url.spec();
       check->callbacks.push_back(callback);
@@ -171,21 +179,22 @@ bool SafeSearchURLChecker::CheckURL(const GURL& url,
   DVLOG(1) << "Checking URL " << url;
   std::string api_key = google_apis::GetAPIKey();
   std::unique_ptr<URLFetcher> fetcher(
-      CreateFetcher(this, context_, api_key, url));
+      CreateFetcher(this, context_, api_key, url, traffic_annotation_));
   fetcher->Start();
-  checks_in_progress_.push_back(new Check(url, std::move(fetcher), callback));
+  checks_in_progress_.push_back(
+      base::MakeUnique<Check>(url, std::move(fetcher), callback));
   return false;
 }
 
 void SafeSearchURLChecker::OnURLFetchComplete(const net::URLFetcher* source) {
-  ScopedVector<Check>::iterator it = checks_in_progress_.begin();
+  auto it = checks_in_progress_.begin();
   while (it != checks_in_progress_.end()) {
     if (source == (*it)->fetcher.get())
       break;
     ++it;
   }
   DCHECK(it != checks_in_progress_.end());
-  Check* check = *it;
+  Check* check = it->get();
 
   const URLRequestStatus& status = source->GetStatus();
   if (!status.is_success()) {

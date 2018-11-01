@@ -23,8 +23,8 @@
 
 #include "core/CoreExport.h"
 #include "core/css/CSSValue.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -34,7 +34,7 @@ class CSSPrimitiveValue;
 // Used for text-shadow and box-shadow
 class CORE_EXPORT CSSShadowValue : public CSSValue {
  public:
-  static CSSShadowValue* create(CSSPrimitiveValue* x,
+  static CSSShadowValue* Create(CSSPrimitiveValue* x,
                                 CSSPrimitiveValue* y,
                                 CSSPrimitiveValue* blur,
                                 CSSPrimitiveValue* spread,
@@ -43,9 +43,9 @@ class CORE_EXPORT CSSShadowValue : public CSSValue {
     return new CSSShadowValue(x, y, blur, spread, style, color);
   }
 
-  String customCSSText() const;
+  String CustomCSSText() const;
 
-  bool equals(const CSSShadowValue&) const;
+  bool Equals(const CSSShadowValue&) const;
 
   Member<CSSPrimitiveValue> x;
   Member<CSSPrimitiveValue> y;
@@ -65,7 +65,7 @@ class CORE_EXPORT CSSShadowValue : public CSSValue {
                  CSSValue* color);
 };
 
-DEFINE_CSS_VALUE_TYPE_CASTS(CSSShadowValue, isShadowValue());
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSShadowValue, IsShadowValue());
 
 }  // namespace blink
 

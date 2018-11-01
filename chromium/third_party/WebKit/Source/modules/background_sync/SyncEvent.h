@@ -9,8 +9,8 @@
 #include "modules/background_sync/SyncEventInit.h"
 #include "modules/serviceworkers/ExtendableEvent.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/AtomicString.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/AtomicString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -18,20 +18,20 @@ class MODULES_EXPORT SyncEvent final : public ExtendableEvent {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static SyncEvent* create(const AtomicString& type,
+  static SyncEvent* Create(const AtomicString& type,
                            const String& tag,
-                           bool lastChance,
+                           bool last_chance,
                            WaitUntilObserver* observer) {
-    return new SyncEvent(type, tag, lastChance, observer);
+    return new SyncEvent(type, tag, last_chance, observer);
   }
-  static SyncEvent* create(const AtomicString& type,
+  static SyncEvent* Create(const AtomicString& type,
                            const SyncEventInit& init) {
     return new SyncEvent(type, init);
   }
 
   ~SyncEvent() override;
 
-  const AtomicString& interfaceName() const override;
+  const AtomicString& InterfaceName() const override;
 
   String tag();
   bool lastChance();
@@ -42,8 +42,8 @@ class MODULES_EXPORT SyncEvent final : public ExtendableEvent {
   SyncEvent(const AtomicString& type, const String&, bool, WaitUntilObserver*);
   SyncEvent(const AtomicString& type, const SyncEventInit&);
 
-  String m_tag;
-  bool m_lastChance;
+  String tag_;
+  bool last_chance_;
 };
 
 }  // namespace blink

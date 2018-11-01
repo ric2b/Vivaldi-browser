@@ -48,7 +48,6 @@ TransformTree::TransformTree()
       device_scale_factor_(1.f),
       device_transform_scale_factor_(1.f) {
   cached_data_.push_back(TransformCachedNodeData());
-  cached_data_[kRootNodeId].target_id = kRootNodeId;
 }
 
 TransformTree::~TransformTree() = default;
@@ -71,6 +70,7 @@ void PropertyTree<T>::clear() {
   nodes_.push_back(T());
   back()->id = kRootNodeId;
   back()->parent_id = kInvalidNodeId;
+  owning_layer_id_to_node_index_.clear();
 
 #if DCHECK_IS_ON()
   PropertyTree<T> tree;
@@ -80,7 +80,8 @@ void PropertyTree<T>::clear() {
 
 template <typename T>
 bool PropertyTree<T>::operator==(const PropertyTree<T>& other) const {
-  return nodes_ == other.nodes() && needs_update_ == other.needs_update();
+  return nodes_ == other.nodes() && needs_update_ == other.needs_update() &&
+         owning_layer_id_to_node_index_ == other.owning_layer_id_to_node_index_;
 }
 
 template <typename T>
@@ -117,7 +118,6 @@ void TransformTree::clear() {
   nodes_affected_by_outer_viewport_bounds_delta_.clear();
   cached_data_.clear();
   cached_data_.push_back(TransformCachedNodeData());
-  cached_data_[kRootNodeId].target_id = kRootNodeId;
   sticky_position_data_.clear();
 
 #if DCHECK_IS_ON()
@@ -130,9 +130,9 @@ void TransformTree::clear() {
 }
 
 void TransformTree::set_needs_update(bool needs_update) {
-  if (needs_update && !needs_update_)
+  if (needs_update && !PropertyTree<TransformNode>::needs_update())
     property_trees()->UpdateTransformTreeUpdateNumber();
-  needs_update_ = needs_update;
+  PropertyTree<TransformNode>::set_needs_update(needs_update);
 }
 
 bool TransformTree::ComputeTranslation(int source_id,
@@ -176,21 +176,26 @@ bool TransformTree::ComputeTranslation(int source_id,
   return true;
 }
 
-void TransformTree::OnTransformAnimated(const gfx::Transform& transform,
-                                        int id,
-                                        LayerTreeImpl* layer_tree_impl) {
-  TransformNode* node = Node(id);
-  layer_tree_impl->AddToTransformAnimationsMap(node->owning_layer_id,
-                                               transform);
-  if (node->local == transform) {
-    return;
-  }
+TransformNode* TransformTree::FindNodeFromElementId(ElementId id) {
+  auto iterator = property_trees()->element_id_to_transform_node_index.find(id);
+  if (iterator == property_trees()->element_id_to_transform_node_index.end())
+    return nullptr;
+
+  return Node(iterator->second);
+}
+
+bool TransformTree::OnTransformAnimated(ElementId element_id,
+                                        const gfx::Transform& transform) {
+  TransformNode* node = FindNodeFromElementId(element_id);
+  DCHECK(node);
+  if (node->local == transform)
+    return false;
   node->local = transform;
   node->needs_local_transform_update = true;
   node->transform_changed = true;
   property_trees()->changed = true;
   set_needs_update(true);
-  layer_tree_impl->set_needs_update_draw_properties();
+  return true;
 }
 
 bool TransformTree::NeedsSourceToParentUpdate(TransformNode* node) {
@@ -210,7 +215,6 @@ void TransformTree::UpdateTransforms(int id) {
   TransformNode* node = Node(id);
   TransformNode* parent_node = parent(node);
   DCHECK(parent_node);
-  TransformNode* target_node = Node(TargetId(id));
   TransformNode* source_node = Node(node->source_node_id);
   // TODO(flackr): Only dirty when scroll offset changes.
   if (node->sticky_position_constraint_id >= 0 ||
@@ -219,7 +223,7 @@ void TransformTree::UpdateTransforms(int id) {
   } else {
     UndoSnapping(node);
   }
-  UpdateScreenSpaceTransform(node, parent_node, target_node);
+  UpdateScreenSpaceTransform(node, parent_node);
   UpdateAnimationProperties(node, parent_node);
   UpdateSnapping(node);
   UpdateNodeAndAncestorsHaveIntegerTranslations(node, parent_node);
@@ -346,8 +350,7 @@ bool TransformTree::CombineInversesBetween(int source_id,
 gfx::Vector2dF StickyPositionOffset(TransformTree* tree, TransformNode* node) {
   if (node->sticky_position_constraint_id == -1)
     return gfx::Vector2dF();
-  const StickyPositionNodeData* sticky_data =
-      tree->StickyPositionData(node->id);
+  StickyPositionNodeData* sticky_data = tree->StickyPositionData(node->id);
   const LayerStickyPositionConstraint& constraint = sticky_data->constraints;
   ScrollNode* scroll_node =
       tree->property_trees()->scroll_tree.Node(sticky_data->scroll_ancestor);
@@ -368,9 +371,35 @@ gfx::Vector2dF StickyPositionOffset(TransformTree* tree, TransformNode* node) {
       scroll_position,
       gfx::SizeF(tree->property_trees()->scroll_tree.scroll_clip_layer_bounds(
           scroll_node->id)));
-  gfx::Vector2dF sticky_offset(
-      constraint.scroll_container_relative_sticky_box_rect.OffsetFromOrigin());
   gfx::Vector2dF layer_offset(sticky_data->main_thread_offset);
+
+  gfx::Vector2dF ancestor_sticky_box_offset;
+  if (sticky_data->nearest_node_shifting_sticky_box !=
+      TransformTree::kInvalidNodeId) {
+    ancestor_sticky_box_offset =
+        tree->StickyPositionData(sticky_data->nearest_node_shifting_sticky_box)
+            ->total_sticky_box_sticky_offset;
+  }
+
+  gfx::Vector2dF ancestor_containing_block_offset;
+  if (sticky_data->nearest_node_shifting_containing_block !=
+      TransformTree::kInvalidNodeId) {
+    ancestor_containing_block_offset =
+        tree->StickyPositionData(
+                sticky_data->nearest_node_shifting_containing_block)
+            ->total_containing_block_sticky_offset;
+  }
+
+  // Compute the current position of the constraint rects based on the original
+  // positions and the offsets from ancestor sticky elements.
+  gfx::RectF sticky_box_rect =
+      gfx::RectF(constraint.scroll_container_relative_sticky_box_rect) +
+      ancestor_sticky_box_offset + ancestor_containing_block_offset;
+  gfx::RectF containing_block_rect =
+      gfx::RectF(constraint.scroll_container_relative_containing_block_rect) +
+      ancestor_containing_block_offset;
+
+  gfx::Vector2dF sticky_offset(sticky_box_rect.OffsetFromOrigin());
 
   // In each of the following cases, we measure the limit which is the point
   // that the element should stick to, clamping on one side to 0 (because sticky
@@ -383,55 +412,52 @@ gfx::Vector2dF StickyPositionOffset(TransformTree* tree, TransformNode* node) {
   // over bottom offset.
   if (constraint.is_anchored_right) {
     float right_limit = clip.right() - constraint.right_offset;
-    float right_delta = std::min<float>(
-        0, right_limit -
-               constraint.scroll_container_relative_sticky_box_rect.right());
-    float available_space = std::min<float>(
-        0, constraint.scroll_container_relative_containing_block_rect.x() -
-               constraint.scroll_container_relative_sticky_box_rect.x());
+    float right_delta =
+        std::min<float>(0, right_limit - sticky_box_rect.right());
+    float available_space =
+        std::min<float>(0, containing_block_rect.x() - sticky_box_rect.x());
     if (right_delta < available_space)
       right_delta = available_space;
     sticky_offset.set_x(sticky_offset.x() + right_delta);
   }
   if (constraint.is_anchored_left) {
     float left_limit = clip.x() + constraint.left_offset;
-    float left_delta = std::max<float>(
-        0,
-        left_limit - constraint.scroll_container_relative_sticky_box_rect.x());
+    float left_delta = std::max<float>(0, left_limit - sticky_box_rect.x());
     float available_space = std::max<float>(
-        0, constraint.scroll_container_relative_containing_block_rect.right() -
-               constraint.scroll_container_relative_sticky_box_rect.right());
+        0, containing_block_rect.right() - sticky_box_rect.right());
     if (left_delta > available_space)
       left_delta = available_space;
     sticky_offset.set_x(sticky_offset.x() + left_delta);
   }
   if (constraint.is_anchored_bottom) {
     float bottom_limit = clip.bottom() - constraint.bottom_offset;
-    float bottom_delta = std::min<float>(
-        0, bottom_limit -
-               constraint.scroll_container_relative_sticky_box_rect.bottom());
-    float available_space = std::min<float>(
-        0, constraint.scroll_container_relative_containing_block_rect.y() -
-               constraint.scroll_container_relative_sticky_box_rect.y());
+    float bottom_delta =
+        std::min<float>(0, bottom_limit - sticky_box_rect.bottom());
+    float available_space =
+        std::min<float>(0, containing_block_rect.y() - sticky_box_rect.y());
     if (bottom_delta < available_space)
       bottom_delta = available_space;
     sticky_offset.set_y(sticky_offset.y() + bottom_delta);
   }
   if (constraint.is_anchored_top) {
     float top_limit = clip.y() + constraint.top_offset;
-    float top_delta = std::max<float>(
-        0,
-        top_limit - constraint.scroll_container_relative_sticky_box_rect.y());
+    float top_delta = std::max<float>(0, top_limit - sticky_box_rect.y());
     float available_space = std::max<float>(
-        0, constraint.scroll_container_relative_containing_block_rect.bottom() -
-               constraint.scroll_container_relative_sticky_box_rect.bottom());
+        0, containing_block_rect.bottom() - sticky_box_rect.bottom());
     if (top_delta > available_space)
       top_delta = available_space;
     sticky_offset.set_y(sticky_offset.y() + top_delta);
   }
+
+  sticky_data->total_sticky_box_sticky_offset =
+      ancestor_sticky_box_offset + sticky_offset -
+      sticky_box_rect.OffsetFromOrigin();
+  sticky_data->total_containing_block_sticky_offset =
+      ancestor_sticky_box_offset + ancestor_containing_block_offset +
+      sticky_offset - sticky_box_rect.OffsetFromOrigin();
+
   return sticky_offset - layer_offset - node->source_to_parent -
-         constraint.scroll_container_relative_sticky_box_rect
-             .OffsetFromOrigin();
+         sticky_box_rect.OffsetFromOrigin();
 }
 
 void TransformTree::UpdateLocalTransform(TransformNode* node) {
@@ -498,8 +524,7 @@ void TransformTree::UpdateLocalTransform(TransformNode* node) {
 }
 
 void TransformTree::UpdateScreenSpaceTransform(TransformNode* node,
-                                               TransformNode* parent_node,
-                                               TransformNode* target_node) {
+                                               TransformNode* parent_node) {
   DCHECK(parent_node);
   gfx::Transform to_screen_space_transform = ToScreen(parent_node->id);
   if (node->flattens_inherited_transform)
@@ -705,26 +730,6 @@ void TransformTree::SetToScreen(int node_id, const gfx::Transform& transform) {
   cached_data_[node_id].is_showing_backface = transform.IsBackFaceVisible();
 }
 
-int TransformTree::TargetId(int node_id) const {
-  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
-  return cached_data_[node_id].target_id;
-}
-
-void TransformTree::SetTargetId(int node_id, int target_id) {
-  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
-  cached_data_[node_id].target_id = target_id;
-}
-
-int TransformTree::ContentTargetId(int node_id) const {
-  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
-  return cached_data_[node_id].content_target_id;
-}
-
-void TransformTree::SetContentTargetId(int node_id, int content_target_id) {
-  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
-  cached_data_[node_id].content_target_id = content_target_id;
-}
-
 bool TransformTree::operator==(const TransformTree& other) const {
   return PropertyTree::operator==(other) &&
          source_to_parent_updates_allowed_ ==
@@ -842,37 +847,59 @@ void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
       transform_tree.Node(effect_node->transform_id);
   if (transform_node->in_subtree_of_page_scale_layer)
     layer_scale_factor *= transform_tree.page_scale_factor();
+
+  // Note: Copy requests currently expect transform to effect output size.
+  bool use_transform_for_contents_scale =
+      property_trees()->can_adjust_raster_scales ||
+      effect_node->has_copy_request;
   effect_node->surface_contents_scale =
-      MathUtil::ComputeTransform2dScaleComponents(
-          transform_tree.ToScreen(transform_node->id), layer_scale_factor);
+      use_transform_for_contents_scale
+          ? MathUtil::ComputeTransform2dScaleComponents(
+                transform_tree.ToScreen(transform_node->id), layer_scale_factor)
+          : gfx::Vector2dF(layer_scale_factor, layer_scale_factor);
 }
 
-void EffectTree::OnOpacityAnimated(float opacity,
-                                   int id,
-                                   LayerTreeImpl* layer_tree_impl) {
-  EffectNode* node = Node(id);
-  layer_tree_impl->AddToOpacityAnimationsMap(node->owning_layer_id, opacity);
+EffectNode* EffectTree::FindNodeFromElementId(ElementId id) {
+  auto iterator = property_trees()->element_id_to_effect_node_index.find(id);
+  if (iterator == property_trees()->element_id_to_effect_node_index.end())
+    return nullptr;
+
+  return Node(iterator->second);
+}
+
+bool EffectTree::OnOpacityAnimated(ElementId id, float opacity) {
+  EffectNode* node = FindNodeFromElementId(id);
+  DCHECK(node);
+  // TODO(crbug.com/706766): Avoid crash. Need more investigation for what is
+  // calling this without setting element id.
+  if (!node)
+    return false;
+
   if (node->opacity == opacity)
-    return;
+    return false;
   node->opacity = opacity;
   node->effect_changed = true;
   property_trees()->changed = true;
   property_trees()->effect_tree.set_needs_update(true);
-  layer_tree_impl->set_needs_update_draw_properties();
+  return true;
 }
 
-void EffectTree::OnFilterAnimated(const FilterOperations& filters,
-                                  int id,
-                                  LayerTreeImpl* layer_tree_impl) {
-  EffectNode* node = Node(id);
-  layer_tree_impl->AddToFilterAnimationsMap(node->owning_layer_id, filters);
+bool EffectTree::OnFilterAnimated(ElementId id,
+                                  const FilterOperations& filters) {
+  EffectNode* node = FindNodeFromElementId(id);
+  DCHECK(node);
+  // TODO(crbug.com/706766): Avoid crash. Need more investigation for what is
+  // calling this without setting element id.
+  if (!node)
+    return false;
+
   if (node->filters == filters)
-    return;
+    return false;
   node->filters = filters;
   node->effect_changed = true;
   property_trees()->changed = true;
   property_trees()->effect_tree.set_needs_update(true);
-  layer_tree_impl->set_needs_update_draw_properties();
+  return true;
 }
 
 void EffectTree::UpdateEffects(int id) {
@@ -1580,6 +1607,7 @@ PropertyTreesCachedData::~PropertyTreesCachedData() {}
 PropertyTrees::PropertyTrees()
     : needs_rebuild(true),
       non_root_surfaces_enabled(true),
+      can_adjust_raster_scales(true),
       changed(false),
       full_tree_damaged(false),
       sequence_number(0),
@@ -1597,11 +1625,6 @@ bool PropertyTrees::operator==(const PropertyTrees& other) const {
   return transform_tree == other.transform_tree &&
          effect_tree == other.effect_tree && clip_tree == other.clip_tree &&
          scroll_tree == other.scroll_tree &&
-         layer_id_to_transform_node_index ==
-             other.layer_id_to_transform_node_index &&
-         layer_id_to_effect_node_index == other.layer_id_to_effect_node_index &&
-         layer_id_to_clip_node_index == other.layer_id_to_clip_node_index &&
-         layer_id_to_scroll_node_index == other.layer_id_to_scroll_node_index &&
          element_id_to_effect_node_index ==
              other.element_id_to_effect_node_index &&
          element_id_to_scroll_node_index ==
@@ -1615,6 +1638,7 @@ bool PropertyTrees::operator==(const PropertyTrees& other) const {
          is_main_thread == other.is_main_thread &&
          is_active == other.is_active &&
          non_root_surfaces_enabled == other.non_root_surfaces_enabled &&
+         can_adjust_raster_scales == other.can_adjust_raster_scales &&
          sequence_number == other.sequence_number;
 }
 
@@ -1623,12 +1647,8 @@ PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
   effect_tree = from.effect_tree;
   clip_tree = from.clip_tree;
   scroll_tree = from.scroll_tree;
-  layer_id_to_transform_node_index = from.layer_id_to_transform_node_index;
-  layer_id_to_effect_node_index = from.layer_id_to_effect_node_index;
   always_use_active_tree_opacity_effect_ids =
       from.always_use_active_tree_opacity_effect_ids;
-  layer_id_to_clip_node_index = from.layer_id_to_clip_node_index;
-  layer_id_to_scroll_node_index = from.layer_id_to_scroll_node_index;
   element_id_to_effect_node_index = from.element_id_to_effect_node_index;
   element_id_to_scroll_node_index = from.element_id_to_scroll_node_index;
   element_id_to_transform_node_index = from.element_id_to_transform_node_index;
@@ -1636,6 +1656,7 @@ PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
   changed = from.changed;
   full_tree_damaged = from.full_tree_damaged;
   non_root_surfaces_enabled = from.non_root_surfaces_enabled;
+  can_adjust_raster_scales = from.can_adjust_raster_scales;
   sequence_number = from.sequence_number;
   is_main_thread = from.is_main_thread;
   is_active = from.is_active;
@@ -1658,10 +1679,6 @@ void PropertyTrees::clear() {
   clip_tree.clear();
   effect_tree.clear();
   scroll_tree.clear();
-  layer_id_to_transform_node_index.clear();
-  layer_id_to_effect_node_index.clear();
-  layer_id_to_clip_node_index.clear();
-  layer_id_to_scroll_node_index.clear();
   element_id_to_effect_node_index.clear();
   element_id_to_scroll_node_index.clear();
   element_id_to_transform_node_index.clear();
@@ -1671,6 +1688,7 @@ void PropertyTrees::clear() {
   full_tree_damaged = false;
   changed = false;
   non_root_surfaces_enabled = true;
+  can_adjust_raster_scales = true;
   sequence_number++;
 
 #if DCHECK_IS_ON()
@@ -1713,46 +1731,25 @@ void PropertyTrees::SetInnerViewportScrollBoundsDelta(
 
 void PropertyTrees::PushOpacityIfNeeded(PropertyTrees* target_tree) {
   for (int id : target_tree->always_use_active_tree_opacity_effect_ids) {
-    if (layer_id_to_effect_node_index.find(id) ==
-        layer_id_to_effect_node_index.end())
-      continue;
-    EffectNode* source_effect_node =
-        effect_tree.Node(layer_id_to_effect_node_index[id]);
-    EffectNode* target_effect_node = target_tree->effect_tree.Node(
-        target_tree->layer_id_to_effect_node_index[id]);
-    float source_opacity = source_effect_node->opacity;
-    float target_opacity = target_effect_node->opacity;
-    if (source_opacity == target_opacity)
-      continue;
-    target_effect_node->opacity = source_opacity;
-    target_tree->effect_tree.set_needs_update(true);
+    if (const EffectNode* source_effect_node =
+            effect_tree.FindNodeFromOwningLayerId(id)) {
+      EffectNode* target_effect_node =
+          target_tree->effect_tree.UpdateNodeFromOwningLayerId(id);
+      float source_opacity = source_effect_node->opacity;
+      float target_opacity = target_effect_node->opacity;
+      if (source_opacity == target_opacity)
+        continue;
+      target_effect_node->opacity = source_opacity;
+      target_tree->effect_tree.set_needs_update(true);
+    }
   }
 }
 
 void PropertyTrees::RemoveIdFromIdToIndexMaps(int id) {
-  layer_id_to_transform_node_index.erase(id);
-  layer_id_to_effect_node_index.erase(id);
-  layer_id_to_clip_node_index.erase(id);
-  layer_id_to_scroll_node_index.erase(id);
-}
-
-bool PropertyTrees::IsInIdToIndexMap(TreeType tree_type, int id) {
-  std::unordered_map<int, int>* id_to_index_map = nullptr;
-  switch (tree_type) {
-    case TRANSFORM:
-      id_to_index_map = &layer_id_to_transform_node_index;
-      break;
-    case EFFECT:
-      id_to_index_map = &layer_id_to_effect_node_index;
-      break;
-    case CLIP:
-      id_to_index_map = &layer_id_to_clip_node_index;
-      break;
-    case SCROLL:
-      id_to_index_map = &layer_id_to_scroll_node_index;
-      break;
-  }
-  return id_to_index_map->find(id) != id_to_index_map->end();
+  transform_tree.SetOwningLayerIdForNode(nullptr, id);
+  clip_tree.SetOwningLayerIdForNode(nullptr, id);
+  scroll_tree.SetOwningLayerIdForNode(nullptr, id);
+  effect_tree.SetOwningLayerIdForNode(nullptr, id);
 }
 
 void PropertyTrees::UpdateChangeTracking() {
@@ -1983,6 +1980,10 @@ void PropertyTrees::SetAnimationScalesForTesting(
 bool PropertyTrees::GetToTarget(int transform_id,
                                 int effect_id,
                                 gfx::Transform* to_target) const {
+  if (effect_id == EffectTree::kContentsRootNodeId) {
+    *to_target = transform_tree.ToScreen(transform_id);
+    return true;
+  }
   DrawTransforms& transforms = GetDrawTransforms(transform_id, effect_id);
   if (transforms.to_valid) {
     *to_target = transforms.to_target;
@@ -2001,6 +2002,12 @@ bool PropertyTrees::GetToTarget(int transform_id,
 bool PropertyTrees::GetFromTarget(int transform_id,
                                   int effect_id,
                                   gfx::Transform* from_target) const {
+  const TransformNode* node = transform_tree.Node(transform_id);
+  if (node->ancestors_are_invertible &&
+      effect_id == EffectTree::kContentsRootNodeId) {
+    *from_target = transform_tree.FromScreen(transform_id);
+    return true;
+  }
   DrawTransforms& transforms = GetDrawTransforms(transform_id, effect_id);
   if (transforms.from_valid) {
     *from_target = transforms.from_target;
@@ -2034,6 +2041,17 @@ DrawTransformData& PropertyTrees::FetchDrawTransformsDataFromCache(
   data.update_number = -1;
   data.target_id = dest_id;
   return data;
+}
+
+ClipRectData* PropertyTrees::FetchClipRectFromCache(int clip_id,
+                                                    int target_id) {
+  ClipNode* clip_node = clip_tree.Node(clip_id);
+  for (auto& data : clip_node->cached_clip_rects) {
+    if (data.target_id == target_id || data.target_id == -1)
+      return &data;
+  }
+  clip_node->cached_clip_rects.push_back(ClipRectData());
+  return &clip_node->cached_clip_rects.back();
 }
 
 DrawTransforms& PropertyTrees::GetDrawTransforms(int transform_id,

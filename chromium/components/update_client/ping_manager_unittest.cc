@@ -58,8 +58,7 @@ void ComponentUpdaterPingManagerTest::RunThreadsUntilIdle() {
   base::RunLoop().RunUntilIdle();
 }
 
-// Test is flaky: http://crbug.com/349547
-TEST_F(ComponentUpdaterPingManagerTest, DISABLED_PingManagerTest) {
+TEST_F(ComponentUpdaterPingManagerTest, PingManagerTest) {
   std::unique_ptr<InterceptorFactory> interceptor_factory(
       new InterceptorFactory(base::ThreadTaskRunnerHandle::Get()));
   URLRequestPostInterceptor* interceptor =
@@ -176,6 +175,9 @@ TEST_F(ComponentUpdaterPingManagerTest, DISABLED_PingManagerTest) {
           "download_time_ms=\"9870\"/></app>"))
       << interceptor->GetRequestsAsString();
   interceptor->Reset();
+
+  interceptor_factory.reset();
+  base::RunLoop().RunUntilIdle();
 }
 
 // Tests that sending the ping fails when the component requires encryption but

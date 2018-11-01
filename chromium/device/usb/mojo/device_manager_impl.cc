@@ -7,7 +7,9 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
@@ -19,8 +21,6 @@
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_filter.h"
 #include "device/usb/usb_service.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace device {
 namespace usb {
@@ -28,14 +28,16 @@ namespace usb {
 // static
 void DeviceManagerImpl::Create(
     base::WeakPtr<PermissionProvider> permission_provider,
-    mojo::InterfaceRequest<DeviceManager> request) {
+    DeviceManagerRequest request) {
   DCHECK(DeviceClient::Get());
-  UsbService* usb_service = DeviceClient::Get()->GetUsbService();
-  if (usb_service) {
-    mojo::MakeStrongBinding(
-        base::MakeUnique<DeviceManagerImpl>(permission_provider, usb_service),
-        std::move(request));
-  }
+  UsbService* service = DeviceClient::Get()->GetUsbService();
+  if (!service)
+    return;
+
+  auto* device_manager_impl =
+      new DeviceManagerImpl(std::move(permission_provider), service);
+  device_manager_impl->binding_ = mojo::MakeStrongBinding(
+      base::WrapUnique(device_manager_impl), std::move(request));
 }
 
 DeviceManagerImpl::DeviceManagerImpl(
@@ -52,8 +54,6 @@ DeviceManagerImpl::DeviceManagerImpl(
 }
 
 DeviceManagerImpl::~DeviceManagerImpl() {
-  if (!connection_error_handler_.is_null())
-    connection_error_handler_.Run();
 }
 
 void DeviceManagerImpl::GetDevices(EnumerationOptionsPtr options,
@@ -63,18 +63,16 @@ void DeviceManagerImpl::GetDevices(EnumerationOptionsPtr options,
                                       base::Passed(&options), callback));
 }
 
-void DeviceManagerImpl::GetDevice(
-    const std::string& guid,
-    mojo::InterfaceRequest<Device> device_request) {
+void DeviceManagerImpl::GetDevice(const std::string& guid,
+                                  DeviceRequest device_request) {
   scoped_refptr<UsbDevice> device = usb_service_->GetDevice(guid);
   if (!device)
     return;
 
   if (permission_provider_ &&
       permission_provider_->HasDevicePermission(device)) {
-    // Owns itself.
-    new DeviceImpl(device, DeviceInfo::From(*device), permission_provider_,
-                   std::move(device_request));
+    DeviceImpl::Create(std::move(device), permission_provider_,
+                       std::move(device_request));
   }
 }
 
@@ -92,7 +90,7 @@ void DeviceManagerImpl::OnGetDevices(
 
   std::vector<DeviceInfoPtr> device_infos;
   for (const auto& device : devices) {
-    if (UsbDeviceFilter::MatchesAny(device, filters)) {
+    if (UsbDeviceFilter::MatchesAny(*device, filters)) {
       if (permission_provider_ &&
           permission_provider_->HasDevicePermission(device)) {
         device_infos.push_back(DeviceInfo::From(*device));
@@ -116,7 +114,7 @@ void DeviceManagerImpl::OnDeviceRemoved(scoped_refptr<UsbDevice> device) {
 }
 
 void DeviceManagerImpl::WillDestroyUsbService() {
-  delete this;
+  binding_->Close();
 }
 
 }  // namespace usb

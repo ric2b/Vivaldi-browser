@@ -5,6 +5,21 @@
           "className": "NetworkGroupLookup.NetworkProductGroupLookup",
           "title": "Product",
           "id": "product"
+        },
+        {
+          "type": "@Network.NetworkGroupLookupInterface",
+          "className": "NetworkGroupLookup.NetworkProductFrameGroupLookup",
+          "title": "Frame",
+          "id": "frame"
+        },
+        {
+          "type": "@Network.NetworkColumnExtensionInterface",
+          "className": "NetworkGroupLookup.NetworkProductGroupLookup",
+          "title": "Product"
+        },
+        {
+          "type": "@Network.NetworkRowDecorator",
+          "className": "NetworkGroupLookup.NetworkProductTypeGroupLookup"
         }
     ],
     "dependencies": [

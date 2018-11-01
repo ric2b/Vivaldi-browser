@@ -60,7 +60,7 @@ void SigninErrorHandler::HandleConfirm(const base::ListValue* args) {
 void SigninErrorHandler::HandleLearnMore(const base::ListValue* args) {
   Browser* browser = signin::GetDesktopBrowser(web_ui());
   DCHECK(browser);
-  browser->CloseModalSigninWindow();
+  browser->signin_view_controller()->CloseModalSignin();
   signin_ui_util::ShowSigninErrorLearnMorePage(browser->profile());
 }
 
@@ -70,7 +70,8 @@ void SigninErrorHandler::HandleInitializedWithSize(
   if (duplicate_profile_path_.empty())
     CallJavascriptFunction("signin.error.removeSwitchButton");
 
-  signin::SetInitializedModalHeight(web_ui(), args);
+  signin::SetInitializedModalHeight(signin::GetDesktopBrowser(web_ui()),
+                                    web_ui(), args);
 
   // After the dialog is shown, some platforms might have an element focused.
   // To be consistent, clear the focused element on all platforms.
@@ -88,6 +89,6 @@ void SigninErrorHandler::CloseDialog() {
   } else {
     Browser* browser = signin::GetDesktopBrowser(web_ui());
     DCHECK(browser);
-    browser->CloseModalSigninWindow();
+    browser->signin_view_controller()->CloseModalSignin();
   }
 }

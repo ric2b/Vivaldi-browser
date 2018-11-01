@@ -31,11 +31,14 @@ const char kVivaldiReservedApiError[] =
 
 const char kVivaldiUIScheme[] = "vivaldi";
 
+const char kVivaldiUIDataHost[] = "vivaldi-data";
+
+const char kVivaldiUIDataURL[] = "chrome://vivaldi-data/";
+
 const char kVivaldiVersion[] = VIVALDI_VERSION_STRING;
 
 const char kWindowExtDataKey[] = "extData";
 
 const wchar_t kUpdateNotifierAutorunName[] = L"Vivaldi Update Notifier";
-const wchar_t kQuitAllUpdateNotifiersEventName[] =
-    L"Local\\Vivaldi/Update_notifier/QuitAll";
+
 }  // namespace vivaldi

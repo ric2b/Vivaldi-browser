@@ -7,6 +7,7 @@ include_rules = [
   "+components/sync/base/weak_handle.h",
   "+components/sync/js",
   "+device/bluetooth",
+  "+extensions/strings/grit/extensions_strings.h",
 
   # Generated files
   "+js2webui/chrome/test/data",
@@ -16,7 +17,6 @@ include_rules = [
   "+third_party/angle",       # For ANGLE version.
   "+third_party/brotli",      # For compressed resources.
   "+third_party/zlib/zlib.h", # For compression level constants.
-  "+third_party/libaddressinput", # For i18n address input.
 
   # DOM Distiller.
   "+components/dom_distiller/core",

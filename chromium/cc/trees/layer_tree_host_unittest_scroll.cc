@@ -9,7 +9,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "build/build_config.h"
 #include "cc/animation/animation_host.h"
 #include "cc/base/completion_event.h"
 #include "cc/input/main_thread_scrolling_reason.h"
@@ -570,6 +569,8 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
     root_layer->SetBounds(gfx::Size(10, 10));
 
     root_scroll_layer_ = FakePictureLayer::Create(&fake_content_layer_client_);
+    root_scroll_layer_->SetElementId(
+        LayerIdToElementIdForTesting(root_scroll_layer_->id()));
     root_scroll_layer_->SetBounds(gfx::Size(110, 110));
     root_scroll_layer_->SetPosition(gfx::PointF());
     root_scroll_layer_->SetIsDrawable(true);
@@ -582,6 +583,8 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
     child_layer_->set_did_scroll_callback(
         base::Bind(&LayerTreeHostScrollTestCaseWithChild::DidScroll,
                    base::Unretained(this)));
+    child_layer_->SetElementId(
+        LayerIdToElementIdForTesting(child_layer_->id()));
     child_layer_->SetBounds(gfx::Size(110, 110));
 
     if (scroll_child_layer_) {
@@ -599,6 +602,8 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
 
     child_layer_->SetIsDrawable(true);
     child_layer_->SetScrollClipLayerId(outer_container_layer->id());
+    child_layer_->SetElementId(
+        LayerIdToElementIdForTesting(child_layer_->id()));
     child_layer_->SetBounds(root_scroll_layer_->bounds());
     root_scroll_layer_->AddChild(child_layer_);
 
@@ -1314,7 +1319,7 @@ class ThreadCheckingInputHandlerClient : public InputHandlerClient {
 void BindInputHandlerOnCompositorThread(
     const base::WeakPtr<InputHandler>& input_handler,
     ThreadCheckingInputHandlerClient* client) {
-  input_handler->BindToClient(client);
+  input_handler->BindToClient(client, false);
 }
 
 TEST(LayerTreeHostFlingTest, DidStopFlingingThread) {
@@ -1342,9 +1347,9 @@ TEST(LayerTreeHostFlingTest, DidStopFlingingThread) {
   ThreadCheckingInputHandlerClient input_handler_client(
       impl_thread.task_runner().get(), &received_stop_flinging);
   impl_thread.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&BindInputHandlerOnCompositorThread,
-                            layer_tree_host->GetInputHandler(),
-                            base::Unretained(&input_handler_client)));
+      FROM_HERE, base::BindOnce(&BindInputHandlerOnCompositorThread,
+                                layer_tree_host->GetInputHandler(),
+                                base::Unretained(&input_handler_client)));
 
   layer_tree_host->DidStopFlinging();
 
@@ -1435,6 +1440,8 @@ class LayerTreeHostScrollTestLayerStructureChange
     scroll_layer->SetPosition(gfx::PointF());
     scroll_layer->SetIsDrawable(true);
     scroll_layer->SetScrollClipLayerId(parent->id());
+    scroll_layer->SetElementId(
+        LayerIdToElementIdForTesting(scroll_layer->id()));
     scroll_layer->SetBounds(gfx::Size(parent->bounds().width() + 100,
                                       parent->bounds().height() + 100));
     scroll_layer->set_did_scroll_callback(base::Bind(
@@ -1861,15 +1868,15 @@ class LayerTreeHostScrollTestElasticOverscroll
     DCHECK(HasImplThread());
     ImplThreadTaskRunner()->PostTask(
         FROM_HERE,
-        base::Bind(&LayerTreeHostScrollTestElasticOverscroll::BindInputHandler,
-                   base::Unretained(this),
-                   layer_tree_host()->GetInputHandler()));
+        base::BindOnce(
+            &LayerTreeHostScrollTestElasticOverscroll::BindInputHandler,
+            base::Unretained(this), layer_tree_host()->GetInputHandler()));
     PostSetNeedsCommitToMainThread();
   }
 
   void BindInputHandler(base::WeakPtr<InputHandler> input_handler) {
     DCHECK(task_runner_provider()->IsImplThread());
-    input_handler->BindToClient(&input_handler_client_);
+    input_handler->BindToClient(&input_handler_client_, false);
     scroll_elasticity_helper_ = input_handler->CreateScrollElasticityHelper();
     DCHECK(scroll_elasticity_helper_);
   }
@@ -2072,20 +2079,11 @@ class LayerTreeHostScrollTestPropertyTreeUpdate
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostScrollTestPropertyTreeUpdate);
 
-// Disabled due to flakes/crashes on Linux TSan Tests and on
-// linux_chromium_asan_rel; see https://crbug.com/697652.
-#if defined(OS_LINUX)
-#define MAYBE_LayerTreeHostScrollTestImplSideInvalidation \
-  DISABLED_LayerTreeHostScrollTestImplSideInvalidation
-#else
-#define MAYBE_LayerTreeHostScrollTestImplSideInvalidation \
-  LayerTreeHostScrollTestImplSideInvalidation
-#endif
-class MAYBE_LayerTreeHostScrollTestImplSideInvalidation
+class LayerTreeHostScrollTestImplSideInvalidation
     : public LayerTreeHostScrollTest {
   void BeginTest() override {
     layer_tree_host()->outer_viewport_scroll_layer()->set_did_scroll_callback(
-        base::Bind(&MAYBE_LayerTreeHostScrollTestImplSideInvalidation::
+        base::Bind(&LayerTreeHostScrollTestImplSideInvalidation::
                        DidScrollOuterViewport,
                    base::Unretained(this)));
     PostSetNeedsCommitToMainThread();
@@ -2098,9 +2096,9 @@ class MAYBE_LayerTreeHostScrollTestImplSideInvalidation
       CompletionEvent completion;
       task_runner_provider()->ImplThreadTaskRunner()->PostTask(
           FROM_HERE,
-          base::Bind(&MAYBE_LayerTreeHostScrollTestImplSideInvalidation::
-                         WaitForInvalidationOnImplThread,
-                     base::Unretained(this), &completion));
+          base::BindOnce(&LayerTreeHostScrollTestImplSideInvalidation::
+                             WaitForInvalidationOnImplThread,
+                         base::Unretained(this), &completion));
       completion.Wait();
     }
 
@@ -2172,18 +2170,11 @@ class MAYBE_LayerTreeHostScrollTestImplSideInvalidation
 
   void BeginMainFrameAbortedOnThread(LayerTreeHostImpl* host_impl,
                                      CommitEarlyOutReason reason) override {
-    // The aborted main frame is bound to come after the fourth activation,
-    // since the activation should occur synchronously after the impl-side
-    // invalidation, and the main thread is released after this activation. It
-    // should leave the scroll offset unchanged.
-    EXPECT_EQ(reason, CommitEarlyOutReason::FINISHED_NO_UPDATES);
-    EXPECT_EQ(num_of_activations_, 4);
-    EXPECT_EQ(num_of_main_frames_, 3);
-    EXPECT_EQ(host_impl->active_tree()
-                  ->OuterViewportScrollLayer()
-                  ->CurrentScrollOffset(),
-              outer_viewport_offsets_[2]);
-    EndTest();
+    EXPECT_EQ(CommitEarlyOutReason::FINISHED_NO_UPDATES, reason);
+    EXPECT_EQ(3, num_of_main_frames_);
+    EXPECT_EQ(outer_viewport_offsets_[2], host_impl->active_tree()
+                                              ->OuterViewportScrollLayer()
+                                              ->CurrentScrollOffset());
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
@@ -2200,11 +2191,10 @@ class MAYBE_LayerTreeHostScrollTestImplSideInvalidation
         // The second activation is from an impl-side pending tree so the source
         // frame number on the active tree remains unchanged, and the scroll
         // offset on the active tree should also remain unchanged.
-        EXPECT_EQ(host_impl->active_tree()->source_frame_number(), 0);
-        EXPECT_EQ(host_impl->active_tree()
-                      ->OuterViewportScrollLayer()
-                      ->CurrentScrollOffset(),
-                  outer_viewport_offsets_[1]);
+        EXPECT_EQ(0, host_impl->active_tree()->source_frame_number());
+        EXPECT_EQ(outer_viewport_offsets_[1], host_impl->active_tree()
+                                                  ->OuterViewportScrollLayer()
+                                                  ->CurrentScrollOffset());
         break;
       case 3:
         // The third activation is from a commit. The scroll offset on the
@@ -2218,21 +2208,25 @@ class MAYBE_LayerTreeHostScrollTestImplSideInvalidation
       case 4:
         // The fourth activation is from an impl-side pending tree, which should
         // leave the scroll offset unchanged.
-        EXPECT_EQ(host_impl->active_tree()->source_frame_number(), 1);
-        EXPECT_EQ(host_impl->active_tree()
-                      ->OuterViewportScrollLayer()
-                      ->CurrentScrollOffset(),
-                  outer_viewport_offsets_[2]);
+        EXPECT_EQ(1, host_impl->active_tree()->source_frame_number());
+        EXPECT_EQ(outer_viewport_offsets_[2], host_impl->active_tree()
+                                                  ->OuterViewportScrollLayer()
+                                                  ->CurrentScrollOffset());
         break;
       default:
         NOTREACHED();
     }
   }
 
+  void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
+    if (++num_of_draws_ == 4)
+      EndTest();
+  }
+
   void AfterTest() override {
-    EXPECT_EQ(num_of_activations_, 4);
-    EXPECT_EQ(num_of_deltas_, 2);
-    EXPECT_EQ(num_of_main_frames_, 3);
+    EXPECT_EQ(4, num_of_activations_);
+    EXPECT_EQ(2, num_of_deltas_);
+    EXPECT_EQ(3, num_of_main_frames_);
   }
 
   const gfx::ScrollOffset outer_viewport_offsets_[3] = {
@@ -2241,6 +2235,7 @@ class MAYBE_LayerTreeHostScrollTestImplSideInvalidation
 
   // Impl thread.
   int num_of_activations_ = 0;
+  int num_of_draws_ = 0;
   int num_of_main_frames_ = 0;
   bool invalidated_on_impl_thread_ = false;
   CompletionEvent* impl_side_invalidation_event_ = nullptr;
@@ -2249,7 +2244,7 @@ class MAYBE_LayerTreeHostScrollTestImplSideInvalidation
   int num_of_deltas_ = 0;
 };
 
-MULTI_THREAD_TEST_F(MAYBE_LayerTreeHostScrollTestImplSideInvalidation);
+MULTI_THREAD_TEST_F(LayerTreeHostScrollTestImplSideInvalidation);
 
 }  // namespace
 }  // namespace cc

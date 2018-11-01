@@ -34,6 +34,7 @@ using base::TimeDelta;
 using sessions::SerializedNavigationEntry;
 using sessions::SessionTab;
 using sessions::SessionWindow;
+using sync_sessions::SyncedSessionWindow;
 using sync_sessions::SyncedSession;
 
 using DismissedFilter = base::Callback<bool(const std::string& id)>;
@@ -199,8 +200,7 @@ CategoryInfo ForeignSessionsSuggestionsProvider::GetCategoryInfo(
   return CategoryInfo(l10n_util::GetStringUTF16(
                           IDS_NTP_FOREIGN_SESSIONS_SUGGESTIONS_SECTION_HEADER),
                       ContentSuggestionsCardLayout::MINIMAL_CARD,
-                      /*has_fetch_action=*/false,
-                      /*has_view_all_action=*/true,
+                      ContentSuggestionsAdditionalAction::VIEW_ALL,
                       /*show_if_empty=*/false,
                       l10n_util::GetStringUTF16(
                           IDS_NTP_FOREIGN_SESSIONS_SUGGESTIONS_SECTION_EMPTY));
@@ -232,11 +232,11 @@ void ForeignSessionsSuggestionsProvider::Fetch(
   LOG(DFATAL)
       << "ForeignSessionsSuggestionsProvider has no |Fetch| functionality!";
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(callback, Status(StatusCode::PERMANENT_ERROR,
-                                  "ForeignSessionsSuggestionsProvider "
-                                  "has no |Fetch| functionality!"),
-                 base::Passed(std::vector<ContentSuggestion>())));
+      FROM_HERE, base::Bind(callback,
+                            Status(StatusCode::PERMANENT_ERROR,
+                                   "ForeignSessionsSuggestionsProvider "
+                                   "has no |Fetch| functionality!"),
+                            base::Passed(std::vector<ContentSuggestion>())));
 }
 
 void ForeignSessionsSuggestionsProvider::ClearHistory(
@@ -366,10 +366,9 @@ ForeignSessionsSuggestionsProvider::GetSuggestionCandidates(
   const TimeDelta max_foreign_tab_age = GetMaxForeignTabAge();
   std::vector<SessionData> suggestion_candidates;
   for (const SyncedSession* session : foreign_sessions) {
-    for (const std::pair<const SessionID::id_type,
-                         std::unique_ptr<sessions::SessionWindow>>& key_value :
-         session->windows) {
-      for (const std::unique_ptr<SessionTab>& tab : key_value.second->tabs) {
+    for (const auto& key_value : session->windows) {
+      for (const std::unique_ptr<SessionTab>& tab :
+           key_value.second->wrapped_window.tabs) {
         if (tab->navigations.empty()) {
           continue;
         }

@@ -22,22 +22,22 @@
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/proto/data_store.pb.h"
 
+namespace data_reduction_proxy {
+
 namespace {
+
 const char kCurrentBucketIndexKey[] = "current_bucket_index";
 const char kBucketKeyPrefix[] = "data_usage_bucket:";
 
 const int kMinutesInHour = 60;
 const int kMinutesInDay = 24 * kMinutesInHour;
 
-// Time interval for each DataUsageBucket.
-const int kDataUsageBucketLengthInMinutes = 15;
-static_assert(kDataUsageBucketLengthInMinutes > 0,
+static_assert(data_reduction_proxy::kDataUsageBucketLengthInMinutes > 0,
               "Length of time should be positive");
-static_assert(kMinutesInHour % kDataUsageBucketLengthInMinutes == 0,
+static_assert(kMinutesInHour %
+                      data_reduction_proxy::kDataUsageBucketLengthInMinutes ==
+                  0,
               "kDataUsageBucketLengthMins must be a factor of kMinsInHour");
-
-// Number of days for which to maintain data usage history.
-const int kDataUsageHistoryNumDays = 60;
 
 // Total number of buckets persisted to DB.
 const int kNumDataUsageBuckets =
@@ -64,8 +64,6 @@ base::Time BucketLowerBoundary(base::Time time) {
 }
 
 }  // namespace
-
-namespace data_reduction_proxy {
 
 DataUsageStore::DataUsageStore(DataStore* db)
     : db_(db), current_bucket_index_(-1) {
@@ -154,10 +152,16 @@ void DataUsageStore::StoreCurrentDataUsageBucket(
 }
 
 void DataUsageStore::DeleteHistoricalDataUsage() {
-  for (int i = 0; i < kNumDataUsageBuckets; ++i)
-    db_->Delete(DbKeyForBucketIndex(i));
+  std::string current_index_string;
+  DataStore::Status index_read_status =
+      db_->Get(kCurrentBucketIndexKey, &current_index_string);
 
-  db_->Delete(kCurrentBucketIndexKey);
+  // If the index doesn't exist, then no buckets have been written and the
+  // data usage doesn't need to be deleted.
+  if (index_read_status != DataStore::Status::OK)
+    return;
+
+  db_->RecreateDB();
 }
 
 void DataUsageStore::DeleteBrowsingHistory(const base::Time& start,

@@ -11,7 +11,6 @@
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/win/object_watcher.h"
 #include "components/device_event_log/device_event_log.h"
@@ -30,8 +29,7 @@ extern "C" {
 
 namespace device {
 
-class PendingHidTransfer : public base::win::ObjectWatcher::Delegate,
-                           public base::MessageLoop::DestructionObserver {
+class PendingHidTransfer : public base::win::ObjectWatcher::Delegate {
  public:
   typedef base::OnceCallback<void(PendingHidTransfer*, bool)> Callback;
 
@@ -44,9 +42,6 @@ class PendingHidTransfer : public base::win::ObjectWatcher::Delegate,
 
   // Implements base::win::ObjectWatcher::Delegate.
   void OnObjectSignaled(HANDLE object) override;
-
-  // Implements base::MessageLoop::DestructionObserver
-  void WillDestroyCurrentMessageLoop() override;
 
  private:
   // The buffer isn't used by this object but it's important that a reference
@@ -70,7 +65,6 @@ PendingHidTransfer::PendingHidTransfer(scoped_refptr<net::IOBuffer> buffer,
 }
 
 PendingHidTransfer::~PendingHidTransfer() {
-  base::MessageLoop::current()->RemoveDestructionObserver(this);
   if (callback_)
     std::move(callback_).Run(this, false);
 }
@@ -79,7 +73,6 @@ void PendingHidTransfer::TakeResultFromWindowsAPI(BOOL result) {
   if (result) {
     std::move(callback_).Run(this, true);
   } else if (GetLastError() == ERROR_IO_PENDING) {
-    base::MessageLoop::current()->AddDestructionObserver(this);
     watcher_.StartWatchingOnce(event_.Get(), this);
   } else {
     HID_PLOG(EVENT) << "HID transfer failed";
@@ -91,14 +84,9 @@ void PendingHidTransfer::OnObjectSignaled(HANDLE event_handle) {
   std::move(callback_).Run(this, true);
 }
 
-void PendingHidTransfer::WillDestroyCurrentMessageLoop() {
-  watcher_.StopWatching();
-  std::move(callback_).Run(this, false);
-}
-
 HidConnectionWin::HidConnectionWin(scoped_refptr<HidDeviceInfo> device_info,
                                    base::win::ScopedHandle file)
-    : HidConnection(device_info), file_(std::move(file)) {}
+    : HidConnection(std::move(device_info)), file_(std::move(file)) {}
 
 HidConnectionWin::~HidConnectionWin() {
   DCHECK(!file_.IsValid());
@@ -191,13 +179,26 @@ void HidConnectionWin::OnReadComplete(scoped_refptr<net::IOBuffer> buffer,
 
   std::unique_ptr<PendingHidTransfer> transfer = UnlinkTransfer(transfer_raw);
   DWORD bytes_transferred;
-  if (signaled && GetOverlappedResult(file_.Get(), transfer->GetOverlapped(),
-                                      &bytes_transferred, FALSE)) {
-    CompleteRead(buffer, bytes_transferred, callback);
-  } else {
+  if (!signaled || !GetOverlappedResult(file_.Get(), transfer->GetOverlapped(),
+                                        &bytes_transferred, FALSE)) {
     HID_PLOG(EVENT) << "HID read failed";
     callback.Run(false, nullptr, 0);
+    return;
   }
+
+  if (bytes_transferred < 1) {
+    HID_LOG(EVENT) << "HID read too short.";
+    callback.Run(false, nullptr, 0);
+    return;
+  }
+
+  uint8_t report_id = buffer->data()[0];
+  if (IsReportIdProtected(report_id)) {
+    PlatformRead(callback);
+    return;
+  }
+
+  callback.Run(true, buffer, bytes_transferred);
 }
 
 void HidConnectionWin::OnReadFeatureComplete(

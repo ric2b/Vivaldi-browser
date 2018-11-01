@@ -4,6 +4,7 @@
 
 #import "chrome/browser/ui/cocoa/tabs/tab_view.h"
 
+#include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/mac/sdk_forward_declarations.h"
@@ -16,6 +17,7 @@
 #import "chrome/browser/ui/cocoa/tabs/tab_window_controller.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/theme_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMFadeTruncatingTextFieldCell.h"
@@ -32,6 +34,10 @@ namespace {
 
 // The color of the icons in dark mode theme.
 const SkColor kDarkModeIconColor = SkColorSetARGB(0xFF, 0xC4, 0xC4, 0xC4);
+
+bool IsTabStripKeyboardFocusEnabled() {
+  return base::FeatureList::IsEnabled(features::kTabStripKeyboardFocus);
+}
 
 }  // namespace
 
@@ -80,6 +86,10 @@ const CGFloat kRapidCloseDist = 2.5;
 + (void)setTabEdgeStrokeColor;
 @end
 
+@interface TabHeavyInvertedImageMaker : TabImageMaker
++ (void)setTabEdgeStrokeColor;
+@end
+
 @interface TabController(Private)
 // The TabView's close button.
 - (HoverCloseButton*)closeButton;
@@ -92,7 +102,19 @@ namespace {
 enum StrokeType {
   STROKE_NORMAL,
   STROKE_HEAVY,
+  STROKE_HEAVY_INVERTED,
 };
+
+Class drawingClassForStrokeType(StrokeType stroke_type) {
+  switch (stroke_type) {
+    case STROKE_NORMAL:
+      return [TabImageMaker class];
+    case STROKE_HEAVY:
+      return [TabHeavyImageMaker class];
+    case STROKE_HEAVY_INVERTED:
+      return [TabHeavyInvertedImageMaker class];
+  }
+}
 
 NSImage* imageForResourceID(int resource_id, StrokeType stroke_type) {
   CGFloat imageWidth = resource_id == IDR_TAB_ACTIVE_CENTER ? 1 : 18;
@@ -120,8 +142,7 @@ NSImage* imageForResourceID(int resource_id, StrokeType stroke_type) {
   }
   DCHECK(theSelector);
 
-  Class makerClass = stroke_type == STROKE_HEAVY ? [TabHeavyImageMaker class]
-                                                 : [TabImageMaker class];
+  Class makerClass = drawingClassForStrokeType(stroke_type);
   base::scoped_nsobject<NSCustomImageRep> imageRep([[NSCustomImageRep alloc]
       initWithDrawSelector:theSelector
                   delegate:makerClass]);
@@ -154,8 +175,20 @@ ui::ThreePartImage& GetStrokeImage(bool active, StrokeType stroke_type) {
       (imageForResourceID(IDR_TAB_ACTIVE_LEFT, STROKE_HEAVY),
        imageForResourceID(IDR_TAB_ACTIVE_CENTER, STROKE_HEAVY),
        imageForResourceID(IDR_TAB_ACTIVE_RIGHT, STROKE_HEAVY)));
+  CR_DEFINE_STATIC_LOCAL(
+      ui::ThreePartImage, heavyInvertedStroke,
+      (imageForResourceID(IDR_TAB_ACTIVE_LEFT, STROKE_HEAVY_INVERTED),
+       imageForResourceID(IDR_TAB_ACTIVE_CENTER, STROKE_HEAVY_INVERTED),
+       imageForResourceID(IDR_TAB_ACTIVE_RIGHT, STROKE_HEAVY_INVERTED)));
 
-  return stroke_type == STROKE_HEAVY ? heavyStroke : stroke;
+  switch (stroke_type) {
+    case STROKE_NORMAL:
+      return stroke;
+    case STROKE_HEAVY:
+      return heavyStroke;
+    case STROKE_HEAVY_INVERTED:
+      return heavyInvertedStroke;
+  }
 }
 
 CGFloat LineWidthFromContext(CGContextRef context) {
@@ -521,10 +554,12 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   clipRect.origin.y += [self cr_lineWidth];
   NSRectClip(clipRect);
   const ui::ThemeProvider* provider = [[self window] themeProvider];
-  GetStrokeImage(state_ == NSOnState,
-                 provider && provider->ShouldIncreaseContrast()
-                     ? STROKE_HEAVY
-                     : STROKE_NORMAL)
+  StrokeType stroke_type = STROKE_NORMAL;
+  if (provider && provider->ShouldIncreaseContrast()) {
+    stroke_type =
+        [[self window] hasDarkTheme] ? STROKE_HEAVY_INVERTED : STROKE_HEAVY;
+  }
+  GetStrokeImage(state_ == NSOnState, stroke_type)
       .DrawInRect(bounds, NSCompositeSourceOver, alpha);
 }
 
@@ -789,6 +824,27 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   [self setNeedsDisplay:YES];
 }
 
+- (BOOL)acceptsFirstResponder {
+  return IsTabStripKeyboardFocusEnabled() ? YES : NO;
+}
+
+- (BOOL)becomeFirstResponder {
+  return IsTabStripKeyboardFocusEnabled() ? YES : NO;
+}
+
+- (void)drawFocusRingMask {
+  if (!IsTabStripKeyboardFocusEnabled())
+    return;
+  if ([titleView_ isHidden])
+    NSRectFill([self bounds]);
+  else
+    NSRectFill([titleView_ frame]);
+}
+
+- (NSRect)focusRingMaskBounds {
+  return [self bounds];
+}
+
 @end  // @implementation TabView
 
 @implementation TabView (TabControllerInterface)
@@ -1028,6 +1084,20 @@ CGFloat LineWidthFromContext(CGContextRef context) {
 + (void)setTabEdgeStrokeColor {
   static NSColor* heavyStrokeColor =
       [skia::SkColorToSRGBNSColor(SK_ColorBLACK) retain];
+  [heavyStrokeColor set];
+}
+
+@end
+
+@implementation TabHeavyInvertedImageMaker
+
+// For "Increase Contrast" mode, when using a dark theme, the stroke should be
+// drawn in flat white instead of flat black. There is normally no need to
+// special-case this since the lower-contrast border is equally visible in light
+// or dark themes.
++ (void)setTabEdgeStrokeColor {
+  static NSColor* heavyStrokeColor =
+      [skia::SkColorToSRGBNSColor(SK_ColorWHITE) retain];
   [heavyStrokeColor set];
 }
 

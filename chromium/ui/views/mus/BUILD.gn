@@ -48,8 +48,6 @@ component("mus") {
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//cc/surfaces",
-    "//components/discardable_memory/client",
-    "//components/discardable_memory/public/interfaces",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//net",
@@ -130,6 +128,7 @@ static_library("test_support") {
     "//testing/gtest",
     "//ui/aura",
     "//ui/aura:test_support",
+    "//ui/compositor:test_support",
     "//ui/gl:test_support",
     "//ui/resources",
     "//ui/resources:ui_test_pak",
@@ -230,6 +229,7 @@ test("views_mus_interactive_ui_tests") {
   sources = [
     "../widget/widget_interactive_uitest.cc",
     "clipboard_unittest.cc",
+    "drag_interactive_uitest.cc",
     "interactive_ui_tests_mus.cc",
   ]
 
@@ -240,6 +240,7 @@ test("views_mus_interactive_ui_tests") {
     "//testing/gmock",
     "//testing/gtest",
     "//ui/aura",
+    "//ui/aura:test_support",
     "//ui/base",
     "//ui/base/ime",
     "//ui/events:events_base",

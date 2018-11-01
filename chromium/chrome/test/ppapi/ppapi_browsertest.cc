@@ -1159,8 +1159,9 @@ IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, MAYBE_FlashMessageLoop) {
 TEST_PPAPI_NACL_SUBTESTS(MAYBE_Compositor0, RUN_COMPOSITOR_SUBTESTS_0)
 TEST_PPAPI_NACL_SUBTESTS(MAYBE_Compositor1, RUN_COMPOSITOR_SUBTESTS_1)
 
-#if defined(OS_LINUX) || defined(OS_WIN) || defined(OS_CHROMEOS)
-// Flaky on ChromeOS, Linux and Windows (crbug.com/438729)
+#if defined(OS_LINUX) || defined(OS_WIN) || defined(OS_CHROMEOS) || \
+    defined(OS_MACOSX)
+// Flaky on ChromeOS, Linux, Windows, and Mac (crbug.com/438729)
 #define MAYBE_MediaStreamAudioTrack DISABLED_MediaStreamAudioTrack
 #else
 #define MAYBE_MediaStreamAudioTrack MediaStreamAudioTrack
@@ -1302,8 +1303,14 @@ class NonSfiPackagedAppTest : public PackagedAppTest {
 
 // Load a packaged app, and wait for it to successfully post a "hello" message
 // back.
+#if defined(OS_WIN) || !defined(NDEBUG)
+// flaky: crbug.com/707068
+// flaky on debug builds: crbug.com/709447
+IN_PROC_BROWSER_TEST_F(NewlibPackagedAppTest, DISABLED_SuccessfulLoad) {
+#else
 IN_PROC_BROWSER_TEST_F(NewlibPackagedAppTest,
                        MAYBE_PPAPI_NACL(SuccessfulLoad)) {
+#endif
   RunTests("packaged_app");
 }
 

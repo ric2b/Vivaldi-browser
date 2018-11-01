@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <utility>
 
-#include "ash/common/wm/window_resizer.h"
+#include "ash/wm/window_resizer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "build/build_config.h"
@@ -63,7 +63,7 @@ class TestScreen : public display::Screen {
   }
 
   display::Display GetDisplayNearestWindow(
-      gfx::NativeView view) const override {
+      gfx::NativeWindow window) const override {
 #if defined(USE_AURA)
     return displays_[index_of_display_nearest_window_];
 #else

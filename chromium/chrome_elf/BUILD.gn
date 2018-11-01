@@ -79,6 +79,7 @@ source_set("security") {
   deps = [
     ":constants",
     ":nt_registry",
+    "//chrome/install_static:install_static_util",
   ]
 }
 
@@ -149,6 +150,7 @@ static_library("crash") {
     "//chrome/install_static:install_static_util",
     "//components/crash/content/app:app",
     "//components/crash/core/common",  # crash_keys
+    "//components/version_info:channel",
     "//content/public/common:result_codes",
     "//third_party/crashpad/crashpad/client:client",  # DumpWithoutCrash
   ]
@@ -215,6 +217,7 @@ test("chrome_elf_unittests") {
     "//chrome",
     "//chrome/common:version_header",
     "//chrome/install_static:install_static_util",
+    "//chrome/install_static/test:test_support",
     "//sandbox",
     "//testing/gtest",
   ]
@@ -249,6 +252,7 @@ shared_library("blacklist_test_main_dll") {
   sources = [
     "blacklist/test/blacklist_test_main_dll.cc",
     "blacklist/test/blacklist_test_main_dll.def",
+    "blacklist/test/blacklist_test_main_dll.h",
   ]
   deps = [
     ":blacklist",

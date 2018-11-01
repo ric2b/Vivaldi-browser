@@ -22,35 +22,64 @@ MaterialBookmarksBrowserTest.prototype = {
                          switchValue: 'MaterialDesignBookmarks'}],
 
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    'test_store.js',
     'test_util.js',
   ]),
 };
 
-function MaterialBookmarksStoreTest() {}
+function MaterialBookmarksActionsTest() {}
 
-MaterialBookmarksStoreTest.prototype = {
+MaterialBookmarksActionsTest.prototype = {
   __proto__: MaterialBookmarksBrowserTest.prototype,
 
   extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
-    'store_test.js',
+    'actions_test.js',
   ]),
 };
 
-TEST_F('MaterialBookmarksStoreTest', 'All', function() {
+TEST_F('MaterialBookmarksActionsTest', 'All', function() {
   mocha.run();
 });
 
-function MaterialBookmarksSidebarTest() {}
+function MaterialBookmarksAppTest() {}
 
-MaterialBookmarksSidebarTest.prototype = {
+MaterialBookmarksAppTest.prototype = {
   __proto__: MaterialBookmarksBrowserTest.prototype,
 
   extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
-    'sidebar_test.js',
+    'app_test.js',
   ]),
 };
 
-TEST_F('MaterialBookmarksSidebarTest', 'All', function() {
+TEST_F('MaterialBookmarksAppTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksDNDManagerTest() {}
+
+MaterialBookmarksDNDManagerTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'dnd_manager_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksDNDManagerTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksEditDialogTest() {}
+
+MaterialBookmarksEditDialogTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'edit_dialog_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksEditDialogTest', 'All', function() {
   mocha.run();
 });
 
@@ -79,5 +108,75 @@ MaterialBookmarksListTest.prototype = {
 };
 
 TEST_F('MaterialBookmarksListTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksReducersTest() {}
+
+MaterialBookmarksReducersTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'reducers_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksReducersTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksRouterTest() {}
+
+MaterialBookmarksRouterTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'router_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksRouterTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksSidebarTest() {}
+
+MaterialBookmarksSidebarTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'sidebar_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksSidebarTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksStoreClientTest() {}
+
+MaterialBookmarksStoreClientTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'store_client_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksStoreClientTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksUtilTest() {}
+
+MaterialBookmarksUtilTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'util_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksUtilTest', 'All', function() {
   mocha.run();
 });

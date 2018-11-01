@@ -22,7 +22,6 @@
 #include "chrome/browser/chromeos/file_manager/open_with_browser.h"
 #include "chrome/browser/chromeos/fileapi/file_system_backend.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/common/extensions/api/file_browser_handlers/file_browser_handler.h"
@@ -392,9 +391,7 @@ void FileBrowserHandlerExecutor::SetupPermissionsAndDispatchEvent(
   auto details = base::MakeUnique<base::DictionaryValue>();
   // Get file definitions. These will be replaced with Entry instances by
   // dispatchEvent() method from event_binding.js.
-  base::ListValue* file_entries = new base::ListValue();
-  details->Set("entries", file_entries);
-  event_args->Append(std::move(details));
+  auto file_entries = base::MakeUnique<base::ListValue>();
 
   for (EntryDefinitionList::const_iterator iter =
            entry_definition_list->begin();
@@ -409,6 +406,8 @@ void FileBrowserHandlerExecutor::SetupPermissionsAndDispatchEvent(
     file_entries->Append(std::move(file_def));
   }
 
+  details->Set("entries", std::move(file_entries));
+  event_args->Append(std::move(details));
   std::unique_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::FILE_BROWSER_HANDLER_ON_EXECUTE,
       "fileBrowserHandler.onExecute", std::move(event_args)));

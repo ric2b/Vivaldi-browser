@@ -35,7 +35,7 @@ Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 """
 from operator import or_
 
-from idl_definitions import IdlOperation, IdlArgument
+from idl_definitions import IdlAttribute, IdlOperation, IdlArgument
 from idl_types import IdlType, inherits_interface
 from overload_set_algorithm import effective_overload_set_by_length
 from overload_set_algorithm import method_overloads_by_name
@@ -51,8 +51,9 @@ from v8_utilities import (cpp_name_or_partial, cpp_name, has_extended_attribute_
 
 INTERFACE_H_INCLUDES = frozenset([
     'bindings/core/v8/GeneratedCodeHelper.h',
+    'bindings/core/v8/NativeValueTraits.h',
     'bindings/core/v8/ScriptWrappable.h',
-    'bindings/core/v8/ToV8.h',
+    'bindings/core/v8/ToV8ForCore.h',
     'bindings/core/v8/V8Binding.h',
     'bindings/core/v8/V8DOMWrapper.h',
     'bindings/core/v8/WrapperTypeInfo.h',
@@ -62,9 +63,9 @@ INTERFACE_CPP_INCLUDES = frozenset([
     'bindings/core/v8/ExceptionState.h',
     'bindings/core/v8/V8DOMConfiguration.h',
     'bindings/core/v8/V8ObjectConstructor.h',
-    'core/dom/Document.h',
-    'wtf/GetPtr.h',
-    'wtf/RefPtr.h',
+    'core/dom/ExecutionContext.h',
+    'platform/wtf/GetPtr.h',
+    'platform/wtf/RefPtr.h',
 ])
 
 
@@ -213,7 +214,7 @@ def interface_context(interface, interfaces):
     # as in the WebIDL spec?
     is_immutable_prototype = is_global or 'ImmutablePrototype' in extended_attributes
 
-    wrapper_class_id = ('NodeClassId' if inherits_interface(interface.name, 'Node') else 'ObjectClassId')
+    wrapper_class_id = ('kNodeClassId' if inherits_interface(interface.name, 'Node') else 'kObjectClassId')
 
     # [ActiveScriptWrappable] must be accompanied with [DependentLifetime].
     if active_scriptwrappable and not is_dependent_lifetime:
@@ -249,7 +250,7 @@ def interface_context(interface, interfaces):
         'is_node': inherits_interface(interface.name, 'Node'),
         'is_partial': interface.is_partial,
         'is_typed_array_type': is_typed_array_type,
-        'lifetime': 'Dependent' if is_dependent_lifetime else 'Independent',
+        'lifetime': 'kDependent' if is_dependent_lifetime else 'kIndependent',
         'measure_as': v8_utilities.measure_as(interface, None),  # [MeasureAs]
         'needs_runtime_enabled_installer': needs_runtime_enabled_installer,
         'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(interface),
@@ -296,6 +297,8 @@ def interface_context(interface, interfaces):
             raise Exception('[Constructor] and [NamedConstructor] MUST NOT be'
                             ' specified on partial interface definitions: '
                             '%s' % interface.name)
+        if named_constructor:
+            includes.add('bindings/core/v8/V8PrivateProperty.h')
 
         includes.add('bindings/core/v8/V8ObjectConstructor.h')
         includes.add('core/frame/LocalDOMWindow.h')
@@ -303,6 +306,10 @@ def interface_context(interface, interfaces):
         if not interface.is_partial:
             raise Exception('[Measure] or [MeasureAs] specified for interface without a constructor: '
                             '%s' % interface.name)
+
+    # [ConstructorCallWith=Document]
+    if has_extended_attribute_value(interface, 'ConstructorCallWith', 'Document'):
+        includes.add('core/dom/Document.h')
 
     # [Unscopable] attributes and methods
     unscopables = []
@@ -343,13 +350,7 @@ def interface_context(interface, interfaces):
     })
 
     # Attributes
-    attributes = [v8_attributes.attribute_context(interface, attribute, interfaces)
-                  for attribute in interface.attributes]
-
-    has_conditional_attributes = any(attribute['exposed_test'] for attribute in attributes)
-    if has_conditional_attributes and interface.is_partial:
-        raise Exception('Conditional attributes between partial interfaces in modules and the original interfaces(%s) in core are not allowed.' % interface.name)
-
+    attributes = attributes_context(interface, interfaces)
     context.update({
         'attributes': attributes,
         # Elements in attributes are broken in following members.
@@ -455,6 +456,45 @@ def interface_context(interface, interfaces):
     return context
 
 
+def attributes_context(interface, interfaces):
+    """Creates a list of Jinja template contexts for attributes of an interface.
+
+    Args:
+        interface: An interface to create contexts for
+        interfaces: A dict which maps an interface name to the definition
+            which can be referred if needed
+
+    Returns:
+        A list of attribute contexts
+    """
+
+    attributes = [v8_attributes.attribute_context(interface, attribute, interfaces)
+                  for attribute in interface.attributes]
+
+    has_conditional_attributes = any(attribute['exposed_test'] for attribute in attributes)
+    if has_conditional_attributes and interface.is_partial:
+        raise Exception(
+            'Conditional attributes between partial interfaces in modules '
+            'and the original interfaces(%s) in core are not allowed.'
+            % interface.name)
+
+    # See also comment in methods_context.
+    if not interface.is_partial and (interface.maplike or interface.setlike):
+        if any(attribute['name'] == 'size' for attribute in attributes):
+            raise ValueError(
+                'An interface cannot define an attribute called "size"; it is '
+                'implied by maplike/setlike in the IDL.')
+        size_attribute = IdlAttribute()
+        size_attribute.name = 'size'
+        size_attribute.idl_type = IdlType('unsigned long')
+        size_attribute.is_read_only = True
+        size_attribute.extended_attributes['NotEnumerable'] = None
+        attributes.append(v8_attributes.attribute_context(
+            interface, size_attribute, interfaces))
+
+    return attributes
+
+
 def methods_context(interface):
     """Creates a list of Jinja template contexts for methods of an interface.
 
@@ -504,7 +544,7 @@ def methods_context(interface):
             argument.extended_attributes.update(extended_attributes)
         return argument
 
-    # [Iterable], iterable<>, maplike<> and setlike<>
+    # iterable<>, maplike<> and setlike<>
     iterator_method = None
 
     # FIXME: support Iterable in partial interfaces. However, we don't
@@ -513,8 +553,7 @@ def methods_context(interface):
     # http://heycam.github.io/webidl/#idl-overloading
     if (not interface.is_partial and (
             interface.iterable or interface.maplike or interface.setlike or
-            interface.has_indexed_elements or
-            'Iterable' in interface.extended_attributes)):
+            interface.has_indexed_elements)):
 
         used_extended_attributes = {}
 
@@ -548,7 +587,7 @@ def methods_context(interface):
                 implemented_as=implemented_as)
 
         if not interface.has_indexed_elements:
-            iterator_method = generated_iterator_method('iterator', implemented_as='iterator')
+            iterator_method = generated_iterator_method('iterator', implemented_as='GetIterator')
 
         if interface.iterable or interface.maplike or interface.setlike:
             non_overridable_methods = []
@@ -1034,7 +1073,7 @@ def resolution_tests_methods(effective_overloads):
     try:
         method = next(method for idl_type, method in idl_types_methods
                       if idl_type.is_nullable)
-        test = 'isUndefinedOrNull(%s)' % cpp_value
+        test = 'IsUndefinedOrNull(%s)' % cpp_value
         yield test, method
     except StopIteration:
         pass
@@ -1098,7 +1137,8 @@ def resolution_tests_methods(effective_overloads):
             # Array in overloaded method: http://crbug.com/262383
             yield '%s->IsArray()' % cpp_value, method
     for idl_type, method in idl_types_methods:
-        if idl_type.is_dictionary or idl_type.name == 'Dictionary' or idl_type.is_callback_interface:
+        if idl_type.is_dictionary or idl_type.name == 'Dictionary' or \
+           idl_type.is_callback_interface or idl_type.is_record_type:
             # FIXME: should be '{1}->IsObject() && !{1}->IsRegExp()'.format(cpp_value)
             # FIXME: the IsRegExp checks can be skipped if we've
             # already generated tests for them.
@@ -1282,11 +1322,11 @@ def property_getter(getter, cpp_arguments):
         if idl_type.use_output_parameter_for_result:
             return 'result.isNull()'
         if idl_type.is_string_type:
-            return 'result.isNull()'
+            return 'result.IsNull()'
         if idl_type.is_interface_type:
             return '!result'
         if idl_type.base_type in ('any', 'object'):
-            return 'result.isEmpty()'
+            return 'result.IsEmpty()'
         return ''
 
     extended_attributes = getter.extended_attributes

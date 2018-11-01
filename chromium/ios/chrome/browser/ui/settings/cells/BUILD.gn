@@ -4,14 +4,10 @@
 
 source_set("cells") {
   sources = [
-    "account_control_item.h",
-    "account_control_item.mm",
     "account_signin_item.h",
     "account_signin_item.mm",
     "autofill_data_item.h",
     "autofill_data_item.mm",
-    "autofill_edit_item.h",
-    "autofill_edit_item.mm",
     "byo_textfield_item.h",
     "byo_textfield_item.mm",
     "card_multiline_item.h",
@@ -43,7 +39,6 @@ source_set("cells") {
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/colors",
-    "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ui/base",
   ]
@@ -54,10 +49,8 @@ source_set("cells") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "account_control_item_unittest.mm",
     "account_signin_item_unittest.mm",
     "autofill_data_item_unittest.mm",
-    "autofill_edit_item_unittest.mm",
     "byo_textfield_item_unittest.mm",
     "card_multiline_item_unittest.mm",
     "copied_to_chrome_item_unittest.mm",
@@ -77,8 +70,6 @@ source_set("unit_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/collection_view/cells:test_support",
-    "//ios/chrome/browser/ui/colors",
-    "//ios/third_party/material_components_ios",
     "//testing/gtest",
     "//ui/base",
   ]

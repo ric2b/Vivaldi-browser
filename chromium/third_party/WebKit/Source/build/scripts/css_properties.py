@@ -4,7 +4,9 @@
 # found in the LICENSE file.
 
 import json5_generator
-import name_utilities
+from name_utilities import (
+    upper_camel_case, lower_camel_case, enum_for_css_property, enum_for_css_property_alias
+)
 
 
 class CSSProperties(json5_generator.Writer):
@@ -41,24 +43,39 @@ class CSSProperties(json5_generator.Writer):
         # StylePropertyMetadata additionally assumes there are under 1024 properties.
         assert self._first_enum_value + len(properties) < 512, 'Property aliasing expects there are under 512 properties.'
 
+        for property in properties:
+            assert property['is_descriptor'] or property['is_property'], \
+                property['name'] + ' must be either a property, a descriptor' +\
+                ' or both'
+
         for offset, property in enumerate(properties):
-            property['property_id'] = name_utilities.enum_for_css_property(property['name'])
-            property['upper_camel_name'] = name_utilities.camel_case(property['name'])
-            property['lower_camel_name'] = name_utilities.lower_first(property['upper_camel_name'])
+            property['property_id'] = enum_for_css_property(property['name'])
+            property['upper_camel_name'] = upper_camel_case(property['name'])
+            property['lower_camel_name'] = lower_camel_case(property['name'])
             property['enum_value'] = self._first_enum_value + offset
             property['is_internal'] = property['name'].startswith('-internal-')
 
         self._properties_including_aliases = properties
         self._properties = {property['property_id']: property for property in properties}
 
-        # The generated code will only work with at most one alias per property
+        # The generated code will only work with at most one alias per property.
         assert len({property['alias_for'] for property in self._aliases}) == len(self._aliases)
 
-        for property in self._aliases:
-            property['property_id'] = name_utilities.enum_for_css_property_alias(property['name'])
-            aliased_property = self._properties[name_utilities.enum_for_css_property(property['alias_for'])]
-            property['enum_value'] = aliased_property['enum_value'] + 512
+        # Update property aliases to include the fields of the property being aliased.
+        for i, alias in enumerate(self._aliases):
+            aliased_property = self._properties[
+                enum_for_css_property(alias['alias_for'])]
+            updated_alias = aliased_property.copy()
+            updated_alias['name'] = alias['name']
+            updated_alias['alias_for'] = alias['alias_for']
+            updated_alias['property_id'] = enum_for_css_property_alias(alias['name'])
+            updated_alias['enum_value'] = aliased_property['enum_value'] + 512
+            updated_alias['upper_camel_name'] = upper_camel_case(alias['name'])
+            updated_alias['lower_camel_name'] = lower_camel_case(alias['name'])
+            self._aliases[i] = updated_alias
         self._properties_including_aliases += self._aliases
+
+        self.last_unresolved_property_id = max(property["enum_value"] for property in self._properties_including_aliases)
 
     def properties(self):
         return self._properties

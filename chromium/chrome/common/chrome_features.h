@@ -9,6 +9,7 @@
 #define CHROME_COMMON_CHROME_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "chrome/common/features.h"
 #include "extensions/features/features.h"
 #include "ppapi/features/features.h"
 #include "printing/features/features.h"
@@ -24,6 +25,7 @@ extern const base::Feature kAllowAutoplayUnmutedInWebappManifestScope;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kAppleScriptExecuteJavaScript;
+extern const base::Feature kViewsTaskManager;
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
@@ -47,20 +49,35 @@ extern const base::Feature kBackgroundModeAllowRestart;
 extern const base::Feature kBackspaceGoesBackFeature;
 
 extern const base::Feature kBlockPromptsIfDismissedOften;
+extern const base::Feature kBlockPromptsIfIgnoredOften;
+
+#if defined(OS_MACOSX)
+extern const base::Feature kBookmarkApps;
+#endif
 
 extern const base::Feature kBrowserHangFixesExperiment;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kBrowserTouchBar;
+extern const base::Feature kTabStripKeyboardFocus;
 #endif  // defined(OS_MACOSX)
+
+extern const base::Feature kCheckInstallabilityForBannerOnLoad;
+
+#if defined(OS_WIN)
+extern const base::Feature kCleanupToolUI;
+#endif
 
 #if defined(OS_ANDROID)
 extern const base::Feature kConsistentOmniboxGeolocation;
 #endif
 
+#if defined(OS_ANDROID)
+extern const base::Feature kCopylessPaste;
+#endif
+
 #if defined(OS_WIN)
 extern const base::Feature kDesktopIOSPromotion;
-extern const base::Feature kDisableFirstRunAutoImportWin;
 #endif  // defined(OS_WIN)
 
 extern const base::Feature kDisplayPersistenceToggleInPermissionPrompts;
@@ -107,9 +124,9 @@ extern const base::Feature kModalPermissionPrompts;
 extern const base::Feature kModuleDatabase;
 #endif
 
-#if defined(OS_MACOSX)
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
 extern const base::Feature kNativeNotifications;
-#endif  // defined(OS_MACOSX)
+#endif
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
@@ -166,6 +183,8 @@ extern const base::Feature kEHVInputOnImeMenu;
 
 extern const base::Feature kCrosCompUpdates;
 #endif  // defined(OS_CHROMEOS)
+
+bool PrefServiceEnabled();
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in
 // alphabetical order, or in one of the ifdefs (also in order in each section).

@@ -14,6 +14,20 @@
 @protocol CRWWebStateDelegate<NSObject>
 @optional
 
+// Called when |webState| wants to open a new window. |url| is the URL of
+// the new window; |opener_url| is the URL of the page which requested a
+// window to be open; |initiated_by_user| is true if action was caused by the
+// user. |webState| will not open a window if this method returns nil. This
+// method can not return |webState|.
+- (web::WebState*)webState:(web::WebState*)webState
+    createNewWebStateForURL:(const GURL&)URL
+                  openerURL:(const GURL&)openerURL
+            initiatedByUser:(BOOL)initiatedByUser;
+
+// Called when the page calls wants to close self by calling window.close()
+// JavaScript API.
+- (void)closeWebState:(web::WebState*)webState;
+
 // Returns the WebState the URL is opened in, or nullptr if the URL wasn't
 // opened immediately.
 - (web::WebState*)webState:(web::WebState*)webState
@@ -57,6 +71,11 @@ class WebStateDelegateBridge : public web::WebStateDelegate {
   ~WebStateDelegateBridge() override;
 
   // web::WebStateDelegate methods.
+  WebState* CreateNewWebState(WebState* source,
+                              const GURL& url,
+                              const GURL& opener_url,
+                              bool initiated_by_user) override;
+  void CloseWebState(WebState* source) override;
   WebState* OpenURLFromWebState(WebState*,
                                 const WebState::OpenURLParams&) override;
   bool HandleContextMenu(WebState* source,

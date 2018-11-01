@@ -50,6 +50,22 @@ class SerializableUserDataManagerWrapper : public base::SupportsUserData::Data {
   // The SerializableUserDataManagerWrapper owned by this object.
   SerializableUserDataManagerImpl manager_;
 };
+
+// Returns a dictionary mapping old CRWSessionStorage serialised properties to
+// the corresponding key in the serialised user data. When adding a mapping to
+// this dictionary, create a new crbug to track its removal and mark it with a
+// release at least one year after the introduction of the mapping.
+NSDictionary* GetLegacyKeyConversion() {
+  NSMutableDictionary* legacy_key_conversion = [NSMutableDictionary dictionary];
+  // TODO(crbug.com/661633): those mappings where introduced between M57 and
+  // M58, so remove them after M67 has shipped to stable.
+  [legacy_key_conversion addEntriesFromDictionary:@{
+    @"tabId" : @"TabID",
+    @"openerId" : @"OpenerID",
+    @"openerNavigationIndex" : @"OpenerNavigationIndex",
+  }];
+  return [legacy_key_conversion copy];
+}
 }  // namespace
 
 // static
@@ -58,12 +74,7 @@ std::unique_ptr<SerializableUserData> SerializableUserData::Create() {
 }
 
 SerializableUserDataImpl::SerializableUserDataImpl()
-    : data_(@{}), legacy_key_conversions_(@{
-        @"tabId" : @"TabID",
-        @"openerId" : @"OpenerID",
-        @"openerNavigationIndex" : @"OpenerNavigationIndex",
-        @"lastVisitedTimestamp" : @"LastVisitedTimestamp",
-      }) {}
+    : data_(@{}), legacy_key_conversions_(GetLegacyKeyConversion()) {}
 
 SerializableUserDataImpl::~SerializableUserDataImpl() {}
 

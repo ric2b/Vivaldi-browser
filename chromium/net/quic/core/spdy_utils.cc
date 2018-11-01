@@ -9,6 +9,7 @@
 
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_map_util.h"
+#include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 #include "net/quic/platform/api/quic_url_utils.h"
 #include "net/spdy/spdy_flags.h"
@@ -16,7 +17,6 @@
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_protocol.h"
 
-using base::StringPiece;
 using std::string;
 
 namespace net {
@@ -57,10 +57,10 @@ bool SpdyUtils::ExtractContentLengthFromHeaders(int64_t* content_length,
     return false;
   } else {
     // Check whether multiple values are consistent.
-    StringPiece content_length_header = it->second;
-    std::vector<StringPiece> values =
+    QuicStringPiece content_length_header = it->second;
+    std::vector<QuicStringPiece> values =
         QuicTextUtils::Split(content_length_header, '\0');
-    for (const StringPiece& value : values) {
+    for (const QuicStringPiece& value : values) {
       uint64_t new_value;
       if (!QuicTextUtils::StringToUint64(value, &new_value)) {
         QUIC_DLOG(ERROR)
@@ -100,8 +100,8 @@ bool SpdyUtils::ParseTrailers(const char* data,
   auto it = trailers->find(kFinalOffsetHeaderKey);
   if (it == trailers->end() ||
       !QuicTextUtils::StringToSizeT(it->second, final_byte_offset)) {
-    QUIC_DVLOG(1) << "Required key '" << kFinalOffsetHeaderKey
-                  << "' not present";
+    QUIC_DLOG(ERROR) << "Required key '" << kFinalOffsetHeaderKey
+                     << "' not present";
     return false;
   }
   // The final offset header is no longer needed.
@@ -109,8 +109,8 @@ bool SpdyUtils::ParseTrailers(const char* data,
 
   // Trailers must not have empty keys, and must not contain pseudo headers.
   for (const auto& trailer : *trailers) {
-    StringPiece key = trailer.first;
-    StringPiece value = trailer.second;
+    QuicStringPiece key = trailer.first;
+    QuicStringPiece value = trailer.second;
     if (QuicTextUtils::StartsWith(key, ":")) {
       QUIC_DVLOG(1) << "Trailers must not contain pseudo-header: '" << key
                     << "','" << value << "'.";
@@ -130,7 +130,7 @@ bool SpdyUtils::CopyAndValidateHeaders(const QuicHeaderList& header_list,
   for (const auto& p : header_list) {
     const string& name = p.first;
     if (name.empty()) {
-      QUIC_DVLOG(1) << "Header name must not be empty.";
+      QUIC_DLOG(ERROR) << "Header name must not be empty.";
       return false;
     }
 
@@ -168,20 +168,21 @@ bool SpdyUtils::CopyAndValidateTrailers(const QuicHeaderList& header_list,
     }
 
     if (name.empty() || name[0] == ':') {
-      QUIC_DVLOG(1)
+      QUIC_DLOG(ERROR)
           << "Trailers must not be empty, and must not contain pseudo-"
           << "headers. Found: '" << name << "'";
       return false;
     }
 
     if (QuicTextUtils::ContainsUpperCase(name)) {
-      QUIC_DLOG(INFO) << "Malformed header: Header name " << name
-                      << " contains upper-case characters.";
+      QUIC_DLOG(ERROR) << "Malformed header: Header name " << name
+                       << " contains upper-case characters.";
       return false;
     }
 
     if (trailers->find(name) != trailers->end()) {
-      QUIC_DLOG(INFO) << "Duplicate header '" << name << "' found in trailers.";
+      QUIC_DLOG(ERROR) << "Duplicate header '" << name
+                       << "' found in trailers.";
       return false;
     }
 
@@ -189,8 +190,8 @@ bool SpdyUtils::CopyAndValidateTrailers(const QuicHeaderList& header_list,
   }
 
   if (!found_final_byte_offset) {
-    QUIC_DVLOG(1) << "Required key '" << kFinalOffsetHeaderKey
-                  << "' not present";
+    QUIC_DLOG(ERROR) << "Required key '" << kFinalOffsetHeaderKey
+                     << "' not present";
     return false;
   }
 

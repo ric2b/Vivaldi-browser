@@ -22,6 +22,7 @@
 #include "net/test/test_certificate_data.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/url_features.h"
 
 #if defined(USE_NSS_CERTS)
 #include <cert.h>
@@ -267,10 +268,91 @@ TEST(X509CertificateTest, UnescapedSpecialCharacters) {
   EXPECT_EQ(0U, subject.domain_components.size());
 }
 
+TEST(X509CertificateTest, TeletexStringIsLatin1) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "subject_t61string.pem");
+  ASSERT_TRUE(cert);
+
+  const CertPrincipal& subject = cert->subject();
+  EXPECT_EQ(
+      " !\"#$%&'()*+,-./"
+      "0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`"
+      "abcdefghijklmnopqrstuvwxyz{|}~"
+      " ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæç"
+      "èéêëìíîïðñòóôõö÷øùúûüýþÿ",
+      subject.organization_names[0]);
+}
+
+TEST(X509CertificateTest, TeletexStringControlChars) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "subject_t61string_1-32.pem");
+  ASSERT_TRUE(cert);
+
+  const CertPrincipal& subject = cert->subject();
+  EXPECT_EQ(
+      "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12"
+      "\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x20",
+      subject.organization_names[0]);
+}
+
+TEST(X509CertificateTest, TeletexStringIsLatin1OrCp1252) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "subject_t61string_126-160.pem");
+  ASSERT_TRUE(cert);
+
+  const CertPrincipal& subject = cert->subject();
+#if (defined(OS_MACOSX) && !defined(OS_IOS)) || \
+    (BUILDFLAG(USE_BYTE_CERTS) && !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES))
+  // Mac: TeletexString is decoded as CP1252.
+  // use_byte_certs: ICU ISO-8859-1 seems to be CP1252 actually.
+  //   (but with use_platform_icu_alternatives it's not.)
+  EXPECT_EQ(
+      "~\x7F\xE2\x82\xAC\xC2\x81\xE2\x80\x9A\xC6\x92\xE2\x80\x9E\xE2\x80\xA6"
+      "\xE2\x80\xA0\xE2\x80\xA1\xCB\x86\xE2\x80\xB0\xC5\xA0\xE2\x80\xB9\xC5\x92"
+      "\xC2\x8D\xC5\xBD\xC2\x8F\xC2\x90\xE2\x80\x98\xE2\x80\x99\xE2\x80\x9C\xE2"
+      "\x80\x9D\xE2\x80\xA2\xE2\x80\x93\xE2\x80\x94\xCB\x9C\xE2\x84\xA2\xC5\xA1"
+      "\xE2\x80\xBA\xC5\x93\xC2\x9D\xC5\xBE\xC5\xB8\xC2\xA0",
+      subject.organization_names[0]);
+#else
+  // NSS, Win, Android, iOS: TeletexString is decoded as latin1, so 127-160 get
+  // decoded to equivalent unicode control chars.
+  EXPECT_EQ(
+      "~\x7F\xC2\x80\xC2\x81\xC2\x82\xC2\x83\xC2\x84\xC2\x85\xC2\x86\xC2\x87"
+      "\xC2\x88\xC2\x89\xC2\x8A\xC2\x8B\xC2\x8C\xC2\x8D\xC2\x8E\xC2\x8F\xC2\x90"
+      "\xC2\x91\xC2\x92\xC2\x93\xC2\x94\xC2\x95\xC2\x96\xC2\x97\xC2\x98\xC2\x99"
+      "\xC2\x9A\xC2\x9B\xC2\x9C\xC2\x9D\xC2\x9E\xC2\x9F\xC2\xA0",
+      subject.organization_names[0]);
+#endif
+}
+
+TEST(X509CertificateTest, TeletexStringIsNotARealT61String) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "subject_t61string_actual.pem");
+  ASSERT_TRUE(cert);
+
+  const CertPrincipal& subject = cert->subject();
+  // If TeletexStrings were actually parsed according to T.61, this would be
+  // "あ". (Probably. Not verified against a real implementation.)
+  EXPECT_EQ("\x1B$@$\"", subject.organization_names[0]);
+}
+
 TEST(X509CertificateTest, SerialNumbers) {
   scoped_refptr<X509Certificate> google_cert(
       X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(google_der), sizeof(google_der)));
+  ASSERT_TRUE(google_cert);
 
   static const uint8_t google_serial[16] = {
     0x01,0x2a,0x39,0x76,0x0d,0x3f,0x4f,0xc9,
@@ -280,24 +362,79 @@ TEST(X509CertificateTest, SerialNumbers) {
   ASSERT_EQ(sizeof(google_serial), google_cert->serial_number().size());
   EXPECT_TRUE(memcmp(google_cert->serial_number().data(), google_serial,
                      sizeof(google_serial)) == 0);
+}
 
-  // We also want to check a serial number where the first byte is >= 0x80 in
-  // case the underlying library tries to pad it.
-  scoped_refptr<X509Certificate> paypal_null_cert(
-      X509Certificate::CreateFromBytes(
-          reinterpret_cast<const char*>(paypal_null_der),
-          sizeof(paypal_null_der)));
+TEST(X509CertificateTest, SerialNumberZeroPadded) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "serial_zero_padded.pem");
+  ASSERT_TRUE(cert);
 
-  static const uint8_t paypal_null_serial[3] = {0x00, 0xf0, 0x9b};
-  ASSERT_EQ(sizeof(paypal_null_serial),
-            paypal_null_cert->serial_number().size());
-  EXPECT_TRUE(memcmp(paypal_null_cert->serial_number().data(),
-                     paypal_null_serial, sizeof(paypal_null_serial)) == 0);
+  // Check a serial number where the first byte is >= 0x80, the DER returned by
+  // serial() should contain the leading 0 padding byte.
+  static const uint8_t expected_serial[3] = {0x00, 0x80, 0x01};
+  ASSERT_EQ(sizeof(expected_serial), cert->serial_number().size());
+  EXPECT_TRUE(memcmp(cert->serial_number().data(), expected_serial,
+                     sizeof(expected_serial)) == 0);
+}
+
+TEST(X509CertificateTest, SerialNumberZeroPadded21BytesLong) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "serial_zero_padded_21_bytes.pem");
+  ASSERT_TRUE(cert);
+
+  // Check a serial number where the first byte is >= 0x80, causing the encoded
+  // length to be 21 bytes long. This should be an error, but serial number
+  // parsing is currently permissive.
+  static const uint8_t expected_serial[21] = {
+      0x00, 0x80, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+      0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13};
+  ASSERT_EQ(sizeof(expected_serial), cert->serial_number().size());
+  EXPECT_TRUE(memcmp(cert->serial_number().data(), expected_serial,
+                     sizeof(expected_serial)) == 0);
+}
+
+TEST(X509CertificateTest, SerialNumberNegative) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "serial_negative.pem");
+  ASSERT_TRUE(cert);
+
+  // RFC 5280 does not allow serial numbers to be negative, but serial number
+  // parsing is currently permissive, so this does not cause an error.
+  static const uint8_t expected_serial[2] = {0x80, 0x01};
+  ASSERT_EQ(sizeof(expected_serial), cert->serial_number().size());
+  EXPECT_TRUE(memcmp(cert->serial_number().data(), expected_serial,
+                     sizeof(expected_serial)) == 0);
+}
+
+TEST(X509CertificateTest, SerialNumber37BytesLong) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "serial_37_bytes.pem");
+  ASSERT_TRUE(cert);
+
+  // Check a serial number which is very long. This should be an error, but
+  // serial number parsing is currently permissive.
+  static const uint8_t expected_serial[37] = {
+      0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+      0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
+      0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
+      0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25};
+  ASSERT_EQ(sizeof(expected_serial), cert->serial_number().size());
+  EXPECT_TRUE(memcmp(cert->serial_number().data(), expected_serial,
+                     sizeof(expected_serial)) == 0);
 }
 
 TEST(X509CertificateTest, SHA256FingerprintsCorrectly) {
   scoped_refptr<X509Certificate> google_cert(X509Certificate::CreateFromBytes(
       reinterpret_cast<const char*>(google_der), sizeof(google_der)));
+  ASSERT_TRUE(google_cert);
 
   const SHA256HashValue google_sha256_fingerprint = {
       {0x21, 0xaf, 0x58, 0x74, 0xea, 0x6b, 0xad, 0xbd, 0xe4, 0xb3, 0xb1,
@@ -328,18 +465,21 @@ TEST(X509CertificateTest, CAFingerprints) {
   scoped_refptr<X509Certificate> cert_chain1 =
       X509Certificate::CreateFromHandle(server_cert->os_cert_handle(),
                                         intermediates);
+  ASSERT_TRUE(cert_chain1);
 
   intermediates.clear();
   intermediates.push_back(intermediate_cert2->os_cert_handle());
   scoped_refptr<X509Certificate> cert_chain2 =
       X509Certificate::CreateFromHandle(server_cert->os_cert_handle(),
                                         intermediates);
+  ASSERT_TRUE(cert_chain2);
 
   // No intermediate CA certicates.
   intermediates.clear();
   scoped_refptr<X509Certificate> cert_chain3 =
       X509Certificate::CreateFromHandle(server_cert->os_cert_handle(),
                                         intermediates);
+  ASSERT_TRUE(cert_chain3);
 
   SHA256HashValue cert_chain1_ca_fingerprint_256 = {
       {0x51, 0x15, 0x30, 0x49, 0x97, 0x54, 0xf8, 0xb4, 0x17, 0x41, 0x6b,
@@ -547,6 +687,7 @@ TEST(X509CertificateTest, Cache) {
   scoped_refptr<X509Certificate> cert1(X509Certificate::CreateFromHandle(
       google_cert_handle, X509Certificate::OSCertHandles()));
   X509Certificate::FreeOSCertHandle(google_cert_handle);
+  ASSERT_TRUE(cert1);
 
   // Add the same certificate, but as a new handle.
   google_cert_handle = X509Certificate::CreateOSCertHandleFromBytes(
@@ -554,6 +695,7 @@ TEST(X509CertificateTest, Cache) {
   scoped_refptr<X509Certificate> cert2(X509Certificate::CreateFromHandle(
       google_cert_handle, X509Certificate::OSCertHandles()));
   X509Certificate::FreeOSCertHandle(google_cert_handle);
+  ASSERT_TRUE(cert2);
 
   // A new X509Certificate should be returned.
   EXPECT_NE(cert1.get(), cert2.get());
@@ -575,6 +717,7 @@ TEST(X509CertificateTest, Cache) {
       google_cert_handle, intermediates));
   X509Certificate::FreeOSCertHandle(google_cert_handle);
   X509Certificate::FreeOSCertHandle(thawte_cert_handle);
+  ASSERT_TRUE(cert3);
 
   // Test that the new certificate, even with intermediates, results in the
   // same underlying handle being used.
@@ -626,10 +769,12 @@ TEST(X509CertificateTest, IntermediateCertificates) {
   scoped_refptr<X509Certificate> webkit_cert(
       X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(webkit_der), sizeof(webkit_der)));
+  ASSERT_TRUE(webkit_cert);
 
   scoped_refptr<X509Certificate> thawte_cert(
       X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(thawte_der), sizeof(thawte_der)));
+  ASSERT_TRUE(thawte_cert);
 
   X509Certificate::OSCertHandle google_handle;
   // Create object with no intermediates:
@@ -638,6 +783,7 @@ TEST(X509CertificateTest, IntermediateCertificates) {
   X509Certificate::OSCertHandles intermediates1;
   scoped_refptr<X509Certificate> cert1;
   cert1 = X509Certificate::CreateFromHandle(google_handle, intermediates1);
+  ASSERT_TRUE(cert1);
   EXPECT_EQ(0u, cert1->GetIntermediateCertificates().size());
 
   // Create object with 2 intermediates:
@@ -646,6 +792,7 @@ TEST(X509CertificateTest, IntermediateCertificates) {
   intermediates2.push_back(thawte_cert->os_cert_handle());
   scoped_refptr<X509Certificate> cert2;
   cert2 = X509Certificate::CreateFromHandle(google_handle, intermediates2);
+  ASSERT_TRUE(cert2);
 
   // Verify it has all the intermediates:
   const X509Certificate::OSCertHandles& cert2_intermediates =
@@ -758,6 +905,7 @@ TEST(X509CertificateTest, IsIssuedByEncodedWithIntermediates) {
   scoped_refptr<X509Certificate> cert_chain =
       X509Certificate::CreateFromHandle(policy_chain[0]->os_cert_handle(),
                                         intermediates);
+  ASSERT_TRUE(cert_chain);
 
   std::vector<std::string> issuers;
 
@@ -924,6 +1072,7 @@ TEST_P(X509CertificateParseTest, CanParseFormat) {
 
     // A cert is expected - make sure that one was parsed.
     ASSERT_LT(i, certs.size());
+    ASSERT_TRUE(certs[i]);
 
     // Compare the parsed certificate with the expected certificate, by
     // comparing fingerprints.
@@ -1181,16 +1330,13 @@ const struct PublicKeyInfoTestData {
   size_t expected_bits;
   X509Certificate::PublicKeyType expected_type;
 } kPublicKeyInfoTestData[] = {
-    {"768-rsa-ee-by-768-rsa-intermediate.pem",
-     768,
+    {"768-rsa-ee-by-768-rsa-intermediate.pem", 768,
      X509Certificate::kPublicKeyTypeRSA},
-    {"1024-rsa-ee-by-768-rsa-intermediate.pem",
-     1024,
+    {"1024-rsa-ee-by-768-rsa-intermediate.pem", 1024,
      X509Certificate::kPublicKeyTypeRSA},
-    {"prime256v1-ecdsa-ee-by-1024-rsa-intermediate.pem",
-     256,
+    {"prime256v1-ecdsa-ee-by-1024-rsa-intermediate.pem", 256,
      X509Certificate::kPublicKeyTypeECDSA},
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MACOSX) && !defined(OS_IOS) && !BUILDFLAG(USE_BYTE_CERTS)
     // OS X has an key length limit of 4096 bits. This should manifest as an
     // unknown key. If a future version of OS X changes this, large_key.pem may
     // need to be renegerated with a larger key. See https://crbug.com/472291.

@@ -17,7 +17,6 @@
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/browser/local_storage_usage_info.h"
 #include "services/file/public/interfaces/constants.mojom.h"
-#include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "sql/connection.h"
 #include "third_party/leveldatabase/env_chromium.h"
@@ -68,11 +67,6 @@ std::vector<uint8_t> CreateMetaDataKey(const url::Origin& origin) {
 
 void NoOpSuccess(bool success) {}
 
-std::vector<uint8_t> String16ToUint8Vector(const base::string16& input) {
-  const uint8_t* data = reinterpret_cast<const uint8_t*>(input.data());
-  return std::vector<uint8_t>(data, data + input.size() * sizeof(base::char16));
-}
-
 void MigrateStorageHelper(
     base::FilePath db_path,
     const scoped_refptr<base::SingleThreadTaskRunner> reply_task_runner,
@@ -83,8 +77,8 @@ void MigrateStorageHelper(
   db.ReadAllValues(&map);
   auto values = base::MakeUnique<LevelDBWrapperImpl::ValueMap>();
   for (const auto& it : map) {
-    (*values)[String16ToUint8Vector(it.first)] =
-        String16ToUint8Vector(it.second.string());
+    (*values)[LocalStorageContextMojo::MigrateString(it.first)] =
+        LocalStorageContextMojo::MigrateString(it.second.string());
   }
   reply_task_runner->PostTask(FROM_HERE,
                               base::Bind(callback, base::Passed(&values)));
@@ -290,24 +284,28 @@ LocalStorageContextMojo::DatabaseRequestForTesting() {
   DCHECK_EQ(connection_state_, NO_CONNECTION);
   connection_state_ = CONNECTION_IN_PROGRESS;
   leveldb::mojom::LevelDBDatabaseAssociatedRequest request =
-      MakeRequestForTesting(&database_);
+      MakeIsolatedRequest(&database_);
   OnDatabaseOpened(true, leveldb::mojom::DatabaseError::OK);
   return request;
+}
+
+// static
+std::vector<uint8_t> LocalStorageContextMojo::MigrateString(
+    const base::string16& input) {
+  static const uint8_t kUTF16Format = 0;
+
+  const uint8_t* data = reinterpret_cast<const uint8_t*>(input.data());
+  std::vector<uint8_t> result;
+  result.reserve(input.size() * sizeof(base::char16) + 1);
+  result.push_back(kUTF16Format);
+  result.insert(result.end(), data, data + input.size() * sizeof(base::char16));
+  return result;
 }
 
 void LocalStorageContextMojo::RunWhenConnected(base::OnceClosure callback) {
   // If we don't have a filesystem_connection_, we'll need to establish one.
   if (connection_state_ == NO_CONNECTION) {
-    CHECK(connector_);
-    file_service_connection_ = connector_->Connect(file::mojom::kServiceName);
     connection_state_ = CONNECTION_IN_PROGRESS;
-    file_service_connection_->AddConnectionCompletedClosure(
-        base::Bind(&LocalStorageContextMojo::OnUserServiceConnectionComplete,
-                   weak_ptr_factory_.GetWeakPtr()));
-    file_service_connection_->SetConnectionLostClosure(
-        base::Bind(&LocalStorageContextMojo::OnUserServiceConnectionError,
-                   weak_ptr_factory_.GetWeakPtr()));
-
     InitiateConnection();
   }
 
@@ -320,28 +318,20 @@ void LocalStorageContextMojo::RunWhenConnected(base::OnceClosure callback) {
   std::move(callback).Run();
 }
 
-void LocalStorageContextMojo::OnUserServiceConnectionComplete() {
-  CHECK_EQ(service_manager::mojom::ConnectResult::SUCCEEDED,
-           file_service_connection_->GetResult());
-}
-
-void LocalStorageContextMojo::OnUserServiceConnectionError() {
-  CHECK(false);
-}
-
 void LocalStorageContextMojo::InitiateConnection(bool in_memory_only) {
   DCHECK_EQ(connection_state_, CONNECTION_IN_PROGRESS);
+  CHECK(connector_);
   if (!subdirectory_.empty() && !in_memory_only) {
     // We were given a subdirectory to write to. Get it and use a disk backed
     // database.
-    file_service_connection_->GetInterface(&file_system_);
+    connector_->BindInterface(file::mojom::kServiceName, &file_system_);
     file_system_->GetSubDirectory(
         subdirectory_.AsUTF8Unsafe(), MakeRequest(&directory_),
         base::Bind(&LocalStorageContextMojo::OnDirectoryOpened,
                    weak_ptr_factory_.GetWeakPtr()));
   } else {
     // We were not given a subdirectory. Use a memory backed database.
-    file_service_connection_->GetInterface(&leveldb_service_);
+    connector_->BindInterface(file::mojom::kServiceName, &leveldb_service_);
     leveldb_service_->OpenInMemory(
         MakeRequest(&database_),
         base::Bind(&LocalStorageContextMojo::OnDatabaseOpened,
@@ -367,8 +357,7 @@ void LocalStorageContextMojo::OnDirectoryOpened(
 
   // Now that we have a directory, connect to the LevelDB service and get our
   // database.
-  file_service_connection_->GetInterface(&leveldb_service_);
-  leveldb_service_->SetEnvironmentName("LevelDBEnv.LocalStorage");
+  connector_->BindInterface(file::mojom::kServiceName, &leveldb_service_);
 
   // We might still need to use the directory, so create a clone.
   filesystem::mojom::DirectoryPtr directory_clone;
@@ -494,9 +483,9 @@ void LocalStorageContextMojo::DeleteAndRecreateDatabase() {
 
   tried_to_recreate_ = true;
 
-  // Unit tests might not have a file_service_connection_, in which case there
-  // is nothing to retry.
-  if (!file_service_connection_) {
+  // Unit tests might not have a bound file_service_, in which case there is
+  // nothing to retry.
+  if (!file_system_.is_bound()) {
     database_ = nullptr;
     OnConnectionFinished();
     return;

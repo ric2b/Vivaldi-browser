@@ -104,10 +104,7 @@ void ChromeSetting::Get(gin::Arguments* arguments) {
 void ChromeSetting::Set(gin::Arguments* arguments) {
   v8::Isolate* isolate = arguments->isolate();
   v8::HandleScope handle_scope(isolate);
-
-  v8::Local<v8::Object> holder;
-  CHECK(arguments->GetHolder(&holder));
-  v8::Local<v8::Context> context = holder->CreationContext();
+  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
 
   v8::Local<v8::Value> value = arguments->PeekNext();
   // The set schema included in the Schema object is generic, since it varies
@@ -129,10 +126,8 @@ void ChromeSetting::Clear(gin::Arguments* arguments) {
 v8::Local<v8::Value> ChromeSetting::GetOnChangeEvent(
     gin::Arguments* arguments) {
   v8::Isolate* isolate = arguments->isolate();
-  v8::Local<v8::Object> holder;
-  CHECK(arguments->GetHolder(&holder));
-  v8::Local<v8::Context> context = holder->CreationContext();
-  v8::Local<v8::Object> wrapper = GetWrapper(isolate);
+  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
+  v8::Local<v8::Object> wrapper = GetWrapper(isolate).ToLocalChecked();
   v8::Local<v8::Private> key = v8::Private::ForApi(
       isolate, gin::StringToSymbol(isolate, "onChangeEvent"));
   v8::Local<v8::Value> event;
@@ -143,10 +138,11 @@ v8::Local<v8::Value> ChromeSetting::GetOnChangeEvent(
 
   DCHECK(!event.IsEmpty());
   if (event->IsUndefined()) {
+    bool supports_filters = false;
     event = event_handler_->CreateEventInstance(
         base::StringPrintf("types.ChromeSetting.%s.onChange",
                            pref_name_.c_str()),
-        context);
+        supports_filters, context);
     v8::Maybe<bool> set_result = wrapper->SetPrivate(context, key, event);
     if (!set_result.IsJust() || !set_result.FromJust()) {
       NOTREACHED();
@@ -160,9 +156,7 @@ void ChromeSetting::HandleFunction(const std::string& method_name,
                                    gin::Arguments* arguments) {
   v8::Isolate* isolate = arguments->isolate();
   v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Object> holder;
-  CHECK(arguments->GetHolder(&holder));
-  v8::Local<v8::Context> context = holder->CreationContext();
+  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
 
   std::vector<v8::Local<v8::Value>> argument_list;
   if (arguments->Length() > 0) {
@@ -182,9 +176,9 @@ void ChromeSetting::HandleFunction(const std::string& method_name,
   }
 
   converted_arguments->Insert(0u, base::MakeUnique<base::Value>(pref_name_));
-  request_handler_->StartRequest(context, full_name,
-                                 std::move(converted_arguments), callback,
-                                 v8::Local<v8::Function>());
+  request_handler_->StartRequest(
+      context, full_name, std::move(converted_arguments), callback,
+      v8::Local<v8::Function>(), binding::RequestThread::UI);
 }
 
 }  // namespace extensions

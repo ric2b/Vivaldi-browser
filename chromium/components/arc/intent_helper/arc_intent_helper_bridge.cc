@@ -6,11 +6,10 @@
 
 #include <utility>
 
-#include "ash/common/new_window_controller.h"
-#include "ash/common/shell_delegate.h"
-#include "ash/common/wallpaper/wallpaper_controller.h"
-#include "ash/common/wm_shell.h"
+#include "ash/new_window_controller.h"
 #include "ash/shell.h"
+#include "ash/shell_delegate.h"
+#include "ash/wallpaper/wallpaper_controller.h"
 #include "base/memory/weak_ptr.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
@@ -46,7 +45,7 @@ ArcIntentHelperBridge::~ArcIntentHelperBridge() {
 
 void ArcIntentHelperBridge::OnInstanceReady() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  ash::Shell::GetInstance()->set_link_handler_model_factory(this);
+  ash::Shell::Get()->set_link_handler_model_factory(this);
   auto* instance =
       ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->intent_helper(), Init);
   DCHECK(instance);
@@ -55,7 +54,7 @@ void ArcIntentHelperBridge::OnInstanceReady() {
 
 void ArcIntentHelperBridge::OnInstanceClosed() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  ash::Shell::GetInstance()->set_link_handler_model_factory(nullptr);
+  ash::Shell::Get()->set_link_handler_model_factory(nullptr);
 }
 
 void ArcIntentHelperBridge::OnIconInvalidated(const std::string& package_name) {
@@ -69,17 +68,17 @@ void ArcIntentHelperBridge::OnOpenDownloads() {
   // downloads by default, which is what we want.  However if it is open it will
   // simply be brought to the forgeground without forcibly being navigated to
   // downloads, which is probably not ideal.
-  ash::WmShell::Get()->new_window_controller()->OpenFileManager();
+  ash::Shell::Get()->new_window_controller()->OpenFileManager();
 }
 
 void ArcIntentHelperBridge::OnOpenUrl(const std::string& url) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  ash::WmShell::Get()->delegate()->OpenUrlFromArc(GURL(url));
+  ash::Shell::Get()->shell_delegate()->OpenUrlFromArc(GURL(url));
 }
 
 void ArcIntentHelperBridge::OpenWallpaperPicker() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  ash::WmShell::Get()->wallpaper_controller()->OpenSetWallpaperPage();
+  ash::Shell::Get()->wallpaper_controller()->OpenSetWallpaperPage();
 }
 
 void ArcIntentHelperBridge::SetWallpaperDeprecated(

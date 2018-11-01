@@ -5,15 +5,14 @@
 #include "chrome/installer/util/helper.h"
 
 #include "base/path_service.h"
-#include "chrome/installer/util/browser_distribution.h"
+#include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/util_constants.h"
 
 #include "base/command_line.h"
 
 namespace installer {
 
-base::FilePath GetChromeInstallPath(bool system_install,
-                                    BrowserDistribution* dist) {
+base::FilePath GetChromeInstallPath(bool system_install) {
   base::FilePath install_path;
 
   // Vivaldi customization. Use the install path provided by the command line switch: --vivaldi-install-dir=<filepath>
@@ -31,7 +30,8 @@ base::FilePath GetChromeInstallPath(bool system_install,
   int key = system_install ? base::DIR_PROGRAM_FILES : base::DIR_LOCAL_APP_DATA;
 #endif
   if (PathService::Get(key, &install_path)) {
-    install_path = install_path.Append(dist->GetInstallSubDir());
+    install_path =
+        install_path.Append(install_static::GetChromeInstallSubDirectory());
     install_path = install_path.Append(kInstallBinaryDir);
   }
   return install_path;

@@ -5,7 +5,6 @@
 #include "net/spdy/spdy_deframer_visitor.h"
 
 #include <stdlib.h>
-#include <string.h>
 
 #include <algorithm>
 #include <limits>
@@ -13,7 +12,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
-#include "base/strings/string_piece.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/mock_spdy_framer_visitor.h"
 #include "net/spdy/spdy_frame_builder.h"
@@ -23,7 +21,6 @@
 #include "net/spdy/spdy_test_utils.h"
 
 using ::base::MakeUnique;
-using ::std::string;
 
 namespace net {
 namespace test {
@@ -67,9 +64,9 @@ class SpdyDeframerVisitorTest : public ::testing::Test {
     return encoder_.SerializeFrame(frame);
   }
 
-  string SerializeFrames(
+  SpdyString SerializeFrames(
       const std::vector<std::unique_ptr<SpdyFrameIR>>& frames) {
-    string result;
+    SpdyString result;
     for (const auto& frame_ptr : frames) {
       auto sf = SerializeFrame(*frame_ptr);
       result.append(sf.data(), sf.size());

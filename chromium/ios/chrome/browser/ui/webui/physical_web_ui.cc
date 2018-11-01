@@ -28,12 +28,15 @@ web::WebUIIOSDataSource* CreatePhysicalWebUIDataSource() {
   // Localized and data strings.
   html_source->AddLocalizedString(physical_web_ui::kTitle,
                                   IDS_PHYSICAL_WEB_UI_TITLE);
-
+  html_source->AddLocalizedString(physical_web_ui::kEmptyMessage,
+                                  IDS_PHYSICAL_WEB_UI_EMPTY_MESSAGE);
   html_source->SetJsonPath("strings.js");
   html_source->AddResourcePath(physical_web_ui::kPhysicalWebJS,
                                IDR_PHYSICAL_WEB_UI_JS);
   html_source->AddResourcePath(physical_web_ui::kPhysicalWebCSS,
                                IDR_PHYSICAL_WEB_UI_CSS);
+  html_source->AddResourcePath(physical_web_ui::kPhysicalWebLinkIcon,
+                               IDR_PHYSICAL_WEB_UI_LINK_ICON);
   html_source->SetDefaultResource(IDR_PHYSICAL_WEB_UI_HTML);
   return html_source;
 }

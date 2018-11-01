@@ -62,7 +62,7 @@ namespace {
 #if defined(OS_MACOSX)
 // U+0028 U+21E7 U+2318 U+0050 U+0029 in UTF8
 const char kBasicPrintShortcut[] = "\x28\xE2\x8c\xA5\xE2\x8C\x98\x50\x29";
-#else
+#elif !defined(OS_CHROMEOS)
 const char kBasicPrintShortcut[] = "(Ctrl+Shift+P)";
 #endif
 
@@ -107,13 +107,13 @@ class PrintPreviewRequestIdMapWithLock {
 };
 
 // Written to on the UI thread, read from any thread.
-base::LazyInstance<PrintPreviewRequestIdMapWithLock>
+base::LazyInstance<PrintPreviewRequestIdMapWithLock>::DestructorAtExit
     g_print_preview_request_id_map = LAZY_INSTANCE_INITIALIZER;
 
 // PrintPreviewUI IDMap used to avoid exposing raw pointer addresses to WebUI.
 // Only accessed on the UI thread.
-base::LazyInstance<IDMap<PrintPreviewUI*>> g_print_preview_ui_id_map =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<IDMap<PrintPreviewUI*>>::DestructorAtExit
+    g_print_preview_ui_id_map = LAZY_INSTANCE_INITIALIZER;
 
 // PrintPreviewUI serves data for chrome://print requests.
 //
@@ -235,11 +235,13 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
   source->AddLocalizedString(
       "resolveExtensionUSBErrorMessage",
       IDS_PRINT_PREVIEW_RESOLVE_EXTENSION_USB_ERROR_MESSAGE);
-  source->AddLocalizedString(
-      "resolveCrosPrinterMessage",
-      IDS_PRINT_PREVIEW_RESOLVE_CROS_DESTINATION_MESSAGE);
+#if defined(OS_CHROMEOS)
+  source->AddLocalizedString("configuringInProgressText",
+                             IDS_PRINT_CONFIGURING_IN_PROGRESS_TEXT);
+  source->AddLocalizedString("configuringFailedText",
+                             IDS_PRINT_CONFIGURING_FAILED_TEXT);
+#else
   const base::string16 shortcut_text(base::UTF8ToUTF16(kBasicPrintShortcut));
-#if !defined(OS_CHROMEOS)
   source->AddString(
       "systemDialogOption",
       l10n_util::GetStringFUTF16(
@@ -423,8 +425,8 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
 
 #if defined(OS_CHROMEOS)
   bool cups_and_md_settings_enabled =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kEnableNativeCups);
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kDisableNativeCups);
   source->AddBoolean("showLocalManageButton", cups_and_md_settings_enabled);
 #else
   source->AddBoolean("showLocalManageButton", true);
@@ -443,6 +445,7 @@ PrintPreviewUI::PrintPreviewUI(content::WebUI* web_ui)
       handler_(nullptr),
       source_is_modifiable_(true),
       source_has_selection_(false),
+      print_selection_only_(false),
       dialog_closed_(false) {
   // Set up the chrome://print/ data source.
   Profile* profile = Profile::FromWebUI(web_ui);
@@ -545,12 +548,6 @@ void PrintPreviewUI::OnPrintPreviewRequest(int request_id) {
   }
   g_print_preview_request_id_map.Get().Set(id_, request_id);
 }
-
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
-void PrintPreviewUI::OnShowSystemDialog() {
-  web_ui()->CallJavascriptFunctionUnsafe("onSystemDialogLinkClicked");
-}
-#endif  // ENABLE_BASIC_PRINTING
 
 void PrintPreviewUI::OnDidGetPreviewPageCount(
     const PrintHostMsg_DidGetPreviewPageCount_Params& params) {
@@ -658,8 +655,11 @@ void PrintPreviewUI::OnHidePreviewDialog() {
   ConstrainedWebDialogDelegate* delegate = GetConstrainedDelegate();
   if (!delegate)
     return;
-  delegate->ReleaseWebContentsOnDialogClose();
-  background_printing_manager->OwnPrintPreviewDialog(preview_dialog);
+  std::unique_ptr<content::WebContents> preview_contents =
+      delegate->ReleaseWebContents();
+  DCHECK_EQ(preview_dialog, preview_contents.get());
+  background_printing_manager->OwnPrintPreviewDialog(
+      preview_contents.release());
   OnClosePrintPreviewDialog();
 }
 

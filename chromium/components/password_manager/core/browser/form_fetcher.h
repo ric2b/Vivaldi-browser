@@ -56,6 +56,9 @@ class FormFetcher {
   // |consumer| outlives |this|.
   virtual void AddConsumer(Consumer* consumer) = 0;
 
+  // Call this to stop |consumer| from receiving updates from |this|.
+  virtual void RemoveConsumer(Consumer* consumer) = 0;
+
   // Returns the current state of the FormFetcher
   virtual State GetState() const = 0;
 
@@ -73,6 +76,11 @@ class FormFetcher {
   // construction and can be called manually later as well to cause an update
   // of the cached credentials.
   virtual void Fetch() = 0;
+
+  // Creates a copy of |*this| with contains the same credentials without the
+  // need for calling Fetch(). Only call this if GetState() returns NOT_WAITING,
+  // otherwise the original FormFetcher does not have any data to be cloned.
+  virtual std::unique_ptr<FormFetcher> Clone() = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FormFetcher);

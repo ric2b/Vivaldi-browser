@@ -5,6 +5,8 @@
 module device.mojom;
 
 import "mojo/common/time.mojom";
+import "gpu/ipc/common/mailbox_holder.mojom";
+import "gpu/ipc/common/sync_token.mojom";
 
 // A field of view, given by 4 degrees describing the view from a center point.
 struct VRFieldOfView {
@@ -17,7 +19,6 @@ struct VRFieldOfView {
 // A display's position, orientation, velocity, and acceleration state at the
 // given timestamp.
 struct VRPose {
-  double timestamp;
   array<float, 4>? orientation;
   array<float, 3>? position;
   array<float, 3>? angularVelocity;
@@ -27,7 +28,6 @@ struct VRPose {
 };
 
 struct VRDisplayCapabilities {
-  bool hasOrientation;
   bool hasPosition;
   bool hasExternalDisplay;
   bool canPresent;
@@ -73,8 +73,8 @@ enum VRDisplayEventReason {
 // TODO(shaobo.yan@intel.com) : Add comments to describe these interfaces about
 // how to use and where they live.
 interface VRService {
-  // TODO(shaobo.yan@intel.com) : Use a factory function which took a
-  // VRServiceClient so we would never have a half-initialized VRService.
+  // TODO(shaobo.yan@intel.com, crbug/701027): Use a factory function which
+  // takes a VRServiceClient so we will never have a half-initialized VRService.
   SetClient(VRServiceClient client) => (uint32 numberOfConnectedDevices);
   // Inform the service that the page is listening for vrdisplayactivate events.
   SetListeningForActivate(bool listening);
@@ -85,19 +85,23 @@ interface VRServiceClient {
                      VRDisplayInfo displayInfo);
 };
 
-interface VRDisplay {
-  ResetPose();
+interface VRSubmitFrameClient {
+  OnSubmitFrameTransferred();
+  OnSubmitFrameRendered();
+};
 
-  RequestPresent(bool secureOrigin) => (bool success);
+interface VRDisplay {
+  RequestPresent(bool secureOrigin, VRSubmitFrameClient client) => (bool success);
   ExitPresent();
-  SubmitFrame(VRPose? pose);
+  SubmitFrame(int16 frameId, gpu.mojom.MailboxHolder mailboxHolder);
   UpdateLayerBounds(int16 frameId, VRLayerBounds leftBounds,
-                    VRLayerBounds rightBounds);
+                    VRLayerBounds rightBounds, int16 sourceWidth,
+                    int16 sourceHeight);
   GetVRVSyncProvider(VRVSyncProvider& request);
 };
 
 interface VRVSyncProvider {
-  enum Status { SUCCESS, RETRY };
+  enum Status { SUCCESS, CLOSING };
 
   // The frameId maps a VSync to a frame arriving from the compositor. IDs will
   // be reused after the frame arrives from the compositor. Negative IDs imply

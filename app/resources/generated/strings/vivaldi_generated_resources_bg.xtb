@@ -93,7 +93,7 @@
 <translation id="2327492829706409234">Разреши приложението</translation>
 <translation id="2344028582131185878">Изтегляния</translation>
 <translation id="2348176352564285430">Приложение: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="2357949918965361754">С тази възможност показвате съдържание от Chrome на вашия телевизор или други устройства.</translation>
+<translation id="2357949918965361754">Ползвайте възможността, за да показвате съдържание от Chrome на вашия телевизор или други устройства.</translation>
 <translation id="2378982052244864789">Изберете директория на разширението.</translation>
 <translation id="2379281330731083556">Отпечатай чрез диалог на системата… <ph name="SHORTCUT_KEY" /></translation>
 <translation id="241082044617551207">Неизвестна приставка</translation>
@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Въведете бърз клавиш</translation>
 <translation id="2509495747794740764">Мащабът е число между 10 и 200.</translation>
 <translation id="2509857212037838238">Инсталиране на <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Брой жизнепризиви</translation>
 <translation id="2550212893339833758">Разменна памет</translation>
 <translation id="2580924999637585241">Всичко: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Магазин на Chrome</translation>
@@ -163,7 +164,7 @@
 <translation id="3347086966102161372">Копирай &amp;адреса на картината</translation>
 <translation id="335985608243443814">Прелисти…</translation>
 <translation id="3360297538363969800">Провалено отпечатване. Моля, проверете принтера и опитайте отново.</translation>
-<translation id="3378572629723696641">Разширението е вероятно повредено.</translation>
+<translation id="3378572629723696641">Вероятно разширението е повредено.</translation>
 <translation id="3396331542604645348">Избраният принтер е недостъпен или е инсталиран неправилно. Проверете принтера или опитайте да изберете друг.</translation>
 <translation id="3427092606871434483">Позволи (фабрично)</translation>
 <translation id="3435896845095436175">Разреши</translation>
@@ -366,6 +367,7 @@
 <translation id="6273677812470008672">Качество</translation>
 <translation id="6295855836753816081">Записване…</translation>
 <translation id="6308937455967653460">Запиши пр&amp;епратката като…</translation>
+<translation id="6326855256003666642">Брой жизнепризиви</translation>
 <translation id="6348109281845364640">Провалено настройване на принтера</translation>
 <translation id="6370021412472292592">Зареждане на манифест е невъзможно.</translation>
 <translation id="6398765197997659313">Изход от цял екран</translation>
@@ -488,7 +490,7 @@
 <translation id="8137559199583651773">Организирай разширенията</translation>
 <translation id="8180239481735238521">страница</translation>
 <translation id="8188120771410500975">&amp;Проверявай текстовите полета</translation>
-<translation id="8259581864063078725">Щракнете за намиране на приложение за печат към принтера.</translation>
+<translation id="8259581864063078725">Щракнете за намиране на отпечатващо приложение, което да ползвате с принтера.</translation>
 <translation id="8261378640211443080">Разширението не е в списъка на <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> и може да е било добавено без ваше знание.</translation>
 <translation id="8294431847097064396">Източник</translation>
 <translation id="8335587457941836791">Откачи от лавицата</translation>

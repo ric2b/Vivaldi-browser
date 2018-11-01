@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "base/strings/string_util.h"
+
 namespace arc {
 
 ArcProcess::ArcProcess(base::ProcessId nspid,
@@ -33,5 +35,15 @@ bool ArcProcess::operator<(const ArcProcess& rhs) const {
 
 ArcProcess::ArcProcess(ArcProcess&& other) = default;
 ArcProcess& ArcProcess::operator=(ArcProcess&& other) = default;
+
+std::ostream& operator<<(std::ostream& out, const ArcProcess& arc_process) {
+  out << "process_name: " << arc_process.process_name()
+      << ", pid: " << arc_process.pid()
+      << ", process_state: " << arc_process.process_state()
+      << ", is_focused: " << arc_process.is_focused()
+      << ", last_activity_time: " << arc_process.last_activity_time()
+      << ", packages: " << base::JoinString(arc_process.packages(), ",");
+  return out;
+}
 
 }  // namespace arc

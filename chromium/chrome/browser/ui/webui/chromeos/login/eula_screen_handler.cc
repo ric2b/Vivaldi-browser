@@ -53,7 +53,7 @@ class CreditsWebDialog : public chromeos::LoginWebDialog {
       source->GetWebUI()->CallJavascriptFunctionUnsafe(
           "(function () {"
           "  document.body.classList.toggle('dialog', true);"
-          "  keyboard.initializeKeyboardFlow();"
+          "  keyboard.initializeKeyboardFlow(false);"
           "})");
     }
   }
@@ -83,7 +83,9 @@ void ShowCreditsDialog(Profile* profile,
 namespace chromeos {
 
 EulaScreenHandler::EulaScreenHandler(CoreOobeView* core_oobe_view)
-    : core_oobe_view_(core_oobe_view), weak_factory_(this) {
+    : BaseScreenHandler(kScreenId),
+      core_oobe_view_(core_oobe_view),
+      weak_factory_(this) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -97,7 +99,7 @@ void EulaScreenHandler::Show() {
     show_on_init_ = true;
     return;
   }
-  ShowScreen(OobeScreen::SCREEN_OOBE_EULA);
+  ShowScreen(kScreenId);
 }
 
 void EulaScreenHandler::Hide() {

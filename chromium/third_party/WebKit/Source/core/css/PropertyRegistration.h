@@ -10,49 +10,49 @@
 #include "core/css/CSSSyntaxDescriptor.h"
 #include "core/css/CSSValue.h"
 #include "core/css/CSSVariableData.h"
-#include "wtf/Allocator.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 class ExceptionState;
+class ExecutionContext;
 class PropertyDescriptor;
-class ScriptState;
 
 using CSSInterpolationTypes = Vector<std::unique_ptr<CSSInterpolationType>>;
 
-class PropertyRegistration
+class CORE_EXPORT PropertyRegistration
     : public GarbageCollectedFinalized<PropertyRegistration> {
  public:
-  static void registerProperty(ScriptState*,
+  static void registerProperty(ExecutionContext*,
                                const PropertyDescriptor&,
                                ExceptionState&);
 
   PropertyRegistration(const CSSSyntaxDescriptor&,
                        bool inherits,
                        const CSSValue* initial,
-                       PassRefPtr<CSSVariableData> initialVariableData,
+                       PassRefPtr<CSSVariableData> initial_variable_data,
                        CSSInterpolationTypes);
 
-  const CSSSyntaxDescriptor& syntax() const { return m_syntax; }
-  bool inherits() const { return m_inherits; }
-  const CSSValue* initial() const { return m_initial; }
-  CSSVariableData* initialVariableData() const {
-    return m_initialVariableData.get();
+  const CSSSyntaxDescriptor& Syntax() const { return syntax_; }
+  bool Inherits() const { return inherits_; }
+  const CSSValue* Initial() const { return initial_; }
+  CSSVariableData* InitialVariableData() const {
+    return initial_variable_data_.Get();
   }
-  const InterpolationTypes& interpolationTypes() const {
-    return m_interpolationTypes;
+  const InterpolationTypes& GetInterpolationTypes() const {
+    return interpolation_types_;
   }
 
-  DEFINE_INLINE_TRACE() { visitor->trace(m_initial); }
+  DEFINE_INLINE_TRACE() { visitor->Trace(initial_); }
 
  private:
-  const CSSSyntaxDescriptor m_syntax;
-  const bool m_inherits;
-  const Member<const CSSValue> m_initial;
-  const RefPtr<CSSVariableData> m_initialVariableData;
-  const InterpolationTypes m_interpolationTypes;
+  const CSSSyntaxDescriptor syntax_;
+  const bool inherits_;
+  const Member<const CSSValue> initial_;
+  const RefPtr<CSSVariableData> initial_variable_data_;
+  const InterpolationTypes interpolation_types_;
 };
 
 }  // namespace blink

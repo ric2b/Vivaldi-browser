@@ -51,7 +51,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/url_constants.h"
@@ -79,10 +78,6 @@
 
 #if defined(OS_POSIX)
 #include "base/file_descriptor_posix.h"
-#endif
-
-#if defined(OS_ANDROID)
-#include "content/browser/media/android/media_throttler.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -136,7 +131,8 @@ RenderMessageFilter::RenderMessageFilter(
                            arraysize(kFilteredMessageClasses)),
       BrowserAssociatedInterface<mojom::RenderMessageFilter>(this, this),
       resource_dispatcher_host_(ResourceDispatcherHostImpl::Get()),
-      bitmap_manager_client_(HostSharedBitmapManager::current()),
+      bitmap_manager_client_(
+          display_compositor::HostSharedBitmapManager::current()),
       request_context_(request_context),
       resource_context_(browser_context->GetResourceContext()),
       render_widget_helper_(render_widget_helper),
@@ -160,17 +156,10 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderMessageFilter, message)
 #if defined(OS_MACOSX)
-    // On Mac, the IPCs ViewHostMsg_SwapCompositorFrame, ViewHostMsg_UpdateRect,
-    // and GpuCommandBufferMsg_SwapBuffersCompleted need to be handled in a
-    // nested message loop during resize.
-    IPC_MESSAGE_HANDLER_GENERIC(
-        ViewHostMsg_SwapCompositorFrame,
-        ResizeHelperPostMsgToUIThread(render_process_id_, message))
+    // On Mac, ViewHostMsg_UpdateRect needs to be handled in a nested message
+    // loop during resize.
     IPC_MESSAGE_HANDLER_GENERIC(
         ViewHostMsg_UpdateRect,
-        ResizeHelperPostMsgToUIThread(render_process_id_, message))
-    IPC_MESSAGE_HANDLER_GENERIC(
-        ViewHostMsg_SetNeedsBeginFrames,
         ResizeHelperPostMsgToUIThread(render_process_id_, message))
 #endif
     IPC_MESSAGE_HANDLER_DELAY_REPLY(ChildProcessHostMsg_HasGpuProcess,
@@ -261,6 +250,11 @@ void RenderMessageFilter::CreateFullscreenWidget(
   callback.Run(route_id);
 }
 
+void RenderMessageFilter::GetSharedBitmapManager(
+    cc::mojom::SharedBitmapManagerAssociatedRequest request) {
+  bitmap_manager_client_.Bind(std::move(request));
+}
+
 #if defined(OS_MACOSX)
 
 void RenderMessageFilter::OnLoadFont(const FontDescriptor& font,
@@ -290,21 +284,6 @@ void RenderMessageFilter::SendLoadFontReply(IPC::Message* reply,
 }
 
 #endif  // defined(OS_MACOSX)
-
-void RenderMessageFilter::AllocatedSharedBitmap(
-    mojo::ScopedSharedBufferHandle buffer,
-    const cc::SharedBitmapId& id) {
-  base::SharedMemoryHandle memory_handle;
-  size_t size;
-  MojoResult result = mojo::UnwrapSharedMemoryHandle(
-      std::move(buffer), &memory_handle, &size, NULL);
-  DCHECK_EQ(result, MOJO_RESULT_OK);
-  bitmap_manager_client_.ChildAllocatedSharedBitmap(size, memory_handle, id);
-}
-
-void RenderMessageFilter::DeletedSharedBitmap(const cc::SharedBitmapId& id) {
-  bitmap_manager_client_.ChildDeletedSharedBitmap(id);
-}
 
 #if defined(OS_LINUX)
 void RenderMessageFilter::SetThreadPriorityOnFileThread(
@@ -402,17 +381,15 @@ void RenderMessageFilter::OnMediaLogEvents(
 
 void RenderMessageFilter::OnHasGpuProcess(IPC::Message* reply_ptr) {
   std::unique_ptr<IPC::Message> reply(reply_ptr);
-  GpuProcessHost::GetProcessHandles(
-      base::Bind(&RenderMessageFilter::GetGpuProcessHandlesCallback,
+  GpuProcessHost::GetHasGpuProcess(
+      base::Bind(&RenderMessageFilter::GetHasGpuProcessCallback,
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&reply)));
 }
 
-void RenderMessageFilter::GetGpuProcessHandlesCallback(
+void RenderMessageFilter::GetHasGpuProcessCallback(
     std::unique_ptr<IPC::Message> reply,
-    const std::list<base::ProcessHandle>& handles) {
-  bool has_gpu_process = handles.size() > 0;
-  ChildProcessHostMsg_HasGpuProcess::WriteReplyParams(reply.get(),
-                                                      has_gpu_process);
+    bool has_gpu) {
+  ChildProcessHostMsg_HasGpuProcess::WriteReplyParams(reply.get(), has_gpu);
   Send(reply.release());
 }
 

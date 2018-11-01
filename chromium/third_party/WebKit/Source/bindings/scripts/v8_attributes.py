@@ -111,7 +111,7 @@ def attribute_context(interface, attribute, interfaces):
     cached_attribute_validation_method = extended_attributes.get('CachedAttribute')
     keep_alive_for_gc = is_keep_alive_for_gc(interface, attribute)
     if cached_attribute_validation_method or keep_alive_for_gc:
-        includes.add('bindings/core/v8/V8HiddenValue.h')
+        includes.add('bindings/core/v8/V8PrivateProperty.h')
 
     # [CachedAccessor]
     is_cached_accessor = 'CachedAccessor' in extended_attributes
@@ -155,6 +155,7 @@ def attribute_context(interface, attribute, interfaces):
         'is_lenient_this': 'LenientThis' in extended_attributes,
         'is_nullable': idl_type.is_nullable,
         'is_explicit_nullable': idl_type.is_explicit_nullable,
+        'is_named_constructor': is_named_constructor_attribute(attribute),
         'is_partial_interface_member':
             'PartialInterfaceImplementedAs' in extended_attributes,
         'is_per_world_bindings': 'PerWorldBindings' in extended_attributes,
@@ -280,13 +281,18 @@ def getter_context(interface, attribute, context):
 
     def v8_set_return_value_statement(for_main_world=False):
         if context['is_keep_alive_for_gc'] or 'CachedAttribute' in extended_attributes:
-            return 'v8SetReturnValue(info, v8Value)'
+            return 'V8SetReturnValue(info, v8Value)'
         return idl_type.v8_set_return_value(
             cpp_value, extended_attributes=extended_attributes, script_wrappable='impl',
             for_main_world=for_main_world, is_static=attribute.is_static)
 
+    cpp_value_to_script_wrappable = cpp_value
+    if idl_type.is_array_buffer_view_or_typed_array:
+        cpp_value_to_script_wrappable += '.View()'
+
     context.update({
         'cpp_value': cpp_value,
+        'cpp_value_to_script_wrappable': cpp_value_to_script_wrappable,
         'cpp_value_to_v8_value': idl_type.cpp_value_to_v8_value(
             cpp_value=cpp_value, creation_context='holder',
             extended_attributes=extended_attributes),
@@ -317,15 +323,16 @@ def getter_expression(interface, attribute, context):
     expression = '%s(%s)' % (getter_name, ', '.join(arguments))
     # Needed to handle getter expressions returning Type& as the
     # use site for |expression| expects Type*.
-    if attribute.idl_type.is_interface_type and len(arguments) == 0:
-        return 'WTF::getPtr(%s)' % expression
+    if (attribute.idl_type.is_interface_type and len(arguments) == 0 and
+            not attribute.idl_type.is_array_buffer_view_or_typed_array):
+        return 'WTF::GetPtr(%s)' % expression
     return expression
 
 
 CONTENT_ATTRIBUTE_GETTER_NAMES = {
-    'boolean': 'fastHasAttribute',
-    'long': 'getIntegralAttribute',
-    'unsigned long': 'getUnsignedIntegralAttribute',
+    'boolean': 'FastHasAttribute',
+    'long': 'GetIntegralAttribute',
+    'unsigned long': 'GetUnsignedIntegralAttribute',
 }
 
 
@@ -338,7 +345,7 @@ def getter_base_name(interface, attribute, arguments):
     content_attribute_name = extended_attributes['Reflect'] or attribute.name.lower()
     if content_attribute_name in ['class', 'id', 'name']:
         # Special-case for performance optimization.
-        return 'get%sAttribute' % content_attribute_name.capitalize()
+        return 'Get%sAttribute' % content_attribute_name.capitalize()
 
     arguments.append(scoped_content_attribute_name(interface, attribute))
 
@@ -346,8 +353,8 @@ def getter_base_name(interface, attribute, arguments):
     if base_idl_type in CONTENT_ATTRIBUTE_GETTER_NAMES:
         return CONTENT_ATTRIBUTE_GETTER_NAMES[base_idl_type]
     if 'URL' in attribute.extended_attributes:
-        return 'getURLAttribute'
-    return 'fastGetAttribute'
+        return 'GetURLAttribute'
+    return 'FastGetAttribute'
 
 
 def is_keep_alive_for_gc(interface, attribute):
@@ -393,7 +400,9 @@ def setter_context(interface, attribute, interfaces, context):
                             (target_attribute_name, target_interface_name))
 
     if ('Replaceable' in attribute.extended_attributes):
-        context['cpp_setter'] = 'v8CallBoolean(info.Holder()->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), propertyName, v8Value))'
+        context['cpp_setter'] = (
+            'V8CallBoolean(info.Holder()->CreateDataProperty(' +
+            'info.GetIsolate()->GetCurrentContext(), propertyName, v8Value))')
         return
 
     extended_attributes = attribute.extended_attributes
@@ -448,15 +457,17 @@ def setter_expression(interface, attribute, context):
                 attribute.name == 'onerror'):
             includes.add('bindings/core/v8/V8ErrorHandler.h')
             arguments.append(
-                'V8EventListenerHelper::ensureEventListener<V8ErrorHandler>(' +
-                'v8Value, true, ScriptState::forReceiverObject(info))')
+                'V8EventListenerHelper::EnsureEventListener<V8ErrorHandler>(' +
+                'v8Value, true, ScriptState::ForReceiverObject(info))')
         else:
             arguments.append(
-                'V8EventListenerHelper::getEventListener(' +
-                'ScriptState::forReceiverObject(info), v8Value, true, ' +
-                'ListenerFindOrCreate)')
+                'V8EventListenerHelper::GetEventListener(' +
+                'ScriptState::ForReceiverObject(info), v8Value, true, ' +
+                'kListenerFindOrCreate)')
     else:
         arguments.append('cppValue')
+    if idl_type.is_explicit_nullable:
+        arguments.append('isNull')
     if context['is_setter_raises_exception']:
         arguments.append('exceptionState')
 
@@ -464,9 +475,9 @@ def setter_expression(interface, attribute, context):
 
 
 CONTENT_ATTRIBUTE_SETTER_NAMES = {
-    'boolean': 'setBooleanAttribute',
-    'long': 'setIntegralAttribute',
-    'unsigned long': 'setUnsignedIntegralAttribute',
+    'boolean': 'SetBooleanAttribute',
+    'long': 'SetIntegralAttribute',
+    'unsigned long': 'SetUnsignedIntegralAttribute',
 }
 
 
@@ -553,13 +564,15 @@ def has_custom_setter(attribute):
 ################################################################################
 
 idl_types.IdlType.constructor_type_name = property(
-    # FIXME: replace this with a [ConstructorAttribute] extended attribute
     lambda self: strip_suffix(self.base_type, 'Constructor'))
 
 
 def is_constructor_attribute(attribute):
-    # FIXME: replace this with [ConstructorAttribute] extended attribute
     return attribute.idl_type.name.endswith('Constructor')
+
+
+def is_named_constructor_attribute(attribute):
+    return attribute.idl_type.name.endswith('ConstructorConstructor')
 
 
 def update_constructor_attribute_context(interface, attribute, context):

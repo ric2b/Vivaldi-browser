@@ -174,6 +174,8 @@ void DoMount(const base::WeakPtr<AuthAttemptState>& attempt,
         kCryptohomeGAIAKeyLabel,
         cryptohome::PRIV_DEFAULT));
   }
+  mount.force_dircrypto_if_available =
+      attempt->user_context.IsForcingDircrypto();
 
   cryptohome::HomedirMethods::GetInstance()->MountEx(
       cryptohome::Identification(attempt->user_context.GetAccountId()),
@@ -658,6 +660,15 @@ void CryptohomeAuthenticator::OnPasswordChangeDetected() {
     consumer_->OnPasswordChangeDetected();
 }
 
+void CryptohomeAuthenticator::OnOldEncryptionDetected(
+    bool has_incomplete_migration) {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  if (consumer_) {
+    consumer_->OnOldEncryptionDetected(current_state_->user_context,
+                                       has_incomplete_migration);
+  }
+}
+
 void CryptohomeAuthenticator::OnAuthFailure(const AuthFailure& error) {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
@@ -721,6 +732,15 @@ void CryptohomeAuthenticator::OnOwnershipChecked(bool is_owner) {
   user_can_login_ = is_owner;
   owner_is_verified_ = true;
   Resolve();
+}
+
+void CryptohomeAuthenticator::OnUnmount(DBusMethodCallStatus call_status,
+                                        bool success) {
+  if (call_status != DBUS_METHOD_CALL_SUCCESS || !success) {
+    // Maybe we should reboot immediately here?
+    LOGIN_LOG(ERROR) << "Couldn't unmount users home!";
+  }
+  OnAuthFailure(AuthFailure(AuthFailure::OWNER_REQUIRED));
 }
 
 void CryptohomeAuthenticator::Resolve() {
@@ -843,19 +863,20 @@ void CryptohomeAuthenticator::Resolve() {
       break;
     case OWNER_REQUIRED: {
       current_state_->ResetCryptohomeStatus();
-      bool success = false;
-      DBusThreadManager::Get()->GetCryptohomeClient()->Unmount(&success);
-      if (!success) {
-        // Maybe we should reboot immediately here?
-        LOGIN_LOG(ERROR) << "Couldn't unmount users home!";
-      }
-      task_runner_->PostTask(
-          FROM_HERE,
-          base::Bind(&CryptohomeAuthenticator::OnAuthFailure,
-                     this,
-                     AuthFailure(AuthFailure::OWNER_REQUIRED)));
+      DBusThreadManager::Get()->GetCryptohomeClient()->Unmount(
+          base::Bind(&CryptohomeAuthenticator::OnUnmount, this));
       break;
     }
+    case FAILED_OLD_ENCRYPTION:
+    case FAILED_PREVIOUS_MIGRATION_INCOMPLETE:
+      // In this case, we tried to create/mount cryptohome and failed
+      // because the file system is encrypted in old format.
+      // Chrome will show a screen which asks user to migrate the encryption.
+      task_runner_->PostTask(
+          FROM_HERE,
+          base::Bind(&CryptohomeAuthenticator::OnOldEncryptionDetected, this,
+                     state == FAILED_PREVIOUS_MIGRATION_INCOMPLETE));
+      break;
     default:
       NOTREACHED();
       break;
@@ -926,6 +947,15 @@ CryptohomeAuthenticator::ResolveCryptohomeFailureState() {
       cryptohome::MOUNT_ERROR_TPM_NEEDS_REBOOT) {
     // Critical TPM error detected, reboot needed.
     return FAILED_TPM;
+  }
+
+  if (current_state_->cryptohome_code() ==
+      cryptohome::MOUNT_ERROR_OLD_ENCRYPTION) {
+    return FAILED_OLD_ENCRYPTION;
+  }
+  if (current_state_->cryptohome_code() ==
+      cryptohome::MOUNT_ERROR_PREVIOUS_MIGRATION_INCOMPLETE) {
+    return FAILED_PREVIOUS_MIGRATION_INCOMPLETE;
   }
 
   // Return intermediate states in the following case:

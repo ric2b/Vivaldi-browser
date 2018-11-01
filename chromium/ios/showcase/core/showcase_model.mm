@@ -17,14 +17,9 @@
 + (NSArray<showcase::ModelRow*>*)model {
   return @[
     @{
-      showcase::kClassForDisplayKey : @"SettingsViewController",
-      showcase::kClassForInstantiationKey : @"SCSettingsCoordinator",
-      showcase::kUseCaseKey : @"Main settings screen",
-    },
-    @{
       showcase::kClassForDisplayKey : @"ContentSuggestionsViewController",
-      showcase::kClassForInstantiationKey : @"SCSuggestionsCoordinator",
-      showcase::kUseCaseKey : @"New Suggestions UI",
+      showcase::kClassForInstantiationKey : @"SCContentSuggestionsCoordinator",
+      showcase::kUseCaseKey : @"Content Suggestions UI",
     },
     @{
       showcase::kClassForDisplayKey : @"MenuViewController",
@@ -32,9 +27,29 @@
       showcase::kUseCaseKey : @"Tools menu",
     },
     @{
-      showcase::kClassForDisplayKey : @"UITableViewCell",
-      showcase::kClassForInstantiationKey : @"UIKitTableViewCellViewController",
-      showcase::kUseCaseKey : @"UIKit Table Cells",
+      showcase::kClassForDisplayKey : @"NTPViewController",
+      showcase::kClassForInstantiationKey : @"SCNTPCoordinator",
+      showcase::kUseCaseKey : @"NTP",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"PaymentRequestEditViewController",
+      showcase::kClassForInstantiationKey : @"SCPaymentsEditorCoordinator",
+      showcase::kUseCaseKey : @"Generic payment request editor",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"PaymentRequestPickerViewController",
+      showcase::kClassForInstantiationKey : @"SCPaymentsPickerCoordinator",
+      showcase::kUseCaseKey : @"Payment request picker view",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"RootContainerViewController",
+      showcase::kClassForInstantiationKey : @"SCRootCoordinator",
+      showcase::kUseCaseKey : @"Root container",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"SettingsViewController",
+      showcase::kClassForInstantiationKey : @"SCSettingsCoordinator",
+      showcase::kUseCaseKey : @"Main settings screen",
     },
     @{
       showcase::kClassForDisplayKey : @"TabGridViewController",
@@ -42,14 +57,24 @@
       showcase::kUseCaseKey : @"Tab grid",
     },
     @{
-      showcase::kClassForDisplayKey : @"TabStripContainerViewController",
-      showcase::kClassForInstantiationKey : @"SCTabStripCoordinator",
-      showcase::kUseCaseKey : @"Tab strip container",
+      showcase::kClassForDisplayKey : @"TopToolbarTabViewController",
+      showcase::kClassForInstantiationKey : @"SCTopToolbarTabCoordinator",
+      showcase::kUseCaseKey : @"Top toolbar tab",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"BottomToolbarTabViewController",
+      showcase::kClassForInstantiationKey : @"SCBottomToolbarTabCoordinator",
+      showcase::kUseCaseKey : @"Bottom toolbar tab",
     },
     @{
       showcase::kClassForDisplayKey : @"ToolbarViewController",
       showcase::kClassForInstantiationKey : @"SCToolbarCoordinator",
       showcase::kUseCaseKey : @"Toolbar",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"UITableViewCell",
+      showcase::kClassForInstantiationKey : @"UIKitTableViewCellViewController",
+      showcase::kUseCaseKey : @"UIKit Table Cells",
     },
   ];
 }

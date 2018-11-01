@@ -15,7 +15,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/gfx_export.h"
 
-#if defined(USE_OZONE)
+#if defined(OS_LINUX)
 #include "ui/gfx/native_pixmap_handle.h"
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
 #include "ui/gfx/mac/io_surface.h"
@@ -31,8 +31,8 @@ enum GpuMemoryBufferType {
   EMPTY_BUFFER,
   SHARED_MEMORY_BUFFER,
   IO_SURFACE_BUFFER,
-  OZONE_NATIVE_PIXMAP,
-  GPU_MEMORY_BUFFER_TYPE_LAST = OZONE_NATIVE_PIXMAP
+  NATIVE_PIXMAP,
+  GPU_MEMORY_BUFFER_TYPE_LAST = NATIVE_PIXMAP
 };
 
 using GpuMemoryBufferId = GenericSharedMemoryId;
@@ -47,7 +47,7 @@ struct GFX_EXPORT GpuMemoryBufferHandle {
   base::SharedMemoryHandle handle;
   uint32_t offset;
   int32_t stride;
-#if defined(USE_OZONE)
+#if defined(OS_LINUX)
   NativePixmapHandle native_pixmap_handle;
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
   ScopedRefCountedIOSurfaceMachPort mach_port;

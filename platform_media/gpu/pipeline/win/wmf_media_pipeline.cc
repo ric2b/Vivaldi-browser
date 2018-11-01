@@ -6,10 +6,9 @@
 
 #include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
 
-#include <Mferror.h>
-
-#include <algorithm>
-#include <string>
+#include "platform_media/common/platform_media_pipeline_constants.h"
+#include "platform_media/common/platform_mime_util.h"
+#include "platform_media/common/win/mf_util.h"
 
 #include "base/callback_helpers.h"
 #include "base/numerics/safe_conversions.h"
@@ -18,13 +17,15 @@
 #include "base/trace_event/trace_event.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/data_buffer.h"
-#include "platform_media/common/platform_mime_util.h"
+#include "media/base/data_source.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/win/mf_initializer.h"
-#include "platform_media/common/win/mf_util.h"
-#include "platform_media/common/platform_media_pipeline_constants.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface_egl.h"
+
+#include <Mferror.h>
+#include <algorithm>
+#include <string>
 
 namespace content {
 
@@ -620,7 +621,7 @@ WMFMediaPipeline::InitializationResult WMFMediaPipeline::CreateSourceReader(
   if (FAILED(hr)) {
     DLOG(ERROR) << "Failed to create source reader.";
     // We use (result.source_reader != NULL) as status.
-    result.source_reader.Release();
+    result.source_reader.Reset();
   }
 
   return result;
@@ -1292,7 +1293,7 @@ bool WMFMediaPipeline::CreateSourceReaderCallbackAndAttributes(
 
   HRESULT hr = MFCreateAttributes((*attributes).Receive(), 1);
   if (FAILED(hr)) {
-    source_reader_callback_.Release();
+    source_reader_callback_.Reset();
     return false;
   }
 

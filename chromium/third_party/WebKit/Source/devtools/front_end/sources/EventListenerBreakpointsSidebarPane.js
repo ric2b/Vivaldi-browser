@@ -64,7 +64,9 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
     ]);
     this._createCategory(Common.UIString('Script'), ['scriptFirstStatement', 'scriptBlockedByCSP'], true);
     this._createCategory(
-        Common.UIString('Timer'), ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'timerFired'], true);
+        Common.UIString('Timer'),
+        ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setTimeout.callback', 'setInterval.callback'],
+        true);
     this._createCategory(Common.UIString('Touch'), ['touchstart', 'touchmove', 'touchend', 'touchcancel']);
     this._createCategory(Common.UIString('Window'), ['DOMWindow.close'], true);
     this._createCategory(
@@ -86,7 +88,8 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
   static eventNameForUI(eventName, auxData) {
     if (!Sources.EventListenerBreakpointsSidebarPane._eventNamesForUI) {
       Sources.EventListenerBreakpointsSidebarPane._eventNamesForUI = {
-        'instrumentation:timerFired': Common.UIString('Timer Fired'),
+        'instrumentation:setTimeout.callback': Common.UIString('setTimeout fired'),
+        'instrumentation:setInterval.callback': Common.UIString('setInterval fired'),
         'instrumentation:scriptFirstStatement': Common.UIString('Script First Statement'),
         'instrumentation:scriptBlockedByCSP': Common.UIString('Script Blocked by Content Security Policy'),
         'instrumentation:requestAnimationFrame': Common.UIString('Request Animation Frame'),
@@ -139,7 +142,7 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
    * @param {!Array.<string>=} targetNames
    */
   _createCategory(name, eventNames, isInstrumentationEvent, targetNames) {
-    var labelNode = UI.createCheckboxLabel(name);
+    var labelNode = UI.CheckboxLabel.create(name);
 
     var categoryItem = {};
     categoryItem.element = new UI.TreeElement(labelNode);
@@ -161,7 +164,7 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
       var breakpointItem = {};
       var title = Sources.EventListenerBreakpointsSidebarPane.eventNameForUI(eventName);
 
-      labelNode = UI.createCheckboxLabel(title);
+      labelNode = UI.CheckboxLabel.create(title);
       labelNode.classList.add('source-code');
 
       breakpointItem.element = new UI.TreeElement(labelNode);
@@ -182,7 +185,7 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
 
   _update() {
     var target = UI.context.flavor(SDK.Target);
-    var debuggerModel = SDK.DebuggerModel.fromTarget(target);
+    var debuggerModel = target ? target.model(SDK.DebuggerModel) : null;
     var details = debuggerModel ? debuggerModel.debuggerPausedDetails() : null;
 
     if (!details || details.reason !== SDK.DebuggerModel.BreakReason.EventListener) {

@@ -12,6 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "content/common/content_export.h"
+#include "net/base/request_priority.h"
 
 namespace net {
 class URLRequest;
@@ -21,7 +22,6 @@ namespace content {
 
 class ResourceContext;
 class ResourceDispatcherHostDelegate;
-class RenderFrameHost;
 
 // This value is returned by header interceptors below, to determine if a
 // request should proceed based on the values of HTTP headers.
@@ -63,16 +63,6 @@ class CONTENT_EXPORT ResourceDispatcherHost {
   // Returns the singleton instance of the ResourceDispatcherHost.
   static ResourceDispatcherHost* Get();
 
-  // Causes all new requests for the root RenderFrameHost and its children to be
-  // blocked (not being started) until ResumeBlockedRequestsForFrameFromUI is
-  // called.
-  static void BlockRequestsForFrameFromUI(RenderFrameHost* root_frame_host);
-
-  // Resumes any blocked request for the specified root RenderFrameHost and
-  // child frame hosts.
-  static void ResumeBlockedRequestsForFrameFromUI(
-      RenderFrameHost* root_frame_host);
-
   // This does not take ownership of the delegate. It is expected that the
   // delegate have a longer lifetime than the ResourceDispatcherHost.
   virtual void SetDelegate(ResourceDispatcherHostDelegate* delegate) = 0;
@@ -94,6 +84,11 @@ class CONTENT_EXPORT ResourceDispatcherHost {
   virtual void RegisterInterceptor(const std::string& http_header,
                                    const std::string& starts_with,
                                    const InterceptorCallback& interceptor) = 0;
+
+  // Updates the priority for |request|. Modifies request->priority(), and may
+  // start the request loading if it wasn't already started.
+  virtual void ReprioritizeRequest(net::URLRequest* request,
+                                   net::RequestPriority priority) = 0;
 
  protected:
   virtual ~ResourceDispatcherHost() {}

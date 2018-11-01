@@ -30,7 +30,8 @@ class UpdateNotifierManager {
   bool RunNotifier(HINSTANCE instance);
 
   static bool OnUpdateAvailable(const char* version);
-  void TriggerUpdate();
+  static void OnShutdownRequested();
+  void TriggerUpdate(bool with_ui = false);
 
   void Disable();
 
@@ -42,19 +43,32 @@ class UpdateNotifierManager {
 
   void OnEventTriggered(base::WaitableEvent* waitable_event);
 
-  HINSTANCE instance_;
+  bool IsNotifierAlreadyRunning();
+  bool IsNotifierEnabled();
+
+  void CheckForUpdates() const;
+  void Quit() const;
+
+  HINSTANCE instance_ = NULL;
+  HANDLE already_exists_ = NULL;
   base::string16 current_version_;
 
-  bool notification_accepted_;
+  bool notification_accepted_ = false;
   std::unique_ptr<UpdateNotifierWindow> update_notifier_window_;
-  base::MessageLoop* ui_thread_loop_;
+  base::MessageLoop* ui_thread_loop_ = nullptr;
 
-  std::unique_ptr<base::WaitableEvent> restart_event_;
-  base::WaitableEventWatcher restart_event_watch_;
+  std::unique_ptr<base::WaitableEvent> global_restart_event_;
+  base::WaitableEventWatcher global_restart_event_watch_;
+
+  std::unique_ptr<base::WaitableEvent> global_quit_event_;
+  base::WaitableEventWatcher global_quit_event_watch_;
+
   std::unique_ptr<base::WaitableEvent> quit_event_;
   base::WaitableEventWatcher quit_event_watch_;
-  std::unique_ptr<base::WaitableEvent> quit_all_event_;
-  base::WaitableEventWatcher quit_all_event_watch_;
+
+  std::unique_ptr<base::WaitableEvent> check_for_updates_event_;
+  base::WaitableEventWatcher check_for_updates_event_watch_;
+
   DISALLOW_COPY_AND_ASSIGN(UpdateNotifierManager);
 };
 }  // namespace vivaldi_update_notifier

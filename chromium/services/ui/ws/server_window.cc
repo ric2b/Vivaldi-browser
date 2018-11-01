@@ -30,12 +30,12 @@ ServerWindow::ServerWindow(ServerWindowDelegate* delegate,
       parent_(nullptr),
       stacking_target_(nullptr),
       transient_parent_(nullptr),
-      is_modal_(false),
+      modal_type_(MODAL_TYPE_NONE),
       visible_(false),
       // Default to POINTER as CURSOR_NULL doesn't change the cursor, it leaves
       // the last non-null cursor.
-      cursor_id_(mojom::Cursor::POINTER),
-      non_client_cursor_id_(mojom::Cursor::POINTER),
+      cursor_id_(mojom::CursorType::POINTER),
+      non_client_cursor_id_(mojom::CursorType::POINTER),
       opacity_(1),
       can_focus_(true),
       properties_(properties),
@@ -172,13 +172,16 @@ void ServerWindow::StackChildAtTop(ServerWindow* child) {
   child->Reorder(children_.back(), mojom::OrderDirection::ABOVE);
 }
 
-void ServerWindow::SetBounds(const gfx::Rect& bounds) {
-  if (bounds_ == bounds)
+void ServerWindow::SetBounds(
+    const gfx::Rect& bounds,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+  if (bounds_ == bounds && current_local_surface_id_ == local_surface_id)
     return;
 
-  // TODO(fsamuel): figure out how will this work with CompositorFrames.
-
   const gfx::Rect old_bounds = bounds_;
+
+  current_local_surface_id_ = local_surface_id;
+
   bounds_ = bounds;
   for (auto& observer : observers_)
     observer.OnWindowBoundsChanged(this, old_bounds, bounds);
@@ -228,10 +231,6 @@ ServerWindow* ServerWindow::GetChildWindow(const WindowId& window_id) {
 }
 
 bool ServerWindow::AddTransientWindow(ServerWindow* child) {
-  // A system modal window cannot become a transient child.
-  if (child->is_modal() && !child->transient_parent())
-    return false;
-
   if (child->transient_parent())
     child->transient_parent()->RemoveTransientWindow(child);
 
@@ -268,8 +267,8 @@ void ServerWindow::RemoveTransientWindow(ServerWindow* child) {
     observer.OnTransientWindowRemoved(this, child);
 }
 
-void ServerWindow::SetModal() {
-  is_modal_ = true;
+void ServerWindow::SetModalType(ModalType modal_type) {
+  modal_type_ = modal_type;
 }
 
 bool ServerWindow::Contains(const ServerWindow* window) const {
@@ -300,7 +299,7 @@ void ServerWindow::SetOpacity(float value) {
     observer.OnWindowOpacityChanged(this, old_opacity, opacity_);
 }
 
-void ServerWindow::SetPredefinedCursor(ui::mojom::Cursor value) {
+void ServerWindow::SetPredefinedCursor(ui::mojom::CursorType value) {
   if (value == cursor_id_)
     return;
   cursor_id_ = value;
@@ -308,7 +307,7 @@ void ServerWindow::SetPredefinedCursor(ui::mojom::Cursor value) {
     observer.OnWindowPredefinedCursorChanged(this, value);
 }
 
-void ServerWindow::SetNonClientCursor(ui::mojom::Cursor value) {
+void ServerWindow::SetNonClientCursor(ui::mojom::CursorType value) {
   if (value == non_client_cursor_id_)
     return;
   non_client_cursor_id_ = value;

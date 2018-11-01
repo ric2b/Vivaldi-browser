@@ -19,7 +19,8 @@
 #include "base/id_map.h"
 #include "base/macros.h"
 #include "content/common/content_export.h"
-#include "content/public/common/presentation_session.h"
+#include "content/public/common/presentation_connection_message.h"
+#include "content/public/common/presentation_info.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationClient.h"
@@ -56,17 +57,21 @@ class CONTENT_EXPORT PresentationDispatcher
   friend class PresentationConnectionProxy;
   friend class TestPresentationDispatcher;
   friend class PresentationDispatcherTest;
-  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestStartSession);
-  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestStartSessionError);
-  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestJoinSession);
-  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestJoinSessionError);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestStartPresentation);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
+                           TestStartPresentationError);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
+                           TestReconnectPresentation);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
+                           TestReconnectPresentationError);
   FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestSendString);
   FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestSendArrayBuffer);
   FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestSendBlobData);
   FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
                            TestOnReceiverConnectionAvailable);
-  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestCloseSession);
-  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestTerminateSession);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestCloseConnection);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
+                           TestTerminatePresentation);
   FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
                            TestListenForScreenAvailability);
   FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
@@ -74,14 +79,14 @@ class CONTENT_EXPORT PresentationDispatcher
 
   struct SendMessageRequest {
     SendMessageRequest(
-        const PresentationSessionInfo& session_info,
-        blink::mojom::ConnectionMessagePtr message,
+        const PresentationInfo& presentation_info,
+        PresentationConnectionMessage connection_message,
         const blink::WebPresentationConnectionProxy* connection_proxy);
 
     ~SendMessageRequest();
 
-    PresentationSessionInfo session_info;
-    blink::mojom::ConnectionMessagePtr message;
+    PresentationInfo presentation_info;
+    PresentationConnectionMessage message;
     // Proxy of Blink connection object |connection| calling connection.send().
     // It does not take ownership of proxy object. Proxy object is owned by
     // Blink connection. Blink connection is destroyed after
@@ -89,93 +94,95 @@ class CONTENT_EXPORT PresentationDispatcher
     const blink::WebPresentationConnectionProxy* connection_proxy;
   };
 
-  static SendMessageRequest* CreateSendTextMessageRequest(
+  static std::unique_ptr<SendMessageRequest> CreateSendTextMessageRequest(
       const blink::WebURL& presentationUrl,
       const blink::WebString& presentationId,
       const blink::WebString& message,
       const blink::WebPresentationConnectionProxy* connection_proxy);
-  static SendMessageRequest* CreateSendBinaryMessageRequest(
+  static std::unique_ptr<SendMessageRequest> CreateSendBinaryMessageRequest(
       const blink::WebURL& presentationUrl,
       const blink::WebString& presentationId,
-      blink::mojom::PresentationMessageType type,
       const uint8_t* data,
       size_t length,
       const blink::WebPresentationConnectionProxy* connection_proxy);
 
   // WebPresentationClient implementation.
-  void setController(blink::WebPresentationController* controller) override;
-  void setReceiver(blink::WebPresentationReceiver*) override;
-  void startSession(const blink::WebVector<blink::WebURL>& presentationUrls,
-                    std::unique_ptr<blink::WebPresentationConnectionCallbacks>
-                        callback) override;
-  void joinSession(const blink::WebVector<blink::WebURL>& presentationUrls,
-                   const blink::WebString& presentationId,
-                   std::unique_ptr<blink::WebPresentationConnectionCallbacks>
-                       callback) override;
-  void sendString(
+  void SetController(blink::WebPresentationController* controller) override;
+  void SetReceiver(blink::WebPresentationReceiver*) override;
+  void StartPresentation(
+      const blink::WebVector<blink::WebURL>& presentationUrls,
+      std::unique_ptr<blink::WebPresentationConnectionCallbacks> callback)
+      override;
+  void ReconnectPresentation(
+      const blink::WebVector<blink::WebURL>& presentationUrls,
+      const blink::WebString& presentationId,
+      std::unique_ptr<blink::WebPresentationConnectionCallbacks> callback)
+      override;
+  void TerminatePresentation(const blink::WebURL& presentationUrl,
+                             const blink::WebString& presentationId) override;
+  void SendString(
       const blink::WebURL& presentationUrl,
       const blink::WebString& presentationId,
       const blink::WebString& message,
       const blink::WebPresentationConnectionProxy* connection_proxy) override;
-  void sendArrayBuffer(
+  void SendArrayBuffer(
       const blink::WebURL& presentationUrl,
       const blink::WebString& presentationId,
       const uint8_t* data,
       size_t length,
       const blink::WebPresentationConnectionProxy* connection_proxy) override;
-  void sendBlobData(
+  void SendBlobData(
       const blink::WebURL& presentationUrl,
       const blink::WebString& presentationId,
       const uint8_t* data,
       size_t length,
       const blink::WebPresentationConnectionProxy* connection_proxy) override;
-  void closeSession(
+  void CloseConnection(
       const blink::WebURL& presentationUrl,
       const blink::WebString& presentationId,
       const blink::WebPresentationConnectionProxy* connection_proxy) override;
-  void terminateSession(const blink::WebURL& presentationUrl,
-                        const blink::WebString& presentationId) override;
-  void getAvailability(
+  void GetAvailability(
       const blink::WebVector<blink::WebURL>& availabilityUrls,
       std::unique_ptr<blink::WebPresentationAvailabilityCallbacks> callbacks)
       override;
-  void startListening(blink::WebPresentationAvailabilityObserver*) override;
-  void stopListening(blink::WebPresentationAvailabilityObserver*) override;
-  void setDefaultPresentationUrls(
+  void StartListening(blink::WebPresentationAvailabilityObserver*) override;
+  void StopListening(blink::WebPresentationAvailabilityObserver*) override;
+  void SetDefaultPresentationUrls(
       const blink::WebVector<blink::WebURL>& presentationUrls) override;
 
   // RenderFrameObserver implementation.
-  void DidCommitProvisionalLoad(
-      bool is_new_navigation,
-      bool is_same_page_navigation) override;
+  void DidCommitProvisionalLoad(bool is_new_navigation,
+                                bool is_same_document_navigation) override;
+  void DidFinishDocumentLoad() override;
   void OnDestruct() override;
+  void WidgetWillClose() override;
 
   // blink::mojom::PresentationServiceClient
   void OnScreenAvailabilityNotSupported(const GURL& url) override;
   void OnScreenAvailabilityUpdated(const GURL& url, bool available) override;
-  void OnConnectionStateChanged(const PresentationSessionInfo& session_info,
+  void OnConnectionStateChanged(const PresentationInfo& presentation_info,
                                 PresentationConnectionState state) override;
-  void OnConnectionClosed(const PresentationSessionInfo& session_info,
+  void OnConnectionClosed(const PresentationInfo& presentation_info,
                           PresentationConnectionCloseReason reason,
                           const std::string& message) override;
   void OnConnectionMessagesReceived(
-      const PresentationSessionInfo& session_info,
-      std::vector<blink::mojom::ConnectionMessagePtr> messages) override;
-  void OnDefaultSessionStarted(
-      const PresentationSessionInfo& session_info) override;
+      const PresentationInfo& presentation_info,
+      std::vector<PresentationConnectionMessage> messages) override;
+  void OnDefaultPresentationStarted(
+      const PresentationInfo& presentation_info) override;
 
-  void OnSessionCreated(
+  void OnConnectionCreated(
       std::unique_ptr<blink::WebPresentationConnectionCallbacks> callback,
-      const base::Optional<PresentationSessionInfo>& session_info,
+      const base::Optional<PresentationInfo>& presentation_info,
       const base::Optional<PresentationError>& error);
   void OnReceiverConnectionAvailable(
-      const PresentationSessionInfo& session_info,
+      const PresentationInfo& presentation_info,
       blink::mojom::PresentationConnectionPtr /*connection*/,
       blink::mojom::PresentationConnectionRequest /*connection_request*/)
       override;
 
   // Call to PresentationService to send the message in |request|.
-  // |session_info| and |message| of |reuqest| will be consumed.
+  // |presentation_info| and |message| of |reuqest| will be consumed.
   // |HandleSendMessageRequests| will be invoked after the send is attempted.
   void DoSendMessage(SendMessageRequest* request);
   void HandleSendMessageRequests(bool success);
@@ -184,11 +191,11 @@ class CONTENT_EXPORT PresentationDispatcher
   // |connection|. Sends mojo interface ptr of |controller_connection_proxy|
   // and mojo interface request of |controller_connection_proxy|'s
   // |target_connection_| to PresentationService.
-  // |session_info|: |connection|'s id and url;
+  // |presentation_info|: |connection|'s id and url;
   // |connection|: |controller_connection_proxy|'s |source_connection_|. Raw
   // pointer to Blink connection owning proxy object. It does not take object
   // ownership.
-  void SetControllerConnection(const PresentationSessionInfo& session_info,
+  void SetControllerConnection(const PresentationInfo& presentation_info,
                                blink::WebPresentationConnection* connection);
 
   virtual void ConnectToPresentationServiceIfNeeded();

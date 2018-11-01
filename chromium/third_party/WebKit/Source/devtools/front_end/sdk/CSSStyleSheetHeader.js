@@ -22,6 +22,7 @@ SDK.CSSStyleSheetHeader = class {
     this.isInline = payload.isInline;
     this.startLine = payload.startLine;
     this.startColumn = payload.startColumn;
+    this.contentLength = payload.length;
     if (payload.ownerNode)
       this.ownerNode = new SDK.DeferredDOMNode(cssModel.target(), payload.ownerNode);
     this.setSourceMapURL(payload.sourceMapURL);
@@ -43,16 +44,7 @@ SDK.CSSStyleSheetHeader = class {
    * @param {string=} sourceMapURL
    */
   setSourceMapURL(sourceMapURL) {
-    var completeSourceMapURL =
-        this.sourceURL && sourceMapURL ? Common.ParsedURL.completeURL(this.sourceURL, sourceMapURL) : sourceMapURL;
-    this.sourceMapURL = completeSourceMapURL;
-  }
-
-  /**
-   * @return {!SDK.Target}
-   */
-  target() {
-    return this._cssModel.target();
+    this.sourceMapURL = sourceMapURL;
   }
 
   /**
@@ -66,7 +58,7 @@ SDK.CSSStyleSheetHeader = class {
    * @return {boolean}
    */
   isAnonymousInlineStyleSheet() {
-    return !this.resourceURL() && !this._cssModel.sourceMapForHeader(this);
+    return !this.resourceURL() && !this._cssModel.sourceMapManager().sourceMapForClient(this);
   }
 
   /**
@@ -80,8 +72,7 @@ SDK.CSSStyleSheetHeader = class {
    * @return {string}
    */
   _viaInspectorResourceURL() {
-    var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(this.target());
-    var frame = resourceTreeModel.frameForId(this.frameId);
+    var frame = this._cssModel.target().model(SDK.ResourceTreeModel).frameForId(this.frameId);
     console.assert(frame);
     var parsedURL = new Common.ParsedURL(frame.url);
     var fakeURL = 'inspector://' + parsedURL.host + parsedURL.folderPathComponents;

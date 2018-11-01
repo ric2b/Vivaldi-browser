@@ -2,9 +2,70 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-group("tests") {
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//testing/test.gni")
+
+service_manifest("manifest") {
+  name = "preferences"
+  source = "manifest.json"
+}
+
+source_set("preferences") {
+  visibility = [
+    ":*",
+    "//services/preferences/public/cpp:service_main",
+  ]
+  deps = [
+    "//components/prefs",
+    "//services/preferences/public/cpp",
+    "//services/preferences/public/interfaces",
+    "//services/preferences/tracked",
+    "//services/service_manager/public/cpp",
+  ]
+  sources = [
+    "persistent_pref_store_factory.cc",
+    "persistent_pref_store_factory.h",
+    "persistent_pref_store_impl.cc",
+    "persistent_pref_store_impl.h",
+    "pref_store_manager_impl.cc",
+    "pref_store_manager_impl.h",
+  ]
+}
+
+source_set("tests") {
   testonly = true
   deps = [
+    ":preferences",
+    "//base",
+    "//base/test:test_support",
+    "//components/prefs:test_support",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/preferences/public/cpp",
+    "//services/preferences/public/cpp:service_main",
     "//services/preferences/public/cpp/tests",
+    "//services/preferences/public/interfaces",
+    "//services/preferences/tracked:unit_tests",
+    "//services/service_manager/public/cpp",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
+  sources = [
+    "persistent_pref_store_impl_unittest.cc",
+  ]
+  if (!is_ios) {
+    sources += [ "pref_service_factory_unittest.cc" ]
+    deps += [ "//services/service_manager/public/cpp:service_test_support" ]
+  }
+}
+
+service_manifest("unittest_manifest") {
+  name = "prefs_unittests"
+  source = "unittest_manifest.json"
+  packaged_services = [ ":manifest" ]
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
 }

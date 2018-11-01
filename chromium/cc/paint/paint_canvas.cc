@@ -4,6 +4,10 @@
 
 #include "cc/paint/paint_canvas.h"
 
+#include "base/memory/ptr_util.h"
+#include "cc/paint/paint_record.h"
+#include "cc/paint/paint_recorder.h"
+#include "third_party/skia/include/core/SkAnnotation.h"
 #include "third_party/skia/include/core/SkMetaData.h"
 
 #if defined(OS_MACOSX)
@@ -14,32 +18,8 @@ const char kIsPreviewMetafileKey[] = "CrIsPreviewMetafile";
 
 namespace cc {
 
-PaintCanvasPassThrough::PaintCanvasPassThrough(SkCanvas* canvas)
-    : SkNWayCanvas(canvas->getBaseLayerSize().width(),
-                   canvas->getBaseLayerSize().height()) {
-  SkIRect raster_bounds;
-  canvas->getDeviceClipBounds(&raster_bounds);
-  clipRect(SkRect::MakeFromIRect(raster_bounds));
-  setMatrix(canvas->getTotalMatrix());
-  addCanvas(canvas);
-}
-
-PaintCanvasPassThrough::PaintCanvasPassThrough(int width, int height)
-    : SkNWayCanvas(width, height) {}
-
-PaintCanvasPassThrough::~PaintCanvasPassThrough() = default;
-
 bool ToPixmap(PaintCanvas* canvas, SkPixmap* output) {
-  SkImageInfo info;
-  size_t row_bytes;
-  void* pixels = canvas->accessTopLayerPixels(&info, &row_bytes);
-  if (!pixels) {
-    output->reset();
-    return false;
-  }
-
-  output->reset(info, pixels, row_bytes);
-  return true;
+  return canvas->ToPixmap(output);
 }
 
 #if defined(OS_MACOSX)

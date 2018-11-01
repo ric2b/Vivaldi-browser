@@ -248,6 +248,12 @@ const LocalizedErrorMap net_error_options[] = {
    SUGGEST_CONTACT_ADMINISTRATOR,
    SHOW_NO_BUTTONS,
   },
+  {net::ERR_SSL_VERSION_INTERFERENCE,
+   IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
+   IDS_ERRORPAGES_SUMMARY_CONNECTION_FAILED,
+   SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG,
+   SHOW_BUTTON_RELOAD,
+  },
   {net::ERR_SSL_WEAK_SERVER_EPHEMERAL_DH_KEY,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_SSL_SECURITY_ERROR,
@@ -757,6 +763,9 @@ base::DictionaryValue* AddSuggestionDetailDictionaryToList(
         l10n_util::GetStringUTF16(body_message_id));
   }
   list->Append(base::WrapUnique(suggestion_list_item));
+  // |suggestion_list_item| is invalidated at this point, so it needs to be
+  // reset.
+  list->GetDictionary(list->GetSize() - 1, &suggestion_list_item);
   return suggestion_list_item;
 }
 

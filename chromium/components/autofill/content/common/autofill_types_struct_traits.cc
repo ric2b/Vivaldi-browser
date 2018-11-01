@@ -403,40 +403,6 @@ bool StructTraits<mojom::PasswordAndRealmDataView, PasswordAndRealm>::Read(
 }
 
 // static
-bool StructTraits<
-    mojom::UsernamesCollectionKeyDataView,
-    UsernamesCollectionKey>::Read(mojom::UsernamesCollectionKeyDataView data,
-                                  UsernamesCollectionKey* out) {
-  if (!data.ReadUsername(&out->username))
-    return false;
-  if (!data.ReadPassword(&out->password))
-    return false;
-  if (!data.ReadRealm(&out->realm))
-    return false;
-
-  return true;
-}
-
-// static
-void* StructTraits<mojom::PasswordFormFillDataDataView, PasswordFormFillData>::
-    SetUpContext(const PasswordFormFillData& r) {
-  // Extracts keys vector and values vector from the map, saves them as a pair.
-  auto* pair = new UsernamesCollectionKeysValuesPair();
-  for (const auto& i : r.other_possible_usernames) {
-    pair->first.push_back(i.first);
-    pair->second.push_back(i.second);
-  }
-
-  return pair;
-}
-
-// static
-void StructTraits<mojom::PasswordFormFillDataDataView, PasswordFormFillData>::
-    TearDownContext(const PasswordFormFillData& r, void* context) {
-  delete static_cast<UsernamesCollectionKeysValuesPair*>(context);
-}
-
-// static
 bool StructTraits<mojom::PasswordFormFillDataDataView, PasswordFormFillData>::
     Read(mojom::PasswordFormFillDataDataView data, PasswordFormFillData* out) {
   if (!data.ReadName(&out->name) || !data.ReadOrigin(&out->origin) ||
@@ -446,19 +412,6 @@ bool StructTraits<mojom::PasswordFormFillDataDataView, PasswordFormFillData>::
       !data.ReadPreferredRealm(&out->preferred_realm) ||
       !data.ReadAdditionalLogins(&out->additional_logins))
     return false;
-
-  // Combines keys vector and values vector to the map.
-  std::vector<UsernamesCollectionKey> keys;
-  if (!data.ReadOtherPossibleUsernamesKeys(&keys))
-    return false;
-  std::vector<std::vector<base::string16>> values;
-  if (!data.ReadOtherPossibleUsernamesValues(&values))
-    return false;
-  if (keys.size() != values.size())
-    return false;
-  out->other_possible_usernames.clear();
-  for (size_t i = 0; i < keys.size(); ++i)
-    out->other_possible_usernames.insert({keys[i], values[i]});
 
   out->wait_for_username = data.wait_for_username();
   out->is_possible_change_password_form =
@@ -474,6 +427,12 @@ bool StructTraits<mojom::PasswordFormGenerationDataDataView,
          PasswordFormGenerationData* out) {
   out->form_signature = data.form_signature();
   out->field_signature = data.field_signature();
+  if (data.has_confirmation_field()) {
+    out->confirmation_field_signature.emplace(
+        data.confirmation_field_signature());
+  } else {
+    DCHECK(!out->confirmation_field_signature);
+  }
   return true;
 }
 
@@ -622,6 +581,15 @@ bool StructTraits<mojom::FormsPredictionsMapDataView, FormsPredictionsMap>::
   out->clear();
   for (size_t i = 0; i < keys.size(); ++i)
     out->insert({keys[i], values[i]});
+
+  return true;
+}
+
+// static
+bool StructTraits<mojom::PossibleUsernamePairDataView, PossibleUsernamePair>::
+    Read(mojom::PossibleUsernamePairDataView data, PossibleUsernamePair* out) {
+  if (!data.ReadValue(&out->first) || !data.ReadFieldName(&out->second))
+    return false;
 
   return true;
 }

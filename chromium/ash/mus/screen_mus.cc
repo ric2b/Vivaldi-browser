@@ -4,8 +4,8 @@
 
 #include "ash/mus/screen_mus.h"
 
-#include "ash/common/wm/root_window_finder.h"
-#include "ash/common/wm_window.h"
+#include "ash/wm/root_window_finder.h"
+#include "ash/wm_window.h"
 #include "services/ui/public/interfaces/display/display_controller.mojom.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
@@ -39,7 +39,7 @@ void ScreenMus::SetWorkAreaInsets(aura::Window* window,
 }
 
 display::Display ScreenMus::GetDisplayNearestWindow(
-    aura::Window* window) const {
+    gfx::NativeWindow window) const {
   const aura::WindowTreeHost* host = window->GetHost();
   if (!host)
     return GetPrimaryDisplay();
@@ -66,7 +66,7 @@ gfx::NativeWindow ScreenMus::GetWindowAtScreenPoint(const gfx::Point& point) {
   if (position_client)
     position_client->ConvertPointFromScreen(root_window, &local_point);
 
-  return root_window->GetTopWindowContainingPoint(local_point);
+  return root_window->GetEventHandlerForPoint(local_point);
 }
 
 }  // namespace ash

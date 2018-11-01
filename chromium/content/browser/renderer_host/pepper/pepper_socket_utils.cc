@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -80,42 +81,42 @@ bool GetCertificateFields(const net::X509Certificate& cert,
                           ppapi::PPB_X509Certificate_Fields* fields) {
   const net::CertPrincipal& issuer = cert.issuer();
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_ISSUER_COMMON_NAME,
-                   base::MakeUnique<base::StringValue>(issuer.common_name));
+                   base::MakeUnique<base::Value>(issuer.common_name));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_ISSUER_LOCALITY_NAME,
-                   base::MakeUnique<base::StringValue>(issuer.locality_name));
+                   base::MakeUnique<base::Value>(issuer.locality_name));
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_ISSUER_STATE_OR_PROVINCE_NAME,
-      base::MakeUnique<base::StringValue>(issuer.state_or_province_name));
+      base::MakeUnique<base::Value>(issuer.state_or_province_name));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_ISSUER_COUNTRY_NAME,
-                   base::MakeUnique<base::StringValue>(issuer.country_name));
+                   base::MakeUnique<base::Value>(issuer.country_name));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_ISSUER_ORGANIZATION_NAME,
-                   base::MakeUnique<base::StringValue>(
+                   base::MakeUnique<base::Value>(
                        base::JoinString(issuer.organization_names, "\n")));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_ISSUER_ORGANIZATION_UNIT_NAME,
-                   base::MakeUnique<base::StringValue>(
+                   base::MakeUnique<base::Value>(
                        base::JoinString(issuer.organization_unit_names, "\n")));
 
   const net::CertPrincipal& subject = cert.subject();
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SUBJECT_COMMON_NAME,
-                   base::MakeUnique<base::StringValue>(subject.common_name));
+                   base::MakeUnique<base::Value>(subject.common_name));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SUBJECT_LOCALITY_NAME,
-                   base::MakeUnique<base::StringValue>(subject.locality_name));
+                   base::MakeUnique<base::Value>(subject.locality_name));
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_SUBJECT_STATE_OR_PROVINCE_NAME,
-      base::MakeUnique<base::StringValue>(subject.state_or_province_name));
+      base::MakeUnique<base::Value>(subject.state_or_province_name));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SUBJECT_COUNTRY_NAME,
-                   base::MakeUnique<base::StringValue>(subject.country_name));
+                   base::MakeUnique<base::Value>(subject.country_name));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SUBJECT_ORGANIZATION_NAME,
-                   base::MakeUnique<base::StringValue>(
+                   base::MakeUnique<base::Value>(
                        base::JoinString(subject.organization_names, "\n")));
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SUBJECT_ORGANIZATION_UNIT_NAME,
-                   base::MakeUnique<base::StringValue>(base::JoinString(
+                   base::MakeUnique<base::Value>(base::JoinString(
                        subject.organization_unit_names, "\n")));
 
   const std::string& serial_number = cert.serial_number();
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SERIAL_NUMBER,
-                   base::BinaryValue::CreateWithCopiedBuffer(
-                       serial_number.data(), serial_number.length()));
+                   base::Value::CreateWithCopiedBuffer(serial_number.data(),
+                                                       serial_number.length()));
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_VALIDITY_NOT_BEFORE,
       base::MakeUnique<base::Value>(cert.valid_start().ToDoubleT()));
@@ -126,7 +127,7 @@ bool GetCertificateFields(const net::X509Certificate& cert,
   net::X509Certificate::GetDEREncoded(cert.os_cert_handle(), &der);
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_RAW,
-      base::BinaryValue::CreateWithCopiedBuffer(der.data(), der.length()));
+      base::Value::CreateWithCopiedBuffer(der.data(), der.length()));
   return true;
 }
 

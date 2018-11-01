@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 
-#include "ash/common/wm/window_positioner.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_window.h"
 #include "ash/shell.h"
+#include "ash/wm/window_positioner.h"
+#include "ash/wm/window_state.h"
+#include "ash/wm_window.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -46,8 +46,7 @@ bool WindowSizer::GetBrowserBoundsAsh(gfx::Rect* bounds,
     // In case of a popup with an 'unspecified' location in ash, we are
     // looking for a good screen location. We are interpreting (0,0) as an
     // unspecified location.
-    *bounds = ash::Shell::GetInstance()->window_positioner()->
-        GetPopupPosition(*bounds);
+    *bounds = ash::Shell::Get()->window_positioner()->GetPopupPosition(*bounds);
     determined = true;
   }
 

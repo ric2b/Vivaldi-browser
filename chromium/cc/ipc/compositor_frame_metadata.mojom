@@ -4,9 +4,10 @@
 
 module cc.mojom;
 
+import "cc/ipc/begin_frame_args.mojom";
 import "cc/ipc/selection.mojom";
 import "cc/ipc/surface_id.mojom";
-import "ui/events/mojo/latency_info.mojom";
+import "ui/latency/mojo/latency_info.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // See cc/output/compositor_frame_metadata.h.
@@ -30,6 +31,9 @@ struct CompositorFrameMetadata {
   Selection selection;
   array<ui.mojom.LatencyInfo> latency_info;
   array<SurfaceId> referenced_surfaces;
+  array<SurfaceId> embedded_surfaces;
   bool can_activate_before_dependencies;
   uint32 content_source_id;
+  BeginFrameAck begin_frame_ack;
+  uint32 frame_token;
 };

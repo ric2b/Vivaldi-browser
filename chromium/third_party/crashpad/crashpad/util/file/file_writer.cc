@@ -15,6 +15,7 @@
 #include "util/file/file_writer.h"
 
 #include <limits.h>
+#include <stddef.h>
 #include <string.h>
 
 #include <algorithm>
@@ -55,6 +56,11 @@ bool WeakFileHandleFileWriter::Write(const void* data, size_t size) {
 
 bool WeakFileHandleFileWriter::WriteIoVec(std::vector<WritableIoVec>* iovecs) {
   DCHECK_NE(file_handle_, kInvalidFileHandle);
+
+  if (iovecs->empty()) {
+    LOG(ERROR) << "WriteIoVec(): no iovecs";
+    return false;
+  }
 
 #if defined(OS_POSIX)
 

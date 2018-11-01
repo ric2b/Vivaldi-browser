@@ -20,8 +20,8 @@ PasswordManager.PasswordUiEntry;
 /** @typedef {chrome.passwordsPrivate.LoginPair} */
 PasswordManager.LoginPair;
 
-/** @typedef {chrome.passwordsPrivate.ExceptionPair} */
-PasswordManager.ExceptionPair;
+/** @typedef {chrome.passwordsPrivate.ExceptionEntry} */
+PasswordManager.ExceptionEntry;
 
 /** @typedef {chrome.passwordsPrivate.PlaintextPasswordEventParameters} */
 PasswordManager.PlaintextPasswordEvent;
@@ -54,19 +54,19 @@ PasswordManager.prototype = {
 
   /**
    * Add an observer to the list of password exceptions.
-   * @param {function(!Array<!PasswordManager.ExceptionPair>):void} listener
+   * @param {function(!Array<!PasswordManager.ExceptionEntry>):void} listener
    */
   addExceptionListChangedListener: assertNotReached,
 
   /**
    * Remove an observer from the list of password exceptions.
-   * @param {function(!Array<!PasswordManager.ExceptionPair>):void} listener
+   * @param {function(!Array<!PasswordManager.ExceptionEntry>):void} listener
    */
   removeExceptionListChangedListener: assertNotReached,
 
   /**
    * Request the list of password exceptions.
-   * @param {function(!Array<!PasswordManager.ExceptionPair>):void} callback
+   * @param {function(!Array<!PasswordManager.ExceptionEntry>):void} callback
    */
   getExceptionList: assertNotReached,
 
@@ -144,7 +144,7 @@ PasswordManagerImpl.prototype = {
   getPlaintextPassword: function(loginPair, callback) {
     var listener = function(reply) {
       // Only handle the reply for our loginPair request.
-      if (reply.loginPair.originUrl == loginPair.originUrl &&
+      if (reply.loginPair.urls.origin == loginPair.urls.origin &&
           reply.loginPair.username == loginPair.username) {
         chrome.passwordsPrivate.onPlaintextPasswordRetrieved.removeListener(
             listener);
@@ -159,8 +159,8 @@ PasswordManagerImpl.prototype = {
 /** @typedef {!{model: !{item: !chrome.passwordsPrivate.PasswordUiEntry}}} */
 var PasswordUiEntryEvent;
 
-/** @typedef {!{model: !{item: !chrome.passwordsPrivate.ExceptionPair}}} */
-var ExceptionPairEntryEvent;
+/** @typedef {!{model: !{item: !chrome.passwordsPrivate.ExceptionEntry}}} */
+var ExceptionEntryEntryEvent;
 
 (function() {
 'use strict';
@@ -168,7 +168,7 @@ var ExceptionPairEntryEvent;
 Polymer({
   is: 'passwords-section',
 
-  behaviors: [settings.GlobalScrollTargetBehavior],
+  behaviors: [settings.GlobalScrollTargetBehavior, I18nBehavior],
 
   properties: {
     /** Preferences state. */
@@ -185,7 +185,7 @@ Polymer({
 
     /**
      * An array of sites to display.
-     * @type {!Array<!PasswordManager.ExceptionPair>}
+     * @type {!Array<!PasswordManager.ExceptionEntry>}
      */
     passwordExceptions: Array,
 
@@ -216,6 +216,13 @@ Polymer({
   },
 
   /**
+   * The element to return focus to, when the currently active dialog is
+   * closed.
+   * @private {?HTMLElement}
+   */
+  activeDialogAnchor_: null,
+
+  /**
    * @type {PasswordManager}
    * @private
    */
@@ -228,13 +235,13 @@ Polymer({
   setSavedPasswordsListener_: null,
 
   /**
-   * @type {?function(!Array<PasswordManager.ExceptionPair>):void}
+   * @type {?function(!Array<PasswordManager.ExceptionEntry>):void}
    * @private
    */
   setPasswordExceptionsListener_: null,
 
   /** @override */
-  ready: function() {
+  attached: function() {
     // Create listener functions.
     var setSavedPasswordsListener = function(list) {
       this.savedPasswords = list;
@@ -267,7 +274,7 @@ Polymer({
       /** @type {function(!Array<PasswordManager.PasswordUiEntry>):void} */(
         this.setSavedPasswordsListener_));
     this.passwordManager_.removeExceptionListChangedListener(
-      /** @type {function(!Array<PasswordManager.ExceptionPair>):void} */(
+      /** @type {function(!Array<PasswordManager.ExceptionEntry>):void} */(
         this.setPasswordExceptionsListener_));
   },
 
@@ -278,7 +285,7 @@ Polymer({
    */
   setPassword: function(loginPair, password) {
     if (this.activePassword &&
-        this.activePassword.loginPair.originUrl == loginPair.originUrl &&
+        this.activePassword.loginPair.urls.origin == loginPair.urls.origin &&
         this.activePassword.loginPair.username == loginPair.username) {
       this.$$('password-edit-dialog').password = password;
     }
@@ -298,6 +305,8 @@ Polymer({
   /** @private */
   onPasswordEditDialogClosed_: function() {
     this.showPasswordEditDialog_ = false;
+    this.activeDialogAnchor_.focus();
+    this.activeDialogAnchor_ = null;
   },
 
   /**
@@ -311,19 +320,19 @@ Polymer({
       return savedPasswords;
 
     return savedPasswords.filter(function(password) {
-      return password.loginPair.originUrl.includes(filter) ||
+      return password.loginPair.urls.shown.includes(filter) ||
              password.loginPair.username.includes(filter);
     });
   },
 
   /**
    * @param {string} filter
-   * @return {function(!chrome.passwordsPrivate.ExceptionPair): boolean}
+   * @return {function(!chrome.passwordsPrivate.ExceptionEntry): boolean}
    * @private
    */
   passwordExceptionFilter_: function(filter) {
     return function(exception) {
-      return exception.exceptionUrl.includes(filter);
+      return exception.urls.shown.includes(filter);
     };
   },
 
@@ -338,11 +347,11 @@ Polymer({
 
   /**
    * Fires an event that should delete the password exception.
-   * @param {!ExceptionPairEntryEvent} e The polymer event.
+   * @param {!ExceptionEntryEntryEvent} e The polymer event.
    * @private
    */
   onRemoveExceptionButtonTap_: function(e) {
-    this.passwordManager_.removeException(e.model.item.exceptionUrl);
+    this.passwordManager_.removeException(e.model.item.urls.origin);
   },
 
   /**
@@ -351,7 +360,9 @@ Polymer({
    * @return {string} password
    * @private
    */
-  getEmptyPassword_: function(length) { return ' '.repeat(length); },
+  getEmptyPassword_: function(length) {
+    return ' '.repeat(length);
+  },
 
   /**
    * Opens the password action menu.
@@ -359,13 +370,14 @@ Polymer({
    */
   onPasswordMenuTap_: function(e) {
     var menu = /** @type {!CrActionMenuElement} */(this.$.menu);
-    var target = /** @type {!Element} */(Polymer.dom(e).localTarget);
+    var target = /** @type {!HTMLElement} */(Polymer.dom(e).localTarget);
     var passwordUiEntryEvent = /** @type {!PasswordUiEntryEvent} */(e);
 
     this.activePassword =
         /** @type {!chrome.passwordsPrivate.PasswordUiEntry} */ (
             passwordUiEntryEvent.model.item);
     menu.showAt(target);
+    this.activeDialogAnchor_ = target;
   },
 
   /**
@@ -390,5 +402,14 @@ Polymer({
           this.setPassword(item.loginPair, item.plaintextPassword);
         }.bind(this));
   },
+
+  /**
+   * @private
+   * @param {boolean} toggleValue
+   * @return {string}
+   */
+  getOnOffLabel_: function(toggleValue) {
+    return toggleValue ? this.i18n('toggleOn') : this.i18n('toggleOff');
+  }
 });
 })();

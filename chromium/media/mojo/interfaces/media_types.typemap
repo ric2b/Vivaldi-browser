@@ -10,6 +10,8 @@ public_headers = [
   "//media/base/channel_layout.h",
   "//media/base/decode_status.h",
   "//media/base/encryption_scheme.h",
+  "//media/base/hdr_metadata.h",
+  "//media/base/output_device_info.h",
   "//media/base/sample_format.h",
   "//media/base/subsample_entry.h",
   "//media/base/video_codecs.h",
@@ -18,8 +20,11 @@ public_headers = [
 
 traits_headers = [ "//media/base/ipc/media_param_traits_macros.h" ]
 
-deps = [
+public_deps = [
   "//media",
+]
+
+deps = [
   "//media/base/ipc",
 ]
 
@@ -30,6 +35,7 @@ type_mappings = [
   "media.mojom.ColorSpace=media::ColorSpace",
   "media.mojom.DecodeStatus=media::DecodeStatus",
   "media.mojom.EncryptionScheme.CipherMode=media::EncryptionScheme::CipherMode",
+  "media.mojom.OutputDeviceStatus=media::OutputDeviceStatus",
   "media.mojom.SampleFormat=media::SampleFormat",
   "media.mojom.SubsampleEntry=media::SubsampleEntry",
   "media.mojom.VideoCodec=media::VideoCodec",

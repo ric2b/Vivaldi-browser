@@ -15,6 +15,11 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/strings/grit/extensions_strings.h"
+#include "ui/base/l10n/l10n_util.h"
+#endif
+
 namespace {
 
 const char kAudio[] = "mic";
@@ -120,7 +125,7 @@ void MediaDevicesSelectionHandler::UpdateDevicesMenu(
   base::ListValue device_list;
   for (size_t i = 0; i < devices.size(); ++i) {
     std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
-    entry->SetString("name", devices[i].name);
+    entry->SetString("name", GetDeviceDisplayName(devices[i]));
     entry->SetString("id",  devices[i].id);
     device_list.Append(std::move(entry));
     if (devices[i].id == default_device)
@@ -132,13 +137,36 @@ void MediaDevicesSelectionHandler::UpdateDevicesMenu(
   if (!devices.empty() && default_id.empty())
     default_id = devices[0].id;
 
-  base::StringValue default_value(default_id);
-  base::StringValue type_value(device_type);
+  base::Value default_value(default_id);
+  base::Value type_value(device_type);
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue("updateDevicesMenu"),
-                         type_value,
-                         device_list,
-                         default_value);
+                         base::Value("updateDevicesMenu"), type_value,
+                         device_list, default_value);
+}
+
+std::string MediaDevicesSelectionHandler::GetDeviceDisplayName(
+    const content::MediaStreamDevice& device) const {
+  std::string facing_info;
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  switch (device.video_facing) {
+    case media::VideoFacingMode::MEDIA_VIDEO_FACING_USER:
+      facing_info = l10n_util::GetStringUTF8(IDS_CAMERA_FACING_USER);
+      break;
+    case media::VideoFacingMode::MEDIA_VIDEO_FACING_ENVIRONMENT:
+      facing_info = l10n_util::GetStringUTF8(IDS_CAMERA_FACING_ENVIRONMENT);
+      break;
+    case media::VideoFacingMode::MEDIA_VIDEO_FACING_NONE:
+      break;
+    case media::VideoFacingMode::NUM_MEDIA_VIDEO_FACING_MODES:
+      NOTREACHED();
+      break;
+  }
+#endif
+
+  if (facing_info.empty())
+    return device.name;
+  return device.name + " " + facing_info;
 }
 
 void MediaDevicesSelectionHandler::UpdateDevicesMenuForType(DeviceType type) {

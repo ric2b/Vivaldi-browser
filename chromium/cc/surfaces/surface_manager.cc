@@ -23,17 +23,6 @@
 
 namespace cc {
 
-SurfaceManager::FrameSinkSourceMapping::FrameSinkSourceMapping()
-    : client(nullptr), source(nullptr) {}
-
-SurfaceManager::FrameSinkSourceMapping::FrameSinkSourceMapping(
-    const FrameSinkSourceMapping& other) = default;
-
-SurfaceManager::FrameSinkSourceMapping::~FrameSinkSourceMapping() {
-  DCHECK(is_empty()) << "client: " << client
-                     << ", children: " << children.size();
-}
-
 SurfaceManager::SurfaceManager(LifetimeType lifetime_type)
     : lifetime_type_(lifetime_type),
       root_surface_id_(FrameSinkId(0u, 0u),
@@ -58,14 +47,9 @@ SurfaceManager::~SurfaceManager() {
   for (SurfaceDestroyList::iterator it = surfaces_to_destroy_.begin();
        it != surfaces_to_destroy_.end();
        ++it) {
-    DeregisterSurface((*it)->surface_id());
+    UnregisterSurface((*it)->surface_id());
   }
   surfaces_to_destroy_.clear();
-
-  // All hierarchies, sources, and surface factory clients should be
-  // unregistered prior to SurfaceManager destruction.
-  DCHECK_EQ(frame_sink_source_map_.size(), 0u);
-  DCHECK_EQ(registered_sources_.size(), 0u);
 }
 
 #if DCHECK_IS_ON()
@@ -90,22 +74,68 @@ void SurfaceManager::RequestSurfaceResolution(Surface* pending_surface) {
     dependency_tracker_->RequestSurfaceResolution(pending_surface);
 }
 
-void SurfaceManager::RegisterSurface(Surface* surface) {
+std::unique_ptr<Surface> SurfaceManager::CreateSurface(
+    base::WeakPtr<SurfaceFactory> surface_factory,
+    const LocalSurfaceId& local_surface_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(surface);
-  DCHECK(!surface_map_.count(surface->surface_id()));
-  surface_map_[surface->surface_id()] = surface;
+  DCHECK(local_surface_id.is_valid() && surface_factory);
+
+  SurfaceId surface_id(surface_factory->frame_sink_id(), local_surface_id);
+
+  // If no surface with this SurfaceId exists, simply create the surface and
+  // return.
+  auto surface_iter = surface_map_.find(surface_id);
+  // NOTE(andre@vivaldi.com) : Since we delete the view, and then the
+  // |SurfaceFactory| owned by the |Surface| in
+  // WebContentsViewGuest::CreateViewForWidget we cannot reuse exsisting
+  // Surfaces pending for destruction. Always clean up and return a new.
+  // VB-28351.
+  bool do_not_reuse = false;
+  if (surface_iter != surface_map_.end()) {
+    auto* tsurface = surface_iter->second;
+    do_not_reuse = (tsurface->factory().get() == nullptr);
+    if (do_not_reuse) {
+      // make sure the surface is no longer referenced
+      UnregisterSurface(surface_id);
+      for (SurfaceDestroyList::iterator dead_iter =
+               surfaces_to_destroy_.begin();
+           dead_iter != surfaces_to_destroy_.end();) {
+        if ((*dead_iter)->surface_id() == surface_id) {
+          surfaces_to_destroy_.erase(dead_iter);
+          break;
+        }
+        dead_iter++;
+      }
+    }
+  }
+  if (do_not_reuse || surface_iter == surface_map_.end()) {
+    auto surface = base::MakeUnique<Surface>(surface_id, surface_factory);
+    surface_map_[surface->surface_id()] = surface.get();
+    return surface;
+  }
+
+  // If a surface with this SurfaceId exists and it's not marked as destroyed,
+  // we should not receive a request to create a new surface with the same
+  // SurfaceId.
+  DCHECK(surface_iter->second->destroyed());
+
+  // If a surface with this SurfaceId exists and it's marked as destroyed,
+  // it means it's in the garbage collector's queue. We simply take it out of
+  // the queue and reuse it.
+  auto it =
+      std::find_if(surfaces_to_destroy_.begin(), surfaces_to_destroy_.end(),
+                   [&surface_id](const std::unique_ptr<Surface>& surface) {
+                     return surface->surface_id() == surface_id;
+                   });
+  DCHECK(it != surfaces_to_destroy_.end());
+  std::unique_ptr<Surface> surface = std::move(*it);
+  surfaces_to_destroy_.erase(it);
+  surface->set_destroyed(false);
+  DCHECK_EQ(surface_factory.get(), surface->factory().get());
+  return surface;
 }
 
-void SurfaceManager::DeregisterSurface(const SurfaceId& surface_id) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  SurfaceMap::iterator it = surface_map_.find(surface_id);
-  DCHECK(it != surface_map_.end());
-  surface_map_.erase(it);
-  RemoveAllSurfaceReferences(surface_id);
-}
-
-void SurfaceManager::Destroy(std::unique_ptr<Surface> surface) {
+void SurfaceManager::DestroySurface(std::unique_ptr<Surface> surface) {
   DCHECK(thread_checker_.CalledOnValidThread());
   surface->set_destroyed(true);
   surfaces_to_destroy_.push_back(std::move(surface));
@@ -130,12 +160,11 @@ void SurfaceManager::SatisfySequence(const SurfaceSequence& sequence) {
 }
 
 void SurfaceManager::RegisterFrameSinkId(const FrameSinkId& frame_sink_id) {
-  bool inserted = valid_frame_sink_ids_.insert(frame_sink_id).second;
-  DCHECK(inserted);
+  framesink_manager_.RegisterFrameSinkId(frame_sink_id);
 }
 
 void SurfaceManager::InvalidateFrameSinkId(const FrameSinkId& frame_sink_id) {
-  valid_frame_sink_ids_.erase(frame_sink_id);
+  framesink_manager_.InvalidateFrameSinkId(frame_sink_id);
 
   if (using_surface_references()) {
     // Remove any temporary references owned by |frame_sink_id|.
@@ -213,7 +242,7 @@ void SurfaceManager::GarbageCollectSurfaces() {
        iter != surfaces_to_destroy_.end();) {
     SurfaceId surface_id = (*iter)->surface_id();
     if (reachable_surfaces.count(surface_id) == 0) {
-      DeregisterSurface(surface_id);
+      UnregisterSurface(surface_id);
       surfaces_to_delete.push_back(std::move(*iter));
       iter = surfaces_to_destroy_.erase(iter);
     } else {
@@ -271,7 +300,7 @@ SurfaceManager::SurfaceIdSet SurfaceManager::GetLiveSurfacesForSequences() {
     const SurfaceId& surface_id = map_entry.first;
     Surface* surface = map_entry.second;
     surface->SatisfyDestructionDependencies(&satisfied_sequences_,
-                                            &valid_frame_sink_ids_);
+                                  framesink_manager_.GetValidFrameSinkIds());
 
     if (!surface->destroyed() || surface->GetDestructionDependencyCount() > 0) {
       live_surfaces_set.insert(surface_id);
@@ -310,6 +339,13 @@ void SurfaceManager::AddSurfaceReferenceImpl(const SurfaceId& parent_id,
   if (parent_id.frame_sink_id() == child_id.frame_sink_id()) {
     DLOG(ERROR) << "Cannot add self reference from " << parent_id << " to "
                 << child_id;
+    return;
+  }
+
+  // We trust that |parent_id| either exists or is about to exist, since is not
+  // sent over IPC. We don't trust |child_id|, since it is sent over IPC.
+  if (surface_map_.count(child_id) == 0) {
+    DLOG(ERROR) << "No surface in map for " << child_id.ToString();
     return;
   }
 
@@ -397,186 +433,36 @@ void SurfaceManager::RemoveTemporaryReference(const SurfaceId& surface_id,
 void SurfaceManager::RegisterSurfaceFactoryClient(
     const FrameSinkId& frame_sink_id,
     SurfaceFactoryClient* client) {
-  DCHECK(client);
-  DCHECK_EQ(valid_frame_sink_ids_.count(frame_sink_id), 1u);
-
-  // Will create a new FrameSinkSourceMapping for |frame_sink_id| if necessary.
-  FrameSinkSourceMapping& frame_sink_source =
-      frame_sink_source_map_[frame_sink_id];
-  DCHECK(!frame_sink_source.client);
-  frame_sink_source.client = client;
-
-  // Propagate any previously set sources to the new client.
-  if (frame_sink_source.source)
-    client->SetBeginFrameSource(frame_sink_source.source);
+  framesink_manager_.RegisterSurfaceFactoryClient(frame_sink_id, client);
 }
 
 void SurfaceManager::UnregisterSurfaceFactoryClient(
     const FrameSinkId& frame_sink_id) {
-  DCHECK_EQ(valid_frame_sink_ids_.count(frame_sink_id), 1u);
-  DCHECK_EQ(frame_sink_source_map_.count(frame_sink_id), 1u);
-
-  auto iter = frame_sink_source_map_.find(frame_sink_id);
-  if (iter->second.source)
-    iter->second.client->SetBeginFrameSource(nullptr);
-  iter->second.client = nullptr;
-
-  // The SurfaceFactoryClient and hierarchy can be registered/unregistered
-  // in either order, so empty namespace_client_map entries need to be
-  // checked when removing either clients or relationships.
-  if (iter->second.is_empty())
-    frame_sink_source_map_.erase(iter);
+  framesink_manager_.UnregisterSurfaceFactoryClient(frame_sink_id);
 }
 
 void SurfaceManager::RegisterBeginFrameSource(
     BeginFrameSource* source,
     const FrameSinkId& frame_sink_id) {
-  DCHECK(source);
-  DCHECK_EQ(registered_sources_.count(source), 0u);
-  DCHECK_EQ(valid_frame_sink_ids_.count(frame_sink_id), 1u);
-
-  registered_sources_[source] = frame_sink_id;
-  RecursivelyAttachBeginFrameSource(frame_sink_id, source);
+  framesink_manager_.RegisterBeginFrameSource(source, frame_sink_id);
 }
 
 void SurfaceManager::UnregisterBeginFrameSource(BeginFrameSource* source) {
-  DCHECK(source);
-  DCHECK_EQ(registered_sources_.count(source), 1u);
-
-  FrameSinkId frame_sink_id = registered_sources_[source];
-  registered_sources_.erase(source);
-
-  if (frame_sink_source_map_.count(frame_sink_id) == 0u)
-    return;
-
-  // TODO(enne): these walks could be done in one step.
-  // Remove this begin frame source from its subtree.
-  RecursivelyDetachBeginFrameSource(frame_sink_id, source);
-  // Then flush every remaining registered source to fix any sources that
-  // became null because of the previous step but that have an alternative.
-  for (auto source_iter : registered_sources_)
-    RecursivelyAttachBeginFrameSource(source_iter.second, source_iter.first);
-}
-
-void SurfaceManager::RecursivelyAttachBeginFrameSource(
-    const FrameSinkId& frame_sink_id,
-    BeginFrameSource* source) {
-  FrameSinkSourceMapping& mapping = frame_sink_source_map_[frame_sink_id];
-  if (!mapping.source) {
-    mapping.source = source;
-    if (mapping.client)
-      mapping.client->SetBeginFrameSource(source);
-  }
-  for (size_t i = 0; i < mapping.children.size(); ++i)
-    RecursivelyAttachBeginFrameSource(mapping.children[i], source);
-}
-
-void SurfaceManager::RecursivelyDetachBeginFrameSource(
-    const FrameSinkId& frame_sink_id,
-    BeginFrameSource* source) {
-  auto iter = frame_sink_source_map_.find(frame_sink_id);
-  if (iter == frame_sink_source_map_.end())
-    return;
-  if (iter->second.source == source) {
-    iter->second.source = nullptr;
-    if (iter->second.client)
-      iter->second.client->SetBeginFrameSource(nullptr);
-  }
-
-  if (iter->second.is_empty()) {
-    frame_sink_source_map_.erase(iter);
-    return;
-  }
-
-  std::vector<FrameSinkId>& children = iter->second.children;
-  for (size_t i = 0; i < children.size(); ++i) {
-    RecursivelyDetachBeginFrameSource(children[i], source);
-  }
-}
-
-bool SurfaceManager::ChildContains(
-    const FrameSinkId& child_frame_sink_id,
-    const FrameSinkId& search_frame_sink_id) const {
-  auto iter = frame_sink_source_map_.find(child_frame_sink_id);
-  if (iter == frame_sink_source_map_.end())
-    return false;
-
-  const std::vector<FrameSinkId>& children = iter->second.children;
-  for (size_t i = 0; i < children.size(); ++i) {
-    if (children[i] == search_frame_sink_id)
-      return true;
-    if (ChildContains(children[i], search_frame_sink_id))
-      return true;
-  }
-  return false;
+  framesink_manager_.UnregisterBeginFrameSource(source);
 }
 
 void SurfaceManager::RegisterFrameSinkHierarchy(
     const FrameSinkId& parent_frame_sink_id,
     const FrameSinkId& child_frame_sink_id) {
-  // If it's possible to reach the parent through the child's descendant chain,
-  // then this will create an infinite loop.  Might as well just crash here.
-  CHECK(!ChildContains(child_frame_sink_id, parent_frame_sink_id));
-
-  std::vector<FrameSinkId>& children =
-      frame_sink_source_map_[parent_frame_sink_id].children;
-  for (size_t i = 0; i < children.size(); ++i)
-    DCHECK(children[i] != child_frame_sink_id);
-  children.push_back(child_frame_sink_id);
-
-  // If the parent has no source, then attaching it to this child will
-  // not change any downstream sources.
-  BeginFrameSource* parent_source =
-      frame_sink_source_map_[parent_frame_sink_id].source;
-  if (!parent_source)
-    return;
-
-  DCHECK_EQ(registered_sources_.count(parent_source), 1u);
-  RecursivelyAttachBeginFrameSource(child_frame_sink_id, parent_source);
+  framesink_manager_.RegisterFrameSinkHierarchy(parent_frame_sink_id,
+                                                child_frame_sink_id);
 }
 
 void SurfaceManager::UnregisterFrameSinkHierarchy(
     const FrameSinkId& parent_frame_sink_id,
     const FrameSinkId& child_frame_sink_id) {
-  // Deliberately do not check validity of either parent or child namespace
-  // here.  They were valid during the registration, so were valid at some
-  // point in time.  This makes it possible to invalidate parent and child
-  // namespaces independently of each other and not have an ordering dependency
-  // of unregistering the hierarchy first before either of them.
-  DCHECK_EQ(frame_sink_source_map_.count(parent_frame_sink_id), 1u);
-
-  auto iter = frame_sink_source_map_.find(parent_frame_sink_id);
-
-  std::vector<FrameSinkId>& children = iter->second.children;
-  bool found_child = false;
-  for (size_t i = 0; i < children.size(); ++i) {
-    if (children[i] == child_frame_sink_id) {
-      found_child = true;
-      children[i] = children.back();
-      children.resize(children.size() - 1);
-      break;
-    }
-  }
-  DCHECK(found_child);
-
-  // The SurfaceFactoryClient and hierarchy can be registered/unregistered
-  // in either order, so empty namespace_client_map entries need to be
-  // checked when removing either clients or relationships.
-  if (iter->second.is_empty()) {
-    frame_sink_source_map_.erase(iter);
-    return;
-  }
-
-  // If the parent does not have a begin frame source, then disconnecting it
-  // will not change any of its children.
-  BeginFrameSource* parent_source = iter->second.source;
-  if (!parent_source)
-    return;
-
-  // TODO(enne): these walks could be done in one step.
-  RecursivelyDetachBeginFrameSource(child_frame_sink_id, parent_source);
-  for (auto source_iter : registered_sources_)
-    RecursivelyAttachBeginFrameSource(source_iter.second, source_iter.first);
+  framesink_manager_.UnregisterFrameSinkHierarchy(parent_frame_sink_id,
+                                                child_frame_sink_id);
 }
 
 Surface* SurfaceManager::GetSurfaceForId(const SurfaceId& surface_id) {
@@ -605,18 +491,19 @@ void SurfaceManager::SurfaceCreated(const SurfaceInfo& surface_info) {
     // destroyed in SurfaceFactory and then if there are no references it will
     // be deleted during surface GC. A temporary reference, removed when a
     // real reference is received, is added to prevent this from happening.
-    auto it = child_to_parent_refs_.find(surface_info.id());
-    // TODO(fsamuel): Tests create empty sets and so we also need to check that
-    // they're not empty here. Ideally tests shouldn't do that and we shouldn't
-    // use array notation into maps in tests (see https://crbug.com/691115).
-    bool has_real_reference =
-        it != child_to_parent_refs_.end() && !it->second.empty();
-    if (!has_real_reference)
-      AddTemporaryReference(surface_info.id());
+    AddTemporaryReference(surface_info.id());
   }
 
   for (auto& observer : observer_list_)
     observer.OnSurfaceCreated(surface_info);
+}
+
+void SurfaceManager::UnregisterSurface(const SurfaceId& surface_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  SurfaceMap::iterator it = surface_map_.find(surface_id);
+  DCHECK(it != surface_map_.end());
+  surface_map_.erase(it);
+  RemoveAllSurfaceReferences(surface_id);
 }
 
 #if DCHECK_IS_ON()

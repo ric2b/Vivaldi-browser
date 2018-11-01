@@ -53,6 +53,7 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 namespace extensions {
 
@@ -96,7 +97,7 @@ ChromeChannelForHistogram GetChromeChannelForHistogram(
 
 }  // namespace
 
-static base::LazyInstance<ChromeExtensionsClient> g_client =
+static base::LazyInstance<ChromeExtensionsClient>::DestructorAtExit g_client =
     LAZY_INSTANCE_INITIALIZER;
 
 static ChromeExtensionsClient::ChromeExtensionsClientInstanceFetcher
@@ -225,7 +226,7 @@ URLPatternSet ChromeExtensionsClient::GetPermittedChromeSchemeHosts(
 
   if (vivaldi::IsVivaldiApp(extension->id())) {
     hosts.AddPattern(URLPattern(URLPattern::SCHEME_CHROMEUI,
-      chrome::kChromeUIThemeURL));
+                                vivaldi::kVivaldiUIDataURL));
   }
   return hosts;
 }

@@ -2,44 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/wm/workspace_controller.h"
+#include "ash/wm/workspace_controller.h"
 
 #include <map>
 
-#include "ash/common/session/session_controller.h"
-#include "ash/common/shelf/shelf_layout_manager.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/system/status_area_widget.h"
-#include "ash/common/test/test_shelf_delegate.h"
-#include "ash/common/wm/panels/panel_layout_manager.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm/wm_event.h"
-#include "ash/common/wm/workspace/workspace_window_resizer.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
+#include "ash/session/session_controller.h"
+#include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
+#include "ash/test/test_shelf_delegate.h"
+#include "ash/wm/panels/panel_layout_manager.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/wm_event.h"
+#include "ash/wm/workspace/workspace_window_resizer.h"
+#include "ash/wm_window.h"
 #include "base/strings/string_number_conversions.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/hit_test.h"
-#include "ui/base/ui_base_types.h"
-#include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
-#include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/window_util.h"
 
 using aura::Window;
@@ -504,7 +499,7 @@ TEST_F(WorkspaceControllerTest, MinimizeResetsVisibility) {
   // AshTestHelper.
   mojom::SessionInfoPtr info = mojom::SessionInfo::New();
   info->state = session_manager::SessionState::ACTIVE;
-  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+  ash::Shell::Get()->session_controller()->SetSessionInfo(std::move(info));
 
   std::unique_ptr<Window> w1(CreateTestWindow());
   w1->Show();
@@ -628,7 +623,7 @@ TEST_F(WorkspaceControllerTest, MoveOnSwitch) {
   gfx::Insets insets =
       display::Screen::GetScreen()->GetPrimaryDisplay().GetWorkAreaInsets();
   insets.Set(0, 0, insets.bottom() + 30, 0);
-  Shell::GetInstance()->SetDisplayWorkAreaInsets(w1.get(), insets);
+  Shell::Get()->SetDisplayWorkAreaInsets(w1.get(), insets);
 
   // Switch to w1. The window should have moved.
   wm::ActivateWindow(w1.get());
@@ -704,8 +699,7 @@ TEST_F(WorkspaceControllerTest, TransientParent) {
   // Window with a transient parent. We set the transient parent to the root,
   // which would never happen but is enough to exercise the bug.
   std::unique_ptr<Window> w1(CreateTestWindowUnparented());
-  ::wm::AddTransientChild(Shell::GetInstance()->GetPrimaryRootWindow(),
-                          w1.get());
+  ::wm::AddTransientChild(Shell::Get()->GetPrimaryRootWindow(), w1.get());
   w1->SetBounds(gfx::Rect(10, 11, 250, 251));
   ParentWindowInPrimaryRootWindow(w1.get());
   w1->Show();
@@ -1343,42 +1337,6 @@ TEST_F(WorkspaceControllerTest, RestoreMinimizedSnappedWindow) {
   EXPECT_EQ(snapped_bounds, window->bounds());
 }
 
-namespace {
-
-// Used by DragMaximizedNonTrackedWindow to track how many times the window
-// hierarchy changes affecting the specified window.
-class DragMaximizedNonTrackedWindowObserver : public aura::WindowObserver {
- public:
-  DragMaximizedNonTrackedWindowObserver(aura::Window* window)
-      : change_count_(0), window_(window) {}
-
-  // Number of times OnWindowHierarchyChanged() has been received.
-  void clear_change_count() { change_count_ = 0; }
-  int change_count() const { return change_count_; }
-
-  // aura::WindowObserver overrides:
-  // Counts number of times a window is reparented. Ignores reparenting into and
-  // from a docked container which is expected when a tab is dragged.
-  void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override {
-    if (params.target != window_ ||
-        (params.old_parent->id() == kShellWindowId_DefaultContainer &&
-         params.new_parent->id() == kShellWindowId_DockedContainer) ||
-        (params.old_parent->id() == kShellWindowId_DockedContainer &&
-         params.new_parent->id() == kShellWindowId_DefaultContainer)) {
-      return;
-    }
-    change_count_++;
-  }
-
- private:
-  int change_count_;
-  aura::Window* window_;
-
-  DISALLOW_COPY_AND_ASSIGN(DragMaximizedNonTrackedWindowObserver);
-};
-
-}  // namespace
-
 // Verifies that a new maximized window becomes visible after its activation
 // is requested, even though it does not become activated because a system
 // modal window is active.
@@ -1398,24 +1356,9 @@ TEST_F(WorkspaceControllerTest, SwitchFromModal) {
   EXPECT_TRUE(maximized_window->IsVisible());
 }
 
-namespace {
-
-// Subclass of WorkspaceControllerTest that runs tests with docked windows
-// enabled and disabled.
-class WorkspaceControllerTestDragging : public WorkspaceControllerTest {
- public:
-  WorkspaceControllerTestDragging() {}
-  ~WorkspaceControllerTestDragging() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WorkspaceControllerTestDragging);
-};
-
-}  // namespace
-
 // Verifies that when dragging a window over the shelf overlap is detected
 // during and after the drag.
-TEST_F(WorkspaceControllerTestDragging, DragWindowOverlapShelf) {
+TEST_F(WorkspaceControllerTest, DragWindowOverlapShelf) {
   aura::test::TestWindowDelegate delegate;
   delegate.set_window_component(HTCAPTION);
   std::unique_ptr<Window> w1(aura::test::CreateTestWindowWithDelegate(
@@ -1444,7 +1387,7 @@ TEST_F(WorkspaceControllerTestDragging, DragWindowOverlapShelf) {
 
 // Verifies that when dragging a window autohidden shelf stays hidden during
 // and after the drag.
-TEST_F(WorkspaceControllerTestDragging, DragWindowKeepsShelfAutohidden) {
+TEST_F(WorkspaceControllerTest, DragWindowKeepsShelfAutohidden) {
   aura::test::TestWindowDelegate delegate;
   delegate.set_window_component(HTCAPTION);
   std::unique_ptr<Window> w1(aura::test::CreateTestWindowWithDelegate(
@@ -1481,8 +1424,9 @@ TEST_F(WorkspaceControllerTest, WindowEdgeHitTest) {
   ParentWindowInPrimaryRootWindow(second.get());
   second->Show();
 
-  ui::EventTarget* root = first->GetRootWindow();
-  ui::EventTargeter* targeter = root->GetEventTargeter();
+  aura::Window* root = first->GetRootWindow();
+  ui::EventTargeter* targeter =
+      root->GetHost()->dispatcher()->GetDefaultEventTargeter();
 
   // The windows overlap, and |second| is on top of |first|. Events targeted
   // slightly outside the edges of the |second| window should still be targeted
@@ -1512,8 +1456,9 @@ TEST_F(WorkspaceControllerTest, WindowEdgeHitTest) {
       ui::EventTarget* target = targeter->FindTargetForEvent(root, &mouse);
       EXPECT_EQ(expected_target, target);
 
-      ui::TouchEvent touch(ui::ET_TOUCH_PRESSED, location, 0,
-                           ui::EventTimeForNow());
+      ui::TouchEvent touch(
+          ui::ET_TOUCH_PRESSED, location, ui::EventTimeForNow(),
+          ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
       target = targeter->FindTargetForEvent(root, &touch);
       EXPECT_EQ(expected_target, target);
     }
@@ -1530,8 +1475,9 @@ TEST_F(WorkspaceControllerTest, WindowEdgeMouseHitTestPanel) {
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<Window> window(
       CreateTestPanel(&delegate, gfx::Rect(20, 10, 100, 50)));
-  ui::EventTarget* root = window->GetRootWindow();
-  ui::EventTargeter* targeter = root->GetEventTargeter();
+  aura::Window* root = window->GetRootWindow();
+  ui::EventTargeter* targeter =
+      root->GetHost()->dispatcher()->GetDefaultEventTargeter();
   const gfx::Rect bounds = window->bounds();
   const int kNumPoints = 5;
   struct {
@@ -1566,8 +1512,9 @@ TEST_F(WorkspaceControllerTest, WindowEdgeTouchHitTestPanel) {
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<Window> window(
       CreateTestPanel(&delegate, gfx::Rect(20, 10, 100, 50)));
-  ui::EventTarget* root = window->GetRootWindow();
-  ui::EventTargeter* targeter = root->GetEventTargeter();
+  aura::Window* root = window->GetRootWindow();
+  ui::EventTargeter* targeter =
+      root->GetHost()->dispatcher()->GetDefaultEventTargeter();
   const gfx::Rect bounds = window->bounds();
   const int kNumPoints = 5;
   struct {
@@ -1584,58 +1531,10 @@ TEST_F(WorkspaceControllerTest, WindowEdgeTouchHitTestPanel) {
   for (int i = 0; i < kNumPoints; ++i) {
     SCOPED_TRACE(points[i].direction);
     const gfx::Point& location = points[i].location;
-    ui::TouchEvent touch(ui::ET_TOUCH_PRESSED, location, 0,
-                         ui::EventTimeForNow());
+    ui::TouchEvent touch(
+        ui::ET_TOUCH_PRESSED, location, ui::EventTimeForNow(),
+        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
     ui::EventTarget* target = targeter->FindTargetForEvent(root, &touch);
-    if (points[i].is_target_hit)
-      EXPECT_EQ(window.get(), target);
-    else
-      EXPECT_NE(window.get(), target);
-  }
-}
-
-// Verifies events targeting just outside the window edges for docked windows.
-TEST_F(WorkspaceControllerTest, WindowEdgeHitTestDocked) {
-  aura::test::TestWindowDelegate delegate;
-  // Make window smaller than the minimum docked area so that the window edges
-  // are exposed.
-  delegate.set_maximum_size(gfx::Size(180, 200));
-  std::unique_ptr<Window> window(aura::test::CreateTestWindowWithDelegate(
-      &delegate, 123, gfx::Rect(20, 10, 100, 50), NULL));
-  ParentWindowInPrimaryRootWindow(window.get());
-  aura::Window* docked_container = Shell::GetContainer(
-      window->GetRootWindow(), kShellWindowId_DockedContainer);
-  docked_container->AddChild(window.get());
-  window->Show();
-  ui::EventTarget* root = window->GetRootWindow();
-  ui::EventTargeter* targeter = root->GetEventTargeter();
-  const gfx::Rect bounds = window->bounds();
-  const int kNumPoints = 5;
-  struct {
-    const char* direction;
-    gfx::Point location;
-    bool is_target_hit;
-  } points[kNumPoints] = {
-      {"left", gfx::Point(bounds.x() - 2, bounds.y() + 10), true},
-      {"top", gfx::Point(bounds.x() + 10, bounds.y() - 2), true},
-      {"right", gfx::Point(bounds.right() + 2, bounds.y() + 10), true},
-      {"bottom", gfx::Point(bounds.x() + 10, bounds.bottom() + 2), true},
-      {"outside", gfx::Point(bounds.x() + 10, bounds.y() - 31), false},
-  };
-  for (int i = 0; i < kNumPoints; ++i) {
-    SCOPED_TRACE(points[i].direction);
-    const gfx::Point& location = points[i].location;
-    ui::MouseEvent mouse(ui::ET_MOUSE_MOVED, location, location,
-                         ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
-    ui::EventTarget* target = targeter->FindTargetForEvent(root, &mouse);
-    if (points[i].is_target_hit)
-      EXPECT_EQ(window.get(), target);
-    else
-      EXPECT_NE(window.get(), target);
-
-    ui::TouchEvent touch(ui::ET_TOUCH_PRESSED, location, 0,
-                         ui::EventTimeForNow());
-    target = targeter->FindTargetForEvent(root, &touch);
     if (points[i].is_target_hit)
       EXPECT_EQ(window.get(), target);
     else

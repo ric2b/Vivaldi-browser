@@ -5,17 +5,20 @@
 #import "ios/chrome/browser/payments/payment_request_error_view_controller.h"
 
 #include "base/mac/foundation_util.h"
-#include "base/memory/ptr_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller_test.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 class PaymentRequestErrorViewControllerTest
     : public CollectionViewControllerTest {
  protected:
-  CollectionViewController* NewController() override NS_RETURNS_RETAINED {
+  CollectionViewController* InstantiateController() override {
     return [[PaymentRequestErrorViewController alloc] init];
   }
 

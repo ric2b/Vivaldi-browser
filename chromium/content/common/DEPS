@@ -4,6 +4,7 @@ include_rules = [
   "+components/discardable_memory/common",
   "+components/payments",
   "+device/base/synchronization",
+  "+services/resource_coordinator/public/interfaces",
   "+services/service_manager/public/cpp",
   "+services/video_capture/public/interfaces",
 
@@ -39,6 +40,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h",
   "+third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionData.h",
   "+third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationData.h",
+  "+third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
   "+third_party/WebKit/public/platform/modules/mediasession/media_session.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission.mojom.h",

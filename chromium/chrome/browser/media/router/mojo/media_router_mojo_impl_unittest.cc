@@ -697,13 +697,20 @@ TEST_F(MediaRouterMojoImplTest, RegisterAndUnregisterMediaSinksObserver) {
   expected_sinks.push_back(
       MediaSink(kSinkId2, kSinkName, MediaSink::IconType::CAST));
 
+  std::vector<MediaSinkInternal> sinks;
+  for (const auto& expected_sink : expected_sinks) {
+    MediaSinkInternal sink_internal;
+    sink_internal.set_sink(expected_sink);
+    sinks.push_back(sink_internal);
+  }
+
   base::RunLoop run_loop;
   EXPECT_CALL(*sinks_observer, OnSinksReceived(SequenceEquals(expected_sinks)));
   EXPECT_CALL(*extra_sinks_observer,
               OnSinksReceived(SequenceEquals(expected_sinks)))
       .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
   media_router_proxy_->OnSinksReceived(
-      media_source.id(), expected_sinks,
+      media_source.id(), sinks,
       std::vector<url::Origin>(1, url::Origin(GURL(kOrigin))));
   run_loop.Run();
 
@@ -1042,6 +1049,15 @@ class ExpectedMessagesObserver : public RouteMessageObserver {
   std::vector<RouteMessage> messages_;
 };
 
+class NullMessageObserver : public RouteMessageObserver {
+ public:
+  NullMessageObserver(MediaRouter* router, const MediaRoute::Id& route_id)
+      : RouteMessageObserver(router, route_id) {}
+  ~NullMessageObserver() final {}
+
+  void OnMessagesReceived(const std::vector<RouteMessage>& messages) final {}
+};
+
 }  // namespace
 
 TEST_F(MediaRouterMojoImplTest, RouteMessagesSingleObserver) {
@@ -1091,8 +1107,7 @@ TEST_F(MediaRouterMojoImplTest, PresentationConnectionStateChangedCallback) {
   MediaRoute::Id route_id("route-id");
   const GURL presentation_url("http://www.example.com/presentation.html");
   const std::string kPresentationId("pid");
-  content::PresentationSessionInfo connection(presentation_url,
-                                              kPresentationId);
+  content::PresentationInfo connection(presentation_url, kPresentationId);
   base::MockCallback<content::PresentationConnectionStateChangedCallback>
       callback;
   std::unique_ptr<PresentationConnectionStateSubscription> subscription =
@@ -1198,6 +1213,25 @@ TEST_F(MediaRouterMojoImplTest, SearchSinks) {
   run_loop.RunUntilIdle();
 }
 
+TEST_F(MediaRouterMojoImplTest, ProvideSinks) {
+  std::vector<MediaSinkInternal> sinks;
+  MediaSink sink(kSinkId, kSinkName, MediaSink::IconType::CAST);
+  CastSinkExtraData extra_data;
+  EXPECT_TRUE(extra_data.ip_address.AssignFromIPLiteral("192.168.1.3"));
+  extra_data.capabilities = 2;
+  extra_data.cast_channel_id = 3;
+  MediaSinkInternal expected_sink(sink, extra_data);
+  sinks.push_back(expected_sink);
+  std::string provider_name = "cast";
+
+  EXPECT_CALL(mock_media_route_provider_, ProvideSinks(provider_name, sinks));
+
+  router()->ProvideSinks(provider_name, sinks);
+
+  base::RunLoop run_loop;
+  run_loop.RunUntilIdle();
+}
+
 class MediaRouterMojoExtensionTest : public ::testing::Test {
  public:
   MediaRouterMojoExtensionTest() : process_manager_(nullptr) {}
@@ -1278,6 +1312,8 @@ class MediaRouterMojoExtensionTest : public ::testing::Test {
                                         static_cast<int>(wakeup),
                                         expected_count);
   }
+
+  MediaRouterMojoImpl* router() const { return media_router_.get(); }
 
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<MediaRouterMojoImpl> media_router_;
@@ -1482,7 +1518,7 @@ TEST_F(MediaRouterMojoExtensionTest, EnableMdnsAfterEachRegister) {
   EXPECT_CALL(mock_media_route_provider_,
               UpdateMediaSinks(MediaSourceForDesktop().id()))
       .Times(2);
-  // EnableMdnsDisocvery() is never called except on Windows.
+  // EnableMdnsDiscovery() is never called except on Windows.
   EXPECT_CALL(mock_media_route_provider_, EnableMdnsDiscovery())
       .WillOnce(InvokeWithoutArgs([&run_loop2]() {
                   run_loop2.Quit();
@@ -1523,7 +1559,7 @@ TEST_F(MediaRouterMojoExtensionTest, EnableMdnsAfterEachRegister) {
   EXPECT_CALL(mock_media_route_provider_, DetachRoute(kRouteId));
   EXPECT_CALL(mock_media_route_provider_,
               UpdateMediaSinks(MediaSourceForDesktop().id()));
-  // EnableMdnsDisocvery() is never called except on Windows.
+  // EnableMdnsDiscovery() is never called except on Windows.
   EXPECT_CALL(mock_media_route_provider_, EnableMdnsDiscovery())
       .WillOnce(InvokeWithoutArgs([&run_loop6]() {
                   run_loop6.Quit();
@@ -1575,6 +1611,59 @@ TEST_F(MediaRouterMojoExtensionTest, UpdateMediaSinksOnUserGesture) {
       }));
 
   run_loop2.Run();
+}
+
+TEST_F(MediaRouterMojoExtensionTest, SyncStateToMediaRouteProvider) {
+  EXPECT_CALL(*process_manager_, IsEventPageSuspended(extension_->id()))
+      .WillRepeatedly(Return(false));
+  MediaSource media_source = MediaSource(kSource);
+  std::unique_ptr<MockMediaSinksObserver> sinks_observer;
+  std::unique_ptr<MockMediaRoutesObserver> routes_observer;
+  std::unique_ptr<NullMessageObserver> messages_observer;
+
+  {
+    EXPECT_CALL(provide_handler_, Invoke(testing::Not("")));
+    BindMediaRouteProvider();
+    RegisterMediaRouteProvider();
+    base::RunLoop().RunUntilIdle();
+    EXPECT_TRUE(Mock::VerifyAndClearExpectations(&provide_handler_));
+  }
+
+  {
+    media_router_->OnSinkAvailabilityUpdated(
+        mojom::MediaRouter::SinkAvailability::PER_SOURCE);
+    EXPECT_CALL(mock_media_route_provider_,
+                StartObservingMediaSinks(media_source.id()));
+    sinks_observer.reset(new MockMediaSinksObserver(
+        router(), media_source, url::Origin(GURL(kOrigin))));
+    EXPECT_TRUE(sinks_observer->Init());
+
+    EXPECT_CALL(mock_media_route_provider_,
+                StartObservingMediaRoutes(media_source.id()));
+    routes_observer.reset(
+        new MockMediaRoutesObserver(router(), media_source.id()));
+
+    EXPECT_CALL(mock_media_route_provider_,
+                StartListeningForRouteMessages(media_source.id()));
+    messages_observer.reset(
+        new NullMessageObserver(router(), media_source.id()));
+    base::RunLoop().RunUntilIdle();
+    EXPECT_TRUE(Mock::VerifyAndClearExpectations(&mock_media_route_provider_));
+  }
+
+  {
+    EXPECT_CALL(provide_handler_, Invoke(testing::Not("")));
+    EXPECT_CALL(mock_media_route_provider_,
+                StartObservingMediaSinks(media_source.id()));
+    EXPECT_CALL(mock_media_route_provider_,
+                StartObservingMediaRoutes(media_source.id()));
+    EXPECT_CALL(mock_media_route_provider_,
+                StartListeningForRouteMessages(media_source.id()));
+    media_router_->OnConnectionError();
+    BindMediaRouteProvider();
+    RegisterMediaRouteProvider();
+    base::RunLoop().RunUntilIdle();
+  }
 }
 
 }  // namespace media_router

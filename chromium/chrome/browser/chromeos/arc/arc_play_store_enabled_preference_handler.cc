@@ -4,8 +4,8 @@
 
 #include "chrome/browser/chromeos/arc/arc_play_store_enabled_preference_handler.h"
 
-#include "ash/common/shelf/shelf_delegate.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shelf/shelf_delegate.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_util.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -71,7 +72,7 @@ void ArcPlayStoreEnabledPreferenceHandler::Start() {
     // launches.
     VLOG(1) << "Google Play Store is initially disabled for managed "
             << "profile. Removing data.";
-    arc_session_manager_->RemoveArcData();
+    arc_session_manager_->RequestArcDataRemoval();
   }
 
   // ArcAuthNotification may need to be shown.
@@ -92,8 +93,8 @@ void ArcPlayStoreEnabledPreferenceHandler::OnPreferenceChanged() {
       // Remove the pinned Play Store icon launcher in Shelf.
       // This is only for non-Managed cases. In managed cases, it is expected
       // to be "disabled" rather than "removed", so keep it here.
-      auto* shelf_delegate = ash::WmShell::HasInstance()
-                                 ? ash::WmShell::Get()->shelf_delegate()
+      auto* shelf_delegate = ash::Shell::HasInstance()
+                                 ? ash::Shell::Get()->shelf_delegate()
                                  : nullptr;
       if (shelf_delegate)
         shelf_delegate->UnpinAppWithID(ArcSupportHost::kHostAppId);
@@ -115,12 +116,12 @@ void ArcPlayStoreEnabledPreferenceHandler::OnPreferenceChanged() {
 
 void ArcPlayStoreEnabledPreferenceHandler::UpdateArcSessionManager() {
   auto* support_host = arc_session_manager_->support_host();
-  if (support_host) {
+  if (support_host && IsArcPlayStoreEnabledForProfile(profile_)) {
     support_host->SetArcManaged(
         IsArcPlayStoreEnabledPreferenceManagedForProfile(profile_));
   }
 
-  if (IsArcPlayStoreEnabledForProfile(profile_))
+  if (ShouldArcAlwaysStart() || IsArcPlayStoreEnabledForProfile(profile_))
     arc_session_manager_->RequestEnable();
   else
     arc_session_manager_->RequestDisable();

@@ -10,13 +10,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.when;
 
 import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.gcm.GcmNetworkManager;
 import com.google.android.gms.gcm.Task;
 
@@ -25,11 +25,11 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.internal.ShadowExtractor;
+import org.robolectric.shadows.gms.Shadows;
+import org.robolectric.shadows.gms.common.ShadowGoogleApiAvailability;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -41,13 +41,15 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeBackgroundServiceWaiter;
 import org.chromium.chrome.browser.DisableHistogramsRule;
 import org.chromium.net.ConnectionType;
+import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 /**
  * Unit tests for BackgroundOfflinerTask.
  */
-@RunWith(OfflinePageTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
-        shadows = {ShadowGcmNetworkManager.class, ShadowGoogleApiAvailability.class})
+@RunWith(LocalRobolectricTestRunner.class)
+@Config(manifest = Config.NONE, application = BaseChromiumApplication.class, sdk = 21,
+        shadows = {ShadowGcmNetworkManager.class, ShadowGoogleApiAvailability.class,
+                ShadowDeviceConditions.class})
 public class BackgroundOfflinerTaskTest {
     private static final boolean REQUIRE_POWER = true;
     private static final boolean REQUIRE_UNMETERED = true;
@@ -58,9 +60,6 @@ public class BackgroundOfflinerTaskTest {
 
     @Rule
     public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
-
-    @Mock
-    private OfflinePageUtils mOfflinePageUtils;
 
     private Bundle mTaskExtras;
     private long mTestTime;
@@ -76,16 +75,15 @@ public class BackgroundOfflinerTaskTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
-        when(mOfflinePageUtils.getDeviceConditionsImpl(any(Context.class)))
-                .thenReturn(mDeviceConditions);
+        Shadows.shadowOf(GoogleApiAvailability.getInstance())
+                .setIsGooglePlayServicesAvailable(ConnectionResult.SUCCESS);
+        ShadowDeviceConditions.setCurrentConditions(mDeviceConditions);
 
         // Build a bundle with trigger conditions.
         mTaskExtras = new Bundle();
         TaskExtrasPacker.packTimeInBundle(mTaskExtras);
         TaskExtrasPacker.packTriggerConditionsInBundle(mTaskExtras, mTriggerConditions);
 
-        OfflinePageUtils.setInstanceForTesting(mOfflinePageUtils);
         mStubBackgroundSchedulerProcessor = new StubBackgroundSchedulerProcessor();
         mContext =  RuntimeEnvironment.application;
         mGcmNetworkManager = (ShadowGcmNetworkManager) ShadowExtractor.extract(
@@ -161,8 +159,7 @@ public class BackgroundOfflinerTaskTest {
         // Setup low battery conditions.
         DeviceConditions deviceConditionsLowBattery = new DeviceConditions(
                 !POWER_CONNECTED, MINIMUM_BATTERY_LEVEL - 1, ConnectionType.CONNECTION_WIFI);
-        when(mOfflinePageUtils.getDeviceConditionsImpl(any(Context.class)))
-                .thenReturn(deviceConditionsLowBattery);
+        ShadowDeviceConditions.setCurrentConditions(deviceConditionsLowBattery);
 
         BackgroundOfflinerTask task = new BackgroundOfflinerTask(mStubBackgroundSchedulerProcessor);
         ChromeBackgroundServiceWaiter waiter = new ChromeBackgroundServiceWaiter(1);
@@ -182,8 +179,7 @@ public class BackgroundOfflinerTaskTest {
         // Now verify low battery level but with power connected will start processing.
         DeviceConditions deviceConditionsPowerConnected = new DeviceConditions(
                 POWER_CONNECTED, MINIMUM_BATTERY_LEVEL - 1, ConnectionType.CONNECTION_WIFI);
-        when(mOfflinePageUtils.getDeviceConditionsImpl(any(Context.class)))
-                .thenReturn(deviceConditionsPowerConnected);
+        ShadowDeviceConditions.setCurrentConditions(deviceConditionsPowerConnected);
 
         BackgroundOfflinerTask task2 =
                 new BackgroundOfflinerTask(mStubBackgroundSchedulerProcessor);

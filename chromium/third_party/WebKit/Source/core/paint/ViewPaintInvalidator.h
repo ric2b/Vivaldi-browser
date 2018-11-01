@@ -6,7 +6,7 @@
 #define ViewPaintInvalidator_h
 
 #include "platform/graphics/PaintInvalidationReason.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -19,15 +19,15 @@ class ViewPaintInvalidator {
  public:
   ViewPaintInvalidator(const LayoutView& view,
                        const PaintInvalidatorContext& context)
-      : m_view(view), m_context(context) {}
+      : view_(view), context_(context) {}
 
-  PaintInvalidationReason invalidatePaintIfNeeded();
+  PaintInvalidationReason InvalidatePaintIfNeeded();
 
  private:
-  void invalidateBackgroundIfNeeded();
+  void InvalidateBackgroundIfNeeded();
 
-  const LayoutView& m_view;
-  const PaintInvalidatorContext& m_context;
+  const LayoutView& view_;
+  const PaintInvalidatorContext& context_;
 };
 
 }  // namespace blink

@@ -100,6 +100,7 @@ class TestRunner : public WebTestRunner {
   bool HasCustomTextDump(std::string* custom_text_dump) const override;
   bool ShouldDumpBackForwardList() const override;
   blink::WebContentSettingsClient* GetWebContentSettings() const override;
+  blink::WebTextCheckClient* GetWebTextCheckClient() const override;
   void InitializeWebViewWithMocks(blink::WebView* web_view) override;
   void SetFocus(blink::WebView* web_view, bool focus) override;
 
@@ -656,7 +657,7 @@ class TestRunner : public WebTestRunner {
   // is ok, because this is taken care of in WebTestDelegate::SetFocus).
   blink::WebView* previously_focused_view_;
 
-  // True if we run a test in LayoutTests/imported/{csswg-test,wpt}/.
+  // True when running a test in LayoutTests/external/wpt/.
   bool is_web_platform_tests_mode_;
 
   // An effective connection type settable by layout tests.

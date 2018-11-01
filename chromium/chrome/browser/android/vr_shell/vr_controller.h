@@ -9,6 +9,9 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "chrome/browser/android/vr_shell/vr_controller_model.h"
+#include "device/vr/android/gvr/gvr_gamepad_data_provider.h"
+#include "device/vr/vr_types.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
@@ -37,6 +40,8 @@ class VrController {
   // Must be called when the GL renderer gets OnSurfaceCreated().
   void Initialize(gvr_context* gvr_context);
 
+  device::GvrGamepadData GetGamepadData();
+
   // Must be called when the GL renderer gets OnDrawFrame().
   void UpdateState();
 
@@ -48,7 +53,11 @@ class VrController {
 
   float TouchPosY();
 
-  const gvr::Quatf Orientation();
+  vr::Quatf Orientation() const;
+
+  void GetTransform(vr::Mat4f* out) const;
+
+  VrControllerModel::State GetModelState() const;
 
   bool TouchDownHappened();
 
@@ -56,6 +65,7 @@ class VrController {
 
   bool ButtonUpHappened(gvr::ControllerButton button);
   bool ButtonDownHappened(gvr::ControllerButton button);
+  bool ButtonState(gvr::ControllerButton button) const;
 
   bool IsConnected();
 
@@ -67,7 +77,7 @@ class VrController {
   };
 
   struct TouchPoint {
-    gvr::Vec2f position;
+    gfx::Vector2dF position;
     int64_t timestamp;
   };
 
@@ -102,7 +112,7 @@ class VrController {
 
   // Returns true if the touch position is within the slop of the initial touch
   // point, false otherwise.
-  bool InSlop(const gvr::Vec2f touch_position);
+  bool InSlop(const gfx::Vector2dF touch_position);
 
   // Returns true if the gesture is in horizontal direction.
   bool IsHorizontalGesture();
@@ -130,6 +140,9 @@ class VrController {
   bool zoom_in_progress_ = false;
   bool touch_position_changed_ = false;
 
+  // Handedness from user prefs (currently only read once on initialization)
+  gvr::ControllerHandedness handedness_;
+
   // Current touch info after the extrapolation.
   std::unique_ptr<TouchInfo> touch_info_;
 
@@ -143,13 +156,13 @@ class VrController {
   std::unique_ptr<TouchPoint> init_touch_point_;
 
   // Overall velocity
-  gvr::Vec2f overall_velocity_;
+  gfx::Vector2dF overall_velocity_;
 
   // Last velocity that is used for fling and direction detection
-  gvr::Vec2f last_velocity_;
+  gfx::Vector2dF last_velocity_;
 
   // Displacement of the touch point from the previews to the current touch
-  gvr::Vec2f displacement_;
+  gfx::Vector2dF displacement_;
 
   int64_t last_touch_timestamp_ = 0;
   int64_t last_timestamp_nanos_ = 0;

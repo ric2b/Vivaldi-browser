@@ -13,10 +13,10 @@
 #include "base/vivaldi_switches.h"
 #include "base/win/win_util.h"
 #include "chrome/installer/util/util_constants.h"
-#include "third_party/_winsparkle_lib/include/winsparkle.h"
+#include "update_notifier/update_notifier_switches.h"
+
 
 namespace {
-const int kQuitAllUpdateNotifiersEventInterval = 1;  // s
 
 base::FilePath GetUpdateNotifierPath() {
   base::FilePath exe_dir;
@@ -31,10 +31,19 @@ bool AutoUpdateCheckForUpdatesFunction::RunAsync() {
   std::unique_ptr<vivaldi::auto_update::CheckForUpdates::Params> params(
       vivaldi::auto_update::CheckForUpdates::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
-  if (params->with_ui)
-    win_sparkle_check_update_with_ui();
-  else
-    win_sparkle_check_update_without_ui();
+  base::CommandLine update_notifier_command(GetUpdateNotifierPath());
+  update_notifier_command.AppendSwitch(::vivaldi_update_notifier::kCheckForUpdates);
+
+  base::CommandLine* vivaldi_cmd_line = base::CommandLine::ForCurrentProcess();
+
+  if (vivaldi_cmd_line->HasSwitch(switches::kVivaldiUpdateURL)) {
+    update_notifier_command.AppendSwitchNative(
+        switches::kVivaldiUpdateURL,
+        vivaldi_cmd_line->GetSwitchValueNative(switches::kVivaldiUpdateURL));
+  }
+
+  base::LaunchProcess(update_notifier_command, base::LaunchOptions());
+
   SendResponse(true);
   return true;
 }
@@ -85,32 +94,14 @@ bool AutoUpdateDisableUpdateNotifierFunction::RunAsync() {
     SendResponse(false);
     return true;
   }
-
-  // Best effort attempt to stop any running notifier for the current user.
-  base::win::ScopedHandle quit_all_event_handle;
-  quit_all_event_handle.Set(OpenEvent(
-      EVENT_MODIFY_STATE, FALSE, ::vivaldi::kQuitAllUpdateNotifiersEventName));
-  if (quit_all_event_handle.IsValid()) {
-    quit_all_update_notifiers_event_.reset(
-        new base::WaitableEvent(std::move(quit_all_event_handle)));
-
-    quit_all_update_notifiers_event_->Signal();
-    base::MessageLoop::current()->task_runner()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&AutoUpdateDisableUpdateNotifierFunction::
-                       FinishClosingUpdateNotifiers,
-                   this),
-        base::TimeDelta::FromSeconds(kQuitAllUpdateNotifiersEventInterval));
-  }
+  // Run the update_notifier with the --q switch to terminate any
+  // running instance launched from the same filepath as ourselves.
+  base::CommandLine update_notifier_command(GetUpdateNotifierPath());
+  update_notifier_command.AppendSwitch(::vivaldi_update_notifier::kQuit);
+  base::LaunchProcess(update_notifier_command, base::LaunchOptions());
 
   SendResponse(true);
   return true;
-}
-
-void AutoUpdateDisableUpdateNotifierFunction::FinishClosingUpdateNotifiers() {
-  DCHECK(quit_all_update_notifiers_event_.get());
-  quit_all_update_notifiers_event_->Reset();
-  quit_all_update_notifiers_event_.reset();
 }
 
 }  // namespace extensions

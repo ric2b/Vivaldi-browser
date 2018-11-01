@@ -2,29 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/wm/panels/panel_layout_manager.h"
+#include "ash/wm/panels/panel_layout_manager.h"
 
-#include "ash/common/shelf/shelf_button.h"
-#include "ash/common/shelf/shelf_layout_manager.h"
-#include "ash/common/shelf/shelf_model.h"
-#include "ash/common/shelf/shelf_view.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/system/web_notification/web_notification_tray.h"
-#include "ash/common/test/test_shelf_delegate.h"
-#include "ash/common/wm/mru_window_tracker.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
-#include "ash/common/wm_window_property.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/shelf_button.h"
+#include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_model.h"
+#include "ash/shelf/shelf_view.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
+#include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shelf_view_test_api.h"
+#include "ash/test/test_shelf_delegate.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/window_properties.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
@@ -36,6 +36,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
+#include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
@@ -119,7 +120,7 @@ class PanelLayoutManagerTest : public test::AshTestBase {
     gfx::Rect panel_bounds = panel->GetBoundsInRootWindow();
     gfx::Point root_point = gfx::Point(panel_bounds.x(), panel_bounds.y());
     display::Display display =
-        display_manager()->FindDisplayContainingPoint(root_point);
+        display::Screen::GetScreen()->GetDisplayNearestPoint(root_point);
 
     gfx::Rect panel_bounds_in_screen = panel->GetBoundsInScreen();
     gfx::Point screen_bottom_right = gfx::Point(
@@ -219,8 +220,8 @@ class PanelLayoutManagerTest : public test::AshTestBase {
     test::ShelfViewTestAPI test_api(shelf_view);
     test_api.SetAnimationDuration(1);
     test_api.RunMessageLoopUntilAnimationsDone();
-    int index = WmShell::Get()->shelf_model()->ItemIndexByID(
-        WmWindow::Get(window)->GetIntProperty(WmWindowProperty::SHELF_ID));
+    int index = Shell::Get()->shelf_model()->ItemIndexByID(
+        window->GetProperty(kShelfIDKey));
     gfx::Rect bounds = test_api.GetButton(index)->GetBoundsInScreen();
 
     ui::test::EventGenerator& event_generator = GetEventGenerator();
@@ -302,11 +303,15 @@ TEST_P(PanelLayoutManagerTextDirectionTest, AddOnePanel) {
 // Tests for crashes during undocking.
 // See https://crbug.com/632755
 TEST_F(PanelLayoutManagerTest, UndockTest) {
+  // TODO: mash doesn't support SetFirstDisplayAsInternalDisplay().
+  // http://crbug.com/698091.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   std::vector<display::ManagedDisplayInfo> info_list;
 
   const int64_t internal_display_id =
-      display::test::DisplayManagerTestApi(
-          Shell::GetInstance()->display_manager())
+      display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
           .SetFirstDisplayAsInternalDisplay();
 
   // Create the primary display info.
@@ -334,11 +339,15 @@ TEST_F(PanelLayoutManagerTest, UndockTest) {
 // Tests for any crash during docking and then undocking.
 // See https://crbug.com/632755
 TEST_F(PanelLayoutManagerTest, DockUndockTest) {
+  // TODO: mash doesn't support SetFirstDisplayAsInternalDisplay().
+  // http://crbug.com/698091.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   std::vector<display::ManagedDisplayInfo> info_list;
 
   const int64_t internal_display_id =
-      display::test::DisplayManagerTestApi(
-          Shell::GetInstance()->display_manager())
+      display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
           .SetFirstDisplayAsInternalDisplay();
 
   // Create the primary display info.
@@ -496,6 +505,11 @@ TEST_F(PanelLayoutManagerTest, MultiplePanelCallout) {
   EXPECT_TRUE(IsPanelCalloutVisible(w1.get()));
   EXPECT_TRUE(IsPanelCalloutVisible(w2.get()));
   EXPECT_TRUE(IsPanelCalloutVisible(w3.get()));
+
+  // TODO: investigate failure. http://crbug.com/698887.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   wm::ActivateWindow(w1.get());
   EXPECT_NO_FATAL_FAILURE(IsCalloutAboveLauncherIcon(w1.get()));
   wm::ActivateWindow(w2.get());
@@ -527,6 +541,10 @@ TEST_F(PanelLayoutManagerTest, RemoveLeftPanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, RemoveMiddlePanel) {
+  // TODO: fails because of ShelfModel. http://crbug.com/698878.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   gfx::Rect bounds(0, 0, 201, 201);
   std::unique_ptr<aura::Window> w1(CreatePanelWindow(bounds));
   std::unique_ptr<aura::Window> w2(CreatePanelWindow(bounds));
@@ -542,6 +560,10 @@ TEST_F(PanelLayoutManagerTest, RemoveMiddlePanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, RemoveRightPanel) {
+  // TODO: fails because of ShelfModel. http://crbug.com/698878.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   gfx::Rect bounds(0, 0, 201, 201);
   std::unique_ptr<aura::Window> w1(CreatePanelWindow(bounds));
   std::unique_ptr<aura::Window> w2(CreatePanelWindow(bounds));
@@ -557,6 +579,10 @@ TEST_F(PanelLayoutManagerTest, RemoveRightPanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, RemoveNonActivePanel) {
+  // TODO: fails because of ShelfModel. http://crbug.com/698878.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   gfx::Rect bounds(0, 0, 201, 201);
   std::unique_ptr<aura::Window> w1(CreatePanelWindow(bounds));
   std::unique_ptr<aura::Window> w2(CreatePanelWindow(bounds));
@@ -648,6 +674,10 @@ TEST_F(PanelLayoutManagerTest, MinimizeRestorePanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, PanelMoveBetweenMultipleDisplays) {
+  // TODO: fails because of ShelfModel. http://crbug.com/698878.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   // Keep the displays wide so that shelves have enough space for launcher
   // buttons.
   UpdateDisplay("600x400,600x400");
@@ -812,7 +842,7 @@ TEST_F(PanelLayoutManagerTest, PanelsHideAndRestoreWithShelf) {
   // While in full-screen mode, the panel windows should still be in the
   // switchable window list - http://crbug.com/313919.
   aura::Window::Windows switchable_window_list = WmWindow::ToAuraWindows(
-      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
+      Shell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(3u, switchable_window_list.size());
   EXPECT_NE(switchable_window_list.end(),
             std::find(switchable_window_list.begin(),
@@ -839,8 +869,9 @@ TEST_F(PanelLayoutManagerTest, TouchHitTestPanel) {
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> w(
       CreatePanelWindowWithDelegate(&delegate, gfx::Rect(0, 0, 200, 200)));
-  ui::EventTarget* root = w->GetRootWindow();
-  ui::EventTargeter* targeter = root->GetEventTargeter();
+  aura::Window* root = w->GetRootWindow();
+  ui::EventTargeter* targeter =
+      root->GetHost()->dispatcher()->GetDefaultEventTargeter();
 
   // Note that the constants used in the touch locations below are
   // arbitrarily-selected small numbers which will ensure the point is
@@ -852,9 +883,10 @@ TEST_F(PanelLayoutManagerTest, TouchHitTestPanel) {
   // Hit test outside the right edge with a bottom-aligned shelf.
   SetAlignment(Shell::GetPrimaryRootWindow(), SHELF_ALIGNMENT_BOTTOM);
   gfx::Rect bounds(w->bounds());
-  ui::TouchEvent touch(ui::ET_TOUCH_PRESSED,
-                       gfx::Point(bounds.right() + 3, bounds.y() + 2), 0,
-                       ui::EventTimeForNow());
+  ui::TouchEvent touch(
+      ui::ET_TOUCH_PRESSED, gfx::Point(bounds.right() + 3, bounds.y() + 2),
+      ui::EventTimeForNow(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   ui::EventTarget* target = targeter->FindTargetForEvent(root, &touch);
   EXPECT_EQ(w.get(), target);
 

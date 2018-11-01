@@ -91,8 +91,8 @@ enum DownloadCountTypes {
   // candidates for partial resumption.
   STRONG_VALIDATOR_AND_ACCEPTS_RANGES,
 
-  // To be used for parallel requests.
-  DOWNLOAD_COUNT_UNUSED_18,
+  // (Deprecated) Count of downloads that uses parallel download requests.
+  USES_PARALLEL_REQUESTS,
 
   // Count of new downloads.
   NEW_DOWNLOAD_COUNT,
@@ -145,6 +145,42 @@ enum DownloadDiscardReason {
   DOWNLOAD_DISCARD_DUE_TO_SHUTDOWN
 };
 
+// When parallel download is enabled, the download may fall back to a normal
+// download for various reasons. This enum counts the number of parallel
+// download and fallbacks. Also records the reasons why the download falls back
+// to a normal download. The reasons are not mutually exclusive.
+// Used in histogram "Download.ParallelDownload.CreationEvent" and should be
+// treated as append-only.
+enum class ParallelDownloadCreationEvent {
+  // The total number of downloads started as parallel download.
+  STARTED_PARALLEL_DOWNLOAD = 0,
+
+  // The total number of downloads fell back to normal download when parallel
+  // download is enabled.
+  FELL_BACK_TO_NORMAL_DOWNLOAD,
+
+  // No ETag or Last-Modified response header.
+  FALLBACK_REASON_STRONG_VALIDATORS,
+
+  // No Accept-Range response header.
+  FALLBACK_REASON_ACCEPT_RANGE_HEADER,
+
+  // No Content-Length response header.
+  FALLBACK_REASON_CONTENT_LENGTH_HEADER,
+
+  // File size is not complied to finch configuration.
+  FALLBACK_REASON_FILE_SIZE,
+
+  // The HTTP connection type does not meet the requirement.
+  FALLBACK_REASON_CONNECTION_TYPE,
+
+  // The remaining time does not meet the requirement.
+  FALLBACK_REASON_REMAINING_TIME,
+
+  // Last entry of the enum.
+  COUNT,
+};
+
 // Increment one of the above counts.
 void RecordDownloadCount(DownloadCountTypes type);
 
@@ -158,7 +194,9 @@ void RecordDownloadCompleted(const base::TimeTicks& start,
 // Record INTERRUPTED_COUNT, |reason|, |received| and |total| bytes.
 void RecordDownloadInterrupted(DownloadInterruptReason reason,
                                int64_t received,
-                               int64_t total);
+                               int64_t total,
+                               bool is_parallelizable,
+                               bool is_parallel_download_enabled);
 
 // Record that a download has been classified as malicious.
 void RecordMaliciousDownloadClassified(DownloadDangerType danger_type);
@@ -212,9 +250,41 @@ void RecordNetworkBlockage(base::TimeDelta resource_handler_lifetime,
                            base::TimeDelta resource_handler_blocked_time);
 
 // Record overall bandwidth stats at the file end.
+// Does not count in any hash computation or file open/close time.
 void RecordFileBandwidth(size_t length,
                          base::TimeDelta disk_write_time,
                          base::TimeDelta elapsed_time);
+
+// Increment one of the count for parallelizable download.
+void RecordParallelizableDownloadCount(DownloadCountTypes type,
+                                       bool is_parallel_download_enabled);
+
+// Records the actual total number of requests sent for a parallel download,
+// including the initial request.
+void RecordParallelDownloadRequestCount(int request_count);
+
+// Records if each byte stream is successfully added to download sink.
+void RecordParallelDownloadAddStreamSuccess(bool success);
+
+// Records the bandwidth for parallelizable download and estimates the saved
+// time at the file end. Does not count in any hash computation or file
+// open/close time.
+void RecordParallelizableDownloadStats(
+    size_t bytes_downloaded_with_parallel_streams,
+    base::TimeDelta time_with_parallel_streams,
+    size_t bytes_downloaded_without_parallel_streams,
+    base::TimeDelta time_without_parallel_streams,
+    bool uses_parallel_requests);
+
+// Records the average bandwidth, time, and file size for parallelizable
+// download.
+CONTENT_EXPORT void RecordParallelizableDownloadAverageStats(
+    int64_t bytes_downloaded,
+    const base::TimeDelta& time_span);
+
+// Records the parallel download creation counts and the reasons why the
+// download falls back to non-parallel download.
+void RecordParallelDownloadCreationEvent(ParallelDownloadCreationEvent event);
 
 // Record the result of a download file rename.
 void RecordDownloadFileRenameResultAfterRetry(
@@ -260,6 +330,8 @@ void RecordDownloadConnectionSecurity(const GURL& download_url,
 
 void RecordDownloadSourcePageTransitionType(
     const base::Optional<ui::PageTransition>& transition);
+
+void RecordDownloadHttpResponseCode(int response_code);
 
 }  // namespace content
 

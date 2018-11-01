@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/accessibility_delegate.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm/wm_event.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "components/exo/shell_surface.h"
+
+#include "ash/accessibility_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
+#include "ash/public/interfaces/window_pin_type.mojom.h"
+#include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
+#include "ash/wm/wm_event.h"
+#include "ash/wm_window.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
-#include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
 #include "components/exo/test/exo_test_base.h"
@@ -42,13 +46,20 @@ uint32_t ConfigureFullscreen(uint32_t serial,
                              ash::wm::WindowStateType state_type,
                              bool resizing,
                              bool activated,
-                             const gfx::Point& origin) {
+                             const gfx::Vector2d& origin_offset) {
   EXPECT_EQ(ash::wm::WINDOW_STATE_TYPE_FULLSCREEN, state_type);
   return serial;
 }
 
 wm::ShadowElevation GetShadowElevation(aura::Window* window) {
   return window->GetProperty(wm::kShadowElevationKey);
+}
+
+bool IsWidgetPinned(views::Widget* widget) {
+  ash::mojom::WindowPinType type =
+      widget->GetNativeWindow()->GetProperty(ash::kWindowPinTypeKey);
+  return type == ash::mojom::WindowPinType::PINNED ||
+         type == ash::mojom::WindowPinType::TRUSTED_PINNED;
 }
 
 TEST_F(ShellSurfaceTest, AcknowledgeConfigure) {
@@ -185,25 +196,17 @@ TEST_F(ShellSurfaceTest, SetPinned) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
-  shell_surface->SetPinned(true, /* trusted */ true);
-  EXPECT_TRUE(
-      ash::wm::GetWindowState(shell_surface->GetWidget()->GetNativeWindow())
-          ->IsPinned());
+  shell_surface->SetPinned(ash::mojom::WindowPinType::TRUSTED_PINNED);
+  EXPECT_TRUE(IsWidgetPinned(shell_surface->GetWidget()));
 
-  shell_surface->SetPinned(false, /* trusted */ true);
-  EXPECT_FALSE(
-      ash::wm::GetWindowState(shell_surface->GetWidget()->GetNativeWindow())
-          ->IsPinned());
+  shell_surface->SetPinned(ash::mojom::WindowPinType::NONE);
+  EXPECT_FALSE(IsWidgetPinned(shell_surface->GetWidget()));
 
-  shell_surface->SetPinned(true, /* trusted */ false);
-  EXPECT_TRUE(
-      ash::wm::GetWindowState(shell_surface->GetWidget()->GetNativeWindow())
-          ->IsPinned());
+  shell_surface->SetPinned(ash::mojom::WindowPinType::PINNED);
+  EXPECT_TRUE(IsWidgetPinned(shell_surface->GetWidget()));
 
-  shell_surface->SetPinned(false, /* trusted */ false);
-  EXPECT_FALSE(
-      ash::wm::GetWindowState(shell_surface->GetWidget()->GetNativeWindow())
-          ->IsPinned());
+  shell_surface->SetPinned(ash::mojom::WindowPinType::NONE);
+  EXPECT_FALSE(IsWidgetPinned(shell_surface->GetWidget()));
 }
 
 TEST_F(ShellSurfaceTest, SetSystemUiVisibility) {
@@ -389,7 +392,7 @@ uint32_t Configure(gfx::Size* suggested_size,
                    ash::wm::WindowStateType state_type,
                    bool resizing,
                    bool activated,
-                   const gfx::Point& origin) {
+                   const gfx::Vector2d& origin_offset) {
   *suggested_size = size;
   *has_state_type = state_type;
   *is_resizing = resizing;
@@ -454,7 +457,7 @@ TEST_F(ShellSurfaceTest, ModalWindow) {
   surface->SetInputRegion(SkRegion());
   surface->Commit();
 
-  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   // Creating a surface without input region should not make it modal.
   std::unique_ptr<Display> display(new Display);
@@ -468,26 +471,26 @@ TEST_F(ShellSurfaceTest, ModalWindow) {
   surface->SetSubSurfacePosition(child.get(), gfx::Point(10, 10));
   child->Commit();
   surface->Commit();
-  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   // Making the surface opaque shouldn't make it modal either.
   child->SetBlendMode(SkBlendMode::kSrc);
   child->Commit();
   surface->Commit();
-  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   // Setting input regions won't make it modal either.
   surface->SetInputRegion(
       SkRegion(gfx::RectToSkIRect(gfx::Rect(10, 10, 100, 100))));
   surface->Commit();
-  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   // Only SetSystemModal changes modality.
   shell_surface->SetSystemModal(true);
-  EXPECT_TRUE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   shell_surface->SetSystemModal(false);
-  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 }
 
 TEST_F(ShellSurfaceTest, ModalWindowSetSystemModalBeforeCommit) {
@@ -510,12 +513,12 @@ TEST_F(ShellSurfaceTest, ModalWindowSetSystemModalBeforeCommit) {
 
   // It is expected that modal window is shown.
   EXPECT_TRUE(shell_surface->GetWidget());
-  EXPECT_TRUE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   // Now widget is created and setting modal state should be applied
   // immediately.
   shell_surface->SetSystemModal(false);
-  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 }
 
 TEST_F(ShellSurfaceTest, PopupWindow) {
@@ -978,7 +981,7 @@ TEST_F(ShellSurfaceTest, SpokenFeedbackFullscreenBackground) {
   EXPECT_FALSE(targeter->SubtreeShouldBeExploredForEvent(shell_window, ev_out));
 
   // Enable spoken feedback.
-  ash::WmShell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
+  ash::Shell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
       ash::A11Y_NOTIFICATION_NONE);
   shell_surface.OnAccessibilityModeChanged();
 
@@ -1015,7 +1018,7 @@ TEST_F(ShellSurfaceTest, SpokenFeedbackFullscreenBackground) {
   EXPECT_EQ(shadow_bounds, shell_surface.shadow_underlay()->bounds());
 
   // Disable spoken feedback. Shadow underlay is restored.
-  ash::WmShell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
+  ash::Shell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
       ash::A11Y_NOTIFICATION_NONE);
   shell_surface.OnAccessibilityModeChanged();
   shell_surface2.OnAccessibilityModeChanged();

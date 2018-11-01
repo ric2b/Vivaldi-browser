@@ -16,6 +16,8 @@ class VRDisplayImpl;
 
 const unsigned int VR_DEVICE_LAST_ID = 0xFFFFFFFF;
 
+// Represents one of the platform's VR devices. Owned by the respective
+// VRDeviceProvider.
 class DEVICE_VR_EXPORT VRDevice {
  public:
   VRDevice();
@@ -23,17 +25,23 @@ class DEVICE_VR_EXPORT VRDevice {
 
   unsigned int id() const { return id_; }
 
-  virtual void GetVRDevice(
-      const base::Callback<void(mojom::VRDisplayInfoPtr)>& callback) = 0;
-  virtual void ResetPose() = 0;
+  // Queries VR device for display info and calls onCreated once the display
+  // info object is created. If the query fails onCreated will be called with a
+  // nullptr as argument. onCreated can be called before this function returns.
+  virtual void CreateVRDisplayInfo(
+      const base::Callback<void(mojom::VRDisplayInfoPtr)>& on_created) = 0;
 
-  virtual void RequestPresent(const base::Callback<void(bool)>& callback) = 0;
+  virtual void RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
+                              const base::Callback<void(bool)>& callback) = 0;
   virtual void SetSecureOrigin(bool secure_origin) = 0;
   virtual void ExitPresent() = 0;
-  virtual void SubmitFrame(mojom::VRPosePtr pose) = 0;
+  virtual void SubmitFrame(int16_t frame_index,
+                           const gpu::MailboxHolder& mailbox) = 0;
   virtual void UpdateLayerBounds(int16_t frame_index,
                                  mojom::VRLayerBoundsPtr left_bounds,
-                                 mojom::VRLayerBoundsPtr right_bounds) = 0;
+                                 mojom::VRLayerBoundsPtr right_bounds,
+                                 int16_t source_width,
+                                 int16_t source_height) = 0;
   virtual void GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) = 0;
 
   virtual void AddDisplay(VRDisplayImpl* display);

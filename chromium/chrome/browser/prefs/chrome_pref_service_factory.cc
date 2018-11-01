@@ -55,11 +55,13 @@
 #include "components/sync_preferences/pref_model_associator.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/pref_service_syncable_factory.h"
-#include "components/user_prefs/tracked/pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/features/features.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "rlz/features/features.h"
+#include "services/preferences/public/cpp/tracked/configuration.h"
+#include "services/preferences/public/cpp/tracked/pref_names.h"
 #include "sql/error_delegate_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -81,6 +83,12 @@
 using content::BrowserContext;
 using content::BrowserThread;
 
+using EnforcementLevel =
+    prefs::mojom::TrackedPreferenceMetadata::EnforcementLevel;
+using PrefTrackingStrategy =
+    prefs::mojom::TrackedPreferenceMetadata::PrefTrackingStrategy;
+using ValueType = prefs::mojom::TrackedPreferenceMetadata::ValueType;
+
 namespace {
 
 #if defined(OS_WIN)
@@ -96,159 +104,81 @@ bool g_disable_domain_check_for_testing = false;
 // tracked preference must be given a unique reporting ID.
 // See CleanupDeprecatedTrackedPreferences() in pref_hash_filter.cc to remove a
 // deprecated tracked preference.
-const PrefHashFilter::TrackedPreferenceMetadata kTrackedPrefs[] = {
-  {
-    0, prefs::kShowHomeButton,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    1, prefs::kHomePageIsNewTabPage,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    2, prefs::kHomePage,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    3, prefs::kRestoreOnStartup,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    4, prefs::kURLsToRestoreOnStartup,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+const prefs::TrackedPreferenceMetadata kTrackedPrefs[] = {
+    {0, prefs::kShowHomeButton, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
+    {1, prefs::kHomePageIsNewTabPage, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
+    {2, prefs::kHomePage, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
+    {3, prefs::kRestoreOnStartup, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
+    {4, prefs::kURLsToRestoreOnStartup, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  {
-    5, extensions::pref_names::kExtensions,
-    PrefHashFilter::NO_ENFORCEMENT,
-    PrefHashFilter::TRACKING_STRATEGY_SPLIT,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+    {5, extensions::pref_names::kExtensions, EnforcementLevel::NO_ENFORCEMENT,
+     PrefTrackingStrategy::SPLIT, ValueType::IMPERSONAL},
 #endif
-  {
-    6, prefs::kGoogleServicesLastUsername,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_PERSONAL
-  },
-  {
-    7, prefs::kSearchProviderOverrides,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+    {6, prefs::kGoogleServicesLastUsername, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::PERSONAL},
+    {7, prefs::kSearchProviderOverrides, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 #if !defined(OS_ANDROID)
-  {
-    11, prefs::kPinnedTabs,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+    {11, prefs::kPinnedTabs, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 #endif
-  {
-    14, DefaultSearchManager::kDefaultSearchProviderDataPrefName,
-    PrefHashFilter::NO_ENFORCEMENT,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    // Protecting kPreferenceResetTime does two things:
-    //  1) It ensures this isn't accidently set by someone stomping the pref
-    //     file.
-    //  2) More importantly, it declares kPreferenceResetTime as a protected
-    //     pref which is required for it to be visible when queried via the
-    //     SegregatedPrefStore. This is because it's written directly in the
-    //     protected JsonPrefStore by that store's PrefHashFilter if there was
-    //     a reset in FilterOnLoad and SegregatedPrefStore will not look for it
-    //     in the protected JsonPrefStore unless it's declared as a protected
-    //     preference here.
-    15, user_prefs::kPreferenceResetTime,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  // kSyncRemainingRollbackTries is deprecated and will be removed a few
-  // releases after M50.
-  {
-    18, prefs::kSafeBrowsingIncidentsSent,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+    {14, DefaultSearchManager::kDefaultSearchProviderDataPrefName,
+     EnforcementLevel::NO_ENFORCEMENT, PrefTrackingStrategy::ATOMIC,
+     ValueType::IMPERSONAL},
+    {// Protecting kPreferenceResetTime does two things:
+     //  1) It ensures this isn't accidently set by someone stomping the pref
+     //     file.
+     //  2) More importantly, it declares kPreferenceResetTime as a protected
+     //     pref which is required for it to be visible when queried via the
+     //     SegregatedPrefStore. This is because it's written directly in the
+     //     protected JsonPrefStore by that store's PrefHashFilter if there was
+     //     a reset in FilterOnLoad and SegregatedPrefStore will not look for it
+     //     in the protected JsonPrefStore unless it's declared as a protected
+     //     preference here.
+     15, user_prefs::kPreferenceResetTime, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
+    // kSyncRemainingRollbackTries is deprecated and will be removed a few
+    // releases after M50.
+    {18, prefs::kSafeBrowsingIncidentsSent, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 #if defined(OS_WIN)
-  {
-    19, prefs::kSwReporterPromptVersion,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+    {19, prefs::kSwReporterPromptVersion, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 #endif
-  // This pref is deprecated and will be removed a few releases after M43.
-  // kGoogleServicesAccountId replaces it.
-  {
-    21, prefs::kGoogleServicesUsername,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_PERSONAL
-  },
+    // This pref is deprecated and will be removed a few releases after M43.
+    // kGoogleServicesAccountId replaces it.
+    {21, prefs::kGoogleServicesUsername, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::PERSONAL},
 #if defined(OS_WIN)
-  {
-    22, prefs::kSwReporterPromptSeed,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+    {22, prefs::kSwReporterPromptSeed, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 #endif
-  {
-    23, prefs::kGoogleServicesAccountId,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_PERSONAL
-  },
-  {
-    24, prefs::kGoogleServicesLastAccountId,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_PERSONAL
-  },
+    {23, prefs::kGoogleServicesAccountId, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::PERSONAL},
+    {24, prefs::kGoogleServicesLastAccountId, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::PERSONAL},
 #if defined(OS_WIN)
-  {
-    25, prefs::kSettingsResetPromptPromptWave,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    26, prefs::kSettingsResetPromptLastTriggeredForDefaultSearch,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    27, prefs::kSettingsResetPromptLastTriggeredForStartupUrls,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    28, prefs::kSettingsResetPromptLastTriggeredForHomepage,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
+    {25, prefs::kSettingsResetPromptPromptWave,
+     EnforcementLevel::ENFORCE_ON_LOAD, PrefTrackingStrategy::ATOMIC,
+     ValueType::IMPERSONAL},
+    {26, prefs::kSettingsResetPromptLastTriggeredForDefaultSearch,
+     EnforcementLevel::ENFORCE_ON_LOAD, PrefTrackingStrategy::ATOMIC,
+     ValueType::IMPERSONAL},
+    {27, prefs::kSettingsResetPromptLastTriggeredForStartupUrls,
+     EnforcementLevel::ENFORCE_ON_LOAD, PrefTrackingStrategy::ATOMIC,
+     ValueType::IMPERSONAL},
+    {28, prefs::kSettingsResetPromptLastTriggeredForHomepage,
+     EnforcementLevel::ENFORCE_ON_LOAD, PrefTrackingStrategy::ATOMIC,
+     ValueType::IMPERSONAL},
 #endif  // defined(OS_WIN)
-  // See note at top, new items added here also need to be added to
-  // histograms.xml's TrackedPreference enum.
+
+    // See note at top, new items added here also need to be added to
+    // histograms.xml's TrackedPreference enum.
 };
 
 // One more than the last tracked preferences ID above.
@@ -331,35 +261,37 @@ SettingsEnforcementGroup GetSettingsEnforcementGroup() {
 }
 
 // Returns the effective preference tracking configuration.
-std::vector<PrefHashFilter::TrackedPreferenceMetadata>
+std::vector<prefs::mojom::TrackedPreferenceMetadataPtr>
 GetTrackingConfiguration() {
   const SettingsEnforcementGroup enforcement_group =
       GetSettingsEnforcementGroup();
 
-  std::vector<PrefHashFilter::TrackedPreferenceMetadata> result;
+  std::vector<prefs::mojom::TrackedPreferenceMetadataPtr> result;
   for (size_t i = 0; i < arraysize(kTrackedPrefs); ++i) {
-    PrefHashFilter::TrackedPreferenceMetadata data = kTrackedPrefs[i];
+    prefs::mojom::TrackedPreferenceMetadataPtr data =
+        prefs::ConstructTrackedMetadata(kTrackedPrefs[i]);
 
     if (GROUP_NO_ENFORCEMENT == enforcement_group) {
       // Remove enforcement for all tracked preferences.
-      data.enforcement_level = PrefHashFilter::NO_ENFORCEMENT;
+      data->enforcement_level = EnforcementLevel::NO_ENFORCEMENT;
     }
 
     if (enforcement_group >= GROUP_ENFORCE_ALWAYS_WITH_DSE &&
-        data.name == DefaultSearchManager::kDefaultSearchProviderDataPrefName) {
+        data->name ==
+            DefaultSearchManager::kDefaultSearchProviderDataPrefName) {
       // Specifically enable default search settings enforcement.
-      data.enforcement_level = PrefHashFilter::ENFORCE_ON_LOAD;
+      data->enforcement_level = EnforcementLevel::ENFORCE_ON_LOAD;
     }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     if (enforcement_group >= GROUP_ENFORCE_ALWAYS_WITH_EXTENSIONS_AND_DSE &&
-        data.name == extensions::pref_names::kExtensions) {
+        data->name == extensions::pref_names::kExtensions) {
       // Specifically enable extension settings enforcement.
-      data.enforcement_level = PrefHashFilter::ENFORCE_ON_LOAD;
+      data->enforcement_level = EnforcementLevel::ENFORCE_ON_LOAD;
     }
 #endif
 
-    result.push_back(data);
+    result.push_back(std::move(data));
   }
   return result;
 }
@@ -425,9 +357,8 @@ std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
   seed = ResourceBundle::GetSharedInstance().GetRawDataResource(
       IDR_PREF_HASH_SEED_BIN).as_string();
 #endif
-  return base::MakeUnique<ProfilePrefStoreManager>(
-      profile_path, GetTrackingConfiguration(), kTrackedPrefsReportingIDsCount,
-      seed, legacy_device_id, g_browser_process->local_state());
+  return base::MakeUnique<ProfilePrefStoreManager>(profile_path, seed,
+                                                   legacy_device_id);
 }
 
 void PrepareFactory(sync_preferences::PrefServiceSyncableFactory* factory,
@@ -460,6 +391,28 @@ void PrepareFactory(sync_preferences::PrefServiceSyncableFactory* factory,
   factory->SetPrefModelAssociatorClient(
       ChromePrefModelAssociatorClient::GetInstance());
 }
+
+class ResetOnLoadObserverImpl : public prefs::mojom::ResetOnLoadObserver {
+ public:
+  explicit ResetOnLoadObserverImpl(const base::FilePath& profile_path)
+      : profile_path_(profile_path) {}
+
+  void OnResetOnLoad() override {
+    // A StartSyncFlare used to kick sync early in case of a reset event. This
+    // is done since sync may bring back the user's server value post-reset
+    // which could potentially cause a "settings flash" between the factory
+    // default and the re-instantiated server value. Starting sync ASAP
+    // minimizes the window before the server value is re-instantiated (this
+    // window can otherwise be as long as 10 seconds by default).
+    sync_start_util::GetFlareForSyncableService(profile_path_)
+        .Run(syncer::PREFERENCES);
+  }
+
+ private:
+  const base::FilePath profile_path_;
+
+  DISALLOW_COPY_AND_ASSIGN(ResetOnLoadObserverImpl);
+};
 
 }  // namespace
 
@@ -497,37 +450,33 @@ std::unique_ptr<PrefService> CreateLocalState(
 
 std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
     const base::FilePath& profile_path,
-    base::SequencedTaskRunner* pref_io_task_runner,
-    TrackedPreferenceValidationDelegate* validation_delegate,
+    prefs::mojom::TrackedPreferenceValidationDelegatePtr validation_delegate,
     policy::PolicyService* policy_service,
     SupervisedUserSettingsService* supervised_user_settings,
     const scoped_refptr<PrefStore>& extension_prefs,
     const scoped_refptr<user_prefs::PrefRegistrySyncable>& pref_registry,
-    bool async) {
+    bool async,
+    service_manager::Connector* connector) {
   TRACE_EVENT0("browser", "chrome_prefs::CreateProfilePrefs");
   SCOPED_UMA_HISTOGRAM_TIMER("PrefService.CreateProfilePrefsTime");
 
-  // A StartSyncFlare used to kick sync early in case of a reset event. This is
-  // done since sync may bring back the user's server value post-reset which
-  // could potentially cause a "settings flash" between the factory default and
-  // the re-instantiated server value. Starting sync ASAP minimizes the window
-  // before the server value is re-instantiated (this window can otherwise be
-  // as long as 10 seconds by default).
-  const base::Closure start_sync_flare_for_prefs =
-      base::Bind(sync_start_util::GetFlareForSyncableService(profile_path),
-                 syncer::PREFERENCES);
-
+  prefs::mojom::ResetOnLoadObserverPtr reset_on_load_observer;
+  mojo::MakeStrongBinding(
+      base::MakeUnique<ResetOnLoadObserverImpl>(profile_path),
+      mojo::MakeRequest(&reset_on_load_observer));
   sync_preferences::PrefServiceSyncableFactory factory;
   scoped_refptr<PersistentPrefStore> user_pref_store(
       CreateProfilePrefStoreManager(profile_path)
-          ->CreateProfilePrefStore(pref_io_task_runner,
-                                   start_sync_flare_for_prefs,
-                                   validation_delegate));
+          ->CreateProfilePrefStore(
+              GetTrackingConfiguration(), kTrackedPrefsReportingIDsCount,
+              content::BrowserThread::GetBlockingPool(),
+              std::move(reset_on_load_observer), std::move(validation_delegate),
+              connector, pref_registry));
   PrepareFactory(&factory, profile_path, policy_service,
                  supervised_user_settings, user_pref_store, extension_prefs,
                  async);
   std::unique_ptr<sync_preferences::PrefServiceSyncable> pref_service =
-      factory.CreateSyncable(pref_registry.get());
+      factory.CreateSyncable(pref_registry.get(), connector);
 
   return pref_service;
 }
@@ -542,7 +491,9 @@ bool InitializePrefsFromMasterPrefs(
     const base::FilePath& profile_path,
     std::unique_ptr<base::DictionaryValue> master_prefs) {
   return CreateProfilePrefStoreManager(profile_path)
-      ->InitializePrefsFromMasterPrefs(std::move(master_prefs));
+      ->InitializePrefsFromMasterPrefs(GetTrackingConfiguration(),
+                                       kTrackedPrefsReportingIDsCount,
+                                       std::move(master_prefs));
 }
 
 base::Time GetResetTime(Profile* profile) {

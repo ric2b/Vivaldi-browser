@@ -32,6 +32,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/url_util.h"
+#include "net/filter/filter_source_stream.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_handler.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -100,9 +101,10 @@ HttpNetworkTransaction::HttpNetworkTransaction(RequestPriority priority,
       total_sent_bytes_(0),
       next_state_(STATE_NONE),
       establishing_tunnel_(false),
+      enable_ip_based_pooling_(true),
+      enable_alternative_services_(true),
       websocket_handshake_stream_base_create_helper_(NULL),
-      net_error_details_() {
-}
+      net_error_details_() {}
 
 HttpNetworkTransaction::~HttpNetworkTransaction() {
   if (stream_.get()) {
@@ -545,6 +547,12 @@ void HttpNetworkTransaction::OnNeedsProxyAuth(
   establishing_tunnel_ = true;
   response_.headers = proxy_response.headers;
   response_.auth_challenge = proxy_response.auth_challenge;
+
+  if (response_.headers.get() && !ContentEncodingsValid()) {
+    DoCallback(ERR_CONTENT_DECODING_FAILED);
+    return;
+  }
+
   headers_valid_ = true;
   server_ssl_config_ = used_ssl_config;
   proxy_info_ = used_proxy_info;
@@ -843,26 +851,23 @@ int HttpNetworkTransaction::DoCreateStream() {
   response_.network_accessed = true;
 
   next_state_ = STATE_CREATE_STREAM_COMPLETE;
+  // IP based pooling is only enabled on a retry after 421 Misdirected Request
+  // is received. Alternative Services are also disabled in this case (though
+  // they can also be disabled when retrying after a QUIC error).
+  if (!enable_ip_based_pooling_)
+    DCHECK(!enable_alternative_services_);
   if (ForWebSocketHandshake()) {
     stream_request_.reset(
         session_->http_stream_factory_for_websocket()
             ->RequestWebSocketHandshakeStream(
-                  *request_,
-                  priority_,
-                  server_ssl_config_,
-                  proxy_ssl_config_,
-                  this,
-                  websocket_handshake_stream_base_create_helper_,
-                  net_log_));
+                *request_, priority_, server_ssl_config_, proxy_ssl_config_,
+                this, websocket_handshake_stream_base_create_helper_,
+                enable_ip_based_pooling_, enable_alternative_services_,
+                net_log_));
   } else {
-    stream_request_.reset(
-        session_->http_stream_factory()->RequestStream(
-            *request_,
-            priority_,
-            server_ssl_config_,
-            proxy_ssl_config_,
-            this,
-            net_log_));
+    stream_request_.reset(session_->http_stream_factory()->RequestStream(
+        *request_, priority_, server_ssl_config_, proxy_ssl_config_, this,
+        enable_ip_based_pooling_, enable_alternative_services_, net_log_));
   }
   DCHECK(stream_request_.get());
   return ERR_IO_PENDING;
@@ -1246,6 +1251,9 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
 
   DCHECK(response_.headers.get());
 
+  if (response_.headers.get() && !ContentEncodingsValid())
+    return ERR_CONTENT_DECODING_FAILED;
+
   // On a 408 response from the server ("Request Timeout") on a stale socket,
   // retry the request.
   // Headers can be NULL because of http://crbug.com/384554.
@@ -1290,6 +1298,10 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
     response_.headers = new HttpResponseHeaders(std::string());
     next_state_ = STATE_READ_HEADERS;
     return OK;
+  }
+
+  if (response_.headers->response_code() == 421) {
+    return HandleIOError(ERR_MISDIRECTED_REQUEST);
   }
 
   if (IsSecureRequest()) {
@@ -1346,6 +1358,14 @@ int HttpNetworkTransaction::DoReadBodyComplete(int result) {
     // again in ~HttpNetworkTransaction.  Clean that up.
 
     // The next Read call will return 0 (EOF).
+
+    // This transaction was successful. If it had been retried because of an
+    // error with an alternative service, mark that alternative service broken.
+    if (!enable_alternative_services_ &&
+        retried_alternative_service_.protocol != kProtoUnknown) {
+      session_->http_server_properties()->MarkAlternativeServiceBroken(
+          retried_alternative_service_);
+    }
   }
 
   // Clear these to avoid leaving around old state.
@@ -1546,6 +1566,48 @@ int HttpNetworkTransaction::HandleIOError(int error) {
       ResetConnectionAndRequestForResend();
       error = OK;
       break;
+    case ERR_QUIC_PROTOCOL_ERROR:
+      if (GetResponseHeaders() != nullptr ||
+          !stream_->GetAlternativeService(&retried_alternative_service_)) {
+        // If the response headers have already been recieved and passed up
+        // then the request can not be retried. Also, if there was no
+        // alternative service used for this request, then there is no
+        // alternative service to be disabled.
+        break;
+      }
+      if (session_->http_server_properties()->IsAlternativeServiceBroken(
+              retried_alternative_service_)) {
+        // If the alternative service was marked as broken while the request
+        // was in flight, retry the request which will not use the broken
+        // alternative service.
+        net_log_.AddEventWithNetErrorCode(
+            NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR, error);
+        ResetConnectionAndRequestForResend();
+        error = OK;
+      } else if (session_->params().retry_without_alt_svc_on_quic_errors) {
+        // Disable alternative services for this request and retry it. If the
+        // retry succeeds, then the alternative service will be marked as
+        // broken then.
+        enable_alternative_services_ = false;
+        net_log_.AddEventWithNetErrorCode(
+            NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR, error);
+        ResetConnectionAndRequestForResend();
+        error = OK;
+      }
+      break;
+    case ERR_MISDIRECTED_REQUEST:
+      // If this is the second try, just give up.
+      if (!enable_ip_based_pooling_ && !enable_alternative_services_)
+        return OK;
+      // Otherwise retry the request with both IP based pooling
+      // and Alternative Services disabled.
+      enable_ip_based_pooling_ = false;
+      enable_alternative_services_ = false;
+      net_log_.AddEventWithNetErrorCode(
+          NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR, error);
+      ResetConnectionAndRequestForResend();
+      error = OK;
+      break;
   }
   return error;
 }
@@ -1709,6 +1771,58 @@ void HttpNetworkTransaction::CopyConnectionAttemptsFromStreamRequest() {
   // those streams by appending them to the vector:
   for (const auto& attempt : stream_request_->connection_attempts())
     connection_attempts_.push_back(attempt);
+}
+
+bool HttpNetworkTransaction::ContentEncodingsValid() const {
+  HttpResponseHeaders* headers = GetResponseHeaders();
+  DCHECK(headers);
+
+  std::string accept_encoding;
+  request_headers_.GetHeader(HttpRequestHeaders::kAcceptEncoding,
+                             &accept_encoding);
+  std::set<std::string> allowed_encodings;
+  if (!HttpUtil::ParseAcceptEncoding(accept_encoding, &allowed_encodings)) {
+    FilterSourceStream::ReportContentDecodingFailed(SourceStream::TYPE_INVALID);
+    return false;
+  }
+
+  std::string content_encoding;
+  headers->GetNormalizedHeader("Content-Encoding", &content_encoding);
+  std::set<std::string> used_encodings;
+  if (!HttpUtil::ParseContentEncoding(content_encoding, &used_encodings)) {
+    FilterSourceStream::ReportContentDecodingFailed(SourceStream::TYPE_INVALID);
+    return false;
+  }
+
+  // When "Accept-Encoding" is not specified, it is parsed as "*".
+  // If "*" encoding is advertised, then any encoding should be "accepted".
+  // This does not mean, that it will be successfully decoded.
+  if (allowed_encodings.find("*") != allowed_encodings.end())
+    return true;
+
+  bool result = true;
+  for (auto const& encoding : used_encodings) {
+    SourceStream::SourceType source_type =
+        FilterSourceStream::ParseEncodingType(encoding);
+    // We don't reject encodings we are not aware. They just will not decode.
+    if (source_type == SourceStream::TYPE_UNKNOWN)
+      continue;
+    if (allowed_encodings.find(encoding) == allowed_encodings.end()) {
+      FilterSourceStream::ReportContentDecodingFailed(
+          SourceStream::TYPE_REJECTED);
+      result = false;
+      break;
+    }
+  }
+
+  // Temporary workaround for http://crbug.com/714514
+  if (headers->IsRedirect(nullptr)) {
+    UMA_HISTOGRAM_BOOLEAN("Net.RedirectWithUnadvertisedContentEncoding",
+                          !result);
+    return true;
+  }
+
+  return result;
 }
 
 }  // namespace net

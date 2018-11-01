@@ -34,7 +34,6 @@
 #include "base/win/win_util.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_settings.h"
-#include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/install_util.h"
 #elif defined(OS_MACOSX)
 #include "chrome/browser/mac/keystone_glue.h"
@@ -378,8 +377,8 @@ void UpgradeDetectorImpl::CheckForUpgrade() {
 }
 
 bool UpgradeDetectorImpl::DetectOutdatedInstall() {
-  constexpr base::Feature kOutdatedBuildDetector =
-      { "OutdatedBuildDetector", base::FEATURE_ENABLED_BY_DEFAULT };
+  static constexpr base::Feature kOutdatedBuildDetector = {
+      "OutdatedBuildDetector", base::FEATURE_ENABLED_BY_DEFAULT};
 
   if (!base::FeatureList::IsEnabled(kOutdatedBuildDetector))
     return false;

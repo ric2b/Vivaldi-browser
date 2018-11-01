@@ -61,6 +61,7 @@ class Layer;
 class NativeTheme;
 class PaintContext;
 class ThemeProvider;
+class TransformRecorder;
 }
 
 namespace views {
@@ -1102,6 +1103,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // required when a view is added or removed from a view hierarchy
   //
   // Refer to comments in struct |ViewHierarchyChangedDetails| for |details|.
+  //
+  // See also AddedToWidget() and RemovedFromWidget() for detecting when the
+  // view is added to/removed from a widget.
   virtual void ViewHierarchyChanged(const ViewHierarchyChangedDetails& details);
 
   // When SetVisible() changes the visibility of a view, this method is
@@ -1115,6 +1119,15 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // hierarchy. Overriding this method is useful for tracking which
   // FocusManager manages this view.
   virtual void NativeViewHierarchyChanged();
+
+  // This method is invoked for a view when it is attached to a hierarchy with
+  // a widget, i.e. GetWidget() starts returning a non-null result.
+  // It is also called when the view is moved to a different widget.
+  virtual void AddedToWidget();
+
+  // This method is invoked for a view when it is removed from a hierarchy with
+  // a widget or moved to a different widget.
+  virtual void RemovedFromWidget();
 
   // Painting ------------------------------------------------------------------
 
@@ -1279,6 +1292,35 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Schedules a paint on the parent View if it exists.
   void SchedulePaintOnParent();
 
+  // Returns whether this view is eligible for painting, i.e. is visible and
+  // nonempty.  Note that this does not behave like IsDrawn(), since it doesn't
+  // check ancestors recursively; rather, it's used to prune subtrees of views
+  // during painting.
+  bool ShouldPaint() const;
+
+  // Returns the offset that should be used when constructing the paint context
+  // for this view.
+  gfx::Vector2d GetPaintContextOffset() const;
+
+  // Adjusts the transform of |recorder| in advance of painting.
+  void SetupTransformRecorderForPainting(ui::TransformRecorder* recorder) const;
+
+  // Recursively calls the painting method |func| on all non-layered children,
+  // in Z order.
+  void RecursivePaintHelper(void (View::*func)(const ui::PaintContext&),
+                            const ui::PaintContext& context);
+
+  // Invokes Paint() and, if necessary, PaintDebugRects().  Should be called
+  // only on the root of a widget/layer.  PaintDebugRects() is invoked as a
+  // separate pass, instead of being rolled into Paint(), so that siblings will
+  // not obscure debug rects.
+  void PaintFromPaintRoot(const ui::PaintContext& parent_context);
+
+  // Draws a semitransparent rect to indicate the bounds of this view.
+  // Recursively does the same for all children.  Invoked only with
+  // --draw-view-bounds-rects.
+  void PaintDebugRects(const ui::PaintContext& parent_context);
+
   // Tree operations -----------------------------------------------------------
 
   // Removes |view| from the hierarchy tree.  If |update_focus_cycle| is true,
@@ -1298,10 +1340,16 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // |old_parent| is the original parent of the View that was removed.
   // If |new_parent| is not NULL, the View that was removed will be reparented
   // to |new_parent| after the remove operation.
-  void PropagateRemoveNotifications(View* old_parent, View* new_parent);
+  // If is_removed_from_widget is true, calls RemovedFromWidget for all
+  // children.
+  void PropagateRemoveNotifications(View* old_parent,
+                                    View* new_parent,
+                                    bool is_removed_from_widget);
 
   // Call ViewHierarchyChanged() for all children.
-  void PropagateAddNotifications(const ViewHierarchyChangedDetails& details);
+  // If is_added_to_widget is true, calls AddedToWidget for all children.
+  void PropagateAddNotifications(const ViewHierarchyChangedDetails& details,
+                                 bool is_added_to_widget);
 
   // Propagates NativeViewHierarchyChanged() notification through all the
   // children.
@@ -1616,9 +1664,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Accessibility -------------------------------------------------------------
 
-  // Belongs to this view, but it's reference-counted on some platforms
-  // so we can't use a scoped_ptr. It's dereferenced in the destructor.
-  NativeViewAccessibility* native_view_accessibility_;
+  // The accessibility element used to represent this View.
+  std::unique_ptr<NativeViewAccessibility> native_view_accessibility_;
 
   // Observers -------------------------------------------------------------
 

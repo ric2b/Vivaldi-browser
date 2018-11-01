@@ -12,7 +12,6 @@ goog.provide('Output.EventType');
 goog.require('AutomationTreeWalker');
 goog.require('EarconEngine');
 goog.require('Spannable');
-goog.require('Stubs');
 goog.require('constants');
 goog.require('cursors.Cursor');
 goog.require('cursors.Range');
@@ -480,7 +479,9 @@ Output.RULES = {
       enter: '$nameFromNode $role $description'
     },
     link: {
-      enter: '$nameFromNode= $role $state'
+      enter: '$nameFromNode= $role $state',
+      speak: '$name $value $state ' +
+          '$if($inPageLinkTarget, @internal_link, $role) $description',
     },
     list: {
       enter: '$role @@list_with_items($countChildren(listItem))',

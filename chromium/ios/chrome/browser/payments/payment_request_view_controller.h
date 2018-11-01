@@ -8,10 +8,12 @@
 #import <UIKit/UIKit.h>
 
 #include "ios/chrome/browser/payments/payment_request.h"
+#import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
-#include "ios/web/public/payments/payment_request.h"
 
 extern NSString* const kPaymentRequestCollectionViewID;
+
+class PaymentRequest;
 
 @class PaymentRequestViewController;
 
@@ -24,6 +26,11 @@ extern NSString* const kPaymentRequestCollectionViewID;
 
 // Notifies the delegate that the user has confirmed the payment request.
 - (void)paymentRequestViewControllerDidConfirm:
+    (PaymentRequestViewController*)controller;
+
+// Notifies the delegate that the user has selected to go to the card and
+// address options page in Settings.
+- (void)paymentRequestViewControllerDidSelectSettings:
     (PaymentRequestViewController*)controller;
 
 // Notifies the delegate that the user has selected the payment summary item.
@@ -46,7 +53,8 @@ extern NSString* const kPaymentRequestCollectionViewID;
 
 // View controller responsible for presenting the details of a PaymentRequest to
 // the user and communicating their choices to the supplied delegate.
-@interface PaymentRequestViewController : CollectionViewController
+@interface PaymentRequestViewController
+    : CollectionViewController<CollectionViewFooterLinkDelegate>
 
 // The favicon of the page invoking the Payment Request API.
 @property(nonatomic, strong) UIImage* pageFavicon;
@@ -63,6 +71,13 @@ extern NSString* const kPaymentRequestCollectionViewID;
 // The delegate to be notified when the user confirms or cancels the request.
 @property(nonatomic, weak) id<PaymentRequestViewControllerDelegate> delegate;
 
+// Whether the data source should be shown (usually until the first payment
+// has been completed) or not.
+@property(nonatomic, assign) BOOL showDataSource;
+
+// If the user is signed in, the name of the authenticated account.
+@property(nonatomic, copy) NSString* authenticatedAccountName;
+
 // Updates the payment summary section UI. If |totalValueChanged| is YES,
 // adds a label to the total amount item indicating that the total amount was
 // updated.
@@ -77,9 +92,9 @@ extern NSString* const kPaymentRequestCollectionViewID;
 // Updates the selected payment method.
 - (void)updateSelectedPaymentMethodUI;
 
-// Initializes this object with an instance of PaymentRequest which owns an
-// instance of web::PaymentRequest as provided by the page invoking the Payment
-// Request API. This object will not take ownership of |paymentRequest|.
+// Initializes this object with an instance of PaymentRequest which has a copy
+// of web::PaymentRequest as provided by the page invoking the Payment Request
+// API. This object will not take ownership of |paymentRequest|.
 - (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
     NS_DESIGNATED_INITIALIZER;
 

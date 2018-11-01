@@ -11,14 +11,15 @@
 #include <vector>
 
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/debug/debug_colors.h"
-#include "cc/debug/frame_rate_counter.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/memory_history.h"
+#include "cc/trees/frame_rate_counter.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "skia/ext/platform_canvas.h"
@@ -102,12 +103,10 @@ void HeadsUpDisplayLayerImpl::AcquireResource(
 
 void HeadsUpDisplayLayerImpl::ReleaseUnmatchedSizeResources(
     ResourceProvider* resource_provider) {
-  auto it_erase =
-      std::remove_if(resources_.begin(), resources_.end(),
-                     [this](const std::unique_ptr<ScopedResource>& resource) {
-                       return internal_content_bounds_ != resource->size();
-                     });
-  resources_.erase(it_erase, resources_.end());
+  base::EraseIf(resources_,
+                [this](const std::unique_ptr<ScopedResource>& resource) {
+                  return internal_content_bounds_ != resource->size();
+                });
 }
 
 bool HeadsUpDisplayLayerImpl::WillDraw(DrawMode draw_mode,

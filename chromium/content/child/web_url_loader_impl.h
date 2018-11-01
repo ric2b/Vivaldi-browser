@@ -10,6 +10,7 @@
 #include "content/common/content_export.h"
 #include "content/common/url_loader_factory.mojom.h"
 #include "content/public/common/resource_response.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "net/url_request/redirect_info.h"
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "url/gurl.h"
@@ -27,6 +28,7 @@ struct CONTENT_EXPORT StreamOverrideParameters {
   // TODO(clamy): The browser should be made aware on destruction of this struct
   // that it can release its associated stream handle.
   GURL stream_url;
+  mojo::ScopedDataPipeConsumerHandle consumer_handle;
   ResourceResponseHead response;
   std::vector<GURL> redirects;
   std::vector<ResourceResponseInfo> redirect_responses;
@@ -35,6 +37,8 @@ struct CONTENT_EXPORT StreamOverrideParameters {
   // The delta between the actual transfer size and the one reported by the
   // AsyncResourceLoader due to not having the ResourceResponse.
   int total_transfer_size_delta;
+
+  int total_transferred = 0;
 };
 
 class CONTENT_EXPORT WebURLLoaderImpl
@@ -56,20 +60,19 @@ class CONTENT_EXPORT WebURLLoaderImpl
       blink::WebURLRequest::ServiceWorkerMode service_worker_mode);
 
   // WebURLLoader methods:
-  void loadSynchronously(const blink::WebURLRequest& request,
+  void LoadSynchronously(const blink::WebURLRequest& request,
                          blink::WebURLResponse& response,
                          blink::WebURLError& error,
                          blink::WebData& data,
                          int64_t& encoded_data_length,
                          int64_t& encoded_body_length) override;
-  void loadAsynchronously(
-      const blink::WebURLRequest& request,
-      blink::WebURLLoaderClient* client) override;
-  void cancel() override;
-  void setDefersLoading(bool value) override;
-  void didChangePriority(blink::WebURLRequest::Priority new_priority,
+  void LoadAsynchronously(const blink::WebURLRequest& request,
+                          blink::WebURLLoaderClient* client) override;
+  void Cancel() override;
+  void SetDefersLoading(bool value) override;
+  void DidChangePriority(blink::WebURLRequest::Priority new_priority,
                          int intra_priority_value) override;
-  void setLoadingTaskRunner(
+  void SetLoadingTaskRunner(
       base::SingleThreadTaskRunner* loading_task_runner) override;
 
  private:

@@ -109,6 +109,7 @@ class DirectCompositorFrameSinkTest : public testing::Test {
     render_pass->SetNew(1, display_rect_, damage_rect, gfx::Transform());
 
     CompositorFrame frame;
+    frame.metadata.begin_frame_ack = BeginFrameAck(0, 1, 1, true);
     frame.render_pass_list.push_back(std::move(render_pass));
 
     compositor_frame_sink_->SubmitCompositorFrame(std::move(frame));
@@ -185,30 +186,35 @@ TEST_F(DirectCompositorFrameSinkTest,
 
 class TestBeginFrameObserver : public BeginFrameObserverBase {
  public:
-  explicit TestBeginFrameObserver(BeginFrameSource* source) : source_(source) {}
-
-  void FinishFrame() { source_->DidFinishFrame(this, ack()); }
-
   const BeginFrameAck& ack() const { return ack_; }
 
  private:
   bool OnBeginFrameDerivedImpl(const BeginFrameArgs& args) override {
     ack_ = BeginFrameAck(args.source_id, args.sequence_number,
-                         args.sequence_number, 0, true);
+                         args.sequence_number, false);
     return true;
   }
 
   void OnBeginFrameSourcePausedChanged(bool paused) override{};
 
-  BeginFrameSource* source_;
   BeginFrameAck ack_;
 };
 
-TEST_F(DirectCompositorFrameSinkTest, AcknowledgesBeginFrames) {
+TEST_F(DirectCompositorFrameSinkTest, AcknowledgesBeginFramesWithDamage) {
+  // Verify that the frame sink acknowledged the BeginFrame attached to
+  // CompositorFrame submitted during SetUp().
+  EXPECT_EQ(BeginFrameAck(0, 1, 1, true), begin_frame_source_->last_ack());
+}
+
+TEST_F(DirectCompositorFrameSinkTest, AcknowledgesBeginFramesWithoutDamage) {
   // Request a BeginFrame from the CompositorFrameSinkClient.
-  TestBeginFrameObserver observer(begin_frame_source_.get());
+  TestBeginFrameObserver observer;
   compositor_frame_sink_client_.begin_frame_source()->AddObserver(&observer);
-  observer.FinishFrame();
+  task_runner_->RunUntilIdle();
+  EXPECT_LE(BeginFrameArgs::kStartingFrameNumber,
+            observer.ack().sequence_number);
+  compositor_frame_sink_client_.begin_frame_source()->DidFinishFrame(
+      &observer, observer.ack());
   compositor_frame_sink_client_.begin_frame_source()->RemoveObserver(&observer);
 
   // Verify that the frame sink acknowledged the last BeginFrame.

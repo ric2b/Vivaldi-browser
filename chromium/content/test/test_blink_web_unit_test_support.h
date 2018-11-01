@@ -36,47 +36,42 @@ class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
   TestBlinkWebUnitTestSupport();
   ~TestBlinkWebUnitTestSupport() override;
 
-  blink::WebBlobRegistry* getBlobRegistry() override;
-  blink::WebClipboard* clipboard() override;
-  blink::WebFileUtilities* fileUtilities() override;
-  blink::WebIDBFactory* idbFactory() override;
+  blink::WebBlobRegistry* GetBlobRegistry() override;
+  blink::WebClipboard* Clipboard() override;
+  blink::WebFileUtilities* GetFileUtilities() override;
+  blink::WebIDBFactory* IdbFactory() override;
 
-  blink::WebURLLoader* createURLLoader() override;
-  blink::WebString userAgent() override;
-  blink::WebString queryLocalizedString(
+  blink::WebURLLoader* CreateURLLoader() override;
+  blink::WebString UserAgent() override;
+  blink::WebString QueryLocalizedString(
       blink::WebLocalizedString::Name name) override;
-  blink::WebString queryLocalizedString(blink::WebLocalizedString::Name name,
+  blink::WebString QueryLocalizedString(blink::WebLocalizedString::Name name,
                                         const blink::WebString& value) override;
-  blink::WebString queryLocalizedString(
+  blink::WebString QueryLocalizedString(
       blink::WebLocalizedString::Name name,
       const blink::WebString& value1,
       const blink::WebString& value2) override;
-  blink::WebString defaultLocale() override;
+  blink::WebString DefaultLocale() override;
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-  void SetThemeEngine(blink::WebThemeEngine* engine);
-  blink::WebThemeEngine* themeEngine() override;
-#endif
+  blink::WebCompositorSupport* CompositorSupport() override;
 
-  blink::WebCompositorSupport* compositorSupport() override;
-
-  blink::WebGestureCurve* createFlingAnimationCurve(
+  blink::WebGestureCurve* CreateFlingAnimationCurve(
       blink::WebGestureDevice device_source,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulative_scroll) override;
 
-  blink::WebURLLoaderMockFactory* getURLLoaderMockFactory() override;
+  blink::WebURLLoaderMockFactory* GetURLLoaderMockFactory() override;
 
-  blink::WebThread* currentThread() override;
+  blink::WebThread* CurrentThread() override;
 
-  std::unique_ptr<cc::SharedBitmap> allocateSharedBitmap(
+  std::unique_ptr<cc::SharedBitmap> AllocateSharedBitmap(
       const blink::WebSize& size) override;
 
-  void getPluginList(bool refresh,
+  void GetPluginList(bool refresh,
                      const blink::WebSecurityOrigin& mainFrameOrigin,
                      blink::WebPluginListBuilder* builder) override;
 
-  blink::WebRTCCertificateGenerator* createRTCCertificateGenerator() override;
+  blink::WebRTCCertificateGenerator* CreateRTCCertificateGenerator() override;
 
  private:
   MockWebBlobRegistryImpl blob_registry_;
@@ -89,9 +84,6 @@ class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
   std::unique_ptr<blink::WebThread> web_thread_;
   std::unique_ptr<cc::TestSharedBitmapManager> shared_bitmap_manager_;
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-  blink::WebThemeEngine* active_theme_engine_ = nullptr;
-#endif
   DISALLOW_COPY_AND_ASSIGN(TestBlinkWebUnitTestSupport);
 };
 

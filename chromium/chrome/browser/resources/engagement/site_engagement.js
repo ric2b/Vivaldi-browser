@@ -4,26 +4,37 @@
 
 'use strict';
 
+// Allow a function to be provided by tests, which will be called when
+// the page has been populated with site engagement details.
+var resolvePageIsPopulated = null;
+var pageIsPopulatedPromise = new Promise((resolve, reject) => {
+  resolvePageIsPopulated = resolve;
+});
+
+function whenPageIsPopulatedForTest() {
+  return pageIsPopulatedPromise;
+}
+
 define('main', [
-    'chrome/browser/ui/webui/engagement/site_engagement.mojom',
+    'chrome/browser/engagement/site_engagement_details.mojom',
     'content/public/renderer/frame_interfaces',
-], function(siteEngagementMojom, frameInterfaces) {
-  return function() {
-    var uiHandler = new siteEngagementMojom.SiteEngagementUIHandlerPtr(
+], (siteEngagementMojom, frameInterfaces) => {
+  return () => {
+    var uiHandler = new siteEngagementMojom.SiteEngagementDetailsProviderPtr(
         frameInterfaces.getInterface(
-            siteEngagementMojom.SiteEngagementUIHandler.name));
+            siteEngagementMojom.SiteEngagementDetailsProvider.name));
 
     var engagementTableBody = $('engagement-table-body');
     var updateInterval = null;
     var info = null;
-    var sortKey = 'score';
+    var sortKey = 'total_score';
     var sortReverse = true;
 
     // Set table header sort handlers.
     var engagementTableHeader = $('engagement-table-header');
     var headers = engagementTableHeader.children;
     for (var i = 0; i < headers.length; i++) {
-      headers[i].addEventListener('click', function(e) {
+      headers[i].addEventListener('click', (e) => {
         var newSortKey = e.target.getAttribute('sort-key');
         if (sortKey == newSortKey) {
           sortReverse = !sortReverse;
@@ -44,7 +55,7 @@ define('main', [
 
     /**
      * Creates a single row in the engagement table.
-     * @param {SiteEngagementInfo} info The info to create the row from.
+     * @param {SiteEngagementDetails} info The info to create the row from.
      * @return {HTMLElement}
      */
     function createRow(info) {
@@ -56,13 +67,13 @@ define('main', [
           'change', handleScoreChange.bind(undefined, info.origin));
       scoreInput.addEventListener('focus', disableAutoupdate);
       scoreInput.addEventListener('blur', enableAutoupdate);
-      scoreInput.value = info.score;
+      scoreInput.value = info.total_score;
 
       var scoreCell = createElementWithClassName('td', 'score-cell');
       scoreCell.appendChild(scoreInput);
 
       var engagementBar = createElementWithClassName('div', 'engagement-bar');
-      engagementBar.style.width = (info.score * 4) + 'px';
+      engagementBar.style.width = (info.total_score * 4) + 'px';
 
       var engagementBarCell =
           createElementWithClassName('td', 'engagement-bar-cell');
@@ -100,7 +111,7 @@ define('main', [
      */
     function handleScoreChange(origin, e) {
       var scoreInput = e.target;
-      uiHandler.setSiteEngagementScoreForOrigin(origin, scoreInput.value);
+      uiHandler.setSiteEngagementBaseScoreForUrl(origin, scoreInput.value);
       scoreInput.barCellRef.style.width = (scoreInput.value * 4) + 'px';
       scoreInput.blur();
       enableAutoupdate();
@@ -117,14 +128,14 @@ define('main', [
      * Sort the engagement info based on |sortKey| and |sortReverse|.
      */
     function sortInfo() {
-      info.sort(function(a, b) {
+      info.sort((a, b) => {
         return (sortReverse ? -1 : 1) *
                compareTableItem(sortKey, a, b);
       });
     }
 
     /**
-     * Compares two SiteEngagementInfo objects based on |sortKey|.
+     * Compares two SiteEngagementDetails objects based on |sortKey|.
      * @param {string} sortKey The name of the property to sort by.
      * @return {number} A negative number if |a| should be ordered before |b|, a
      * positive number otherwise.
@@ -137,7 +148,7 @@ define('main', [
       if (sortKey == 'origin')
         return new URL(val1.url).host > new URL(val2.url).host ? 1 : -1;
 
-      if (sortKey == 'score')
+      if (sortKey == 'total_score')
         return val1 - val2;
 
       assertNotReached('Unsupported sort key: ' + sortKey);
@@ -151,10 +162,12 @@ define('main', [
       clearTable();
       sortInfo();
       // Round each score to 2 decimal places.
-      info.forEach(function(info) {
-        info.score = Number(Math.round(info.score * 100) / 100);
+      info.forEach((info) => {
+        info.total_score = Number(Math.round(info.total_score * 100) / 100);
         engagementTableBody.appendChild(createRow(info));
       });
+
+      resolvePageIsPopulated();
     }
 
     /**
@@ -162,7 +175,7 @@ define('main', [
      */
     function updateEngagementTable() {
       // Populate engagement table.
-      uiHandler.getSiteEngagementInfo().then(function(response) {
+      uiHandler.getSiteEngagementDetails().then((response) => {
         info = response.info;
         renderTable(info);
       });

@@ -11,7 +11,6 @@
 #include "net/quic/platform/api/quic_str_cat.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 
-using base::StringPiece;
 using std::string;
 
 namespace net {
@@ -64,11 +63,10 @@ QuicPacketPublicHeader::QuicPacketPublicHeader(
 
 QuicPacketPublicHeader::~QuicPacketPublicHeader() {}
 
-QuicPacketHeader::QuicPacketHeader()
-    : packet_number(0), path_id(kDefaultPathId) {}
+QuicPacketHeader::QuicPacketHeader() : packet_number(0) {}
 
 QuicPacketHeader::QuicPacketHeader(const QuicPacketPublicHeader& header)
-    : public_header(header), packet_number(0), path_id(kDefaultPathId) {}
+    : public_header(header), packet_number(0) {}
 
 QuicPacketHeader::QuicPacketHeader(const QuicPacketHeader& other) = default;
 
@@ -95,11 +93,10 @@ std::ostream& operator<<(std::ostream& os, const QuicPacketHeader& header) {
   if (header.public_header.nonce != nullptr) {
     os << ", diversification_nonce: "
        << QuicTextUtils::HexEncode(
-              StringPiece(header.public_header.nonce->data(),
-                          header.public_header.nonce->size()));
+              QuicStringPiece(header.public_header.nonce->data(),
+                              header.public_header.nonce->size()));
   }
-  os << ", path_id: " << static_cast<int>(header.path_id)
-     << ", packet_number: " << header.packet_number << " }\n";
+  os << ", packet_number: " << header.packet_number << " }\n";
   return os;
 }
 
@@ -185,23 +182,22 @@ std::ostream& operator<<(std::ostream& os, const QuicReceivedPacket& s) {
   return os;
 }
 
-StringPiece QuicPacket::AssociatedData(QuicVersion version) const {
-  return StringPiece(
+QuicStringPiece QuicPacket::AssociatedData(QuicVersion version) const {
+  return QuicStringPiece(
       data(), GetStartOfEncryptedData(
                   version, connection_id_length_, includes_version_,
                   includes_diversification_nonce_, packet_number_length_));
 }
 
-StringPiece QuicPacket::Plaintext(QuicVersion version) const {
+QuicStringPiece QuicPacket::Plaintext(QuicVersion version) const {
   const size_t start_of_encrypted_data = GetStartOfEncryptedData(
       version, connection_id_length_, includes_version_,
       includes_diversification_nonce_, packet_number_length_);
-  return StringPiece(data() + start_of_encrypted_data,
-                     length() - start_of_encrypted_data);
+  return QuicStringPiece(data() + start_of_encrypted_data,
+                         length() - start_of_encrypted_data);
 }
 
-SerializedPacket::SerializedPacket(QuicPathId path_id,
-                                   QuicPacketNumber packet_number,
+SerializedPacket::SerializedPacket(QuicPacketNumber packet_number,
                                    QuicPacketNumberLength packet_number_length,
                                    const char* encrypted_buffer,
                                    QuicPacketLength encrypted_length,
@@ -211,14 +207,14 @@ SerializedPacket::SerializedPacket(QuicPathId path_id,
       encrypted_length(encrypted_length),
       has_crypto_handshake(NOT_HANDSHAKE),
       num_padding_bytes(0),
-      path_id(path_id),
       packet_number(packet_number),
       packet_number_length(packet_number_length),
       encryption_level(ENCRYPTION_NONE),
       has_ack(has_ack),
       has_stop_waiting(has_stop_waiting),
       transmission_type(NOT_RETRANSMISSION),
-      original_packet_number(0) {}
+      original_packet_number(0),
+      largest_acked(0) {}
 
 SerializedPacket::SerializedPacket(const SerializedPacket& other) = default;
 
@@ -230,6 +226,7 @@ void ClearSerializedPacket(SerializedPacket* serialized_packet) {
   }
   serialized_packet->encrypted_buffer = nullptr;
   serialized_packet->encrypted_length = 0;
+  serialized_packet->largest_acked = 0;
 }
 
 char* CopyBuffer(const SerializedPacket& packet) {

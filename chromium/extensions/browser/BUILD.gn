@@ -224,8 +224,14 @@ source_set("browser_sources") {
       "notification_types.h",
       "null_app_sorting.cc",
       "null_app_sorting.h",
+      "policy_check.cc",
+      "policy_check.h",
       "pref_names.cc",
       "pref_names.h",
+      "preload_check.cc",
+      "preload_check.h",
+      "preload_check_group.cc",
+      "preload_check_group.h",
       "process_manager.cc",
       "process_manager.h",
       "process_manager_delegate.h",
@@ -240,6 +246,7 @@ source_set("browser_sources") {
       "quota_service.h",
       "renderer_startup_helper.cc",
       "renderer_startup_helper.h",
+      "requirements_checker.cc",
       "requirements_checker.h",
       "runtime_data.cc",
       "runtime_data.h",
@@ -285,6 +292,7 @@ source_set("browser_sources") {
       "//extensions/browser/kiosk",
       "//extensions/browser/updater",
       "//extensions/browser/value_store",
+      "//ipc",
     ]
 
     deps += [
@@ -295,7 +303,7 @@ source_set("browser_sources") {
       "//components/variations",
       "//crypto:platform",
       "//extensions:extensions_browser_resources",
-      "//extensions/common:mojo",
+      "//extensions/common",
       "//services/service_manager/public/cpp",
     ]
   }
@@ -362,6 +370,21 @@ source_set("browser_tests") {
   }
 }
 
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "preload_check_test_util.cc",
+    "preload_check_test_util.h",
+  ]
+
+  deps = [
+    "//base",
+    "//extensions/browser",
+    "//extensions/common",
+    "//testing/gtest",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -383,12 +406,14 @@ source_set("unit_tests") {
     "api/document_scan/document_scan_api_unittest.cc",
     "api/document_scan/document_scan_interface_chromeos_unittest.cc",
     "api/document_scan/mock_document_scan_interface.cc",
+    "api/document_scan/mock_document_scan_interface.h",
     "api/file_handlers/app_file_handler_util_unittest.cc",
     "api/file_handlers/directory_util_unittest.cc",
     "api/file_handlers/mime_util_unittest.cc",
     "api/idle/idle_api_unittest.cc",
     "api/mime_handler_private/mime_handler_private_unittest.cc",
     "api/networking_config/networking_config_service_chromeos_unittest.cc",
+    "api/networking_private/networking_private_chromeos_unittest.cc",
     "api/power/power_api_unittest.cc",
     "api/runtime/restart_after_delay_api_unittest.cc",
     "api/sockets_tcp/sockets_tcp_api_unittest.cc",
@@ -405,6 +430,7 @@ source_set("unit_tests") {
     "computed_hashes_unittest.cc",
     "content_hash_fetcher_unittest.cc",
     "content_hash_tree_unittest.cc",
+    "content_verify_job_unittest.cc",
     "error_map_unittest.cc",
     "event_listener_map_unittest.cc",
     "event_router_unittest.cc",
@@ -424,9 +450,13 @@ source_set("unit_tests") {
     "load_monitoring_extension_host_queue_unittest.cc",
     "management_policy_unittest.cc",
     "mojo/keep_alive_impl_unittest.cc",
+    "policy_check_unittest.cc",
+    "preload_check_group_unittest.cc",
     "process_manager_unittest.cc",
     "process_map_unittest.cc",
     "quota_service_unittest.cc",
+    "renderer_startup_helper_unittest.cc",
+    "requirements_checker_unittest.cc",
     "runtime_data_unittest.cc",
     "sandboxed_unpacker_unittest.cc",
     "updater/update_service_unittest.cc",
@@ -443,6 +473,7 @@ source_set("unit_tests") {
 
   deps = [
     ":browser",
+    ":test_support",
     "//base",
     "//base/test:test_support",
     "//components/cast_certificate",
@@ -450,6 +481,7 @@ source_set("unit_tests") {
     "//components/cast_certificate/proto:unittest_proto",
     "//components/crx_file",
     "//components/keyed_service/content",
+    "//components/onc",
     "//components/pref_registry:pref_registry",
     "//components/prefs:test_support",
     "//components/sync_preferences:test_support",
@@ -466,12 +498,17 @@ source_set("unit_tests") {
     "//extensions/features",
     "//ipc:test_support",
     "//net:test_support",
+    "//storage/browser:test_support",
     "//third_party/leveldatabase",
     "//third_party/zlib:zip",
   ]
 
   if (is_chromeos) {
-    sources += [ "api/webcam_private/visca_webcam_unittest.cc" ]
+    sources += [
+      "api/audio/audio_device_id_calculator_unittest.cc",
+      "api/webcam_private/visca_webcam_unittest.cc",
+    ]
+
     deps += [ "//chromeos:test_support" ]
   }
 }

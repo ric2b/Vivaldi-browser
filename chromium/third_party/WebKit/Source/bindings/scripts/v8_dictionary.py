@@ -15,7 +15,8 @@ from v8_utilities import has_extended_attribute_value
 
 
 DICTIONARY_H_INCLUDES = frozenset([
-    'bindings/core/v8/ToV8.h',
+    'bindings/core/v8/NativeValueTraits.h',
+    'bindings/core/v8/ToV8ForCore.h',
     'bindings/core/v8/V8Binding.h',
     'platform/heap/Handle.h',
 ])
@@ -208,12 +209,14 @@ def member_impl_context(member, interfaces_info, header_includes,
     def has_method_expression():
         if nullable_indicator_name:
             return nullable_indicator_name
-        elif idl_type.is_enum or idl_type.is_string_type or idl_type.is_union_type:
+        elif idl_type.is_union_type:
             return '!m_%s.isNull()' % cpp_name
+        elif idl_type.is_enum or idl_type.is_string_type:
+            return '!m_%s.IsNull()' % cpp_name
         elif idl_type.name in ['Any', 'Object']:
-            return '!(m_{0}.isEmpty() || m_{0}.isNull() || m_{0}.isUndefined())'.format(cpp_name)
+            return '!(m_{0}.IsEmpty() || m_{0}.IsNull() || m_{0}.IsUndefined())'.format(cpp_name)
         elif idl_type.name == 'Dictionary':
-            return '!m_%s.isUndefinedOrNull()' % cpp_name
+            return '!m_%s.IsUndefinedOrNull()' % cpp_name
         else:
             return 'm_%s' % cpp_name
 
@@ -227,6 +230,10 @@ def member_impl_context(member, interfaces_info, header_includes,
         header_forward_decls.add(forward_decl_name)
     else:
         header_includes.update(idl_type.impl_includes_for_type(interfaces_info))
+
+    setter_value = 'value'
+    if idl_type.is_array_buffer_view_or_typed_array:
+        setter_value += '.View()'
 
     return {
         'cpp_default_value': cpp_default_value,
@@ -242,4 +249,5 @@ def member_impl_context(member, interfaces_info, header_includes,
         'nullable_indicator_name': nullable_indicator_name,
         'rvalue_cpp_type': idl_type.cpp_type_args(used_as_rvalue_type=True),
         'setter_name': setter_name_for_dictionary_member(member),
+        'setter_value': setter_value,
     }

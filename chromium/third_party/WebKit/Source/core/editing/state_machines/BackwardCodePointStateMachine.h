@@ -7,9 +7,9 @@
 
 #include "core/CoreExport.h"
 #include "core/editing/state_machines/TextSegmentationMachineState.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/text/Unicode.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/text/Unicode.h"
 
 namespace blink {
 
@@ -22,29 +22,29 @@ class CORE_EXPORT BackwardCodePointStateMachine {
   ~BackwardCodePointStateMachine() = default;
 
   // Prepares by feeding preceding text.
-  TextSegmentationMachineState feedPrecedingCodeUnit(UChar codeUnit);
+  TextSegmentationMachineState FeedPrecedingCodeUnit(UChar code_unit);
 
   // Finds boundary offset by feeding following text.
-  TextSegmentationMachineState feedFollowingCodeUnit(UChar codeUnit);
+  TextSegmentationMachineState FeedFollowingCodeUnit(UChar code_unit);
 
   // Returns true if we are at code point boundary.
-  bool atCodePointBoundary();
+  bool AtCodePointBoundary();
 
   // Returns the next boundary offset.
-  int getBoundaryOffset();
+  int GetBoundaryOffset();
 
   // Resets the internal state to the initial state.
-  void reset();
+  void Reset();
 
  private:
   enum class BackwardCodePointState;
 
   // The number of code units to be deleted.
   // Nothing to delete if there is an invalid surrogate pair.
-  int m_codeUnitsToBeDeleted = 0;
+  int code_units_to_be_deleted_ = 0;
 
   // The internal state.
-  BackwardCodePointState m_state;
+  BackwardCodePointState state_;
 };
 
 }  // namespace blink

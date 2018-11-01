@@ -13,69 +13,86 @@
 #include "LongCallbackFunction.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/dom/ExecutionContext.h"
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 namespace blink {
 
 // static
-LongCallbackFunction* LongCallbackFunction::create(ScriptState* scriptState, v8::Local<v8::Value> callback){
-  if (isUndefinedOrNull(callback))
+LongCallbackFunction* LongCallbackFunction::Create(ScriptState* scriptState, v8::Local<v8::Value> callback) {
+  if (IsUndefinedOrNull(callback))
     return nullptr;
   return new LongCallbackFunction(scriptState, v8::Local<v8::Function>::Cast(callback));
 }
 
 LongCallbackFunction::LongCallbackFunction(ScriptState* scriptState, v8::Local<v8::Function> callback)
     : m_scriptState(scriptState),
-    m_callback(scriptState->isolate(), this, callback) {
-  DCHECK(!m_callback.isEmpty());
+    m_callback(scriptState->GetIsolate(), this, callback) {
+  DCHECK(!m_callback.IsEmpty());
 }
-
-DEFINE_TRACE(LongCallbackFunction) {}
 
 DEFINE_TRACE_WRAPPERS(LongCallbackFunction) {
-  visitor->traceWrappers(m_callback.cast<v8::Value>());
+  visitor->TraceWrappers(m_callback.Cast<v8::Value>());
 }
 
-bool LongCallbackFunction::call(ScriptWrappable* scriptWrappable, int num1, int num2, int& returnValue) {
-  if (!m_scriptState->contextIsValid())
+bool LongCallbackFunction::call(ScriptWrappable* scriptWrappable, int32_t num1, int32_t num2, int32_t& returnValue) {
+  if (m_callback.IsEmpty())
     return false;
 
-  ExecutionContext* context = m_scriptState->getExecutionContext();
+  if (!m_scriptState->ContextIsValid())
+    return false;
+
+  ExecutionContext* context = ExecutionContext::From(m_scriptState.Get());
   DCHECK(context);
-  if (context->isContextSuspended() || context->isContextDestroyed())
-    return false;
-
-  if (m_callback.isEmpty())
+  if (context->IsContextSuspended() || context->IsContextDestroyed())
     return false;
 
   // TODO(bashi): Make sure that using DummyExceptionStateForTesting is OK.
   // crbug.com/653769
   DummyExceptionStateForTesting exceptionState;
-  ScriptState::Scope scope(m_scriptState.get());
+  ScriptState::Scope scope(m_scriptState.Get());
+  v8::Isolate* isolate = m_scriptState->GetIsolate();
 
-  v8::Local<v8::Value> num1Argument = v8::Integer::New(m_scriptState->isolate(), num1);
-  v8::Local<v8::Value> num2Argument = v8::Integer::New(m_scriptState->isolate(), num2);
+  v8::Local<v8::Value> thisValue = ToV8(
+      scriptWrappable,
+      m_scriptState->GetContext()->Global(),
+      isolate);
 
-  v8::Local<v8::Value> thisValue = ToV8(scriptWrappable, m_scriptState->context()->Global(), m_scriptState->isolate());
-
+  v8::Local<v8::Value> num1Argument = v8::Integer::New(m_scriptState->GetIsolate(), num1);
+  v8::Local<v8::Value> num2Argument = v8::Integer::New(m_scriptState->GetIsolate(), num2);
   v8::Local<v8::Value> argv[] = { num1Argument, num2Argument };
-
-  v8::Local<v8::Value> v8ReturnValue;
-  v8::TryCatch exceptionCatcher(m_scriptState->isolate());
+  v8::TryCatch exceptionCatcher(isolate);
   exceptionCatcher.SetVerbose(true);
 
-  if (V8ScriptRunner::callFunction(m_callback.newLocal(m_scriptState->isolate()), m_scriptState->getExecutionContext(), thisValue, 2, argv, m_scriptState->isolate()).ToLocal(&v8ReturnValue)) {
-    int cppValue = toInt32(m_scriptState->isolate(), v8ReturnValue, NormalConversion, exceptionState);
-        if (exceptionState.hadException())
-          return false;
-    returnValue = cppValue;
-    return true;
+  v8::Local<v8::Value> v8ReturnValue;
+  if (!V8ScriptRunner::CallFunction(m_callback.NewLocal(isolate),
+                                    context,
+                                    thisValue,
+                                    2,
+                                    argv,
+                                    isolate).ToLocal(&v8ReturnValue)) {
+    return false;
   }
-  return false;
+
+  int32_t cppValue = NativeValueTraits<IDLLong>::NativeValue(m_scriptState->GetIsolate(), v8ReturnValue, exceptionState, kNormalConversion);
+  if (exceptionState.HadException())
+    return false;
+  returnValue = cppValue;
+  return true;
+}
+
+LongCallbackFunction* NativeValueTraits<LongCallbackFunction>::NativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
+  LongCallbackFunction* nativeValue = LongCallbackFunction::Create(ScriptState::Current(isolate), value);
+  if (!nativeValue) {
+    exceptionState.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
+        "LongCallbackFunction"));
+  }
+  return nativeValue;
 }
 
 }  // namespace blink

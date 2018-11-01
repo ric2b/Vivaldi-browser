@@ -15,7 +15,7 @@ TEST(JSONWriterTest, BasicTypes) {
   std::string output_js;
 
   // Test null.
-  EXPECT_TRUE(JSONWriter::Write(*Value::CreateNullValue(), &output_js));
+  EXPECT_TRUE(JSONWriter::Write(Value(), &output_js));
   EXPECT_EQ("null", output_js);
 
   // Test empty dict.
@@ -47,7 +47,7 @@ TEST(JSONWriterTest, BasicTypes) {
   EXPECT_EQ("-0.8", output_js);
 
   // Test String values.
-  EXPECT_TRUE(JSONWriter::Write(StringValue("foo"), &output_js));
+  EXPECT_TRUE(JSONWriter::Write(Value("foo"), &output_js));
   EXPECT_EQ("\"foo\"", output_js);
 }
 
@@ -111,29 +111,29 @@ TEST(JSONWriterTest, BinaryValues) {
 
   // Binary values should return errors unless suppressed via the
   // OPTIONS_OMIT_BINARY_VALUES flag.
-  std::unique_ptr<Value> root(BinaryValue::CreateWithCopiedBuffer("asdf", 4));
+  std::unique_ptr<Value> root(Value::CreateWithCopiedBuffer("asdf", 4));
   EXPECT_FALSE(JSONWriter::Write(*root, &output_js));
   EXPECT_TRUE(JSONWriter::WriteWithOptions(
       *root, JSONWriter::OPTIONS_OMIT_BINARY_VALUES, &output_js));
   EXPECT_TRUE(output_js.empty());
 
   ListValue binary_list;
-  binary_list.Append(BinaryValue::CreateWithCopiedBuffer("asdf", 4));
+  binary_list.Append(Value::CreateWithCopiedBuffer("asdf", 4));
   binary_list.Append(MakeUnique<Value>(5));
-  binary_list.Append(BinaryValue::CreateWithCopiedBuffer("asdf", 4));
+  binary_list.Append(Value::CreateWithCopiedBuffer("asdf", 4));
   binary_list.Append(MakeUnique<Value>(2));
-  binary_list.Append(BinaryValue::CreateWithCopiedBuffer("asdf", 4));
+  binary_list.Append(Value::CreateWithCopiedBuffer("asdf", 4));
   EXPECT_FALSE(JSONWriter::Write(binary_list, &output_js));
   EXPECT_TRUE(JSONWriter::WriteWithOptions(
       binary_list, JSONWriter::OPTIONS_OMIT_BINARY_VALUES, &output_js));
   EXPECT_EQ("[5,2]", output_js);
 
   DictionaryValue binary_dict;
-  binary_dict.Set("a", BinaryValue::CreateWithCopiedBuffer("asdf", 4));
+  binary_dict.Set("a", Value::CreateWithCopiedBuffer("asdf", 4));
   binary_dict.SetInteger("b", 5);
-  binary_dict.Set("c", BinaryValue::CreateWithCopiedBuffer("asdf", 4));
+  binary_dict.Set("c", Value::CreateWithCopiedBuffer("asdf", 4));
   binary_dict.SetInteger("d", 2);
-  binary_dict.Set("e", BinaryValue::CreateWithCopiedBuffer("asdf", 4));
+  binary_dict.Set("e", Value::CreateWithCopiedBuffer("asdf", 4));
   EXPECT_FALSE(JSONWriter::Write(binary_dict, &output_js));
   EXPECT_TRUE(JSONWriter::WriteWithOptions(
       binary_dict, JSONWriter::OPTIONS_OMIT_BINARY_VALUES, &output_js));

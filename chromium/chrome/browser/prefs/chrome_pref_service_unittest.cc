@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
 #include "chrome/common/chrome_switches.h"
@@ -60,13 +61,13 @@ class ChromePrefServiceWebKitPrefs : public ChromeRenderViewHostTestHarness {
     sync_preferences::TestingPrefServiceSyncable* pref_services =
         profile()->GetTestingPrefService();
     pref_services->SetUserPref(prefs::kDefaultCharset,
-                               new base::StringValue("utf8"));
+                               base::MakeUnique<base::Value>("utf8"));
     pref_services->SetUserPref(prefs::kWebKitDefaultFontSize,
-                               new base::Value(20));
+                               base::MakeUnique<base::Value>(20));
     pref_services->SetUserPref(prefs::kWebKitTextAreasAreResizable,
-                               new base::Value(false));
+                               base::MakeUnique<base::Value>(false));
     pref_services->SetUserPref("webkit.webprefs.foo",
-                               new base::StringValue("bar"));
+                               base::MakeUnique<base::Value>("bar"));
   }
 };
 

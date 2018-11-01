@@ -21,17 +21,20 @@ class CORE_EXPORT NGBlockBreakToken : public NGBreakToken {
   //
   // The NGBlockBreakToken takes ownership of child_break_tokens, leaving it
   // empty for the caller.
-  static RefPtr<NGBlockBreakToken> create(
-      NGBlockNode* node,
+  //
+  // The node is NGBlockNode, or any other NGLayoutInputNode that produces
+  // anonymous box.
+  static RefPtr<NGBlockBreakToken> Create(
+      NGLayoutInputNode* node,
       LayoutUnit used_block_size,
       Vector<RefPtr<NGBreakToken>>& child_break_tokens) {
-    return adoptRef(
+    return AdoptRef(
         new NGBlockBreakToken(node, used_block_size, child_break_tokens));
   }
 
   // Creates a break token for a node which cannot produce any more fragments.
-  static RefPtr<NGBlockBreakToken> create(NGLayoutInputNode* node) {
-    return adoptRef(new NGBlockBreakToken(node));
+  static RefPtr<NGBlockBreakToken> Create(NGLayoutInputNode* node) {
+    return AdoptRef(new NGBlockBreakToken(node));
   }
 
   // Represents the amount of block size used in previous fragments.
@@ -54,7 +57,7 @@ class CORE_EXPORT NGBlockBreakToken : public NGBreakToken {
   }
 
  private:
-  NGBlockBreakToken(NGBlockNode* node,
+  NGBlockBreakToken(NGLayoutInputNode* node,
                     LayoutUnit used_block_size,
                     Vector<RefPtr<NGBreakToken>>& child_break_tokens);
 
@@ -67,8 +70,8 @@ class CORE_EXPORT NGBlockBreakToken : public NGBreakToken {
 DEFINE_TYPE_CASTS(NGBlockBreakToken,
                   NGBreakToken,
                   token,
-                  token->Type() == NGBreakToken::kBlockBreakToken,
-                  token.Type() == NGBreakToken::kBlockBreakToken);
+                  token->IsBlockType(),
+                  token.IsBlockType());
 
 }  // namespace blink
 

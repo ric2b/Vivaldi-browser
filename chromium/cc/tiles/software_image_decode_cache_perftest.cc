@@ -4,8 +4,8 @@
 
 #include <vector>
 
-#include "cc/debug/lap_timer.h"
-#include "cc/playback/draw_image.h"
+#include "cc/base/lap_timer.h"
+#include "cc/paint/draw_image.h"
 #include "cc/raster/tile_task.h"
 #include "cc/tiles/software_image_decode_cache.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -57,7 +57,8 @@ class SoftwareImageDecodeCachePerfTest : public testing::Test {
         for (auto& scale : scales) {
           images.emplace_back(
               CreateImage(rect.width(), rect.height()), subrect, quality,
-              CreateMatrix(SkSize::Make(scale.first, scale.second)));
+              CreateMatrix(SkSize::Make(scale.first, scale.second)),
+              gfx::ColorSpace());
         }
       }
     }

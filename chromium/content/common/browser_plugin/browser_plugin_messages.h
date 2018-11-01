@@ -26,14 +26,14 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
+#include "ui/gfx/range/range.h"
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
 
 #define IPC_MESSAGE_START BrowserPluginMsgStart
 
-
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebDragStatus, blink::WebDragStatusLast)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::WebDragStatus, blink::kWebDragStatusLast)
 
 IPC_STRUCT_BEGIN(BrowserPluginHostMsg_Attach_Params)
   IPC_STRUCT_MEMBER(bool, focused)
@@ -44,13 +44,24 @@ IPC_STRUCT_BEGIN(BrowserPluginHostMsg_Attach_Params)
   IPC_STRUCT_MEMBER(bool, is_full_page_plugin)
 IPC_STRUCT_END()
 
+IPC_STRUCT_BEGIN(BrowserPluginHostMsg_SetComposition_Params)
+  IPC_STRUCT_MEMBER(base::string16, text)
+  IPC_STRUCT_MEMBER(std::vector<blink::WebCompositionUnderline>, underlines)
+  IPC_STRUCT_MEMBER(gfx::Range, replacement_range)
+  IPC_STRUCT_MEMBER(int, selection_start)
+  IPC_STRUCT_MEMBER(int, selection_end)
+IPC_STRUCT_END()
+
 // Browser plugin messages
 
 // -----------------------------------------------------------------------------
 // These messages are from the embedder to the browser process.
 // Most messages from the embedder to the browser process are CONTROL because
 // they are routed to the appropriate BrowserPluginGuest based on the
-// browser_plugin_instance_id which is unique per embedder process.
+// |browser_plugin_instance_id| which is unique per embedder process.
+// |browser_plugin_instance_id| is only used by BrowserPluginMessageFilter to
+// find the right BrowserPluginGuest. It should not be needed by the final IPC
+// handler.
 
 // This message is sent from BrowserPlugin to BrowserPluginGuest to issue an
 // edit command.
@@ -65,26 +76,24 @@ IPC_MESSAGE_CONTROL2(BrowserPluginHostMsg_SetEditCommandsForNextKeyEvent,
 
 // This message is sent from BrowserPlugin to BrowserPluginGuest whenever IME
 // composition state is updated.
-IPC_MESSAGE_CONTROL5(
-    BrowserPluginHostMsg_ImeSetComposition,
-    int /* browser_plugin_instance_id */,
-    std::string /* text */,
-    std::vector<blink::WebCompositionUnderline> /* underlines */,
-    int /* selectiont_start */,
-    int /* selection_end */)
+IPC_MESSAGE_CONTROL2(BrowserPluginHostMsg_ImeSetComposition,
+                     int /* browser_plugin_instance_id */,
+                     BrowserPluginHostMsg_SetComposition_Params /* params */)
 
 // This message is sent from BrowserPlugin to BrowserPluginGuest to notify that
 // deleting the current composition and inserting specified text is requested.
-IPC_MESSAGE_CONTROL4(
+IPC_MESSAGE_CONTROL5(
     BrowserPluginHostMsg_ImeCommitText,
     int /* browser_plugin_instance_id */,
-    std::string /* text */,
+    base::string16 /* text */,
     std::vector<blink::WebCompositionUnderline> /* underlines */,
+    gfx::Range /* replacement_range */,
     int /* relative_cursor_pos */)
 
 // This message is sent from BrowserPlugin to BrowserPluginGuest to notify that
 // inserting the current composition is requested.
-IPC_MESSAGE_CONTROL1(BrowserPluginHostMsg_ImeFinishComposingText,
+IPC_MESSAGE_CONTROL2(BrowserPluginHostMsg_ImeFinishComposingText,
+                     int /* browser_plugin_instance_id */,
                      bool /* keep selection */)
 
 // Deletes the current selection plus the specified number of characters before

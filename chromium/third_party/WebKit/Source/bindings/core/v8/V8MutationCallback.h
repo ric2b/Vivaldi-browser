@@ -28,9 +28,11 @@
 
 #include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/TraceWrapperV8Reference.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/dom/MutationCallback.h"
+#include "platform/wtf/RefPtr.h"
 #include "v8/include/v8.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -38,29 +40,30 @@ class ExecutionContext;
 
 class V8MutationCallback final : public MutationCallback {
  public:
-  static V8MutationCallback* create(v8::Local<v8::Function> callback,
+  static V8MutationCallback* Create(v8::Local<v8::Function> callback,
                                     v8::Local<v8::Object> owner,
-                                    ScriptState* scriptState) {
-    return new V8MutationCallback(callback, owner, scriptState);
+                                    ScriptState* script_state) {
+    return new V8MutationCallback(callback, owner, script_state);
   }
   ~V8MutationCallback() override;
 
-  void call(const HeapVector<Member<MutationRecord>>&,
+  void Call(const HeapVector<Member<MutationRecord>>&,
             MutationObserver*) override;
 
-  ExecutionContext* getExecutionContext() const override {
-    return m_scriptState->getExecutionContext();
+  ExecutionContext* GetExecutionContext() const override {
+    return ExecutionContext::From(script_state_.Get());
   }
 
   DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
  private:
   V8MutationCallback(v8::Local<v8::Function>,
                      v8::Local<v8::Object>,
                      ScriptState*);
 
-  ScopedPersistent<v8::Function> m_callback;
-  RefPtr<ScriptState> m_scriptState;
+  TraceWrapperV8Reference<v8::Function> callback_;
+  RefPtr<ScriptState> script_state_;
 };
 
 }  // namespace blink

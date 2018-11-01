@@ -50,10 +50,7 @@ from webkitpy.style.filter import FilterConfiguration
 # is in STYLE_CATEGORIES, to help keep that list up to date.
 
 
-class ErrorCollector:
-    _all_style_categories = CppChecker.categories
-    # This is a list including all categories seen in any unit test.
-    _seen_style_categories = {}
+class ErrorCollector(object):
 
     def __init__(self, assert_fn, filter=None, lines_to_check=None):
         """assert_fn: a function to call when we notice a problem.
@@ -62,6 +59,7 @@ class ErrorCollector:
         self._assert_fn = assert_fn
         self._errors = []
         self._lines_to_check = lines_to_check
+        self._all_style_categories = CppChecker.categories
         if not filter:
             filter = FilterConfiguration()
         self._filter = filter
@@ -74,8 +72,7 @@ class ErrorCollector:
         if self._lines_to_check and not line_number in self._lines_to_check:
             return False
 
-        if self._filter.should_check(category, ""):
-            self._seen_style_categories[category] = 1
+        if self._filter.should_check(category, ''):
             self._errors.append('%s  [%s] [%d]' % (message, category, confidence))
         return True
 
@@ -87,20 +84,6 @@ class ErrorCollector:
 
     def result_list(self):
         return self._errors
-
-    def verify_all_categories_are_seen(self):
-        """Fails if there's a category in _all_style_categories - _seen_style_categories.
-
-        This should only be called after all tests are run, so
-        _seen_style_categories has had a chance to fully populate.  Since
-        this isn't called from within the normal unittest framework, we
-        can't use the normal unittest assert macros.  Instead we just exit
-        when we see an error.  Good thing this test is always run last!
-        """
-        for category in self._all_style_categories:
-            if category not in self._seen_style_categories:
-                import sys
-                sys.exit('FATAL ERROR: There are no tests for category "%s"' % category)
 
 
 class CppFunctionsTest(unittest.TestCase):
@@ -1109,6 +1092,51 @@ class CppStyleTest(CppStyleTestBase):
         self.assertEqual('f(a, b);',
                          cpp_style.cleanse_comments('f(a, /* name */b);'))
 
+    def test_raw_strings(self):
+        self.assert_multi_line_lint(
+            '''
+            void Func() {
+                static const char kString[] = R"(
+                  #endif  <- invalid preprocessor should be ignored
+                  */      <- invalid comment should be ignored too
+                )";
+            }''',
+            '')
+        self.assert_multi_line_lint(
+            '''
+            void Func() {
+                const char s[] = R"TrueDelimiter(
+                    )"
+                    )FalseDelimiter"
+                    )TrueDelimiter";
+            }''',
+            '')
+        self.assert_multi_line_lint(
+            '''
+            void Func() {
+                char char kString[] = R"(  ";" )";
+            }''',
+            '')
+        self.assert_multi_line_lint(
+            '''
+            static const char kRawString[] = R"(
+                \tstatic const int kLineWithTab = 1;
+                static const int kLineWithTrailingWhiteSpace = 1;\x20
+
+                 void WeirdNumberOfSpacesAtLineStart() {
+                    string x;
+                    x += StrCat("Use StrAppend instead");
+                }
+
+                void BlankLineAtEndOfBlock() {
+                    // TODO incorrectly formatted
+                    //Badly formatted comment
+
+                }
+
+            )";''',
+            '')
+
     def test_multi_line_comments(self):
         # missing explicit is bad
         self.assert_multi_line_lint(
@@ -1691,7 +1719,7 @@ class CppStyleTest(CppStyleTestBase):
         self.assert_language_rules_check(
             'foo.h', 'namespace {',
             'Do not use unnamed namespaces in header files.  See'
-            ' http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml#Namespaces'
+            ' https://google.github.io/styleguide/cppguide.html#Unnamed_Namespaces_and_Static_Variables'
             ' for more information.  [build/namespaces] [4]')
         # namespace registration macros are OK.
         self.assert_language_rules_check('foo.h', 'namespace {  \\', '')
@@ -2245,45 +2273,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
         os.path.abspath = self.os_path_abspath_orig
         os.path.isfile = self.os_path_isfile_orig
 
-    def test_check_next_include_order__no_self(self):
-        self.assertEqual('Header file should not contain itself.',
-                         self.include_state.check_next_include_order(cpp_style._PRIMARY_HEADER, True, True))
-        # Test actual code to make sure that header types are correctly assigned.
-        self.assert_language_rules_check('Foo.h',
-                                         '#include "Foo.h"\n',
-                                         'Header file should not contain itself. Should be: alphabetically sorted.'
-                                         '  [build/include_order] [4]')
-        self.assert_language_rules_check('FooBar.h',
-                                         '#include "Foo.h"\n',
-                                         '')
-
-    def test_check_next_include_order__likely_then_config(self):
-        self.assertEqual('',
-                         self.include_state.check_next_include_order(cpp_style._PRIMARY_HEADER, False, True))
-
-    def test_check_next_include_order__other_then_config(self):
-        self.assertEqual('Found other header before a header this file implements.',
-                         self.include_state.check_next_include_order(cpp_style._OTHER_HEADER, False, True))
-
-    def test_check_next_include_order__config_then_other_then_likely(self):
-        self.assertEqual('Found other header before a header this file implements.',
-                         self.include_state.check_next_include_order(cpp_style._OTHER_HEADER, False, True))
-        self.assertEqual('Found header this file implements after other header.',
-                         self.include_state.check_next_include_order(cpp_style._PRIMARY_HEADER, False, True))
-
-    def test_check_line_break_after_own_header(self):
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "foo.h"\n'
-                                         '#include "bar.h"\n',
-                                         ('You should add a blank line after implementation file\'s own header.'
-                                          '  [build/include_order] [4]'))
-
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "foo.h"\n'
-                                         '\n'
-                                         '#include "bar.h"\n',
-                                         '')
-
     def test_check_preprocessor_in_include_section(self):
         self.assert_language_rules_check('foo.cpp',
                                          '#include "foo.h"\n'
@@ -2303,41 +2292,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
                                          '#include "foo.h"\n'
                                          '#include "g.h"\n',
                                          '"foo.h" already included at foo.cpp:1  [build/include] [4]')
-
-    def test_primary_header(self):
-        # File with non-existing primary header should not produce errors.
-        self.assert_language_rules_check('foo.cpp',
-                                         '\n'
-                                         '#include "bar.h"\n',
-                                         '')
-        # Pretend that header files exist.
-        os.path.isfile = lambda filename: True
-        # Missing include for existing primary header -> error.
-        self.assert_language_rules_check('foo.cpp',
-                                         '\n'
-                                         '#include "bar.h"\n',
-                                         'Found other header before a header this file implements. '
-                                         'Should be: primary header, blank line, and then '
-                                         'alphabetically sorted.  [build/include_order] [4]')
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "config.h"\n'
-                                         '#include "foo.h"\n'
-                                         '\n'
-                                         '#include "bar.h"\n',
-                                         ['Found other header before a header this file implements. '
-                                          'Should be: primary header, blank line, and then '
-                                          'alphabetically sorted.  [build/include_order] [4]',
-                                          'Found header this file implements after other header. '
-                                          'Should be: primary header, blank line, and then '
-                                          'alphabetically sorted.  [build/include_order] [4]'])
-        # Having include for existing primary header -> no error.
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "foo.h"\n'
-                                         '\n'
-                                         '#include "bar.h"\n',
-                                         '')
-
-        os.path.isfile = self.os_path_isfile_orig
 
     def test_check_wtf_includes(self):
         self.assert_language_rules_check('foo.cpp',
@@ -2359,78 +2313,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
                                          '#include "cc/CCProxy.h"\n',
                                          'cc includes should be "CCFoo.h" instead of "cc/CCFoo.h".'
                                          '  [build/include] [4]')
-
-    def test_classify_include(self):
-        classify_include = cpp_style._classify_include
-        include_state = cpp_style._IncludeState()
-        self.assertEqual(cpp_style._OTHER_HEADER,
-                         classify_include('foo/foo.cpp',
-                                          'config.h',
-                                          False, include_state))
-        self.assertEqual(cpp_style._PRIMARY_HEADER,
-                         classify_include('foo/internal/foo.cpp',
-                                          'foo/public/foo.h',
-                                          False, include_state))
-        self.assertEqual(cpp_style._PRIMARY_HEADER,
-                         classify_include('foo/internal/foo.cpp',
-                                          'foo/other/public/foo.h',
-                                          False, include_state))
-        self.assertEqual(cpp_style._OTHER_HEADER,
-                         classify_include('foo/internal/foo.cpp',
-                                          'foo/other/public/foop.h',
-                                          False, include_state))
-        self.assertEqual(cpp_style._OTHER_HEADER,
-                         classify_include('foo/foo.cpp',
-                                          'string',
-                                          True, include_state))
-        self.assertEqual(cpp_style._PRIMARY_HEADER,
-                         classify_include('fooCustom.cpp',
-                                          'foo.h',
-                                          False, include_state))
-        self.assertEqual(cpp_style._PRIMARY_HEADER,
-                         classify_include('PrefixFooCustom.cpp',
-                                          'Foo.h',
-                                          False, include_state))
-        # <public/foo.h> must be considered as primary even if is_system is True.
-        self.assertEqual(cpp_style._PRIMARY_HEADER,
-                         classify_include('foo/foo.cpp',
-                                          'public/foo.h',
-                                          True, include_state))
-        self.assertEqual(cpp_style._OTHER_HEADER,
-                         classify_include('foo.cpp',
-                                          'foo.h',
-                                          True, include_state))
-        self.assertEqual(cpp_style._OTHER_HEADER,
-                         classify_include('foo.cpp',
-                                          'public/foop.h',
-                                          True, include_state))
-        # Tricky example where both includes might be classified as primary.
-        self.assert_language_rules_check('ScrollbarThemeWince.cpp',
-                                         '#include "ScrollbarThemeWince.h"\n'
-                                         '\n'
-                                         '#include "Scrollbar.h"\n',
-                                         '')
-        self.assert_language_rules_check('ScrollbarThemeWince.cpp',
-                                         '#include "Scrollbar.h"\n'
-                                         '\n'
-                                         '#include "ScrollbarThemeWince.h"\n',
-                                         'Found header this file implements after a header this file implements.'
-                                         ' Should be: primary header, blank line, and then alphabetically sorted.'
-                                         '  [build/include_order] [4]')
-
-    def test_try_drop_common_suffixes(self):
-        self.assertEqual('foo/foo', cpp_style._drop_common_suffixes('foo/foo-inl.h'))
-        self.assertEqual('foo/bar/foo',
-                         cpp_style._drop_common_suffixes('foo/bar/foo_inl.h'))
-        self.assertEqual('foo/foo', cpp_style._drop_common_suffixes('foo/foo.cpp'))
-        self.assertEqual('foo/foo_unusualinternal',
-                         cpp_style._drop_common_suffixes('foo/foo_unusualinternal.h'))
-        self.assertEqual('',
-                         cpp_style._drop_common_suffixes('_test.cpp'))
-        self.assertEqual('test',
-                         cpp_style._drop_common_suffixes('test.cpp'))
-        self.assertEqual('test',
-                         cpp_style._drop_common_suffixes('test.cpp'))
 
 
 class CheckForFunctionLengthsTest(CppStyleTestBase):
@@ -2541,9 +2423,6 @@ class CheckForFunctionLengthsTest(CppStyleTestBase):
 
     def function_body(self, number_of_lines):
         return ' {\n' + '  this_is_just_a_test();\n' * number_of_lines + '}'
-
-    def function_body_with_blank_lines(self, number_of_lines):
-        return ' {\n' + '  this_is_just_a_test();\n\n' * number_of_lines + '}'
 
     def function_body_with_no_lints(self, number_of_lines):
         return ' {\n' + '  this_is_just_a_test();  // NOLINT\n' * number_of_lines + '}'
@@ -3711,7 +3590,7 @@ class WebKitStyleTest(CppStyleTestBase):
         self.assert_lint(
             'using std::min;',
             "Use 'using namespace std;' instead of 'using std::min;'."
-            "  [build/using_std] [4]",
+            '  [build/using_std] [4]',
             'foo.cpp')
 
     def test_using_std_swap_ignored(self):
@@ -3764,29 +3643,15 @@ class WebKitStyleTest(CppStyleTestBase):
             'foo.cpp')
 
     def test_names(self):
-        name_underscore_error_message = (" is incorrectly named. Don't use underscores in your identifier names."
-                                         "  [readability/naming/underscores] [4]")
         name_tooshort_error_message = (" is incorrectly named. Don't use the single letter 'l' as an identifier name."
-                                       "  [readability/naming] [4]")
+                                       '  [readability/naming] [4]')
 
         # Basic cases from WebKit style guide.
         self.assert_lint('struct Data;', '')
         self.assert_lint('size_t bufferSize;', '')
         self.assert_lint('class HTMLDocument;', '')
         self.assert_lint('String mimeType();', '')
-        self.assert_lint('size_t buffer_size;',
-                         'buffer_size' + name_underscore_error_message)
         self.assert_lint('short m_length;', '')
-        self.assert_lint('short _length;',
-                         '_length' + name_underscore_error_message)
-        self.assert_lint('short length_;',
-                         'length_' + name_underscore_error_message)
-        self.assert_lint('unsigned _length;',
-                         '_length' + name_underscore_error_message)
-        self.assert_lint('unsigned long _length;',
-                         '_length' + name_underscore_error_message)
-        self.assert_lint('unsigned long long _length;',
-                         '_length' + name_underscore_error_message)
 
         # Allow underscores in Objective C files.
         self.assert_lint('unsigned long long _length;',
@@ -3817,105 +3682,21 @@ class WebKitStyleTest(CppStyleTestBase):
         self.assert_lint('size_t l;', 'l' + name_tooshort_error_message)
         self.assert_lint('long long l;', 'l' + name_tooshort_error_message)
 
-        # Pointers, references, functions, templates, and adjectives.
-        self.assert_lint('char* under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('const int UNDER_SCORE;',
-                         'UNDER_SCORE' + name_underscore_error_message)
-        self.assert_lint('static inline const char const& const under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('WebCore::LayoutObject* under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('int func_name();',
-                         'func_name' + name_underscore_error_message)
-        self.assert_lint('RefPtr<LayoutObject*> under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('WTF::Vector<WTF::RefPtr<const LayoutObject* const>> under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('int under_score[];',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('struct dirent* under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('long under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('long long under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('long double under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('long long int under_score;',
-                         'under_score' + name_underscore_error_message)
-
         # Declarations in control statement.
-        self.assert_lint('if (int under_score = 42) {',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('else if (int under_score = 42) {',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('for (int under_score = 42; cond; i++) {',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('while (foo & under_score = bar) {',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('for (foo * under_score = p; cond; i++) {',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('for (foo * under_score; cond; i++) {',
-                         'under_score' + name_underscore_error_message)
         self.assert_lint('while (foo & value_in_thirdparty_library) {', '')
         self.assert_lint('while (foo * value_in_thirdparty_library) {', '')
         self.assert_lint('if (mli && S_OK == mli->foo()) {', '')
 
         # More member variables and functions.
         self.assert_lint('int SomeClass::s_validName', '')
-        self.assert_lint('int m_under_score;',
-                         'm_under_score' + name_underscore_error_message)
-        self.assert_lint('int SomeClass::s_under_score = 0;',
-                         'SomeClass::s_under_score' + name_underscore_error_message)
-        self.assert_lint('int SomeClass::under_score = 0;',
-                         'SomeClass::under_score' + name_underscore_error_message)
 
         # Other statements.
         self.assert_lint('return INT_MAX;', '')
-        self.assert_lint('return_t under_score;',
-                         'under_score' + name_underscore_error_message)
-        self.assert_lint('goto under_score;',
-                         'under_score' + name_underscore_error_message)
         self.assert_lint('delete static_cast<Foo*>(p);', '')
-
-        # Multiple variables in one line.
-        self.assert_lint('void myFunction(int variable1, int another_variable);',
-                         'another_variable' + name_underscore_error_message)
-        self.assert_lint('int variable1, another_variable;',
-                         'another_variable' + name_underscore_error_message)
-        self.assert_lint('int first_variable, secondVariable;',
-                         'first_variable' + name_underscore_error_message)
-        self.assert_lint('void my_function(int variable_1, int variable_2);',
-                         ['my_function' + name_underscore_error_message,
-                          'variable_1' + name_underscore_error_message,
-                          'variable_2' + name_underscore_error_message])
-        self.assert_lint('for (int variable_1, variable_2;;) {',
-                         ['variable_1' + name_underscore_error_message,
-                          'variable_2' + name_underscore_error_message])
-
-        # There is an exception for op code functions but only in the JavaScriptCore directory.
-        self.assert_lint('void this_op_code(int var1, int var2)', '', 'Source/JavaScriptCore/foo.cpp')
-        self.assert_lint('void op_code(int var1, int var2)', '', 'Source/JavaScriptCore/foo.cpp')
-        self.assert_lint('void this_op_code(int var1, int var2)', 'this_op_code' + name_underscore_error_message)
 
         # GObject requires certain magical names in class declarations.
         self.assert_lint('void webkit_dom_object_init();', '')
         self.assert_lint('void webkit_dom_object_class_init();', '')
-
-        # There is an exception for GTK+ API.
-        self.assert_lint('void webkit_web_view_load(int var1, int var2)', '', 'Source/Webkit/gtk/webkit/foo.cpp')
-        self.assert_lint('void webkit_web_view_load(int var1, int var2)', '', 'Source/Webkit2/UIProcess/gtk/foo.cpp')
-
-        # Test that this doesn't also apply to files not in a 'gtk' directory.
-        self.assert_lint('void webkit_web_view_load(int var1, int var2)',
-                         'webkit_web_view_load is incorrectly named. Don\'t use underscores in your identifier names.'
-                         '  [readability/naming/underscores] [4]', 'Source/Webkit/webkit/foo.cpp')
-        # Test that this doesn't also apply to names that don't start with 'webkit_'.
-        self.assert_lint_one_of_many_errors_re(
-            'void otherkit_web_view_load(int var1, int var2)',
-            'otherkit_web_view_load is incorrectly named. Don\'t use underscores in your identifier names.'
-            '  [readability/naming/underscores] [4]', 'Source/Webkit/webkit/foo.cpp')
 
         # There is an exception for some unit tests that begin with "tst_".
         self.assert_lint('void tst_QWebFrame::arrayObjectEnumerable(int var1, int var2)', '')
@@ -3949,15 +3730,9 @@ class WebKitStyleTest(CppStyleTestBase):
         # vm_throw is allowed as well.
         self.assert_lint('int vm_throw;', '')
 
-        # Bitfields.
-        self.assert_lint('unsigned _fillRule : 1;',
-                         '_fillRule' + name_underscore_error_message)
-
         # new operators in initialization.
         self.assert_lint('OwnPtr<uint32_t> variable(new uint32_t);', '')
         self.assert_lint('OwnPtr<uint32_t> variable(new (expr) uint32_t);', '')
-        self.assert_lint('OwnPtr<uint32_t> under_score(new uint32_t);',
-                         'under_score' + name_underscore_error_message)
 
         # Conversion operator declaration.
         self.assert_lint('operator int64_t();', '')
@@ -4104,13 +3879,13 @@ class CppCheckerTest(unittest.TestCase):
         pass
 
     def _checker(self):
-        return CppChecker("foo", "h", self.mock_handle_style_error, 3)
+        return CppChecker('foo', 'h', self.mock_handle_style_error, 3)
 
     def test_init(self):
         """Test __init__ constructor."""
         checker = self._checker()
-        self.assertEqual(checker.file_extension, "h")
-        self.assertEqual(checker.file_path, "foo")
+        self.assertEqual(checker.file_extension, 'h')
+        self.assertEqual(checker.file_path, 'foo')
         self.assertEqual(checker.handle_style_error, self.mock_handle_style_error)
         self.assertEqual(checker.min_confidence, 3)
 
@@ -4126,11 +3901,11 @@ class CppCheckerTest(unittest.TestCase):
             pass
 
         # Verify that a difference in any argument cause equality to fail.
-        checker = CppChecker("foo", "h", self.mock_handle_style_error, 3)
-        self.assertFalse(checker == CppChecker("bar", "h", self.mock_handle_style_error, 3))
-        self.assertFalse(checker == CppChecker("foo", "c", self.mock_handle_style_error, 3))
-        self.assertFalse(checker == CppChecker("foo", "h", mock_handle_style_error2, 3))
-        self.assertFalse(checker == CppChecker("foo", "h", self.mock_handle_style_error, 4))
+        checker = CppChecker('foo', 'h', self.mock_handle_style_error, 3)
+        self.assertFalse(checker == CppChecker('bar', 'h', self.mock_handle_style_error, 3))
+        self.assertFalse(checker == CppChecker('foo', 'c', self.mock_handle_style_error, 3))
+        self.assertFalse(checker == CppChecker('foo', 'h', mock_handle_style_error2, 3))
+        self.assertFalse(checker == CppChecker('foo', 'h', self.mock_handle_style_error, 4))
 
     def test_ne(self):
         """Test __ne__ inequality function."""

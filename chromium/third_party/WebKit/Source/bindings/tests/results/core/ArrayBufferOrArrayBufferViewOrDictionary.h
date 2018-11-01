@@ -14,14 +14,17 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/NativeValueTraits.h"
+#include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
+#include "core/dom/FlexibleArrayBufferView.h"
+#include "core/dom/NotShared.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
 class TestArrayBuffer;
-class TestArrayBufferView;
 
 class CORE_EXPORT ArrayBufferOrArrayBufferViewOrDictionary final {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -35,9 +38,9 @@ class CORE_EXPORT ArrayBufferOrArrayBufferViewOrDictionary final {
   static ArrayBufferOrArrayBufferViewOrDictionary fromArrayBuffer(TestArrayBuffer*);
 
   bool isArrayBufferView() const { return m_type == SpecificTypeArrayBufferView; }
-  TestArrayBufferView* getAsArrayBufferView() const;
-  void setArrayBufferView(TestArrayBufferView*);
-  static ArrayBufferOrArrayBufferViewOrDictionary fromArrayBufferView(TestArrayBufferView*);
+  NotShared<TestArrayBufferView> getAsArrayBufferView() const;
+  void setArrayBufferView(NotShared<TestArrayBufferView>);
+  static ArrayBufferOrArrayBufferViewOrDictionary fromArrayBufferView(NotShared<TestArrayBufferView>);
 
   bool isDictionary() const { return m_type == SpecificTypeDictionary; }
   Dictionary getAsDictionary() const;
@@ -73,18 +76,23 @@ class V8ArrayBufferOrArrayBufferViewOrDictionary final {
 CORE_EXPORT v8::Local<v8::Value> ToV8(const ArrayBufferOrArrayBufferViewOrDictionary&, v8::Local<v8::Object>, v8::Isolate*);
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, ArrayBufferOrArrayBufferViewOrDictionary& impl) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, ArrayBufferOrArrayBufferViewOrDictionary& impl) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, ArrayBufferOrArrayBufferViewOrDictionary& impl, v8::Local<v8::Object> creationContext) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, ArrayBufferOrArrayBufferViewOrDictionary& impl, v8::Local<v8::Object> creationContext) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
 }
 
 template <>
-struct NativeValueTraits<ArrayBufferOrArrayBufferViewOrDictionary> {
-  CORE_EXPORT static ArrayBufferOrArrayBufferViewOrDictionary nativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+struct NativeValueTraits<ArrayBufferOrArrayBufferViewOrDictionary> : public NativeValueTraitsBase<ArrayBufferOrArrayBufferViewOrDictionary> {
+  CORE_EXPORT static ArrayBufferOrArrayBufferViewOrDictionary NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+};
+
+template <>
+struct V8TypeOf<ArrayBufferOrArrayBufferViewOrDictionary> {
+  typedef V8ArrayBufferOrArrayBufferViewOrDictionary Type;
 };
 
 }  // namespace blink

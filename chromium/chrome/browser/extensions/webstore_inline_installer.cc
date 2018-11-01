@@ -13,6 +13,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -84,7 +86,7 @@ bool WebstoreInlineInstaller::IsRequestorPermitted(
     for (base::ListValue::const_iterator it = verified_sites->begin();
          it != verified_sites->end() && !requestor_is_ok; ++it) {
       std::string verified_site;
-      if (!(*it)->GetAsString(&verified_site)) {
+      if (!it->GetAsString(&verified_site)) {
         *error = kInvalidWebstoreResponseError;
         return false;
       }
@@ -105,6 +107,11 @@ std::string WebstoreInlineInstaller::GetJsonPostData() {
   // web_contents() might return null during tab destruction. This object would
   // also be destroyed shortly thereafter but check to be on the safe side.
   if (!web_contents())
+    return std::string();
+
+  // Report extra data only when SafeBrowsing is enabled for the current
+  // profile.
+  if (!profile()->GetPrefs()->GetBoolean(prefs::kSafeBrowsingEnabled))
     return std::string();
 
   content::NavigationController& navigation_controller =
@@ -210,7 +217,7 @@ bool WebstoreInlineInstaller::CheckInlineInstallPermitted(
         content::Referrer::SanitizeForRequest(
             GURL(redirect_url),
             content::Referrer(web_contents()->GetURL(),
-                              blink::WebReferrerPolicyDefault)),
+                              blink::kWebReferrerPolicyDefault)),
         WindowOpenDisposition::NEW_FOREGROUND_TAB,
         ui::PAGE_TRANSITION_AUTO_BOOKMARK, false));
     *error = kInlineInstallSupportedError;
@@ -233,7 +240,7 @@ bool WebstoreInlineInstaller::CheckRequestorPermitted(
 void WebstoreInlineInstaller::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (navigation_handle->HasCommitted() &&
-      !navigation_handle->IsSamePage() &&
+      !navigation_handle->IsSameDocument() &&
       (navigation_handle->GetRenderFrameHost() == host_ ||
        navigation_handle->IsInMainFrame())) {
     host_ = nullptr;

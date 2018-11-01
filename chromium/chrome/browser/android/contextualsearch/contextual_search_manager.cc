@@ -65,40 +65,32 @@ void ContextualSearchManager::Destroy(JNIEnv* env,
 void ContextualSearchManager::StartSearchTermResolutionRequest(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jstring>& j_selection,
-    const JavaParamRef<jstring>& j_home_country,
-    const JavaParamRef<jobject>& j_base_web_contents,
-    jboolean j_may_send_base_page_url) {
+    const base::android::JavaParamRef<jobject>& j_contextual_search_context,
+    const JavaParamRef<jobject>& j_base_web_contents) {
   WebContents* base_web_contents =
       WebContents::FromJavaWebContents(j_base_web_contents);
   DCHECK(base_web_contents);
-  std::string selection(
-      base::android::ConvertJavaStringToUTF8(env, j_selection));
-  std::string home_country(
-      base::android::ConvertJavaStringToUTF8(env, j_home_country));
-  bool may_send_base_page_url = j_may_send_base_page_url;
+  base::WeakPtr<ContextualSearchContext> contextual_search_context =
+      ContextualSearchContext::FromJavaContextualSearchContext(
+          j_contextual_search_context);
   // Calls back to OnSearchTermResolutionResponse.
-  delegate_->StartSearchTermResolutionRequest(
-      selection, home_country, base_web_contents, may_send_base_page_url);
+  delegate_->StartSearchTermResolutionRequest(contextual_search_context,
+                                              base_web_contents);
 }
 
 void ContextualSearchManager::GatherSurroundingText(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jstring>& j_selection,
-    const JavaParamRef<jstring>& j_home_country,
-    const JavaParamRef<jobject>& j_base_web_contents,
-    jboolean j_may_send_base_page_url) {
+    const base::android::JavaParamRef<jobject>& j_contextual_search_context,
+    const JavaParamRef<jobject>& j_base_web_contents) {
   WebContents* base_web_contents =
       WebContents::FromJavaWebContents(j_base_web_contents);
   DCHECK(base_web_contents);
-  std::string selection(
-      base::android::ConvertJavaStringToUTF8(env, j_selection));
-  std::string home_country(
-      base::android::ConvertJavaStringToUTF8(env, j_home_country));
-  bool may_send_base_page_url = j_may_send_base_page_url;
-  delegate_->GatherAndSaveSurroundingText(
-      selection, home_country, base_web_contents, may_send_base_page_url);
+  base::WeakPtr<ContextualSearchContext> contextual_search_context =
+      ContextualSearchContext::FromJavaContextualSearchContext(
+          j_contextual_search_context);
+  delegate_->GatherAndSaveSurroundingText(contextual_search_context,
+                                          base_web_contents);
 }
 
 base::android::ScopedJavaLocalRef<jstring>
@@ -107,7 +99,7 @@ ContextualSearchManager::GetTargetLanguage(JNIEnv* env,
   DCHECK(delegate_);
   std::string target_language(delegate_->GetTargetLanguage());
   base::android::ScopedJavaLocalRef<jstring> j_target_language =
-      base::android::ConvertUTF8ToJavaString(env, target_language.c_str());
+      base::android::ConvertUTF8ToJavaString(env, target_language);
   return j_target_language;
 }
 
@@ -116,7 +108,7 @@ ContextualSearchManager::GetAcceptLanguages(JNIEnv* env,
                                             const JavaParamRef<jobject>& obj) {
   std::string accept_languages = delegate_->GetAcceptLanguages();
   base::android::ScopedJavaLocalRef<jstring> j_accept_languages =
-      base::android::ConvertUTF8ToJavaString(env, accept_languages.c_str());
+      base::android::ConvertUTF8ToJavaString(env, accept_languages);
   return j_accept_languages;
 }
 
@@ -125,30 +117,27 @@ void ContextualSearchManager::OnSearchTermResolutionResponse(
   // Notify the Java UX of the result.
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jstring> j_search_term =
-      base::android::ConvertUTF8ToJavaString(
-          env, resolved_search_term.search_term.c_str());
+      base::android::ConvertUTF8ToJavaString(env,
+                                             resolved_search_term.search_term);
   base::android::ScopedJavaLocalRef<jstring> j_display_text =
-      base::android::ConvertUTF8ToJavaString(
-          env, resolved_search_term.display_text.c_str());
+      base::android::ConvertUTF8ToJavaString(env,
+                                             resolved_search_term.display_text);
   base::android::ScopedJavaLocalRef<jstring> j_alternate_term =
       base::android::ConvertUTF8ToJavaString(
-          env, resolved_search_term.alternate_term.c_str());
+          env, resolved_search_term.alternate_term);
   base::android::ScopedJavaLocalRef<jstring> j_mid =
-      base::android::ConvertUTF8ToJavaString(env,
-                                             resolved_search_term.mid.c_str());
+      base::android::ConvertUTF8ToJavaString(env, resolved_search_term.mid);
   base::android::ScopedJavaLocalRef<jstring> j_context_language =
       base::android::ConvertUTF8ToJavaString(
-          env, resolved_search_term.context_language.c_str());
+          env, resolved_search_term.context_language);
   base::android::ScopedJavaLocalRef<jstring> j_thumbnail_url =
       base::android::ConvertUTF8ToJavaString(
-          env,
-          resolved_search_term.thumbnail_url.c_str());
+          env, resolved_search_term.thumbnail_url);
   base::android::ScopedJavaLocalRef<jstring> j_caption =
-      base::android::ConvertUTF8ToJavaString(
-          env, resolved_search_term.caption.c_str());
+      base::android::ConvertUTF8ToJavaString(env, resolved_search_term.caption);
   base::android::ScopedJavaLocalRef<jstring> j_quick_action_uri =
       base::android::ConvertUTF8ToJavaString(
-          env, resolved_search_term.quick_action_uri.c_str());
+          env, resolved_search_term.quick_action_uri);
   Java_ContextualSearchManager_onSearchTermResolutionResponse(
       env, java_manager_, resolved_search_term.is_invalid,
       resolved_search_term.response_code, j_search_term, j_display_text,

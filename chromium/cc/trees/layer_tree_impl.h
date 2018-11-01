@@ -145,9 +145,14 @@ class CC_EXPORT LayerTreeImpl {
   LayerImplList::reverse_iterator rbegin();
   LayerImplList::reverse_iterator rend();
 
+  // TODO(crbug.com/702832): This won't be needed if overlay scrollbars have
+  // element ids.
   void AddToOpacityAnimationsMap(int id, float opacity);
-  void AddToTransformAnimationsMap(int id, gfx::Transform transform);
-  void AddToFilterAnimationsMap(int id, const FilterOperations& filters);
+
+  void SetTransformMutated(ElementId element_id,
+                           const gfx::Transform& transform);
+  void SetOpacityMutated(ElementId element_id, float opacity);
+  void SetFilterMutated(ElementId element_id, const FilterOperations& filters);
 
   int source_frame_number() const { return source_frame_number_; }
   void set_source_frame_number(int frame_number) {
@@ -232,9 +237,14 @@ class CC_EXPORT LayerTreeImpl {
   void set_content_source_id(uint32_t id) { content_source_id_ = id; }
   uint32_t content_source_id() { return content_source_id_; }
 
-  void SetDeviceColorSpace(const gfx::ColorSpace& device_color_space);
-  const gfx::ColorSpace& device_color_space() const {
-    return device_color_space_;
+  void set_local_surface_id(const LocalSurfaceId& id) {
+    local_surface_id_ = id;
+  }
+  const LocalSurfaceId& local_surface_id() const { return local_surface_id_; }
+
+  void SetRasterColorSpace(const gfx::ColorSpace& raster_color_space);
+  const gfx::ColorSpace& raster_color_space() const {
+    return raster_color_space_;
   }
 
   SyncedElasticOverscroll* elastic_overscroll() {
@@ -256,9 +266,7 @@ class CC_EXPORT LayerTreeImpl {
   // Updates draw properties and render surface layer list, as well as tile
   // priorities. Returns false if it was unable to update.  Updating lcd
   // text may cause invalidations, so should only be done after a commit.
-  bool UpdateDrawProperties(
-      bool update_lcd_text,
-      bool force_skip_verify_visible_rect_calculations = false);
+  bool UpdateDrawProperties(bool update_lcd_text);
   void BuildPropertyTreesForTesting();
   void BuildLayerListAndPropertyTreesForTesting();
 
@@ -469,6 +477,7 @@ class CC_EXPORT LayerTreeImpl {
                                 float max_page_scale_factor);
   bool IsViewportLayerId(int id) const;
   void UpdateScrollbars(int scroll_layer_id, int clip_layer_id);
+  void ShowScrollbars();
   void DidUpdatePageScale();
   void PushBrowserControls(const float* top_controls_shown_ratio);
   bool ClampBrowserControlsShownRatio();
@@ -496,9 +505,10 @@ class CC_EXPORT LayerTreeImpl {
 
   float device_scale_factor_;
   float painted_device_scale_factor_;
-  gfx::ColorSpace device_color_space_;
+  gfx::ColorSpace raster_color_space_;
 
   uint32_t content_source_id_;
+  LocalSurfaceId local_surface_id_;
 
   scoped_refptr<SyncedElasticOverscroll> elastic_overscroll_;
 
@@ -510,9 +520,12 @@ class CC_EXPORT LayerTreeImpl {
 
   std::unordered_map<ElementId, int, ElementIdHash> element_layers_map_;
 
-  std::unordered_map<int, float> opacity_animations_map_;
-  std::unordered_map<int, gfx::Transform> transform_animations_map_;
-  std::unordered_map<int, FilterOperations> filter_animations_map_;
+  std::unordered_map<ElementId, float, ElementIdHash>
+      element_id_to_opacity_animations_;
+  std::unordered_map<ElementId, gfx::Transform, ElementIdHash>
+      element_id_to_transform_animations_;
+  std::unordered_map<ElementId, FilterOperations, ElementIdHash>
+      element_id_to_filter_animations_;
 
   // Maps from clip layer ids to scroll layer ids.  Note that this only includes
   // the subset of clip layers that act as scrolling containers.  (This is

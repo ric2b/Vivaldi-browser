@@ -16,24 +16,23 @@ namespace gpu {
 class ProprietaryMediaGpuChannelManager : public GpuChannelManager {
  public:
   ProprietaryMediaGpuChannelManager(const GpuPreferences& gpu_preferences,
+                    const GpuDriverBugWorkarounds& workarounds,
                     GpuChannelManagerDelegate* delegate,
                     GpuWatchdogThread* watchdog,
-                    base::SingleThreadTaskRunner* task_runner,
-                    base::SingleThreadTaskRunner* io_task_runner,
-                    base::WaitableEvent* shutdown_event,
+                    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
                     SyncPointManager* sync_point_manager,
                     GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-                    const GpuFeatureInfo& gpu_feature_info);
+                    const GpuFeatureInfo& gpu_feature_info,
+                    GpuProcessActivityFlags activity_flags);
 
   ~ProprietaryMediaGpuChannelManager() override;
 
  protected:
-  std::unique_ptr<GpuChannel> CreateGpuChannel(
+  GpuChannel* EstablishChannel(
       int client_id,
       uint64_t client_tracing_id,
-      bool preempts,
-      bool allow_view_command_buffers,
-      bool allow_real_time_streams) override;
+      bool is_gpu_host) override;
 
   DISALLOW_COPY_AND_ASSIGN(ProprietaryMediaGpuChannelManager);
 };

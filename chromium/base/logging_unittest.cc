@@ -69,16 +69,14 @@ class MockLogSource {
 
 TEST_F(LoggingTest, BasicLogging) {
   MockLogSource mock_log_source;
-  EXPECT_CALL(mock_log_source, Log()).Times(DEBUG_MODE ? 16 : 8).
-      WillRepeatedly(Return("log message"));
+  EXPECT_CALL(mock_log_source, Log())
+      .Times(DCHECK_IS_ON() ? 16 : 8)
+      .WillRepeatedly(Return("log message"));
 
   SetMinLogLevel(LOG_INFO);
 
   EXPECT_TRUE(LOG_IS_ON(INFO));
-  // As of g++-4.5, the first argument to EXPECT_EQ cannot be a
-  // constant expression.
-  const bool kIsDebugMode = (DEBUG_MODE != 0);
-  EXPECT_TRUE(kIsDebugMode == DLOG_IS_ON(INFO));
+  EXPECT_TRUE((DCHECK_IS_ON() != 0) == DLOG_IS_ON(INFO));
   EXPECT_TRUE(VLOG_IS_ON(0));
 
   LOG(INFO) << mock_log_source.Log();
@@ -187,7 +185,13 @@ TEST_F(LoggingTest, LoggingIsLazyByDestination) {
 // Official builds have CHECKs directly call BreakDebugger.
 #if !defined(OFFICIAL_BUILD)
 
-TEST_F(LoggingTest, CheckStreamsAreLazy) {
+// https://crbug.com/709067 tracks test flakiness on iOS.
+#if defined(OS_IOS)
+#define MAYBE_CheckStreamsAreLazy DISABLED_CheckStreamsAreLazy
+#else
+#define MAYBE_CheckStreamsAreLazy CheckStreamsAreLazy
+#endif
+TEST_F(LoggingTest, MAYBE_CheckStreamsAreLazy) {
   MockLogSource mock_log_source, uncalled_mock_log_source;
   EXPECT_CALL(mock_log_source, Log()).Times(8).
       WillRepeatedly(Return("check message"));
@@ -388,7 +392,13 @@ void DcheckEmptyFunction1() {
 }
 void DcheckEmptyFunction2() {}
 
-TEST_F(LoggingTest, Dcheck) {
+// https://crbug.com/709067 tracks test flakiness on iOS.
+#if defined(OS_IOS)
+#define MAYBE_Dcheck DISABLED_Dcheck
+#else
+#define MAYBE_Dcheck Dcheck
+#endif
+TEST_F(LoggingTest, MAYBE_Dcheck) {
 #if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
   // Release build.
   EXPECT_FALSE(DCHECK_IS_ON());

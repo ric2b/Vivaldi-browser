@@ -14,16 +14,19 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/DoubleOrString.h"
+#include "bindings/core/v8/FloatOrBoolean.h"
 #include "bindings/core/v8/IDLDictionaryBase.h"
+#include "bindings/core/v8/LongOrBoolean.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/TestInterface2OrUint8Array.h"
 #include "bindings/tests/idls/core/TestInterface2.h"
 #include "core/CoreExport.h"
 #include "core/dom/DOMTypedArray.h"
+#include "core/dom/NotShared.h"
 #include "core/testing/InternalDictionary.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -40,6 +43,10 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   virtual ~TestDictionary();
   TestDictionary(const TestDictionary&);
   TestDictionary& operator=(const TestDictionary&);
+
+  bool hasAnyInRecordMember() const;
+  const Vector<std::pair<String, ScriptValue>>& anyInRecordMember() const;
+  void setAnyInRecordMember(const Vector<std::pair<String, ScriptValue>>&);
 
   bool hasAnyMember() const;
   ScriptValue anyMember() const;
@@ -87,13 +94,17 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   EventTarget* eventTargetMember() const;
   void setEventTargetMember(EventTarget*);
 
+  bool hasGarbageCollectedRecordMember() const;
+  const HeapVector<std::pair<String, Member<TestObject>>>& garbageCollectedRecordMember() const;
+  void setGarbageCollectedRecordMember(const HeapVector<std::pair<String, Member<TestObject>>>&);
+
   bool hasInternalDictionarySequenceMember() const;
   const HeapVector<InternalDictionary>& internalDictionarySequenceMember() const;
   void setInternalDictionarySequenceMember(const HeapVector<InternalDictionary>&);
 
   bool hasLongMember() const;
-  int longMember() const;
-  void setLongMember(int);
+  int32_t longMember() const;
+  void setLongMember(int32_t);
 
   bool hasObjectMember() const;
   ScriptValue objectMember() const;
@@ -111,6 +122,10 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   bool hasPrefixGetMember() const;
   ScriptValue getPrefixGetMember() const;
   void setPrefixGetMember(ScriptValue);
+
+  bool hasRecordMember() const;
+  const Vector<std::pair<String, int8_t>>& recordMember() const;
+  void setRecordMember(const Vector<std::pair<String, int8_t>>&);
 
   bool hasRestrictedDoubleMember() const;
   double restrictedDoubleMember() const;
@@ -172,17 +187,27 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   void setTestObjectSequenceMember(const HeapVector<Member<TestObject>>&);
 
   bool hasUint8ArrayMember() const;
-  DOMUint8Array* uint8ArrayMember() const;
-  void setUint8ArrayMember(DOMUint8Array*);
+  NotShared<DOMUint8Array> uint8ArrayMember() const;
+  void setUint8ArrayMember(NotShared<DOMUint8Array>);
+
+  bool hasUnionInRecordMember() const;
+  const HeapVector<std::pair<String, LongOrBoolean>>& unionInRecordMember() const;
+  void setUnionInRecordMember(const HeapVector<std::pair<String, LongOrBoolean>>&);
+
+  bool hasUnionWithTypedefs() const;
+  const FloatOrBoolean& unionWithTypedefs() const;
+  void setUnionWithTypedefs(const FloatOrBoolean&);
 
   bool hasUnrestrictedDoubleMember() const;
   double unrestrictedDoubleMember() const;
   void setUnrestrictedDoubleMember(double);
 
-  v8::Local<v8::Value> toV8Impl(v8::Local<v8::Object>, v8::Isolate*) const override;
+  v8::Local<v8::Value> ToV8Impl(v8::Local<v8::Object>, v8::Isolate*) const override;
   DECLARE_VIRTUAL_TRACE();
 
  private:
+  bool m_hasAnyInRecordMember = false;
+  Vector<std::pair<String, ScriptValue>> m_anyInRecordMember;
   ScriptValue m_anyMember;
   bool m_hasBooleanMember = false;
   bool m_booleanMember;
@@ -199,14 +224,18 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   bool m_hasEnumSequenceMember = false;
   Vector<String> m_enumSequenceMember;
   Member<EventTarget> m_eventTargetMember;
+  bool m_hasGarbageCollectedRecordMember = false;
+  HeapVector<std::pair<String, Member<TestObject>>> m_garbageCollectedRecordMember;
   bool m_hasInternalDictionarySequenceMember = false;
   HeapVector<InternalDictionary> m_internalDictionarySequenceMember;
   bool m_hasLongMember = false;
-  int m_longMember;
+  int32_t m_longMember;
   ScriptValue m_objectMember;
   ScriptValue m_objectOrNullMember;
   DoubleOrString m_otherDoubleOrStringMember;
   ScriptValue m_prefixGetMember;
+  bool m_hasRecordMember = false;
+  Vector<std::pair<String, int8_t>> m_recordMember;
   bool m_hasRestrictedDoubleMember = false;
   double m_restrictedDoubleMember;
   bool m_hasRuntimeMember = false;
@@ -229,6 +258,9 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   bool m_hasTestObjectSequenceMember = false;
   HeapVector<Member<TestObject>> m_testObjectSequenceMember;
   Member<DOMUint8Array> m_uint8ArrayMember;
+  bool m_hasUnionInRecordMember = false;
+  HeapVector<std::pair<String, LongOrBoolean>> m_unionInRecordMember;
+  FloatOrBoolean m_unionWithTypedefs;
   bool m_hasUnrestrictedDoubleMember = false;
   double m_unrestrictedDoubleMember;
 

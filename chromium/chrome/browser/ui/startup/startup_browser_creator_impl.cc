@@ -1005,7 +1005,7 @@ bool StartupBrowserCreatorImpl::ProcessStartupURLs(
     VLOG(1) << "Pref: default";
 
   apps::AppRestoreService* restore_service =
-      apps::AppRestoreServiceFactory::GetForProfile(profile_);
+      apps::AppRestoreServiceFactory::GetForBrowserContext(profile_);
   // NULL in incognito mode.
   if (restore_service) {
     restore_service->HandleStartup(apps::AppRestoreService::ShouldRestoreApps(

@@ -17,6 +17,7 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/upload_data_stream.h"
 #include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
 #include "net/url_request/url_request.h"
 
 #if defined(OS_ANDROID)
@@ -64,6 +65,17 @@ void IncrementLatencyHistogramByCount(const std::string& name,
   histogram_pointer->AddCount(latency.InMilliseconds(), count);
 }
 #endif
+
+void RecordFavIconDataUse(const net::URLRequest& request) {
+  UMA_HISTOGRAM_COUNTS_100000(
+      "DataUse.FavIcon.Downstream",
+      request.was_cached() ? 0 : request.GetTotalReceivedBytes());
+  if (request.status().is_success() &&
+      request.GetResponseCode() != net::HTTP_OK) {
+    UMA_HISTOGRAM_COUNTS_100000("DataUse.FavIcon.Downstream.Non200Response",
+                                request.GetTotalReceivedBytes());
+  }
+}
 
 }  // namespace
 
@@ -132,6 +144,8 @@ void DataUseMeasurement::OnBeforeRedirect(const net::URLRequest& request,
   // TODO(rajendrant): May not be needed when http://crbug/651957 is fixed.
   UpdateDataUsePrefs(request);
   ReportServicesMessageSizeUMA(request);
+  if (url_request_classifier_->IsFavIconRequest(request))
+    RecordFavIconDataUse(request);
 }
 
 void DataUseMeasurement::OnHeadersReceived(
@@ -169,9 +183,12 @@ void DataUseMeasurement::OnCompleted(const net::URLRequest& request,
   // of redirected requests.
   UpdateDataUsePrefs(request);
   ReportServicesMessageSizeUMA(request);
+  RecordPageTransitionUMA(request);
 #if defined(OS_ANDROID)
   MaybeRecordNetworkBytesOS();
 #endif
+  if (url_request_classifier_->IsFavIconRequest(request))
+    RecordFavIconDataUse(request);
 }
 
 void DataUseMeasurement::ReportDataUseUMA(const net::URLRequest& request,
@@ -381,6 +398,10 @@ void DataUseMeasurement::ReportDataUsageServices(
         GetHistogramName("DataUse.MessageSize.AllServices", dir, app_state,
                          is_connection_cellular),
         service, message_size);
+    if (app_state == DataUseUserData::BACKGROUND) {
+      IncreaseSparseHistogramByValue("DataUse.AllServices.Background", service,
+                                     message_size);
+    }
   }
 }
 
@@ -388,7 +409,7 @@ void DataUseMeasurement::RecordTabStateHistogram(
     TrafficDirection dir,
     DataUseUserData::AppState app_state,
     bool is_tab_visible,
-    int64_t bytes) {
+    int64_t bytes) const {
   if (app_state == DataUseUserData::UNKNOWN)
     return;
 
@@ -437,6 +458,18 @@ void DataUseMeasurement::RecordContentTypeHistogram(
             "DataUse.ContentType.Services", 1, DataUseUserData::TYPE_MAX,
             DataUseUserData::TYPE_MAX + 1,
             base::HistogramBase::kUmaTargetedHistogramFlag));
+  }
+}
+
+void DataUseMeasurement::RecordPageTransitionUMA(
+    const net::URLRequest& request) const {
+  if (!url_request_classifier_->IsUserRequest(request))
+    return;
+
+  const DataUseRecorder* recorder = ascriber_->GetDataUseRecorder(request);
+  if (recorder) {
+    url_request_classifier_->RecordPageTransitionUMA(
+        recorder->page_transition(), request.GetTotalReceivedBytes());
   }
 }
 

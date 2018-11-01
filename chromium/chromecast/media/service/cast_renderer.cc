@@ -18,6 +18,7 @@
 #include "chromecast/media/cma/pipeline/video_pipeline_client.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 #include "chromecast/public/media/media_pipeline_device_params.h"
+#include "chromecast/public/volume_control.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
@@ -54,7 +55,9 @@ CastRenderer::CastRenderer(
     MediaResourceTracker* media_resource_tracker)
     : backend_factory_(backend_factory),
       task_runner_(task_runner),
-      audio_device_id_(audio_device_id),
+      audio_device_id_(audio_device_id.empty()
+                           ? ::media::AudioDeviceDescription::kDefaultDeviceId
+                           : audio_device_id),
       video_mode_switcher_(video_mode_switcher),
       video_resolution_policy_(video_resolution_policy),
       media_resource_tracker_(media_resource_tracker),
@@ -94,13 +97,17 @@ void CastRenderer::Initialize(::media::MediaResource* media_resource,
       (load_type == kLoadTypeMediaStream)
           ? MediaPipelineDeviceParams::kModeIgnorePts
           : MediaPipelineDeviceParams::kModeSyncPts;
-  std::string device_id = audio_device_id_;
-  if (device_id == "")
-    device_id = ::media::AudioDeviceDescription::kDefaultDeviceId;
 
-  MediaPipelineDeviceParams params(
-      sync_type, MediaPipelineDeviceParams::kAudioStreamNormal, device_id,
-      backend_task_runner_.get());
+  AudioContentType content_type;
+  if (audio_device_id_ == kAlarmAudioDeviceId) {
+    content_type = AudioContentType::kAlarm;
+  } else if (audio_device_id_ == kTtsAudioDeviceId) {
+    content_type = AudioContentType::kCommunication;
+  } else {
+    content_type = AudioContentType::kMedia;
+  }
+  MediaPipelineDeviceParams params(sync_type, backend_task_runner_.get(),
+                                   content_type, audio_device_id_);
 
   if (audio_device_id_ == kTtsAudioDeviceId ||
       audio_device_id_ ==
@@ -109,7 +116,7 @@ void CastRenderer::Initialize(::media::MediaResource* media_resource,
   }
 
   std::unique_ptr<MediaPipelineBackend> backend =
-      backend_factory_->CreateBackend(params, audio_device_id_);
+      backend_factory_->CreateBackend(params);
 
   // Create pipeline.
   MediaPipelineClient pipeline_client;

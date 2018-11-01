@@ -11,13 +11,12 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/wm/mru_window_tracker.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/shell.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -30,6 +29,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/worker_pool.h"
+#include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -53,7 +53,7 @@
 #include "ui/strings/grit/app_locale_settings.h"
 #include "url/gurl.h"
 
-using base::BinaryValue;
+using base::Value;
 using content::BrowserThread;
 
 namespace wallpaper_base = extensions::api::wallpaper;
@@ -218,7 +218,7 @@ void WindowStateManager::BuildWindowListAndMinimizeInactiveForUser(
       &user_id_hash_window_list_map_[user_id_hash];
 
   std::vector<aura::Window*> windows = ash::WmWindow::ToAuraWindows(
-      ash::WmShell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal());
+      ash::Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal());
 
   for (std::vector<aura::Window*>::iterator iter = windows.begin();
        iter != windows.end(); ++iter) {
@@ -596,22 +596,10 @@ WallpaperPrivateResetWallpaperFunction::
     ~WallpaperPrivateResetWallpaperFunction() {}
 
 bool WallpaperPrivateResetWallpaperFunction::RunAsync() {
-  chromeos::WallpaperManager* wallpaper_manager =
-      chromeos::WallpaperManager::Get();
-  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  const AccountId& account_id =
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId();
+  chromeos::WallpaperManager::Get()->SetDefaultWallpaper(account_id, true);
 
-  const AccountId& account_id = user_manager->GetActiveUser()->GetAccountId();
-  wallpaper_manager->RemoveUserWallpaperInfo(account_id);
-
-  wallpaper::WallpaperInfo info = {std::string(),
-                                   wallpaper::WALLPAPER_LAYOUT_CENTER,
-                                   user_manager::User::DEFAULT,
-                                   base::Time::Now().LocalMidnight()};
-  bool is_persistent =
-      !user_manager->IsCurrentUserNonCryptohomeDataEphemeral();
-  wallpaper_manager->SetUserWallpaperInfo(account_id, info, is_persistent);
-
-  wallpaper_manager->SetDefaultWallpaperNow(account_id);
   Profile* profile = Profile::FromBrowserContext(browser_context());
   // This API is only available to the component wallpaper picker. We do not
   // need to show the app's name if it is the component wallpaper picker. So set
@@ -711,7 +699,7 @@ void WallpaperPrivateSetCustomWallpaperFunction::GenerateThumbnail(
 
 void WallpaperPrivateSetCustomWallpaperFunction::ThumbnailGenerated(
     base::RefCountedBytes* data) {
-  SetResult(BinaryValue::CreateWithCopiedBuffer(
+  SetResult(Value::CreateWithCopiedBuffer(
       reinterpret_cast<const char*>(data->front()), data->size()));
   SendResponse(true);
 }
@@ -836,7 +824,7 @@ void WallpaperPrivateGetThumbnailFunction::FileNotLoaded() {
 
 void WallpaperPrivateGetThumbnailFunction::FileLoaded(
     const std::string& data) {
-  SetResult(BinaryValue::CreateWithCopiedBuffer(data.c_str(), data.size()));
+  SetResult(Value::CreateWithCopiedBuffer(data.c_str(), data.size()));
   SendResponse(true);
 }
 

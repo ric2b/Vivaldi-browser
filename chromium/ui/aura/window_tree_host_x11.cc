@@ -31,6 +31,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/base/layout.h"
 #include "ui/base/platform_window_defaults.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/view_prop.h"
@@ -245,7 +246,7 @@ uint32_t WindowTreeHostX11::DispatchEvent(const ui::PlatformEvent& event) {
       case ui::ET_KEY_PRESSED:
       case ui::ET_KEY_RELEASED: {
         ui::KeyEvent keydown_event(xev);
-        SendEventToProcessor(&keydown_event);
+        SendEventToSink(&keydown_event);
         break;
       }
       case ui::ET_MOUSE_MOVED:
@@ -403,9 +404,7 @@ void WindowTreeHostX11::SetBoundsInPixels(const gfx::Rect& bounds) {
   // Even if the host window's size doesn't change, aura's root window
   // size, which is in DIP, changes when the scale changes.
   float current_scale = compositor()->device_scale_factor();
-  float new_scale = display::Screen::GetScreen()
-                        ->GetDisplayNearestWindow(window())
-                        .device_scale_factor();
+  float new_scale = ui::GetScaleFactorForNativeView(window());
   bool origin_changed = bounds_.origin() != bounds.origin();
   bool size_changed = bounds_.size() != bounds.size();
   XWindowChanges changes = {0};
@@ -536,13 +535,13 @@ void WindowTreeHostX11::DispatchXI2Event(const base::NativeEvent& event) {
     case ui::ET_SCROLL_FLING_CANCEL:
     case ui::ET_SCROLL: {
       ui::ScrollEvent scrollev(xev);
-      SendEventToProcessor(&scrollev);
+      SendEventToSink(&scrollev);
       break;
     }
     case ui::ET_KEY_PRESSED:
     case ui::ET_KEY_RELEASED: {
       ui::KeyEvent key_event(xev);
-      SendEventToProcessor(&key_event);
+      SendEventToSink(&key_event);
       break;
     }
     case ui::ET_UMA_DATA:
@@ -566,7 +565,7 @@ void WindowTreeHostX11::OnConfigureNotify() {}
 
 void WindowTreeHostX11::TranslateAndDispatchLocatedEvent(
     ui::LocatedEvent* event) {
-  SendEventToProcessor(event);
+  SendEventToSink(event);
 }
 
 // static

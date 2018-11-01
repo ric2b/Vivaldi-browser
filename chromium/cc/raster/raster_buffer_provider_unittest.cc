@@ -38,6 +38,7 @@
 #include "cc/tiles/tile_task_manager.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/axis_transform2d.h"
 
 namespace cc {
 namespace {
@@ -83,7 +84,8 @@ class TestRasterTaskImpl : public TileTask {
 
     uint64_t new_content_id = 0;
     raster_buffer_->Playback(raster_source_.get(), gfx::Rect(1, 1),
-                             gfx::Rect(1, 1), new_content_id, 1.f, settings);
+                             gfx::Rect(1, 1), new_content_id,
+                             gfx::AxisTransform2d(), settings);
   }
 
   // Overridden from TileTask:
@@ -182,13 +184,15 @@ class RasterBufferProviderTest
         Create3dResourceProvider();
         raster_buffer_provider_ = base::MakeUnique<GpuRasterBufferProvider>(
             context_provider_.get(), worker_context_provider_.get(),
-            resource_provider_.get(), false, 0, false);
+            resource_provider_.get(), false, 0,
+            PlatformColor::BestTextureFormat(), false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_ASYNC_GPU:
         Create3dResourceProvider();
         raster_buffer_provider_ = base::MakeUnique<GpuRasterBufferProvider>(
             context_provider_.get(), worker_context_provider_.get(),
-            resource_provider_.get(), false, 0, true);
+            resource_provider_.get(), false, 0,
+            PlatformColor::BestTextureFormat(), true);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
         CreateSoftwareResourceProvider();

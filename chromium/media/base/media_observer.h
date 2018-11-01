@@ -16,9 +16,10 @@ class MEDIA_EXPORT MediaObserverClient {
   virtual ~MediaObserverClient() {}
 
   // Requests to restart the media pipeline and create a new renderer as soon as
-  // possible. |disable_pipeline_auto_suspend| indicates whether to disable
-  // any optimizations that might suspend the media pipeline.
-  virtual void SwitchRenderer(bool disable_pipeline_auto_suspend) = 0;
+  // possible. |is_rendered_remotely| indicates whether the media is rendered
+  // remotely. When it is true, all the optimizations that might suspend the
+  // media pipeline should be disabled.
+  virtual void SwitchRenderer(bool is_rendered_remotely) = 0;
 
   // Requests to activate monitoring changes on viewport intersection.
   virtual void ActivateViewportIntersectionMonitoring(bool activate) = 0;
@@ -54,10 +55,6 @@ class MEDIA_EXPORT MediaObserver {
   // Called when the media is playing/paused.
   virtual void OnPlaying() = 0;
   virtual void OnPaused() = 0;
-
-  // Called when a poster image URL is set, which happens when media is loaded
-  // or the poster attribute is changed.
-  virtual void OnSetPoster(const GURL& poster) = 0;
 
   // Set the MediaObserverClient.
   virtual void SetClient(MediaObserverClient* client) = 0;

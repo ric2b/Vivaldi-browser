@@ -10,131 +10,57 @@
 #include <utility>
 
 #include "ash/accelerators/accelerator_commands_aura.h"
-#include "ash/common/accelerators/debug_commands.h"
-#include "ash/common/accessibility_types.h"
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_delegate.h"
-#include "ash/common/system/system_notifier.h"
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm/wm_event.h"
-#include "ash/common/wm_shell.h"
+#include "ash/accelerators/debug_commands.h"
+#include "ash/accessibility_types.h"
 #include "ash/debug.h"
 #include "ash/display/display_configuration_controller.h"
-#include "ash/display/window_tree_host_manager.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
-#include "ash/rotator/window_rotation.h"
 #include "ash/screenshot_delegate.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
+#include "ash/system/system_notifier.h"
 #include "ash/touch/touch_hud_debug.h"
 #include "ash/utility/screenshot_controller.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/power_button_controller.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
-#include "ash/wm/window_util.h"
+#include "ash/wm/wm_event.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/strings/string_split.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/compositor/layer.h"
-#include "ui/compositor/layer_animation_sequence.h"
-#include "ui/compositor/layer_animator.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notifier_settings.h"
 
 namespace ash {
 namespace {
 
 using base::UserMetricsAction;
 
-// The notification delegate that will be used to open the keyboard shortcut
-// help page when the notification is clicked.
-class DeprecatedAcceleratorNotificationDelegate
-    : public message_center::NotificationDelegate {
- public:
-  DeprecatedAcceleratorNotificationDelegate() {}
-
-  // message_center::NotificationDelegate:
-  bool HasClickedListener() override { return true; }
-
-  void Click() override {
-    if (!WmShell::Get()->GetSessionStateDelegate()->IsUserSessionBlocked())
-      WmShell::Get()->delegate()->OpenKeyboardShortcutHelpPage();
-  }
-
- private:
-  // Private destructor since NotificationDelegate is ref-counted.
-  ~DeprecatedAcceleratorNotificationDelegate() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(DeprecatedAcceleratorNotificationDelegate);
-};
-
-// Ensures that there are no word breaks at the "+"s in the shortcut texts such
-// as "Ctrl+Shift+Space".
-void EnsureNoWordBreaks(base::string16* shortcut_text) {
-  std::vector<base::string16> keys =
-      base::SplitString(*shortcut_text, base::ASCIIToUTF16("+"),
-                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-
-  if (keys.size() < 2U)
-    return;
-
-  // The plus sign surrounded by the word joiner to guarantee an non-breaking
-  // shortcut.
-  const base::string16 non_breaking_plus =
-      base::UTF8ToUTF16("\xe2\x81\xa0+\xe2\x81\xa0");
-  shortcut_text->clear();
-  for (size_t i = 0; i < keys.size() - 1; ++i) {
-    *shortcut_text += keys[i];
-    *shortcut_text += non_breaking_plus;
-  }
-
-  *shortcut_text += keys.back();
-}
-
-// Gets the notification message after it formats it in such a way that there
-// are no line breaks in the middle of the shortcut texts.
-base::string16 GetNotificationText(int message_id,
-                                   int old_shortcut_id,
-                                   int new_shortcut_id) {
-  base::string16 old_shortcut = l10n_util::GetStringUTF16(old_shortcut_id);
-  base::string16 new_shortcut = l10n_util::GetStringUTF16(new_shortcut_id);
-  EnsureNoWordBreaks(&old_shortcut);
-  EnsureNoWordBreaks(&new_shortcut);
-
-  return l10n_util::GetStringFUTF16(message_id, new_shortcut, old_shortcut);
-}
-
 bool CanHandleMagnifyScreen() {
-  return Shell::GetInstance()->magnification_controller()->IsEnabled();
+  return Shell::Get()->magnification_controller()->IsEnabled();
 }
 
 // Magnify the screen
 void HandleMagnifyScreen(int delta_index) {
-  if (Shell::GetInstance()->magnification_controller()->IsEnabled()) {
+  if (Shell::Get()->magnification_controller()->IsEnabled()) {
     // TODO(yoshiki): Move the following logic to MagnificationController.
-    float scale = Shell::GetInstance()->magnification_controller()->GetScale();
+    float scale = Shell::Get()->magnification_controller()->GetScale();
     // Calculate rounded logarithm (base kMagnificationScaleFactor) of scale.
     int scale_index =
         std::floor(std::log(scale) / std::log(kMagnificationScaleFactor) + 0.5);
 
     int new_scale_index = std::max(0, std::min(8, scale_index + delta_index));
 
-    Shell::GetInstance()->magnification_controller()->SetScale(
+    Shell::Get()->magnification_controller()->SetScale(
         std::pow(kMagnificationScaleFactor, new_scale_index), true);
   }
 }
@@ -156,7 +82,7 @@ display::Display::Rotation GetNextRotation(display::Display::Rotation current) {
 
 // Rotates the screen.
 void HandleRotateScreen() {
-  if (Shell::GetInstance()->display_manager()->IsInUnifiedMode())
+  if (Shell::Get()->display_manager()->IsInUnifiedMode())
     return;
 
   base::RecordAction(UserMetricsAction("Accel_Rotate_Screen"));
@@ -164,51 +90,23 @@ void HandleRotateScreen() {
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestPoint(point);
   const display::ManagedDisplayInfo& display_info =
-      Shell::GetInstance()->display_manager()->GetDisplayInfo(display.id());
-  Shell::GetInstance()->display_configuration_controller()->SetDisplayRotation(
+      Shell::Get()->display_manager()->GetDisplayInfo(display.id());
+  Shell::Get()->display_configuration_controller()->SetDisplayRotation(
       display.id(), GetNextRotation(display_info.GetActiveRotation()),
       display::Display::ROTATION_SOURCE_USER);
-}
-
-// Rotate the active window.
-void HandleRotateActiveWindow() {
-  base::RecordAction(UserMetricsAction("Accel_Rotate_Active_Window"));
-  aura::Window* active_window = wm::GetActiveWindow();
-  if (active_window) {
-    // The rotation animation bases its target transform on the current
-    // rotation and position. Since there could be an animation in progress
-    // right now, queue this animation so when it starts it picks up a neutral
-    // rotation and position. Use replace so we only enqueue one at a time.
-    active_window->layer()->GetAnimator()->set_preemption_strategy(
-        ui::LayerAnimator::REPLACE_QUEUED_ANIMATIONS);
-    active_window->layer()->GetAnimator()->StartAnimation(
-        new ui::LayerAnimationSequence(
-            base::MakeUnique<WindowRotation>(360, active_window->layer())));
-  }
-}
-
-void HandleShowSystemTrayBubble() {
-  base::RecordAction(UserMetricsAction("Accel_Show_System_Tray_Bubble"));
-  RootWindowController* controller =
-      RootWindowController::ForTargetRootWindow();
-  SystemTray* tray = controller->GetSystemTray();
-  if (!tray->HasSystemBubble()) {
-    tray->ShowDefaultView(BUBBLE_CREATE_NEW);
-    tray->ActivateBubble();
-  }
 }
 
 void HandleTakeWindowScreenshot(ScreenshotDelegate* screenshot_delegate) {
   base::RecordAction(UserMetricsAction("Accel_Take_Window_Screenshot"));
   DCHECK(screenshot_delegate);
-  Shell::GetInstance()->screenshot_controller()->StartWindowScreenshotSession(
+  Shell::Get()->screenshot_controller()->StartWindowScreenshotSession(
       screenshot_delegate);
 }
 
 void HandleTakePartialScreenshot(ScreenshotDelegate* screenshot_delegate) {
   base::RecordAction(UserMetricsAction("Accel_Take_Partial_Screenshot"));
   DCHECK(screenshot_delegate);
-  Shell::GetInstance()->screenshot_controller()->StartPartialScreenshotSession(
+  Shell::Get()->screenshot_controller()->StartPartialScreenshotSession(
       screenshot_delegate, true /* draw_overlay_immediately */);
 }
 
@@ -233,16 +131,14 @@ void HandleSwapPrimaryDisplay() {
   // TODO(rjkroege): This is not correct behaviour on devices with more than
   // two screens. Behave the same as mirroring: fail and notify if there are
   // three or more screens.
-  Shell::GetInstance()->display_configuration_controller()->SetPrimaryDisplayId(
-      Shell::GetInstance()->display_manager()->GetSecondaryDisplay().id(),
-      true /* user_action */);
+  Shell::Get()->display_configuration_controller()->SetPrimaryDisplayId(
+      Shell::Get()->display_manager()->GetSecondaryDisplay().id());
 }
 
 void HandleToggleMirrorMode() {
   base::RecordAction(UserMetricsAction("Accel_Toggle_Mirror_Mode"));
-  bool mirror = !Shell::GetInstance()->display_manager()->IsInMirrorMode();
-  Shell::GetInstance()->display_configuration_controller()->SetMirrorMode(
-      mirror, true /* user_action */);
+  bool mirror = !Shell::Get()->display_manager()->IsInMirrorMode();
+  Shell::Get()->display_configuration_controller()->SetMirrorMode(mirror);
 }
 
 bool CanHandleTouchHud() {
@@ -289,12 +185,10 @@ bool AcceleratorControllerDelegateAura::HandlesAction(
     case POWER_PRESSED:
     case POWER_RELEASED:
     case ROTATE_SCREEN:
-    case ROTATE_WINDOW:
     case SCALE_UI_DOWN:
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
     case SHOW_MESSAGE_CENTER_BUBBLE:
-    case SHOW_SYSTEM_TRAY_BUBBLE:
     case SWAP_PRIMARY_DISPLAY:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
@@ -342,8 +236,6 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
     case POWER_PRESSED:
     case POWER_RELEASED:
     case ROTATE_SCREEN:
-    case ROTATE_WINDOW:
-    case SHOW_SYSTEM_TRAY_BUBBLE:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
@@ -369,7 +261,7 @@ void AcceleratorControllerDelegateAura::PerformAction(
     const ui::Accelerator& accelerator) {
   switch (action) {
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
-      Shell::GetInstance()->display_manager()->ToggleDisplayScaleFactor();
+      Shell::Get()->display_manager()->ToggleDisplayScaleFactor();
       break;
     case DEBUG_TOGGLE_SHOW_DEBUG_BORDERS:
       debug::ToggleShowDebugBorders();
@@ -381,18 +273,18 @@ void AcceleratorControllerDelegateAura::PerformAction(
       debug::ToggleShowPaintRects();
       break;
     case DEV_ADD_REMOVE_DISPLAY:
-      Shell::GetInstance()->display_manager()->AddRemoveDisplay();
+      Shell::Get()->display_manager()->AddRemoveDisplay();
       break;
     case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
       Shell::GetPrimaryRootWindowController()->ash_host()->ToggleFullScreen();
       break;
     case DEV_TOGGLE_UNIFIED_DESKTOP:
-      Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(
-          !Shell::GetInstance()->display_manager()->unified_desktop_enabled());
+      Shell::Get()->display_manager()->SetUnifiedDesktopEnabled(
+          !Shell::Get()->display_manager()->unified_desktop_enabled());
       break;
     case LOCK_PRESSED:
     case LOCK_RELEASED:
-      Shell::GetInstance()->power_button_controller()->OnLockButtonEvent(
+      Shell::Get()->power_button_controller()->OnLockButtonEvent(
           action == LOCK_PRESSED, base::TimeTicks());
       break;
     case MAGNIFY_SCREEN_ZOOM_IN:
@@ -406,7 +298,7 @@ void AcceleratorControllerDelegateAura::PerformAction(
       if (!base::SysInfo::IsRunningOnChromeOS()) {
         // There is no powerd, the Chrome OS power manager, in linux desktop,
         // so call the PowerButtonController here.
-        Shell::GetInstance()->power_button_controller()->OnPowerButtonEvent(
+        Shell::Get()->power_button_controller()->OnPowerButtonEvent(
             action == POWER_PRESSED, base::TimeTicks());
       }
       // We don't do anything with these at present on the device,
@@ -417,9 +309,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case ROTATE_SCREEN:
       HandleRotateScreen();
       break;
-    case ROTATE_WINDOW:
-      HandleRotateActiveWindow();
-      break;
     case SCALE_UI_DOWN:
       accelerators::ZoomInternalDisplay(false /* down */);
       break;
@@ -428,9 +317,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
       break;
     case SCALE_UI_UP:
       accelerators::ZoomInternalDisplay(true /* up */);
-      break;
-    case SHOW_SYSTEM_TRAY_BUBBLE:
-      HandleShowSystemTrayBubble();
       break;
     case SWAP_PRIMARY_DISPLAY:
       HandleSwapPrimaryDisplay();
@@ -462,28 +348,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
     default:
       break;
   }
-}
-
-void AcceleratorControllerDelegateAura::ShowDeprecatedAcceleratorNotification(
-    const char* const notification_id,
-    int message_id,
-    int old_shortcut_id,
-    int new_shortcut_id) {
-  const base::string16 message =
-      GetNotificationText(message_id, old_shortcut_id, new_shortcut_id);
-  std::unique_ptr<message_center::Notification> notification(
-      new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
-          base::string16(), message,
-          WmShell::Get()->delegate()->GetDeprecatedAcceleratorImage(),
-          base::string16(), GURL(),
-          message_center::NotifierId(
-              message_center::NotifierId::SYSTEM_COMPONENT,
-              system_notifier::kNotifierDeprecatedAccelerator),
-          message_center::RichNotificationData(),
-          new DeprecatedAcceleratorNotificationDelegate));
-  message_center::MessageCenter::Get()->AddNotification(
-      std::move(notification));
 }
 
 }  // namespace ash

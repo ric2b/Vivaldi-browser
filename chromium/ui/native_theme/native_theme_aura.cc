@@ -17,13 +17,14 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/native_theme/common_theme.h"
-#include "ui/native_theme/native_theme_switches.h"
+#include "ui/native_theme/native_theme_features.h"
 #include "ui/native_theme/overlay_scrollbar_constants_aura.h"
 
 namespace ui {
@@ -32,8 +33,7 @@ namespace {
 
 // Constants for painting overlay scrollbars. Other properties needed outside
 // this painting code are defined in overlay_scrollbar_constants_aura.h.
-constexpr int kOverlayScrollbarStrokeWidth = 1;
-constexpr int kOverlayScrollbarMinimumLength = 12;
+constexpr int kOverlayScrollbarMinimumLength = 32;
 
 // 2 pixel border with 1 pixel center patch. The border is 2 pixels despite the
 // stroke width being 1 so that the inner pixel can match the center tile
@@ -72,7 +72,7 @@ NativeThemeAura::NativeThemeAura(bool use_overlay_scrollbars)
 
   if (use_overlay_scrollbars_) {
     scrollbar_width_ =
-        kOverlayScrollbarThumbWidthPressed + kOverlayScrollbarStrokeWidth * 2;
+        kOverlayScrollbarThumbWidthPressed + kOverlayScrollbarStrokeWidth;
   }
 
   // Images and alphas declarations assume the following order.
@@ -198,14 +198,6 @@ void NativeThemeAura::PaintScrollbarThumb(
   SkColor thumb_color;
 
   if (use_overlay_scrollbars_) {
-    // Constants used for painting overlay scrollbar thumb.
-    constexpr SkAlpha kOverlayScrollbarFillAlphaNormal = 0x4D;
-    constexpr SkAlpha kOverlayScrollbarFillAlphaHovered = 0x80;
-    constexpr SkAlpha kOverlayScrollbarFillAlphaPressed = 0x80;
-    constexpr SkAlpha kOverlayScrollbarStrokeAlphaNormal = 0x4D;
-    constexpr SkAlpha kOverlayScrollbarStrokeAlphaHovered = 0x58;
-    constexpr SkAlpha kOverlayScrollbarStrokeAlphaPressed = 0x80;
-
     // Indexed by ScrollbarOverlayColorTheme.
     constexpr SkColor kOverlayScrollbarThumbColor[] = {SK_ColorBLACK,
                                                        SK_ColorWHITE};
@@ -221,16 +213,16 @@ void NativeThemeAura::PaintScrollbarThumb(
         stroke_alpha = SK_AlphaTRANSPARENT;
         break;
       case NativeTheme::kHovered:
-        thumb_alpha = kOverlayScrollbarFillAlphaHovered;
-        stroke_alpha = kOverlayScrollbarStrokeAlphaHovered;
+        thumb_alpha = SK_AlphaOPAQUE * kOverlayScrollbarThumbHoverAlpha;
+        stroke_alpha = SK_AlphaOPAQUE * kOverlayScrollbarStrokeHoverAlpha;
         break;
       case NativeTheme::kNormal:
-        thumb_alpha = kOverlayScrollbarFillAlphaNormal;
-        stroke_alpha = kOverlayScrollbarStrokeAlphaNormal;
+        thumb_alpha = SK_AlphaOPAQUE * kOverlayScrollbarThumbNormalAlpha;
+        stroke_alpha = SK_AlphaOPAQUE * kOverlayScrollbarStrokeNormalAlpha;
         break;
       case NativeTheme::kPressed:
-        thumb_alpha = kOverlayScrollbarFillAlphaPressed;
-        stroke_alpha = kOverlayScrollbarStrokeAlphaPressed;
+        thumb_alpha = SK_AlphaOPAQUE * kOverlayScrollbarThumbHoverAlpha;
+        stroke_alpha = SK_AlphaOPAQUE * kOverlayScrollbarStrokeHoverAlpha;
         break;
       case NativeTheme::kNumStates:
         NOTREACHED();
@@ -246,12 +238,21 @@ void NativeThemeAura::PaintScrollbarThumb(
     flags.setStrokeWidth(kStrokeWidth);
 
     gfx::RectF stroke_rect(thumb_rect);
-    constexpr float kHalfStrokeWidth = kStrokeWidth / 2.f;
-    stroke_rect.Inset(kHalfStrokeWidth, kHalfStrokeWidth);
+    gfx::InsetsF stroke_insets(kStrokeWidth / 2.f);
+    // The edge to which the scrollbar is attached shouldn't have a border.
+    gfx::Insets edge_adjust_insets;
+    if (part == NativeTheme::kScrollbarHorizontalThumb)
+      edge_adjust_insets = gfx::Insets(0, 0, -kStrokeWidth, 0);
+    else
+      edge_adjust_insets = gfx::Insets(0, 0, 0, -kStrokeWidth);
+    stroke_rect.Inset(stroke_insets + edge_adjust_insets);
     canvas->drawRect(gfx::RectFToSkRect(stroke_rect), flags);
 
     // Inset the all the edges edges so we fill-in the stroke below.
-    thumb_rect.Inset(kStrokeWidth, kStrokeWidth);
+    // For left vertical scrollbar, we will horizontally flip the canvas in
+    // ScrollbarThemeOverlay::paintThumb.
+    gfx::Insets fill_insets(kStrokeWidth);
+    thumb_rect.Inset(fill_insets + edge_adjust_insets);
   } else {
     switch (state) {
       case NativeTheme::kDisabled:

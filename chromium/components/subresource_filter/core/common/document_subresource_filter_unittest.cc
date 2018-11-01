@@ -16,7 +16,6 @@ namespace subresource_filter {
 
 namespace {
 
-constexpr auto kDisabled = ActivationLevel::DISABLED;
 constexpr auto kDryRun = ActivationLevel::DRYRUN;
 constexpr auto kEnabled = ActivationLevel::ENABLED;
 
@@ -25,6 +24,7 @@ constexpr auto kSubdocumentType = proto::ELEMENT_TYPE_SUBDOCUMENT;
 
 constexpr const char kTestAlphaURL[] = "http://example.com/alpha";
 constexpr const char kTestAlphaDataURI[] = "data:text/plain,alpha";
+constexpr const char kTestAlphaWSURI[] = "ws://example.com/alpha";
 constexpr const char kTestBetaURL[] = "http://example.com/beta";
 
 constexpr const char kTestAlphaURLPathSuffix[] = "alpha";
@@ -70,6 +70,9 @@ TEST_F(DocumentSubresourceFilterTest, DryRun) {
             filter.GetLoadPolicy(GURL(kTestAlphaURL), kImageType));
   EXPECT_EQ(LoadPolicy::ALLOW,
             filter.GetLoadPolicy(GURL(kTestAlphaDataURI), kImageType));
+  EXPECT_EQ(
+      LoadPolicy::WOULD_DISALLOW,
+      filter.GetLoadPolicy(GURL(kTestAlphaWSURI), proto::ELEMENT_TYPE_OTHER));
   EXPECT_EQ(LoadPolicy::ALLOW,
             filter.GetLoadPolicy(GURL(kTestBetaURL), kImageType));
   EXPECT_EQ(LoadPolicy::WOULD_DISALLOW,
@@ -78,9 +81,9 @@ TEST_F(DocumentSubresourceFilterTest, DryRun) {
             filter.GetLoadPolicy(GURL(kTestBetaURL), kSubdocumentType));
 
   const auto& statistics = filter.statistics();
-  EXPECT_EQ(5, statistics.num_loads_total);
-  EXPECT_EQ(4, statistics.num_loads_evaluated);
-  EXPECT_EQ(2, statistics.num_loads_matching_rules);
+  EXPECT_EQ(6, statistics.num_loads_total);
+  EXPECT_EQ(5, statistics.num_loads_evaluated);
+  EXPECT_EQ(3, statistics.num_loads_matching_rules);
   EXPECT_EQ(0, statistics.num_loads_disallowed);
 }
 
@@ -95,6 +98,9 @@ TEST_F(DocumentSubresourceFilterTest, Enabled) {
               filter.GetLoadPolicy(GURL(kTestAlphaURL), kImageType));
     EXPECT_EQ(LoadPolicy::ALLOW,
               filter.GetLoadPolicy(GURL(kTestAlphaDataURI), kImageType));
+    EXPECT_EQ(
+        LoadPolicy::DISALLOW,
+        filter.GetLoadPolicy(GURL(kTestAlphaWSURI), proto::ELEMENT_TYPE_OTHER));
     EXPECT_EQ(LoadPolicy::ALLOW,
               filter.GetLoadPolicy(GURL(kTestBetaURL), kImageType));
     EXPECT_EQ(LoadPolicy::DISALLOW,
@@ -103,10 +109,10 @@ TEST_F(DocumentSubresourceFilterTest, Enabled) {
               filter.GetLoadPolicy(GURL(kTestBetaURL), kSubdocumentType));
 
     const auto& statistics = filter.statistics();
-    EXPECT_EQ(5, statistics.num_loads_total);
-    EXPECT_EQ(4, statistics.num_loads_evaluated);
-    EXPECT_EQ(2, statistics.num_loads_matching_rules);
-    EXPECT_EQ(2, statistics.num_loads_disallowed);
+    EXPECT_EQ(6, statistics.num_loads_total);
+    EXPECT_EQ(5, statistics.num_loads_evaluated);
+    EXPECT_EQ(3, statistics.num_loads_matching_rules);
+    EXPECT_EQ(3, statistics.num_loads_disallowed);
 
     if (!measure_performance) {
       EXPECT_TRUE(statistics.evaluation_total_cpu_duration.is_zero());
@@ -229,61 +235,6 @@ TEST_F(SubresourceFilterComputeActivationStateTest,
     ActivationState activation_state =
         ComputeActivationState(document_url, parent_document_origin,
                                test_case.parent_activation, ruleset());
-    EXPECT_EQ(test_case.expected_activation_state, activation_state);
-  }
-}
-
-TEST_F(SubresourceFilterComputeActivationStateTest,
-       ActivationStateCorrectlyPropagatesDownDocumentHierarchy) {
-  const struct {
-    std::vector<std::string> ancestor_document_urls;
-    ActivationLevel activation_level;
-    ActivationState expected_activation_state;
-  } kTestCases[] = {
-      {{"http://example.com"}, kEnabled, MakeState(false)},
-      {std::vector<std::string>(2, "http://example.com"), kEnabled,
-       MakeState(false)},
-      {std::vector<std::string>(4, "http://example.com"), kEnabled,
-       MakeState(false)},
-
-      {std::vector<std::string>(4, "http://example.com"), kEnabled,
-       MakeState(false, false, kEnabled)},
-      {std::vector<std::string>(4, "http://example.com"), kDisabled,
-       MakeState(false, false, kDisabled)},
-      {std::vector<std::string>(4, "http://example.com"), kDryRun,
-       MakeState(false, false, kDryRun)},
-
-      {{"http://ex.com", "http://child1.com", "http://parent1.com",
-        "http://root.com"},
-       kEnabled,
-       MakeState(true)},
-
-      {{"http://ex.com", "http://child1.com", "http://parent1.com",
-        "http://root.com"},
-       kEnabled,
-       MakeState(true)},
-
-      {{"http://ex.com", "http://child2.com", "http://parent1.com",
-        "http://root.com"},
-       kEnabled,
-       MakeState(false, true)},
-
-      {{"http://ex.com", "http://ex.com", "http://child3.com",
-        "http://parent1.com", "http://root.com"},
-       kDryRun,
-       MakeState(true, false, kDryRun)},
-  };
-
-  for (size_t i = 0, size = arraysize(kTestCases); i != size; ++i) {
-    const auto& test_case = kTestCases[i];
-    SCOPED_TRACE(::testing::Message() << "Test number: " << i);
-
-    std::vector<GURL> ancestor_document_urls;
-    for (const auto& url_string : test_case.ancestor_document_urls)
-      ancestor_document_urls.emplace_back(url_string);
-
-    ActivationState activation_state = ComputeActivationState(
-        test_case.activation_level, false, ancestor_document_urls, ruleset());
     EXPECT_EQ(test_case.expected_activation_state, activation_state);
   }
 }

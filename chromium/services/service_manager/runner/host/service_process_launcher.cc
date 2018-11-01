@@ -189,15 +189,23 @@ void ServiceProcessLauncher::DoLaunch(
   }
 
   if (child_process_.IsValid()) {
-    DVLOG(0) << "Launched child process pid=" << child_process_.Pid()
-             << ", instance=" << target_.instance()
-             << ", name=" << target_.name()
-             << ", user_id=" << target_.user_id();
+#if defined(OS_CHROMEOS)
+    // Always log instead of DVLOG because knowing which pid maps to which
+    // service is vital for interpreting crashes after-the-fact and Chrome OS
+    // devices generally run release builds, even in development.
+    VLOG(0)
+#else
+    DVLOG(0)
+#endif
+        << "Launched child process pid=" << child_process_.Pid()
+        << ", instance=" << target_.instance() << ", name=" << target_.name()
+        << ", user_id=" << target_.user_id();
 
     if (mojo_ipc_channel_.get()) {
       mojo_ipc_channel_->ChildProcessLaunched();
-      process_connection_.Connect(child_process_.Handle(),
-                                  mojo_ipc_channel_->PassServerHandle());
+      process_connection_.Connect(
+          child_process_.Handle(),
+          mojo::edk::ConnectionParams(mojo_ipc_channel_->PassServerHandle()));
     }
   }
   start_child_process_event_.Signal();

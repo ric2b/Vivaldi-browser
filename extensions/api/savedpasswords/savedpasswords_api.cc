@@ -9,8 +9,11 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_ui.h"
@@ -145,6 +148,100 @@ void SavedpasswordsRemoveFunction::SendAsyncResponse() {
   base::MessageLoop::current()->task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&SavedpasswordsRemoveFunction::SendResponseToCallback, this));
+}
+
+bool SavedpasswordsAddFunction::RunAsync() {
+  std::unique_ptr<passwords::Add::Params> params(
+      passwords::Add::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  scoped_refptr<password_manager::PasswordStore> password_store(
+      PasswordStoreFactory::GetForProfile(
+          GetProfile(), params->is_explicit
+                            ? ServiceAccessType::EXPLICIT_ACCESS
+                            : ServiceAccessType::IMPLICIT_ACCESS));
+
+  if (!params->password_form.password.get()) {
+    SendResponse(false);
+    return true;
+  }
+
+  autofill::PasswordForm password_form = {};
+  password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
+  password_form.signon_realm = params->password_form.signon_realm;
+  password_form.origin = GURL(params->password_form.origin);
+  password_form.username_value =
+      base::UTF8ToUTF16(params->password_form.username);
+  password_form.password_value =
+      base::UTF8ToUTF16(*params->password_form.password.get());
+
+  password_store->AddLogin(password_form);
+
+  SendResponse(true);
+  return true;
+}
+
+bool SavedpasswordsGetFunction::RunAsync() {
+  std::unique_ptr<passwords::Get::Params> params(
+      passwords::Get::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  scoped_refptr<password_manager::PasswordStore> password_store(
+      PasswordStoreFactory::GetForProfile(
+          GetProfile(), params->is_explicit
+                            ? ServiceAccessType::EXPLICIT_ACCESS
+                            : ServiceAccessType::IMPLICIT_ACCESS));
+
+  username_ = params->password_form.username;
+
+  password_manager::PasswordStore::FormDigest form_digest(
+      autofill::PasswordForm::SCHEME_OTHER, params->password_form.signon_realm,
+      GURL(params->password_form.origin));
+
+  // Adding a ref on the behalf of the password store, which expects us to
+  // remain alive
+  AddRef();
+  password_store->GetLogins(form_digest, this);
+
+  return true;
+}
+
+void SavedpasswordsGetFunction::OnGetPasswordStoreResults(
+    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+  for (const auto& result : results) {
+    if (base::UTF16ToUTF8(result->username_value) == username_) {
+      results_ = passwords::Get::Results::Create(
+          base::UTF16ToASCII(result->password_value));
+      SendResponse(true);
+    }
+  }
+
+  // Balance the AddRef in RunAsync
+  Release();
+}
+
+bool SavedpasswordsDeleteFunction::RunAsync() {
+  std::unique_ptr<passwords::Delete::Params> params(
+      passwords::Delete::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  scoped_refptr<password_manager::PasswordStore> password_store(
+      PasswordStoreFactory::GetForProfile(
+          GetProfile(), params->is_explicit
+                            ? ServiceAccessType::EXPLICIT_ACCESS
+                            : ServiceAccessType::IMPLICIT_ACCESS));
+
+  autofill::PasswordForm password_form = {};
+  password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
+  password_form.signon_realm = params->password_form.signon_realm;
+  password_form.origin = GURL(params->password_form.origin);
+  password_form.username_value =
+      base::UTF8ToUTF16(params->password_form.username);
+
+  password_store->RemoveLogin(password_form);
+
+  SendResponse(true);
+  return true;
 }
 
 }  // namespace extensions

@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Ampliada</translation>
 <translation id="1025074108959230262">Modo permanente inhabilitado</translation>
 <translation id="1031961866430398710">luego</translation>
+<translation id="1038643060055067718">Líneas:</translation>
 <translation id="1038795173450935438">Para avanzar entre los elementos de una página, presiona Búsqueda + flecha a la derecha; para volver, presiona Búsqueda + flecha a la izquierda. Para ir a la línea siguiente, presiona Búsqueda + flecha hacia abajo. Para ir a la línea anterior, usa Búsqueda + flecha hacia arriba. Cuando llegas a un elemento en el que deseas hacer clic, presiona Búsqueda + barra espaciadora.</translation>
 <translation id="1044777062731150180">Sin encabezados</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,8 @@
 <translation id="2110480898214777136">Ajusta el audio de principio a fin dentro de una página, cuadro de diálogo u otro contenedor</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">tecla de acceso: <ph name="KEY" /></translation>
-<translation id="2155457205053847599">Para cambiar la tabla actual de braille de seis puntos, selecciona una opción de la siguiente lista.</translation>
+<translation id="2138345533858834403">Simula el resultado de una pantalla de braille que se actualiza
+        en el panel de ChromeVox en la parte superior de la pantalla.</translation>
 <translation id="2169714232367507776">Hacer clic en el elemento actual</translation>
 <translation id="2179452035581866348">ChromeVox usa sonidos para otorgarte información fundamental y adicional. Puedes usar estos sonidos para navegar con mayor velocidad al aprender qué significa cada sonido. Cuando te sientas más cómodo, puedes desactivar las descripciones detalladas de voz y confiar en los sonidos para obtener información fundamental sobre la página. A continuación, encontrarás una lista completa de sonidos y sus significados.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{paréntesis de cierre}other{# paréntesis de cierre}}</translation>
@@ -124,6 +126,7 @@
 <translation id="2344193891939537199">Control de hora y fecha</translation>
 <translation id="2347456970887948350">Un vínculo</translation>
 <translation id="2359897517538099099">No está en el modo de tabla.</translation>
+<translation id="2381733276052567791">Activa o desactiva el habla</translation>
 <translation id="2390264819538553347">Para avanzar, presiona Intro; para volver, presiona la tecla de retroceso.</translation>
 <translation id="241124561063364910">seguido de</translation>
 <translation id="2416512023405990736">Una casilla de verificación desmarcada</translation>
@@ -166,6 +169,7 @@
 <translation id="2800204403141299078">No hay más elementos diferentes.</translation>
 <translation id="2800780099804980316">No hay ningún encabezado de nivel 1 anterior.</translation>
 <translation id="280499067616661124">ChromeVox se encuentra en la página</translation>
+<translation id="2808001342598757276">Cancela el oscurecimiento de la pantalla</translation>
 <translation id="2811019999044652585">Para pasar a otras partes de la pantalla, como barras de tareas o la bandeja del sistema, presiona Ctrl + flecha hacia adelante. En una Chromebook, la tecla de la flecha hacia adelante está arriba de la del número 2.</translation>
 <translation id="2811204574343810641">Fila</translation>
 <translation id="2816654101880605877">No hay ningún control deslizante posterior.</translation>
@@ -185,11 +189,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{tabulación}other{# tabulaciones}}</translation>
 <translation id="2972078295414139404">No hay ningún vínculo anterior visitado.</translation>
 <translation id="2972205263822847197">Información de la herramienta</translation>
-<translation id="2978549349327282388">Columnas:</translation>
 <translation id="2998131015536248178">Carácter anterior</translation>
 <translation id="2999559350546931576">Disminuir el tono</translation>
 <translation id="2999945368667127852">No hay ningún widget multimedia posterior.</translation>
 <translation id="3012414509011670858">No hay ninguna sección anterior.</translation>
+<translation id="3014130421870723208">@8 puntos de ed</translation>
 <translation id="3030432017085518523">Botón de selección del elemento de menú</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apóstrofo}other{# apóstrofos}}</translation>
 <translation id="3040901448410802366">Indicador de progreso</translation>
@@ -212,6 +216,7 @@
 <translation id="3138767756593758860">Mostrar lista de puntos de referencia</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">Línea siguiente</translation>
+<translation id="3153024374267644603">Activar comentarios de texto a voz</translation>
 <translation id="3155083529632865074">No hay ningún botón anterior.</translation>
 <translation id="3163593631834463955">Encabezado de columna vacío</translation>
 <translation id="316542773973815724">Navegación</translation>
@@ -224,6 +229,7 @@ Si completaste este instructivo, usa ChromeVox para navegar hasta el botón Cerr
 <translation id="3229375994964697375">Vínculo visitado</translation>
 <translation id="3232388865800379423">Un botón con ventana emergente</translation>
 <translation id="3241052487511142956">Vínculo visitado anterior</translation>
+<translation id="3241638166094654466">Celdas en cada línea:</translation>
 <translation id="3286390186030710347">Control deslizante</translation>
 <translation id="3299925995433437805">No hay ningún vínculo visitado posterior.</translation>
 <translation id="3307886118343381874">Ir al final de la tabla</translation>
@@ -380,6 +386,7 @@ Si completaste este instructivo, usa ChromeVox para navegar hasta el botón Cerr
 <translation id="4376316291247992553">Ver gráficos como idioma braille</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">restablecer</translation>
+<translation id="4457472090507035117">Seleccionar voz actual:</translation>
 <translation id="4471074325120394300">No hay vínculos.</translation>
 <translation id="4476183483923481720">Nueva línea</translation>
 <translation id="4482330759234983253">Tabla anterior</translation>
@@ -453,7 +460,6 @@ Si completaste este instructivo, usa ChromeVox para navegar hasta el botón Cerr
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">No hay ningún campo de formulario anterior.</translation>
 <translation id="5111640677200759579">Encabezado de columna</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">No hay ningún vínculo anterior.</translation>
 <translation id="513774504516943387">vncl</translation>
 <translation id="517143700877085897">, sin seleccionar</translation>
@@ -564,10 +570,10 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="5968607524793740041">Mostrar el menú contextual</translation>
 <translation id="5983179082906765664">Aumentar nivel de detalle de navegación</translation>
 <translation id="5999630716831179808">Voces</translation>
-<translation id="6000417740266304866">Para cambiar la tabla actual de braille de ocho puntos, selecciona una opción de la siguiente lista.</translation>
 <translation id="6006050241733874051">Formulario</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{barra diagonal inversa}other{# barras diagonales inversas}}</translation>
 <translation id="6037602951055904232">Desplazar hacia delante</translation>
+<translation id="6044160928851315051">Oscurece la pantalla</translation>
 <translation id="6082768461603900813">Navegación básica</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Fin de celda</translation>
@@ -606,7 +612,6 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="6444046323172968959">Cuadro de diálogo de alerta</translation>
 <translation id="6459511626086141404">Mapa de teclado plano</translation>
 <translation id="6468049171101508116">Botón Siguiente</translation>
-<translation id="6491972999578897419">Para cambiar la voz actual, selecciona una de las opciones de la lista que aparece a continuación.</translation>
 <translation id="6493991254603208962">Disminuir brillo</translation>
 <translation id="6508059270146105198">Mover la pantalla de braille a la parte inferior de la página</translation>
 <translation id="6536864053412760904">Token de MathML</translation>
@@ -658,6 +663,7 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">reproducción oral de palabras</translation>
 <translation id="713824876195128146">Siguiente cita de bloque</translation>
+<translation id="7143034430156387447">Cambia entre braille de 8 o 6 puntos</translation>
 <translation id="7161771961008409533">Botón con ventana emergente</translation>
 <translation id="7165714724802225287">El estilo actual de la pantalla es intercalado.</translation>
 <translation id="7167657087543110">reproducción oral de caracteres</translation>
@@ -668,6 +674,7 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="7217912842225915592">Más de <ph name="NUM" /></translation>
 <translation id="7221740160534240920">línea</translation>
 <translation id="7226216518520804442">lst</translation>
+<translation id="7229749224609077523">Seleccionar una tabla de braille de seis puntos:</translation>
 <translation id="72393384879519786">Encabezado</translation>
 <translation id="7241683698754534149">Abrir la descripción larga en una pestaña nueva</translation>
 <translation id="7248671827512403053">Aplicación</translation>
@@ -741,6 +748,7 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="7974390230414479278">Elemento del menú</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{comilla}other{# comillas}}</translation>
+<translation id="8017588669690167134">Desactivar comentarios de texto a voz</translation>
 <translation id="8033827949643255796">seleccionados</translation>
 <translation id="8035962149453661158">máx:<ph name="X" /></translation>
 <translation id="8042761080832772327">Editar texto, entrada de búsqueda</translation>
@@ -759,7 +767,6 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="820417203470636242">Celda vacía</translation>
 <translation id="8215202828671303819">Selección múltiple</translation>
 <translation id="8224171046658870249">Cambió a ChromeVox Next</translation>
-<translation id="8259358278692921574">Filas:</translation>
 <translation id="8276439074553447000">Saltar al elemento enfocable anterior</translation>
 <translation id="8278417001922463147">No hay artículos anteriores.</translation>
 <translation id="8283603667300770666">Siguiente campo de formulario</translation>
@@ -797,7 +804,6 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="8638532244051952400">Anunciar coordenadas de celda actuales</translation>
 <translation id="8650576015643545550">No hay ninguna lista anterior.</translation>
 <translation id="8651481478098336970">silenciar volumen</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">Mostrar la lista de vínculos</translation>
 <translation id="8664519043722036194">segundos</translation>
 <translation id="867187640362843212">Encabezado 5</translation>
@@ -817,6 +823,7 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="8856538297388979332">Presiona las flechas hacia arriba y hacia abajo para revisar los comandos y presiona Enter para activarlos.</translation>
 <translation id="8864099967139188018">No hay ningún encabezado de nivel 6 posterior.</translation>
 <translation id="8882002077197914455">Encabezado de fila</translation>
+<translation id="8883850400338911892">8 puntos de URL</translation>
 <translation id="8896347895970027998">Activar o desactivar ChromeVox</translation>
 <translation id="8898516272131543774">Reproducción oral del ciclo de puntuación</translation>
 <translation id="8900148057318340779">Tecla de prefijo</translation>
@@ -830,6 +837,7 @@ Para abrir el menú del navegador Chrome, presiona Alt + F.</translation>
 <translation id="9027462562263121875">No hay tablas.</translation>
 <translation id="9040132695316389094">Encabezado 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" /> %</translation>
+<translation id="9061884144798498064">Seleccionar una tabla de braille de ocho puntos:</translation>
 <translation id="9065283790526219006">+emergente</translation>
 <translation id="9077213568694924680">eliminado de la selección</translation>
 <translation id="9082874451376019682">No hay ningún control deslizante anterior.</translation>

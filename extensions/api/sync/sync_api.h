@@ -11,10 +11,11 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
-#include "sync/vivaldi_sync_model_observer.h"
+#include "sync/vivaldi_sync_manager_observer.h"
 
 class VivaldiSyncModel;
 
@@ -26,22 +27,25 @@ namespace vivaldi {
 class VivaldiSyncManager;
 }
 
-using vivaldi::VivaldiSyncModelObserver;
-using vivaldi::VivaldiSyncManager;
-
 namespace extensions {
 
 // Observes SyncModel and then routes the notifications as events to
 // the extension system.
-class SyncEventRouter : public VivaldiSyncModelObserver {
+class SyncEventRouter : public ::vivaldi::VivaldiSyncManagerObserver {
  public:
   explicit SyncEventRouter(Profile* profile);
   ~SyncEventRouter() override;
 
   // VivaldiSyncModelObserver:
-  void SyncOnMessage(const std::string& param1,
-                     const std::string& param2) override;
-  void SyncModelBeingDeleted(VivaldiSyncModel* model) override;
+
+  void OnAccessTokenRequested() override;
+  void OnEncryptionPasswordRequested() override;
+  void OnSyncConfigured() override;
+  void OnLoginDone() override;
+  void OnSyncEngineInitFailed() override;
+  void OnBeginSyncing() override;
+  void OnEndSyncing() override;
+  void OnDeletingSyncManager() override;
 
  private:
   // Helper to actually dispatch an event to extension listeners.
@@ -49,9 +53,8 @@ class SyncEventRouter : public VivaldiSyncModelObserver {
                      std::unique_ptr<base::ListValue> event_args);
 
   content::BrowserContext* browser_context_;
-  VivaldiSyncModel* model_;
 
-  VivaldiSyncManager* client_;
+  base::WeakPtr<::vivaldi::VivaldiSyncManager> manager_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncEventRouter);
 };
@@ -84,18 +87,126 @@ class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   std::unique_ptr<SyncEventRouter> sync_event_router_;
 };
 
-class SyncSendFunction : public ChromeAsyncExtensionFunction {
+class SyncLoginCompleteFunction : public ChromeAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sync.send", SYNC_SEND)
-  SyncSendFunction();
+  DECLARE_EXTENSION_FUNCTION("sync.loginComplete", SYNC_LOGIN_COMPLETE)
+  SyncLoginCompleteFunction() = default;
 
  private:
-  ~SyncSendFunction() override;
+  ~SyncLoginCompleteFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncSendFunction);
+  DISALLOW_COPY_AND_ASSIGN(SyncLoginCompleteFunction);
 };
+
+class SyncRefreshTokenFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.refreshToken", SYNC_REFRESH_TOKEN)
+  SyncRefreshTokenFunction() = default;
+
+ private:
+  ~SyncRefreshTokenFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncRefreshTokenFunction);
+};
+
+class SyncSetEncryptionPasswordFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.setEncryptionPassword",
+                             SYNC_SET_ENCRYPTION_PASSWORD)
+  SyncSetEncryptionPasswordFunction() = default;
+
+ private:
+  ~SyncSetEncryptionPasswordFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncSetEncryptionPasswordFunction);
+};
+
+class SyncIsFirstSetupFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.isFirstSetup", SYNC_IS_FIRST_SETUP)
+  SyncIsFirstSetupFunction() = default;
+
+ private:
+  ~SyncIsFirstSetupFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncIsFirstSetupFunction);
+};
+
+class SyncSetTypesFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.setTypes", SYNC_SET_TYPES)
+  SyncSetTypesFunction() = default;
+
+ private:
+  ~SyncSetTypesFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncSetTypesFunction);
+};
+
+class SyncGetTypesFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.getTypes", SYNC_GET_TYPES)
+  SyncGetTypesFunction() = default;
+
+ private:
+  ~SyncGetTypesFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncGetTypesFunction);
+};
+
+class SyncLogoutFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.logout", SYNC_LOGOUT)
+  SyncLogoutFunction() = default;
+
+ private:
+  ~SyncLogoutFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncLogoutFunction);
+};
+
+class SyncClearDataFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.clearData", SYNC_CLEAR_DATA)
+  SyncClearDataFunction() = default;
+
+ private:
+  ~SyncClearDataFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  void ReportClearDataDone();
+
+  DISALLOW_COPY_AND_ASSIGN(SyncClearDataFunction);
+};
+
+class SyncPollServerFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.pollServer", SYNC_POLL_SERVER)
+  SyncPollServerFunction() = default;
+
+ private:
+  ~SyncPollServerFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncPollServerFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SYNC_SYNC_API_H_

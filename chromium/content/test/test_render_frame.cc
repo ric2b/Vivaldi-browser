@@ -30,7 +30,8 @@ void TestRenderFrame::Navigate(const CommonNavigationParams& common_params,
                                const RequestNavigationParams& request_params) {
   // PlzNavigate
   if (IsBrowserSideNavigationEnabled()) {
-    OnCommitNavigation(ResourceResponseHead(), GURL(), common_params,
+    OnCommitNavigation(ResourceResponseHead(), GURL(),
+                       mojo::DataPipeConsumerHandle(), common_params,
                        request_params);
   } else {
     OnNavigate(common_params, start_params, request_params);
@@ -75,18 +76,17 @@ void TestRenderFrame::SetCompositionFromExistingText(
   OnSetCompositionFromExistingText(start, end, underlines);
 }
 
-blink::WebNavigationPolicy TestRenderFrame::decidePolicyForNavigation(
+blink::WebNavigationPolicy TestRenderFrame::DecidePolicyForNavigation(
     const blink::WebFrameClient::NavigationPolicyInfo& info) {
   if (IsBrowserSideNavigationEnabled() &&
-      info.urlRequest.checkForBrowserSideNavigation() &&
-      GetWebFrame()->parent() &&
-      info.form.isNull()) {
+      info.url_request.CheckForBrowserSideNavigation() &&
+      GetWebFrame()->Parent() && info.form.IsNull()) {
     // RenderViewTest::LoadHTML already disables PlzNavigate for the main frame
     // requests. However if the loaded html has a subframe, the WebURLRequest
     // will be created inside Blink and it won't have this flag set.
-    info.urlRequest.setCheckForBrowserSideNavigation(false);
+    info.url_request.SetCheckForBrowserSideNavigation(false);
   }
-  return RenderFrameImpl::decidePolicyForNavigation(info);
+  return RenderFrameImpl::DecidePolicyForNavigation(info);
 }
 
 }  // namespace content

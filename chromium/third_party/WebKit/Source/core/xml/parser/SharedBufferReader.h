@@ -32,9 +32,9 @@
 #define SharedBufferReader_h
 
 #include "core/CoreExport.h"
-#include "wtf/Allocator.h"
-#include "wtf/Forward.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -54,11 +54,11 @@ class CORE_EXPORT SharedBufferReader {
   // |outputBuffer|).
   // TODO(junov): use size_t instead of int. Until then, readData uses safeCast
   // internally.
-  int readData(char* outputBuffer, int askedToRead);
+  int ReadData(char* output_buffer, int asked_to_read);
 
  private:
-  RefPtr<const SharedBuffer> m_buffer;
-  size_t m_currentOffset;
+  RefPtr<const SharedBuffer> buffer_;
+  size_t current_offset_;
 };
 
 }  // namespace blink

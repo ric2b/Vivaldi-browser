@@ -30,15 +30,12 @@
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/PlatformExport.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
-enum class WebNavigationHintType;
-
-PLATFORM_EXPORT void prefetchDNS(const String& hostname);
-PLATFORM_EXPORT void preconnect(const KURL&, const CrossOriginAttributeValue);
-PLATFORM_EXPORT void sendNavigationHint(const KURL&, WebNavigationHintType);
+PLATFORM_EXPORT void PrefetchDNS(const String& hostname);
+PLATFORM_EXPORT void Preconnect(const KURL&, const CrossOriginAttributeValue);
 
 }  // namespace blink
 

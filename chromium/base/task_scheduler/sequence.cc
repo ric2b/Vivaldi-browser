@@ -15,6 +15,11 @@ namespace internal {
 Sequence::Sequence() = default;
 
 bool Sequence::PushTask(std::unique_ptr<Task> task) {
+  DCHECK(task);
+
+  // Use CHECK instead of DCHECK to crash earlier. See http://crbug.com/711167
+  // for details.
+  CHECK(task->task);
   DCHECK(task->sequenced_time.is_null());
   task->sequenced_time = base::TimeTicks::Now();
 

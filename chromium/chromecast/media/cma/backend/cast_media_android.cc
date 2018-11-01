@@ -6,7 +6,6 @@
 #include "chromecast/public/cast_media_shlib.h"
 #include "chromecast/public/media/decoder_config.h"
 #include "chromecast/public/media/media_capabilities_shlib.h"
-#include "chromecast/public/media_codec_support_shlib.h"
 
 namespace chromecast {
 namespace media {
@@ -22,11 +21,6 @@ VideoPlane* CastMediaShlib::GetVideoPlane() {
 MediaPipelineBackend* CastMediaShlib::CreateMediaPipelineBackend(
     const MediaPipelineDeviceParams& params) {
   return nullptr;
-}
-
-MediaCodecSupportShlib::CodecSupport MediaCodecSupportShlib::IsSupported(
-    const std::string& codec) {
-  return kDefault;
 }
 
 double CastMediaShlib::GetMediaClockRate() {
@@ -54,6 +48,13 @@ bool MediaCapabilitiesShlib::IsSupportedVideoConfig(VideoCodec codec,
   // This should not be called directly.
   NOTREACHED() << "Unexpected call to "
                << "MediaCapabilitiesShlib::IsSupportedVideoConfig on Android";
+  return false;
+}
+
+bool MediaCapabilitiesShlib::IsSupportedAudioConfig(const AudioConfig& config) {
+  // This should not be called directly.
+  NOTREACHED() << "Unexpected call to "
+               << "MediaCapabilitiesShlib::IsSupportedAudioConfig on Android";
   return false;
 }
 

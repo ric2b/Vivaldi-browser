@@ -10,30 +10,26 @@
 
 namespace blink {
 
-SerializedScriptValueFactory* SerializedScriptValueFactory::m_instance = 0;
+SerializedScriptValueFactory* SerializedScriptValueFactory::instance_ = 0;
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValueFactory::create(
+PassRefPtr<SerializedScriptValue> SerializedScriptValueFactory::Create(
     v8::Isolate* isolate,
     v8::Local<v8::Value> value,
-    Transferables* transferables,
-    WebBlobInfoArray* blobInfo,
-    ExceptionState& exceptionState) {
+    const SerializedScriptValue::SerializeOptions& options,
+    ExceptionState& exception_state) {
   TRACE_EVENT0("blink", "SerializedScriptValueFactory::create");
-  V8ScriptValueSerializer serializer(ScriptState::current(isolate));
-  serializer.setBlobInfoArray(blobInfo);
-  return serializer.serialize(value, transferables, exceptionState);
+  V8ScriptValueSerializer serializer(ScriptState::Current(isolate), options);
+  return serializer.Serialize(value, exception_state);
 }
 
-v8::Local<v8::Value> SerializedScriptValueFactory::deserialize(
+v8::Local<v8::Value> SerializedScriptValueFactory::Deserialize(
     SerializedScriptValue* value,
     v8::Isolate* isolate,
-    MessagePortArray* messagePorts,
-    const WebBlobInfoArray* blobInfo) {
+    const SerializedScriptValue::DeserializeOptions& options) {
   TRACE_EVENT0("blink", "SerializedScriptValueFactory::deserialize");
-  V8ScriptValueDeserializer deserializer(ScriptState::current(isolate), value);
-  deserializer.setTransferredMessagePorts(messagePorts);
-  deserializer.setBlobInfoArray(blobInfo);
-  return deserializer.deserialize();
+  V8ScriptValueDeserializer deserializer(ScriptState::Current(isolate), value,
+                                         options);
+  return deserializer.Deserialize();
 }
 
 }  // namespace blink

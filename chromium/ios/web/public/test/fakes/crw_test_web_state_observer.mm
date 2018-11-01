@@ -7,6 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "ios/web/public/web_state/navigation_context.h"
 #include "ios/web/web_state/navigation_context_impl.h"
+#include "net/http/http_response_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace web {
@@ -34,6 +35,11 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
       _changeLoadingProgressInfo;
   // Arguments passed to |webStateDidChangeTitle:|.
   std::unique_ptr<web::TestTitleWasSetInfo> _titleWasSetInfo;
+  // Arguments passed to |webStateDidChangeVisibleSecurityState:|.
+  std::unique_ptr<web::TestDidChangeVisibleSecurityStateInfo>
+      _didChangeVisibleSecurityStateInfo;
+  // Arguments passed to |webStateDidSuppressDialog:|.
+  std::unique_ptr<web::TestDidSuppressDialogInfo> _didSuppressDialogInfo;
   // Arguments passed to
   // |webState:didSubmitDocumentWithFormNamed:userInitiated:|.
   std::unique_ptr<web::TestSubmitDocumentInfo> _submitDocumentInfo;
@@ -79,6 +85,15 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 
 - (web::TestTitleWasSetInfo*)titleWasSetInfo {
   return _titleWasSetInfo.get();
+}
+
+- (web::TestDidChangeVisibleSecurityStateInfo*)
+    didChangeVisibleSecurityStateInfo {
+  return _didChangeVisibleSecurityStateInfo.get();
+}
+
+- (web::TestDidSuppressDialogInfo*)didSuppressDialogInfo {
+  return _didSuppressDialogInfo.get();
 }
 
 - (web::TestSubmitDocumentInfo*)submitDocumentInfo {
@@ -132,20 +147,22 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   _didFinishNavigationInfo =
       base::MakeUnique<web::TestDidFinishNavigationInfo>();
   _didFinishNavigationInfo->web_state = webState;
-  if (navigation->IsSamePage()) {
+  if (navigation->IsSameDocument()) {
     ASSERT_FALSE(navigation->IsErrorPage());
     _didFinishNavigationInfo->context =
-        web::NavigationContextImpl::CreateSamePageNavigationContext(
+        web::NavigationContextImpl::CreateSameDocumentNavigationContext(
             navigation->GetWebState(), navigation->GetUrl());
   } else if (navigation->IsErrorPage()) {
-    ASSERT_FALSE(navigation->IsSamePage());
+    ASSERT_FALSE(navigation->IsSameDocument());
     _didFinishNavigationInfo->context =
         web::NavigationContextImpl::CreateErrorPageNavigationContext(
-            navigation->GetWebState(), navigation->GetUrl());
+            navigation->GetWebState(), navigation->GetUrl(),
+            navigation->GetResponseHeaders());
   } else {
     _didFinishNavigationInfo->context =
         web::NavigationContextImpl::CreateNavigationContext(
-            navigation->GetWebState(), navigation->GetUrl());
+            navigation->GetWebState(), navigation->GetUrl(),
+            navigation->GetResponseHeaders());
   }
 }
 
@@ -172,6 +189,17 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 - (void)webStateDidChangeTitle:(web::WebState*)webState {
   _titleWasSetInfo = base::MakeUnique<web::TestTitleWasSetInfo>();
   _titleWasSetInfo->web_state = webState;
+}
+
+- (void)webStateDidChangeVisibleSecurityState:(web::WebState*)webState {
+  _didChangeVisibleSecurityStateInfo =
+      base::MakeUnique<web::TestDidChangeVisibleSecurityStateInfo>();
+  _didChangeVisibleSecurityStateInfo->web_state = webState;
+}
+
+- (void)webStateDidSuppressDialog:(web::WebState*)webState {
+  _didSuppressDialogInfo = base::MakeUnique<web::TestDidSuppressDialogInfo>();
+  _didSuppressDialogInfo->web_state = webState;
 }
 
 - (void)webState:(web::WebState*)webState

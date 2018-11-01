@@ -35,6 +35,7 @@
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
@@ -87,7 +88,7 @@ class FakeLoginDisplayHost : public chromeos::LoginDisplayHost {
     return nullptr;
   }
   void BeforeSessionStart() override {}
-  void Finalize() override {}
+  void Finalize(base::OnceClosure) override {}
   void OnCompleteLogin() override {}
   void OpenProxySettings() override {}
   void SetStatusAreaVisible(bool visible) override {}
@@ -99,7 +100,7 @@ class FakeLoginDisplayHost : public chromeos::LoginDisplayHost {
   chromeos::AppLaunchController* GetAppLaunchController() override {
     return nullptr;
   }
-  void StartUserAdding(const base::Closure& completion_callback) override {}
+  void StartUserAdding(base::OnceClosure completion_callback) override {}
   void CancelUserAdding() override {}
   void StartSignInScreen(const chromeos::LoginScreenContext& context) override {
   }
@@ -236,11 +237,11 @@ TEST_F(ArcSessionManagerTest, BaseWorkflow) {
   // Enables ARC. First time, ToS negotiation should start.
   arc_session_manager()->RequestEnable();
   base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  ASSERT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
 
-  // TODO(hidehiko): Verify state transition from SHOWING_TERMS_OF_SERVICE ->
-  // CHECKING_ANDROID_MANAGEMENT, when we extract ArcSessionManager.
+  // TODO(hidehiko): Verify state transition from NEGOTIATING_TERMS_OF_SERVICE
+  // -> CHECKING_ANDROID_MANAGEMENT, when we extract ArcSessionManager.
   arc_session_manager()->StartArcForTesting();
 
   EXPECT_TRUE(arc_session_manager()->sign_in_start_time().is_null());
@@ -259,7 +260,7 @@ TEST_F(ArcSessionManagerTest, CancelFetchingDisablesArc) {
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->RequestEnable();
   base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  ASSERT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
 
   // Emulate to cancel the ToS UI (e.g. closing the window).
@@ -284,7 +285,7 @@ TEST_F(ArcSessionManagerTest, CloseUIKeepsArcEnabled) {
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->RequestEnable();
   base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  ASSERT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
   arc_session_manager()->StartArcForTesting();
   ASSERT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
@@ -309,7 +310,7 @@ TEST_F(ArcSessionManagerTest, Provisioning_Success) {
 
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->RequestEnable();
-  ASSERT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  ASSERT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
 
   // Emulate to accept the terms of service.
@@ -364,7 +365,7 @@ TEST_F(ArcSessionManagerTest, RemoveDataDir) {
   // preference is false for managed user, i.e., data dir is being removed at
   // beginning.
   arc_session_manager()->SetProfile(profile());
-  arc_session_manager()->RemoveArcData();
+  arc_session_manager()->RequestArcDataRemoval();
   EXPECT_TRUE(
       profile()->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
   EXPECT_EQ(ArcSessionManager::State::REMOVING_DATA_DIR,
@@ -381,13 +382,13 @@ TEST_F(ArcSessionManagerTest, RemoveDataDir) {
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(
       profile()->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
-  EXPECT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
   arc_session_manager()->StartArcForTesting();
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
 
   // Request to remove data and stop session manager.
-  arc_session_manager()->RemoveArcData();
+  arc_session_manager()->RequestArcDataRemoval();
   ASSERT_TRUE(
       profile()->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
@@ -406,8 +407,8 @@ TEST_F(ArcSessionManagerTest, RemoveDataDir_Restart) {
   arc_session_manager()->RequestEnable();
   EXPECT_TRUE(
       profile()->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
-  ASSERT_TRUE(
-      WaitForDataRemoved(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE));
+  ASSERT_TRUE(WaitForDataRemoved(
+      ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE));
   EXPECT_FALSE(
       profile()->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
 
@@ -434,16 +435,58 @@ TEST_F(ArcSessionManagerTest, IgnoreSecondErrorReporting) {
   arc_session_manager()->Shutdown();
 }
 
+class ArcSessionManagerArcAlwaysStartTest : public ArcSessionManagerTest {
+ public:
+  ArcSessionManagerArcAlwaysStartTest() = default;
+
+  void SetUp() override {
+    SetArcAlwaysStartForTesting();
+    ArcSessionManagerTest::SetUp();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ArcSessionManagerArcAlwaysStartTest);
+};
+
+TEST_F(ArcSessionManagerArcAlwaysStartTest, BaseWorkflow) {
+  // TODO(victorhsieh): Consider also tracking sign-in activity, which is
+  // initiated from the Android side.
+  EXPECT_TRUE(arc_session_manager()->arc_start_time().is_null());
+
+  arc_session_manager()->SetProfile(profile());
+
+  // By default ARC is not enabled.
+  EXPECT_EQ(ArcSessionManager::State::STOPPED, arc_session_manager()->state());
+
+  // When ARC is always started, ArcSessionManager should always be in ACTIVE
+  // state.
+  arc_session_manager()->RequestEnable();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
+
+  arc_session_manager()->StartArcForTesting();
+
+  EXPECT_FALSE(arc_session_manager()->arc_start_time().is_null());
+
+  ASSERT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
+  ASSERT_TRUE(arc_session_manager()->IsSessionRunning());
+
+  arc_session_manager()->Shutdown();
+}
+
 class ArcSessionManagerPolicyTest
     : public ArcSessionManagerTest,
-      public testing::WithParamInterface<std::tuple<base::Value, base::Value>> {
+      public testing::WithParamInterface<
+          std::tuple<bool, base::Value, base::Value>> {
  public:
+  bool arc_enabled_pref_managed() const { return std::get<0>(GetParam()); }
+
   const base::Value& backup_restore_pref_value() const {
-    return std::get<0>(GetParam());
+    return std::get<1>(GetParam());
   }
 
   const base::Value& location_service_pref_value() const {
-    return std::get<1>(GetParam());
+    return std::get<2>(GetParam());
   }
 };
 
@@ -455,31 +498,35 @@ TEST_P(ArcSessionManagerPolicyTest, SkippingTerms) {
   EXPECT_FALSE(prefs->GetBoolean(prefs::kArcSignedIn));
   EXPECT_FALSE(prefs->GetBoolean(prefs::kArcTermsAccepted));
 
-  // Set ARC to be managed.
-  prefs->SetManagedPref(prefs::kArcEnabled, new base::Value(true));
+  // Enable ARC through user pref or by policy, according to the test parameter.
+  if (arc_enabled_pref_managed())
+    prefs->SetManagedPref(prefs::kArcEnabled,
+                          base::MakeUnique<base::Value>(true));
+  else
+    prefs->SetBoolean(prefs::kArcEnabled, true);
+  EXPECT_TRUE(IsArcPlayStoreEnabledForProfile(profile()));
 
   // Assign test values to the prefs.
   if (backup_restore_pref_value().is_bool()) {
     prefs->SetManagedPref(prefs::kArcBackupRestoreEnabled,
-                          backup_restore_pref_value().DeepCopy());
+                          backup_restore_pref_value().CreateDeepCopy());
   }
   if (location_service_pref_value().is_bool()) {
     prefs->SetManagedPref(prefs::kArcLocationServiceEnabled,
-                          location_service_pref_value().DeepCopy());
+                          location_service_pref_value().CreateDeepCopy());
   }
-  EXPECT_TRUE(arc::IsArcPlayStoreEnabledForProfile(profile()));
-  EXPECT_TRUE(arc::IsArcPlayStoreEnabledPreferenceManagedForProfile(profile()));
 
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->RequestEnable();
 
-  // Terms of Service are skipped if both ArcBackupRestoreEnabled and
-  // ArcLocationServiceEnabled are managed.
-  const bool expected_terms_skipping = backup_restore_pref_value().is_bool() &&
+  // Terms of Service are skipped iff ARC is enabled by policy and both
+  // ArcBackupRestoreEnabled and ArcLocationServiceEnabled are managed.
+  const bool expected_terms_skipping = arc_enabled_pref_managed() &&
+                                       backup_restore_pref_value().is_bool() &&
                                        location_service_pref_value().is_bool();
   EXPECT_EQ(expected_terms_skipping
                 ? ArcSessionManager::State::ACTIVE
-                : ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+                : ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
 
   // Complete provisioning if it's not done yet.
@@ -514,7 +561,8 @@ TEST_P(ArcSessionManagerPolicyTest, ReenableManagedArc) {
       profile()->GetTestingPrefService();
 
   // Set ARC to be managed.
-  prefs->SetManagedPref(prefs::kArcEnabled, new base::Value(true));
+  prefs->SetManagedPref(prefs::kArcEnabled,
+                        base::MakeUnique<base::Value>(true));
   EXPECT_TRUE(arc::IsArcPlayStoreEnabledForProfile(profile()));
 
   arc_session_manager()->SetProfile(profile());
@@ -538,8 +586,13 @@ INSTANTIATE_TEST_CASE_P(
     ArcSessionManagerPolicyTest,
     ArcSessionManagerPolicyTest,
     testing::Combine(
-        testing::Values(base::Value(), base::Value(false), base::Value(true)),
-        testing::Values(base::Value(), base::Value(false), base::Value(true))));
+        testing::Values(false, true) /* arc_enabled_pref_managed */,
+        testing::Values(base::Value(),
+                        base::Value(false),
+                        base::Value(true)) /* backup_restore_pref_value */,
+        testing::Values(base::Value(),
+                        base::Value(false),
+                        base::Value(true)) /* location_service_pref_value */));
 
 class ArcSessionManagerKioskTest : public ArcSessionManagerTestBase {
  public:
@@ -641,8 +694,8 @@ class ArcSessionOobeOptInNegotiatorTest
               profile());
       connector->OverrideIsManagedForTesting(true);
 
-      profile()->GetTestingPrefService()->SetManagedPref(prefs::kArcEnabled,
-                                                         new base::Value(true));
+      profile()->GetTestingPrefService()->SetManagedPref(
+          prefs::kArcEnabled, base::MakeUnique<base::Value>(true));
     }
 
     arc_session_manager()->SetProfile(profile());
@@ -714,7 +767,7 @@ INSTANTIATE_TEST_CASE_P(ArcSessionOobeOptInNegotiatorTestImpl,
 
 TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsAccepted) {
   view()->Show();
-  EXPECT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
   ReportResult(true);
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
@@ -722,14 +775,13 @@ TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsAccepted) {
 
 TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsRejected) {
   view()->Show();
-  EXPECT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
   ReportResult(false);
   if (!IsManagedUser()) {
     // ArcPlayStoreEnabledPreferenceHandler is not running, so the state should
     // be kept as is
-    EXPECT_EQ(/*ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,*/
-              ArcSessionManager::State::STOPPED,  // M58 Only, different logic
+    EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
               arc_session_manager()->state());
     EXPECT_FALSE(IsArcPlayStoreEnabledForProfile(profile()));
   } else {
@@ -744,15 +796,14 @@ TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsRejected) {
 
 TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsViewDestroyed) {
   view()->Show();
-  EXPECT_EQ(ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,
+  EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
   CloseLoginDisplayHost();
   ReportViewDestroyed();
   if (!IsManagedUser()) {
     // ArcPlayStoreEnabledPreferenceHandler is not running, so the state should
     // be kept as is.
-    EXPECT_EQ(/*ArcSessionManager::State::SHOWING_TERMS_OF_SERVICE,*/
-              ArcSessionManager::State::STOPPED,  // M58 Only, different logic
+    EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
               arc_session_manager()->state());
     EXPECT_FALSE(IsArcPlayStoreEnabledForProfile(profile()));
   } else {

@@ -9,7 +9,6 @@
 <link rel="import" href="../controls/controlled_radio_button.html">
 <link rel="import" href="../controls/extension_controlled_indicator.html">
 <link rel="import" href="../controls/settings_dropdown_menu.html">
-<link rel="import" href="../controls/settings_input.html">
 <link rel="import" href="../controls/settings_radio_group.html">
 <link rel="import" href="../controls/settings_toggle_button.html">
 <link rel="import" href="../route.html">
@@ -18,22 +17,28 @@
 <link rel="import" href="../settings_shared_css.html">
 <link rel="import" href="../settings_vars_css.html">
 <link rel="import" href="appearance_fonts_page.html">
+<link rel="import" href="home_url_input.html">
 
 <dom-module id="settings-appearance-page">
   <template>
     <style include="settings-shared md-select">
-      :host {
-        --paper-input-container-label: {
-          font-size: inherit;
-          font-weight: inherit;
-        };
-      }
-
       .secondary-button ~ .secondary-button {
         -webkit-margin-start: 12px;
       }
+
+      #custom-input {
+        margin-bottom: 1rem;
+      }
+
+      #customHomePage {
+        --paper-input-container: {
+          width: 200px;
+        };
+        width: 100%;  /* Pushes policy indicators to end. */
+      }
     </style>
-    <settings-animated-pages id="pages" section="appearance">
+    <settings-animated-pages id="pages" section="appearance"
+        focus-config="[[focusConfig_]]">
       <neon-animatable route-path="default">
 <if expr="chromeos">
         <div class="settings-box first two-line" id="wallpaperButton"
@@ -103,28 +108,27 @@
               pref="{{prefs.browser.show_home_button}}"
               label="$i18n{showHomeButton}"
               sub-label="[[getShowHomeSubLabel_(
-                  prefs.homepage_is_newtabpage.value, prefs.homepage.value)]]">
+                  prefs.browser.show_home_button.value,
+                  prefs.homepage_is_newtabpage.value,
+                  prefs.homepage.value)]]">
           </settings-toggle-button>
         </div>
         <template is="dom-if" if="[[prefs.browser.show_home_button.value]]">
-          <div class="list-frame"
-              hidden="[[!pageVisibility.homeButton]]">
+          <div class="list-frame" hidden="[[!pageVisibility.homeButton]]">
             <settings-radio-group pref="{{prefs.homepage_is_newtabpage}}">
               <controlled-radio-button class="list-item" name="true"
-                  pref="[[prefs.homepage_is_newtabpage]]">
-                $i18n{homePageNtp}
+                  pref="[[prefs.homepage_is_newtabpage]]"
+                  label="$i18n{homePageNtp}" no-extension-indicator>
               </controlled-radio-button>
-              <controlled-radio-button class="list-item" name="false"
-                  pref="[[prefs.homepage_is_newtabpage]]">
-                $i18n{other}
+              <controlled-radio-button id="custom-input" class="list-item"
+                  name="false" pref="[[prefs.homepage_is_newtabpage]]"
+                  no-extension-indicator>
                 <!-- TODO(dbeam): this can show double indicators when both
                      homepage and whether to use the NTP as the homepage are
                      managed. -->
-                <settings-input no-label-float pref="{{prefs.homepage}}"
-                    label="$i18n{exampleDotCom}"
-                    can-tab="[[!prefs.homepage_is_newtabpage.value]]"
-                    stop-keyboard-event-propagation>
-                </settings-input>
+                <home-url-input id="customHomePage" pref="{{prefs.homepage}}"
+                    can-tab="[[!prefs.homepage_is_newtabpage.value]]">
+                </home-url-input>
               </controlled-radio-button>
               <template is="dom-if" if="[[prefs.homepage.extensionId]]">
                 <extension-controlled-indicator
@@ -156,30 +160,27 @@
         <div class="settings-box">
 </if>
           <div class="start">$i18n{fontSize}</div>
-          <settings-dropdown-menu id="defaultFontSize"
+          <settings-dropdown-menu id="defaultFontSize" label="$i18n{fontSize}"
               pref="{{prefs.webkit.webprefs.default_font_size}}"
               menu-options="[[fontSizeOptions_]]">
           </settings-dropdown-menu>
         </div>
-        <div id="customize-fonts-subpage-trigger" class="settings-box two-line"
+        <div id="customize-fonts-subpage-trigger" class="settings-box"
             on-tap="onCustomizeFontsTap_" actionable>
           <div class="start">
             $i18n{customizeFonts}
-            <div class="secondary" id="fontsSecondary">$i18n{chooseFonts}</div>
           </div>
           <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label="$i18n{customizeFonts}"
-              aria-describedby="fontsSecondary"></button>
+              aria-label="$i18n{customizeFonts}"></button>
         </div>
-        <div class="settings-box"
-            hidden="[[!pageVisibility.pageZoom]]">
-          <div class="start">$i18n{pageZoom}</div>
+        <div class="settings-box" hidden="[[!pageVisibility.pageZoom]]">
+          <div id="pageZoom" class="start">$i18n{pageZoom}</div>
           <div class="md-select-wrapper">
-            <select id="zoomLevel" class="md-select"
+            <select id="zoomLevel" class="md-select" aria-labelledy="pageZoom"
                 on-change="onZoomLevelChange_">
               <template is="dom-repeat" items="[[pageZoomLevels_]]">
                 <option value="[[item]]"
-                    selected$="[[zoomValuesEqual_(item, defaultZoom_)]]">
+                    selected="[[zoomValuesEqual_(item, defaultZoom_)]]">
                   [[formatZoom_(item)]]%
                 </option>
               </template>
@@ -187,6 +188,14 @@
             <span class="md-select-underline"></span>
           </div>
         </div>
+<if expr="is_macosx">
+        <div class="settings-box">
+          <settings-toggle-button class="start"
+              pref="{{prefs.webkit.webprefs.tabs_to_links}}"
+              label="$i18n{tabsToLinks}">
+          </settings-toggle-button>
+        </div>
+</if>
       </neon-animatable>
       <template is="dom-if" route-path="/fonts">
         <settings-subpage

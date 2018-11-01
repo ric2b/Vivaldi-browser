@@ -59,6 +59,37 @@ struct InstallConstants {
   // empty string if the brand does not integrate with Google Update.
   const wchar_t* app_guid;
 
+  // The unsuffixed application name of this program. This is the base of the
+  // name registered with Default Programs on Windows.
+  const wchar_t* base_app_name;
+
+  // The unsuffixed portion of the AppUserModelId. The AppUserModelId is used to
+  // group an app's windows together on the Windows taskbar along with its
+  // corresponding shortcuts; see
+  // https://msdn.microsoft.com/library/windows/desktop/dd378459.aspx for more
+  // information. Use ShellUtil::GetBrowserModelId to get the suffixed value --
+  // it is almost never correct to use the unsuffixed (base) portion of this id
+  // directly.
+  const wchar_t* base_app_id;
+
+  // The prefix for the browser's ProgID. This prefix may be no more than 11
+  // characters long; see ShellUtil::GetBrowserProgId and
+  // https://msdn.microsoft.com/library/windows/desktop/dd542719.aspx.
+  const wchar_t* prog_id_prefix;
+
+  // A human-readable description of the browser, used when registering with
+  // Windows.
+  const wchar_t* prog_id_description;
+
+  // The GUID to be used when registering this install mode for Active Setup.
+  // Active Setup is used to perform certain operations in a user's context for
+  // system-level installs.
+  const wchar_t* active_setup_guid;
+
+  // The legacy CommandExecuteImpl CLSID, or an empty string if this install
+  // mode never included a DelegateExecute verb handler.
+  const wchar_t* legacy_command_execute_clsid;
+
   // The default name for this mode's update channel.
   const wchar_t* default_channel_name;
 
@@ -69,8 +100,20 @@ struct InstallConstants {
   // True if this mode supports system-level installs.
   bool supports_system_level;
 
+  // True if this mode supports in-product mechanisms to make the browser the
+  // user's chosen default browser. Features such as the "Make default" button
+  // in chrome://settings are hidden when this is false.
+  bool supports_set_as_default_browser;
+
+  // True if this mode supports user retention experiments run by the installer
+  // following updates.
+  bool supports_retention_experiments;
+
   // True if this mode supported the now-deprecated multi-install.
   bool supported_multi_install;
+
+  // The index of this mode's main application icon in the main executable.
+  int app_icon_resource_index;
 
   // The resource id of this mode's main application icon.
   int16_t app_icon_resource_id;

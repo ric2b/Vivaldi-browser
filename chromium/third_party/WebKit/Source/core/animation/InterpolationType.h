@@ -5,6 +5,7 @@
 #ifndef InterpolationType_h
 #define InterpolationType_h
 
+#include <memory>
 #include "core/animation/InterpolationValue.h"
 #include "core/animation/Keyframe.h"
 #include "core/animation/PairwiseInterpolationValue.h"
@@ -12,8 +13,7 @@
 #include "core/animation/PropertyHandle.h"
 #include "core/animation/UnderlyingValueOwner.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Allocator.h"
-#include <memory>
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -31,7 +31,9 @@ class InterpolationType {
   WTF_MAKE_NONCOPYABLE(InterpolationType);
 
  public:
-  PropertyHandle getProperty() const { return m_property; }
+  virtual ~InterpolationType() {}
+
+  PropertyHandle GetProperty() const { return property_; }
 
   // ConversionCheckers are returned from calls to maybeConvertPairwise() and
   // maybeConvertSingle() to enable the caller to check whether the result is
@@ -43,64 +45,64 @@ class InterpolationType {
 
    public:
     virtual ~ConversionChecker() {}
-    void setType(const InterpolationType& type) { m_type = &type; }
-    const InterpolationType& type() const { return *m_type; }
-    virtual bool isValid(const InterpolationEnvironment&,
+    void SetType(const InterpolationType& type) { type_ = &type; }
+    const InterpolationType& GetType() const { return *type_; }
+    virtual bool IsValid(const InterpolationEnvironment&,
                          const InterpolationValue& underlying) const = 0;
 
    protected:
-    ConversionChecker() : m_type(nullptr) {}
-    const InterpolationType* m_type;
+    ConversionChecker() : type_(nullptr) {}
+    const InterpolationType* type_;
   };
   using ConversionCheckers = Vector<std::unique_ptr<ConversionChecker>>;
 
-  virtual PairwiseInterpolationValue maybeConvertPairwise(
-      const PropertySpecificKeyframe& startKeyframe,
-      const PropertySpecificKeyframe& endKeyframe,
+  virtual PairwiseInterpolationValue MaybeConvertPairwise(
+      const PropertySpecificKeyframe& start_keyframe,
+      const PropertySpecificKeyframe& end_keyframe,
       const InterpolationEnvironment& environment,
       const InterpolationValue& underlying,
-      ConversionCheckers& conversionCheckers) const {
-    InterpolationValue start = maybeConvertSingle(
-        startKeyframe, environment, underlying, conversionCheckers);
+      ConversionCheckers& conversion_checkers) const {
+    InterpolationValue start = MaybeConvertSingle(
+        start_keyframe, environment, underlying, conversion_checkers);
     if (!start)
       return nullptr;
-    InterpolationValue end = maybeConvertSingle(endKeyframe, environment,
-                                                underlying, conversionCheckers);
+    InterpolationValue end = MaybeConvertSingle(
+        end_keyframe, environment, underlying, conversion_checkers);
     if (!end)
       return nullptr;
-    return maybeMergeSingles(std::move(start), std::move(end));
+    return MaybeMergeSingles(std::move(start), std::move(end));
   }
 
-  virtual InterpolationValue maybeConvertSingle(
+  virtual InterpolationValue MaybeConvertSingle(
       const PropertySpecificKeyframe&,
       const InterpolationEnvironment&,
       const InterpolationValue& underlying,
       ConversionCheckers&) const = 0;
 
-  virtual PairwiseInterpolationValue maybeMergeSingles(
+  virtual PairwiseInterpolationValue MaybeMergeSingles(
       InterpolationValue&& start,
       InterpolationValue&& end) const {
-    DCHECK(!start.nonInterpolableValue);
-    DCHECK(!end.nonInterpolableValue);
-    return PairwiseInterpolationValue(std::move(start.interpolableValue),
-                                      std::move(end.interpolableValue),
+    DCHECK(!start.non_interpolable_value);
+    DCHECK(!end.non_interpolable_value);
+    return PairwiseInterpolationValue(std::move(start.interpolable_value),
+                                      std::move(end.interpolable_value),
                                       nullptr);
   }
 
-  virtual InterpolationValue maybeConvertUnderlyingValue(
+  virtual InterpolationValue MaybeConvertUnderlyingValue(
       const InterpolationEnvironment&) const = 0;
 
-  virtual void composite(UnderlyingValueOwner& underlyingValueOwner,
-                         double underlyingFraction,
+  virtual void Composite(UnderlyingValueOwner& underlying_value_owner,
+                         double underlying_fraction,
                          const InterpolationValue& value,
-                         double interpolationFraction) const {
-    DCHECK(!underlyingValueOwner.value().nonInterpolableValue);
-    DCHECK(!value.nonInterpolableValue);
-    underlyingValueOwner.mutableValue().interpolableValue->scaleAndAdd(
-        underlyingFraction, *value.interpolableValue);
+                         double interpolation_fraction) const {
+    DCHECK(!underlying_value_owner.Value().non_interpolable_value);
+    DCHECK(!value.non_interpolable_value);
+    underlying_value_owner.MutableValue().interpolable_value->ScaleAndAdd(
+        underlying_fraction, *value.interpolable_value);
   }
 
-  virtual void apply(const InterpolableValue&,
+  virtual void Apply(const InterpolableValue&,
                      const NonInterpolableValue*,
                      InterpolationEnvironment&) const = 0;
 
@@ -114,9 +116,9 @@ class InterpolationType {
   }
 
  protected:
-  InterpolationType(PropertyHandle property) : m_property(property) {}
+  InterpolationType(PropertyHandle property) : property_(property) {}
 
-  const PropertyHandle m_property;
+  const PropertyHandle property_;
 };
 
 }  // namespace blink

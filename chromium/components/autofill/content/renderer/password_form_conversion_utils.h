@@ -64,6 +64,13 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
 bool HasAutocompleteAttributeValue(const blink::WebInputElement& element,
                                    const char* value_in_lowercase);
 
+// Checks in a case-insensitive way if credit card autocomplete attributes for
+// the given |element| are present.
+bool HasCreditCardAutocompleteAttributes(const blink::WebInputElement& element);
+
+// The "Realm" for the sign-on. This is scheme, host, port.
+std::string GetSignOnRealm(const GURL& origin);
+
 }  // namespace autofill
 
 #endif  // COMPONENTS_AUTOFILL_CONTENT_RENDERER_PASSWORD_FORM_CONVERSION_UTILS_H__

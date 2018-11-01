@@ -760,7 +760,7 @@ void FileManagerPrivateSearchDriveFunction::OnEntryDefinitionList(
     std::unique_ptr<SearchResultInfoList> search_result_info_list,
     std::unique_ptr<EntryDefinitionList> entry_definition_list) {
   DCHECK_EQ(search_result_info_list->size(), entry_definition_list->size());
-  base::ListValue* entries = new base::ListValue();
+  auto entries = base::MakeUnique<base::ListValue>();
 
   // Convert Drive files to something File API stack can understand.
   for (EntryDefinitionList::const_iterator it = entry_definition_list->begin();
@@ -775,7 +775,7 @@ void FileManagerPrivateSearchDriveFunction::OnEntryDefinitionList(
   }
 
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  result->Set("entries", entries);
+  result->Set("entries", std::move(entries));
   result->SetString("nextFeed", next_link.spec());
 
   SetResult(std::move(result));
@@ -869,7 +869,7 @@ void FileManagerPrivateSearchDriveMetadataFunction::OnEntryDefinitionList(
     auto result_dict = base::MakeUnique<base::DictionaryValue>();
 
     // FileEntry fields.
-    base::DictionaryValue* entry = new base::DictionaryValue();
+    auto entry = base::MakeUnique<base::DictionaryValue>();
     entry->SetString(
         "fileSystemName", entry_definition_list->at(i).file_system_name);
     entry->SetString(
@@ -880,7 +880,7 @@ void FileManagerPrivateSearchDriveMetadataFunction::OnEntryDefinitionList(
     entry->SetBoolean("fileIsDirectory",
                       entry_definition_list->at(i).is_directory);
 
-    result_dict->Set("entry", entry);
+    result_dict->Set("entry", std::move(entry));
     result_dict->SetString(
         "highlightedBaseName",
         search_result_info_list->at(i).highlighted_base_name);
@@ -941,7 +941,7 @@ bool FileManagerPrivateRequestAccessTokenFunction::RunAsync() {
 
   if (!drive_service) {
     // DriveService is not available.
-    SetResult(base::MakeUnique<base::StringValue>(std::string()));
+    SetResult(base::MakeUnique<base::Value>(std::string()));
     SendResponse(true);
     return true;
   }
@@ -961,7 +961,7 @@ bool FileManagerPrivateRequestAccessTokenFunction::RunAsync() {
 void FileManagerPrivateRequestAccessTokenFunction::OnAccessTokenFetched(
     google_apis::DriveApiErrorCode code,
     const std::string& access_token) {
-  SetResult(base::MakeUnique<base::StringValue>(access_token));
+  SetResult(base::MakeUnique<base::Value>(access_token));
   SendResponse(true);
 }
 
@@ -1000,7 +1000,7 @@ void FileManagerPrivateInternalGetShareUrlFunction::OnGetShareUrl(
     return;
   }
 
-  SetResult(base::MakeUnique<base::StringValue>(share_url.spec()));
+  SetResult(base::MakeUnique<base::Value>(share_url.spec()));
   SendResponse(true);
 }
 
@@ -1078,7 +1078,7 @@ bool FileManagerPrivateInternalGetDownloadUrlFunction::RunAsync() {
     // |file_system| is NULL if Drive is disabled or not mounted.
     SetError("Drive is disabled or not mounted.");
     // Intentionally returns a blank.
-    SetResult(base::MakeUnique<base::StringValue>(std::string()));
+    SetResult(base::MakeUnique<base::Value>(std::string()));
     return false;
   }
 
@@ -1087,7 +1087,7 @@ bool FileManagerPrivateInternalGetDownloadUrlFunction::RunAsync() {
   if (!drive::util::IsUnderDriveMountPoint(path)) {
     SetError("The given file is not in Drive.");
     // Intentionally returns a blank.
-    SetResult(base::MakeUnique<base::StringValue>(std::string()));
+    SetResult(base::MakeUnique<base::Value>(std::string()));
     return false;
   }
   base::FilePath file_path = drive::util::ExtractDrivePath(path);
@@ -1108,7 +1108,7 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnGetResourceEntry(
   if (error != drive::FILE_ERROR_OK) {
     SetError("Download Url for this item is not available.");
     // Intentionally returns a blank.
-    SetResult(base::MakeUnique<base::StringValue>(std::string()));
+    SetResult(base::MakeUnique<base::Value>(std::string()));
     SendResponse(false);
     return;
   }
@@ -1143,14 +1143,14 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnTokenFetched(
   if (code != google_apis::HTTP_SUCCESS) {
     SetError("Not able to fetch the token.");
     // Intentionally returns a blank.
-    SetResult(base::MakeUnique<base::StringValue>(std::string()));
+    SetResult(base::MakeUnique<base::Value>(std::string()));
     SendResponse(false);
     return;
   }
 
   const std::string url =
       download_url_.Resolve("?alt=media&access_token=" + access_token).spec();
-  SetResult(base::MakeUnique<base::StringValue>(url));
+  SetResult(base::MakeUnique<base::Value>(url));
 
   SendResponse(true);
 }

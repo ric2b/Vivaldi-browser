@@ -22,6 +22,7 @@ using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Eq;
 using ::testing::InvokeWithoutArgs;
+using ::testing::NiceMock;
 
 namespace content {
 
@@ -64,7 +65,7 @@ class MockMediaSessionPlayerObserver : public MediaSessionPlayerObserver {
   MOCK_METHOD2(OnSetVolumeMultiplier,
                void(int player_id, double volume_multiplier));
 
-  RenderFrameHost* GetRenderFrameHost() const override {
+  RenderFrameHost* render_frame_host() const override {
     return render_frame_host_;
   }
 
@@ -84,14 +85,10 @@ class MediaSessionImplServiceRoutingTest
     RenderViewHostImplTestHarness::SetUp();
 
     contents()->GetMainFrame()->InitializeRenderFrameIfNeeded();
-    mock_media_session_observer_.reset(
-        new MockMediaSessionObserver(MediaSessionImpl::Get(contents())));
+    mock_media_session_observer_.reset(new NiceMock<MockMediaSessionObserver>(
+        MediaSessionImpl::Get(contents())));
     main_frame_ = contents()->GetMainFrame();
     sub_frame_ = main_frame_->AppendChild("sub_frame");
-
-    player_in_main_frame_.reset(
-        new MockMediaSessionPlayerObserver(main_frame_));
-    player_in_sub_frame_.reset(new MockMediaSessionPlayerObserver(sub_frame_));
   }
 
   void TearDown() override {
@@ -108,8 +105,9 @@ class MediaSessionImplServiceRoutingTest
   }
 
   void CreateServiceForFrame(TestRenderFrameHost* frame) {
-    services_[frame] = base::MakeUnique<MockMediaSessionServiceImpl>(frame);
-    clients_[frame] = base::MakeUnique<MockMediaSessionClient>();
+    services_[frame] =
+        base::MakeUnique<NiceMock<MockMediaSessionServiceImpl>>(frame);
+    clients_[frame] = base::MakeUnique<NiceMock<MockMediaSessionClient>>();
     services_[frame]->SetClient(clients_[frame]->CreateInterfacePtrAndBind());
   }
 
@@ -124,7 +122,8 @@ class MediaSessionImplServiceRoutingTest
   }
 
   void StartPlayerForFrame(TestRenderFrameHost* frame) {
-    players_[frame] = base::MakeUnique<MockMediaSessionPlayerObserver>(frame);
+    players_[frame] =
+        base::MakeUnique<NiceMock<MockMediaSessionPlayerObserver>>(frame);
     MediaSessionImpl::Get(contents())
         ->AddPlayer(players_[frame].get(), kPlayerId,
                     media::MediaContentType::Persistent);
@@ -150,9 +149,6 @@ class MediaSessionImplServiceRoutingTest
 
   TestRenderFrameHost* main_frame_;
   TestRenderFrameHost* sub_frame_;
-
-  std::unique_ptr<MockMediaSessionPlayerObserver> player_in_main_frame_;
-  std::unique_ptr<MockMediaSessionPlayerObserver> player_in_sub_frame_;
 
   std::unique_ptr<MockMediaSessionObserver> mock_media_session_observer_;
 

@@ -185,21 +185,21 @@ void BufferedResourceLoader::Start(
   // Prepare the request.
   WebURLRequest request(url_);
   // TODO(mkwst): Split this into video/audio.
-  request.setRequestContext(WebURLRequest::RequestContextVideo);
+  request.SetRequestContext(WebURLRequest::kRequestContextVideo);
 
   if (IsRangeRequest()) {
-    request.setHTTPHeaderField(
-        WebString::fromUTF8(net::HttpRequestHeaders::kRange),
-        WebString::fromUTF8(net::HttpByteRange::Bounded(
+    request.SetHTTPHeaderField(
+        WebString::FromUTF8(net::HttpRequestHeaders::kRange),
+        WebString::FromUTF8(net::HttpByteRange::Bounded(
             first_byte_position_, last_byte_position_).GetHeaderValue()));
   }
 
-  frame->setReferrerForRequest(request, blink::WebURL());
+  frame->SetReferrerForRequest(request, blink::WebURL());
 
   // Disable compression, compression for audio/video doesn't make sense...
-  request.setHTTPHeaderField(
-      WebString::fromUTF8(net::HttpRequestHeaders::kAcceptEncoding),
-      WebString::fromUTF8("identity;q=1, *;q=0"));
+  request.SetHTTPHeaderField(
+      WebString::FromUTF8(net::HttpRequestHeaders::kAcceptEncoding),
+      WebString::FromUTF8("identity;q=1, *;q=0"));
 
   // Check for our test WebURLLoader.
   std::unique_ptr<WebAssociatedURLLoader> loader;
@@ -208,23 +208,23 @@ void BufferedResourceLoader::Start(
   } else {
     WebAssociatedURLLoaderOptions options;
     if (cors_mode_ == UrlData::CORS_UNSPECIFIED) {
-      options.allowCredentials = true;
-      options.crossOriginRequestPolicy =
-          WebAssociatedURLLoaderOptions::CrossOriginRequestPolicyAllow;
+      options.allow_credentials = true;
+      options.cross_origin_request_policy =
+          WebAssociatedURLLoaderOptions::kCrossOriginRequestPolicyAllow;
     } else {
-      options.exposeAllResponseHeaders = true;
+      options.expose_all_response_headers = true;
       // The author header set is empty, no preflight should go ahead.
-      options.preflightPolicy = WebAssociatedURLLoaderOptions::PreventPreflight;
-      options.crossOriginRequestPolicy =
-          WebAssociatedURLLoaderOptions::CrossOriginRequestPolicyUseAccessControl;
+      options.preflight_policy = WebAssociatedURLLoaderOptions::kPreventPreflight;
+      options.cross_origin_request_policy =
+          WebAssociatedURLLoaderOptions::kCrossOriginRequestPolicyUseAccessControl;
       if (cors_mode_ == UrlData::CORS_USE_CREDENTIALS)
-        options.allowCredentials = true;
+        options.allow_credentials = true;
     }
-    loader.reset(frame->createAssociatedURLLoader(options));
+    loader.reset(frame->CreateAssociatedURLLoader(options));
   }
 
   // Start the resource loading.
-  loader->loadAsynchronously(request, this);
+  loader->LoadAsynchronously(request, this);
   active_loader_.reset(new ActiveLoader(std::move(loader)));
   loading_cb_.Run(kLoading);
 }
@@ -353,7 +353,7 @@ bool BufferedResourceLoader::range_supported() {
 
 /////////////////////////////////////////////////////////////////////////////
 // blink::WebURLLoaderClient implementation.
-bool BufferedResourceLoader::willFollowRedirect(
+bool BufferedResourceLoader::WillFollowRedirect(
     const WebURLRequest& newRequest,
     const WebURLResponse& redirectResponse) {
   // The load may have been stopped and |start_cb| is destroyed.
@@ -364,37 +364,37 @@ bool BufferedResourceLoader::willFollowRedirect(
 
   // Only allow |single_origin_| if we haven't seen a different origin yet.
   if (single_origin_)
-    single_origin_ = url_.GetOrigin() == GURL(newRequest.url()).GetOrigin();
+    single_origin_ = url_.GetOrigin() == GURL(newRequest.Url()).GetOrigin();
 
-  url_ = newRequest.url();
+  url_ = newRequest.Url();
   return true;
 }
 
-void BufferedResourceLoader::didSendData(
+void BufferedResourceLoader::DidSendData(
     unsigned long long bytes_sent,
     unsigned long long total_bytes_to_be_sent) {
   NOTIMPLEMENTED();
 }
 
-void BufferedResourceLoader::didReceiveResponse(
+void BufferedResourceLoader::DidReceiveResponse(
     const WebURLResponse& response) {
-  DVLOG(1) << "didReceiveResponse: HTTP/"
-           << (response.httpVersion() == WebURLResponse::HTTPVersion_0_9
+  DVLOG(1) << "DidReceiveResponse: HTTP/"
+           << (response.HttpVersion() == WebURLResponse::kHTTPVersion_0_9
                    ? "0.9"
-                   : response.httpVersion() == WebURLResponse::HTTPVersion_1_0
+                   : response.HttpVersion() == WebURLResponse::kHTTPVersion_1_0
                          ? "1.0"
-                         : response.httpVersion() ==
-                                   WebURLResponse::HTTPVersion_1_1
+                         : response.HttpVersion() ==
+                                   WebURLResponse::kHTTPVersion_1_1
                                ? "1.1"
-                               : response.httpVersion() ==
-                                         WebURLResponse::HTTPVersion_2_0
+                               : response.HttpVersion() ==
+                                         WebURLResponse::kHTTPVersion_2_0
                                      ? "2.0"
                                      : "Unknown")
-           << " " << response.httpStatusCode();
+           << " " << response.HttpStatusCode();
   DCHECK(active_loader_.get());
-  response_original_url_ = response.wasFetchedViaServiceWorker()
-                               ? response.originalURLViaServiceWorker()
-                               : response.url();
+  response_original_url_ = response.WasFetchedViaServiceWorker()
+                               ? response.OriginalURLViaServiceWorker()
+                               : response.Url();
 
   // The loader may have been stopped and |start_cb| is destroyed.
   // In this case we shouldn't do anything.
@@ -409,7 +409,7 @@ void BufferedResourceLoader::didReceiveResponse(
   while (reasons) {
     DCHECK_LT(shift, max_enum);  // Sanity check.
     if (reasons & 0x1) {
-      UMA_HISTOGRAM_ENUMERATION("Media.UncacheableReason",
+      UMA_HISTOGRAM_EXACT_LINEAR("Media.UncacheableReason",
                                 shift,
                                 max_enum); // PRESUBMIT_IGNORE_UMA_MAX
     }
@@ -420,21 +420,21 @@ void BufferedResourceLoader::didReceiveResponse(
 
   // Expected content length can be |kPositionNotSpecified|, in that case
   // |content_length_| is not specified and this is a streaming response.
-  content_length_ = response.expectedContentLength();
-  mime_type_ = response.mimeType().latin1();
+  content_length_ = response.ExpectedContentLength();
+  mime_type_ = response.MimeType().Latin1();
 
   // We make a strong assumption that when we reach here we have either
   // received a response from HTTP/HTTPS protocol or the request was
   // successful (in particular range request). So we only verify the partial
   // response for HTTP and HTTPS protocol.
   if (url_.SchemeIsHTTPOrHTTPS()) {
-    bool partial_response = (response.httpStatusCode() == kHttpPartialContent);
-    bool ok_response = (response.httpStatusCode() == kHttpOK);
+    bool partial_response = (response.HttpStatusCode() == kHttpPartialContent);
+    bool ok_response = (response.HttpStatusCode() == kHttpOK);
 
     if (IsRangeRequest()) {
       // Check to see whether the server supports byte ranges.
       std::string accept_ranges =
-          response.httpHeaderField("Accept-Ranges").utf8();
+          response.HttpHeaderField("Accept-Ranges").Utf8();
       range_supported_ = (accept_ranges.find("bytes") != std::string::npos);
 
       // If we have verified the partial response and it is correct, we will
@@ -452,17 +452,17 @@ void BufferedResourceLoader::didReceiveResponse(
         MEDIA_LOG(ERROR, media_log_)
             << "Failed loading buffered resource using range request due to "
                "invalid server response. HTTP status code="
-            << response.httpStatusCode();
+            << response.HttpStatusCode();
         DoneStart(kFailed);
         return;
       }
     } else {
       instance_size_ = content_length_;
-      if (response.httpStatusCode() != kHttpOK) {
+      if (response.HttpStatusCode() != kHttpOK) {
         // We didn't request a range but server didn't reply with "200 OK".
         MEDIA_LOG(ERROR, media_log_)
             << "Failed loading buffered resource due to invalid server "
-               "response. HTTP status code=" << response.httpStatusCode();
+               "response. HTTP status code=" << response.HttpStatusCode();
         DoneStart(kFailed);
         return;
       }
@@ -482,7 +482,7 @@ void BufferedResourceLoader::didReceiveResponse(
   DoneStart(kOk);
 }
 
-void BufferedResourceLoader::didReceiveData(const char* data,
+void BufferedResourceLoader::DidReceiveData(const char* data,
                                             int data_length) {
   DVLOG(1) << "didReceiveData: " << data_length << " bytes";
   DCHECK(active_loader_.get());
@@ -510,17 +510,17 @@ void BufferedResourceLoader::didReceiveData(const char* data,
   Log();
 }
 
-void BufferedResourceLoader::didDownloadData(
+void BufferedResourceLoader::DidDownloadData(
     int dataLength) {
   NOTIMPLEMENTED();
 }
 
-void BufferedResourceLoader::didReceiveCachedMetadata(
+void BufferedResourceLoader::DidReceiveCachedMetadata(
     const char* data, int dataLength) {
   NOTIMPLEMENTED();
 }
 
-void BufferedResourceLoader::didFinishLoading(
+void BufferedResourceLoader::DidFinishLoading(
     double finishTime) {
   DVLOG(1) << "didFinishLoading";
   DCHECK(active_loader_.get());
@@ -552,13 +552,13 @@ void BufferedResourceLoader::didFinishLoading(
   }
 }
 
-void BufferedResourceLoader::didFail(
+void BufferedResourceLoader::DidFail(
     const WebURLError& error) {
   DVLOG(1) << "didFail: reason=" << error.reason
-           << ", isCancellation=" << error.isCancellation
-           << ", domain=" << error.domain.utf8().data()
+           << ", isCancellation=" << error.is_cancellation
+           << ", domain=" << error.domain.Utf8().data()
            << ", localizedDescription="
-           << error.localizedDescription.utf8().data();
+           << error.localized_description.Utf8().data();
   DCHECK(active_loader_.get());
   MEDIA_LOG(ERROR, media_log_)
       << "Failed loading buffered resource. Error code=" << error.reason;
@@ -803,7 +803,7 @@ int64_t BufferedResourceLoader::GetMemoryUsage() const {
 bool BufferedResourceLoader::VerifyPartialResponse(
     const WebURLResponse& response) {
   int64_t first_byte_position, last_byte_position, instance_size;
-  if (!ParseContentRange(response.httpHeaderField("Content-Range").utf8(),
+  if (!ParseContentRange(response.HttpHeaderField("Content-Range").Utf8(),
                          &first_byte_position, &last_byte_position,
                          &instance_size)) {
     return false;

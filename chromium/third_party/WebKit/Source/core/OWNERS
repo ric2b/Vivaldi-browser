@@ -3,6 +3,8 @@
 
 # Reviewers (comments indicate areas of expertise):
 ager@chromium.org
+# alancutter reviews changes in core/animation, core/css and core/style.
+alancutter@chromium.org
 alexis.menard@intel.com
 # bokan reviews changes around viewport behavior, scrolling, cc/blink interaction, co-ordinate spaces and input events
 bokan@chromium.org
@@ -10,6 +12,8 @@ cbiesinger@chromium.org
 chrishtr@chromium.org
 dcheng@chromium.org
 dglazkov@chromium.org
+# dtapuska reviews input-related changes
+dtapuska@chromium.org
 dgozman@chromium.org
 dominicc@chromium.org
 dpranke@chromium.org
@@ -46,7 +50,6 @@ pdr@chromium.org
 pfeldman@chromium.org
 pkasting@chromium.org
 rego@igalia.com
-# rbyers reviews input related changes (eg. event handling, mouse cursors, touch hit testing, scrolling coordinator)
 rbyers@chromium.org
 rob.buis@samsung.com
 robhogan@gmail.com

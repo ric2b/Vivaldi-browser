@@ -21,6 +21,8 @@ static_library("arc") {
     "clipboard/arc_clipboard_bridge.h",
     "crash_collector/arc_crash_collector_bridge.cc",
     "crash_collector/arc_crash_collector_bridge.h",
+    "file_system/file_system_struct_traits.cc",
+    "file_system/file_system_struct_traits.h",
     "ime/arc_ime_bridge.h",
     "ime/arc_ime_bridge_impl.cc",
     "ime/arc_ime_bridge_impl.h",
@@ -30,6 +32,7 @@ static_library("arc") {
     "intent_helper/activity_icon_loader.h",
     "intent_helper/arc_intent_helper_bridge.cc",
     "intent_helper/arc_intent_helper_bridge.h",
+    "intent_helper/arc_intent_helper_observer.h",
     "intent_helper/font_size_util.cc",
     "intent_helper/font_size_util.h",
     "intent_helper/intent_constants.cc",
@@ -152,9 +155,11 @@ mojom("arc_bindings") {
     "common/scale_factor.mojom",
     "common/screen_rect.mojom",
     "common/storage_manager.mojom",
+    "common/tracing.mojom",
     "common/tts.mojom",
     "common/video.mojom",
     "common/video_accelerator.mojom",
+    "common/voice_interaction_framework.mojom",
     "common/wallpaper.mojom",
   ]
 
@@ -211,6 +216,7 @@ source_set("unit_tests") {
     "intent_helper/link_handler_model_impl_unittest.cc",
     "intent_helper/local_activity_resolver_unittest.cc",
     "intent_helper/page_transition_util_unittest.cc",
+    "kiosk/arc_kiosk_bridge_unittest.cc",
   ]
 
   deps = [
@@ -220,6 +226,7 @@ source_set("unit_tests") {
     "//chromeos",
     "//device/bluetooth",
     "//mojo/public/cpp/system:system",
+    "//testing/gmock",
     "//testing/gtest",
     "//ui/aura",
     "//ui/aura:test_support",

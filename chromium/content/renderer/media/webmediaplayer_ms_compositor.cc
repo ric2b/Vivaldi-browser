@@ -11,9 +11,10 @@
 #include "base/hash.h"
 #include "base/single_thread_task_runner.h"
 #include "base/values.h"
-#include "cc/paint/paint_surface.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "content/renderer/media/webmediaplayer_ms.h"
 #include "content/renderer/render_thread_impl.h"
+#include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
@@ -48,25 +49,27 @@ scoped_refptr<media::VideoFrame> CopyFrame(
         media::PIXEL_FORMAT_I420, frame->coded_size(), frame->visible_rect(),
         frame->natural_size(), frame->timestamp());
 
-    sk_sp<cc::PaintSurface> surface = cc::PaintSurface::MakeRasterN32Premul(
-        frame->visible_rect().width(), frame->visible_rect().height());
-
     ui::ContextProviderCommandBuffer* const provider =
         RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
-    if (surface && provider) {
-      DCHECK(provider->ContextGL());
-      video_renderer->Copy(
-          frame.get(), surface->getCanvas(),
-          media::Context3D(provider->ContextGL(), provider->GrContext()));
-    } else {
+    if (!provider) {
       // Return a black frame (yuv = {0, 0x80, 0x80}).
       return media::VideoFrame::CreateColorFrame(
           frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
     }
 
+    SkBitmap bitmap;
+    bitmap.allocPixels(SkImageInfo::MakeN32Premul(
+        frame->visible_rect().width(), frame->visible_rect().height()));
+    cc::SkiaPaintCanvas paint_canvas(bitmap);
+
+    DCHECK(provider->ContextGL());
+    video_renderer->Copy(
+        frame.get(), &paint_canvas,
+        media::Context3D(provider->ContextGL(), provider->GrContext()));
+
     SkPixmap pixmap;
-    const bool result = surface->getCanvas()->peekPixels(&pixmap);
-    DCHECK(result) << "Error trying to access PaintSurface's pixels";
+    const bool result = bitmap.peekPixels(&pixmap);
+    DCHECK(result) << "Error trying to access SkBitmap's pixels";
 
     const uint32 source_pixel_format =
         (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
@@ -127,9 +130,11 @@ scoped_refptr<media::VideoFrame> CopyFrame(
 WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
     const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
     const blink::WebMediaStream& web_stream,
-    const base::WeakPtr<WebMediaPlayerMS>& player)
+    const base::WeakPtr<WebMediaPlayerMS>& player,
+    scoped_refptr<media::MediaLog> media_log)
     : compositor_task_runner_(compositor_task_runner),
       player_(player),
+      media_log_(std::move(media_log)),
       video_frame_provider_client_(nullptr),
       current_frame_used_by_compositor_(false),
       last_render_length_(base::TimeDelta::FromSecondsD(1.0 / 60.0)),
@@ -140,24 +145,24 @@ WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
   io_thread_checker_.DetachFromThread();
 
   blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
-  if (!web_stream.isNull())
-    web_stream.videoTracks(video_tracks);
+  if (!web_stream.IsNull())
+    web_stream.VideoTracks(video_tracks);
 
   const bool remote_video =
-      video_tracks.size() && video_tracks[0].source().remote();
+      video_tracks.size() && video_tracks[0].Source().Remote();
 
-  if (remote_video &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableRTCSmoothnessAlgorithm)) {
+  if (remote_video && !base::CommandLine::ForCurrentProcess()->HasSwitch(
+                          switches::kDisableRTCSmoothnessAlgorithm)) {
     base::AutoLock auto_lock(current_frame_lock_);
     rendering_frame_buffer_.reset(new media::VideoRendererAlgorithm(
         base::Bind(&WebMediaPlayerMSCompositor::MapTimestampsToRenderTimeTicks,
-                   base::Unretained(this))));
+                   base::Unretained(this)),
+        media_log_));
   }
 
   // Just for logging purpose.
   std::string stream_id =
-      web_stream.isNull() ? std::string() : web_stream.id().utf8();
+      web_stream.IsNull() ? std::string() : web_stream.Id().Utf8();
   const uint32_t hash_value = base::Hash(stream_id);
   serial_ = (hash_value << 1) | (remote_video ? 1 : 0);
 }
@@ -179,13 +184,15 @@ base::TimeDelta WebMediaPlayerMSCompositor::GetCurrentTime() {
   return current_frame_.get() ? current_frame_->timestamp() : base::TimeDelta();
 }
 
-size_t WebMediaPlayerMSCompositor::total_frame_count() const {
+size_t WebMediaPlayerMSCompositor::total_frame_count() {
+  base::AutoLock auto_lock(current_frame_lock_);
   DVLOG(1) << __func__ << ", " << total_frame_count_;
   DCHECK(thread_checker_.CalledOnValidThread());
   return total_frame_count_;
 }
 
-size_t WebMediaPlayerMSCompositor::dropped_frame_count() const {
+size_t WebMediaPlayerMSCompositor::dropped_frame_count() {
+  base::AutoLock auto_lock(current_frame_lock_);
   DVLOG(1) << __func__ << ", " << dropped_frame_count_;
   DCHECK(thread_checker_.CalledOnValidThread());
   return dropped_frame_count_;
@@ -330,16 +337,26 @@ void WebMediaPlayerMSCompositor::StopRendering() {
 
 void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopy() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  base::AutoLock auto_lock(current_frame_lock_);
-  if (!current_frame_.get() || !player_)
-    return;
-
+  scoped_refptr<media::VideoFrame> current_frame_ref;
+  {
+    base::AutoLock auto_lock(current_frame_lock_);
+    if (!current_frame_ || !player_)
+      return;
+    current_frame_ref = current_frame_;
+  }
   // Copy the frame so that rendering can show the last received frame.
   // The original frame must not be referenced when the player is paused since
   // there might be a finite number of available buffers. E.g, video that
-  // originates from a video camera.
-  current_frame_ =
-      CopyFrame(current_frame_, player_->GetSkCanvasVideoRenderer());
+  // originates from a video camera, HW decoded frames.
+  scoped_refptr<media::VideoFrame> copied_frame =
+      CopyFrame(current_frame_ref, player_->GetSkCanvasVideoRenderer());
+  // Copying frame can take time, so only set the copied frame if
+  // |current_frame_| hasn't been changed.
+  {
+    base::AutoLock auto_lock(current_frame_lock_);
+    if (current_frame_ == current_frame_ref)
+      current_frame_ = std::move(copied_frame);
+  }
 }
 
 void WebMediaPlayerMSCompositor::StopUsingProvider() {
@@ -455,7 +472,8 @@ void WebMediaPlayerMSCompositor::SetAlgorithmEnabledForTesting(
   if (!rendering_frame_buffer_) {
     rendering_frame_buffer_.reset(new media::VideoRendererAlgorithm(
         base::Bind(&WebMediaPlayerMSCompositor::MapTimestampsToRenderTimeTicks,
-                   base::Unretained(this))));
+                   base::Unretained(this)),
+        media_log_));
   }
 }
 

@@ -28,7 +28,7 @@ declare_args() {
   # Set to true to have the clang Blink GC plugin use Chromium-style naming
   # rather than legacy Blink name.
   # TODO(https://crbug.com/675879): Remove this option after the Blink rename.
-  blink_gc_plugin_option_use_chromium_style_naming = false
+  blink_gc_plugin_option_use_chromium_style_naming = true
 }
 
 # features ---------------------------------------------------------------------
@@ -69,6 +69,8 @@ config("blink_pch") {
 
       # Force include the header.
       cflags = [ "/FI$precompiled_header" ]
+    } else if (is_mac) {
+      precompiled_source = "//third_party/WebKit/Source/build/mac/Prefix.h"
     }
   }
 }
@@ -77,6 +79,11 @@ config("blink_pch") {
 
 config("config") {
   include_dirs = [
+    # crbug.com/691465: Temporary solution to fix an issue related to MSVC-
+    # specific #include search order. This essentially lets
+    # #include "wtf/Foo.h" actually include "platform/wtf/Foo.h". This is okay
+    # because these files are equivalent if both exist.
+    "platform",
     ".",
     "..",
     "$root_gen_dir/blink",
@@ -151,15 +158,6 @@ config("config") {
         "use-chromium-style-naming",
       ]
     }
-
-    # TODO(https://crbug.com/689864): remove once the GC plugin has been rolled
-    # with this warning default enabled.
-    cflags += [
-      "-Xclang",
-      "-plugin-arg-blink-gc-plugin",
-      "-Xclang",
-      "warn-stack-allocated-trace-method",
-    ]
   }
 }
 
@@ -170,13 +168,5 @@ config("non_test_config") {
 
   if (is_clang) {
     cflags += [ "-Wglobal-constructors" ]
-  }
-}
-
-if (is_mac) {
-  # This sets up precompiled headers for Mac.
-  config("mac_precompiled_headers") {
-    precompiled_header = rebase_path("build/mac/Prefix.h", root_build_dir)
-    precompiled_source = "//third_party/WebKit/Source/build/mac/Prefix.h"
   }
 }

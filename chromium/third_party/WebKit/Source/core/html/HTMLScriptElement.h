@@ -26,65 +26,81 @@
 #define HTMLScriptElement_h
 
 #include "core/CoreExport.h"
+#include "core/dom/ScriptElementBase.h"
 #include "core/dom/ScriptLoader.h"
-#include "core/dom/ScriptLoaderClient.h"
 #include "core/html/HTMLElement.h"
 
 namespace blink {
 
 class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
-                                            public ScriptLoaderClient {
+                                            public ScriptElementBase {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(HTMLScriptElement);
 
  public:
-  static HTMLScriptElement* create(Document&,
-                                   bool wasInsertedByParser,
-                                   bool alreadyStarted = false,
-                                   bool createdDuringDocumentWrite = false);
+  static HTMLScriptElement* Create(Document&,
+                                   bool was_inserted_by_parser,
+                                   bool already_started = false,
+                                   bool created_during_document_write = false);
 
-  String text() { return textFromChildren(); }
+  String text() { return TextFromChildren(); }
   void setText(const String&);
 
-  KURL src() const;
+  KURL Src() const;
 
   void setAsync(bool);
   bool async() const;
 
-  ScriptLoader* loader() const { return m_loader.get(); }
+  ScriptLoader* Loader() const { return loader_.Get(); }
+
+  bool IsScriptElement() const override { return true; }
+  Document& GetDocument() const override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   HTMLScriptElement(Document&,
-                    bool wasInsertedByParser,
-                    bool alreadyStarted,
-                    bool createdDuringDocumentWrite);
+                    bool was_inserted_by_parser,
+                    bool already_started,
+                    bool created_during_document_write);
 
-  void parseAttribute(const AttributeModificationParams&) override;
-  InsertionNotificationRequest insertedInto(ContainerNode*) override;
-  void didNotifySubtreeInsertionsToDocument() override;
-  void childrenChanged(const ChildrenChange&) override;
-  void didMoveToNewDocument(Document& oldDocument) override;
+  void ParseAttribute(const AttributeModificationParams&) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
+  void DidNotifySubtreeInsertionsToDocument() override;
+  void ChildrenChanged(const ChildrenChange&) override;
+  void DidMoveToNewDocument(Document& old_document) override;
 
-  bool isURLAttribute(const Attribute&) const override;
-  bool hasLegalLinkAttribute(const QualifiedName&) const override;
-  const QualifiedName& subResourceAttributeName() const override;
+  bool IsURLAttribute(const Attribute&) const override;
+  bool HasLegalLinkAttribute(const QualifiedName&) const override;
+  const QualifiedName& SubResourceAttributeName() const override;
 
-  String sourceAttributeValue() const override;
-  String charsetAttributeValue() const override;
-  String typeAttributeValue() const override;
-  String languageAttributeValue() const override;
-  String forAttributeValue() const override;
-  String eventAttributeValue() const override;
-  bool asyncAttributeValue() const override;
-  bool deferAttributeValue() const override;
-  bool hasSourceAttribute() const override;
+  // ScriptElementBase overrides:
+  String SourceAttributeValue() const override;
+  String CharsetAttributeValue() const override;
+  String TypeAttributeValue() const override;
+  String LanguageAttributeValue() const override;
+  String ForAttributeValue() const override;
+  String EventAttributeValue() const override;
+  String CrossOriginAttributeValue() const override;
+  String IntegrityAttributeValue() const override;
+  String TextFromChildren() override;
+  String TextContent() const override;
+  bool AsyncAttributeValue() const override;
+  bool DeferAttributeValue() const override;
+  bool HasSourceAttribute() const override;
+  bool IsConnected() const override;
+  bool HasChildren() const override;
+  bool IsNonceableElement() const override;
+  bool AllowInlineScriptForCSP(const AtomicString& nonce,
+                               const WTF::OrdinalNumber&,
+                               const String& script_content) override;
+  AtomicString InitiatorName() const override;
+  void DispatchLoadEvent() override;
+  void DispatchErrorEvent() override;
+  void SetScriptElementForBinding(
+      HTMLScriptElementOrSVGScriptElement&) override;
 
-  void dispatchLoadEvent() override;
-
-  Element* cloneElementWithoutAttributesAndChildren() override;
-
-  Member<ScriptLoader> m_loader;
+  Element* CloneElementWithoutAttributesAndChildren() override;
 };
 
 }  // namespace blink

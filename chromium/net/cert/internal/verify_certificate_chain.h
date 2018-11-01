@@ -23,6 +23,13 @@ struct GeneralizedTime;
 class SignaturePolicy;
 class TrustAnchor;
 
+// The key purpose (extended key usage) to check for during verification.
+enum class KeyPurpose {
+  ANY_EKU,
+  SERVER_AUTH,
+  CLIENT_AUTH,
+};
+
 // VerifyCertificateChain() verifies a certificate path (chain) based on the
 // rules in RFC 5280. The caller is responsible for building the path and
 // finding the trust anchor.
@@ -56,23 +63,31 @@ class TrustAnchor;
 //   time:
 //     The UTC time to use for expiration checks.
 //
+//   key_purpose:
+//     The key purpose that the target certificate needs to be valid for.
+//
 // ---------
 // Outputs
 // ---------
 //
 //   Returns true if the target certificate can be verified.
+//   TODO(eroman): This return value is redundant with the |errors| parameter.
 //
 //   errors:
 //     Must be non-null. The set of errors/warnings encountered while
-//     validating the path are appended to this structure. There is no
-//     guarantee that on success |errors| is empty, or conversely that
-//     on failure |errors| is non-empty. Consumers must only use the
-//     boolean return value to determine success/failure.
+//     validating the path are appended to this structure. If verification
+//     failed, then there is guaranteed to be at least 1 error written to
+//     |errors|.
 NET_EXPORT bool VerifyCertificateChain(const ParsedCertificateList& certs,
                                        const TrustAnchor* trust_anchor,
                                        const SignaturePolicy* signature_policy,
                                        const der::GeneralizedTime& time,
-                                       CertErrors* errors) WARN_UNUSED_RESULT;
+                                       KeyPurpose required_key_purpose,
+                                       CertPathErrors* errors);
+
+// TODO(crbug.com/634443): Move exported errors to a central location?
+extern CertErrorId kValidityFailedNotAfter;
+extern CertErrorId kValidityFailedNotBefore;
 
 }  // namespace net
 

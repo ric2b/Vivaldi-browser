@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Спојено.</translation>
 <translation id="1025074108959230262">Лепљиви режим је онемогућен</translation>
 <translation id="1031961866430398710">и</translation>
+<translation id="1038643060055067718">Линије:</translation>
 <translation id="1038795173450935438">Да бисте се кретали унапред између ставки на страници, притисните тастер за претрагу + стрелицу надесно. Да бисте се вратили назад притисните тастер за претрагу + стрелицу налево . Да бисте отишли у следећи ред, притисните тастер за претрагу + стрелицу надоле. Да бисте отишли у претходни ред, користите тастер за претрагу + стрелицу нагоре. Ако дођете до ставке на коју желите да кликнете, притисните тастер за претрагу + тастер за размак.</translation>
 <translation id="1044777062731150180">Нема заглавља</translation>
 <translation id="106222400312645156">заглавље реда</translation>
@@ -109,7 +110,8 @@
 <translation id="2110480898214777136">Превуците са почетка на крај или са краја на почетак странице, дијалога или другог контејнера</translation>
 <translation id="2119965627982867824">дугме за промену вредности</translation>
 <translation id="2121067395472282800">приступни тастер:<ph name="KEY" /></translation>
-<translation id="2155457205053847599">Промените актуелну табелу Брајеве азбуке са 6 тачака тако што ћете изабрати опцију са листе у наставку.</translation>
+<translation id="2138345533858834403">Симулира приказ екрана са Брајевом азбуком који може да се освежава
+        у ChromeVox окну при врху екрана.</translation>
 <translation id="2169714232367507776">Клик на актуелну ставку</translation>
 <translation id="2179452035581866348">ChromeVox користи звукове да би пружао важне и додатне информације. Можете да користите ове звукове да бисте се брже кретали тако што ћете научити шта сваки од звукова значи. Када се боље упознате са услугом, можете да искључите говорне описе и користите звукове за важне информације о страници. Ево комплетне листе звукова и њихових значења.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{затворена заграда}one{# затворена заграда}few{# затворене заграде}other{# затворених заграда}}</translation>
@@ -124,6 +126,7 @@
 <translation id="2344193891939537199">Контрола датума и времена</translation>
 <translation id="2347456970887948350">Линк</translation>
 <translation id="2359897517538099099">Не у режиму табеле.</translation>
+<translation id="2381733276052567791">Укључите или искључите говор</translation>
 <translation id="2390264819538553347">Да бисте ишли унапред, притисните Enter. Да бисте ишли уназад, притисните тастер за назад (Backspace).</translation>
 <translation id="241124561063364910">па</translation>
 <translation id="2416512023405990736">Неозначено поље за потврду</translation>
@@ -166,6 +169,7 @@
 <translation id="2800204403141299078">Нема више различитих елемената.</translation>
 <translation id="2800780099804980316">Нема претходног заглавља 1. нивоа.</translation>
 <translation id="280499067616661124">Функција ChromeVox-а Пронађи на страници</translation>
+<translation id="2808001342598757276">Осветли екран</translation>
 <translation id="2811019999044652585">Да бисте прелазили на друге делове екрана, као што су траке с алаткама или системска палета, притисните Control + тастер за кретање унапред. Тастер за кретање унапред на Chromebook-у се налази одмах изнад тастера са бројем 2.</translation>
 <translation id="2811204574343810641">Ред</translation>
 <translation id="2816654101880605877">Нема следећег клизача.</translation>
@@ -185,11 +189,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{табулатор}one{# табулатор}few{# табулатора}other{# табулатора}}</translation>
 <translation id="2972078295414139404">Нема претходног посећеног линка.</translation>
 <translation id="2972205263822847197">Опис алатке</translation>
-<translation id="2978549349327282388">Колоне:</translation>
 <translation id="2998131015536248178">Претходни знак</translation>
 <translation id="2999559350546931576">Смањивање регистра</translation>
 <translation id="2999945368667127852">Не постоји виџет за следећу медијску датотеку.</translation>
 <translation id="3012414509011670858">Нема претходног одељка.</translation>
+<translation id="3014130421870723208">@изм 8тач</translation>
 <translation id="3030432017085518523">Дугме за избор ставке менија</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостроф}one{# апостроф}few{# апострофа}other{# апострофа}}</translation>
 <translation id="3040901448410802366">Индикатор напретка</translation>
@@ -212,6 +216,7 @@
 <translation id="3138767756593758860">Приказивање листе обележја</translation>
 <translation id="3143851963874289911">ћелија мреже</translation>
 <translation id="3149472044574196936">Следећи ред</translation>
+<translation id="3153024374267644603">Говор је укључен</translation>
 <translation id="3155083529632865074">Нема претходног дугмета.</translation>
 <translation id="3163593631834463955">Празно заглавље колоне</translation>
 <translation id="316542773973815724">Навигација</translation>
@@ -224,6 +229,7 @@
 <translation id="3229375994964697375">Посећени линк</translation>
 <translation id="3232388865800379423">Искачуће дугме</translation>
 <translation id="3241052487511142956">Претходни посећени линк</translation>
+<translation id="3241638166094654466">Ћелија у свакој линији:</translation>
 <translation id="3286390186030710347">Клизач</translation>
 <translation id="3299925995433437805">Нема следећег посећеног линка.</translation>
 <translation id="3307886118343381874">Прелазак на крај табеле</translation>
@@ -380,6 +386,7 @@
 <translation id="4376316291247992553">Прикажи графику као Брајеву азбуку</translation>
 <translation id="4391478986194775161">информације о садржају</translation>
 <translation id="443163561286008705">ресетуј</translation>
+<translation id="4457472090507035117">Изаберите актуелни глас:</translation>
 <translation id="4471074325120394300">Нема линкова.</translation>
 <translation id="4476183483923481720">нови ред</translation>
 <translation id="4482330759234983253">Претходна табела</translation>
@@ -453,7 +460,6 @@
 <translation id="5105050547967751155">обавезно</translation>
 <translation id="5110983769041734144">Нема претходног поља обрасца.</translation>
 <translation id="5111640677200759579">Заглавље колоне</translation>
-<translation id="5117636609870536415">имејл</translation>
 <translation id="5136967254288895616">Нема претходног линка.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="517143700877085897">, није изабрано</translation>
@@ -564,10 +570,10 @@
 <translation id="5968607524793740041">Прикажи контекстуални мени</translation>
 <translation id="5983179082906765664">Повећавање грануларности навигације</translation>
 <translation id="5999630716831179808">Гласови</translation>
-<translation id="6000417740266304866">Промените актуелну табелу Брајеве азбуке са 8 тачака тако што ћете изабрати опцију са листе у наставку.</translation>
 <translation id="6006050241733874051">Образац</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{обрнута коса црта}one{# обрнута коса црта}few{# обрнуте косе црте}other{# обрнутих косих црта}}</translation>
 <translation id="6037602951055904232">Померање унапред</translation>
+<translation id="6044160928851315051">Затамни екран</translation>
 <translation id="6082768461603900813">Основно кретање</translation>
 <translation id="611827076493383239">посећено</translation>
 <translation id="6119955456199054975">Крај ћелије.</translation>
@@ -606,7 +612,6 @@
 <translation id="6444046323172968959">Дијалог обавештења</translation>
 <translation id="6459511626086141404">Равна мапа тастера</translation>
 <translation id="6468049171101508116">Следеће дугме</translation>
-<translation id="6491972999578897419">Промените актуелни глас тако што ћете изабрати неку од опција са листе у наставку.</translation>
 <translation id="6493991254603208962">Смањи осветљеност</translation>
 <translation id="6508059270146105198">Померање екрана са Брајевом азбуком на дно странице</translation>
 <translation id="6536864053412760904">Math ML токен</translation>
@@ -658,6 +663,7 @@
 <translation id="7116595520562830928">више редова</translation>
 <translation id="712735679809149106">одјек речи</translation>
 <translation id="713824876195128146">Следећи издвојени цитат</translation>
+<translation id="7143034430156387447">Прелази са Брајеве азбуке са 6 тачака на 8 тачака и обрнуто.</translation>
 <translation id="7161771961008409533">Искачуће дугме</translation>
 <translation id="7165714724802225287">Актуелни стил приказа је „преклапање“.</translation>
 <translation id="7167657087543110">одјек знакова</translation>
@@ -668,6 +674,7 @@
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">ред</translation>
 <translation id="7226216518520804442">lst</translation>
+<translation id="7229749224609077523">Изаберите табелу Брајеве азбуке са 6 тачака:</translation>
 <translation id="72393384879519786">Заглавље</translation>
 <translation id="7241683698754534149">Отварање дугог описа на новој картици</translation>
 <translation id="7248671827512403053">Апликација</translation>
@@ -741,6 +748,7 @@
 <translation id="7974390230414479278">Ставка менија</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{знак навода}one{# знак навода}few{# знака навода}other{# знакова навода}}</translation>
+<translation id="8017588669690167134">Говор је искључен</translation>
 <translation id="8033827949643255796">изабрано</translation>
 <translation id="8035962149453661158">највише: <ph name="X" /></translation>
 <translation id="8042761080832772327">Измените текст, унос за претрагу</translation>
@@ -759,7 +767,6 @@
 <translation id="820417203470636242">Празна ћелија.</translation>
 <translation id="8215202828671303819">Вишеструки избор</translation>
 <translation id="8224171046658870249">Прешли сте на ChromeVox Next</translation>
-<translation id="8259358278692921574">Редови:</translation>
 <translation id="8276439074553447000">Прелазак на претходну ставку која може да се фокусира</translation>
 <translation id="8278417001922463147">Нема претходног чланка.</translation>
 <translation id="8283603667300770666">Следеће поље обрасца</translation>
@@ -797,7 +804,6 @@
 <translation id="8638532244051952400">Објављивање координата актуелне ћелије</translation>
 <translation id="8650576015643545550">Нема претходне листе.</translation>
 <translation id="8651481478098336970">искључи звук</translation>
-<translation id="8653031188082306838">URL</translation>
 <translation id="8653646212587894517">Приказивање листе линкова</translation>
 <translation id="8664519043722036194">секунди</translation>
 <translation id="867187640362843212">Заглавље 5</translation>
@@ -817,6 +823,7 @@
 <translation id="8856538297388979332">Притисните нагоре или надоле да бисте прегледали команде и притисните Enter за активацију</translation>
 <translation id="8864099967139188018">Нема следећег заглавља 6. нивоа.</translation>
 <translation id="8882002077197914455">Заглавље реда</translation>
+<translation id="8883850400338911892">urlизм 8тач</translation>
 <translation id="8896347895970027998">Активирање или деактивирање ChromeVox-а.</translation>
 <translation id="8898516272131543774">Циклични одјек интерпункције</translation>
 <translation id="8900148057318340779">Тастер за префикс</translation>
@@ -830,6 +837,7 @@
 <translation id="9027462562263121875">Нема табела.</translation>
 <translation id="9040132695316389094">Заглавље 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" />%</translation>
+<translation id="9061884144798498064">Изаберите табелу Брајеве азбуке са 8 тачака:</translation>
 <translation id="9065283790526219006">+popup</translation>
 <translation id="9077213568694924680">уклоњено из избора</translation>
 <translation id="9082874451376019682">Нема претходног клизача.</translation>

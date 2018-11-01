@@ -226,7 +226,7 @@ TEST(NetworkQualityEstimatorTest, TestKbpsRTTUpdates) {
       estimator.GetRecentTransportRTT(base::TimeTicks(), &transport_rtt));
 
   // Verify the contents of the net log.
-  EXPECT_EQ(
+  EXPECT_LE(
       2, estimator.GetEntriesCount(NetLogEventType::NETWORK_QUALITY_CHANGED));
   EXPECT_EQ(http_rtt.InMilliseconds(),
             estimator.GetNetLogLastIntegerValue(
@@ -316,7 +316,7 @@ TEST(NetworkQualityEstimatorTest, TestKbpsRTTUpdates) {
   estimator.SimulateNetworkChange(
       NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI, std::string());
   histogram_tester.ExpectUniqueSample("NQE.CachedNetworkQualityAvailable",
-                                      false, 3);
+                                      false, 2);
   histogram_tester.ExpectTotalCount("NQE.PeakKbps.Unknown", 1);
   histogram_tester.ExpectTotalCount("NQE.FastestRTT.Unknown", 1);
 
@@ -347,7 +347,7 @@ TEST(NetworkQualityEstimatorTest, TestKbpsRTTUpdates) {
   estimator.SimulateNetworkChange(
       NetworkChangeNotifier::ConnectionType::CONNECTION_UNKNOWN, "test");
   histogram_tester.ExpectBucketCount("NQE.CachedNetworkQualityAvailable", false,
-                                     3);
+                                     2);
   histogram_tester.ExpectBucketCount("NQE.CachedNetworkQualityAvailable", true,
                                      1);
 }
@@ -411,8 +411,10 @@ TEST(NetworkQualityEstimatorTest, Caching) {
   // |observer| should be notified as soon as it is added.
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, observer.effective_connection_types().size());
-  EXPECT_EQ(
-      2, estimator.GetEntriesCount(NetLogEventType::NETWORK_QUALITY_CHANGED));
+
+  int num_net_log_entries =
+      estimator.GetEntriesCount(NetLogEventType::NETWORK_QUALITY_CHANGED);
+  EXPECT_LE(2, num_net_log_entries);
 
   estimator.SimulateNetworkChange(
       NetworkChangeNotifier::ConnectionType::CONNECTION_2G, "test");
@@ -425,7 +427,8 @@ TEST(NetworkQualityEstimatorTest, Caching) {
 
   // Verify the contents of the net log.
   EXPECT_LE(
-      3, estimator.GetEntriesCount(NetLogEventType::NETWORK_QUALITY_CHANGED));
+      1, estimator.GetEntriesCount(NetLogEventType::NETWORK_QUALITY_CHANGED) -
+             num_net_log_entries);
   EXPECT_NE(-1, estimator.GetNetLogLastIntegerValue(
                     NetLogEventType::NETWORK_QUALITY_CHANGED, "http_rtt_ms"));
   EXPECT_EQ(-1,
@@ -1741,7 +1744,7 @@ TEST(NetworkQualityEstimatorTest, MAYBE_TestEffectiveConnectionTypeObserver) {
   request->Start();
   base::RunLoop().Run();
   EXPECT_EQ(1U, observer.effective_connection_types().size());
-  EXPECT_EQ(
+  EXPECT_LE(
       1, estimator.GetEntriesCount(NetLogEventType::NETWORK_QUALITY_CHANGED));
 
   // Verify the contents of the net log.

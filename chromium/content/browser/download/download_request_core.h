@@ -127,6 +127,9 @@ class CONTENT_EXPORT DownloadRequestCore
       const net::HttpResponseHeaders& http_headers,
       DownloadSaveInfo* save_info);
 
+  static void AddPartialRequestHeaders(net::URLRequest* request,
+                                       DownloadUrlParameters* params);
+
   std::unique_ptr<DownloadCreateInfo> CreateDownloadCreateInfo(
       DownloadInterruptReason result);
 
@@ -137,6 +140,7 @@ class CONTENT_EXPORT DownloadRequestCore
   // populate the DownloadCreateInfo when the time comes.
   std::unique_ptr<DownloadSaveInfo> save_info_;
   uint32_t download_id_;
+  bool transient_;
   DownloadUrlParameters::OnStartedCallback on_started_callback_;
 
   // Data flow

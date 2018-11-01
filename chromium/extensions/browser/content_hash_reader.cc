@@ -35,11 +35,10 @@ ContentHashReader::ContentHashReader(const std::string& extension_id,
       relative_path_(relative_path),
       key_(key),
       status_(NOT_INITIALIZED),
-      content_exists_(false),
       have_verified_contents_(false),
       have_computed_hashes_(false),
-      block_size_(0) {
-}
+      file_missing_from_verified_contents_(false),
+      block_size_(0) {}
 
 ContentHashReader::~ContentHashReader() {
 }
@@ -50,23 +49,16 @@ bool ContentHashReader::Init() {
   status_ = FAILURE;
   base::FilePath verified_contents_path =
       file_util::GetVerifiedContentsPath(extension_root_);
-
-  // Check that this is a valid resource to verify (i.e., it exists).
-  base::FilePath content_path = extension_root_.Append(relative_path_);
-  if (!base::PathExists(content_path) || base::DirectoryExists(content_path))
-    return false;
-
-  content_exists_ = true;
-
   if (!base::PathExists(verified_contents_path))
     return false;
 
-  verified_contents_.reset(new VerifiedContents(key_.data, key_.size));
-  if (!verified_contents_->InitFrom(verified_contents_path, false) ||
-      !verified_contents_->valid_signature() ||
-      verified_contents_->version() != extension_version_ ||
-      verified_contents_->extension_id() != extension_id_)
+  VerifiedContents verified_contents(key_.data, key_.size);
+  if (!verified_contents.InitFrom(verified_contents_path) ||
+      !verified_contents.valid_signature() ||
+      verified_contents.version() != extension_version_ ||
+      verified_contents.extension_id() != extension_id_) {
     return false;
+  }
 
   have_verified_contents_ = true;
 
@@ -81,13 +73,22 @@ bool ContentHashReader::Init() {
 
   have_computed_hashes_ = true;
 
+  if (!verified_contents.HasTreeHashRoot(relative_path_)) {
+    // Extension is requesting a non-existent resource that does not have an
+    // entry in verified_contents.json. This can happen when an extension sends
+    // XHR to its non-existent resource. This should not result in content
+    // verification failure.
+    file_missing_from_verified_contents_ = true;
+    return false;
+  }
+
   if (!reader.GetHashes(relative_path_, &block_size_, &hashes_) ||
       block_size_ % crypto::kSHA256Length != 0)
     return false;
 
   std::string root =
       ComputeTreeHashRoot(hashes_, block_size_ / crypto::kSHA256Length);
-  if (!verified_contents_->TreeHashRootEquals(relative_path_, root))
+  if (!verified_contents.TreeHashRootEquals(relative_path_, root))
     return false;
 
   status_ = SUCCESS;

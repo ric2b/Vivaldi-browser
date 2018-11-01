@@ -4,9 +4,9 @@
 
 #include "ash/mus/move_event_handler.h"
 
-#include "ash/common/wm_window.h"
 #include "ash/mus/bridge/workspace_event_handler_mus.h"
-#include "services/ui/public/interfaces/cursor.mojom.h"
+#include "ash/wm_window.h"
+#include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "ui/aura/mus/window_manager_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/base/class_property.h"
@@ -28,26 +28,26 @@ namespace ash {
 namespace mus {
 namespace {
 
-ui::mojom::Cursor CursorForWindowComponent(int window_component) {
+ui::mojom::CursorType CursorForWindowComponent(int window_component) {
   switch (window_component) {
     case HTBOTTOM:
-      return ui::mojom::Cursor::SOUTH_RESIZE;
+      return ui::mojom::CursorType::SOUTH_RESIZE;
     case HTBOTTOMLEFT:
-      return ui::mojom::Cursor::SOUTH_WEST_RESIZE;
+      return ui::mojom::CursorType::SOUTH_WEST_RESIZE;
     case HTBOTTOMRIGHT:
-      return ui::mojom::Cursor::SOUTH_EAST_RESIZE;
+      return ui::mojom::CursorType::SOUTH_EAST_RESIZE;
     case HTLEFT:
-      return ui::mojom::Cursor::WEST_RESIZE;
+      return ui::mojom::CursorType::WEST_RESIZE;
     case HTRIGHT:
-      return ui::mojom::Cursor::EAST_RESIZE;
+      return ui::mojom::CursorType::EAST_RESIZE;
     case HTTOP:
-      return ui::mojom::Cursor::NORTH_RESIZE;
+      return ui::mojom::CursorType::NORTH_RESIZE;
     case HTTOPLEFT:
-      return ui::mojom::Cursor::NORTH_WEST_RESIZE;
+      return ui::mojom::CursorType::NORTH_WEST_RESIZE;
     case HTTOPRIGHT:
-      return ui::mojom::Cursor::NORTH_EAST_RESIZE;
+      return ui::mojom::CursorType::NORTH_EAST_RESIZE;
     default:
-      return ui::mojom::Cursor::CURSOR_NULL;
+      return ui::mojom::CursorType::CURSOR_NULL;
   }
 }
 
@@ -63,8 +63,7 @@ MoveEventHandler::MoveEventHandler(
     aura::WindowManagerClient* window_manager_client,
     aura::Window* window)
     : wm_window_(WmWindow::Get(window)),
-      window_manager_client_(window_manager_client),
-      toplevel_window_event_handler_(wm_window_->GetShell()) {
+      window_manager_client_(window_manager_client) {
   window->AddObserver(this);
   window->AddPreTargetHandler(this);
 

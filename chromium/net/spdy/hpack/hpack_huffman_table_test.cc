@@ -7,7 +7,6 @@
 #include <stdint.h>
 
 #include <bitset>
-#include <string>
 #include <utility>
 
 #include "base/logging.h"
@@ -20,8 +19,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using base::StringPiece;
-using std::string;
 using testing::ElementsAreArray;
 using testing::Pointwise;
 
@@ -67,8 +64,8 @@ class GenericHuffmanTableTest : public ::testing::TestWithParam<bool> {
  protected:
   GenericHuffmanTableTest() : table_(), peer_(table_) {}
 
-  string EncodeString(StringPiece input) {
-    string result;
+  SpdyString EncodeString(SpdyStringPiece input) {
+    SpdyString result;
     HpackOutputStream output_stream;
     table_.EncodeString(input, &output_stream);
 
@@ -89,10 +86,10 @@ MATCHER(DecodeEntryEq, "") {
          lhs.length == rhs.length && lhs.symbol_id == rhs.symbol_id;
 }
 
-uint32_t bits32(const string& bitstring) {
+uint32_t bits32(const SpdyString& bitstring) {
   return std::bitset<32>(bitstring).to_ulong();
 }
-char bits8(const string& bitstring) {
+char bits8(const SpdyString& bitstring) {
   return static_cast<char>(std::bitset<8>(bitstring).to_ulong());
 }
 
@@ -229,16 +226,16 @@ TEST_F(GenericHuffmanTableTest, ValidateInternalsWithSmallCode) {
   EXPECT_EQ(bits8("10011000"), peer_.pad_bits());
 
   char input_storage[] = {2, 3, 2, 7, 4};
-  StringPiece input(input_storage, arraysize(input_storage));
+  SpdyStringPiece input(input_storage, arraysize(input_storage));
   // By symbol: (2) 00 (3) 010 (2) 00 (7) 10010 (4) 10000 (6 as pad) 1001100.
   char expect_storage[] = {bits8("00010001"), bits8("00101000"),
                            bits8("01001100")};
-  StringPiece expect(expect_storage, arraysize(expect_storage));
+  SpdyStringPiece expect(expect_storage, arraysize(expect_storage));
 
-  string buffer_in = EncodeString(input);
+  SpdyString buffer_in = EncodeString(input);
   EXPECT_EQ(expect, buffer_in);
 
-  string buffer_out;
+  SpdyString buffer_out;
   HpackInputStream input_stream(buffer_in);
   EXPECT_TRUE(table_.GenericDecodeString(&input_stream, &buffer_out));
   EXPECT_EQ(buffer_out, input);
@@ -297,11 +294,11 @@ TEST_F(GenericHuffmanTableTest, DecodeWithBadInput) {
       {bits32("10011100000000000000000000000000"), 16, 8}};
   EXPECT_TRUE(table_.Initialize(code, arraysize(code)));
 
-  string buffer;
+  SpdyString buffer;
   {
     // This example works: (2) 00 (3) 010 (2) 00 (6) 100110 (pad) 100.
     char input_storage[] = {bits8("00010001"), bits8("00110100")};
-    StringPiece input(input_storage, arraysize(input_storage));
+    SpdyStringPiece input(input_storage, arraysize(input_storage));
 
     HpackInputStream input_stream(input);
     EXPECT_TRUE(table_.GenericDecodeString(&input_stream, &buffer));
@@ -311,7 +308,7 @@ TEST_F(GenericHuffmanTableTest, DecodeWithBadInput) {
     // Expect to fail on an invalid code prefix.
     // (2) 00 (3) 010 (2) 00 (too-large) 101000 (pad) 100.
     char input_storage[] = {bits8("00010001"), bits8("01000111")};
-    StringPiece input(input_storage, arraysize(input_storage));
+    SpdyStringPiece input(input_storage, arraysize(input_storage));
 
     HpackInputStream input_stream(input);
     EXPECT_FALSE(table_.GenericDecodeString(&input_stream, &buffer));
@@ -321,7 +318,7 @@ TEST_F(GenericHuffmanTableTest, DecodeWithBadInput) {
     // Expect to fail if more than a byte of unconsumed input remains.
     // (6) 100110 (8 truncated) 1001110000
     char input_storage[] = {bits8("10011010"), bits8("01110000")};
-    StringPiece input(input_storage, arraysize(input_storage));
+    SpdyStringPiece input(input_storage, arraysize(input_storage));
 
     HpackInputStream input_stream(input);
     EXPECT_FALSE(table_.GenericDecodeString(&input_stream, &buffer));
@@ -339,7 +336,7 @@ class HpackHuffmanTableTest : public GenericHuffmanTableTest {
     EXPECT_TRUE(table_.IsInitialized());
   }
 
-  void DecodeStringTwice(const string& encoded, string* out) {
+  void DecodeStringTwice(const SpdyString& encoded, SpdyString* out) {
     // First decode with HpackHuffmanTable.
     {
       HpackInputStream input_stream(encoded);
@@ -349,7 +346,7 @@ class HpackHuffmanTableTest : public GenericHuffmanTableTest {
     // the same.
     {
       HpackInputStream input_stream(encoded);
-      string buf;
+      SpdyString buf;
       EXPECT_TRUE(HpackHuffmanDecoder::DecodeString(&input_stream, &buf));
       EXPECT_EQ(*out, buf);
     }
@@ -361,8 +358,8 @@ TEST_F(HpackHuffmanTableTest, InitializeHpackCode) {
 }
 
 TEST_F(HpackHuffmanTableTest, SpecRequestExamples) {
-  string buffer;
-  string test_table[] = {
+  SpdyString buffer;
+  SpdyString test_table[] = {
       a2b_hex("f1e3c2e5f23a6ba0ab90f4ff"),
       "www.example.com",
       a2b_hex("a8eb10649cbf"),
@@ -374,8 +371,8 @@ TEST_F(HpackHuffmanTableTest, SpecRequestExamples) {
   };
   // Round-trip each test example.
   for (size_t i = 0; i != arraysize(test_table); i += 2) {
-    const string& encodedFixture(test_table[i]);
-    const string& decodedFixture(test_table[i + 1]);
+    const SpdyString& encodedFixture(test_table[i]);
+    const SpdyString& decodedFixture(test_table[i + 1]);
     DecodeStringTwice(encodedFixture, &buffer);
     EXPECT_EQ(decodedFixture, buffer);
     buffer = EncodeString(decodedFixture);
@@ -384,23 +381,27 @@ TEST_F(HpackHuffmanTableTest, SpecRequestExamples) {
 }
 
 TEST_F(HpackHuffmanTableTest, SpecResponseExamples) {
-  string buffer;
-  string test_table[] = {
-      a2b_hex("6402"), "302", a2b_hex("aec3771a4b"), "private",
+  SpdyString buffer;
+  SpdyString test_table[] = {
+      a2b_hex("6402"),
+      "302",
+      a2b_hex("aec3771a4b"),
+      "private",
       a2b_hex("d07abe941054d444a8200595040b8166"
               "e082a62d1bff"),
       "Mon, 21 Oct 2013 20:13:21 GMT",
       a2b_hex("9d29ad171863c78f0b97c8e9ae82ae43"
               "d3"),
-      "https://www.example.com", a2b_hex("94e7821dd7f2e6c7b335dfdfcd5b3960"
-                                         "d5af27087f3672c1ab270fb5291f9587"
-                                         "316065c003ed4ee5b1063d5007"),
+      "https://www.example.com",
+      a2b_hex("94e7821dd7f2e6c7b335dfdfcd5b3960"
+              "d5af27087f3672c1ab270fb5291f9587"
+              "316065c003ed4ee5b1063d5007"),
       "foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1",
   };
   // Round-trip each test example.
   for (size_t i = 0; i != arraysize(test_table); i += 2) {
-    const string& encodedFixture(test_table[i]);
-    const string& decodedFixture(test_table[i + 1]);
+    const SpdyString& encodedFixture(test_table[i]);
+    const SpdyString& decodedFixture(test_table[i + 1]);
     DecodeStringTwice(encodedFixture, &buffer);
     EXPECT_EQ(decodedFixture, buffer);
     buffer = EncodeString(decodedFixture);
@@ -412,9 +413,9 @@ TEST_F(HpackHuffmanTableTest, RoundTripIndividualSymbols) {
   for (size_t i = 0; i != 256; i++) {
     char c = static_cast<char>(i);
     char storage[3] = {c, c, c};
-    StringPiece input(storage, arraysize(storage));
-    string buffer_in = EncodeString(input);
-    string buffer_out;
+    SpdyStringPiece input(storage, arraysize(storage));
+    SpdyString buffer_in = EncodeString(input);
+    SpdyString buffer_out;
     DecodeStringTwice(buffer_in, &buffer_out);
     EXPECT_EQ(input, buffer_out);
   }
@@ -426,23 +427,23 @@ TEST_F(HpackHuffmanTableTest, RoundTripSymbolSequence) {
     storage[i] = static_cast<char>(i);
     storage[511 - i] = static_cast<char>(i);
   }
-  StringPiece input(storage, arraysize(storage));
+  SpdyStringPiece input(storage, arraysize(storage));
 
-  string buffer_in = EncodeString(input);
-  string buffer_out;
+  SpdyString buffer_in = EncodeString(input);
+  SpdyString buffer_out;
   DecodeStringTwice(buffer_in, &buffer_out);
   EXPECT_EQ(input, buffer_out);
 }
 
 TEST_F(HpackHuffmanTableTest, EncodedSizeAgreesWithEncodeString) {
-  string test_table[] = {
+  SpdyString test_table[] = {
       "",
       "Mon, 21 Oct 2013 20:13:21 GMT",
       "https://www.example.com",
       "foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1",
-      string(1, '\0'),
-      string("foo\0bar", 7),
-      string(256, '\0'),
+      SpdyString(1, '\0'),
+      SpdyString("foo\0bar", 7),
+      SpdyString(256, '\0'),
   };
   for (size_t i = 0; i != 256; ++i) {
     // Expand last |test_table| entry to cover all codes.
@@ -450,7 +451,7 @@ TEST_F(HpackHuffmanTableTest, EncodedSizeAgreesWithEncodeString) {
   }
 
   HpackOutputStream output_stream;
-  string encoding;
+  SpdyString encoding;
   for (size_t i = 0; i != arraysize(test_table); ++i) {
     table_.EncodeString(test_table[i], &output_stream);
     output_stream.TakeString(&encoding);

@@ -86,18 +86,18 @@ void EventDispatcher::SetMousePointerScreenLocation(
   delegate_->OnMouseCursorLocationChanged(screen_location);
 }
 
-ui::mojom::Cursor EventDispatcher::GetCurrentMouseCursor() const {
+ui::mojom::CursorType EventDispatcher::GetCurrentMouseCursor() const {
   if (drag_controller_)
     return drag_controller_->current_cursor();
 
   if (!mouse_cursor_source_window_)
-    return ui::mojom::Cursor::POINTER;
+    return ui::mojom::CursorType::POINTER;
 
   if (mouse_cursor_in_non_client_area_)
     return mouse_cursor_source_window_->non_client_cursor();
 
   const ServerWindow* window = GetWindowForMouseCursor();
-  return window ? window->cursor() : ui::mojom::Cursor::POINTER;
+  return window ? window->cursor() : ui::mojom::CursorType::POINTER;
 }
 
 bool EventDispatcher::SetCaptureWindow(ServerWindow* window,
@@ -288,8 +288,7 @@ void EventDispatcher::ProcessEvent(const ui::Event& event,
 #endif
   if (event.IsKeyEvent()) {
     const ui::KeyEvent* key_event = event.AsKeyEvent();
-    if (event.type() == ui::ET_KEY_PRESSED && !key_event->is_char() &&
-        match_phase == AcceleratorMatchPhase::ANY) {
+    if (!key_event->is_char() && match_phase == AcceleratorMatchPhase::ANY) {
       Accelerator* pre_target =
           FindAccelerator(*key_event, ui::mojom::AcceleratorPhase::PRE_TARGET);
       if (pre_target) {
@@ -465,9 +464,9 @@ void EventDispatcher::UpdateTargetForPointer(int32_t pointer_id,
   if (event.IsMousePointerEvent()) {
     ui::PointerEvent exit_event(
         ui::ET_POINTER_EXITED, event.location(), event.root_location(),
-        event.flags(), ui::PointerEvent::kMousePointerId,
-        0 /* changed_button_flags */,
-        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE),
+        event.flags(), 0 /* changed_button_flags */,
+        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE,
+                           ui::MouseEvent::kMousePointerId),
         event.time_stamp());
     DispatchToPointerTarget(pointer_targets_[pointer_id], exit_event);
   }
@@ -618,8 +617,8 @@ void EventDispatcher::CancelImplicitCaptureExcept(ServerWindow* window,
     // TODO(jonross): Track previous location in PointerTarget for sending
     // cancels.
     ui::PointerEvent event(event_type, gfx::Point(), gfx::Point(), ui::EF_NONE,
-                           pair.first, 0 /* changed_button_flags */,
-                           ui::PointerDetails(pointer_type),
+                           0 /* changed_button_flags */,
+                           ui::PointerDetails(pointer_type, pair.first),
                            ui::EventTimeForNow());
     DispatchToPointerTarget(pair.second, event);
   }

@@ -13,6 +13,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "chromeos/dbus/cryptohome_client.h"
 
 namespace chromeos {
@@ -31,7 +32,7 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   void WaitForServiceToBeAvailable(
       const WaitForServiceToBeAvailableCallback& callback) override;
   void IsMounted(const BoolDBusMethodCallback& callback) override;
-  bool Unmount(bool* success) override;
+  void Unmount(const BoolDBusMethodCallback& callback) override;
   void AsyncCheckKey(const cryptohome::Identification& cryptohome_id,
                      const std::string& key,
                      const AsyncMethodCallback& callback) override;
@@ -195,12 +196,18 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   void FlushAndSignBootAttributes(
       const cryptohome::FlushAndSignBootAttributesRequest& request,
       const ProtobufMethodCallback& callback) override;
+  void MigrateToDircrypto(const cryptohome::Identification& cryptohome_id,
+                          const VoidDBusMethodCallback& callback) override;
+  void SetDircryptoMigrationProgressHandler(
+      const DircryptoMigrationProgessHandler& handler) override;
   void RemoveFirmwareManagementParametersFromTpm(
       const cryptohome::RemoveFirmwareManagementParametersRequest& request,
       const ProtobufMethodCallback& callback) override;
   void SetFirmwareManagementParametersInTpm(
       const cryptohome::SetFirmwareManagementParametersRequest& request,
       const ProtobufMethodCallback& callback) override;
+  void NeedsDircryptoMigration(const cryptohome::Identification& cryptohome_id,
+                               const BoolDBusMethodCallback& callback) override;
 
   // Changes the behavior of WaitForServiceToBeAvailable(). This method runs
   // pending callbacks if is_available is true.
@@ -222,6 +229,11 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   // format used by SystemSaltGetter::ConvertRawSaltToHexString()).
   static std::vector<uint8_t> GetStubSystemSalt();
 
+  // Sets the needs dircrypto migration value.
+  void set_needs_dircrypto_migration(bool needs_migration) {
+    needs_dircrypto_migration_ = needs_migration;
+  }
+
  private:
   void ReturnProtobufMethodCallback(
       const cryptohome::BaseReply& reply,
@@ -241,6 +253,10 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   void ReturnAsyncMethodDataInternal(const AsyncMethodCallback& callback,
                                      const std::string& data);
 
+  // This method is used to implement MigrateToDircrypto with simulated progress
+  // updates.
+  void OnDircryptoMigrationProgressUpdated();
+
   bool service_is_available_;
   int async_call_id_;
   AsyncCallStatusHandler async_call_status_handler_;
@@ -255,6 +271,13 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   // associated data blob. Used to implement InstallAttributesSet and -Get.
   std::map<std::string, std::vector<uint8_t>> install_attrs_;
   bool locked_;
+
+  DircryptoMigrationProgessHandler dircrypto_migration_progress_handler_;
+  base::RepeatingTimer dircrypto_migration_progress_timer_;
+  uint64_t dircrypto_migration_progress_;
+
+  bool needs_dircrypto_migration_ = false;
+
   base::WeakPtrFactory<FakeCryptohomeClient> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeCryptohomeClient);

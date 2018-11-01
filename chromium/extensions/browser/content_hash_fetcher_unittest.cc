@@ -85,6 +85,9 @@ class ContentHashFetcherWaiter {
 // Used in setting up the behavior of our ContentHashFetcher.
 class MockDelegate : public ContentVerifierDelegate {
  public:
+  MockDelegate() {}
+  ~MockDelegate() override {}
+
   ContentVerifierDelegate::Mode ShouldBeVerified(
       const Extension& extension) override {
     return ContentVerifierDelegate::ENFORCE_STRICT;
@@ -113,6 +116,11 @@ class MockDelegate : public ContentVerifierDelegate {
                     ContentVerifyJob::FailureReason reason) override {
     ADD_FAILURE() << "Unexpected call for this test";
   }
+
+  void Shutdown() override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockDelegate);
 };
 
 class ContentHashFetcherTest : public ExtensionsTest {
@@ -178,9 +186,15 @@ class ContentHashFetcherTest : public ExtensionsTest {
   base::ScopedTempDir temp_dir_;
 };
 
+// Flaky on Linux and ChromeOS. https://crbug.com/702300
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_MissingVerifiedContents DISABLED_MissingVerifiedContents
+#else
+#define MAYBE_MissingVerifiedContents MissingVerifiedContents
+#endif
 // This tests our ability to successfully fetch, parse, and validate a missing
 // verified_contents.json file for an extension.
-TEST_F(ContentHashFetcherTest, MissingVerifiedContents) {
+TEST_F(ContentHashFetcherTest, MAYBE_MissingVerifiedContents) {
   // We unzip the extension source to a temp directory to simulate it being
   // installed there, because the ContentHashFetcher will create the _metadata/
   // directory within the extension install dir and write the fetched
@@ -219,9 +233,17 @@ TEST_F(ContentHashFetcherTest, MissingVerifiedContents) {
       base::PathExists(file_util::GetVerifiedContentsPath(extension->path())));
 }
 
+// Flaky on Linux and ChromeOS. https://crbug.com/702300
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_MissingVerifiedContentsAndCorrupt \
+  DISABLED_MissingVerifiedContentsAndCorrupt
+#else
+#define MAYBE_MissingVerifiedContentsAndCorrupt \
+  MissingVerifiedContentsAndCorrupt
+#endif
 // Similar to MissingVerifiedContents, but tests the case where the extension
 // actually has corruption.
-TEST_F(ContentHashFetcherTest, MissingVerifiedContentsAndCorrupt) {
+TEST_F(ContentHashFetcherTest, MAYBE_MissingVerifiedContentsAndCorrupt) {
   base::FilePath test_dir_base =
       GetTestPath(base::FilePath()).AppendASCII("missing_verified_contents");
   scoped_refptr<Extension> extension =

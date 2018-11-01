@@ -8,8 +8,8 @@
 #include "core/dom/IntersectionObserver.h"
 #include "core/dom/SuspendableObject.h"
 #include "platform/heap/Handle.h"
-#include "wtf/HashSet.h"
-#include "wtf/WeakPtr.h"
+#include "platform/wtf/HashSet.h"
+#include "platform/wtf/WeakPtr.h"
 
 // Design doc for IntersectionObserver implementation:
 //   https://docs.google.com/a/google.com/document/d/1hLK0eyT5_BzyNS4OkjsnoqqFQDYCbKfyBinj94OnLiQ
@@ -24,32 +24,32 @@ class IntersectionObserverController
   USING_GARBAGE_COLLECTED_MIXIN(IntersectionObserverController);
 
  public:
-  static IntersectionObserverController* create(Document*);
+  static IntersectionObserverController* Create(Document*);
   ~IntersectionObserverController();
 
-  void resume() override;
+  void Resume() override;
 
-  void scheduleIntersectionObserverForDelivery(IntersectionObserver&);
-  void deliverIntersectionObservations();
-  void computeTrackedIntersectionObservations();
-  void addTrackedObserver(IntersectionObserver&);
-  void removeTrackedObserversForRoot(const Node&);
+  void ScheduleIntersectionObserverForDelivery(IntersectionObserver&);
+  void DeliverIntersectionObservations();
+  void ComputeTrackedIntersectionObservations();
+  void AddTrackedObserver(IntersectionObserver&);
+  void RemoveTrackedObserversForRoot(const Node&);
 
   DECLARE_TRACE();
 
  private:
   explicit IntersectionObserverController(Document*);
-  void postTaskToDeliverObservations();
+  void PostTaskToDeliverObservations();
 
  private:
   // IntersectionObservers for which this is the tracking document.
-  HeapHashSet<WeakMember<IntersectionObserver>> m_trackedIntersectionObservers;
+  HeapHashSet<WeakMember<IntersectionObserver>> tracked_intersection_observers_;
   // IntersectionObservers for which this is the execution context of the
   // callback.
-  HeapHashSet<Member<IntersectionObserver>> m_pendingIntersectionObservers;
-  WTF::WeakPtrFactory<IntersectionObserverController> m_weakPtrFactory;
+  HeapHashSet<Member<IntersectionObserver>> pending_intersection_observers_;
+  WTF::WeakPtrFactory<IntersectionObserverController> weak_ptr_factory_;
 
-  bool m_callbackFiredWhileSuspended;
+  bool callback_fired_while_suspended_;
 };
 
 }  // namespace blink

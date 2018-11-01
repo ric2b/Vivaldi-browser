@@ -16,7 +16,9 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -56,7 +58,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/user_metrics.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -658,7 +659,7 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
       break;
     case IDC_EXIT:
       RecordMenuItemClick(MENU_ITEM_EXIT);
-      content::RecordAction(UserMetricsAction("Exit"));
+      base::RecordAction(UserMetricsAction("Exit"));
       chrome::CloseAllBrowsers();
       break;
     case IDC_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND: {
@@ -975,11 +976,10 @@ void BackgroundModeManager::UpdateStatusTrayIconContextMenu() {
       // We should only display the profile in the status icon if it has at
       // least one background app.
       if (bmd->GetBackgroundClientCount() > 0) {
-        StatusIconMenuModel* submenu = new StatusIconMenuModel(bmd);
         // The submenu constructor caller owns the lifetime of the submenu.
         // The containing menu does not handle the lifetime.
-        submenus.push_back(submenu);
-        bmd->BuildProfileMenu(submenu, menu.get());
+        submenus.push_back(base::MakeUnique<StatusIconMenuModel>(bmd));
+        bmd->BuildProfileMenu(submenus.back().get(), menu.get());
         profiles_using_background_mode++;
       }
     }

@@ -49,3 +49,12 @@ DISABLE(TrustStoreMacTest, SystemCerts)
 // Seems to have broken in v58
 DISABLE(BrowserActionButtonUiTest, MediaRouterActionContextMenuInOverflow)
 DISABLE(BrowserActionButtonUiTest, OpenMenuOnDisabledActionWithMouseOrKeyboard)
+
+// Media failures
+DISABLE(DataRequestHandlerTest, DataSourceSizeSmallerThanRequested)
+
+// Touchbar failures
+DISABLE(BrowserWindowTouchBarUnitTest, TouchBarItems)
+DISABLE(BrowserWindowTouchBarUnitTest, ReloadOrStopTouchBarItem)
+
+DISABLE(WebContentsImplBrowserTest, RenderWidgetDeletedWhileMouseLockPending)

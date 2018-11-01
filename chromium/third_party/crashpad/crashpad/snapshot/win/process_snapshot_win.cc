@@ -14,6 +14,9 @@
 
 #include "snapshot/win/process_snapshot_win.h"
 
+#include <stddef.h>
+#include <wchar.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
@@ -323,8 +326,9 @@ void ProcessSnapshotWin::InitializeUnloadedModules() {
           uet.SizeOfImage,
           uet.CheckSum,
           uet.TimeDateStamp,
-          base::UTF16ToUTF8(
-              base::StringPiece16(uet.ImageName, arraysize(uet.ImageName)))));
+          base::UTF16ToUTF8(base::StringPiece16(
+              uet.ImageName,
+              wcsnlen(uet.ImageName, arraysize(uet.ImageName))))));
     }
   }
 }

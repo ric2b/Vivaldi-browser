@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "cc/output/begin_frame_args.h"
 #include "cc/resources/transferable_resource.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/local_surface_id_allocator.h"
@@ -62,7 +63,8 @@ using CursorProvider = Pointer;
 class Surface : public ui::ContextFactoryObserver,
                 public aura::WindowObserver,
                 public ui::PropertyHandler,
-                public ui::CompositorVSyncManager::Observer {
+                public ui::CompositorVSyncManager::Observer,
+                public cc::BeginFrameObserverBase {
  public:
   using PropertyDeallocator = void (*)(int64_t value);
 
@@ -189,15 +191,12 @@ class Surface : public ui::ContextFactoryObserver,
   // Returns a trace value representing the state of the surface.
   std::unique_ptr<base::trace_event::TracedValue> AsTracedValue() const;
 
-  // Call this to indicate that surface is being scheduled for a draw.
-  void WillDraw();
+  // Call this to indicate that the previous CompositorFrame is processed and
+  // the surface is being scheduled for a draw.
+  void DidReceiveCompositorFrameAck();
 
-  // Returns true when there's an active frame callback that requires a
-  // BeginFrame() call.
-  bool NeedsBeginFrame() const;
-
-  // Call this to indicate that it's a good time to start producing a new frame.
-  void BeginFrame(base::TimeTicks frame_time);
+  // Called when the begin frame source has changed.
+  void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source);
 
   // Check whether this Surface and its children need to create new cc::Surface
   // IDs for their contents next time they get new buffer contents.
@@ -221,6 +220,10 @@ class Surface : public ui::ContextFactoryObserver,
   bool HasPendingDamageForTesting(const gfx::Rect& damage) const {
     return pending_damage_.contains(gfx::RectToSkIRect(damage));
   }
+
+  // Overridden from cc::BeginFrameObserverBase:
+  bool OnBeginFrameDerivedImpl(const cc::BeginFrameArgs& args) override;
+  void OnBeginFrameSourcePausedChanged(bool paused) override {}
 
  private:
   struct State {
@@ -281,6 +284,9 @@ class Surface : public ui::ContextFactoryObserver,
   // Updates the current Surface with a new frame referring to the resource in
   // current_resource_.
   void UpdateSurface(bool full_damage);
+
+  // Adds/Removes begin frame observer based on state.
+  void UpdateNeedsBeginFrame();
 
   // This returns true when the surface has some contents assigned to it.
   bool has_contents() const { return !!current_buffer_.buffer(); }
@@ -388,6 +394,11 @@ class Surface : public ui::ContextFactoryObserver,
   // ui::Layer::SetShowSurface because the layer needs to know how to add
   // references to surfaces.
   scoped_refptr<cc::SurfaceReferenceFactory> surface_reference_factory_;
+
+  // The begin frame source being observed.
+  cc::BeginFrameSource* begin_frame_source_ = nullptr;
+  bool needs_begin_frame_ = false;
+  cc::BeginFrameAck current_begin_frame_ack_;
 
   DISALLOW_COPY_AND_ASSIGN(Surface);
 };

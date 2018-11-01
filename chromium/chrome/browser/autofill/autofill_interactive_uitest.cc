@@ -403,9 +403,8 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
             "domAutomationController.send("
             "    Math.floor(bounds.top + bounds.height / 2));",
         &y));
-    content::SimulateMouseClickAt(GetWebContents(),
-                                  0,
-                                  blink::WebMouseEvent::Button::Left,
+    content::SimulateMouseClickAt(GetWebContents(), 0,
+                                  blink::WebMouseEvent::Button::kLeft,
                                   gfx::Point(x, y));
   }
 
@@ -475,12 +474,12 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
                              ui::KeyboardCode key_code,
                              content::RenderWidgetHost* widget) {
     // Route popup-targeted key presses via the render view host.
-    content::NativeWebKeyboardEvent event(blink::WebKeyboardEvent::RawKeyDown,
-                                          blink::WebInputEvent::NoModifiers,
+    content::NativeWebKeyboardEvent event(blink::WebKeyboardEvent::kRawKeyDown,
+                                          blink::WebInputEvent::kNoModifiers,
                                           ui::EventTimeForNow());
-    event.windowsKeyCode = key_code;
-    event.domCode = static_cast<int>(code);
-    event.domKey = key;
+    event.windows_key_code = key_code;
+    event.dom_code = static_cast<int>(code);
+    event.dom_key = key;
     test_delegate_.Reset();
     // Install the key press event sink to ensure that any events that are not
     // handled by the installed callbacks do not end up crashing the test.
@@ -502,12 +501,12 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
                               ui::DomCode code,
                               ui::KeyboardCode key_code) {
     // Route popup-targeted key presses via the render view host.
-    content::NativeWebKeyboardEvent event(blink::WebKeyboardEvent::RawKeyDown,
-                                          blink::WebInputEvent::NoModifiers,
+    content::NativeWebKeyboardEvent event(blink::WebKeyboardEvent::kRawKeyDown,
+                                          blink::WebInputEvent::kNoModifiers,
                                           ui::EventTimeForNow());
-    event.windowsKeyCode = key_code;
-    event.domCode = static_cast<int>(code);
-    event.domKey = key;
+    event.windows_key_code = key_code;
+    event.dom_code = static_cast<int>(code);
+    event.dom_key = key;
     // Install the key press event sink to ensure that any events that are not
     // handled by the installed callbacks do not end up crashing the test.
     GetRenderViewHost()->GetWidget()->AddKeyPressEventCallback(
@@ -765,10 +764,12 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 
 // Test that an input field is not rendered with the yellow autofilled
 // background color when choosing an option from the datalist suggestion list.
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_MACOSX) || defined(OS_CHROMEOS) || defined(OS_WIN) || \
+    defined(OS_LINUX)
 // Flakily triggers and assert on Mac; flakily gets empty string instead
 // of "Adam" on ChromeOS.
 // http://crbug.com/419868, http://crbug.com/595385.
+// Flaky on Windows and Linux as well: http://crbug.com/595385
 #define MAYBE_OnSelectOptionFromDatalist DISABLED_OnSelectOptionFromDatalist
 #else
 #define MAYBE_OnSelectOptionFromDatalist OnSelectOptionFromDatalist
@@ -1275,8 +1276,14 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_DynamicFormFill) {
   TryBasicFormFill();
 }
 
+// https://crbug.com/708861 tracks test flakiness.
+#if defined(OS_CHROMEOS)
+#define MAYBE_AutofillAfterReload DISABLED_AutofillAfterReload
+#else
+#define MAYBE_AutofillAfterReload AutofillAfterReload
+#endif
 // Test that form filling works after reloading the current page.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillAfterReload) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterReload) {
   CreateTestProfile();
 
   // Load the test page.
@@ -1491,13 +1498,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
 // The high level key presses execute the following: Select the first text
 // field, invoke the autofill popup list, select the first profile within the
 // list, and commit to the profile to populate the form.
-// Flakily times out on windows. http://crbug.com/390564
-// Flaky on the official cros-trunk crbug.com/516052
-#if defined(OS_WIN) || defined(OFFICIAL_BUILD)
+// Flakily times out on windows (https://crbug.com/390564), and on CrOS
+// (https://crbug.com/516052).
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
 #define MAYBE_ComparePhoneNumbers DISABLED_ComparePhoneNumbers
 #else
 #define MAYBE_ComparePhoneNumbers ComparePhoneNumbers
-#endif  // defined(OS_WIN) || defined(OFFICIAL_BUILD)
+#endif  // defined(OS_WIN) || defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_ComparePhoneNumbers) {
   AutofillProfile profile;
   profile.SetRawInfo(NAME_FIRST, ASCIIToUTF16("Bob"));
@@ -1771,7 +1778,14 @@ class AutofillInteractiveIsolationTest : public AutofillInteractiveTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest, SimpleCrossSiteFill) {
+#if defined(OS_WIN)
+// Flaky on Windows 7 in debug build. http://crbug.com/710436
+#define MAYBE_SimpleCrossSiteFill DISABLED_SimpleCrossSiteFill
+#else
+#define MAYBE_SimpleCrossSiteFill SimpleCrossSiteFill
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest,
+                       MAYBE_SimpleCrossSiteFill) {
   // Ensure that |embedded_test_server()| serves both domains used below.
   host_resolver()->AddRule("*", "127.0.0.1");
 
@@ -1814,6 +1828,42 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest, SimpleCrossSiteFill) {
       "    document.getElementById('NAME_FIRST').value);",
       &value));
   EXPECT_EQ("Milton", value);
+}
+
+// This test verifies that credit card (payment card list) popup works when the
+// form is inside an OOPIF.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, CrossSitePaymentForms) {
+  // Ensure that |embedded_test_server()| serves both domains used below.
+  host_resolver()->AddRule("*", "127.0.0.1");
+
+  // Main frame is on a.com, iframe is on b.com.
+  GURL url = embedded_test_server()->GetURL(
+      "a.com", "/autofill/cross_origin_iframe.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  GURL iframe_url = embedded_test_server()->GetURL(
+      "b.com", "/autofill/autofill_creditcard_form.html");
+  EXPECT_TRUE(
+      content::NavigateIframeToURL(GetWebContents(), "crossFrame", iframe_url));
+
+  // Let |test_delegate()| also observe autofill events in the iframe.
+  content::RenderFrameHost* cross_frame =
+      RenderFrameHostForName(GetWebContents(), "crossFrame");
+  ASSERT_TRUE(cross_frame);
+  ContentAutofillDriver* cross_driver =
+      ContentAutofillDriverFactory::FromWebContents(GetWebContents())
+          ->DriverForFrame(cross_frame);
+  ASSERT_TRUE(cross_driver);
+  cross_driver->autofill_manager()->SetTestDelegate(test_delegate());
+
+  // Focus the form in the iframe and simulate choosing a suggestion via
+  // keyboard.
+  std::string script_focus(
+      "window.focus();"
+      "document.getElementById('CREDIT_CARD_NUMBER').focus();");
+  ASSERT_TRUE(content::ExecuteScript(cross_frame, script_focus));
+
+  // Send an arrow dow keypress in order to trigger the autofill popup.
+  SendKeyToPageAndWait(ui::DomKey::ARROW_DOWN);
 }
 
 }  // namespace autofill

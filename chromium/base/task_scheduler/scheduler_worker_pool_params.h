@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "base/task_scheduler/scheduler_worker_params.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -34,6 +33,8 @@ class BASE_EXPORT SchedulerWorkerPoolParams final {
   // suggestion on when to reclaim idle threads. The pool is free to ignore this
   // value for performance or correctness reasons. |backward_compatibility|
   // indicates whether backward compatibility is enabled.
+  //
+  // TODO(fdoray): Remove this constructor. https://crbug.com/690706
   SchedulerWorkerPoolParams(
       const std::string& name,
       ThreadPriority priority_hint,
@@ -42,29 +43,37 @@ class BASE_EXPORT SchedulerWorkerPoolParams final {
       TimeDelta suggested_reclaim_time,
       SchedulerBackwardCompatibility backward_compatibility =
           SchedulerBackwardCompatibility::DISABLED);
-  SchedulerWorkerPoolParams(SchedulerWorkerPoolParams&& other);
-  SchedulerWorkerPoolParams& operator=(SchedulerWorkerPoolParams&& other);
+
+  // Same as above, with no explicit |name| and |priority_hint|.
+  SchedulerWorkerPoolParams(
+      StandbyThreadPolicy standby_thread_policy,
+      int max_threads,
+      TimeDelta suggested_reclaim_time,
+      SchedulerBackwardCompatibility backward_compatibility =
+          SchedulerBackwardCompatibility::DISABLED);
+
+  SchedulerWorkerPoolParams(const SchedulerWorkerPoolParams& other);
+  SchedulerWorkerPoolParams& operator=(const SchedulerWorkerPoolParams& other);
 
   const std::string& name() const { return name_; }
   ThreadPriority priority_hint() const { return priority_hint_; }
   StandbyThreadPolicy standby_thread_policy() const {
     return standby_thread_policy_;
   }
-  size_t max_threads() const { return max_threads_; }
+  int max_threads() const { return max_threads_; }
   TimeDelta suggested_reclaim_time() const { return suggested_reclaim_time_; }
   SchedulerBackwardCompatibility backward_compatibility() const {
     return backward_compatibility_;
   }
 
  private:
+  // TODO(fdoray): Remove |name_| and |priority_hint_|. https://crbug.com/690706
   std::string name_;
   ThreadPriority priority_hint_;
   StandbyThreadPolicy standby_thread_policy_;
-  size_t max_threads_;
+  int max_threads_;
   TimeDelta suggested_reclaim_time_;
   SchedulerBackwardCompatibility backward_compatibility_;
-
-  DISALLOW_COPY_AND_ASSIGN(SchedulerWorkerPoolParams);
 };
 
 }  // namespace base

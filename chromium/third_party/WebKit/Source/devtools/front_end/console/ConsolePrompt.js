@@ -32,6 +32,7 @@ Console.ConsolePrompt = class extends UI.Widget {
       });
       this._editor.widget().element.addEventListener('keydown', this._editorKeyDown.bind(this), true);
       this._editor.widget().show(this.element);
+      this._editor.addEventListener(UI.TextEditor.Events.TextChanged, this._onTextChanged, this);
 
       this.setText(this._initialText);
       delete this._initialText;
@@ -41,6 +42,10 @@ Console.ConsolePrompt = class extends UI.Widget {
 
       this._editorSetForTest();
     }
+  }
+
+  _onTextChanged() {
+    this.dispatchEventToListeners(Console.ConsolePrompt.Events.TextChanged);
   }
 
   /**
@@ -64,7 +69,7 @@ Console.ConsolePrompt = class extends UI.Widget {
 
   moveCaretToEndOfPrompt() {
     if (this._editor)
-      this._editor.setSelection(Common.TextRange.createFromLocation(Infinity, Infinity));
+      this._editor.setSelection(TextUtils.TextRange.createFromLocation(Infinity, Infinity));
   }
 
   /**
@@ -75,6 +80,7 @@ Console.ConsolePrompt = class extends UI.Widget {
       this._editor.setText(text);
     else
       this._initialText = text;
+    this.dispatchEventToListeners(Console.ConsolePrompt.Events.TextChanged);
   }
 
   /**
@@ -126,6 +132,10 @@ Console.ConsolePrompt = class extends UI.Widget {
       case UI.KeyboardShortcut.Keys.Enter.code:
         this._enterKeyPressed(keyboardEvent);
         break;
+      case UI.KeyboardShortcut.Keys.Tab.code:
+        if (!this.text())
+          keyboardEvent.consume();
+        break;
     }
 
     if (newText === undefined)
@@ -134,10 +144,9 @@ Console.ConsolePrompt = class extends UI.Widget {
     this.setText(newText);
 
     if (isPrevious)
-      this._editor.setSelection(Common.TextRange.createFromLocation(0, Infinity));
+      this._editor.setSelection(TextUtils.TextRange.createFromLocation(0, Infinity));
     else
       this.moveCaretToEndOfPrompt();
-    this.setMinimumSize(0, this._editor.widget().element.offsetHeight);
   }
 
   /**
@@ -160,7 +169,7 @@ Console.ConsolePrompt = class extends UI.Widget {
       this._appendCommand(str, true);
       return;
     }
-    currentExecutionContext.target().runtimeModel.compileScript(
+    currentExecutionContext.runtimeModel.compileScript(
         str, '', false, currentExecutionContext.id, compileCallback.bind(this));
 
     /**
@@ -191,7 +200,7 @@ Console.ConsolePrompt = class extends UI.Widget {
     this.setText('');
     var currentExecutionContext = UI.context.flavor(SDK.ExecutionContext);
     if (currentExecutionContext) {
-      SDK.ConsoleModel.evaluateCommandInConsole(currentExecutionContext, text, useCommandLineAPI);
+      ConsoleModel.consoleModel.evaluateCommandInConsole(currentExecutionContext, text, useCommandLineAPI);
       if (Console.ConsolePanel.instance().isShowing())
         Host.userMetrics.actionTaken(Host.UserMetrics.Action.CommandEvaluatedInConsolePanel);
     }
@@ -238,39 +247,43 @@ Console.ConsolePrompt = class extends UI.Widget {
   /**
    * @param {number} lineNumber
    * @param {number} columnNumber
-   * @return {?Common.TextRange}
+   * @return {?TextUtils.TextRange}
    */
   _substituteRange(lineNumber, columnNumber) {
+    var token = this._editor.tokenAtTextPosition(lineNumber, columnNumber);
+    if (token && token.type === 'js-string')
+      return new TextUtils.TextRange(lineNumber, token.startColumn, lineNumber, columnNumber);
+
     var lineText = this._editor.line(lineNumber);
     var index;
     for (index = columnNumber - 1; index >= 0; index--) {
       if (' =:[({;,!+-*/&|^<>.\t\r\n'.indexOf(lineText.charAt(index)) !== -1)
         break;
     }
-    return new Common.TextRange(lineNumber, index + 1, lineNumber, columnNumber);
+    return new TextUtils.TextRange(lineNumber, index + 1, lineNumber, columnNumber);
   }
 
   /**
-   * @param {!Common.TextRange} queryRange
-   * @param {!Common.TextRange} substituteRange
+   * @param {!TextUtils.TextRange} queryRange
+   * @param {!TextUtils.TextRange} substituteRange
    * @param {boolean=} force
-   * @param {string=} currentTokenType
    * @return {!Promise<!UI.SuggestBox.Suggestions>}
    */
-  _wordsWithQuery(queryRange, substituteRange, force, currentTokenType) {
+  _wordsWithQuery(queryRange, substituteRange, force) {
     var query = this._editor.text(queryRange);
-    var before = this._editor.text(new Common.TextRange(0, 0, queryRange.startLine, queryRange.startColumn));
+    var before = this._editor.text(new TextUtils.TextRange(0, 0, queryRange.startLine, queryRange.startColumn));
     var historyWords = this._historyCompletions(query, force);
-
-    var excludedTokens = new Set(['js-comment', 'js-string-2', 'js-def']);
-    var trimmedBefore = before.trim();
-    if (!trimmedBefore.endsWith('[') && !trimmedBefore.match(/\.\s*(get|set|delete)\s*\(\s*$/))
-      excludedTokens.add('js-string');
-    if (!trimmedBefore.endsWith('.'))
-      excludedTokens.add('js-property');
-    if (excludedTokens.has(currentTokenType))
-      return Promise.resolve(historyWords);
-
+    var token = this._editor.tokenAtTextPosition(substituteRange.startLine, substituteRange.startColumn);
+    if (token) {
+      var excludedTokens = new Set(['js-comment', 'js-string-2', 'js-def']);
+      var trimmedBefore = before.trim();
+      if (!trimmedBefore.endsWith('[') && !trimmedBefore.match(/\.\s*(get|set|delete)\s*\(\s*$/))
+        excludedTokens.add('js-string');
+      if (!trimmedBefore.endsWith('.'))
+        excludedTokens.add('js-property');
+      if (excludedTokens.has(token.type))
+        return Promise.resolve(historyWords);
+    }
     return ObjectUI.JavaScriptAutocomplete.completionsForTextInCurrentContext(before, query, force)
         .then(words => words.concat(historyWords));
   }
@@ -367,4 +380,8 @@ Console.ConsoleHistoryManager = class {
   _currentHistoryItem() {
     return this._data[this._data.length - this._historyOffset];
   }
+};
+
+Console.ConsolePrompt.Events = {
+  TextChanged: Symbol('TextChanged')
 };

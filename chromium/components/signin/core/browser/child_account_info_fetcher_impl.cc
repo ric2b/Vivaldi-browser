@@ -84,8 +84,8 @@ void ChildAccountInfoFetcherImpl::FetchIfNotInProgress() {
   fetch_in_progress_ = true;
   OAuth2TokenService::ScopeSet scopes;
   scopes.insert(GaiaConstants::kOAuth1LoginScope);
-  login_token_request_.reset(
-      token_service_->StartRequest(account_id_, scopes, this).release());
+  login_token_request_ =
+      token_service_->StartRequest(account_id_, scopes, this);
 }
 
 void ChildAccountInfoFetcherImpl::OnGetTokenSuccess(
@@ -96,9 +96,8 @@ void ChildAccountInfoFetcherImpl::OnGetTokenSuccess(
                                "OnGetTokenSuccess");
   DCHECK_EQ(request, login_token_request_.get());
 
-  gaia_auth_fetcher_.reset(
-      fetcher_service_->signin_client_->CreateGaiaAuthFetcher(
-          this, GaiaConstants::kChromeSource, request_context_getter_));
+  gaia_auth_fetcher_ = fetcher_service_->signin_client_->CreateGaiaAuthFetcher(
+      this, GaiaConstants::kChromeSource, request_context_getter_);
   gaia_auth_fetcher_->StartOAuthLogin(access_token,
                                       GaiaConstants::kGaiaService);
 }

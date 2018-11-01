@@ -264,10 +264,10 @@ GL_FUNCTIONS = [
   'versions': [{ 'name': 'glCopySubTextureCHROMIUM',
                  'extensions': ['GL_CHROMIUM_copy_texture'], }],
   'arguments':
-      'GLuint sourceId, GLuint destId, GLint xoffset, GLint yoffset, '
-      'GLint x, GLint y, GLsizei width, GLsizei height, '
-      'GLboolean unpackFlipY, GLboolean unpackPremultiplyAlpha, '
-      'GLboolean unpackUnmultiplyAlpha', },
+      'GLuint sourceId, GLint sourceLevel, GLenum destTarget, GLuint destId, '
+      'GLint destLevel, GLint xoffset, GLint yoffset, GLint x, GLint y, '
+      'GLsizei width, GLsizei height, GLboolean unpackFlipY, '
+      'GLboolean unpackPremultiplyAlpha, GLboolean unpackUnmultiplyAlpha', },
 { 'return_type': 'void',
   'names': ['glCopyTexImage2D'],
   'arguments':
@@ -287,9 +287,10 @@ GL_FUNCTIONS = [
   'versions': [{ 'name': 'glCopyTextureCHROMIUM',
                  'extensions': ['GL_CHROMIUM_copy_texture'], }],
   'arguments':
-      'GLuint sourceId, GLuint destId, GLint internalFormat, '
-      'GLenum destType, GLboolean unpackFlipY, '
-      'GLboolean unpackPremultiplyAlpha, GLboolean unpackUnmultiplyAlpha', },
+      'GLuint sourceId, GLint sourceLevel, GLenum destTarget, GLuint destId, '
+      'GLint destLevel, GLint internalFormat, GLenum destType, '
+      'GLboolean unpackFlipY, GLboolean unpackPremultiplyAlpha, '
+      'GLboolean unpackUnmultiplyAlpha', },
 { 'return_type': 'void',
   'names': ['glCoverageModulationNV'],
   'arguments': 'GLenum components'},
@@ -1294,7 +1295,8 @@ GL_FUNCTIONS = [
                 'extensions': ['GL_ANGLE_robust_client_memory']}],
   'arguments':
       'GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, '
-      'GLenum type, GLsizei bufSize, GLsizei* length, void* data', },
+      'GLenum type, GLsizei bufSize, GLsizei* length, GLsizei* columns, '
+      'GLsizei* rows, void* data', },
 { 'return_type': 'void',
   'names': ['glReadPixels'],
   'arguments':
@@ -1305,7 +1307,8 @@ GL_FUNCTIONS = [
                 'extensions': ['GL_ANGLE_robust_client_memory']}],
   'arguments':
       'GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, '
-      'GLenum type, GLsizei bufSize, GLsizei* length, void* pixels', },
+      'GLenum type, GLsizei bufSize, GLsizei* length, GLsizei* columns, '
+      'GLsizei* rows, void* pixels', },
 { 'return_type': 'void',
   'names': ['glReleaseShaderCompiler'],
   'arguments': 'void', },
@@ -1329,6 +1332,10 @@ GL_FUNCTIONS = [
   'names': ['glRenderbufferStorageMultisampleIMG'],
   'arguments': 'GLenum target, GLsizei samples, GLenum internalformat, '
                'GLsizei width, GLsizei height', },
+{ 'return_type': 'void',
+  'versions': [{ 'name': 'glRequestExtensionANGLE',
+                 'extensions': ['GL_ANGLE_request_extension'] }],
+  'arguments': 'const char* name', },
 { 'return_type': 'void',
   'versions': [{ 'name': 'glResumeTransformFeedback',
                  'extensions': ['GL_ARB_transform_feedback2'] }],

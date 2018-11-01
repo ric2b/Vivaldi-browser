@@ -11,6 +11,7 @@
 #include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 
@@ -23,7 +24,7 @@ const char kResponsePreamble[] = ")]}'";
 GURL GoogleAppendQueryparamsToLogoURL(const GURL& logo_url,
                                       const std::string& fingerprint,
                                       bool wants_cta,
-                                      bool transparent) {
+                                      bool gray_background) {
   // Note: we can't just use net::AppendQueryParameter() because it escapes
   // ":" to "%3A", but the server requires the colon not to be escaped.
   // See: http://crbug.com/413845
@@ -36,14 +37,17 @@ GURL GoogleAppendQueryparamsToLogoURL(const GURL& logo_url,
       query += "&";
 
     query += "async=";
-    std::vector<std::string> params;
-    if (!fingerprint.empty())
-      params.push_back("es_dfp:" + fingerprint);
+    std::vector<base::StringPiece> params;
+    std::string fingerprint_param;
+    if (!fingerprint.empty()) {
+      fingerprint_param = "es_dfp:" + fingerprint;
+      params.push_back(fingerprint_param);
+    }
 
     if (wants_cta)
       params.push_back("cta:1");
 
-    if (transparent) {
+    if (gray_background) {
       params.push_back("transp:1");
       params.push_back("graybg:1");
     }

@@ -12,7 +12,7 @@
 #include "gin/wrappable.h"
 #include "mojo/edk/js/handle.h"
 #include "mojo/public/cpp/system/core.h"
-#include "mojo/public/cpp/system/watcher.h"
+#include "mojo/public/cpp/system/simple_watcher.h"
 
 namespace mojo {
 namespace edk {
@@ -29,7 +29,7 @@ class WaitingCallback : public gin::Wrappable<WaitingCallback> {
   // WaitingCallback is explicitly cancelled.
   static gin::Handle<WaitingCallback> Create(
       v8::Isolate* isolate,
-      v8::Handle<v8::Function> callback,
+      v8::Local<v8::Function> callback,
       gin::Handle<HandleWrapper> handle_wrapper,
       MojoHandleSignals signals,
       bool one_shot);
@@ -41,7 +41,7 @@ class WaitingCallback : public gin::Wrappable<WaitingCallback> {
 
  private:
   WaitingCallback(v8::Isolate* isolate,
-                  v8::Handle<v8::Function> callback,
+                  v8::Local<v8::Function> callback,
                   bool one_shot);
   ~WaitingCallback() override;
 
@@ -54,7 +54,7 @@ class WaitingCallback : public gin::Wrappable<WaitingCallback> {
   const bool one_shot_;
 
   base::WeakPtr<gin::Runner> runner_;
-  Watcher watcher_;
+  SimpleWatcher watcher_;
   base::WeakPtrFactory<WaitingCallback> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(WaitingCallback);

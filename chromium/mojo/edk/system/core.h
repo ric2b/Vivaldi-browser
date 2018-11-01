@@ -27,6 +27,7 @@
 #include "mojo/public/c/system/message_pipe.h"
 #include "mojo/public/c/system/platform_handle.h"
 #include "mojo/public/c/system/types.h"
+#include "mojo/public/c/system/watcher.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 namespace base {
@@ -56,7 +57,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   // Called in the parent process any time a new child is launched.
   void AddChild(base::ProcessHandle process_handle,
-                ScopedPlatformHandle platform_handle,
+                ConnectionParams connection_params,
                 const std::string& child_token,
                 const ProcessErrorCallback& process_error_callback);
 
@@ -72,7 +73,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   void ClosePeerConnection(const std::string& peer_token);
 
   // Called in a child process exactly once during early initialization.
-  void InitChild(ScopedPlatformHandle platform_handle);
+  void InitChild(ConnectionParams connection_params);
 
   // Creates a message pipe endpoint associated with |token|, which a child
   // holding the token can later locate and connect to.
@@ -135,21 +136,20 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // "mojo/public/c/system/functions.h":
   MojoTimeTicks GetTimeTicksNow();
   MojoResult Close(MojoHandle handle);
-  MojoResult Wait(MojoHandle handle,
-                  MojoHandleSignals signals,
-                  MojoDeadline deadline,
-                  MojoHandleSignalsState* signals_state);
-  MojoResult WaitMany(const MojoHandle* handles,
-                      const MojoHandleSignals* signals,
-                      uint32_t num_handles,
-                      MojoDeadline deadline,
-                      uint32_t* result_index,
-                      MojoHandleSignalsState* signals_states);
-  MojoResult Watch(MojoHandle handle,
+  MojoResult QueryHandleSignalsState(MojoHandle handle,
+                                     MojoHandleSignalsState* signals_state);
+  MojoResult CreateWatcher(MojoWatcherCallback callback,
+                           MojoHandle* watcher_handle);
+  MojoResult Watch(MojoHandle watcher_handle,
+                   MojoHandle handle,
                    MojoHandleSignals signals,
-                   MojoWatchCallback callback,
                    uintptr_t context);
-  MojoResult CancelWatch(MojoHandle handle, uintptr_t context);
+  MojoResult CancelWatch(MojoHandle watcher_handle, uintptr_t context);
+  MojoResult ArmWatcher(MojoHandle watcher_handle,
+                        uint32_t* num_ready_contexts,
+                        uintptr_t* ready_contexts,
+                        MojoResult* ready_results,
+                        MojoHandleSignalsState* ready_signals_states);
   MojoResult AllocMessage(uint32_t num_bytes,
                           const MojoHandle* handles,
                           uint32_t num_handles,
@@ -158,20 +158,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   MojoResult FreeMessage(MojoMessageHandle message);
   MojoResult GetMessageBuffer(MojoMessageHandle message, void** buffer);
   MojoResult GetProperty(MojoPropertyType type, void* value);
-
-  // These methods correspond to the API functions defined in
-  // "mojo/public/c/system/wait_set.h":
-  MojoResult CreateWaitSet(MojoHandle* wait_set_handle);
-  MojoResult AddHandle(MojoHandle wait_set_handle,
-                       MojoHandle handle,
-                       MojoHandleSignals signals);
-  MojoResult RemoveHandle(MojoHandle wait_set_handle,
-                          MojoHandle handle);
-  MojoResult GetReadyHandles(MojoHandle wait_set_handle,
-                             uint32_t* count,
-                             MojoHandle* handles,
-                             MojoResult* results,
-                             MojoHandleSignalsState* signals_states);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/message_pipe.h":
@@ -269,13 +255,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   void GetActiveHandlesForTest(std::vector<MojoHandle>* handles);
 
  private:
-  MojoResult WaitManyInternal(const MojoHandle* handles,
-                              const MojoHandleSignals* signals,
-                              uint32_t num_handles,
-                              MojoDeadline deadline,
-                              uint32_t* result_index,
-                              HandleSignalsState* signals_states);
-
   // Used to pass ownership of our NodeController over to the IO thread in the
   // event that we're torn down before said thread.
   static void PassNodeControllerToIOThread(

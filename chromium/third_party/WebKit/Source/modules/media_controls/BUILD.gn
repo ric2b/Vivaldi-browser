@@ -1,0 +1,28 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/WebKit/Source/modules/modules.gni")
+
+blink_modules_sources("media_controls") {
+  sources = [
+    "MediaControlsImpl.cpp",
+    "MediaControlsImpl.h",
+    "MediaControlsMediaEventListener.cpp",
+    "MediaControlsMediaEventListener.h",
+    "MediaControlsOrientationLockDelegate.cpp",
+    "MediaControlsOrientationLockDelegate.h",
+    "MediaControlsWindowEventListener.cpp",
+    "MediaControlsWindowEventListener.h",
+    "elements/MediaControlCurrentTimeDisplayElement.cpp",
+    "elements/MediaControlCurrentTimeDisplayElement.h",
+    "elements/MediaControlMuteButtonElement.cpp",
+    "elements/MediaControlMuteButtonElement.h",
+    "elements/MediaControlOverlayEnclosureElement.cpp",
+    "elements/MediaControlOverlayEnclosureElement.h",
+    "elements/MediaControlPanelEnclosureElement.cpp",
+    "elements/MediaControlPanelEnclosureElement.h",
+    "elements/MediaControlRemainingTimeDisplayElement.cpp",
+    "elements/MediaControlRemainingTimeDisplayElement.h",
+  ]
+}

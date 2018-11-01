@@ -7,7 +7,6 @@
 
   // TODO(kalman): factor requiring chrome out of here.
   var chrome = requireNative('chrome').GetChrome();
-  var Event = require('event_bindings').Event;
   var lastError = require('lastError');
   var logActivity = requireNative('activityLogger');
   var logging = requireNative('logging');
@@ -22,6 +21,30 @@
   var kMessageChannel = "chrome.runtime.sendMessage";
   var kNativeMessageChannel = "chrome.runtime.sendNativeMessage";
   var kPortClosedError = 'Attempting to use a disconnected port object';
+
+  var jsEvent;
+  function createAnonymousEvent(schema) {
+    if (bindingUtil) {
+      // Native custom events ignore schema.
+      var supportsFilters = false;
+      return bindingUtil.createCustomEvent(undefined, undefined,
+                                           supportsFilters);
+    }
+    var options = {
+      __proto__: null,
+      unmanaged: true,
+    };
+    if (!jsEvent)
+      jsEvent = require('event_bindings').Event;
+    return new jsEvent(undefined, schema, options);
+  }
+
+  function invalidateEvent(event) {
+    if (bindingUtil)
+      bindingUtil.invalidateEvent(event);
+    else
+      privates(event).impl.destroy_();
+  }
 
   // Map of port IDs to port object.
   var ports = {__proto__: null};
@@ -44,12 +67,8 @@
       type: 'any',
       optional: true,
     };
-    var options = {
-      __proto__: null,
-      unmanaged: true,
-    };
-    this.onDisconnect = new Event(null, [portSchema], options);
-    this.onMessage = new Event(null, [messageSchema, portSchema], options);
+    this.onDisconnect = createAnonymousEvent([portSchema]);
+    this.onMessage = createAnonymousEvent([messageSchema, portSchema]);
   }
   $Object.setPrototypeOf(PortImpl.prototype, null);
 
@@ -95,8 +114,8 @@
   };
 
   PortImpl.prototype.destroy_ = function() {
-    privates(this.onDisconnect).impl.destroy_();
-    privates(this.onMessage).impl.destroy_();
+    invalidateEvent(this.onDisconnect);
+    invalidateEvent(this.onMessage);
     delete ports[this.portId_];
   };
 

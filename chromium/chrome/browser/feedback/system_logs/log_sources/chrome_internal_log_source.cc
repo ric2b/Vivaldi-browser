@@ -5,6 +5,7 @@
 #include "chrome/browser/feedback/system_logs/log_sources/chrome_internal_log_source.h"
 
 #include "base/json/json_string_value_serializer.h"
+#include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
@@ -18,7 +19,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/about_sync_util.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/browser/api/power/power_api.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/api/power.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 
@@ -38,6 +41,7 @@ namespace {
 
 constexpr char kSyncDataKey[] = "about_sync_data";
 constexpr char kExtensionsListKey[] = "extensions";
+constexpr char kPowerApiListKey[] = "chrome.power extensions";
 constexpr char kDataReductionProxyKey[] = "data_reduction_proxy";
 constexpr char kChromeVersionTag[] = "CHROME VERSION";
 #if defined(OS_CHROMEOS)
@@ -120,6 +124,7 @@ void ChromeInternalLogSource::Fetch(const SysLogsSourceCallback& callback) {
 
   PopulateSyncLogs(response.get());
   PopulateExtensionInfoLogs(response.get());
+  PopulatePowerApiLogs(response.get());
   PopulateDataReductionProxyLogs(response.get());
 #if defined(OS_WIN)
   PopulateUsbKeyboardDetected(response.get());
@@ -168,7 +173,7 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   for (base::ListValue::iterator it = details->begin();
       it != details->end(); ++it) {
     base::DictionaryValue* dict = NULL;
-    if ((*it)->GetAsDictionary(&dict)) {
+    if (it->GetAsDictionary(&dict)) {
       std::string title;
       dict->GetString("title", &title);
       if (title == syncer::sync_ui_util::kIdentityTitle) {
@@ -198,17 +203,38 @@ void ChromeInternalLogSource::PopulateExtensionInfoLogs(
   std::string extensions_list;
   for (const scoped_refptr<const extensions::Extension>& extension :
        extension_registry->enabled_extensions()) {
-    if (extensions_list.empty()) {
-      extensions_list = extension->name();
-    } else {
-      extensions_list += ",\n" + extension->name();
-    }
+    // Format the list as:
+    // "extension_id" : "extension_name" : "extension_version".
+
+    // Work around the anonymizer tool recognizing some versions as IPv4s.
+    // Replaces dots "." by underscores "_".
+    // We shouldn't change the anonymizer tool as it is working as intended; it
+    // must err on the side of safety.
+    std::string version;
+    base::ReplaceChars(extension->VersionString(), ".", "_", &version);
+    extensions_list += extension->id() + " : " + extension->name() +
+                       " : version " + version + "\n";
   }
-  if (!extensions_list.empty())
-    extensions_list += "\n";
 
   if (!extensions_list.empty())
     (*response)[kExtensionsListKey] = extensions_list;
+}
+
+void ChromeInternalLogSource::PopulatePowerApiLogs(
+    SystemLogsResponse* response) {
+  std::string info;
+  for (auto* profile :
+       g_browser_process->profile_manager()->GetLoadedProfiles()) {
+    for (const auto& it :
+         extensions::PowerAPI::Get(profile)->extension_levels()) {
+      if (!info.empty())
+        info += ",\n";
+      info += it.first + ": " + extensions::api::power::ToString(it.second);
+    }
+  }
+
+  if (!info.empty())
+    (*response)[kPowerApiListKey] = info;
 }
 
 void ChromeInternalLogSource::PopulateDataReductionProxyLogs(

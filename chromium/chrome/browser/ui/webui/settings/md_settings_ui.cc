@@ -35,17 +35,19 @@
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
 #include "chrome/browser/ui/webui/settings/site_settings_handler.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/settings_resources.h"
 #include "chrome/grit/settings_resources_map.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/common/system/chromeos/palette/palette_utils.h"
-#include "ash/common/system/chromeos/power/power_status.h"
+#include "ash/system/palette/palette_utils.h"
+#include "ash/system/power/power_status.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ui/ash/ash_util.h"
@@ -77,6 +79,16 @@
 #endif  // defined(USE_NSS_CERTS)
 
 namespace settings {
+
+// static
+void MdSettingsUI::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(prefs::kImportDialogAutofillFormData, true);
+  registry->RegisterBooleanPref(prefs::kImportDialogBookmarks, true);
+  registry->RegisterBooleanPref(prefs::kImportDialogHistory, true);
+  registry->RegisterBooleanPref(prefs::kImportDialogSavedPasswords, true);
+  registry->RegisterBooleanPref(prefs::kImportDialogSearchEngine, true);
+}
 
 MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
     : content::WebUIController(web_ui),
@@ -123,7 +135,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::CupsPrintersHandler>(web_ui));
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::FingerprintHandler>());
+      base::MakeUnique<chromeos::settings::FingerprintHandler>(profile));
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::KeyboardHandler>(web_ui));
   AddSettingsPageUIHandler(
@@ -162,7 +174,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::StylusHandler>());
   html_source->AddBoolean(
-      "pinUnlockEnabled",
+      "quickUnlockEnabled",
       chromeos::quick_unlock::IsPinEnabled(profile->GetPrefs()));
   html_source->AddBoolean("fingerprintUnlockEnabled",
                           chromeos::quick_unlock::IsFingerprintEnabled());
@@ -193,6 +205,10 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
 
 #if BUILDFLAG(USE_VULCANIZE)
   html_source->AddResourcePath("crisper.js", IDR_MD_SETTINGS_CRISPER_JS);
+  html_source->AddResourcePath("lazy_load.crisper.js",
+                               IDR_MD_SETTINGS_LAZY_LOAD_CRISPER_JS);
+  html_source->AddResourcePath("lazy_load.html",
+                               IDR_MD_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
   html_source->SetDefaultResource(IDR_MD_SETTINGS_VULCANIZED_HTML);
   html_source->UseGzip(std::unordered_set<std::string>());
 #else
@@ -222,7 +238,7 @@ void MdSettingsUI::AddSettingsPageUIHandler(
 
 void MdSettingsUI::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (navigation_handle->IsSamePage())
+  if (navigation_handle->IsSameDocument())
     return;
 
   load_start_time_ = base::Time::Now();

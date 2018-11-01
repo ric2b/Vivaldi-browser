@@ -4,26 +4,28 @@
 
 #include "ash/app_list/app_list_delegate_impl.h"
 
-#include "ash/common/shelf/app_list_button.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wm_shell.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/app_list_button.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
+#include "ash/shell.h"
+#include "ash/shell_port.h"
 #include "ui/app_list/presenter/app_list.h"
 
 namespace ash {
 
 AppListDelegateImpl::AppListDelegateImpl() {
-  WmShell::Get()->app_list()->set_delegate(this);
+  Shell::Get()->app_list()->set_delegate(this);
 }
 
 AppListDelegateImpl::~AppListDelegateImpl() {
-  WmShell::Get()->app_list()->set_delegate(nullptr);
+  Shell::Get()->app_list()->set_delegate(nullptr);
 }
 
 void AppListDelegateImpl::OnAppListVisibilityChanged(bool visible,
                                                      int64_t display_id) {
-  WmWindow* root_window = WmShell::Get()->GetRootWindowForDisplayId(display_id);
+  WmWindow* root_window =
+      ShellPort::Get()->GetRootWindowForDisplayId(display_id);
   AppListButton* app_list_button =
       WmShelf::ForWindow(root_window)->shelf_widget()->GetAppListButton();
   if (!app_list_button)

@@ -13,7 +13,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_impl.h"
@@ -74,8 +74,7 @@ class CC_EXPORT LayerTreeHostCommon {
         int max_texture_size,
         bool can_render_to_separate_surface,
         bool can_adjust_raster_scales,
-        bool verify_clip_tree_calculations,
-        bool verify_visible_rect_calculations,
+        bool use_layer_lists,
         LayerImplList* render_surface_layer_list,
         PropertyTrees* property_trees);
 
@@ -92,8 +91,7 @@ class CC_EXPORT LayerTreeHostCommon {
     int max_texture_size;
     bool can_render_to_separate_surface;
     bool can_adjust_raster_scales;
-    bool verify_clip_tree_calculations;
-    bool verify_visible_rect_calculations;
+    bool use_layer_lists;
     LayerImplList* render_surface_layer_list;
     PropertyTrees* property_trees;
   };
@@ -177,6 +175,8 @@ struct CC_EXPORT ScrollAndScaleSet {
   float top_controls_delta;
   std::vector<LayerTreeHostCommon::ScrollbarsUpdateInfo> scrollbars;
   std::vector<std::unique_ptr<SwapPromise>> swap_promises;
+  bool has_scrolled_by_wheel;
+  bool has_scrolled_by_touch;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ScrollAndScaleSet);

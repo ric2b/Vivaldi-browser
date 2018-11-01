@@ -55,7 +55,7 @@ void BufferedSpdyFramer::OnHeaders(SpdyStreamId stream_id,
   frames_received_++;
   DCHECK(!control_frame_fields_.get());
   control_frame_fields_.reset(new ControlFrameFields());
-  control_frame_fields_->type = HEADERS;
+  control_frame_fields_->type = SpdyFrameType::HEADERS;
   control_frame_fields_->stream_id = stream_id;
   control_frame_fields_->has_priority = has_priority;
   if (control_frame_fields_->has_priority) {
@@ -105,7 +105,7 @@ void BufferedSpdyFramer::OnHeaderFrameEnd(SpdyStreamId stream_id,
   }
   DCHECK(control_frame_fields_.get());
   switch (control_frame_fields_->type) {
-    case HEADERS:
+    case SpdyFrameType::HEADERS:
       visitor_->OnHeaders(
           control_frame_fields_->stream_id, control_frame_fields_->has_priority,
           control_frame_fields_->weight,
@@ -113,7 +113,7 @@ void BufferedSpdyFramer::OnHeaderFrameEnd(SpdyStreamId stream_id,
           control_frame_fields_->exclusive, control_frame_fields_->fin,
           coalescer_->release_headers());
       break;
-    case PUSH_PROMISE:
+    case SpdyFrameType::PUSH_PROMISE:
       visitor_->OnPushPromise(control_frame_fields_->stream_id,
                               control_frame_fields_->promised_stream_id,
                               coalescer_->release_headers());
@@ -185,7 +185,7 @@ void BufferedSpdyFramer::OnPushPromise(SpdyStreamId stream_id,
   frames_received_++;
   DCHECK(!control_frame_fields_.get());
   control_frame_fields_.reset(new ControlFrameFields());
-  control_frame_fields_->type = PUSH_PROMISE;
+  control_frame_fields_->type = SpdyFrameType::PUSH_PROMISE;
   control_frame_fields_->stream_id = stream_id;
   control_frame_fields_->promised_stream_id = promised_stream_id;
 
@@ -194,7 +194,7 @@ void BufferedSpdyFramer::OnPushPromise(SpdyStreamId stream_id,
 
 void BufferedSpdyFramer::OnAltSvc(
     SpdyStreamId stream_id,
-    base::StringPiece origin,
+    SpdyStringPiece origin,
     const SpdyAltSvcWireFormat::AlternativeServiceVector& altsvc_vector) {
   visitor_->OnAltSvc(stream_id, origin, altsvc_vector);
 }
@@ -284,8 +284,7 @@ std::unique_ptr<SpdySerializedFrame> BufferedSpdyFramer::CreateDataFrame(
     const char* data,
     uint32_t len,
     SpdyDataFlags flags) {
-  SpdyDataIR data_ir(stream_id,
-                     base::StringPiece(data, len));
+  SpdyDataIR data_ir(stream_id, SpdyStringPiece(data, len));
   data_ir.set_fin((flags & DATA_FLAG_FIN) != 0);
   return base::MakeUnique<SpdySerializedFrame>(
       spdy_framer_.SerializeData(data_ir));

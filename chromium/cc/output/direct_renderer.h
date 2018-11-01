@@ -11,16 +11,17 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "cc/base/cc_export.h"
+#include "cc/base/filter_operations.h"
+#include "cc/cc_export.h"
 #include "cc/output/ca_layer_overlay.h"
-#include "cc/output/filter_operations.h"
+#include "cc/output/dc_layer_overlay.h"
 #include "cc/output/overlay_processor.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/resources/resource_provider.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/latency/latency_info.h"
 
 namespace gfx {
 class ColorSpace;
@@ -89,7 +90,12 @@ class CC_EXPORT DirectRenderer {
 
     OverlayCandidateList overlay_list;
     CALayerOverlayList ca_layer_overlay_list;
+    DCLayerOverlayList dc_layer_overlay_list;
   };
+
+  void DisableColorChecksForTesting() {
+    disable_color_checks_for_testing_ = true;
+  }
 
  protected:
   friend class BspWalkActionDrawPolygon;
@@ -164,6 +170,7 @@ class CC_EXPORT DirectRenderer {
   virtual void DidChangeVisibility() = 0;
   virtual void CopyCurrentRenderPassToBitmap(
       std::unique_ptr<CopyOutputRequest> request) = 0;
+  virtual void SetEnableDCLayers(bool enable) = 0;
 
   gfx::Size surface_size_for_swap_buffers() const {
     return reshape_surface_size_;
@@ -182,8 +189,14 @@ class CC_EXPORT DirectRenderer {
   bool use_partial_swap_ = false;
   // Whether overdraw feedback is enabled and can be used.
   bool overdraw_feedback_ = false;
-  // Whether the SetDrawRectangle command is in use.
-  bool use_set_draw_rectangle_ = false;
+  // Whether the SetDrawRectangle and EnableDCLayers commands are in
+  // use.
+  bool supports_dc_layers_ = false;
+  // Whether the output surface is actually using DirectComposition.
+  bool using_dc_layers_ = false;
+  // This counts the number of draws since the last time
+  // DirectComposition layers needed to be used.
+  int frames_since_using_dc_layers_ = 0;
 
   // TODO(danakj): Just use a vector of pairs here? Hash map is way overkill.
   std::unordered_map<int, std::unique_ptr<ScopedResource>>
@@ -194,6 +207,7 @@ class CC_EXPORT DirectRenderer {
   RenderPassFilterList render_pass_background_filters_;
 
   bool visible_ = false;
+  bool disable_color_checks_for_testing_ = false;
 
   // For use in coordinate conversion, this stores the output rect, viewport
   // rect (= unflipped version of glViewport rect), the size of target

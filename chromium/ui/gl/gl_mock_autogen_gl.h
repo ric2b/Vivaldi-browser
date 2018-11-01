@@ -154,7 +154,7 @@ MOCK_METHOD5(CopyBufferSubData,
                   GLintptr writeOffset,
                   GLsizeiptr size));
 // TODO(zmo): crbug.com/456340
-// glCopySubTextureCHROMIUM cannot be mocked because it has 11 args.
+// glCopySubTextureCHROMIUM cannot be mocked because it has 14 args.
 MOCK_METHOD8(CopyTexImage2D,
              void(GLenum target,
                   GLint level,
@@ -183,14 +183,17 @@ MOCK_METHOD9(CopyTexSubImage3D,
                   GLint y,
                   GLsizei width,
                   GLsizei height));
-MOCK_METHOD7(CopyTextureCHROMIUM,
-             void(GLuint sourceId,
-                  GLuint destId,
-                  GLint internalFormat,
-                  GLenum destType,
-                  GLboolean unpackFlipY,
-                  GLboolean unpackPremultiplyAlpha,
-                  GLboolean unpackUnmultiplyAlpha));
+MOCK_METHOD10(CopyTextureCHROMIUM,
+              void(GLuint sourceId,
+                   GLint sourceLevel,
+                   GLenum destTarget,
+                   GLuint destId,
+                   GLint destLevel,
+                   GLint internalFormat,
+                   GLenum destType,
+                   GLboolean unpackFlipY,
+                   GLboolean unpackPremultiplyAlpha,
+                   GLboolean unpackUnmultiplyAlpha));
 MOCK_METHOD1(CoverageModulationNV, void(GLenum components));
 MOCK_METHOD7(CoverFillPathInstancedNV,
              void(GLsizei numPaths,
@@ -862,16 +865,8 @@ MOCK_METHOD4(
 MOCK_METHOD2(PushGroupMarkerEXT, void(GLsizei length, const char* marker));
 MOCK_METHOD2(QueryCounter, void(GLuint id, GLenum target));
 MOCK_METHOD1(ReadBuffer, void(GLenum src));
-MOCK_METHOD9(ReadnPixelsRobustANGLE,
-             void(GLint x,
-                  GLint y,
-                  GLsizei width,
-                  GLsizei height,
-                  GLenum format,
-                  GLenum type,
-                  GLsizei bufSize,
-                  GLsizei* length,
-                  void* data));
+// TODO(zmo): crbug.com/456340
+// glReadnPixelsRobustANGLE cannot be mocked because it has 11 args.
 MOCK_METHOD7(ReadPixels,
              void(GLint x,
                   GLint y,
@@ -880,16 +875,8 @@ MOCK_METHOD7(ReadPixels,
                   GLenum format,
                   GLenum type,
                   void* pixels));
-MOCK_METHOD9(ReadPixelsRobustANGLE,
-             void(GLint x,
-                  GLint y,
-                  GLsizei width,
-                  GLsizei height,
-                  GLenum format,
-                  GLenum type,
-                  GLsizei bufSize,
-                  GLsizei* length,
-                  void* pixels));
+// TODO(zmo): crbug.com/456340
+// glReadPixelsRobustANGLE cannot be mocked because it has 11 args.
 MOCK_METHOD0(ReleaseShaderCompiler, void());
 MOCK_METHOD4(
     RenderbufferStorageEXT,
@@ -918,6 +905,7 @@ MOCK_METHOD5(RenderbufferStorageMultisampleIMG,
                   GLenum internalformat,
                   GLsizei width,
                   GLsizei height));
+MOCK_METHOD1(RequestExtensionANGLE, void(const char* name));
 MOCK_METHOD0(ResumeTransformFeedback, void());
 MOCK_METHOD2(SampleCoverage, void(GLclampf value, GLboolean invert));
 MOCK_METHOD3(SamplerParameterf,

@@ -15,10 +15,10 @@
 #include "base/synchronization/lock.h"
 #include "mojo/edk/embedder/platform_handle_vector.h"
 #include "mojo/edk/embedder/platform_shared_buffer.h"
-#include "mojo/edk/system/awakable_list.h"
 #include "mojo/edk/system/dispatcher.h"
 #include "mojo/edk/system/ports/port_ref.h"
 #include "mojo/edk/system/system_impl_export.h"
+#include "mojo/edk/system/watcher_set.h"
 
 namespace mojo {
 namespace edk {
@@ -32,21 +32,16 @@ class NodeController;
 class MOJO_SYSTEM_IMPL_EXPORT DataPipeProducerDispatcher final
     : public Dispatcher {
  public:
-  DataPipeProducerDispatcher(
+  static scoped_refptr<DataPipeProducerDispatcher> Create(
       NodeController* node_controller,
-      const ports::PortRef& port,
+      const ports::PortRef& control_port,
       scoped_refptr<PlatformSharedBuffer> shared_ring_buffer,
       const MojoCreateDataPipeOptions& options,
-      bool initialized,
       uint64_t pipe_id);
 
   // Dispatcher:
   Type GetType() const override;
   MojoResult Close() override;
-  MojoResult Watch(MojoHandleSignals signals,
-                   const Watcher::WatchCallback& callback,
-                   uintptr_t context) override;
-  MojoResult CancelWatch(uintptr_t context) override;
   MojoResult WriteData(const void* elements,
                        uint32_t* num_bytes,
                        MojoReadDataFlags flags) override;
@@ -55,12 +50,10 @@ class MOJO_SYSTEM_IMPL_EXPORT DataPipeProducerDispatcher final
                             MojoWriteDataFlags flags) override;
   MojoResult EndWriteData(uint32_t num_bytes_written) override;
   HandleSignalsState GetHandleSignalsState() const override;
-  MojoResult AddAwakable(Awakable* awakable,
-                         MojoHandleSignals signals,
-                         uintptr_t context,
-                         HandleSignalsState* signals_state) override;
-  void RemoveAwakable(Awakable* awakable,
-                      HandleSignalsState* signals_state) override;
+  MojoResult AddWatcherRef(const scoped_refptr<WatcherDispatcher>& watcher,
+                           uintptr_t context) override;
+  MojoResult RemoveWatcherRef(WatcherDispatcher* watcher,
+                              uintptr_t context) override;
   void StartSerialize(uint32_t* num_bytes,
                       uint32_t* num_ports,
                       uint32_t* num_handles) override;
@@ -83,10 +76,16 @@ class MOJO_SYSTEM_IMPL_EXPORT DataPipeProducerDispatcher final
   class PortObserverThunk;
   friend class PortObserverThunk;
 
+  DataPipeProducerDispatcher(
+      NodeController* node_controller,
+      const ports::PortRef& port,
+      scoped_refptr<PlatformSharedBuffer> shared_ring_buffer,
+      const MojoCreateDataPipeOptions& options,
+      uint64_t pipe_id);
   ~DataPipeProducerDispatcher() override;
 
   void OnSharedBufferCreated(const scoped_refptr<PlatformSharedBuffer>& buffer);
-  void InitializeNoLock();
+  bool InitializeNoLock();
   MojoResult CloseNoLock();
   HandleSignalsState GetHandleSignalsStateNoLock() const;
   void NotifyWrite(uint32_t num_bytes);
@@ -103,7 +102,7 @@ class MOJO_SYSTEM_IMPL_EXPORT DataPipeProducerDispatcher final
   // Guards access to the fields below.
   mutable base::Lock lock_;
 
-  AwakableList awakable_list_;
+  WatcherSet watchers_;
 
   bool buffer_requested_ = false;
 

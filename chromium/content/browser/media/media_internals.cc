@@ -7,8 +7,11 @@
 #include <stddef.h>
 
 #include <memory>
+#include <tuple>
 #include <utility>
 
+#include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
@@ -16,6 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -27,7 +31,7 @@
 #include "media/base/media_log_event.h"
 #include "media/filters/gpu_video_decoder.h"
 
-#if !defined(OS_ANDROID)
+#if !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
 #include "media/filters/decrypting_video_decoder.h"
 #endif
 
@@ -92,6 +96,23 @@ std::string FormatToString(media::AudioParameters::Format format) {
 
   NOTREACHED();
   return "unknown";
+}
+
+// Whether the player is in incognito mode or ChromeOS guest mode.
+bool IsIncognito(int render_process_id) {
+  content::RenderProcessHost* render_process_host =
+      content::RenderProcessHost::FromID(render_process_id);
+  if (!render_process_host) {
+    // This could happen in tests.
+    LOG(ERROR) << "Cannot get RenderProcessHost";
+    return false;
+  }
+
+  content::BrowserContext* browser_context =
+      render_process_host->GetBrowserContext();
+  DCHECK(browser_context);
+
+  return browser_context->IsOffTheRecord();
 }
 
 const char kAudioLogStatusKey[] = "status";
@@ -294,16 +315,10 @@ class MediaInternals::MediaInternalsUMAHandler {
                        const media::MediaLogEvent& event);
 
  private:
-  struct WatchTimeInfo {
-    base::TimeDelta all_watch_time = media::kNoTimestamp;
-    base::TimeDelta mse_watch_time = media::kNoTimestamp;
-    base::TimeDelta eme_watch_time = media::kNoTimestamp;
-    base::TimeDelta src_watch_time = media::kNoTimestamp;
-    base::TimeDelta ac_watch_time = media::kNoTimestamp;
-    base::TimeDelta battery_watch_time = media::kNoTimestamp;
-  };
-
+  using WatchTimeInfo = base::flat_map<base::StringPiece, base::TimeDelta>;
   struct PipelineInfo {
+    explicit PipelineInfo(bool is_incognito) : is_incognito(is_incognito) {}
+
     bool has_pipeline = false;
     bool has_ever_played = false;
     bool has_reached_have_enough = false;
@@ -312,6 +327,8 @@ class MediaInternals::MediaInternalsUMAHandler {
     bool has_video = false;
     bool video_dds = false;
     bool video_decoder_changed = false;
+    bool has_cdm = false;
+    bool is_incognito = false;
     std::string audio_codec_name;
     std::string video_codec_name;
     std::string video_decoder;
@@ -324,62 +341,33 @@ class MediaInternals::MediaInternalsUMAHandler {
   // Helper to generate PipelineStatus UMA name for AudioVideo streams.
   std::string GetUMANameForAVStream(const PipelineInfo& player_info);
 
-  // Saves the watch time info from |event| under |key| at |watch_time| if |key|
-  // is present in |event.params|.
-  void MaybeSaveWatchTime(const media::MediaLogEvent& event,
-                          const char* key,
-                          base::TimeDelta* watch_time) {
-    if (!event.params.HasKey(key))
-      return;
-
-    double in_seconds;
-    const bool result =
-        event.params.GetDoubleWithoutPathExpansion(key, &in_seconds);
-    DCHECK(result);
-    *watch_time = base::TimeDelta::FromSecondsD(in_seconds);
-
-    DVLOG(2) << "Saved watch time for " << key << " of " << *watch_time;
+  void RecordWatchTime(const base::StringPiece& key, base::TimeDelta value) {
+    base::Histogram::FactoryTimeGet(
+        key.as_string(), base::TimeDelta::FromSeconds(7),
+        base::TimeDelta::FromHours(10), 50,
+        base::HistogramBase::kUmaTargetedHistogramFlag)
+        ->AddTime(value);
   }
 
   enum class FinalizeType { EVERYTHING, POWER_ONLY };
   void FinalizeWatchTime(bool has_video,
                          WatchTimeInfo* watch_time_info,
                          FinalizeType finalize_type) {
-// Use a macro instead of a function so we can use the histogram macro (which
-// checks that the uma name is a static value). We use a custom time range for
-// the histogram macro to capitalize on common expected watch times.
-#define MAYBE_RECORD_WATCH_TIME(uma_name, watch_time)                         \
-  if (watch_time_info->watch_time != media::kNoTimestamp) {                   \
-    UMA_HISTOGRAM_CUSTOM_TIMES(                                               \
-        media::MediaLog::uma_name, watch_time_info->watch_time,               \
-        base::TimeDelta::FromSeconds(7), base::TimeDelta::FromHours(10), 50); \
-    watch_time_info->watch_time = media::kNoTimestamp;                        \
-  }
-
-    if (has_video) {
-      if (finalize_type == FinalizeType::EVERYTHING) {
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioVideoAll, all_watch_time);
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioVideoMse, mse_watch_time);
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioVideoEme, eme_watch_time);
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioVideoSrc, src_watch_time);
-      } else {
-        DCHECK_EQ(finalize_type, FinalizeType::POWER_ONLY);
-      }
-      MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioVideoBattery, battery_watch_time);
-      MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioVideoAc, ac_watch_time);
-    } else {
-      if (finalize_type == FinalizeType::EVERYTHING) {
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioAll, all_watch_time);
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioMse, mse_watch_time);
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioEme, eme_watch_time);
-        MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioSrc, src_watch_time);
-      } else {
-        DCHECK_EQ(finalize_type, FinalizeType::POWER_ONLY);
-      }
-      MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioBattery, battery_watch_time);
-      MAYBE_RECORD_WATCH_TIME(kWatchTimeAudioAc, ac_watch_time);
+    if (finalize_type == FinalizeType::EVERYTHING) {
+      for (auto& kv : *watch_time_info)
+        RecordWatchTime(kv.first, kv.second);
+      watch_time_info->clear();
+      return;
     }
-#undef MAYBE_RECORD_WATCH_TIME
+
+    DCHECK_EQ(finalize_type, FinalizeType::POWER_ONLY);
+    for (auto power_key : watch_time_power_keys_) {
+      auto it = watch_time_info->find(power_key);
+      if (it == watch_time_info->end())
+        continue;
+      RecordWatchTime(it->first, it->second);
+      watch_time_info->erase(it);
+    }
   }
 
   // Key is player id.
@@ -391,126 +379,133 @@ class MediaInternals::MediaInternalsUMAHandler {
   // Stores player information per renderer.
   RendererPlayerMap renderer_info_;
 
+  const base::flat_set<base::StringPiece> watch_time_keys_;
+  const base::flat_set<base::StringPiece> watch_time_power_keys_;
+
   DISALLOW_COPY_AND_ASSIGN(MediaInternalsUMAHandler);
 };
 
-MediaInternals::MediaInternalsUMAHandler::MediaInternalsUMAHandler() {
-}
+MediaInternals::MediaInternalsUMAHandler::MediaInternalsUMAHandler()
+    : watch_time_keys_(media::MediaLog::GetWatchTimeKeys()),
+      watch_time_power_keys_(media::MediaLog::GetWatchTimePowerKeys()) {}
 
 void MediaInternals::MediaInternalsUMAHandler::SavePlayerState(
     int render_process_id,
     const media::MediaLogEvent& event) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  PlayerInfoMap& player_info = renderer_info_[render_process_id];
+
+  PlayerInfoMap& player_info_map = renderer_info_[render_process_id];
+
+  auto it = player_info_map.find(event.id);
+  if (it == player_info_map.end()) {
+    bool success = false;
+    std::tie(it, success) = player_info_map.emplace(
+        std::make_pair(event.id, PipelineInfo(IsIncognito(render_process_id))));
+    if (!success) {
+      LOG(ERROR) << "Failed to insert a new PipelineInfo.";
+      return;
+    }
+  }
+
+  PipelineInfo& player_info = it->second;
+
   switch (event.type) {
     case media::MediaLogEvent::PLAY: {
-      player_info[event.id].has_ever_played = true;
+      player_info.has_ever_played = true;
       break;
     }
     case media::MediaLogEvent::PIPELINE_STATE_CHANGED: {
-      player_info[event.id].has_pipeline = true;
+      player_info.has_pipeline = true;
       break;
     }
     case media::MediaLogEvent::PIPELINE_ERROR: {
       int status;
       event.params.GetInteger("pipeline_error", &status);
-      player_info[event.id].last_pipeline_status =
+      player_info.last_pipeline_status =
           static_cast<media::PipelineStatus>(status);
       break;
     }
     case media::MediaLogEvent::PROPERTY_CHANGE:
       if (event.params.HasKey("found_audio_stream")) {
-        event.params.GetBoolean("found_audio_stream",
-                                &player_info[event.id].has_audio);
+        event.params.GetBoolean("found_audio_stream", &player_info.has_audio);
       }
       if (event.params.HasKey("found_video_stream")) {
-        event.params.GetBoolean("found_video_stream",
-                                &player_info[event.id].has_video);
+        event.params.GetBoolean("found_video_stream", &player_info.has_video);
       }
       if (event.params.HasKey("audio_codec_name")) {
         event.params.GetString("audio_codec_name",
-                               &player_info[event.id].audio_codec_name);
+                               &player_info.audio_codec_name);
       }
       if (event.params.HasKey("video_codec_name")) {
         event.params.GetString("video_codec_name",
-                               &player_info[event.id].video_codec_name);
+                               &player_info.video_codec_name);
       }
       if (event.params.HasKey("video_decoder")) {
-        std::string previous_video_decoder(player_info[event.id].video_decoder);
-        event.params.GetString("video_decoder",
-                               &player_info[event.id].video_decoder);
+        std::string previous_video_decoder(player_info.video_decoder);
+        event.params.GetString("video_decoder", &player_info.video_decoder);
         if (!previous_video_decoder.empty() &&
-            previous_video_decoder != player_info[event.id].video_decoder) {
-          player_info[event.id].video_decoder_changed = true;
+            previous_video_decoder != player_info.video_decoder) {
+          player_info.video_decoder_changed = true;
         }
       }
       if (event.params.HasKey("video_dds")) {
-        event.params.GetBoolean("video_dds", &player_info[event.id].video_dds);
+        event.params.GetBoolean("video_dds", &player_info.video_dds);
+      }
+      if (event.params.HasKey("has_cdm")) {
+        event.params.GetBoolean("has_cdm", &player_info.has_cdm);
       }
       if (event.params.HasKey("pipeline_buffering_state")) {
         std::string buffering_state;
         event.params.GetString("pipeline_buffering_state", &buffering_state);
         if (buffering_state == "BUFFERING_HAVE_ENOUGH")
-          player_info[event.id].has_reached_have_enough = true;
+          player_info.has_reached_have_enough = true;
       }
       break;
     case media::MediaLogEvent::Type::WATCH_TIME_UPDATE: {
       DVLOG(2) << "Processing watch time update.";
-      PipelineInfo& info = player_info[event.id];
-      WatchTimeInfo& wti = info.watch_time_info;
-      // Save audio only watch time information.
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioAll,
-                         &wti.all_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioMse,
-                         &wti.mse_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioEme,
-                         &wti.eme_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioSrc,
-                         &wti.src_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioBattery,
-                         &wti.battery_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioAc,
-                         &wti.ac_watch_time);
 
-      // Save audio+video watch time information.
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioVideoAll,
-                         &wti.all_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioVideoMse,
-                         &wti.mse_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioVideoEme,
-                         &wti.eme_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioVideoSrc,
-                         &wti.src_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioVideoBattery,
-                         &wti.battery_watch_time);
-      MaybeSaveWatchTime(event, media::MediaLog::kWatchTimeAudioVideoAc,
-                         &wti.ac_watch_time);
+      for (base::DictionaryValue::Iterator it(event.params); !it.IsAtEnd();
+           it.Advance()) {
+        // Don't log random histogram keys from the untrusted renderer, instead
+        // ensure they are from our list of known keys. Use |key_name| from the
+        // key map, since otherwise we'll end up storing a StringPiece which
+        // points into the soon-to-be-destructed DictionaryValue.
+        auto key_name = watch_time_keys_.find(it.key());
+        if (key_name == watch_time_keys_.end())
+          continue;
+        player_info.watch_time_info[*key_name] =
+            base::TimeDelta::FromSecondsD(it.value().GetDouble());
+      }
 
       if (event.params.HasKey(media::MediaLog::kWatchTimeFinalize)) {
         bool should_finalize;
         DCHECK(event.params.GetBoolean(media::MediaLog::kWatchTimeFinalize,
                                        &should_finalize) &&
                should_finalize);
-        FinalizeWatchTime(info.has_video, &wti, FinalizeType::EVERYTHING);
+        FinalizeWatchTime(player_info.has_video, &player_info.watch_time_info,
+                          FinalizeType::EVERYTHING);
       } else if (event.params.HasKey(
                      media::MediaLog::kWatchTimeFinalizePower)) {
         bool should_finalize;
         DCHECK(event.params.GetBoolean(media::MediaLog::kWatchTimeFinalizePower,
                                        &should_finalize) &&
                should_finalize);
-        FinalizeWatchTime(info.has_video, &wti, FinalizeType::POWER_ONLY);
+        FinalizeWatchTime(player_info.has_video, &player_info.watch_time_info,
+                          FinalizeType::POWER_ONLY);
       }
       break;
     }
     case media::MediaLogEvent::Type::WEBMEDIAPLAYER_DESTROYED: {
       // Upon player destruction report UMA data; if the player is not torn down
       // before process exit, it will be logged during OnProcessTerminated().
-      auto it = player_info.find(event.id);
-      if (it == player_info.end())
+      auto it = player_info_map.find(event.id);
+      if (it == player_info_map.end())
         break;
 
       ReportUMAForPipelineStatus(it->second);
-      player_info.erase(it);
+      FinalizeWatchTime(it->second.has_video, &(it->second.watch_time_info),
+                        FinalizeType::EVERYTHING);
+      player_info_map.erase(it);
     }
     default:
       break;
@@ -536,7 +531,7 @@ std::string MediaInternals::MediaInternalsUMAHandler::GetUMANameForAVStream(
     return uma_name + "Other";
   }
 
-#if !defined(OS_ANDROID)
+#if !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
   if (player_info.video_decoder ==
       media::DecryptingVideoDecoder::kDecoderName) {
     return uma_name + "DVD";
@@ -555,6 +550,8 @@ std::string MediaInternals::MediaInternalsUMAHandler::GetUMANameForAVStream(
   return uma_name;
 }
 
+// TODO(xhwang): This function reports more metrics than just pipeline status
+// and should be renamed. Similarly, PipelineInfo should be PlayerInfo.
 void MediaInternals::MediaInternalsUMAHandler::ReportUMAForPipelineStatus(
     const PipelineInfo& player_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -597,6 +594,11 @@ void MediaInternals::MediaInternalsUMAHandler::ReportUMAForPipelineStatus(
   // effectiveness of efforts to reduce loaded-but-never-used players.
   if (player_info.has_reached_have_enough)
     UMA_HISTOGRAM_BOOLEAN("Media.HasEverPlayed", player_info.has_ever_played);
+
+  // Report whether an encrypted playback is in incognito window, excluding
+  // never-used players.
+  if (player_info.has_cdm && player_info.has_ever_played)
+    UMA_HISTOGRAM_BOOLEAN("Media.EME.IsIncognito", player_info.is_incognito);
 }
 
 void MediaInternals::MediaInternalsUMAHandler::OnProcessTerminated(
@@ -804,6 +806,10 @@ void MediaInternals::SetWebContentsTitleForAudioLogEntry(
     media::AudioLog* audio_log) {
   static_cast<AudioLogImpl*>(audio_log)
       ->SendWebContentsTitle(component_id, render_process_id, render_frame_id);
+}
+
+void MediaInternals::OnProcessTerminatedForTesting(int process_id) {
+  uma_handler_->OnProcessTerminated(process_id);
 }
 
 void MediaInternals::SendUpdate(const base::string16& update) {

@@ -7,6 +7,7 @@ static_library("browser") {
     "//vivaldi/app/resources",
     "//vivaldi/app/resources",
     "//vivaldi/clientparts",
+    "//vivaldi/components/datasource",
     "//vivaldi/extensions",
     "//vivaldi/extensions/schema:api",
     "//vivaldi/importer:browser",

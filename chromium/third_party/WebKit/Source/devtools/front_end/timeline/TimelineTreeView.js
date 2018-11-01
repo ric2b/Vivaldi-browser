@@ -84,6 +84,7 @@ Timeline.TimelineTreeView = class extends UI.VBox {
     this._splitWidget.setSidebarWidget(this._detailsView);
     this._splitWidget.hideSidebar();
     this._splitWidget.show(this.element);
+    this._splitWidget.addEventListener(UI.SplitWidget.Events.ShowModeChanged, this._updateDetailsForSelection, this);
 
     /** @type {?TimelineModel.TimelineProfileTree.Node|undefined} */
     this._lastSelectedNode;
@@ -240,8 +241,10 @@ Timeline.TimelineTreeView = class extends UI.VBox {
     if (this._searchableView)
       this._searchableView.cancelSearch();
     this._dataGrid.rootNode().removeChildren();
-    if (!this._model)
+    if (!this._model) {
+      this._updateDetailsForSelection();
       return;
+    }
     this._root = this._buildTree();
     var children = this._root.children();
     var maxSelfTime = 0;
@@ -356,6 +359,8 @@ Timeline.TimelineTreeView = class extends UI.VBox {
     if (selectedNode === this._lastSelectedNode)
       return;
     this._lastSelectedNode = selectedNode;
+    if (this._splitWidget.showMode() === UI.SplitWidget.ShowMode.OnlyMain)
+      return;
     this._detailsView.detachChildWidgets();
     this._detailsView.element.removeChildren();
     if (!selectedNode || !this._showDetailsForNode(selectedNode)) {
@@ -564,11 +569,11 @@ Timeline.TimelineTreeView.GridNode = class extends DataGrid.SortableDataGridNode
     var cell = this.createTD(columnId);
     cell.className = 'numeric-column';
     var textDiv = cell.createChild('div');
-    textDiv.createChild('span').textContent = Common.UIString('%.1f\u2009ms', value);
+    textDiv.createChild('span').textContent = Common.UIString('%.1f\xa0ms', value);
 
     if (showPercents && this._treeView._exposePercentages()) {
       textDiv.createChild('span', 'percent-column').textContent =
-          Common.UIString('%.1f\u2009%%', value / this._grandTotalTime * 100);
+          Common.UIString('%.1f\xa0%%', value / this._grandTotalTime * 100);
     }
     if (maxTime) {
       textDiv.classList.add('background-percent-bar');
@@ -626,15 +631,21 @@ Timeline.AggregatedTimelineTreeView = class extends Timeline.TimelineTreeView {
     super();
     this._groupBySetting =
         Common.settings.createSetting('timelineTreeGroupBy', Timeline.AggregatedTimelineTreeView.GroupBy.None);
+    this._groupByCombobox = new UI.ToolbarComboBox(this._onGroupByChanged.bind(this));
     this.init(filters);
-    var nonessentialEvents = [
-      TimelineModel.TimelineModel.RecordType.EventDispatch, TimelineModel.TimelineModel.RecordType.FunctionCall,
-      TimelineModel.TimelineModel.RecordType.TimerFire
-    ];
-    this._filters.push(new TimelineModel.ExclusiveNameFilter(nonessentialEvents));
     this._stackView = new Timeline.TimelineStackView(this);
     this._stackView.addEventListener(
         Timeline.TimelineStackView.Events.SelectionChanged, this._onStackViewSelectionChanged, this);
+  }
+
+  /**
+   * @override
+   */
+  wasShown() {
+    var groupById = this._groupBySetting.get();
+    var option = this._groupByCombobox.options().find(option => option.value === groupById);
+    if (option)
+      this._groupByCombobox.select(option);
   }
 
   /**
@@ -651,8 +662,8 @@ Timeline.AggregatedTimelineTreeView = class extends Timeline.TimelineTreeView {
 
   _updateExtensionResolver() {
     this._executionContextNamesByOrigin = new Map();
-    for (var target of SDK.targetManager.targets()) {
-      for (var context of target.runtimeModel.executionContexts())
+    for (var runtimeModel of SDK.targetManager.models(SDK.RuntimeModel)) {
+      for (var context of runtimeModel.executionContexts())
         this._executionContextNamesByOrigin.set(context.origin, context.name);
     }
   }
@@ -712,7 +723,6 @@ Timeline.AggregatedTimelineTreeView = class extends Timeline.TimelineTreeView {
    */
   populateToolbar(toolbar) {
     super.populateToolbar(toolbar);
-    this._groupByCombobox = new UI.ToolbarComboBox(this._onGroupByChanged.bind(this));
     /**
      * @param {string} name
      * @param {string} id

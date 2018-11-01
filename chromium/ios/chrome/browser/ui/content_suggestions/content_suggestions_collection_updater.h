@@ -34,6 +34,21 @@
 // Returns the ContentSuggestionType associated with this item.
 - (ContentSuggestionType)contentSuggestionTypeForItem:(CollectionViewItem*)item;
 
+// Adds the sections for the |suggestions| to the model and returns their
+// indices.
+- (NSIndexSet*)addSectionsForSuggestionsToModel:
+    (NSArray<ContentSuggestion*>*)suggestions;
+
+// Adds the |suggestions| to the model and returns their index paths.
+// The caller must ensure the corresponding sections have been added to the
+// model.
+- (NSArray<NSIndexPath*>*)addSuggestionsToModel:
+    (NSArray<ContentSuggestion*>*)suggestions;
+
+// Adds the empty item to this |section| and returns its index path. The updater
+// does not do any check about the number of elements in the section.
+- (NSIndexPath*)addEmptyItemForSection:(NSInteger)section;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_CONTENT_SUGGESTIONS_COLLECTION_UPDATER_H_

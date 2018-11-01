@@ -53,14 +53,6 @@ void CommonInitFromCommandLine(const base::CommandLine& command_line,
   }
 }
 
-#if GTK_MAJOR_VERSION == 3
-void* GetGtk3SharedLibrary() {
-  static void* gtk3lib = dlopen("libgtk-3.so.0", RTLD_LAZY);
-  DCHECK(gtk3lib);
-  return gtk3lib;
-}
-#endif
-
 }  // namespace
 
 namespace libgtkui {
@@ -209,6 +201,22 @@ void ClearAuraTransientParent(GtkWidget* dialog) {
 }
 
 #if GTK_MAJOR_VERSION > 2
+void* GetGdkSharedLibrary() {
+  std::string lib_name =
+      "libgdk-" + std::to_string(GTK_MAJOR_VERSION) + ".so.0";
+  static void* gdk_lib = dlopen(lib_name.c_str(), RTLD_LAZY);
+  DCHECK(gdk_lib);
+  return gdk_lib;
+}
+
+void* GetGtkSharedLibrary() {
+  std::string lib_name =
+      "libgtk-" + std::to_string(GTK_MAJOR_VERSION) + ".so.0";
+  static void* gtk_lib = dlopen(lib_name.c_str(), RTLD_LAZY);
+  DCHECK(gtk_lib);
+  return gtk_lib;
+}
+
 CairoSurface::CairoSurface(SkBitmap& bitmap)
     : surface_(cairo_image_surface_create_for_data(
           static_cast<unsigned char*>(bitmap.getAddr(0, 0)),
@@ -349,7 +357,7 @@ ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
     } else {
       static auto* _gtk_widget_path_iter_set_object_name =
           reinterpret_cast<void (*)(GtkWidgetPath*, gint, const char*)>(dlsym(
-              GetGtk3SharedLibrary(), "gtk_widget_path_iter_set_object_name"));
+              GetGtkSharedLibrary(), "gtk_widget_path_iter_set_object_name"));
       switch (part_type) {
         case CSS_NAME: {
           if (GtkVersionCheck(3, 20)) {
@@ -395,7 +403,7 @@ ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
   if (GtkVersionCheck(3, 14)) {
     static auto* _gtk_widget_path_iter_set_state =
         reinterpret_cast<void (*)(GtkWidgetPath*, gint, GtkStateFlags)>(
-            dlsym(GetGtk3SharedLibrary(), "gtk_widget_path_iter_set_state"));
+            dlsym(GetGtkSharedLibrary(), "gtk_widget_path_iter_set_state"));
     DCHECK(_gtk_widget_path_iter_set_state);
     _gtk_widget_path_iter_set_state(path, -1, state);
   }
@@ -417,7 +425,7 @@ ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
   return child_context;
 }
 
-ScopedStyleContext GetStyleContextFromCss(const char* css_selector) {
+ScopedStyleContext GetStyleContextFromCss(const std::string& css_selector) {
   // Prepend a window node to the selector since all widgets must live
   // in a window, but we don't want to specify that every time.
   auto context =
@@ -462,14 +470,14 @@ SkColor GetBgColorFromStyleContext(GtkStyleContext* context) {
   return surface.GetAveragePixelValue(false);
 }
 
-SkColor GetFgColor(const char* css_selector) {
+SkColor GetFgColor(const std::string& css_selector) {
   return GetFgColorFromStyleContext(GetStyleContextFromCss(css_selector));
 }
 
-ScopedCssProvider GetCssProvider(const char* css) {
+ScopedCssProvider GetCssProvider(const std::string& css) {
   GtkCssProvider* provider = gtk_css_provider_new();
   GError* error = nullptr;
-  gtk_css_provider_load_from_data(provider, css, -1, &error);
+  gtk_css_provider_load_from_data(provider, css.c_str(), -1, &error);
   DCHECK(!error);
   return ScopedCssProvider(provider);
 }
@@ -483,7 +491,7 @@ void ApplyCssProviderToContext(GtkStyleContext* context,
   }
 }
 
-void ApplyCssToContext(GtkStyleContext* context, const char* css) {
+void ApplyCssToContext(GtkStyleContext* context, const std::string& css) {
   auto provider = GetCssProvider(css);
   ApplyCssProviderToContext(context, provider);
 }
@@ -497,11 +505,11 @@ void RenderBackground(const gfx::Size& size,
   gtk_render_background(context, cr, 0, 0, size.width(), size.height());
 }
 
-SkColor GetBgColor(const char* css_selector) {
+SkColor GetBgColor(const std::string& css_selector) {
   return GetBgColorFromStyleContext(GetStyleContextFromCss(css_selector));
 }
 
-SkColor GetBorderColor(const char* css_selector) {
+SkColor GetBorderColor(const std::string& css_selector) {
   // Borders have the same issue as backgrounds, due to the
   // border-image property.
   auto context = GetStyleContextFromCss(css_selector);
@@ -511,7 +519,7 @@ SkColor GetBorderColor(const char* css_selector) {
   return surface.GetAveragePixelValue(true);
 }
 
-SkColor GetSelectionBgColor(const char* css_selector) {
+SkColor GetSelectionBgColor(const std::string& css_selector) {
   auto context = GetStyleContextFromCss(css_selector);
   if (GtkVersionCheck(3, 20))
     return GetBgColorFromStyleContext(context);
@@ -524,7 +532,13 @@ SkColor GetSelectionBgColor(const char* css_selector) {
   return GdkRgbaToSkColor(selection_color);
 }
 
-SkColor GetSeparatorColor(const char* css_selector) {
+bool ContextHasClass(GtkStyleContext* context, const std::string& style_class) {
+  return gtk_style_context_has_class(context, style_class.c_str()) ||
+         gtk_widget_path_iter_has_class(gtk_style_context_get_path(context), -1,
+                                        style_class.c_str());
+}
+
+SkColor GetSeparatorColor(const std::string& css_selector) {
   if (!GtkVersionCheck(3, 20))
     return GetFgColor(css_selector);
 
@@ -539,12 +553,12 @@ SkColor GetSeparatorColor(const char* css_selector) {
   w += border.left + padding.left + padding.right + border.right;
   h += border.top + padding.top + padding.bottom + border.bottom;
 
-  bool horizontal = gtk_style_context_has_class(context, "horizontal");
+  bool horizontal = ContextHasClass(context, "horizontal");
   if (horizontal) {
     w = 24;
     h = std::max(h, 1);
   } else {
-    DCHECK(gtk_style_context_has_class(context, "vertical"));
+    DCHECK(ContextHasClass(context, "vertical"));
     h = 24;
     w = std::max(w, 1);
   }

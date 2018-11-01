@@ -6,12 +6,9 @@
 
 #include "platform_media/gpu/decoders/win/wmf_byte_stream.h"
 
-#include <algorithm>
+#include "platform_media/gpu/decoders/win/read_stream.h"
 
-#include "base/bind.h"
-#include "base/synchronization/waitable_event.h"
-#include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
-#include "media/base/bind_to_current_loop.h"
+#include <algorithm>
 
 namespace content {
 
@@ -29,30 +26,18 @@ class WMFReadRequest : public base::win::IUnknownImpl {
   ULONG read;
 };
 
-void BlockingReadDone(int* bytes_read_out,
-                      base::WaitableEvent* read_done,
-                      int bytes_read) {
-  *bytes_read_out = bytes_read;
-  read_done->Signal();
-}
-
 }  // namespace
 
-const int64_t WMFByteStream::kUnknownSize = -1;
-
 WMFByteStream::WMFByteStream(media::DataSource* data_source)
-    : data_source_(data_source),
-      async_result_(NULL),
-      read_position_(0),
-      stopped_(false) {
+    : async_result_(nullptr),
+      read_stream_(new ReadStream(data_source)) {
   DVLOG(1) << __FUNCTION__;
-  DCHECK(data_source_);
 }
 
 WMFByteStream::~WMFByteStream() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(stopped_);
+  DCHECK(read_stream_->HasStopped());
 }
 
 HRESULT WMFByteStream::Initialize(LPCWSTR mime_type) {
@@ -61,8 +46,7 @@ HRESULT WMFByteStream::Initialize(LPCWSTR mime_type) {
   HRESULT hresult = MFCreateAttributes(attributes_.Receive(), 1);
   if (SUCCEEDED(hresult)) {
     attributes_->SetString(MF_BYTESTREAM_CONTENT_TYPE, mime_type);
-    read_cb_ =
-        media::BindToCurrentLoop(base::Bind(&WMFByteStream::OnReadData, this));
+    read_stream_->Initialize(this);
     return S_OK;
   }
 
@@ -72,8 +56,7 @@ HRESULT WMFByteStream::Initialize(LPCWSTR mime_type) {
 void WMFByteStream::Stop() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  stopped_ = true;
+  read_stream_->Stop();
 
   if (async_result_) {
     // Set async_result_ to NULL before calling MFInvokeCallback. Doing
@@ -114,7 +97,7 @@ HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetCapabilities(DWORD* capabilities) {
   *capabilities =
       MFBYTESTREAM_IS_READABLE | MFBYTESTREAM_IS_SEEKABLE |
-      (data_source_->IsStreaming()
+      (read_stream_->IsStreaming()
            ? (MFBYTESTREAM_HAS_SLOW_SEEK | MFBYTESTREAM_IS_PARTIALLY_DOWNLOADED)
            : 0);
 
@@ -122,9 +105,7 @@ WMFByteStream::GetCapabilities(DWORD* capabilities) {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::GetLength(QWORD* length) {
-  int64_t size = -1;
-  // The Media Framework expects -1 when the size is unknown.
-  *length = data_source_->GetSize(&size) ? size : kUnknownSize;
+  *length = read_stream_->Size();
   return S_OK;
 }
 
@@ -135,7 +116,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::SetLength(QWORD length) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetCurrentPosition(QWORD* position) {
-  *position = read_position_;
+  *position = read_stream_->CurrentPosition();
   return S_OK;
 }
 
@@ -145,15 +126,12 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::SetCurrentPosition(QWORD position) {
                           // if the position overflows the stream
   }
 
-  read_position_ = position;
+  read_stream_->SetCurrentPosition(position);
   return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::IsEndOfStream(BOOL* end_of_stream) {
-  int64_t size = -1;
-  if (!data_source_->GetSize(&size))
-    size = kUnknownSize;
-  *end_of_stream = size > 0 && read_position_ >= size;
+  *end_of_stream = read_stream_->IsEndOfStream();
   return S_OK;
 }
 
@@ -162,30 +140,25 @@ WMFByteStream::Read(BYTE* buff, ULONG len, ULONG* read) {
   DCHECK(!thread_checker_.CalledOnValidThread())
       << "Trying to make a blocking read on the main thread";
 
-  if (stopped_) {
+  if (read_stream_->HasStopped()) {
     // NOTE(pettern@vivaldi.com): Do not try to read when we've stopped
     // as it might cause freezes with the read_done event never firing.
     return E_FAIL;
   }
-  base::WaitableEvent read_done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                                base::WaitableEvent::InitialState::NOT_SIGNALED);
-  int bytes_read = 0;
-  data_source_->Read(read_position_, len, buff,
-                     base::Bind(&BlockingReadDone, &bytes_read, &read_done));
-  read_done.Wait();
+
+  int bytes_read = read_stream_->SyncRead(buff, len);
+
   if (bytes_read == media::DataSource::kReadError)
     return E_FAIL;
 
-  read_position_ += bytes_read;
   *read = bytes_read;
-
   return S_OK;
 }
 
 void WMFByteStream::OnReadData(int size) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (stopped_)
+  if (read_stream_->HasStopped())
     return;
 
   base::win::ScopedComPtr<IUnknown> unknown;
@@ -216,9 +189,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
                                                    ULONG len,
                                                    IMFAsyncCallback* callback,
                                                    IUnknown* state) {
-  DCHECK(!read_cb_.is_null());
-
-  if (stopped_) {
+  if (read_stream_->HasStopped()) {
     return E_INVALIDARG;
   }
 
@@ -232,8 +203,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
   if (FAILED(hresult))
     return E_ABORT;
 
-  data_source_->Read(read_position_, len, buff, read_cb_);
-  read_position_ += len;
+  read_stream_->AsyncRead(buff, len);
   return S_OK;
 }
 
@@ -279,29 +249,28 @@ WMFByteStream::Seek(MFBYTESTREAM_SEEK_ORIGIN seek_origin,
                     LONGLONG seek_offset,
                     DWORD seek_flags,
                     QWORD* current_position) {
-  int64_t size = -1;
-  if (!data_source_->GetSize(&size))
-    size = kUnknownSize;
+  int64_t size = read_stream_->Size();
   switch (seek_origin) {
     case msoBegin:
       if ((size > 0 && seek_offset > size) || seek_offset < 0) {
         return E_INVALIDARG;  // might happen if the stream is not seekable or
                               // if the llSeekOffset overflows the stream
       }
-      read_position_ = seek_offset;
+      read_stream_->SetCurrentPosition(seek_offset);
       break;
 
     case msoCurrent:
-      if ((size > 0 && (read_position_ + seek_offset) > size) ||
-          (read_position_ + seek_offset) < 0) {
+      int64_t current_position = read_stream_->CurrentPosition();
+      if ((size > 0 && (current_position + seek_offset) > size) ||
+          (current_position + seek_offset) < 0) {
         return E_INVALIDARG;  // might happen if the stream is not seekable or
                               // if the llSeekOffset overflows the stream
       }
-      read_position_ += seek_offset;
+      read_stream_->SetCurrentPosition(current_position + seek_offset);
       break;
   }
 
-  *current_position = read_position_;
+  *current_position = read_stream_->CurrentPosition();
   return S_OK;
 }
 

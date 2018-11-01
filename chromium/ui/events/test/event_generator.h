@@ -69,11 +69,16 @@ class EventGeneratorDelegate {
   virtual void ConvertPointFromHost(const EventTarget* hosted_target,
                                     gfx::Point* point) const = 0;
 
-  // Detemines whether the input method should be the first to handle key events
-  // before dispathcing to Views. If it does, the given |event| will be
+  // Determines if the input method should be the first to handle key events
+  // before dispatching to Views. If it does, the given |event| will be
   // dispatched and processed by the input method from the host of |target|.
   virtual void DispatchKeyEventToIME(EventTarget* target,
                                      ui::KeyEvent* event) = 0;
+
+  // Offers the event to pointer watchers on systems that provide them.
+  // Does not consume the event (pointer watchers cannot consume events).
+  virtual void DispatchEventToPointerWatchers(EventTarget* target,
+                                              const PointerEvent& event) {}
 };
 
 // ui::test::EventGenerator is a tool that generates and dispatches events.
@@ -153,6 +158,20 @@ class EventGenerator {
   // Resets the event flags bitmask.
   void set_flags(int flags) { flags_ = flags; }
   int flags() const { return flags_; }
+
+  // Many tests assume a window created at (0,0) will remain there when shown.
+  // However, an operating system's window manager may reposition the window
+  // into the work area. This can disrupt the coordinates used on test events,
+  // so an EventGeneratorDelegate may skip the step that remaps coordinates in
+  // the root window to window coordinates when dispatching events.
+  // Setting this to false skips that step, in which case the test must ensure
+  // it correctly maps coordinates in window coordinates to root window (screen)
+  // coordinates when calling, e.g., set_current_location().
+  // Default is true. This only has any effect on Mac.
+  void set_assume_window_at_origin(bool assume_window_at_origin) {
+    assume_window_at_origin_ = assume_window_at_origin;
+  }
+  bool assume_window_at_origin() { return assume_window_at_origin_; }
 
   // Generates a left button press event.
   void PressLeftButton();
@@ -432,20 +451,32 @@ class EventGenerator {
   void DispatchNextPendingEvent();
   void DoDispatchEvent(Event* event, bool async);
 
+  // Offers event to pointer watchers (via delegate) if the event is a mouse or
+  // touch event.
+  void MaybeDispatchToPointerWatchers(const Event& event);
+
   const EventGeneratorDelegate* delegate() const;
   EventGeneratorDelegate* delegate();
 
   std::unique_ptr<EventGeneratorDelegate> delegate_;
   gfx::Point current_location_;
-  EventTarget* current_target_;
-  int flags_;
-  bool grab_;
+  EventTarget* current_target_ = nullptr;
+  int flags_ = 0;
+  bool grab_ = false;
+
   ui::PointerDetails touch_pointer_details_;
 
   std::list<std::unique_ptr<Event>> pending_events_;
+
   // Set to true to cause events to be posted asynchronously.
-  bool async_;
-  Target target_;
+  bool async_ = false;
+
+  // Whether to skip mapping of coordinates from the root window to a hit window
+  // when dispatching events.
+  bool assume_window_at_origin_ = true;
+
+  Target target_ = Target::WIDGET;
+
   std::unique_ptr<base::TickClock> tick_clock_;
 
   DISALLOW_COPY_AND_ASSIGN(EventGenerator);

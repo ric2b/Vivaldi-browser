@@ -16,6 +16,7 @@
 #include "chrome/renderer/autofill/password_generation_test_utils.h"
 #include "chrome/test/base/chrome_render_view_test.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
+#include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/test_password_generation_agent.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
@@ -77,10 +78,10 @@ class PasswordGenerationAgentTest : public ChromeRenderViewTest {
   }
 
   void FocusField(const char* element_id) {
-    WebDocument document = GetMainFrame()->document();
+    WebDocument document = GetMainFrame()->GetDocument();
     blink::WebElement element =
-        document.getElementById(blink::WebString::fromUTF8(element_id));
-    ASSERT_FALSE(element.isNull());
+        document.GetElementById(blink::WebString::FromUTF8(element_id));
+    ASSERT_FALSE(element.IsNull());
     ExecuteJavaScriptForTests(
         base::StringPrintf("document.getElementById('%s').focus();",
                            element_id).c_str());
@@ -249,18 +250,6 @@ const char kNewPasswordAutocompleteAttributeFormHTML[] =
     "  <INPUT type = 'submit' value = 'LOGIN' />"
     "</FORM>";
 
-const char ChangeDetectionScript[] =
-    "<script>"
-    "  firstOnChangeCalled = false;"
-    "  secondOnChangeCalled = false;"
-    "  document.getElementById('first_password').onchange = function() {"
-    "    firstOnChangeCalled = true;"
-    "  };"
-    "  document.getElementById('second_password').onchange = function() {"
-    "    secondOnChangeCalled = true;"
-    "  };"
-    "</script>";
-
 const char kPasswordChangeFormHTML[] =
     "<FORM name = 'ChangeWithUsernameForm' action = 'http://www.bidule.com'> "
     "  <INPUT type = 'text' id = 'username'/> "
@@ -270,6 +259,14 @@ const char kPasswordChangeFormHTML[] =
     "  <INPUT type = 'button' id = 'dummy'/> "
     "  <INPUT type = 'submit' value = 'Login'/> "
     "</FORM>";
+
+const char kPasswordFormAndSpanHTML[] =
+    "<FORM name = 'blah' action = 'http://www.random.com/pa/th?q=1&p=3#first'>"
+    "  <INPUT type = 'text' id = 'username'/> "
+    "  <INPUT type = 'password' id = 'password'/> "
+    "  <INPUT type = 'button' id = 'dummy'/> "
+    "</FORM>"
+    "<SPAN id='span'>Text to click on</SPAN>";
 
 TEST_F(PasswordGenerationAgentTest, DetectionTest) {
   // Don't shown the icon for non account creation forms.
@@ -286,7 +283,7 @@ TEST_F(PasswordGenerationAgentTest, DetectionTest) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", true);
 
   // Hidden fields are not treated differently.
@@ -294,7 +291,7 @@ TEST_F(PasswordGenerationAgentTest, DetectionTest) {
   SetNotBlacklistedMessage(password_generation_,
                            kHiddenPasswordAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", true);
 
   // This doesn't trigger because the form action is invalid.
@@ -302,100 +299,99 @@ TEST_F(PasswordGenerationAgentTest, DetectionTest) {
   SetNotBlacklistedMessage(password_generation_,
                            kInvalidActionAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", false);
 }
 
 TEST_F(PasswordGenerationAgentTest, FillTest) {
+  // Add event listeners for password fields.
+  std::vector<base::string16> variables_to_check;
+  std::string events_registration_script =
+      CreateScriptToRegisterListeners("first_password", &variables_to_check) +
+      CreateScriptToRegisterListeners("second_password", &variables_to_check);
+
   // Make sure that we are enabled before loading HTML.
-  std::string html = std::string(kAccountCreationFormHTML) +
-      ChangeDetectionScript;
+  std::string html =
+      std::string(kAccountCreationFormHTML) + events_registration_script;
   LoadHTMLWithUserGesture(html.c_str());
   SetNotBlacklistedMessage(password_generation_, html.c_str());
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
 
-  WebDocument document = GetMainFrame()->document();
+  WebDocument document = GetMainFrame()->GetDocument();
   WebElement element =
-      document.getElementById(WebString::fromUTF8("first_password"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement first_password_element = element.to<WebInputElement>();
-  element = document.getElementById(WebString::fromUTF8("second_password"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement second_password_element = element.to<WebInputElement>();
+      document.GetElementById(WebString::FromUTF8("first_password"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement first_password_element = element.To<WebInputElement>();
+  element = document.GetElementById(WebString::FromUTF8("second_password"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement second_password_element = element.To<WebInputElement>();
 
   // Both password fields should be empty.
-  EXPECT_TRUE(first_password_element.value().isNull());
-  EXPECT_TRUE(second_password_element.value().isNull());
+  EXPECT_TRUE(first_password_element.Value().IsNull());
+  EXPECT_TRUE(second_password_element.Value().IsNull());
 
   base::string16 password = base::ASCIIToUTF16("random_password");
   password_generation_->GeneratedPasswordAccepted(password);
 
   // Password fields are filled out and set as being autofilled.
-  EXPECT_EQ(password, first_password_element.value().utf16());
-  EXPECT_EQ(password, second_password_element.value().utf16());
-  EXPECT_TRUE(first_password_element.isAutofilled());
-  EXPECT_TRUE(second_password_element.isAutofilled());
+  EXPECT_EQ(password, first_password_element.Value().Utf16());
+  EXPECT_EQ(password, second_password_element.Value().Utf16());
+  EXPECT_TRUE(first_password_element.IsAutofilled());
+  EXPECT_TRUE(second_password_element.IsAutofilled());
 
-  // Make sure onchange events are called.
-  int first_onchange_called = -1;
-  int second_onchange_called = -1;
-  ASSERT_TRUE(
-      ExecuteJavaScriptAndReturnIntValue(
-          base::ASCIIToUTF16("firstOnChangeCalled ? 1 : 0"),
-          &first_onchange_called));
-  EXPECT_EQ(1, first_onchange_called);
-  ASSERT_TRUE(
-      ExecuteJavaScriptAndReturnIntValue(
-          base::ASCIIToUTF16("secondOnChangeCalled ? 1 : 0"),
-          &second_onchange_called));
-  EXPECT_EQ(1, second_onchange_called);
+  // Make sure all events are called.
+  for (const base::string16& variable : variables_to_check) {
+    int value;
+    EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(variable, &value));
+    EXPECT_EQ(1, value) << variable;
+  }
 
   // Focus moved to the next input field.
   // TODO(zysxqn): Change this back to the address element once Bug 90224
   // https://bugs.webkit.org/show_bug.cgi?id=90224 has been fixed.
-  element = document.getElementById(WebString::fromUTF8("first_password"));
-  ASSERT_FALSE(element.isNull());
-  EXPECT_EQ(element, document.focusedElement());
+  element = document.GetElementById(WebString::FromUTF8("first_password"));
+  ASSERT_FALSE(element.IsNull());
+  EXPECT_EQ(element, document.FocusedElement());
 }
 
 TEST_F(PasswordGenerationAgentTest, EditingTest) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
 
-  WebDocument document = GetMainFrame()->document();
+  WebDocument document = GetMainFrame()->GetDocument();
   WebElement element =
-      document.getElementById(WebString::fromUTF8("first_password"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement first_password_element = element.to<WebInputElement>();
-  element = document.getElementById(WebString::fromUTF8("second_password"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement second_password_element = element.to<WebInputElement>();
+      document.GetElementById(WebString::FromUTF8("first_password"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement first_password_element = element.To<WebInputElement>();
+  element = document.GetElementById(WebString::FromUTF8("second_password"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement second_password_element = element.To<WebInputElement>();
 
   base::string16 password = base::ASCIIToUTF16("random_password");
   password_generation_->GeneratedPasswordAccepted(password);
 
   // Passwords start out the same.
-  EXPECT_EQ(password, first_password_element.value().utf16());
-  EXPECT_EQ(password, second_password_element.value().utf16());
+  EXPECT_EQ(password, first_password_element.Value().Utf16());
+  EXPECT_EQ(password, second_password_element.Value().Utf16());
 
   // After editing the first field they are still the same.
   std::string edited_password_ascii = "edited_password";
   SimulateUserInputChangeForElement(&first_password_element,
                                     edited_password_ascii);
   base::string16 edited_password = base::ASCIIToUTF16(edited_password_ascii);
-  EXPECT_EQ(edited_password, first_password_element.value().utf16());
-  EXPECT_EQ(edited_password, second_password_element.value().utf16());
+  EXPECT_EQ(edited_password, first_password_element.Value().Utf16());
+  EXPECT_EQ(edited_password, second_password_element.Value().Utf16());
 
   fake_driver_.reset_called_password_no_longer_generated();
 
   // Verify that password mirroring works correctly even when the password
   // is deleted.
   SimulateUserInputChangeForElement(&first_password_element, std::string());
-  EXPECT_EQ(base::string16(), first_password_element.value().utf16());
-  EXPECT_EQ(base::string16(), second_password_element.value().utf16());
+  EXPECT_EQ(base::string16(), first_password_element.Value().Utf16());
+  EXPECT_EQ(base::string16(), second_password_element.Value().Utf16());
 
   // Should have notified the browser that the password is no longer generated
   // and trigger generation again.
@@ -409,7 +405,7 @@ TEST_F(PasswordGenerationAgentTest, BlacklistedTest) {
   // icon.
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", false);
 
   // Receive one not blacklisted message for non account creation form. Don't
@@ -417,7 +413,7 @@ TEST_F(PasswordGenerationAgentTest, BlacklistedTest) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kSigninFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", false);
 
   // Receive one not blacklisted message for account creation form. Show
@@ -425,7 +421,7 @@ TEST_F(PasswordGenerationAgentTest, BlacklistedTest) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", true);
 
   // Receive two not blacklisted messages, one is for account creation form and
@@ -434,7 +430,7 @@ TEST_F(PasswordGenerationAgentTest, BlacklistedTest) {
   SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kSigninFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", true);
 }
 
@@ -450,7 +446,7 @@ TEST_F(PasswordGenerationAgentTest, AccountCreationFormsDetectedTest) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", true);
 }
 
@@ -460,14 +456,14 @@ TEST_F(PasswordGenerationAgentTest, MaximumOfferSize) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
   ExpectGenerationAvailable("first_password", true);
 
-  WebDocument document = GetMainFrame()->document();
+  WebDocument document = GetMainFrame()->GetDocument();
   WebElement element =
-      document.getElementById(WebString::fromUTF8("first_password"));
-  ASSERT_FALSE(element.isNull());
-  WebInputElement first_password_element = element.to<WebInputElement>();
+      document.GetElementById(WebString::FromUTF8("first_password"));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement first_password_element = element.To<WebInputElement>();
 
   // Make a password just under maximum offer size.
   SimulateUserInputChangeForElement(
@@ -541,7 +537,7 @@ TEST_F(PasswordGenerationAgentTest, DynamicFormTest) {
 
   // This needs to come after the DOM has been modified.
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 1, 1);
+                                         GetMainFrame()->GetDocument(), 1, 1);
 
   // TODO(gcasto): I'm slightly worried about flakes in this test where
   // didAssociateFormControls() isn't called. If this turns out to be a problem
@@ -559,7 +555,7 @@ TEST_F(PasswordGenerationAgentTest, MultiplePasswordFormsTest) {
 
   // Should trigger on the second form.
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 1, 1);
+                                         GetMainFrame()->GetDocument(), 1, 1);
 
   ExpectGenerationAvailable("password", false);
   ExpectGenerationAvailable("first_password", true);
@@ -569,7 +565,7 @@ TEST_F(PasswordGenerationAgentTest, MessagesAfterAccountSignupFormFound) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
 
   // Generation should be enabled.
   ExpectGenerationAvailable("first_password", true);
@@ -589,7 +585,7 @@ TEST_F(PasswordGenerationAgentTest, BlurTest) {
   SetNotBlacklistedMessage(password_generation_,
                            kDisabledElementAccountCreationFormHTML);
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 1);
+                                         GetMainFrame()->GetDocument(), 0, 1);
 
   // Focus on the first password field: password generation popup should show
   // up.
@@ -636,7 +632,7 @@ TEST_F(PasswordGenerationAgentTest, ChangePasswordFormDetectionTest) {
   ExpectGenerationAvailable("confirmpassword", false);
 
   SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->document(), 0, 2);
+                                         GetMainFrame()->GetDocument(), 0, 2);
   ExpectGenerationAvailable("password", false);
   ExpectGenerationAvailable("newpassword", true);
   ExpectGenerationAvailable("confirmpassword", false);
@@ -721,6 +717,100 @@ TEST_F(PasswordGenerationAgentTest, FormClassifierDisabled) {
   LoadHTMLWithUserGesture(kSigninFormHTML);
   ExpectFormClassifierVoteReceived(false /* vote is not expected */,
                                    base::string16());
+}
+
+TEST_F(PasswordGenerationAgentTest, ConfirmationFieldVoteFromServer) {
+  LoadHTMLWithUserGesture(kPasswordChangeFormHTML);
+  SetNotBlacklistedMessage(password_generation_, kPasswordChangeFormHTML);
+
+  WebDocument document = GetMainFrame()->GetDocument();
+  blink::WebVector<blink::WebFormElement> web_forms;
+  document.Forms(web_forms);
+  autofill::FormData form_data;
+  WebFormElementToFormData(web_forms[0], blink::WebFormControlElement(),
+                           nullptr, form_util::EXTRACT_NONE, &form_data,
+                           nullptr /* FormFieldData */);
+
+  std::vector<autofill::PasswordFormGenerationData> forms;
+  autofill::PasswordFormGenerationData generation_data(
+      CalculateFormSignature(form_data),
+      CalculateFieldSignatureForField(form_data.fields[1]));
+  generation_data.confirmation_field_signature.emplace(
+      CalculateFieldSignatureForField(form_data.fields[3]));
+  forms.push_back(generation_data);
+  password_generation_->FoundFormsEligibleForGeneration(forms);
+
+  WebElement element =
+      document.GetElementById(WebString::FromUTF16(form_data.fields[1].name));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement generation_element = element.To<WebInputElement>();
+  element =
+      document.GetElementById(WebString::FromUTF16(form_data.fields[2].name));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement ignored_password_element = element.To<WebInputElement>();
+  element =
+      document.GetElementById(WebString::FromUTF16(form_data.fields[3].name));
+  ASSERT_FALSE(element.IsNull());
+  WebInputElement confirmation_password_element = element.To<WebInputElement>();
+
+  base::string16 password = base::ASCIIToUTF16("random_password");
+  password_generation_->GeneratedPasswordAccepted(password);
+  EXPECT_EQ(password, generation_element.Value().Utf16());
+  // Check that the generated password was copied according to the server's
+  // response.
+  EXPECT_EQ(base::string16(), ignored_password_element.Value().Utf16());
+  EXPECT_EQ(password, confirmation_password_element.Value().Utf16());
+}
+
+TEST_F(PasswordGenerationAgentTest, RevealPassword) {
+  // Checks that revealed password is masked when the field lost focus.
+  // Test cases: user click on another input field and on non-focusable element.
+  LoadHTMLWithUserGesture(kPasswordFormAndSpanHTML);
+  SetNotBlacklistedMessage(password_generation_, kPasswordFormAndSpanHTML);
+  SetAccountCreationFormsDetectedMessage(password_generation_,
+                                         GetMainFrame()->GetDocument(), 0, 1);
+  const char* kGenerationElementId = "password";
+  const char* kSpanId = "span";
+  const char* kTextFieldId = "username";
+
+  ExpectGenerationAvailable(kGenerationElementId, true);
+  password_generation_->GeneratedPasswordAccepted(base::ASCIIToUTF16("pwd"));
+
+  const bool kFalseTrue[] = {false, true};
+  for (bool clickOnInputField : kFalseTrue) {
+    SCOPED_TRACE(testing::Message("clickOnInputField = ") << clickOnInputField);
+    // Click on the generation field to reveal the password value.
+    FocusField(kGenerationElementId);
+
+    WebDocument document = GetMainFrame()->GetDocument();
+    blink::WebElement element = document.GetElementById(
+        blink::WebString::FromUTF8(kGenerationElementId));
+    ASSERT_FALSE(element.IsNull());
+    blink::WebInputElement input = element.To<WebInputElement>();
+    EXPECT_TRUE(input.ShouldRevealPassword());
+
+    // Click on another HTML element.
+    const char* const click_target_name =
+        clickOnInputField ? kTextFieldId : kSpanId;
+    EXPECT_TRUE(SimulateElementClick(click_target_name));
+    EXPECT_FALSE(input.ShouldRevealPassword());
+  }
+}
+
+TEST_F(PasswordGenerationAgentTest, JavascriptClearedTheField) {
+  LoadHTMLWithUserGesture(kAccountCreationFormHTML);
+  SetNotBlacklistedMessage(password_generation_, kAccountCreationFormHTML);
+  SetAccountCreationFormsDetectedMessage(password_generation_,
+                                         GetMainFrame()->GetDocument(), 0, 1);
+
+  const char kGenerationElementId[] = "first_password";
+  ExpectGenerationAvailable(kGenerationElementId, true);
+  password_generation_->GeneratedPasswordAccepted(base::ASCIIToUTF16("pwd"));
+  ExecuteJavaScriptForTests(
+      "document.getElementById('first_password').value = '';");
+  FocusField(kGenerationElementId);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(fake_driver_.called_password_no_longer_generated());
 }
 
 }  // namespace autofill

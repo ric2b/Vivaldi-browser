@@ -135,11 +135,8 @@ void GetCachedNetworkPropertiesCallback(
 
 }  // namespace
 
-NetworkingPrivateLinux::NetworkingPrivateLinux(
-    std::unique_ptr<VerifyDelegate> verify_delegate)
-    : NetworkingPrivateDelegate(std::move(verify_delegate)),
-      dbus_thread_("Networking Private DBus"),
-      network_manager_proxy_(NULL) {
+NetworkingPrivateLinux::NetworkingPrivateLinux()
+    : dbus_thread_("Networking Private DBus"), network_manager_proxy_(NULL) {
   base::Thread::Options thread_options(base::MessageLoop::Type::TYPE_IO, 0);
 
   dbus_thread_.StartWithOptions(thread_options);
@@ -254,6 +251,7 @@ void NetworkingPrivateLinux::GetCachedNetworkProperties(
 void NetworkingPrivateLinux::SetProperties(
     const std::string& guid,
     std::unique_ptr<base::DictionaryValue> properties,
+    bool allow_set_shared_config,
     const VoidCallback& success_callback,
     const FailureCallback& failure_callback) {
   ReportNotSupported("SetProperties", failure_callback);
@@ -269,6 +267,7 @@ void NetworkingPrivateLinux::CreateNetwork(
 
 void NetworkingPrivateLinux::ForgetNetwork(
     const std::string& guid,
+    bool allow_forget_shared_config,
     const VoidCallback& success_callback,
     const FailureCallback& failure_callback) {
   // TODO(zentaro): Implement for Linux.
@@ -644,8 +643,8 @@ void NetworkingPrivateLinux::SendNetworkListChangedEvent(
 
   for (const auto& network : network_list) {
     std::string guid;
-    base::DictionaryValue* dict;
-    if (network->GetAsDictionary(&dict)) {
+    const base::DictionaryValue* dict = nullptr;
+    if (network.GetAsDictionary(&dict)) {
       if (dict->GetString(kAccessPointInfoGuid, &guid)) {
         guidsForEventCallback.push_back(guid);
       }

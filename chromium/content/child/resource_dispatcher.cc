@@ -13,7 +13,6 @@
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/debug/stack_trace.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
@@ -36,7 +35,6 @@
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/child/resource_dispatcher_delegate.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/net_errors.h"
@@ -74,9 +72,9 @@ int MakeRequestID() {
 }
 
 void CheckSchemeForReferrerPolicy(const ResourceRequest& request) {
-  if ((request.referrer_policy == blink::WebReferrerPolicyDefault ||
+  if ((request.referrer_policy == blink::kWebReferrerPolicyDefault ||
        request.referrer_policy ==
-           blink::WebReferrerPolicyNoReferrerWhenDowngrade) &&
+           blink::kWebReferrerPolicyNoReferrerWhenDowngrade) &&
       request.referrer.SchemeIsCryptographic() &&
       !request.url.SchemeIsCryptographic()) {
     LOG(FATAL) << "Trying to send secure referrer for insecure request "
@@ -191,13 +189,16 @@ void ResourceDispatcher::OnReceivedResponse(
 }
 
 void ResourceDispatcher::OnReceivedCachedMetadata(
-      int request_id, const std::vector<char>& data) {
+    int request_id,
+    const std::vector<uint8_t>& data) {
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info)
     return;
 
-  if (data.size())
-    request_info->peer->OnReceivedCachedMetadata(&data.front(), data.size());
+  if (data.size()) {
+    request_info->peer->OnReceivedCachedMetadata(
+        reinterpret_cast<const char*>(&data.front()), data.size());
+  }
 }
 
 void ResourceDispatcher::OnSetDataBuffer(int request_id,
@@ -235,38 +236,6 @@ void ResourceDispatcher::OnSetDataBuffer(int request_id,
   CHECK_GE(shm_size, 0);
   CHECK_LE(shm_size, 512 * 1024);
   request_info->buffer_size = shm_size;
-}
-
-void ResourceDispatcher::OnReceivedInlinedDataChunk(
-    int request_id,
-    const std::vector<char>& data,
-    int encoded_data_length) {
-  TRACE_EVENT0("loader", "ResourceDispatcher::OnReceivedInlinedDataChunk");
-  DCHECK(!data.empty());
-  DCHECK(base::FeatureList::IsEnabled(
-      features::kOptimizeLoadingIPCForSmallResources));
-
-  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
-  if (!request_info || data.empty())
-    return;
-
-  // Check whether this response data is compliant with our cross-site
-  // document blocking policy. We only do this for the first chunk of data.
-  if (request_info->site_isolation_metadata.get()) {
-    SiteIsolationStatsGatherer::OnReceivedFirstChunk(
-        request_info->site_isolation_metadata, data.data(), data.size());
-    request_info->site_isolation_metadata.reset();
-  }
-
-  DCHECK(!request_info->buffer.get());
-
-  request_info->peer->OnReceivedData(
-      base::MakeUnique<content::FixedReceivedData>(data));
-
-  // Get the request info again as the client callback may modify the info.
-  request_info = GetPendingRequestInfo(request_id);
-  if (request_info && encoded_data_length > 0)
-    request_info->peer->OnTransferSizeUpdated(encoded_data_length);
 }
 
 void ResourceDispatcher::OnReceivedData(int request_id,
@@ -559,8 +528,6 @@ void ResourceDispatcher::DispatchMessage(const IPC::Message& message) {
                         OnReceivedCachedMetadata)
     IPC_MESSAGE_HANDLER(ResourceMsg_ReceivedRedirect, OnReceivedRedirect)
     IPC_MESSAGE_HANDLER(ResourceMsg_SetDataBuffer, OnSetDataBuffer)
-    IPC_MESSAGE_HANDLER(ResourceMsg_InlinedDataChunkReceived,
-                        OnReceivedInlinedDataChunk)
     IPC_MESSAGE_HANDLER(ResourceMsg_DataReceived, OnReceivedData)
     IPC_MESSAGE_HANDLER(ResourceMsg_DataDownloaded, OnDownloadedData)
     IPC_MESSAGE_HANDLER(ResourceMsg_RequestComplete, OnRequestComplete)
@@ -616,7 +583,7 @@ void ResourceDispatcher::StartSync(
 
   SyncLoadResult result;
 
-  if (ipc_type == blink::WebURLRequest::LoadingIPCType::Mojo) {
+  if (ipc_type == blink::WebURLRequest::LoadingIPCType::kMojo) {
     if (!url_loader_factory->SyncLoad(
             routing_id, MakeRequestID(), *request, &result)) {
       response->error_code = net::ERR_FAILED;
@@ -656,7 +623,8 @@ int ResourceDispatcher::StartAsync(
     const url::Origin& frame_origin,
     std::unique_ptr<RequestPeer> peer,
     blink::WebURLRequest::LoadingIPCType ipc_type,
-    mojom::URLLoaderFactory* url_loader_factory) {
+    mojom::URLLoaderFactory* url_loader_factory,
+    mojo::ScopedDataPipeConsumerHandle consumer_handle) {
   CheckSchemeForReferrerPolicy(*request);
 
   // Compute a unique request_id for this renderer process.
@@ -670,7 +638,22 @@ int ResourceDispatcher::StartAsync(
                                                         loading_task_runner);
   }
 
-  if (ipc_type == blink::WebURLRequest::LoadingIPCType::Mojo) {
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      loading_task_runner ? loading_task_runner : main_thread_task_runner_;
+
+  if (consumer_handle.is_valid()) {
+    pending_requests_[request_id]->url_loader_client =
+        base::MakeUnique<URLLoaderClientImpl>(request_id, this, task_runner);
+
+    task_runner->PostTask(FROM_HERE,
+                          base::Bind(&ResourceDispatcher::ContinueForNavigation,
+                                     weak_factory_.GetWeakPtr(), request_id,
+                                     base::Passed(std::move(consumer_handle))));
+
+    return request_id;
+  }
+
+  if (ipc_type == blink::WebURLRequest::LoadingIPCType::kMojo) {
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
         loading_task_runner ? loading_task_runner : main_thread_task_runner_;
     std::unique_ptr<URLLoaderClientImpl> client(
@@ -771,6 +754,36 @@ base::TimeTicks ResourceDispatcher::ConsumeIOTimestamp() {
   return result;
 }
 
+void ResourceDispatcher::ContinueForNavigation(
+    int request_id,
+    mojo::ScopedDataPipeConsumerHandle consumer_handle) {
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (!request_info)
+    return;
+
+  URLLoaderClientImpl* client_ptr = request_info->url_loader_client.get();
+
+  // Short circuiting call to OnReceivedResponse to immediately start
+  // the request. ResourceResponseHead can be empty here because we
+  // pull the StreamOverride's one in
+  // WebURLLoaderImpl::Context::OnReceivedResponse.
+  client_ptr->OnReceiveResponse(ResourceResponseHead(),
+                                mojom::DownloadedTempFilePtr());
+  // Start streaming now.
+  client_ptr->OnStartLoadingResponseBody(std::move(consumer_handle));
+
+  // Call OnComplete now too, as it won't get called on the client.
+  // TODO(kinuko): Fill this properly.
+  ResourceRequestCompletionStatus completion_status;
+  completion_status.error_code = net::OK;
+  completion_status.was_ignored_by_handler = false;
+  completion_status.exists_in_cache = false;
+  completion_status.completion_time = base::TimeTicks::Now();
+  completion_status.encoded_data_length = -1;
+  completion_status.encoded_body_length = -1;
+  client_ptr->OnComplete(completion_status);
+}
+
 // static
 bool ResourceDispatcher::IsResourceDispatcherMessage(
     const IPC::Message& message) {
@@ -780,7 +793,6 @@ bool ResourceDispatcher::IsResourceDispatcherMessage(
     case ResourceMsg_ReceivedCachedMetadata::ID:
     case ResourceMsg_ReceivedRedirect::ID:
     case ResourceMsg_SetDataBuffer::ID:
-    case ResourceMsg_InlinedDataChunkReceived::ID:
     case ResourceMsg_DataReceived::ID:
     case ResourceMsg_DataDownloaded::ID:
     case ResourceMsg_RequestComplete::ID:

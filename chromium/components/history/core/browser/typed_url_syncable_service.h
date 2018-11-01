@@ -71,11 +71,12 @@ class TypedUrlSyncableService : public syncer::SyncableService,
   // Returns the percentage of DB accesses that have resulted in an error.
   int GetErrorPercentage() const;
 
-  // Converts the passed URL information to a TypedUrlSpecifics structure for
-  // writing to the sync DB.
-  static void WriteToTypedUrlSpecifics(const URLRow& url,
+  // Return true if this function successfully converts the passed URL
+  // information to a TypedUrlSpecifics structure for writing to the sync DB.
+  static bool WriteToTypedUrlSpecifics(const URLRow& url,
                                        const VisitVector& visits,
-                                       sync_pb::TypedUrlSpecifics* specifics);
+                                       sync_pb::TypedUrlSpecifics* specifics)
+      WARN_UNUSED_RESULT;
 
  private:
   friend class TypedUrlSyncableServiceTest;
@@ -183,9 +184,12 @@ class TypedUrlSyncableService : public syncer::SyncableService,
   // function compensates for the fact that the history DB has rather poor data
   // integrity (duplicate visits, visit timestamps that don't match the
   // last_visit timestamp, huge data sets that exhaust memory when fetched,
-  // etc) by modifying the passed |url| object and |visits| vector.
-  // Returns false if we could not fetch the visits for the passed URL, and
-  // tracks DB error statistics internally for reporting via UMA.
+  // expired visits that are not deleted by |ExpireHistoryBackend|, etc) by
+  // modifying the passed |url| object and |visits| vector.
+  // Returns false in two cases.
+  // 1. we could not fetch the visits for the passed URL, and tracks DB error
+  // statistics internally for reporting via UMA.
+  // 2. All the visits are expired.
   virtual bool FixupURLAndGetVisits(URLRow* url, VisitVector* visits);
 
   // Given a typed URL in the sync DB, looks for an existing entry in the

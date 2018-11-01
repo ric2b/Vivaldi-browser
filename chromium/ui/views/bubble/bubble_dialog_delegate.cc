@@ -15,8 +15,8 @@
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/focus/view_storage.h"
 #include "ui/views/layout/layout_constants.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/platform_style.h"
-#include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/dialog_client_view.h"
@@ -108,7 +108,7 @@ bool BubbleDialogDelegateView::ShouldShowCloseButton() const {
 
 ClientView* BubbleDialogDelegateView::CreateClientView(Widget* widget) {
   DialogClientView* client = new DialogClientView(widget, GetContentsView());
-  client->set_button_row_insets(gfx::Insets());
+  client->SetButtonRowInsets(gfx::Insets());
   widget->non_client_view()->set_mirror_client_in_rtl(mirror_arrow_in_rtl_);
   return client;
 }
@@ -226,13 +226,9 @@ BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
       accept_events_(true),
       adjust_if_offscreen_(true),
       parent_window_(NULL) {
-  ViewsDelegate* views_delegate = ViewsDelegate::GetInstance();
-  margins_ = views_delegate ? views_delegate->GetBubbleDialogMargins()
-                            : gfx::Insets(kPanelVertMargin, kPanelHorizMargin);
-  title_margins_ = views_delegate
-                       ? views_delegate->GetDialogFrameViewInsets()
-                       : gfx::Insets(kPanelVertMargin, kPanelHorizMargin, 0,
-                                     kPanelHorizMargin);
+  LayoutProvider* provider = LayoutProvider::Get();
+  margins_ = provider->GetInsetsMetric(INSETS_BUBBLE_CONTENTS);
+  title_margins_ = provider->GetInsetsMetric(INSETS_DIALOG_TITLE);
   if (anchor_view)
     SetAnchorView(anchor_view);
   UpdateColorsFromTheme(GetNativeTheme());

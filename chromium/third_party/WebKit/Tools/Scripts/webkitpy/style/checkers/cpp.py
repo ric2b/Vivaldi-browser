@@ -32,7 +32,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # This is the modified version of Google's cpplint. The original code is
-# http://google-styleguide.googlecode.com/svn/trunk/cpplint/cpplint.py
+# https://github.com/google/styleguide/tree/gh-pages/cpplint
 
 """Support for check-webkit-style."""
 
@@ -113,11 +113,6 @@ _DEPRECATED_MACROS = [
     ['ASSERT_NOT_REACHED', 'NOTREACHED'],
     ['WTF_LOG', 'DVLOG']
 ]
-
-# These constants define types of headers for use with
-# _IncludeState.check_next_include_order().
-_PRIMARY_HEADER = 0
-_OTHER_HEADER = 1
 
 
 # The regexp compilation caching is inlined in all regexp functions for
@@ -292,10 +287,6 @@ class _IncludeState(dict):
 
     As a dict, an _IncludeState object serves as a mapping between include
     filename and line number on which that file was included.
-
-    Call check_next_include_order() once for each header in the file, passing
-    in the type constants defined above. Calls in an illegal order will
-    raise an _IncludeError with an appropriate error message.
     """
     # self._section will move monotonically through this set. If it ever
     # needs to move backwards, check_next_include_order will raise an error.
@@ -303,12 +294,8 @@ class _IncludeState(dict):
     _PRIMARY_SECTION = 1
     _OTHER_SECTION = 2
 
-    _TYPE_NAMES = {
-        _PRIMARY_HEADER: 'header this file implements',
-        _OTHER_HEADER: 'other header',
-    }
     _SECTION_NAMES = {
-        _INITIAL_SECTION: "... nothing.",
+        _INITIAL_SECTION: '... nothing.',
         _PRIMARY_SECTION: 'a header this file implements.',
         _OTHER_SECTION: 'other header.',
     }
@@ -321,46 +308,6 @@ class _IncludeState(dict):
 
     def visited_primary_section(self):
         return self._visited_primary_section
-
-    def check_next_include_order(self, header_type, file_is_header, primary_header_exists):
-        """Returns a non-empty error message if the next header is out of order.
-
-        This function also updates the internal state to be ready to check
-        the next include.
-
-        Args:
-          header_type: One of the _XXX_HEADER constants defined above.
-          file_is_header: Whether the file that owns this _IncludeState is itself a header
-
-        Returns:
-          The empty string if the header is in the right order, or an
-          error message describing what's wrong.
-        """
-        if header_type == _PRIMARY_HEADER and file_is_header:
-            return 'Header file should not contain itself.'
-
-        error_message = ''
-        if self._section != self._OTHER_SECTION:
-            before_error_message = ('Found %s before %s' %
-                                    (self._TYPE_NAMES[header_type],
-                                     self._SECTION_NAMES[self._section + 1]))
-        after_error_message = ('Found %s after %s' %
-                               (self._TYPE_NAMES[header_type],
-                                self._SECTION_NAMES[self._section]))
-
-        if header_type == _PRIMARY_HEADER:
-            if self._section >= self._PRIMARY_SECTION:
-                error_message = after_error_message
-            self._section = self._PRIMARY_SECTION
-            self._visited_primary_section = True
-        else:
-            assert header_type == _OTHER_HEADER
-            if not file_is_header and self._section < self._PRIMARY_SECTION:
-                if primary_header_exists:
-                    error_message = before_error_message
-            self._section = self._OTHER_SECTION
-
-        return error_message
 
 
 class Position(object):
@@ -643,26 +590,12 @@ class FileInfo:
         if os.path.exists(fullname):
             project_dir = os.path.dirname(fullname)
 
-            if os.path.exists(os.path.join(project_dir, ".svn")):
-                # If there's a .svn file in the current directory, we
-                # recursively look up the directory tree for the top
-                # of the SVN checkout
-                root_dir = project_dir
-                one_up_dir = os.path.dirname(root_dir)
-                while os.path.exists(os.path.join(one_up_dir, ".svn")):
-                    root_dir = os.path.dirname(root_dir)
-                    one_up_dir = os.path.dirname(one_up_dir)
-
-                prefix = os.path.commonprefix([root_dir, project_dir])
-                return fullname[len(prefix) + 1:]
-
-            # Not SVN? Try to find a git top level directory by
-            # searching up from the current path.
+            # Try to find a git top level directory by searching up from the current path.
             root_dir = os.path.dirname(fullname)
             while (root_dir != os.path.dirname(root_dir)
-                   and not os.path.exists(os.path.join(root_dir, ".git"))):
+                   and not os.path.exists(os.path.join(root_dir, '.git'))):
                 root_dir = os.path.dirname(root_dir)
-                if os.path.exists(os.path.join(root_dir, ".git")):
+                if os.path.exists(os.path.join(root_dir, '.git')):
                     prefix = os.path.commonprefix([root_dir, project_dir])
                     return fullname[len(prefix) + 1:]
 
@@ -742,6 +675,80 @@ def is_cpp_string(line):
     return ((line.count('"') - line.count(r'\"') - line.count("'\"'")) & 1) == 1
 
 
+def cleanse_raw_strings(raw_lines):
+    """Removes C++11 raw strings from lines.
+
+      Before:
+        static const char kData[] = R"(
+            multi-line string
+            )";
+
+      After:
+        static const char kData[] = ""
+            (replaced by blank line)
+            "";
+
+    Args:
+      raw_lines: list of raw lines.
+
+    Returns:
+      list of lines with C++11 raw strings replaced by empty strings.
+    """
+
+    delimiter = None
+    lines_without_raw_strings = []
+    for line in raw_lines:
+        if delimiter:
+            # Inside a raw string, look for the end
+            end = line.find(delimiter)
+            if end >= 0:
+                # Found the end of the string, match leading space for this
+                # line and resume copying the original lines, and also insert
+                # a "" on the last line.
+                leading_space = match(r'^(\s*)\S', line)
+                line = leading_space.group(1) + '""' + line[end + len(delimiter):]
+                delimiter = None
+            else:
+                # Haven't found the end yet, append a blank line.
+                line = '""'
+
+        # Look for beginning of a raw string, and replace them with
+        # empty strings.  This is done in a loop to handle multiple raw
+        # strings on the same line.
+        while delimiter is None:
+            # Look for beginning of a raw string.
+            # See 2.14.15 [lex.string] for syntax.
+            #
+            # Once we have matched a raw string, we check the prefix of the
+            # line to make sure that the line is not part of a single line
+            # comment.  It's done this way because we remove raw strings
+            # before removing comments as opposed to removing comments
+            # before removing raw strings.  This is because there are some
+            # cpplint checks that requires the comments to be preserved, but
+            # we don't want to check comments that are inside raw strings.
+            matched = match(r'^(.*?)\b(?:R|u8R|uR|UR|LR)"([^\s\\()]*)\((.*)$', line)
+            if matched and not match(r'^([^\'"]|\'(\\.|[^\'])*\'|"(\\.|[^"])*")*//', matched.group(1)):
+                delimiter = ')' + matched.group(2) + '"'
+
+                end = matched.group(3).find(delimiter)
+                if end >= 0:
+                    # Raw string ended on same line
+                    line = (matched.group(1) + '""' +
+                            matched.group(3)[end + len(delimiter):])
+                    delimiter = None
+                else:
+                    # Start of a multi-line raw string
+                    line = matched.group(1) + '""'
+            else:
+                break
+
+        lines_without_raw_strings.append(line)
+
+    # TODO(unknown): if delimiter is not None here, we might want to
+    # emit a warning for unterminated string.
+    return lines_without_raw_strings
+
+
 def find_next_multi_line_comment_start(lines, line_index):
     """Find the beginning marker for a multiline comment."""
     while line_index < len(lines):
@@ -803,12 +810,14 @@ def cleanse_comments(line):
 
 
 class CleansedLines(object):
-    """Holds 3 copies of all lines with different preprocessing applied to them.
+    """Holds 4 copies of all lines with different preprocessing applied to them.
 
-    1) elided member contains lines without strings and comments,
-    2) lines member contains lines without comments, and
-    3) raw member contains all the lines without processing.
-    All these three members are of <type 'list'>, and of the same length.
+    1) elided member contains lines without strings and comments.
+    2) lines member contains lines without comments.
+    3) raw_lines member contains all the lines without processing.
+    4) lines_without_raw_strings member is same as raw_lines, but with C++11 raw
+       strings removed.
+    All these members are of <type 'list'>, and of the same length.
     """
 
     def __init__(self, lines):
@@ -816,9 +825,10 @@ class CleansedLines(object):
         self.lines = []
         self.raw_lines = lines
         self._num_lines = len(lines)
-        for line_number in range(len(lines)):
-            self.lines.append(cleanse_comments(lines[line_number]))
-            elided = self.collapse_strings(lines[line_number])
+        self.lines_without_raw_strings = cleanse_raw_strings(lines)
+        for line_number in range(len(self.lines_without_raw_strings)):
+            self.lines.append(cleanse_comments(self.lines_without_raw_strings[line_number]))
+            elided = self.collapse_strings(self.lines_without_raw_strings[line_number])
             self.elided.append(cleanse_comments(elided))
 
     def num_lines(self):
@@ -939,7 +949,7 @@ def get_legacy_header_guard_cpp_variable(filename):
 
     # Files under WTF typically have header guards that start with WTF_.
     if '/wtf/' in filename:
-        special_name = "WTF_" + standard_name
+        special_name = 'WTF_' + standard_name
     else:
         special_name = standard_name
     return (special_name, standard_name)
@@ -969,7 +979,7 @@ def get_header_guard_cpp_variable(filename):
     return standard_name
 
 
-def check_for_header_guard(filename, lines, error):
+def check_for_header_guard(filename, clean_lines, error):
     """Checks that the file contains a header guard.
 
     Logs an error if no #ifndef header guard is present.  For other
@@ -980,6 +990,7 @@ def check_for_header_guard(filename, lines, error):
       lines: An array of strings, each representing a line of the file.
       error: The function to call with any errors found.
     """
+    raw_lines = clean_lines.lines_without_raw_strings
 
     legacy_cpp_var = get_legacy_header_guard_cpp_variable(filename)
     cpp_var = get_header_guard_cpp_variable(filename)
@@ -987,7 +998,7 @@ def check_for_header_guard(filename, lines, error):
     ifndef = None
     ifndef_line_number = 0
     define = None
-    for line_number, line in enumerate(lines):
+    for line_number, line in enumerate(raw_lines):
         line_split = line.split()
         if len(line_split) >= 2:
             # find the first occurrence of #ifndef and #define, save arg
@@ -1200,7 +1211,6 @@ class _ClassState(object):
 class _FileState(object):
 
     def __init__(self, clean_lines, file_extension):
-        self._did_inside_namespace_indent_warning = False
         self._clean_lines = clean_lines
         if file_extension in ['m', 'mm']:
             self._is_objective_c = True
@@ -1218,18 +1228,12 @@ class _FileState(object):
             self._is_objective_c = False
             self._is_c = False
 
-    def set_did_inside_namespace_indent_warning(self):
-        self._did_inside_namespace_indent_warning = True
-
-    def did_inside_namespace_indent_warning(self):
-        return self._did_inside_namespace_indent_warning
-
     def is_objective_c(self):
         if self._is_objective_c is None:
             for line in self._clean_lines.elided:
                 # Starting with @ or #import seem like the best indications
                 # that we have an Objective C file.
-                if line.startswith("@") or line.startswith("#import"):
+                if line.startswith('@') or line.startswith('#import'):
                     self._is_objective_c = True
                     break
             else:
@@ -1597,7 +1601,7 @@ def check_for_function_lengths(clean_lines, line_number, function_state, error):
     """Reports for long function bodies.
 
     For an overview why this is done, see:
-    http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml#Write_Short_Functions
+    https://google.github.io/styleguide/cppguide.html#Write_Short_Functions
 
     Blank/comment lines are not counted so as to avoid encouraging the removal
     of vertical space and comments just to get through a lint check.
@@ -1670,7 +1674,7 @@ def check_function_definition(filename, file_extension, clean_lines, line_number
                 1 and filename.find('chromium/platform') == -1:
             error(function_state.function_name_start_position.row, 'readability/webkit_export', 5,
                   'WEBKIT_EXPORT should only appear in the chromium public (or tests) directory.')
-        elif not file_extension == "h":
+        elif not file_extension == 'h':
             error(function_state.function_name_start_position.row, 'readability/webkit_export', 5,
                   'WEBKIT_EXPORT should only be used in header files.')
         elif not function_state.is_declaration or search(r'\binline\b', modifiers_and_return_type):
@@ -1764,7 +1768,11 @@ def check_spacing(file_extension, clean_lines, line_number, error):
       error: The function to call with any errors found.
     """
 
-    line = clean_lines.elided[line_number]  # get rid of comments and strings
+    # Don't use "elided" lines here, otherwise we can't check commented lines.
+    # Don't want to use "raw" either, because we don't want to check inside C++11
+    # raw strings,
+    raw = clean_lines.lines_without_raw_strings
+    line = raw[line_number]
 
     # You shouldn't have a space before a semicolon at the end of the line.
     # There's a special case for "for" since the style guide allows space before
@@ -1821,13 +1829,6 @@ def check_enum_casing(clean_lines, line_number, enum_state, error):
     if not enum_state.process_clean_line(line):
         error(line_number, 'readability/enum_casing', 4,
               'enum members should use InterCaps with an initial capital letter.')
-
-
-def get_initial_spaces_for_line(clean_line):
-    initial_spaces = 0
-    while initial_spaces < len(clean_line) and clean_line[initial_spaces] == ' ':
-        initial_spaces += 1
-    return initial_spaces
 
 
 def check_using_std(clean_lines, line_number, file_state, error):
@@ -2232,7 +2233,7 @@ def check_conditional_and_loop_bodies_for_brace_violations(clean_lines, line_num
     expect_conditional_expression = True
     know_whether_using_braces = False
     using_braces = False
-    search_for_else_clause = control_match.group(1) == "if"
+    search_for_else_clause = control_match.group(1) == 'if'
     current_pos = Position(line_number, control_match.end() - 1)
 
     while True:
@@ -2300,7 +2301,7 @@ def check_conditional_and_loop_bodies_for_brace_violations(clean_lines, line_num
         if not next_conditional:
             # Done processing this 'if' and all arms.
             return
-        if next_conditional.group(1) == "else if":
+        if next_conditional.group(1) == 'else if':
             current_pos = _find_in_lines(r'\(', lines, current_pos, None)
         else:
             current_pos.column += 4  # skip 'else'
@@ -2418,7 +2419,10 @@ def check_style(clean_lines, line_number, file_extension, class_state, file_stat
       error: The function to call with any errors found.
     """
 
-    raw_lines = clean_lines.raw_lines
+    # Don't use "elided" lines here, otherwise we can't check commented lines.
+    # Don't want to use "raw" either, because we don't want to check inside C++11
+    # raw strings,
+    raw_lines = clean_lines.lines_without_raw_strings
     line = raw_lines[line_number]
 
     # Some more style checks
@@ -2442,92 +2446,6 @@ _RE_PATTERN_INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]*)[>"].*$')
 #  _RE_FIRST_COMPONENT.match('foo-bar_baz.cpp').group(0) == 'foo'
 #  _RE_FIRST_COMPONENT.match('foo_bar-baz.cpp').group(0) == 'foo'
 _RE_FIRST_COMPONENT = re.compile(r'^[^-_.]+')
-
-
-def _drop_common_suffixes(filename):
-    """Drops common suffixes like _test.cpp or -inl.h from filename.
-
-    For example:
-      >>> _drop_common_suffixes('foo/foo-inl.h')
-      'foo/foo'
-      >>> _drop_common_suffixes('foo/bar/foo.cpp')
-      'foo/bar/foo'
-      >>> _drop_common_suffixes('foo/foo_internal.h')
-      'foo/foo'
-      >>> _drop_common_suffixes('foo/foo_unusualinternal.h')
-      'foo/foo_unusualinternal'
-
-    Args:
-      filename: The input filename.
-
-    Returns:
-      The filename with the common suffix removed.
-    """
-    for suffix in ('test.cpp', 'regtest.cpp', 'unittest.cpp',
-                   'inl.h', 'impl.h', 'internal.h'):
-        if (filename.endswith(suffix) and len(filename) > len(suffix)
-                and filename[-len(suffix) - 1] in ('-', '_')):
-            return filename[:-len(suffix) - 1]
-    return os.path.splitext(filename)[0]
-
-
-def _classify_include(filename, include, is_system, include_state):
-    """Figures out what kind of header 'include' is.
-
-    Args:
-      filename: The current file cpp_style is running over.
-      include: The path to a #included file.
-      is_system: True if the #include used <> rather than "".
-      include_state: An _IncludeState instance in which the headers are inserted.
-
-    Returns:
-      One of the _XXX_HEADER constants.
-
-    For example:
-      >>> _classify_include('foo.cpp', 'foo.h', False)
-      _PRIMARY_HEADER
-      >>> _classify_include('foo.cpp', 'bar.h', False)
-      _OTHER_HEADER
-    """
-
-    # If it is a system header we know it is classified as _OTHER_HEADER.
-    if is_system and not include.startswith('public/'):
-        return _OTHER_HEADER
-
-    # There cannot be primary includes in header files themselves. Only an
-    # include exactly matches the header filename will be is flagged as
-    # primary, so that it triggers the "don't include yourself" check.
-    if filename.endswith('.h') and filename != include:
-        return _OTHER_HEADER
-
-    # If the target file basename starts with the include we're checking
-    # then we consider it the primary header.
-    target_base = FileInfo(filename).base_name()
-    include_base = FileInfo(include).base_name()
-
-    # If we haven't encountered a primary header, then be lenient in checking.
-    if not include_state.visited_primary_section():
-        if target_base.find(include_base) != -1:
-            return _PRIMARY_HEADER
-
-    # If we already encountered a primary header, perform a strict comparison.
-    # In case the two filename bases are the same then the above lenient check
-    # probably was a false positive.
-    elif include_state.visited_primary_section() and target_base == include_base:
-        return _PRIMARY_HEADER
-
-    return _OTHER_HEADER
-
-
-def _does_primary_header_exist(filename):
-    """Return a primary header file name for a file, or empty string
-    if the file is not source file or primary header does not exist.
-    """
-    fileinfo = FileInfo(filename)
-    if not fileinfo.is_source():
-        return False
-    primary_header = fileinfo.no_extension() + ".h"
-    return os.path.isfile(primary_header)
 
 
 def check_include_line(filename, file_extension, clean_lines, line_number, include_state, error):
@@ -2581,40 +2499,6 @@ def check_include_line(filename, file_extension, clean_lines, line_number, inclu
               (include, filename, include_state[include]))
     else:
         include_state[include] = line_number
-
-    header_type = _classify_include(filename, include, is_system, include_state)
-    primary_header_exists = _does_primary_header_exist(filename)
-    include_state.header_types[line_number] = header_type
-
-    # Only proceed if this isn't a duplicate header.
-    if duplicate_header:
-        return
-
-    # We want to ensure that headers appear in the right order:
-    # 1) for implementation files: primary header, blank line, alphabetically sorted
-    # 2) for header files: alphabetically sorted
-    # The include_state object keeps track of the last type seen
-    # and complains if the header types are out of order or missing.
-    error_message = include_state.check_next_include_order(header_type,
-                                                           file_extension == "h",
-                                                           primary_header_exists)
-
-    # Check to make sure we have a blank line after primary header.
-    if not error_message and header_type == _PRIMARY_HEADER:
-        next_line = clean_lines.raw_lines[line_number + 1]
-        if not is_blank_line(next_line):
-            error(line_number, 'build/include_order', 4,
-                  'You should add a blank line after implementation file\'s own header.')
-
-    if error_message:
-        if file_extension == 'h':
-            error(line_number, 'build/include_order', 4,
-                  '%s Should be: alphabetically sorted.' %
-                  error_message)
-        else:
-            error(line_number, 'build/include_order', 4,
-                  '%s Should be: primary header, blank line, and then alphabetically sorted.' %
-                  error_message)
 
 
 def check_language(filename, clean_lines, line_number, file_extension, include_state,
@@ -2818,7 +2702,7 @@ def check_language(filename, clean_lines, line_number, file_extension, include_s
             and line[-1] != '\\'):
         error(line_number, 'build/namespaces', 4,
               'Do not use unnamed namespaces in header files.  See '
-              'http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml#Namespaces'
+              'https://google.github.io/styleguide/cppguide.html#Unnamed_Namespaces_and_Static_Variables'
               ' for more information.')
 
     # Check for plain bitfields declared without either "singed" or "unsigned".
@@ -2930,37 +2814,8 @@ def check_identifier_name_in_declaration(filename, line_number, line, file_state
 
         is_function_arguments = is_function_arguments or character_after_identifier == '('
 
-        # Remove "m_" and "s_" to allow them.
-        modified_identifier = sub(r'(^|(?<=::))[ms]_', '', identifier)
-        if not file_state.is_objective_c() and modified_identifier.find('_') >= 0:
-            # Various exceptions to the rule: JavaScript op codes functions, const_iterator.
-            if (not (filename.find('JavaScriptCore') >= 0 and modified_identifier.find('op_') >= 0)
-                    and not (filename.find('gtk') >= 0 and modified_identifier.startswith('webkit_') >= 0)
-                    and not (filename.find('StructTraits.h') >= 0)
-                    and not modified_identifier.startswith('tst_')
-                    and not modified_identifier.startswith('webkit_dom_object_')
-                    and not modified_identifier.startswith('webkit_soup')
-                    and not modified_identifier.startswith('NPN_')
-                    and not modified_identifier.startswith('NPP_')
-                    and not modified_identifier.startswith('NP_')
-                    and not modified_identifier.startswith('qt_')
-                    and not modified_identifier.startswith('_q_')
-                    and not modified_identifier.startswith('cairo_')
-                    and not modified_identifier.startswith('Ecore_')
-                    and not modified_identifier.startswith('Eina_')
-                    and not modified_identifier.startswith('Evas_')
-                    and not modified_identifier.startswith('Ewk_')
-                    and not modified_identifier.startswith('cti_')
-                    and not modified_identifier.find('::qt_') >= 0
-                    and not modified_identifier.find('::_q_') >= 0
-                    and not modified_identifier == "const_iterator"
-                    and not modified_identifier == "vm_throw"
-                    and not modified_identifier == "DFG_OPERATION"):
-                error(line_number, 'readability/naming/underscores', 4, identifier +
-                      " is incorrectly named. Don't use underscores in your identifier names.")
-
         # Check for variables named 'l', these are too easy to confuse with '1' in some fonts
-        if modified_identifier == 'l':
+        if identifier == 'l':
             error(line_number, 'readability/naming', 4, identifier +
                   " is incorrectly named. Don't use the single letter 'l' as an identifier name.")
 
@@ -3011,7 +2866,7 @@ def check_for_toFoo_definition(filename, pattern, error):
                     detect_functions(lines, line_number, function_state, error)
                     # Exclude the match of dummy conversion function. Dummy function is just to
                     # catch invalid conversions and shouldn't be part of possible alternatives.
-                    result = re.search(r'%s(\s+)%s' % ("void", pattern), line)
+                    result = re.search(r'%s(\s+)%s' % ('void', pattern), line)
                     if not result:
                         matches.append([line, function_state.body_start_position.row, function_state.end_position.row + 1])
                         function_state = None
@@ -3465,12 +3320,12 @@ def _process_lines(filename, file_extension, lines, error, min_confidence):
     class_state = _ClassState()
 
     check_for_copyright(lines, error)
-
-    if file_extension == 'h':
-        check_for_header_guard(filename, lines, error)
-
     remove_multi_line_comments(lines, error)
     clean_lines = CleansedLines(lines)
+
+    if file_extension == 'h':
+        check_for_header_guard(filename, clean_lines, error)
+
     file_state = _FileState(clean_lines, file_extension)
     enum_state = _EnumState()
     for line in xrange(clean_lines.num_lines()):

@@ -5,52 +5,106 @@
 #include "bindings/core/v8/ScriptModule.h"
 
 #include "bindings/core/v8/V8Binding.h"
+#include "core/dom/Modulator.h"
+#include "core/dom/ScriptModuleResolver.h"
 
 namespace blink {
 
 ScriptModule::ScriptModule(v8::Isolate* isolate, v8::Local<v8::Module> module)
-    : m_module(SharedPersistent<v8::Module>::create(module, isolate)) {}
+    : module_(SharedPersistent<v8::Module>::Create(module, isolate)),
+      identity_hash_(static_cast<unsigned>(module->GetIdentityHash())) {
+  DCHECK(!module_->IsEmpty());
+}
 
 ScriptModule::~ScriptModule() {}
 
-ScriptModule ScriptModule::compile(v8::Isolate* isolate,
+ScriptModule ScriptModule::Compile(v8::Isolate* isolate,
                                    const String& source,
-                                   const String& fileName) {
-  v8::TryCatch tryCatch(isolate);
-  tryCatch.SetVerbose(true);
+                                   const String& file_name,
+                                   AccessControlStatus access_control_status) {
+  v8::TryCatch try_catch(isolate);
+  try_catch.SetVerbose(true);
   v8::Local<v8::Module> module;
-  if (!v8Call(V8ScriptRunner::compileModule(isolate, source, fileName), module,
-              tryCatch)) {
-    // TODO(adamk): Signal failure somehow.
-    return ScriptModule(isolate, module);
+  if (!V8Call(V8ScriptRunner::CompileModule(isolate, source, file_name,
+                                            access_control_status),
+              module, try_catch)) {
+    // Compilation error is not used in Blink implementaion logic.
+    // Note: Error message is delivered to user (e.g. console) by message
+    // listeners set on v8::Isolate. See V8Initializer::initalizeMainThread().
+    // TODO(nhiroki): Revisit this when supporting modules on worker threads.
+    DCHECK(try_catch.HasCaught());
+    return ScriptModule();
   }
+  DCHECK(!try_catch.HasCaught());
   return ScriptModule(isolate, module);
 }
 
-v8::MaybeLocal<v8::Module> dummyCallback(v8::Local<v8::Context> context,
-                                         v8::Local<v8::String> specifier,
-                                         v8::Local<v8::Module> referrer) {
-  return v8::MaybeLocal<v8::Module>();
+ScriptValue ScriptModule::Instantiate(ScriptState* script_state) {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::TryCatch try_catch(isolate);
+
+  DCHECK(!IsNull());
+  v8::Local<v8::Context> context = script_state->GetContext();
+  bool success = module_->NewLocal(script_state->GetIsolate())
+                     ->Instantiate(context, &ResolveModuleCallback);
+  if (!success) {
+    DCHECK(try_catch.HasCaught());
+    return ScriptValue(script_state, try_catch.Exception());
+  }
+  DCHECK(!try_catch.HasCaught());
+  return ScriptValue();
 }
 
-bool ScriptModule::instantiate(ScriptState* scriptState) {
-  DCHECK(!isNull());
-  v8::Local<v8::Context> context = scriptState->context();
-  // TODO(adamk): pass in a real callback.
-  return m_module->newLocal(scriptState->isolate())
-      ->Instantiate(context, &dummyCallback);
-}
-
-void ScriptModule::evaluate(ScriptState* scriptState) {
-  v8::Isolate* isolate = scriptState->isolate();
-  v8::TryCatch tryCatch(isolate);
-  tryCatch.SetVerbose(true);
+void ScriptModule::Evaluate(ScriptState* script_state) {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::TryCatch try_catch(isolate);
+  try_catch.SetVerbose(true);
   v8::Local<v8::Value> result;
-  if (!v8Call(V8ScriptRunner::evaluateModule(m_module->newLocal(isolate),
-                                             scriptState->context(), isolate),
-              result, tryCatch)) {
+  if (!V8Call(
+          V8ScriptRunner::EvaluateModule(module_->NewLocal(isolate),
+                                         script_state->GetContext(), isolate),
+          result, try_catch)) {
     // TODO(adamk): report error
   }
+}
+
+Vector<String> ScriptModule::ModuleRequests(ScriptState* script_state) {
+  if (IsNull())
+    return Vector<String>();
+
+  v8::Local<v8::Module> module = module_->NewLocal(script_state->GetIsolate());
+
+  Vector<String> ret;
+
+  int length = module->GetModuleRequestsLength();
+  ret.ReserveInitialCapacity(length);
+  for (int i = 0; i < length; ++i) {
+    v8::Local<v8::String> v8_name = module->GetModuleRequest(i);
+    ret.push_back(ToCoreString(v8_name));
+  }
+  return ret;
+}
+
+v8::MaybeLocal<v8::Module> ScriptModule::ResolveModuleCallback(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::String> specifier,
+    v8::Local<v8::Module> referrer) {
+  v8::Isolate* isolate = context->GetIsolate();
+  Modulator* modulator = Modulator::From(ScriptState::From(context));
+  DCHECK(modulator);
+
+  ScriptModule referrer_record(isolate, referrer);
+  ExceptionState exception_state(isolate, ExceptionState::kExecutionContext,
+                                 "ScriptModule", "resolveModuleCallback");
+  ScriptModule resolved = modulator->GetScriptModuleResolver()->Resolve(
+      ToCoreStringWithNullCheck(specifier), referrer_record, exception_state);
+  if (resolved.IsNull()) {
+    DCHECK(exception_state.HadException());
+    return v8::MaybeLocal<v8::Module>();
+  }
+
+  DCHECK(!exception_state.HadException());
+  return v8::MaybeLocal<v8::Module>(resolved.module_->NewLocal(isolate));
 }
 
 }  // namespace blink

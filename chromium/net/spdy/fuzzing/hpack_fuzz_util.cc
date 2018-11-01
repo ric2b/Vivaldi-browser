@@ -31,10 +31,8 @@ const size_t kValueLengthMax = 75;
 
 }  //  namespace
 
-using base::StringPiece;
 using base::RandBytesAsString;
 using std::map;
-using std::string;
 
 HpackFuzzUtil::GeneratorContext::GeneratorContext() {}
 HpackFuzzUtil::GeneratorContext::~GeneratorContext() {}
@@ -83,7 +81,7 @@ SpdyHeaderBlock HpackFuzzUtil::NextGeneratedHeaderSet(
                                           kHeaderIndexMax);
     size_t value_index = SampleExponential(kHeaderIndexMean,
                                            kHeaderIndexMax);
-    string name, value;
+    SpdyString name, value;
     if (name_index >= context->names.size()) {
       context->names.push_back(
           RandBytesAsString(1 + SampleExponential(kNameLengthMean,
@@ -112,8 +110,7 @@ size_t HpackFuzzUtil::SampleExponential(size_t mean, size_t sanity_bound) {
 }
 
 // static
-bool HpackFuzzUtil::NextHeaderBlock(Input* input,
-                                    StringPiece* out) {
+bool HpackFuzzUtil::NextHeaderBlock(Input* input, SpdyStringPiece* out) {
   // ClusterFuzz may truncate input files if the fuzzer ran out of allocated
   // disk space. Be tolerant of these.
   CHECK_LE(input->offset, input->input.size());
@@ -128,15 +125,15 @@ bool HpackFuzzUtil::NextHeaderBlock(Input* input,
   if (input->remaining() < length) {
     return false;
   }
-  *out = StringPiece(input->ptr(), length);
+  *out = SpdyStringPiece(input->ptr(), length);
   input->offset += length;
   return true;
 }
 
 // static
-string HpackFuzzUtil::HeaderBlockPrefix(size_t block_size) {
+SpdyString HpackFuzzUtil::HeaderBlockPrefix(size_t block_size) {
   uint32_t length = base::HostToNet32(static_cast<uint32_t>(block_size));
-  return string(reinterpret_cast<char*>(&length), sizeof(uint32_t));
+  return SpdyString(reinterpret_cast<char*>(&length), sizeof(uint32_t));
 }
 
 // static
@@ -147,8 +144,9 @@ void HpackFuzzUtil::InitializeFuzzerContext(FuzzerContext* context) {
 }
 
 // static
-bool HpackFuzzUtil::RunHeaderBlockThroughFuzzerStages(FuzzerContext* context,
-                                                      StringPiece input_block) {
+bool HpackFuzzUtil::RunHeaderBlockThroughFuzzerStages(
+    FuzzerContext* context,
+    SpdyStringPiece input_block) {
   // First stage: Decode the input header block. This may fail on invalid input.
   if (!context->first_stage->HandleControlFrameHeadersData(
           input_block.data(), input_block.size())) {
@@ -158,7 +156,7 @@ bool HpackFuzzUtil::RunHeaderBlockThroughFuzzerStages(FuzzerContext* context,
     return false;
   }
   // Second stage: Re-encode the decoded header block. This must succeed.
-  string second_stage_out;
+  SpdyString second_stage_out;
   CHECK(context->second_stage->EncodeHeaderSet(
       context->first_stage->decoded_block(), &second_stage_out));
 

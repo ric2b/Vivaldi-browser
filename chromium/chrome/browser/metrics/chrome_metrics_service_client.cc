@@ -44,6 +44,7 @@
 #include "chrome/browser/safe_browsing/certificate_reporting_metrics_provider.h"
 #include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/translate/translate_ranker_metrics_provider.h"
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
@@ -79,7 +80,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/device_info/device_count_metrics_provider.h"
-#include "components/translate/core/browser/translate_ranker_metrics_provider.h"
 #include "components/ukm/ukm_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -107,6 +107,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chrome/browser/signin/signin_status_metrics_provider_chromeos.h"
 #endif
@@ -118,7 +119,6 @@
 #include "chrome/browser/metrics/google_update_metrics_provider_win.h"
 #include "chrome/common/metrics_constants_util_win.h"
 #include "chrome/install_static/install_util.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "components/browser_watcher/watcher_metrics_provider_win.h"
 #endif
 
@@ -235,12 +235,13 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
       base::GlobalHistogramAllocator::ConstructFilePaths(
           user_data_dir, kCrashpadHistogramAllocatorName, nullptr,
           &active_path);
-      // Register data that will be populated for the current run.
+      // Register data that will be populated for the current run. "Active"
+      // files need an empty "prefs_key" because they update the file itself.
       file_metrics_provider->RegisterSource(
           active_path,
           metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ACTIVE_FILE,
           metrics::FileMetricsProvider::ASSOCIATE_CURRENT_RUN,
-          kCrashpadHistogramAllocatorName);
+          base::StringPiece());
     }
   }
 
@@ -521,10 +522,10 @@ void ChromeMetricsServiceClient::CollectFinalMetricsForLog(
 
 std::unique_ptr<metrics::MetricsLogUploader>
 ChromeMetricsServiceClient::CreateUploader(
-    const std::string& server_url,
-    const std::string& mime_type,
+    base::StringPiece server_url,
+    base::StringPiece mime_type,
     metrics::MetricsLogUploader::MetricServiceType service_type,
-    const base::Callback<void(int)>& on_upload_complete) {
+    const metrics::MetricsLogUploader::UploadCallback& on_upload_complete) {
   return std::unique_ptr<metrics::MetricsLogUploader>(
       new metrics::NetMetricsLogUploader(
           g_browser_process->system_request_context(), server_url, mime_type,
@@ -537,8 +538,7 @@ base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
 
 base::string16 ChromeMetricsServiceClient::GetRegistryBackupKey() {
 #if defined(OS_WIN)
-  BrowserDistribution* distribution = BrowserDistribution::GetDistribution();
-  return distribution->GetRegistryPath().append(L"\\StabilityMetrics");
+  return install_static::GetRegistryPath().append(L"\\StabilityMetrics");
 #else
   return base::string16();
 #endif
@@ -912,6 +912,11 @@ void ChromeMetricsServiceClient::RegisterForNotifications() {
 }
 
 void ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
+#if defined(OS_CHROMEOS)
+  // Ignore the signin profile for sync disables / history deletion.
+  if (chromeos::ProfileHelper::IsSigninProfile(profile))
+    return;
+#endif
   history::HistoryService* history_service =
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::IMPLICIT_ACCESS);

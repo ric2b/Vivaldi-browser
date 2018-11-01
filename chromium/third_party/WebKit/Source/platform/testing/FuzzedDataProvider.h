@@ -6,8 +6,8 @@
 #define FuzzedDataProvider_h
 
 #include "base/test/fuzzed_data_provider.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/text/CString.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/text/CString.h"
 
 namespace blink {
 
@@ -17,12 +17,12 @@ class FuzzedDataProvider {
   WTF_MAKE_NONCOPYABLE(FuzzedDataProvider);
 
  public:
-  FuzzedDataProvider(const uint8_t* bytes, size_t numBytes);
+  FuzzedDataProvider(const uint8_t* bytes, size_t num_bytes);
 
   // Returns a string with length between minBytes and maxBytes. If the
   // length is greater than the length of the remaining data this is
   // equivalent to ConsumeRemainingBytes().
-  CString ConsumeBytesInRange(uint32_t minBytes, uint32_t maxBytes);
+  CString ConsumeBytesInRange(uint32_t min_bytes, uint32_t max_bytes);
 
   // Returns a String containing all remaining bytes of the input data.
   CString ConsumeRemainingBytes();
@@ -30,8 +30,15 @@ class FuzzedDataProvider {
   // Returns a bool, or false when no data remains.
   bool ConsumeBool();
 
+  // Returns a value from |array|, consuming as many bytes as needed to do so.
+  // |array| must be a fixed-size array.
+  template <typename Type, size_t size>
+  Type PickValueInArray(Type (&array)[size]) {
+    return array[provider_.ConsumeUint32InRange(0, size - 1)];
+  }
+
  private:
-  base::FuzzedDataProvider m_provider;
+  base::FuzzedDataProvider provider_;
 };
 
 }  // namespace blink

@@ -12,8 +12,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/pending_task.h"
 #include "base/threading/platform_thread.h"
-#include "public/platform/scheduler/child/single_thread_idle_task_runner.h"
+#include "platform/scheduler/child/compositor_worker_scheduler.h"
+#include "platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
+#include "platform/scheduler/utility/webthread_impl_for_utility_thread.h"
 #include "public/platform/WebTraceLocation.h"
+#include "public/platform/scheduler/child/single_thread_idle_task_runner.h"
 
 namespace blink {
 namespace scheduler {
@@ -25,11 +28,11 @@ class WebThreadBase::TaskObserverAdapter
       : observer_(observer) {}
 
   void WillProcessTask(const base::PendingTask& pending_task) override {
-    observer_->willProcessTask();
+    observer_->WillProcessTask();
   }
 
   void DidProcessTask(const base::PendingTask& pending_task) override {
-    observer_->didProcessTask();
+    observer_->DidProcessTask();
   }
 
  private:
@@ -44,8 +47,8 @@ WebThreadBase::~WebThreadBase() {
   }
 }
 
-void WebThreadBase::addTaskObserver(TaskObserver* observer) {
-  CHECK(isCurrentThread());
+void WebThreadBase::AddTaskObserver(TaskObserver* observer) {
+  CHECK(IsCurrentThread());
   std::pair<TaskObserverMap::iterator, bool> result =
       task_observer_map_.insert(std::make_pair(observer, nullptr));
   if (result.second)
@@ -53,8 +56,8 @@ void WebThreadBase::addTaskObserver(TaskObserver* observer) {
   AddTaskObserverInternal(result.first->second);
 }
 
-void WebThreadBase::removeTaskObserver(TaskObserver* observer) {
-  CHECK(isCurrentThread());
+void WebThreadBase::RemoveTaskObserver(TaskObserver* observer) {
+  CHECK(IsCurrentThread());
   TaskObserverMap::iterator iter = task_observer_map_.find(observer);
   if (iter == task_observer_map_.end())
     return;
@@ -63,11 +66,12 @@ void WebThreadBase::removeTaskObserver(TaskObserver* observer) {
   task_observer_map_.erase(iter);
 }
 
-void WebThreadBase::addTaskTimeObserver(TaskTimeObserver* task_time_observer) {
+void WebThreadBase::AddTaskTimeObserver(TaskTimeObserver* task_time_observer) {
   AddTaskTimeObserverInternal(task_time_observer);
 }
 
-void WebThreadBase::removeTaskTimeObserver(TaskTimeObserver* task_time_observer) {
+void WebThreadBase::RemoveTaskTimeObserver(
+    TaskTimeObserver* task_time_observer) {
   RemoveTaskTimeObserverInternal(task_time_observer);
 }
 
@@ -85,18 +89,55 @@ void WebThreadBase::RemoveTaskObserverInternal(
 void WebThreadBase::RunWebThreadIdleTask(
     std::unique_ptr<blink::WebThread::IdleTask> idle_task,
     base::TimeTicks deadline) {
-  idle_task->run((deadline - base::TimeTicks()).InSecondsF());
+  idle_task->Run((deadline - base::TimeTicks()).InSecondsF());
 }
 
-void WebThreadBase::postIdleTask(const blink::WebTraceLocation& location,
+void WebThreadBase::PostIdleTask(const blink::WebTraceLocation& location,
                                  IdleTask* idle_task) {
   GetIdleTaskRunner()->PostIdleTask(
       location, base::Bind(&WebThreadBase::RunWebThreadIdleTask,
                            base::Passed(base::WrapUnique(idle_task))));
 }
 
-bool WebThreadBase::isCurrentThread() const {
+bool WebThreadBase::IsCurrentThread() const {
   return GetTaskRunner()->BelongsToCurrentThread();
+}
+
+namespace {
+
+class WebThreadForCompositor : public WebThreadImplForWorkerScheduler {
+ public:
+  explicit WebThreadForCompositor(base::Thread::Options options)
+      : WebThreadImplForWorkerScheduler("Compositor", options) {
+    Init();
+  }
+  ~WebThreadForCompositor() override {}
+
+ private:
+  // WebThreadImplForWorkerScheduler:
+  std::unique_ptr<blink::scheduler::WorkerScheduler> CreateWorkerScheduler()
+      override {
+    return base::MakeUnique<CompositorWorkerScheduler>(GetThread());
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(WebThreadForCompositor);
+};
+
+}  // namespace
+
+std::unique_ptr<WebThreadBase> WebThreadBase::CreateWorkerThread(
+    const char* name,
+    base::Thread::Options options) {
+  return base::MakeUnique<WebThreadImplForWorkerScheduler>(name, options);
+}
+
+std::unique_ptr<WebThreadBase> WebThreadBase::CreateCompositorThread(
+    base::Thread::Options options) {
+  return base::MakeUnique<WebThreadForCompositor>(options);
+}
+
+std::unique_ptr<WebThreadBase> WebThreadBase::InitializeUtilityThread() {
+  return base::MakeUnique<WebThreadImplForUtilityThread>();
 }
 
 }  // namespace scheduler

@@ -12,18 +12,17 @@ namespace blink {
 
 class CompositorProxy;
 
-class CORE_EXPORT CompositorProxyClient
-    : public GarbageCollectedFinalized<CompositorProxyClient> {
+class CORE_EXPORT CompositorProxyClient : public GarbageCollectedMixin {
  public:
   virtual ~CompositorProxyClient(){};
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 
-  virtual void registerCompositorProxy(CompositorProxy*) = 0;
+  virtual void RegisterCompositorProxy(CompositorProxy*) = 0;
   // It is not guaranteed to receive an unregister call for every registered
   // proxy. In fact we only receive one when a proxy is explicitly
   // disconnected otherwise we rely on oilpan collection process to remove the
   // weak reference to the proxy.
-  virtual void unregisterCompositorProxy(CompositorProxy*) = 0;
+  virtual void UnregisterCompositorProxy(CompositorProxy*) = 0;
 };
 
 }  // namespace blink

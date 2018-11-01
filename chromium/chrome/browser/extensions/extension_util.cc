@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/values.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "components/variations/variations_associated_data.h"
@@ -28,9 +30,6 @@
 #include "extensions/browser/extension_util.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
-#include "extensions/common/features/behavior_feature.h"
-#include "extensions/common/features/feature.h"
-#include "extensions/common/features/feature_provider.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
@@ -42,8 +41,6 @@
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-
 namespace extensions {
 namespace util {
 
@@ -51,13 +48,6 @@ namespace {
 // The entry into the prefs used to flag an extension as installed by custodian.
 // It is relevant only for supervised users.
 const char kWasInstalledByCustodianPrefName[] = "was_installed_by_custodian";
-
-// Returns true if |extension| should always be enabled in incognito mode.
-bool IsWhitelistedForIncognito(const Extension* extension) {
-  const Feature* feature = FeatureProvider::GetBehaviorFeature(
-      behavior_feature::kWhitelistedForIncognito);
-  return feature && feature->IsAvailableToExtension(extension).is_available();
-}
 
 // Returns |extension_id|. See note below.
 std::string ReloadExtensionIfEnabled(const std::string& extension_id,
@@ -80,29 +70,6 @@ std::string ReloadExtensionIfEnabled(const std::string& extension_id,
 }
 
 }  // namespace
-
-bool IsIncognitoEnabled(const std::string& extension_id,
-                        content::BrowserContext* context) {
-  //  NOTE(andre@vivaldi.com): This is failing in browser_tests-setup, so we
-  //  need to check if we are running as Vivaldi.
-  if (vivaldi::IsVivaldiApp(extension_id) && vivaldi::IsVivaldiRunning())
-    return true;
-  const Extension* extension = ExtensionRegistry::Get(context)->
-      GetExtensionById(extension_id, ExtensionRegistry::ENABLED);
-  if (extension) {
-    if (!util::CanBeIncognitoEnabled(extension))
-      return false;
-    // If this is an existing component extension we always allow it to
-    // work in incognito mode.
-    if (extension->location() == Manifest::COMPONENT ||
-        extension->location() == Manifest::EXTERNAL_COMPONENT) {
-      return true;
-    }
-    if (IsWhitelistedForIncognito(extension))
-      return true;
-  }
-  return ExtensionPrefs::Get(context)->IsIncognitoEnabled(extension_id);
-}
 
 void SetIsIncognitoEnabled(const std::string& extension_id,
                            content::BrowserContext* context,
@@ -205,7 +172,7 @@ void SetWasInstalledByCustodian(const std::string& extension_id,
 
   ExtensionPrefs::Get(context)->UpdateExtensionPref(
       extension_id, kWasInstalledByCustodianPrefName,
-      installed_by_custodian ? new base::Value(true) : nullptr);
+      installed_by_custodian ? base::MakeUnique<base::Value>(true) : nullptr);
   ExtensionService* service =
       ExtensionSystem::Get(context)->extension_service();
 
@@ -336,11 +303,9 @@ const gfx::ImageSkia& GetDefaultExtensionIcon() {
 
 bool IsNewBookmarkAppsEnabled() {
 #if defined(OS_MACOSX)
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableNewBookmarkApps);
+  return base::FeatureList::IsEnabled(features::kBookmarkApps);
 #else
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableNewBookmarkApps);
+  return true;
 #endif
 }
 

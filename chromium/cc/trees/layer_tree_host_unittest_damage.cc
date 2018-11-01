@@ -354,7 +354,6 @@ class LayerTreeHostScrollbarDamageTest : public LayerTreeHostDamageTest {
         FakePaintedScrollbarLayer::Create(false, true, content_layer_->id());
     scrollbar_layer->SetPosition(gfx::PointF(300.f, 300.f));
     scrollbar_layer->SetBounds(gfx::Size(10, 100));
-    scrollbar_layer->ToScrollbarLayer()->SetScrollLayer(content_layer_->id());
     root_layer->AddChild(scrollbar_layer);
 
     gfx::RectF content_rect(content_layer_->position(),
@@ -421,9 +420,10 @@ class LayerTreeHostDamageTestScrollbarDoesDamage
         // Test that modifying the position of the content layer (not
         // scrolling) won't damage the scrollbar.
         MainThreadTaskRunner()->PostTask(
-            FROM_HERE, base::Bind(&LayerTreeHostDamageTestScrollbarDoesDamage::
-                                      ModifyContentLayerPosition,
-                                  base::Unretained(this)));
+            FROM_HERE,
+            base::BindOnce(&LayerTreeHostDamageTestScrollbarDoesDamage::
+                               ModifyContentLayerPosition,
+                           base::Unretained(this)));
         break;
       case 2:
         scroll_layer->ScrollBy(gfx::Vector2dF(10.f, 10.f));
@@ -433,7 +433,7 @@ class LayerTreeHostDamageTestScrollbarDoesDamage
         // We will resize the content layer, on the main thread.
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(
+            base::BindOnce(
                 &LayerTreeHostDamageTestScrollbarDoesDamage::ResizeScrollLayer,
                 base::Unretained(this)));
         break;

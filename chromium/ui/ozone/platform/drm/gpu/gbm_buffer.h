@@ -11,8 +11,8 @@
 #include "base/macros.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/native_pixmap.h"
 #include "ui/ozone/platform/drm/gpu/gbm_buffer_base.h"
-#include "ui/ozone/public/native_pixmap.h"
 
 struct gbm_bo;
 
@@ -48,7 +48,6 @@ class GbmBuffer : public GbmBufferBase {
   int GetStride(size_t plane) const;
   int GetOffset(size_t plane) const;
   size_t GetSize(size_t plane) const;
-  uint64_t GetFormatModifier(size_t plane) const;
   gfx::Size GetSize() const override;
 
  private:
@@ -82,7 +81,7 @@ class GbmBuffer : public GbmBufferBase {
   DISALLOW_COPY_AND_ASSIGN(GbmBuffer);
 };
 
-class GbmPixmap : public NativePixmap {
+class GbmPixmap : public gfx::NativePixmap {
  public:
   GbmPixmap(GbmSurfaceFactory* surface_manager,
             const scoped_refptr<GbmBuffer>& buffer);

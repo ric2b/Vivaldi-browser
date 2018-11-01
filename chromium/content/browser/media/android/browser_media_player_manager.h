@@ -7,10 +7,10 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
 #include "content/browser/android/content_video_view.h"
 #include "content/common/content_export.h"
@@ -48,7 +48,8 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
   static void RegisterMediaUrlInterceptor(
       media::MediaUrlInterceptor* media_url_interceptor);
 
-  // Returns a new instance using the registered factory if available.
+  // Returns a new instance using the registered factory.
+  // Returns nullptr if no factory was registered.
   static BrowserMediaPlayerManager* Create(RenderFrameHost* rfh);
 
 #if !defined(USE_AURA)
@@ -114,7 +115,8 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
 
   // Adds a given player to the list.  Not private to allow embedders
   // to extend the manager and still utilize the base player management.
-  void AddPlayer(media::MediaPlayerAndroid* player, int delegate_id);
+  void AddPlayer(std::unique_ptr<media::MediaPlayerAndroid> player,
+                 int delegate_id);
 
   // Removes the player with the specified id.
   void DestroyPlayer(int player_id);
@@ -127,7 +129,7 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
   // was replaced.
   std::unique_ptr<media::MediaPlayerAndroid> SwapPlayer(
       int player_id,
-      media::MediaPlayerAndroid* player);
+      std::unique_ptr<media::MediaPlayerAndroid> player);
 
   // Called to request decoder resources. Returns true if the request is
   // permitted, or false otherwise. The manager object maintains a list
@@ -151,7 +153,7 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
 
  private:
   // Constructs a MediaPlayerAndroid object.
-  media::MediaPlayerAndroid* CreateMediaPlayer(
+  std::unique_ptr<media::MediaPlayerAndroid> CreateMediaPlayer(
       const MediaPlayerHostMsg_Initialize_Params& media_player_params,
       bool hide_url_log);
 
@@ -159,16 +161,10 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
   // player from |players_|.
   void ReleasePlayer(media::MediaPlayerAndroid* player);
 
-  // Called when user approves media playback after being throttled.
-  void OnPlaybackPermissionGranted(int player_id, bool granted);
-
-  // Helper method to start playback.
-  void StartInternal(int player_id);
-
   RenderFrameHost* const render_frame_host_;
 
   // An array of managed players.
-  ScopedVector<media::MediaPlayerAndroid> players_;
+  std::vector<std::unique_ptr<media::MediaPlayerAndroid>> players_;
 
   typedef std::map<int, bool> ActivePlayerMap;
   // Players that have requested decoding resources. Even though resource is

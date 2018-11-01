@@ -519,7 +519,7 @@ void LoginHandler::GetDialogStrings(const GURL& request_url,
     // TODO(asanka): The string should be different for proxies and servers.
     // http://crbug.com/620756
     *explanation =
-        l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_NON_SECURE_TRANSPORT);
+        l10n_util::GetStringUTF16(IDS_PAGE_INFO_NON_SECURE_TRANSPORT);
   } else {
     explanation->clear();
   }
@@ -592,6 +592,19 @@ void LoginHandler::LoginDialogCallback(const GURL& request_url,
     handler->CancelAuth();
     return;
   }
+  // NOTE(pettern@vivaldi.com): delegate might be nullptr in cases
+  // where a auth page is set as startup page due to how we recreate
+  // the webcontents for guest view. Delay so it can be set
+  // before showing it again.
+  if (!parent_contents->GetDelegate()) {
+    BrowserThread::PostDelayedTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&LoginHandler::LoginDialogCallback, request_url,
+                   base::RetainedRef(auth_info), base::RetainedRef(handler),
+                   is_main_frame),
+        base::TimeDelta::FromMilliseconds(200));
+    return;
+  }
 
   // Check if this is a main frame navigation and
   // (a) if the request is cross origin or
@@ -626,7 +639,7 @@ void LoginHandler::LoginDialogCallback(const GURL& request_url,
       (is_cross_origin_request || parent_contents->ShowingInterstitialPage() ||
        auth_info->is_proxy) &&
       parent_contents->GetDelegate()->GetDisplayMode(parent_contents) !=
-          blink::WebDisplayModeStandalone) {
+          blink::kWebDisplayModeStandalone) {
     RecordHttpAuthPromptType(AUTH_PROMPT_TYPE_WITH_INTERSTITIAL);
 
     // Show a blank interstitial for main-frame, cross origin requests

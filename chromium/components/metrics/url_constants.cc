@@ -4,18 +4,14 @@
 
 #include "components/metrics/url_constants.h"
 
-#include "build/build_config.h"
-
 #include "sync/vivaldi_sync_urls.h"
 
 namespace metrics {
 
-#if defined(OS_ANDROID) || defined(OS_IOS)
-const char kDefaultMetricsServerUrl[] =
-    "https://clientservices.googleapis.com/uma/v2";
-#else
-const char kDefaultMetricsServerUrl[] = SYNC_URL("/uma/v2");
-#endif
+const char kNewMetricsServerUrl[] =
+    SYNC_URL("/uma/v2");
+
+const char kOldMetricsServerUrl[] = SYNC_URL("/uma/v2");
 
 const char kDefaultMetricsMimeType[] = "application/vnd.chrome.uma";
 

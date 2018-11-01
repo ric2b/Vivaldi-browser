@@ -4,7 +4,6 @@
 
 #include "chrome/browser/media/android/router/media_router_dialog_controller_android.h"
 
-#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "chrome/browser/media/android/router/media_router_android.h"
@@ -88,6 +87,18 @@ void MediaRouterDialogControllerAndroid::OnDialogCancelled(
   CancelPresentationRequest();
 }
 
+void MediaRouterDialogControllerAndroid::OnMediaSourceNotSupported(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  std::unique_ptr<CreatePresentationConnectionRequest> request =
+      TakeCreateConnectionRequest();
+  if (!request)
+    return;
+
+  request->InvokeErrorCallback(content::PresentationError(
+      content::PRESENTATION_ERROR_NO_AVAILABLE_SCREENS, "No screens found."));
+}
+
 void MediaRouterDialogControllerAndroid::CancelPresentationRequest() {
   std::unique_ptr<CreatePresentationConnectionRequest> request =
       TakeCreateConnectionRequest();
@@ -95,7 +106,7 @@ void MediaRouterDialogControllerAndroid::CancelPresentationRequest() {
     return;
 
   request->InvokeErrorCallback(content::PresentationError(
-      content::PRESENTATION_ERROR_SESSION_REQUEST_CANCELLED,
+      content::PRESENTATION_ERROR_PRESENTATION_REQUEST_CANCELLED,
       "Dialog closed."));
 }
 
@@ -104,9 +115,7 @@ MediaRouterDialogControllerAndroid::MediaRouterDialogControllerAndroid(
     : MediaRouterDialogController(web_contents) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_dialog_controller_.Reset(Java_ChromeMediaRouterDialogController_create(
-      env,
-      reinterpret_cast<jlong>(this),
-      base::android::GetApplicationContext()));
+      env, reinterpret_cast<jlong>(this)));
 }
 
 // static

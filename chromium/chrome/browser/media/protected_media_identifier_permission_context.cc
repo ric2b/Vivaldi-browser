@@ -5,16 +5,20 @@
 #include "chrome/browser/media/protected_media_identifier_permission_context.h"
 
 #include "base/command_line.h"
+#include "base/metrics/user_metrics.h"
+#include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
+#include "media/base/media_switches.h"
+#include "net/base/url_util.h"
 #if defined(OS_CHROMEOS)
 #include <utility>
 
@@ -83,6 +87,7 @@ void ProtectedMediaIdentifierPermissionContext::DecidePermission(
 
 ContentSetting
 ProtectedMediaIdentifierPermissionContext::GetPermissionStatusInternal(
+    content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
   DVLOG(1) << __func__ << ": (" << requesting_origin.spec() << ", "
@@ -94,13 +99,43 @@ ProtectedMediaIdentifierPermissionContext::GetPermissionStatusInternal(
   }
 
   ContentSetting content_setting =
-      PermissionContextBase::GetPermissionStatusInternal(requesting_origin,
-                                                         embedding_origin);
+      PermissionContextBase::GetPermissionStatusInternal(
+          render_frame_host, requesting_origin, embedding_origin);
   DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
          content_setting == CONTENT_SETTING_BLOCK ||
          content_setting == CONTENT_SETTING_ASK);
 
+  // For automated testing of protected content - having a prompt that
+  // requires user intervention is problematic. If the domain has been
+  // whitelisted as safe - suppress the request and allow.
+  if (content_setting == CONTENT_SETTING_ASK &&
+      IsOriginWhitelisted(requesting_origin)) {
+    content_setting = CONTENT_SETTING_ALLOW;
+  }
+
   return content_setting;
+}
+
+bool ProtectedMediaIdentifierPermissionContext::IsOriginWhitelisted(
+    const GURL& origin) {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+
+  if (command_line.GetSwitchValueASCII(switches::kUserDataDir).empty()) {
+    return false;
+  }
+
+  const std::string whitelist = command_line.GetSwitchValueASCII(
+      switches::kUnsafelyAllowProtectedMediaIdentifierForDomain);
+
+  for (const std::string& domain : base::SplitString(
+           whitelist, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    if (origin.DomainIs(domain)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void ProtectedMediaIdentifierPermissionContext::CancelPermissionRequest(
@@ -211,14 +246,14 @@ void ProtectedMediaIdentifierPermissionContext::
       break;
     case PlatformVerificationDialog::CONSENT_RESPONSE_ALLOW:
       VLOG(1) << "Platform verification accepted by user.";
-      content::RecordAction(
+      base::RecordAction(
           base::UserMetricsAction("PlatformVerificationAccepted"));
       content_setting = CONTENT_SETTING_ALLOW;
       persist = true;
       break;
     case PlatformVerificationDialog::CONSENT_RESPONSE_DENY:
       VLOG(1) << "Platform verification denied by user.";
-      content::RecordAction(
+      base::RecordAction(
           base::UserMetricsAction("PlatformVerificationRejected"));
       content_setting = CONTENT_SETTING_BLOCK;
       persist = true;

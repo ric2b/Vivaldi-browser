@@ -26,43 +26,50 @@
 #ifndef FetchInitiatorInfo_h
 #define FetchInitiatorInfo_h
 
-#include "wtf/Allocator.h"
-#include "wtf/text/AtomicString.h"
-#include "wtf/text/TextPosition.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/text/AtomicString.h"
+#include "platform/wtf/text/TextPosition.h"
 
 namespace blink {
 
 struct FetchInitiatorInfo {
   DISALLOW_NEW();
   FetchInitiatorInfo()
-      : name(), position(TextPosition::belowRangePosition()), startTime(0.0) {}
+      : name(),
+        position(TextPosition::BelowRangePosition()),
+        start_time(0.0),
+        is_link_preload(false) {}
 
   // When adding members, CrossThreadFetchInitiatorInfoData should be
   // updated.
   AtomicString name;
   TextPosition position;
-  double startTime;
+  double start_time;
+  bool is_link_preload;
 };
 
 // Encode AtomicString as String to cross threads.
 struct CrossThreadFetchInitiatorInfoData {
   DISALLOW_NEW();
   explicit CrossThreadFetchInitiatorInfoData(const FetchInitiatorInfo& info)
-      : name(info.name.getString().isolatedCopy()),
+      : name(info.name.GetString().IsolatedCopy()),
         position(info.position),
-        startTime(info.startTime) {}
+        start_time(info.start_time),
+        is_link_preload(info.is_link_preload) {}
 
   operator FetchInitiatorInfo() const {
     FetchInitiatorInfo info;
     info.name = AtomicString(name);
     info.position = position;
-    info.startTime = startTime;
+    info.start_time = start_time;
+    info.is_link_preload = is_link_preload;
     return info;
   }
 
   String name;
   TextPosition position;
-  double startTime;
+  double start_time;
+  bool is_link_preload;
 };
 
 }  // namespace blink

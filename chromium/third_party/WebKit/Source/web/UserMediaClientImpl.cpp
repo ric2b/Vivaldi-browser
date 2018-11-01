@@ -30,37 +30,37 @@
 
 #include "web/UserMediaClientImpl.h"
 
+#include "platform/wtf/RefPtr.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebMediaDeviceChangeObserver.h"
 #include "public/web/WebMediaDevicesRequest.h"
 #include "public/web/WebUserMediaClient.h"
 #include "public/web/WebUserMediaRequest.h"
 #include "web/WebLocalFrameImpl.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
 UserMediaClientImpl::UserMediaClientImpl(WebUserMediaClient* client)
-    : m_client(client) {}
+    : client_(client) {}
 
-void UserMediaClientImpl::requestUserMedia(UserMediaRequest* request) {
-  if (m_client)
-    m_client->requestUserMedia(request);
+void UserMediaClientImpl::RequestUserMedia(UserMediaRequest* request) {
+  if (client_)
+    client_->RequestUserMedia(request);
 }
 
-void UserMediaClientImpl::cancelUserMediaRequest(UserMediaRequest* request) {
-  if (m_client)
-    m_client->cancelUserMediaRequest(WebUserMediaRequest(request));
+void UserMediaClientImpl::CancelUserMediaRequest(UserMediaRequest* request) {
+  if (client_)
+    client_->CancelUserMediaRequest(WebUserMediaRequest(request));
 }
 
-void UserMediaClientImpl::requestMediaDevices(MediaDevicesRequest* request) {
-  if (m_client)
-    m_client->requestMediaDevices(request);
+void UserMediaClientImpl::RequestMediaDevices(MediaDevicesRequest* request) {
+  if (client_)
+    client_->RequestMediaDevices(request);
 }
 
-void UserMediaClientImpl::setMediaDeviceChangeObserver(MediaDevices* observer) {
-  if (m_client)
-    m_client->setMediaDeviceChangeObserver(
+void UserMediaClientImpl::SetMediaDeviceChangeObserver(MediaDevices* observer) {
+  if (client_)
+    client_->SetMediaDeviceChangeObserver(
         WebMediaDeviceChangeObserver(observer));
 }
 

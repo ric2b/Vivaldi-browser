@@ -8,11 +8,14 @@ source_set("ntp_tiles") {
     "ios_most_visited_sites_factory.h",
     "ios_popular_sites_factory.cc",
     "ios_popular_sites_factory.h",
+    "most_visited_sites_observer_bridge.h",
+    "most_visited_sites_observer_bridge.mm",
   ]
   deps = [
     "//base",
     "//components/history/core/browser",
-    "//components/image_fetcher",
+    "//components/image_fetcher/core",
+    "//components/image_fetcher/ios",
     "//components/keyed_service/core",
     "//components/ntp_tiles",
     "//components/ntp_tiles:json_unsafe_parser",

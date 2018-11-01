@@ -45,7 +45,7 @@ ProfileInfoHandler::ProfileInfoHandler(Profile* profile)
       user_manager_observer_(this),
 #endif
       profile_observer_(this),
-      weak_ptr_factory_(this) {
+      callback_weak_ptr_factory_(this) {
 #if defined(OS_CHROMEOS)
   // Set up the chrome://userimage/ source.
   content::URLDataSource::Add(profile,
@@ -88,6 +88,8 @@ void ProfileInfoHandler::OnJavascriptAllowed() {
 }
 
 void ProfileInfoHandler::OnJavascriptDisallowed() {
+  callback_weak_ptr_factory_.InvalidateWeakPtrs();
+
   profile_observer_.Remove(
       &g_browser_process->profile_manager()->GetProfileAttributesStorage());
 
@@ -134,7 +136,7 @@ void ProfileInfoHandler::HandleGetProfileStats(const base::ListValue* args) {
   // (e.g., |item.success| is false). Therefore, query the actual statistics.
   ProfileStatisticsFactory::GetForProfile(profile_)->GatherStatistics(
       base::Bind(&ProfileInfoHandler::PushProfileStatsCount,
-                 weak_ptr_factory_.GetWeakPtr()));
+                 callback_weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ProfileInfoHandler::PushProfileStatsCount(
@@ -152,7 +154,7 @@ void ProfileInfoHandler::PushProfileStatsCount(
   // available. Therefore, webUIListenerCallback mechanism is used instead of
   // the Promise callback approach.
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue(kProfileStatsCountReadyEventName),
+                         base::Value(kProfileStatsCountReadyEventName),
                          base::Value(count));
 }
 #endif
@@ -171,14 +173,14 @@ void ProfileInfoHandler::HandleGetProfileManagesSupervisedUsers(
 
 void ProfileInfoHandler::PushProfileInfo() {
   CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::StringValue(kProfileInfoChangedEventName),
+                         base::Value(kProfileInfoChangedEventName),
                          *GetAccountNameAndIcon());
 }
 
 void ProfileInfoHandler::PushProfileManagesSupervisedUsersStatus() {
   CallJavascriptFunction(
       "cr.webUIListenerCallback",
-      base::StringValue(kProfileManagesSupervisedUsersChangedEventName),
+      base::Value(kProfileManagesSupervisedUsersChangedEventName),
       base::Value(IsProfileManagingSupervisedUsers()));
 }
 
@@ -188,26 +190,15 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
   std::string icon_url;
 
 #if defined(OS_CHROMEOS)
-  name = profile_->GetProfileUserName();
-  std::string user_email;
-  if (name.empty()) {
-    // User is not associated with a gaia account, use the display name.
-    const user_manager::User* user =
-        chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
-    // Note: We don't show the User section in Guest mode.
-    DCHECK(user && (user->GetType() != user_manager::USER_TYPE_GUEST));
-    name = base::UTF16ToUTF8(user->GetDisplayName());
-    user_email = user->GetAccountId().GetUserEmail();
-  } else {
-    name = gaia::SanitizeEmail(gaia::CanonicalizeEmail(name));
-    user_email = name;
-  }
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
+  DCHECK(user);
+  name = base::UTF16ToUTF8(user->GetDisplayName());
 
   // Get image as data URL instead of using chrome://userimage source to avoid
   // issues with caching.
-  const AccountId account_id(AccountId::FromUserEmail(user_email));
   scoped_refptr<base::RefCountedMemory> image =
-      chromeos::options::UserImageSource::GetUserImage(account_id);
+      chromeos::options::UserImageSource::GetUserImage(user->GetAccountId());
   icon_url = webui::GetPngDataUrl(image->front(), image->size());
 #else   // !defined(OS_CHROMEOS)
   ProfileAttributesEntry* entry;
@@ -215,14 +206,13 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
           ->GetProfileAttributesStorage()
           .GetProfileAttributesWithPath(profile_->GetPath(), &entry)) {
     name = base::UTF16ToUTF8(entry->GetName());
-
-    if (entry->IsUsingGAIAPicture() && entry->GetGAIAPicture()) {
-      gfx::Image icon =
-          profiles::GetAvatarIconForWebUI(entry->GetAvatarIcon(), true);
-      icon_url = webui::GetBitmapDataUrl(icon.AsBitmap());
-    } else {
-      icon_url = profiles::GetDefaultAvatarIconUrl(entry->GetAvatarIconIndex());
-    }
+    // TODO(crbug.com/710660): return chrome://theme/IDR_PROFILE_AVATAR_*
+    // and update theme_source.cc to get high res avatar icons. This does less
+    // work here, sends less over IPC, and is more stable with returned results.
+    constexpr int kAvatarIconSize = 40;
+    gfx::Image icon = profiles::GetSizedAvatarIcon(
+        entry->GetAvatarIcon(), true, kAvatarIconSize, kAvatarIconSize);
+    icon_url = webui::GetBitmapDataUrl(icon.AsBitmap());
   }
 #endif  // defined(OS_CHROMEOS)
 

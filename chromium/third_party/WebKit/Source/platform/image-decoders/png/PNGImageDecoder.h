@@ -26,12 +26,11 @@
 #ifndef PNGImageDecoder_h
 #define PNGImageDecoder_h
 
-#include "platform/image-decoders/ImageDecoder.h"
 #include <memory>
+#include "platform/image-decoders/ImageDecoder.h"
+#include "platform/image-decoders/png/PNGImageReader.h"
 
 namespace blink {
-
-class PNGImageReader;
 
 class PLATFORM_EXPORT PNGImageDecoder final : public ImageDecoder {
   WTF_MAKE_NONCOPYABLE(PNGImageDecoder);
@@ -39,30 +38,44 @@ class PLATFORM_EXPORT PNGImageDecoder final : public ImageDecoder {
  public:
   PNGImageDecoder(AlphaOption,
                   const ColorBehavior&,
-                  size_t maxDecodedBytes,
+                  size_t max_decoded_bytes,
                   size_t offset = 0);
   ~PNGImageDecoder() override;
 
   // ImageDecoder:
-  String filenameExtension() const override { return "png"; }
+  String FilenameExtension() const override { return "png"; }
+  bool SetSize(unsigned, unsigned) override;
+  int RepetitionCount() const override;
+  bool FrameIsCompleteAtIndex(size_t) const override;
+  float FrameDurationAtIndex(size_t) const override;
+  bool SetFailed() override;
 
   // Callbacks from libpng
-  void headerAvailable();
-  void rowAvailable(unsigned char* row, unsigned rowIndex, int);
-  void complete();
+  void HeaderAvailable();
+  void RowAvailable(unsigned char* row, unsigned row_index, int);
+  void FrameComplete();
+
+  void SetColorSpace();
+  void SetRepetitionCount(int);
 
  private:
+  using ParseQuery = PNGImageReader::ParseQuery;
+
   // ImageDecoder:
-  void decodeSize() override { decode(true); }
-  void decode(size_t) override { decode(false); }
+  void DecodeSize() override { Parse(ParseQuery::kSize); }
+  void Decode(size_t) override;
+  void Parse(ParseQuery);
+  size_t DecodeFrameCount() override;
+  void InitializeNewFrame(size_t) override;
+  void ClearFrameBuffer(size_t) override;
+  bool CanReusePreviousFrameBuffer(size_t) const override;
 
-  // Decodes the image.  If |onlySize| is true, stops decoding after
-  // calculating the image size.  If decoding fails but there is no more
-  // data coming, sets the "decode failure" flag.
-  void decode(bool onlySize);
-
-  std::unique_ptr<PNGImageReader> m_reader;
-  const unsigned m_offset;
+  std::unique_ptr<PNGImageReader> reader_;
+  const unsigned offset_;
+  size_t current_frame_;
+  int repetition_count_;
+  bool has_alpha_channel_;
+  bool current_buffer_saw_alpha_;
 };
 
 }  // namespace blink

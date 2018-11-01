@@ -10,6 +10,7 @@
 
 #include "base/format_macros.h"
 #include "base/i18n/message_formatter.h"
+#include "base/i18n/unicodestring.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -42,9 +43,9 @@ struct NumberFormatWrapper {
   std::unique_ptr<icu::NumberFormat> number_format;
 };
 
-LazyInstance<NumberFormatWrapper> g_number_format_int =
+LazyInstance<NumberFormatWrapper>::DestructorAtExit g_number_format_int =
     LAZY_INSTANCE_INITIALIZER;
-LazyInstance<NumberFormatWrapper> g_number_format_float =
+LazyInstance<NumberFormatWrapper>::DestructorAtExit g_number_format_float =
     LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
@@ -60,7 +61,7 @@ string16 FormatNumber(int64_t number) {
   icu::UnicodeString ustr;
   number_format->format(number, ustr);
 
-  return string16(ustr.getBuffer(), static_cast<size_t>(ustr.length()));
+  return i18n::UnicodeStringToString16(ustr);
 }
 
 string16 FormatDouble(double number, int fractional_digits) {
@@ -76,7 +77,7 @@ string16 FormatDouble(double number, int fractional_digits) {
   icu::UnicodeString ustr;
   number_format->format(number, ustr);
 
-  return string16(ustr.getBuffer(), static_cast<size_t>(ustr.length()));
+  return i18n::UnicodeStringToString16(ustr);
 }
 
 string16 FormatPercent(int number) {

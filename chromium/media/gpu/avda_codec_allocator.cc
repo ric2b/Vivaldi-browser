@@ -41,6 +41,11 @@ void DeleteMediaCodecAndSignal(std::unique_ptr<MediaCodecBridge> codec,
     done_event->Signal();
 }
 
+void DropReferenceToSurfaceBundle(
+    scoped_refptr<AVDASurfaceBundle> surface_bundle) {
+  // Do nothing.  Let |surface_bundle| go out of scope.
+}
+
 }  // namespace
 
 CodecConfig::CodecConfig() {}
@@ -71,7 +76,7 @@ bool AVDACodecAllocator::HangDetector::IsThreadLikelyHung() {
 }
 
 // static
-AVDACodecAllocator* AVDACodecAllocator::Instance() {
+AVDACodecAllocator* AVDACodecAllocator::GetInstance() {
   static AVDACodecAllocator* allocator = new AVDACodecAllocator();
   return allocator;
 }
@@ -137,103 +142,6 @@ scoped_refptr<base::SingleThreadTaskRunner> AVDACodecAllocator::TaskRunnerFor(
   return threads_[task_type]->thread.task_runner();
 }
 
-bool AVDACodecAllocator::AllocateSurface(AVDACodecAllocatorClient* client,
-                                         int surface_id) {
-  DVLOG(1) << __func__ << ": " << surface_id;
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (surface_id == SurfaceManager::kNoSurfaceID)
-    return true;
-
-  // If it's not owned or being released, |client| now owns it.
-  if (!surface_owners_.count(surface_id) &&
-      !pending_codec_releases_.count(surface_id)) {
-    surface_owners_[surface_id].owner = client;
-    return true;
-  }
-
-  // Otherwise |client| replaces the previous waiter (if any).
-  OwnerRecord& record = surface_owners_[surface_id];
-  if (record.waiter)
-    record.waiter->OnSurfaceAvailable(false);
-  record.waiter = client;
-  return false;
-}
-
-void AVDACodecAllocator::DeallocateSurface(AVDACodecAllocatorClient* client,
-                                           int surface_id) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (surface_id == SurfaceManager::kNoSurfaceID ||
-      !surface_owners_.count(surface_id)) {
-    return;
-  }
-
-  OwnerRecord& record = surface_owners_[surface_id];
-  if (record.owner == client)
-    record.owner = nullptr;
-  else if (record.waiter == client)
-    record.waiter = nullptr;
-
-  // Promote the waiter if possible.
-  if (record.waiter && !record.owner &&
-      !pending_codec_releases_.count(surface_id)) {
-    record.owner = record.waiter;
-    record.waiter = nullptr;
-    record.owner->OnSurfaceAvailable(true);
-    return;
-  }
-
-  // Remove the record if it's now unused.
-  if (!record.owner && !record.waiter)
-    surface_owners_.erase(surface_id);
-}
-
-// During surface teardown we have to handle the following cases.
-// 1) No AVDA has acquired the surface, or the surface has already been
-//    completely released.
-// 2) A MediaCodec is currently being configured with the surface on another
-//    thread. Whether an AVDA owns the surface or has already deallocated it,
-//    the MediaCodec should be dropped when configuration completes.
-// 3) An AVDA owns the surface and it responds to OnSurfaceDestroyed() by:
-//     a) Replacing the destroyed surface by calling MediaCodec#setSurface().
-//     b) Releasing the MediaCodec it's attached to.
-// 4) No AVDA owns the surface, but the MediaCodec it's attached to is currently
-//    being destroyed on another thread.
-void AVDACodecAllocator::OnSurfaceDestroyed(int surface_id) {
-  DVLOG(1) << __func__ << ": " << surface_id;
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  // Notify the owner and waiter (if any).
-  if (surface_owners_.count(surface_id)) {
-    OwnerRecord& record = surface_owners_[surface_id];
-    if (record.waiter) {
-      record.waiter->OnSurfaceAvailable(false);
-      record.waiter = nullptr;
-    }
-
-    if (record.owner)
-      record.owner->OnSurfaceDestroyed();
-
-    surface_owners_.erase(surface_id);
-  }
-
-  // The codec might have been released above in OnSurfaceDestroyed(), or was
-  // already pending release.
-  if (!pending_codec_releases_.count(surface_id))
-    return;
-
-  // The codec is being released so we have to wait for it here. It's a
-  // TimedWait() because the MediaCodec release may hang due to framework bugs.
-  // And in that case we don't want to hang the browser UI thread. Android ANRs
-  // occur when the UI thread is blocked for 5 seconds, so waiting for 2 seconds
-  // gives us leeway to avoid an ANR. Verified no ANR on a Nexus 7.
-  base::WaitableEvent& released =
-      pending_codec_releases_.find(surface_id)->second;
-  released.TimedWait(base::TimeDelta::FromSeconds(2));
-  if (!released.IsSignaled())
-    DLOG(WARNING) << __func__ << ": timed out waiting for MediaCodec#release()";
-}
-
 std::unique_ptr<MediaCodecBridge> AVDACodecAllocator::CreateMediaCodecSync(
     scoped_refptr<CodecConfig> codec_config) {
   TRACE_EVENT0("media", "AVDA::CreateMediaCodecSync");
@@ -249,7 +157,7 @@ std::unique_ptr<MediaCodecBridge> AVDACodecAllocator::CreateMediaCodecSync(
       MediaCodecBridgeImpl::CreateVideoDecoder(
           codec_config->codec, codec_config->needs_protected_surface,
           codec_config->initial_expected_coded_size,
-          codec_config->surface.j_surface().obj(), media_crypto,
+          codec_config->surface_bundle->j_surface().obj(), media_crypto,
           codec_config->csd0, codec_config->csd1, true,
           require_software_codec));
 
@@ -259,55 +167,80 @@ std::unique_ptr<MediaCodecBridge> AVDACodecAllocator::CreateMediaCodecSync(
 void AVDACodecAllocator::CreateMediaCodecAsync(
     base::WeakPtr<AVDACodecAllocatorClient> client,
     scoped_refptr<CodecConfig> codec_config) {
+  // Allocate the codec on the appropriate thread, and reply to this one with
+  // the result.  If |client| is gone by then, we handle cleanup.
   base::PostTaskAndReplyWithResult(
       TaskRunnerFor(codec_config->task_type).get(), FROM_HERE,
       base::Bind(&AVDACodecAllocator::CreateMediaCodecSync,
                  base::Unretained(this), codec_config),
-      base::Bind(&AVDACodecAllocatorClient::OnCodecConfigured, client));
+      base::Bind(&AVDACodecAllocator::ForwardOrDropCodec,
+                 base::Unretained(this), client, codec_config->task_type,
+                 codec_config->surface_bundle));
+}
+
+void AVDACodecAllocator::ForwardOrDropCodec(
+    base::WeakPtr<AVDACodecAllocatorClient> client,
+    TaskType task_type,
+    scoped_refptr<AVDASurfaceBundle> surface_bundle,
+    std::unique_ptr<MediaCodecBridge> media_codec) {
+  if (!client) {
+    // |client| has been destroyed.  Free |media_codec| on the right thread.
+    // Note that this also preserves |surface_bundle| until |media_codec| has
+    // been released, in case our ref to it is the last one.
+    ReleaseMediaCodec(std::move(media_codec), task_type, surface_bundle);
+    return;
+  }
+
+  client->OnCodecConfigured(std::move(media_codec));
 }
 
 void AVDACodecAllocator::ReleaseMediaCodec(
     std::unique_ptr<MediaCodecBridge> media_codec,
     TaskType task_type,
-    int surface_id) {
+    const scoped_refptr<AVDASurfaceBundle>& surface_bundle) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(media_codec);
 
-  // No need to track the release if it's a SurfaceTexture.
-  if (surface_id == SurfaceManager::kNoSurfaceID) {
-    TaskRunnerFor(task_type)->PostTask(
-        FROM_HERE, base::Bind(&DeleteMediaCodecAndSignal,
-                              base::Passed(std::move(media_codec)), nullptr));
+  // No need to track the release if it's a SurfaceTexture.  We still forward
+  // the reference to |surface_bundle|, though, so that the SurfaceTexture
+  // lasts at least as long as the codec.
+  if (!surface_bundle->overlay) {
+    TaskRunnerFor(task_type)->PostTaskAndReply(
+        FROM_HERE,
+        base::Bind(&DeleteMediaCodecAndSignal,
+                   base::Passed(std::move(media_codec)), nullptr),
+        base::Bind(&DropReferenceToSurfaceBundle, surface_bundle));
     return;
   }
 
+  DCHECK(!surface_bundle->surface_texture);
   pending_codec_releases_.emplace(
-      std::piecewise_construct, std::forward_as_tuple(surface_id),
+      std::piecewise_construct,
+      std::forward_as_tuple(surface_bundle->overlay.get()),
       std::forward_as_tuple(base::WaitableEvent::ResetPolicy::MANUAL,
                             base::WaitableEvent::InitialState::NOT_SIGNALED));
   base::WaitableEvent* released =
-      &pending_codec_releases_.find(surface_id)->second;
+      &pending_codec_releases_.find(surface_bundle->overlay.get())->second;
 
+  // Note that we forward |surface_bundle|, too, so that the surface outlasts
+  // the codec.  This doesn't matter so much for CVV surfaces, since they don't
+  // auto-release when they're dropped.  However, for surface owners, this will
+  // become important, so we still handle it.  Plus, it makes sense.
   TaskRunnerFor(task_type)->PostTaskAndReply(
-      FROM_HERE, base::Bind(&DeleteMediaCodecAndSignal,
-                            base::Passed(std::move(media_codec)), released),
-      base::Bind(&AVDACodecAllocator::OnMediaCodecAndSurfaceReleased,
-                 base::Unretained(this), surface_id));
+      FROM_HERE,
+      base::Bind(&DeleteMediaCodecAndSignal,
+                 base::Passed(std::move(media_codec)), released),
+      base::Bind(&AVDACodecAllocator::OnMediaCodecReleased,
+                 base::Unretained(this), surface_bundle));
 }
 
-void AVDACodecAllocator::OnMediaCodecAndSurfaceReleased(int surface_id) {
+void AVDACodecAllocator::OnMediaCodecReleased(
+    scoped_refptr<AVDASurfaceBundle> surface_bundle) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  pending_codec_releases_.erase(surface_id);
-  if (!surface_owners_.count(surface_id))
-    return;
+  pending_codec_releases_.erase(surface_bundle->overlay.get());
 
-  OwnerRecord& record = surface_owners_[surface_id];
-  if (!record.owner && record.waiter) {
-    record.owner = record.waiter;
-    record.waiter = nullptr;
-    record.owner->OnSurfaceAvailable(true);
-  }
+  // Also note that |surface_bundle| lasted at least as long as the codec.
 }
 
 // Returns a hint about whether the construction thread has hung for
@@ -335,6 +268,24 @@ base::Optional<TaskType> AVDACodecAllocator::TaskTypeForAllocation() {
 
 base::Thread& AVDACodecAllocator::GetThreadForTesting(TaskType task_type) {
   return threads_[task_type]->thread;
+}
+
+bool AVDACodecAllocator::WaitForPendingRelease(AndroidOverlay* overlay) {
+  if (!pending_codec_releases_.count(overlay))
+    return true;
+
+  // The codec is being released so we have to wait for it here. It's a
+  // TimedWait() because the MediaCodec release may hang due to framework bugs.
+  // And in that case we don't want to hang the browser UI thread. Android ANRs
+  // occur when the UI thread is blocked for 5 seconds, so waiting for 2 seconds
+  // gives us leeway to avoid an ANR. Verified no ANR on a Nexus 7.
+  base::WaitableEvent& released = pending_codec_releases_.find(overlay)->second;
+  released.TimedWait(base::TimeDelta::FromSeconds(2));
+  if (released.IsSignaled())
+    return true;
+
+  DLOG(WARNING) << __func__ << ": timed out waiting for MediaCodec#release()";
+  return false;
 }
 
 AVDACodecAllocator::AVDACodecAllocator(base::TickClock* tick_clock,

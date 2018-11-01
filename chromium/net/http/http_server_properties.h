@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <ostream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -59,6 +60,7 @@ enum BrokenAlternateProtocolLocation {
   BROKEN_ALTERNATE_PROTOCOL_LOCATION_QUIC_STREAM_FACTORY = 1,
   BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_IMPL_JOB_ALT = 2,
   BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_IMPL_JOB_MAIN = 3,
+  BROKEN_ALTERNATE_PROTOCOL_LOCATION_QUIC_HTTP_STREAM = 4,
   BROKEN_ALTERNATE_PROTOCOL_LOCATION_MAX,
 };
 
@@ -107,6 +109,10 @@ struct NET_EXPORT AlternativeService {
   std::string host;
   uint16_t port;
 };
+
+NET_EXPORT_PRIVATE std::ostream& operator<<(
+    std::ostream& os,
+    const AlternativeService& alternative_service);
 
 struct NET_EXPORT AlternativeServiceInfo {
   AlternativeServiceInfo() : alternative_service() {}
@@ -175,6 +181,9 @@ typedef std::vector<AlternativeService> AlternativeServiceVector;
 typedef std::vector<AlternativeServiceInfo> AlternativeServiceInfoVector;
 typedef base::MRUCache<url::SchemeHostPort, AlternativeServiceInfoVector>
     AlternativeServiceMap;
+// Map to the number of times each alternative service has been marked broken.
+typedef base::MRUCache<AlternativeService, int>
+    RecentlyBrokenAlternativeServices;
 typedef base::MRUCache<url::SchemeHostPort, ServerNetworkStats>
     ServerNetworkStatsMap;
 typedef base::MRUCache<QuicServerId, std::string> QuicServerInfoMap;
@@ -293,10 +302,14 @@ class NET_EXPORT HttpServerProperties {
   virtual void SetSupportsQuic(bool used_quic,
                                const IPAddress& last_address) = 0;
 
-  // Sets |stats| for |host_port_pair|.
+  // Sets |stats| for |server|.
   virtual void SetServerNetworkStats(const url::SchemeHostPort& server,
                                      ServerNetworkStats stats) = 0;
 
+  // Clears any stats for |server|.
+  virtual void ClearServerNetworkStats(const url::SchemeHostPort& server) = 0;
+
+  // Returns any stats for |server| or nullptr if there are none.
   virtual const ServerNetworkStats* GetServerNetworkStats(
       const url::SchemeHostPort& server) = 0;
 

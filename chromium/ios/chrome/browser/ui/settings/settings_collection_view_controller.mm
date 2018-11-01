@@ -40,6 +40,12 @@
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin_interaction_controller.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_item.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
+#import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_account_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_switch_item.h"
@@ -96,6 +102,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSignInButton = kItemTypeEnumZero,
+  ItemTypeSigninPromo,
   ItemTypeAccount,
   ItemTypeHeader,
   ItemTypeSearchEngine,
@@ -171,7 +178,8 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                                                SyncObserverModelBridge,
                                                ChromeIdentityServiceObserver,
                                                BooleanObserver,
-                                               PrefObserverDelegate> {
+                                               PrefObserverDelegate,
+                                               SigninPromoViewConsumer> {
   // The main browser state that hold the settings. Never off the record.
   ios::ChromeBrowserState* _mainBrowserState;  // weak
 
@@ -188,6 +196,10 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   base::scoped_nsobject<PrefBackedBoolean> _showMemoryDebugToolsEnabled;
   // The item related to the switch for the show suggestions setting.
   base::scoped_nsobject<CollectionViewSwitchItem> _showMemoryDebugToolsItem;
+
+  // Mediator to configure the sign-in promo cell. Also used to received
+  // identity update notifications.
+  base::scoped_nsobject<SigninPromoViewMediator> _signinPromoViewMediator;
 
   // Cached resized profile image.
   base::scoped_nsobject<UIImage> _resizedImage;
@@ -320,9 +332,14 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
           base::UserMetricsAction("Signin_Impression_FromSettings"));
       _hasRecordedSigninImpression = YES;
     }
+    if (experimental_flags::IsSigninPromoEnabled()) {
+      _signinPromoViewMediator.reset([[SigninPromoViewMediator alloc] init]);
+      _signinPromoViewMediator.get().consumer = self;
+    }
     [model addItem:[self signInTextItem]
         toSectionWithIdentifier:SectionIdentifierSignIn];
   } else {
+    _signinPromoViewMediator.reset(nil);
     [model addItem:[self accountCellItem]
         toSectionWithIdentifier:SectionIdentifierSignIn];
   }
@@ -332,6 +349,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   CollectionViewTextItem* basicsHeader = [
       [[CollectionViewTextItem alloc] initWithType:ItemTypeHeader] autorelease];
   basicsHeader.text = l10n_util::GetNSString(IDS_IOS_OPTIONS_GENERAL_TAB_LABEL);
+  basicsHeader.textColor = [[MDCPalette greyPalette] tint500];
   [model setHeader:basicsHeader
       forSectionWithIdentifier:SectionIdentifierBasics];
   [model addItem:[self searchEngineDetailItem]
@@ -349,6 +367,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       [[CollectionViewTextItem alloc] initWithType:ItemTypeHeader] autorelease];
   advancedHeader.text =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_ADVANCED_TAB_LABEL);
+  advancedHeader.textColor = [[MDCPalette greyPalette] tint500];
   [model setHeader:advancedHeader
       forSectionWithIdentifier:SectionIdentifierAdvanced];
   [model addItem:[self voiceSearchDetailItem]
@@ -371,6 +390,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     CollectionViewTextItem* debugHeader = [[[CollectionViewTextItem alloc]
         initWithType:ItemTypeHeader] autorelease];
     debugHeader.text = @"Debug";
+    debugHeader.textColor = [[MDCPalette greyPalette] tint500];
     [model setHeader:debugHeader
         forSectionWithIdentifier:SectionIdentifierDebug];
   }
@@ -396,6 +416,14 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 #pragma mark - Model Items
 
 - (CollectionViewItem*)signInTextItem {
+  if (experimental_flags::IsSigninPromoEnabled()) {
+    DCHECK(_signinPromoViewMediator.get());
+    SigninPromoItem* signinPromoItem = [
+        [[SigninPromoItem alloc] initWithType:ItemTypeSigninPromo] autorelease];
+    signinPromoItem.configurator =
+        [_signinPromoViewMediator createConfigurator];
+    return signinPromoItem;
+  }
   AccountSignInItem* signInTextItem = [[[AccountSignInItem alloc]
       initWithType:ItemTypeSignInButton] autorelease];
   signInTextItem.accessibilityIdentifier = kSettingsSignInCellId;
@@ -404,7 +432,6 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                                               ->GetDefaultAvatar(),
                                           kAccountProfilePhotoDimension);
   signInTextItem.image = image;
-
   return signInTextItem;
 }
 
@@ -638,6 +665,19 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                       forControlEvents:UIControlEventValueChanged];
       break;
     }
+    case ItemTypeSigninPromo: {
+      SigninPromoCell* signinPromoCell =
+          base::mac::ObjCCast<SigninPromoCell>(cell);
+      [signinPromoCell.signinPromoView.primaryButton
+                 addTarget:self
+                    action:@selector(signinPromoPrimaryAction:)
+          forControlEvents:UIControlEventTouchUpInside];
+      [signinPromoCell.signinPromoView.secondaryButton
+                 addTarget:self
+                    action:@selector(signinPromoSecondaryAction:)
+          forControlEvents:UIControlEventTouchUpInside];
+      break;
+    }
     case ItemTypeViewSource: {
 #if CHROMIUM_BUILD && !defined(NDEBUG)
       CollectionViewSwitchCell* switchCell =
@@ -681,21 +721,6 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   return cell;
 }
 
-- (UICollectionReusableView*)collectionView:(UICollectionView*)collectionView
-          viewForSupplementaryElementOfKind:(NSString*)kind
-                                atIndexPath:(NSIndexPath*)indexPath {
-  UICollectionReusableView* view = [super collectionView:collectionView
-                       viewForSupplementaryElementOfKind:kind
-                                             atIndexPath:indexPath];
-
-  MDCCollectionViewTextCell* textCell =
-      base::mac::ObjCCast<MDCCollectionViewTextCell>(view);
-  if (textCell) {
-    textCell.textLabel.textColor = [[MDCPalette greyPalette] tint500];
-  }
-  return view;
-}
-
 #pragma mark UICollectionViewDelegate
 
 - (void)collectionView:(UICollectionView*)collectionView
@@ -716,7 +741,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
   switch (itemType) {
     case ItemTypeSignInButton:
-      [self showSignIn];
+      [self showSignInWithIdentity:nil];
       break;
     case ItemTypeAccount:
       controller.reset([[AccountsCollectionViewController alloc]
@@ -786,6 +811,12 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   CollectionViewItem* item =
       [self.collectionViewModel itemAtIndexPath:indexPath];
 
+  if (item.type == ItemTypeSigninPromo) {
+    return [MDCCollectionViewCell
+        cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds)
+                           forItem:item];
+  }
+
   if (item.type == ItemTypeAccount) {
     return MDCCellDefaultTwoLineHeight;
   }
@@ -801,10 +832,11 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     hidesInkViewAtIndexPath:(NSIndexPath*)indexPath {
   NSInteger type = [self.collectionViewModel itemTypeForIndexPath:indexPath];
   switch (type) {
-    case ItemTypeMemoryDebugging:
-    case ItemTypeViewSource:
     case ItemTypeLogJavascript:
+    case ItemTypeMemoryDebugging:
     case ItemTypeShowAutofillTypePredictions:
+    case ItemTypeSigninPromo:
+    case ItemTypeViewSource:
       return YES;
     default:
       return NO;
@@ -955,7 +987,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
 #pragma mark Sign in
 
-- (void)showSignIn {
+- (void)showSignInWithIdentity:(ChromeIdentity*)identity {
   base::RecordAction(base::UserMetricsAction("Signin_Signin_FromSettings"));
   DCHECK(!_signinInteractionController);
   _signinInteractionController.reset([[SigninInteractionController alloc]
@@ -966,14 +998,25 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                                    ACCESS_POINT_SETTINGS]);
 
   base::WeakNSObject<SettingsCollectionViewController> weakSelf(self);
-  [_signinInteractionController signInWithCompletion:^(BOOL success) {
-    [weakSelf didFinishSignin:success];
-  }
-                                      viewController:self];
+  [_signinInteractionController
+      signInWithViewController:self
+                      identity:identity
+                    completion:^(BOOL success) {
+                      [weakSelf didFinishSignin:success];
+                    }];
 }
 
 - (void)didFinishSignin:(BOOL)signedIn {
   _signinInteractionController.reset();
+}
+
+- (void)signinPromoPrimaryAction:(id)unused {
+  [self showSignInWithIdentity:_signinPromoViewMediator.get().defaultIdentity];
+}
+
+- (void)signinPromoSecondaryAction:(id)unused {
+  DCHECK(_signinPromoViewMediator.get().defaultIdentity);
+  [self showSignInWithIdentity:nil];
 }
 
 #pragma mark NotificationBridgeDelegate
@@ -1094,6 +1137,30 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     _autoFillDetailItem.get().detailText = autofillDetail;
     [self reconfigureCellsForItems:@[ _autoFillDetailItem ]
            inSectionWithIdentifier:SectionIdentifierBasics];
+  }
+}
+
+#pragma mark - SigninPromoViewConsumer
+
+- (void)configureSigninPromoViewWithNewIdentity:(BOOL)newIdentity
+                                   configurator:(SigninPromoViewConfigurator*)
+                                                    configurator {
+  if (![self.collectionViewModel hasItemForItemType:ItemTypeSigninPromo
+                                  sectionIdentifier:SectionIdentifierSignIn]) {
+    return;
+  }
+  NSIndexPath* signinPromoCellIndexPath =
+      [self.collectionViewModel indexPathForItemType:ItemTypeSigninPromo
+                                   sectionIdentifier:SectionIdentifierSignIn];
+  DCHECK(signinPromoCellIndexPath.item != NSNotFound);
+  SigninPromoItem* signinPromoItem = base::mac::ObjCCast<SigninPromoItem>(
+      [self.collectionViewModel itemAtIndexPath:signinPromoCellIndexPath]);
+  if (signinPromoItem) {
+    signinPromoItem.configurator = configurator;
+    [self reconfigureCellsForItems:@[ signinPromoItem ]
+           inSectionWithIdentifier:SectionIdentifierSignIn];
+    if (newIdentity)
+      [self.collectionViewLayout invalidateLayout];
   }
 }
 

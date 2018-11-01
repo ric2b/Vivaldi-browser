@@ -9,8 +9,8 @@
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/paint/DisplayItem.h"
+#include "platform/wtf/Allocator.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
-#include "wtf/Allocator.h"
 
 namespace blink {
 
@@ -25,23 +25,13 @@ class PLATFORM_EXPORT CompositingRecorder {
                       const SkBlendMode,
                       const float opacity,
                       const FloatRect* bounds = 0,
-                      ColorFilter = ColorFilterNone);
+                      ColorFilter = kColorFilterNone);
 
   ~CompositingRecorder();
 
-  // FIXME: These helpers only exist to ease the transition to slimming paint
-  //        and should be removed once slimming paint is enabled by default.
-  static void beginCompositing(GraphicsContext&,
-                               const DisplayItemClient&,
-                               const SkBlendMode,
-                               const float opacity,
-                               const FloatRect* bounds = 0,
-                               ColorFilter = ColorFilterNone);
-  static void endCompositing(GraphicsContext&, const DisplayItemClient&);
-
  private:
-  const DisplayItemClient& m_client;
-  GraphicsContext& m_graphicsContext;
+  const DisplayItemClient& client_;
+  GraphicsContext& graphics_context_;
 };
 
 }  // namespace blink

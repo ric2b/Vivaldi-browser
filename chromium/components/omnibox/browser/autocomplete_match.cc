@@ -26,6 +26,7 @@
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 #include "components/omnibox/browser/vector_icons.h"  // nogncheck
+#include "ui/vector_icons/vector_icons.h"             // nogncheck
 #endif
 
 namespace {
@@ -84,8 +85,8 @@ AutocompleteMatch::AutocompleteMatch()
       swap_contents_and_description(false),
       transition(ui::PAGE_TRANSITION_GENERATED),
       type(AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED),
-      from_previous(false) {
-}
+      subtype_identifier(0),
+      from_previous(false) {}
 
 AutocompleteMatch::AutocompleteMatch(AutocompleteProvider* provider,
                                      int relevance,
@@ -99,8 +100,8 @@ AutocompleteMatch::AutocompleteMatch(AutocompleteProvider* provider,
       swap_contents_and_description(false),
       transition(ui::PAGE_TRANSITION_TYPED),
       type(type),
-      from_previous(false) {
-}
+      subtype_identifier(0),
+      from_previous(false) {}
 
 AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
     : provider(match.provider),
@@ -122,16 +123,18 @@ AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
       answer(SuggestionAnswer::copy(match.answer.get())),
       transition(match.transition),
       type(match.type),
-      associated_keyword(match.associated_keyword.get() ?
-          new AutocompleteMatch(*match.associated_keyword) : NULL),
+      subtype_identifier(match.subtype_identifier),
+      associated_keyword(match.associated_keyword.get()
+                             ? new AutocompleteMatch(*match.associated_keyword)
+                             : NULL),
       keyword(match.keyword),
       from_previous(match.from_previous),
-      search_terms_args(match.search_terms_args.get() ?
-          new TemplateURLRef::SearchTermsArgs(*match.search_terms_args) :
-          NULL),
+      search_terms_args(
+          match.search_terms_args.get()
+              ? new TemplateURLRef::SearchTermsArgs(*match.search_terms_args)
+              : NULL),
       additional_info(match.additional_info),
-      duplicate_matches(match.duplicate_matches) {
-}
+      duplicate_matches(match.duplicate_matches) {}
 
 AutocompleteMatch::~AutocompleteMatch() {
 }
@@ -160,6 +163,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   answer = SuggestionAnswer::copy(match.answer.get());
   transition = match.transition;
   type = match.type;
+  subtype_identifier = match.subtype_identifier;
   associated_keyword.reset(match.associated_keyword.get() ?
       new AutocompleteMatch(*match.associated_keyword) : NULL);
   keyword = match.keyword;
@@ -198,7 +202,7 @@ const gfx::VectorIcon& AutocompleteMatch::TypeToVectorIcon(Type type) {
     case Type::SEARCH_OTHER_ENGINE:
     case Type::CONTACT_DEPRECATED:
     case Type::VOICE_SUGGEST:
-      return omnibox::kSearchIcon;
+      return ui::kSearchIcon;
 
     case Type::EXTENSION_APP:
       return omnibox::kExtensionAppIcon;

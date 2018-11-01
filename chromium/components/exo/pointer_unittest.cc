@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/wm/window_positioning_utils.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "components/exo/pointer.h"
+
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/wm/window_positioning_utils.h"
+#include "ash/wm_window.h"
 #include "components/exo/buffer.h"
-#include "components/exo/pointer.h"
 #include "components/exo/pointer_delegate.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/surface.h"
@@ -36,7 +37,6 @@ class MockPointerDelegate : public PointerDelegate {
   MOCK_METHOD3(OnPointerButton, void(base::TimeTicks, int, bool));
   MOCK_METHOD3(OnPointerScroll,
                void(base::TimeTicks, const gfx::Vector2dF&, bool));
-  MOCK_METHOD1(OnPointerScrollCancel, void(base::TimeTicks));
   MOCK_METHOD1(OnPointerScrollStop, void(base::TimeTicks));
   MOCK_METHOD0(OnPointerFrame, void());
 };
@@ -244,7 +244,7 @@ TEST_F(PointerTest, OnPointerScroll) {
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
-  EXPECT_CALL(delegate, OnPointerFrame()).Times(4);
+  EXPECT_CALL(delegate, OnPointerFrame()).Times(3);
 
   EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(location);
@@ -253,7 +253,6 @@ TEST_F(PointerTest, OnPointerScroll) {
     // Expect fling stop followed by scroll and scroll stop.
     testing::InSequence sequence;
 
-    EXPECT_CALL(delegate, OnPointerScrollCancel(testing::_));
     EXPECT_CALL(delegate,
                 OnPointerScroll(testing::_, gfx::Vector2dF(1.2, 1.2), false));
     EXPECT_CALL(delegate, OnPointerScrollStop(testing::_));
@@ -319,7 +318,7 @@ TEST_F(PointerTest, IgnorePointerEventDuringModal) {
 
   // Make the window modal.
   shell_surface2->SetSystemModal(true);
-  EXPECT_TRUE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   EXPECT_CALL(delegate, OnPointerFrame()).Times(testing::AnyNumber());
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
@@ -351,7 +350,6 @@ TEST_F(PointerTest, IgnorePointerEventDuringModal) {
 
   {
     testing::InSequence sequence;
-    EXPECT_CALL(delegate, OnPointerScrollCancel(testing::_));
     EXPECT_CALL(delegate,
                 OnPointerScroll(testing::_, gfx::Vector2dF(1.2, 1.2), false));
     EXPECT_CALL(delegate, OnPointerScrollStop(testing::_));
@@ -392,7 +390,6 @@ TEST_F(PointerTest, IgnorePointerEventDuringModal) {
 
   {
     testing::InSequence sequence;
-    EXPECT_CALL(delegate, OnPointerScrollCancel(testing::_)).Times(0);
     EXPECT_CALL(delegate,
                 OnPointerScroll(testing::_, gfx::Vector2dF(1.2, 1.2), false))
         .Times(0);
@@ -408,7 +405,7 @@ TEST_F(PointerTest, IgnorePointerEventDuringModal) {
 
   // Make the window non-modal.
   shell_surface2->SetSystemModal(false);
-  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
 
   // Check if pointer events on non-modal window are registered.
   {
@@ -434,7 +431,6 @@ TEST_F(PointerTest, IgnorePointerEventDuringModal) {
 
   {
     testing::InSequence sequence;
-    EXPECT_CALL(delegate, OnPointerScrollCancel(testing::_));
     EXPECT_CALL(delegate,
                 OnPointerScroll(testing::_, gfx::Vector2dF(1.2, 1.2), false));
     EXPECT_CALL(delegate, OnPointerScrollStop(testing::_));

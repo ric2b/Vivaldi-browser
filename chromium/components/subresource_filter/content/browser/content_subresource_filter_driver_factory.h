@@ -6,6 +6,7 @@
 #define COMPONENTS_SUBRESOURCE_FILTER_CONTENT_BROWSER_CONTENT_SUBRESOURCE_FILTER_DRIVER_FACTORY_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -15,6 +16,8 @@
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "components/safe_browsing_db/util.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/common/document_load_statistics.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/page_transition_types.h"
@@ -44,7 +47,8 @@ using URLToActivationListsMap =
 // per-frame SubresourceFilterAgents on the renderer side.
 class ContentSubresourceFilterDriverFactory
     : public base::SupportsUserData::Data,
-      public content::WebContentsObserver {
+      public content::WebContentsObserver,
+      public ContentSubresourceFilterThrottleManager::Delegate {
  public:
   // NOTE: ActivationDecision backs a UMA histogram, so it is append-only.
   enum class ActivationDecision {
@@ -113,13 +117,30 @@ class ContentSubresourceFilterDriverFactory
     return activation_decision_;
   }
 
+  // ContentSubresourceFilterThrottleManager::Delegate:
+  void OnFirstSubresourceLoadDisallowed() override;
+  bool ShouldSuppressActivation(
+      content::NavigationHandle* navigation_handle) override;
+  void WillProcessResponse(
+      content::NavigationHandle* navigation_handle) override;
+
+  ContentSubresourceFilterThrottleManager* throttle_manager() {
+    return throttle_manager_.get();
+  }
+
+  // TODO(https://crbug.com/708181): Allow tests to change the configuration
+  // after construction (which happens at WebContents creation) but before a
+  // navigation start. Can be removed once the Safe Browsing navigation throttle
+  // handles all activation decisions.
+  void set_configuration_for_testing(Configuration configuration) {
+    configuration_ = std::move(configuration);
+  }
+
  private:
   friend class ContentSubresourceFilterDriverFactoryTest;
   friend class safe_browsing::SafeBrowsingServiceTest;
 
   void ResetActivationState();
-
-  void OnFirstSubresourceLoadDisallowed();
 
   void OnDocumentLoadStatistics(const DocumentLoadStatistics& statistics);
 
@@ -130,8 +151,6 @@ class ContentSubresourceFilterDriverFactory
       content::NavigationHandle* navigation_handle) override;
   void DidRedirectNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void ReadyToCommitNavigation(
-      content::NavigationHandle* navigation_handle) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   bool OnMessageReceived(const IPC::Message& message,
@@ -141,24 +160,26 @@ class ContentSubresourceFilterDriverFactory
   // activation signal should be sent.
   ActivationDecision ComputeActivationDecisionForMainFrameURL(
       const GURL& url) const;
-  void ActivateForFrameHostIfNeeded(content::RenderFrameHost* render_frame_host,
-                                    const GURL& url);
 
-  // Internal implementation of ReadyToCommitNavigation which doesn't use
-  // NavigationHandle to ease unit tests.
-  void ReadyToCommitNavigationInternal(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& url,
-      const content::Referrer& referrer,
-      ui::PageTransition page_transition);
-
-  bool DidURLMatchCurrentActivationList(const GURL& url) const;
+  bool DidURLMatchActivationList(const GURL& url,
+                                 ActivationList activation_list) const;
 
   void AddActivationListMatch(const GURL& url, ActivationList match_type);
+  int CalculateHitPatternForActivationList(
+      ActivationList activation_list) const;
   void RecordRedirectChainMatchPattern() const;
+
+  void RecordRedirectChainMatchPatternForList(
+      ActivationList activation_list) const;
+
+  Configuration configuration_;
 
   std::unique_ptr<SubresourceFilterClient> client_;
 
+  std::unique_ptr<ContentSubresourceFilterThrottleManager> throttle_manager_;
+
+  // Hosts to whitelist. This is only used for per-WebContents whitelisting and
+  // is distinct from content settings whitelisting.
   HostPathSet whitelisted_hosts_;
 
   ActivationLevel activation_level_;

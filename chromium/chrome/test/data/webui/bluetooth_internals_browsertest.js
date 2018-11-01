@@ -307,7 +307,16 @@ BluetoothInternalsTest.prototype = {
   },
 };
 
-TEST_F('BluetoothInternalsTest', 'Startup_BluetoothInternals', function() {
+// Flaky on Debug and ASAN. See crbug.com/707530
+GEN('#if !defined(NDEBUG) || defined(ADDRESS_SANITIZER)');
+GEN('#define MAYBE_Startup_BluetoothInternals ' +
+    'DISABLED_Startup_BluetoothInternals');
+GEN('#else');
+GEN('#define MAYBE_Startup_BluetoothInternals Startup_BluetoothInternals');
+GEN('#endif');
+
+TEST_F('BluetoothInternalsTest', 'MAYBE_Startup_BluetoothInternals',
+    function() {
   /** @const */ var PageManager = cr.ui.pageManager.PageManager;
 
   var adapterFactory = null;

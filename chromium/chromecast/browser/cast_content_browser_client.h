@@ -13,6 +13,8 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
+#include "chromecast/chromecast_features.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/content_browser_client.h"
 
@@ -32,7 +34,7 @@ class X509Certificate;
 }
 
 namespace service_manager {
-class InterfaceRegistry;
+class BinderRegistry;
 }
 
 namespace chromecast {
@@ -84,7 +86,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
 
   virtual media::VideoModeSwitcher* GetVideoModeSwitcher();
 
-#if !defined(OS_ANDROID)
+#if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
   // Gets object for enforcing video resolution policy restrictions.
   virtual media::VideoResolutionPolicy* GetVideoResolutionPolicy();
 
@@ -101,7 +103,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   ::media::ScopedAudioManagerPtr CreateAudioManager(
       ::media::AudioLogFactory* audio_log_factory) override;
   std::unique_ptr<::media::CdmFactory> CreateCdmFactory() override;
-#endif
+#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
   media::MediaCapsImpl* media_caps();
 
   // Invoked when the metrics client ID changes.
@@ -162,7 +164,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
                        content::ResourceContext* context,
                        bool* no_javascript_access) override;
   void ExposeInterfacesToRenderer(
-      service_manager::InterfaceRegistry* registry,
+      service_manager::BinderRegistry* registry,
       content::RenderProcessHost* render_process_host) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(

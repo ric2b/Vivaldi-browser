@@ -9,20 +9,20 @@ import logging
 import optparse
 
 from webkitpy.common.net.git_cl import GitCL
-from webkitpy.layout_tests.models.test_expectations import BASELINE_SUFFIX_LIST
-from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
+from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand, TestBaselineSet
+from webkitpy.w3c.wpt_manifest import WPTManifest
 
 _log = logging.getLogger(__name__)
 
 
 class RebaselineCL(AbstractParallelRebaselineCommand):
-    name = "rebaseline-cl"
-    help_text = "Fetches new baselines for a CL from test runs on try bots."
-    long_help = ("By default, this command will check the latest try job results "
-                 "for all platforms, and start try jobs for platforms with no "
-                 "try jobs. Then, new baselines are downloaded for any tests "
-                 "that are being rebaselined. After downloading, the baselines "
-                 "for different platforms will be optimized (consolidated).")
+    name = 'rebaseline-cl'
+    help_text = 'Fetches new baselines for a CL from test runs on try bots.'
+    long_help = ('By default, this command will check the latest try job results '
+                 'for all platforms, and start try jobs for platforms with no '
+                 'try jobs. Then, new baselines are downloaded for any tests '
+                 'that are being rebaselined. After downloading, the baselines '
+                 'for different platforms will be optimized (consolidated).')
     show_in_main_help = True
 
     def __init__(self):
@@ -36,12 +36,18 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             optparse.make_option(
                 '--no-trigger-jobs', dest='trigger_jobs', action='store_false', default=True,
                 help='Do not trigger any try jobs.'),
+            optparse.make_option(
+                '--fill-missing', dest='fill_missing', action='store_true', default=False,
+                help='If some platforms have no try job results, use results from try job results of other platforms.'),
             self.no_optimize_option,
             self.results_directory_option,
         ])
 
     def execute(self, options, args, tool):
         self._tool = tool
+
+        # TODO(qyearsley): Move this call to somewhere else.
+        WPTManifest.ensure_manifest(tool)
 
         unstaged_baselines = self.unstaged_baselines()
         if unstaged_baselines:
@@ -51,93 +57,98 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             return 1
 
         issue_number = self._get_issue_number()
-        if not issue_number:
+        if issue_number is None:
+            _log.error('No issue number for current branch.')
             return 1
+        _log.debug('Issue number for current branch: %s', issue_number)
 
         builds = self.git_cl().latest_try_jobs(self._try_bots())
 
-        if options.trigger_jobs:
-            if self.trigger_jobs_for_missing_builds(builds):
-                _log.info('Please re-run webkit-patch rebaseline-cl once all pending try jobs have finished.')
-                return 1
-        if not builds:
-            _log.info('No builds to download baselines from.')
-
-        _log.debug('Getting results for issue %d.', issue_number)
-        builds_to_results = self._fetch_results(builds)
-        if builds_to_results is None:
-            return 1
-
-        test_prefix_list = {}
-        if args:
-            for test in args:
-                test_prefix_list[test] = {b: BASELINE_SUFFIX_LIST for b in builds}
-        else:
-            test_prefix_list = self._test_prefix_list(
-                issue_number,
-                builds_to_results,
-                only_changed_tests=options.only_changed_tests)
-
-        self._log_test_prefix_list(test_prefix_list)
-
-        if not options.dry_run:
-            self.rebaseline(options, test_prefix_list)
-        return 0
-
-    def _get_issue_number(self):
-        """Returns the current CL number, or None if there is none."""
-        issue_number = self.git_cl().get_issue_number()
-        _log.debug('Issue number for current branch: %s', issue_number)
-        if not issue_number.isdigit():
-            _log.error('No CL number for current branch.')
-            return None
-        return int(issue_number)
-
-    def git_cl(self):
-        """Returns a GitCL instance; can be overridden for tests."""
-        return GitCL(self._tool)
-
-    def trigger_jobs_for_missing_builds(self, builds):
-        """Triggers try jobs for any builders that have no builds started.
-
-        Args:
-          builds: A list of Build objects; if the build number of a Build is None,
-              then that indicates that the job is pending.
-
-        Returns:
-            True if there are pending jobs to wait for, including jobs just started.
-        """
-        builders_with_builds = {b.builder_name for b in builds}
-        builders_without_builds = set(self._try_bots()) - builders_with_builds
-        builders_with_pending_builds = {b.builder_name for b in builds if b.build_number is None}
-
+        builders_with_pending_builds = self.builders_with_pending_builds(builds)
         if builders_with_pending_builds:
             _log.info('There are existing pending builds for:')
             for builder in sorted(builders_with_pending_builds):
                 _log.info('  %s', builder)
+        builders_with_no_results = self.builders_with_no_results(builds)
 
-        if builders_without_builds:
-            _log.info('Triggering try jobs for:')
-            command = ['try']
-            for builder in sorted(builders_without_builds):
-                _log.info('  %s', builder)
-                command.extend(['-b', builder])
-            self.git_cl().run(command)
+        if options.trigger_jobs and builders_with_no_results:
+            self.trigger_builds(builders_with_no_results)
+            _log.info('Please re-run webkit-patch rebaseline-cl once all pending try jobs have finished.')
+            return 1
 
-        return bool(builders_with_pending_builds or builders_without_builds)
+        if builders_with_no_results and not options.fill_missing:
+            _log.error('The following builders have no results:')
+            for builder in builders_with_no_results:
+                _log.error('  %s', builder)
+            return 1
+
+        _log.debug('Getting results for issue %d.', issue_number)
+        builds_to_results = self._fetch_results(builds)
+        if not options.fill_missing and len(builds_to_results) < len(builds):
+            return 1
+
+        test_baseline_set = TestBaselineSet(tool)
+        if args:
+            for test in args:
+                for build in builds:
+                    if not builds_to_results.get(build):
+                        continue
+                    test_baseline_set.add(test, build)
+        else:
+            test_baseline_set = self._make_test_baseline_set(
+                builds_to_results,
+                only_changed_tests=options.only_changed_tests)
+
+        if options.fill_missing:
+            self.fill_in_missing_results(test_baseline_set)
+
+        _log.debug('Rebaselining: %s', test_baseline_set)
+
+        if not options.dry_run:
+            self.rebaseline(options, test_baseline_set)
+        return 0
+
+    def _get_issue_number(self):
+        """Returns the current CL issue number, or None."""
+        issue = self.git_cl().get_issue_number()
+        if not issue.isdigit():
+            return None
+        return int(issue)
+
+    def git_cl(self):
+        """Returns a GitCL instance. Can be overridden for tests."""
+        return GitCL(self._tool)
+
+    def trigger_builds(self, builders):
+        _log.info('Triggering try jobs for:')
+        for builder in sorted(builders):
+            _log.info('  %s', builder)
+        self.git_cl().trigger_try_jobs(builders)
+
+    def builders_with_no_results(self, builds):
+        """Returns the set of builders that don't have finished results."""
+        builders_with_no_builds = set(self._try_bots()) - {b.builder_name for b in builds}
+        return builders_with_no_builds | self.builders_with_pending_builds(builds)
+
+    def builders_with_pending_builds(self, builds):
+        """Returns the set of builders that have pending builds."""
+        return {b.builder_name for b in builds if b.build_number is None}
 
     def _try_bots(self):
         """Returns a collection of try bot builders to fetch results for."""
         return self._tool.builders.all_try_builder_names()
 
     def _fetch_results(self, builds):
-        """Fetches results for each build.
+        """Fetches results for all of the given builds.
 
         There should be a one-to-one correspondence between Builds, supported
         platforms, and try bots. If not all of the builds can be fetched, then
         continuing with rebaselining may yield incorrect results, when the new
         baselines are deduped, an old baseline may be kept for the platform
         that's missing results.
+
+        Args:
+            builds: A list of Build objects.
 
         Returns:
             A dict mapping Build to LayoutTestResults, or None if any results
@@ -149,20 +160,20 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             results_url = buildbot.results_url(build.builder_name, build.build_number)
             layout_test_results = buildbot.fetch_results(build)
             if layout_test_results is None:
-                _log.error(
-                    'Failed to fetch results from "%s".\n'
-                    'Try starting a new job for %s by running :\n'
-                    '  git cl try -b %s',
-                    results_url, build.builder_name, build.builder_name)
-                return None
+                _log.info('Failed to fetch results for %s', build)
+                _log.info('Results URL: %s/results.html', results_url)
+                _log.info('Retry job by running: git cl try -b %s', build.builder_name)
+                continue
             results[build] = layout_test_results
         return results
 
-    def _test_prefix_list(self, issue_number, builds_to_results, only_changed_tests):
-        """Returns a collection of tests, builders and file extensions to get new baselines for.
+    def _make_test_baseline_set(self, builds_to_results, only_changed_tests):
+        """Returns a dict which lists the set of baselines to fetch.
+
+        The dict that is returned is a dict of tests to Build objects
+        to baseline file extensions.
 
         Args:
-            issue_number: The CL number of the change which needs new baselines.
             builds_to_results: A dict mapping Builds to LayoutTestResults.
             only_changed_tests: Whether to only include baselines for tests that
                are changed in this CL. If False, all new baselines for failing
@@ -176,23 +187,22 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             builds_to_tests[build] = self._tests_to_rebaseline(build, results)
         if only_changed_tests:
             files_in_cl = self._tool.git().changed_files(diff_filter='AM')
-            # Note, in the changed files list from Rietveld, paths always
-            # use / as the separator, and they're always relative to repo root.
+            # In the changed files list from Git, paths always use "/" as
+            # the path separator, and they're always relative to repo root.
             # TODO(qyearsley): Do this without using a hard-coded constant.
             test_base = 'third_party/WebKit/LayoutTests/'
             tests_in_cl = [f[len(test_base):] for f in files_in_cl if f.startswith(test_base)]
-        result = {}
+
+        test_baseline_set = TestBaselineSet(self._tool)
         for build, tests in builds_to_tests.iteritems():
             for test in tests:
                 if only_changed_tests and test not in tests_in_cl:
                     continue
-                if test not in result:
-                    result[test] = {}
-                result[test][build] = BASELINE_SUFFIX_LIST
-        return result
+                test_baseline_set.add(test, build)
+        return test_baseline_set
 
     def _tests_to_rebaseline(self, build, layout_test_results):
-        """Fetches a list of tests that should be rebaselined for some build ."""
+        """Fetches a list of tests that should be rebaselined for some build."""
         unexpected_results = layout_test_results.didnt_run_as_expected_results()
         tests = sorted(r.test_name() for r in unexpected_results
                        if r.is_missing_baseline() or r.has_mismatch_result())
@@ -205,7 +215,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         return tests
 
     def _fetch_tests_with_new_failures(self, build):
-        """Fetches a list of tests that failed with a patch in a given try job but not without."""
+        """For a given try job, lists tests that only occurred with the patch."""
         buildbot = self._tool.buildbot
         content = buildbot.fetch_retry_summary_json(build)
         if content is None:
@@ -217,14 +227,36 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             _log.warning('Unexpected retry summary content:\n%s', content)
             return None
 
-    @staticmethod
-    def _log_test_prefix_list(test_prefix_list):
-        """Logs the tests to download new baselines for."""
-        if not test_prefix_list:
-            _log.info('No tests to rebaseline; exiting.')
-            return
-        _log.debug('Tests to rebaseline:')
-        for test, builds in test_prefix_list.iteritems():
-            _log.debug('  %s:', test)
-            for build in sorted(builds):
-                _log.debug('    %s', build)
+    def fill_in_missing_results(self, test_baseline_set):
+        """Modifies test_baseline_set to guarantee that there are entries for
+        all ports for all tests to rebaseline.
+
+        For each test prefix, if there is an entry missing for some port,
+        then an entry should be added for that port using a build that is
+        available. For example, if there's no entry for the port "win-win7",
+        then an entry might be added for "win-win7" using a build on
+        a Win10 builder which does have results.
+        """
+        all_ports = {self._tool.builders.port_name_for_builder_name(b) for b in self._try_bots()}
+        for test_prefix in test_baseline_set.test_prefixes():
+            build_port_pairs = test_baseline_set.build_port_pairs(test_prefix)
+            missing_ports = all_ports - {p for _, p in build_port_pairs}
+            if not missing_ports:
+                continue
+            _log.info('For %s:', test_prefix)
+            for port in missing_ports:
+                build = self._choose_fill_in_build(port, build_port_pairs)
+                _log.info('Using %s to supply results for %s.', build, port)
+                test_baseline_set.add(test_prefix, build, port)
+        return test_baseline_set
+
+    def _choose_fill_in_build(self, _, build_port_pairs):
+        """Returns a Build to use to supply results for the given port.
+
+        Ideally, this should return a build for a similar port so that the
+        results from the selected build may also be correct for the target port.
+        """
+        # TODO(qyearsley): Decide what build to use for a given port
+        # in a more sophisticated way, such that a build with a
+        # "similar" port will be used when available.
+        return build_port_pairs[0][0]

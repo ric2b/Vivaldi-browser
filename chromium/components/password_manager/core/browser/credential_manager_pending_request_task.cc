@@ -11,6 +11,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
+#include "base/stl_util.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
@@ -95,15 +96,14 @@ void FilterDuplicatesAndEmptyUsername(
     bool* has_empty_username,
     bool* has_duplicates) {
   // Remove empty usernames from the list.
-  auto begin_empty =
-      std::remove_if(forms->begin(), forms->end(),
-                     [](const std::unique_ptr<autofill::PasswordForm>& form) {
-                       return form->username_value.empty();
-                     });
-  *has_empty_username = (begin_empty != forms->end());
-  forms->erase(begin_empty, forms->end());
+  size_t size_before = forms->size();
+  base::EraseIf(*forms,
+                [](const std::unique_ptr<autofill::PasswordForm>& form) {
+                  return form->username_value.empty();
+                });
+  *has_empty_username = (size_before != forms->size());
 
-  const size_t size_before = forms->size();
+  size_before = forms->size();
   FilterDuplicates(forms);
   *has_duplicates = (size_before != forms->size());
 }
@@ -131,11 +131,11 @@ CredentialManagerPendingRequestTask::~CredentialManagerPendingRequestTask() =
 
 void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
-  if (results.empty()) {
+  // localhost is a secure origin but not https.
+  if (results.empty() && origin_.SchemeIs(url::kHttpsScheme)) {
     // Try to migrate the HTTP passwords and process them later.
-    http_migrator_ = base::MakeUnique<HttpPasswordMigrator>(
-        origin_, HttpPasswordMigrator::MigrationMode::COPY,
-        delegate_->client()->GetPasswordStore(), this);
+    http_migrator_ = base::MakeUnique<HttpPasswordStoreMigrator>(
+        origin_, delegate_->client(), this);
     return;
   }
   ProcessForms(std::move(results));

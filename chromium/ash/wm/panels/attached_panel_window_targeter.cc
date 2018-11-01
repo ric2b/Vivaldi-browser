@@ -4,10 +4,10 @@
 
 #include "ash/wm/panels/attached_panel_window_targeter.h"
 
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wm/panels/panel_layout_manager.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "ash/shelf/wm_shelf.h"
+#include "ash/shell.h"
+#include "ash/wm/panels/panel_layout_manager.h"
+#include "ash/wm_window.h"
 #include "ui/aura/window.h"
 
 namespace ash {
@@ -23,11 +23,11 @@ AttachedPanelWindowTargeter::AttachedPanelWindowTargeter(
       panel_container_(container),
       panel_layout_manager_(panel_layout_manager),
       default_touch_extend_(default_touch_extend) {
-  WmShell::Get()->AddShellObserver(this);
+  Shell::Get()->AddShellObserver(this);
 }
 
 AttachedPanelWindowTargeter::~AttachedPanelWindowTargeter() {
-  WmShell::Get()->RemoveShellObserver(this);
+  Shell::Get()->RemoveShellObserver(this);
 }
 
 void AttachedPanelWindowTargeter::OnShelfCreatedForRootWindow(

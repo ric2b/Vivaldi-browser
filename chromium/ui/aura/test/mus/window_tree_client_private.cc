@@ -29,7 +29,8 @@ void WindowTreeClientPrivate::OnEmbed(ui::mojom::WindowTree* window_tree) {
   const int64_t display_id = 1;
   const Id focused_window_id = 0;
   tree_client_impl_->OnEmbedImpl(window_tree, 1, std::move(root_data),
-                                 display_id, focused_window_id, true);
+                                 display_id, focused_window_id, true,
+                                 cc::FrameSinkId(1, 1), base::nullopt);
 }
 
 WindowTreeHostMus* WindowTreeClientPrivate::CallWmNewDisplayAdded(
@@ -47,8 +48,9 @@ WindowTreeHostMus* WindowTreeClientPrivate::CallWmNewDisplayAdded(
     const display::Display& display,
     ui::mojom::WindowDataPtr root_data,
     bool parent_drawn) {
-  return tree_client_impl_->WmNewDisplayAddedImpl(display, std::move(root_data),
-                                                  parent_drawn);
+  return tree_client_impl_->WmNewDisplayAddedImpl(
+      display, std::move(root_data), parent_drawn, cc::FrameSinkId(1, 1),
+      base::nullopt);
 }
 
 void WindowTreeClientPrivate::CallOnWindowInputEvent(
@@ -60,6 +62,16 @@ void WindowTreeClientPrivate::CallOnWindowInputEvent(
   tree_client_impl_->OnWindowInputEvent(
       event_id, WindowPortMus::Get(window)->server_id(), display_id,
       std::move(event), observer_id);
+}
+
+void WindowTreeClientPrivate::CallOnPointerEventObserved(
+    Window* window,
+    std::unique_ptr<ui::Event> event) {
+  const int64_t display_id = 0;
+  const uint32_t window_id =
+      window ? WindowPortMus::Get(window)->server_id() : 0u;
+  tree_client_impl_->OnPointerEventObserved(std::move(event), window_id,
+                                            display_id);
 }
 
 void WindowTreeClientPrivate::CallOnCaptureChanged(Window* new_capture,

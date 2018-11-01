@@ -29,7 +29,7 @@ DistillerNativeJavaScript::~DistillerNativeJavaScript() {}
 
 void DistillerNativeJavaScript::AddJavaScriptObjectToFrame(
     v8::Local<v8::Context> context) {
-  v8::Isolate* isolate = blink::mainThreadIsolate();
+  v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   if (context.IsEmpty())
     return;
@@ -44,12 +44,6 @@ void DistillerNativeJavaScript::AddJavaScriptObjectToFrame(
   // Many functions can simply call the Mojo interface directly and have no
   // wrapper function for binding. Note that calling distiller_js_service.get()
   // does not transfer ownership of the interface.
-  BindFunctionToObject(
-      distiller_obj, "sendFeedback",
-      base::Bind(
-          &mojom::DistillerJavaScriptService::HandleDistillerFeedbackCall,
-          base::Unretained(distiller_js_service_.get())));
-
   BindFunctionToObject(
       distiller_obj, "closePanel",
       base::Bind(

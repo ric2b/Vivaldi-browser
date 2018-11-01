@@ -92,6 +92,43 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
   return PixelsMatchReference(ref_file, comparator);
 }
 
+bool PixelTest::RunPixelTest(RenderPassList* pass_list,
+                             std::vector<SkColor>* ref_pixels,
+                             const PixelComparator& comparator) {
+  base::RunLoop run_loop;
+  RenderPass* target = pass_list->back().get();
+
+  std::unique_ptr<CopyOutputRequest> request =
+      CopyOutputRequest::CreateBitmapRequest(
+          base::Bind(&PixelTest::ReadbackResult, base::Unretained(this),
+                     run_loop.QuitClosure()));
+  target->copy_requests.push_back(std::move(request));
+
+  if (software_renderer_) {
+    software_renderer_->SetDisablePictureQuadImageFiltering(
+        disable_picture_quad_image_filtering_);
+  }
+
+  renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
+  float device_scale_factor = 1.f;
+  renderer_->DrawFrame(pass_list, device_scale_factor, device_viewport_size_);
+
+  // Wait for the readback to complete.
+  if (output_surface_->context_provider())
+    output_surface_->context_provider()->ContextGL()->Finish();
+  run_loop.Run();
+
+  // Need to wrap |ref_pixels| in a SkBitmap.
+  DCHECK_EQ(ref_pixels->size(), static_cast<size_t>(result_bitmap_->width() *
+                                                    result_bitmap_->height()));
+  SkBitmap ref_pixels_bitmap;
+  ref_pixels_bitmap.installPixels(
+      SkImageInfo::MakeN32Premul(result_bitmap_->width(),
+                                 result_bitmap_->height()),
+      ref_pixels->data(), result_bitmap_->width() * sizeof(SkColor));
+  return comparator.Compare(*result_bitmap_, ref_pixels_bitmap);
+}
+
 void PixelTest::ReadbackResult(base::Closure quit_run_loop,
                                std::unique_ptr<CopyOutputResult> result) {
   ASSERT_TRUE(result->HasBitmap());
@@ -136,7 +173,7 @@ void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
       gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 1,
       delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
-      settings_.enable_color_correct_rendering,
+      settings_.enable_color_correct_rasterization,
       settings_.renderer_settings.buffer_to_texture_target_map);
 
   texture_mailbox_deleter_ = base::MakeUnique<TextureMailboxDeleter>(
@@ -164,7 +201,7 @@ void PixelTest::SetUpSoftwareRenderer() {
       nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
       main_thread_task_runner_.get(), 1, delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
-      settings_.enable_color_correct_rendering,
+      settings_.enable_color_correct_rasterization,
       settings_.renderer_settings.buffer_to_texture_target_map);
   auto renderer = base::MakeUnique<SoftwareRenderer>(
       &settings_.renderer_settings, output_surface_.get(),

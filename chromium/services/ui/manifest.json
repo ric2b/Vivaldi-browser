@@ -11,7 +11,6 @@
         "app": [
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "ui::mojom::Clipboard",
-          "ui::mojom::DisplayCompositor",
           "ui::mojom::DisplayManager",
           "ui::mojom::Gpu",
           "ui::mojom::IMEServer",
@@ -49,9 +48,9 @@
         "window_manager": [
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "display::mojom::DisplayController",
+          "display::mojom::NativeDisplayDelegate",
           "ui::mojom::AccessibilityManager",
           "ui::mojom::Clipboard",
-          "ui::mojom::DisplayCompositor",
           "ui::mojom::DisplayManager",
           "ui::mojom::Gpu",
           "ui::mojom::IMEServer",

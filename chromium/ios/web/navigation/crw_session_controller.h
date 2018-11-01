@@ -8,12 +8,10 @@
 #import <Foundation/Foundation.h>
 #include <vector>
 
-#include "ios/web/public/navigation_item_list.h"
+#import "ios/web/navigation/navigation_item_impl_list.h"
+#import "ios/web/public/navigation_manager.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
-
-@class CRWSessionEntry;
-@class CRWSessionCertificatePolicyManager;
 
 namespace web {
 class BrowserState;
@@ -29,23 +27,24 @@ struct Referrer;
 // DEPRECATED, do not use this class and do not add any methods to it.
 // Use web::NavigationManager instead.
 // TODO(crbug.com/454984): Remove this class.
-@interface CRWSessionController : NSObject<NSCopying>
+@interface CRWSessionController : NSObject
 
-@property(nonatomic, readonly, assign) NSInteger currentNavigationIndex;
-@property(nonatomic, readonly, assign) NSInteger previousNavigationIndex;
+@property(nonatomic, readonly, assign) NSInteger lastCommittedItemIndex;
+@property(nonatomic, readonly, assign) NSInteger previousItemIndex;
 // The index of the pending item if it is in |items|, or -1 if |pendingItem|
 // corresponds with a new navigation (created by addPendingItem:).
 @property(nonatomic, readwrite, assign) NSInteger pendingItemIndex;
-// Indicates whether the page was opened by DOM (e.g. with |window.open|
-// JavaScript call or by clicking a link with |_blank| target).
-@property(nonatomic, readonly, getter=isOpenedByDOM) BOOL openedByDOM;
-@property(nonatomic, readonly, strong)
-    CRWSessionCertificatePolicyManager* sessionCertificatePolicyManager;
 
-// The list of CRWSessionEntries in |_entries|'s NavigationItemImpls.
-@property(nonatomic, readonly) web::NavigationItemList items;
-// The number of elements in |self.items|.
-@property(nonatomic, readonly) NSUInteger itemCount;
+// Whether the CRWSessionController can prune all but the last committed item.
+// This is true when all the following conditions are met:
+// - There is a last committed NavigationItem
+// - There is not currently a pending history navigation
+// - There is no transient NavigationItem.
+@property(nonatomic, readonly) BOOL canPruneAllButLastCommittedItem;
+
+// The ScopedNavigationItemImplList used to store the NavigationItemImpls for
+// this session.
+@property(nonatomic, readonly) const web::ScopedNavigationItemImplList& items;
 // The current NavigationItem.  During a pending navigation, returns the
 // NavigationItem for that navigation.  If a transient NavigationItem exists,
 // this NavigationItem will be returned.
@@ -55,35 +54,20 @@ struct Referrer;
 // Returns the NavigationItem corresponding to a load for which no data has yet
 // been received.
 @property(nonatomic, readonly) web::NavigationItemImpl* pendingItem;
-// Returns the NavigationItem corresponding with a transient navigation (i.e.
-// SSL interstitials).
+// Returns the transient NavigationItem, if any.  The transient item will be
+// discarded on any navigation, and is used to represent interstitials in the
+// session history.
 @property(nonatomic, readonly) web::NavigationItemImpl* transientItem;
 // Returns the NavigationItem corresponding with the last committed load.
 @property(nonatomic, readonly) web::NavigationItemImpl* lastCommittedItem;
 // Returns the NavigationItem corresponding with the previously loaded page.
 @property(nonatomic, readonly) web::NavigationItemImpl* previousItem;
-// Returns most recent NavigationItem that is not a redirect. Returns nil if
-// |items| is empty.
-@property(nonatomic, readonly) web::NavigationItemImpl* lastUserItem;
 // Returns a list of all non-redirected NavigationItems whose index precedes
-// |currentNavigationIndex|.
+// |lastCommittedItemIndex|.
 @property(nonatomic, readonly) web::NavigationItemList backwardItems;
 // Returns a list of all non-redirected NavigationItems whose index follow
-// |currentNavigationIndex|.
+// |lastCommittedItemIndex|.
 @property(nonatomic, readonly) web::NavigationItemList forwardItems;
-
-// DEPRECATED: Don't add new usage of these properties.  Instead, use the
-// NavigationItem versions of these properties above.
-@property(nonatomic, readonly, strong) NSArray* entries;
-@property(nonatomic, readonly, strong) CRWSessionEntry* currentEntry;
-@property(nonatomic, readonly, strong) CRWSessionEntry* visibleEntry;
-@property(nonatomic, readonly, strong) CRWSessionEntry* pendingEntry;
-@property(nonatomic, readonly, strong) CRWSessionEntry* transientEntry;
-@property(nonatomic, readonly, strong) CRWSessionEntry* lastCommittedEntry;
-@property(nonatomic, readonly, strong) CRWSessionEntry* previousEntry;
-@property(nonatomic, readonly, strong) CRWSessionEntry* lastUserEntry;
-@property(nonatomic, readonly, weak) NSArray* backwardEntries;
-@property(nonatomic, readonly, weak) NSArray* forwardEntries;
 
 // CRWSessionController doesn't have public constructors. New
 // CRWSessionControllers are created by deserialization, or via a
@@ -94,14 +78,17 @@ struct Referrer;
 // Sets the corresponding BrowserState.
 - (void)setBrowserState:(web::BrowserState*)browserState;
 
-// Add a new item with the given url, referrer, and navigation type, making it
-// the current item. If pending item is the same as current item, this does
-// nothing. |referrer| may be nil if there isn't one. The item starts out as
-// pending, and will be lost unless |-commitPendingItem| is called.
+// Add a new item with the given url, referrer, navigation type and user agent
+// override option, making it the current item. If pending item is the same as
+// current item, this does nothing. |referrer| may be nil if there isn't one.
+// The item starts out as pending, and will be lost unless |-commitPendingItem|
+// is called.
 - (void)addPendingItem:(const GURL&)url
-              referrer:(const web::Referrer&)referrer
-            transition:(ui::PageTransition)type
-        initiationType:(web::NavigationInitiationType)initiationType;
+                   referrer:(const web::Referrer&)referrer
+                 transition:(ui::PageTransition)type
+             initiationType:(web::NavigationInitiationType)initiationType
+    userAgentOverrideOption:(web::NavigationManager::UserAgentOverrideOption)
+                                userAgentOverrideOption;
 
 // Updates the URL of the yet to be committed pending item. Useful for page
 // redirects. Does nothing if there is no pending item.
@@ -118,9 +105,9 @@ struct Referrer;
 // be made from outside and then handed in.
 - (void)addTransientItemWithURL:(const GURL&)URL;
 
-// Creates a new CRWSessionEntry with the given URL and state object. A state
+// Creates a new NavigationItem with the given URL and state object. A state
 // object is a serialized generic JavaScript object that contains details of the
-// UI's state for a given CRWSessionEntry/URL. The current item's URL is the
+// UI's state for a given NavigationItem/URL. The current item's URL is the
 // new item's referrer.
 - (void)pushNewItemWithURL:(const GURL&)URL
                stateObject:(NSString*)stateObject
@@ -133,13 +120,22 @@ struct Referrer;
 // Removes the pending and transient NavigationItems.
 - (void)discardNonCommittedItems;
 
-// Inserts history state from |otherController| to the front of |items|.  This
-// function transfers ownership of |otherController|'s NavigationItems to the
-// receiver.
-- (void)insertStateFromSessionController:(CRWSessionController*)otherController;
+// Removes all items from this except the last committed item, and inserts
+// copies of all items from |source| at the beginning of the session history.
+//
+// For example:
+// source: A B *C* D
+// this:   E F *G*
+// result: A B C *G*
+//
+// If there is a pending item after *G* in |this|, it is also preserved.
+// This ignores any pending or transient entries in |source|.  No-op if
+// |canPruneAllButLastCommittedItem| is false.
+- (void)copyStateFromSessionControllerAndPrune:(CRWSessionController*)source;
 
-// Sets |currentNavigationIndex_| to the |index| if it's in the entries bounds.
-- (void)goToItemAtIndex:(NSInteger)index;
+// Sets |lastCommittedItemIndex| to the |index| if it's in the entries bounds.
+// Discards pending and transient entries if |discard| is YES.
+- (void)goToItemAtIndex:(NSInteger)index discardNonCommittedItems:(BOOL)discard;
 
 // Removes the item at |index| after discarding any noncomitted entries.
 // |index| must not be the index of the last committed item, or a noncomitted

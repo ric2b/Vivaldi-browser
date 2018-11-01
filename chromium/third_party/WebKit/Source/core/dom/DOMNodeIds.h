@@ -8,7 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/Node.h"
 #include "core/dom/WeakIdentifierMap.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -18,8 +18,8 @@ class CORE_EXPORT DOMNodeIds {
   STATIC_ONLY(DOMNodeIds);
 
  public:
-  static int idForNode(Node*);
-  static Node* nodeForId(int id);
+  static int IdForNode(Node*);
+  static Node* NodeForId(int id);
 };
 
 }  // namespace blink

@@ -22,13 +22,20 @@ Dispatcher::DispatcherInTransit::DispatcherInTransit(
 
 Dispatcher::DispatcherInTransit::~DispatcherInTransit() {}
 
-MojoResult Dispatcher::Watch(MojoHandleSignals signals,
-                             const Watcher::WatchCallback& callback,
-                             uintptr_t context) {
+MojoResult Dispatcher::WatchDispatcher(scoped_refptr<Dispatcher> dispatcher,
+                                       MojoHandleSignals signals,
+                                       uintptr_t context) {
   return MOJO_RESULT_INVALID_ARGUMENT;
 }
 
 MojoResult Dispatcher::CancelWatch(uintptr_t context) {
+  return MOJO_RESULT_INVALID_ARGUMENT;
+}
+
+MojoResult Dispatcher::Arm(uint32_t* num_ready_contexts,
+                           uintptr_t* ready_contexts,
+                           MojoResult* ready_results,
+                           MojoHandleSignalsState* ready_signals_states) {
   return MOJO_RESULT_INVALID_ARGUMENT;
 }
 
@@ -115,16 +122,15 @@ HandleSignalsState Dispatcher::GetHandleSignalsState() const {
   return HandleSignalsState();
 }
 
-MojoResult Dispatcher::AddAwakable(Awakable* awakable,
-                                   MojoHandleSignals signals,
-                                   uintptr_t context,
-                                   HandleSignalsState* signals_state) {
+MojoResult Dispatcher::AddWatcherRef(
+    const scoped_refptr<WatcherDispatcher>& watcher,
+    uintptr_t context) {
   return MOJO_RESULT_INVALID_ARGUMENT;
 }
 
-void Dispatcher::RemoveAwakable(Awakable* awakable,
-                                HandleSignalsState* handle_signals_state) {
-  NOTREACHED();
+MojoResult Dispatcher::RemoveWatcherRef(WatcherDispatcher* watcher,
+                                        uintptr_t context) {
+  return MOJO_RESULT_INVALID_ARGUMENT;
 }
 
 void Dispatcher::StartSerialize(uint32_t* num_bytes,

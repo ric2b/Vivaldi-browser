@@ -38,6 +38,7 @@ static_library("utility") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
+    "//components/payments/content/utility",
     "//components/safe_json/utility",
     "//components/search_engines",
     "//components/strings",
@@ -51,8 +52,6 @@ static_library("utility") {
     "//media",
     "//net:net_with_v8",
     "//printing/features",
-    "//services/image_decoder:lib",
-    "//services/image_decoder/public/cpp",
     "//services/service_manager/public/cpp",
     "//skia",
     "//sql",
@@ -96,6 +95,7 @@ static_library("utility") {
       "//chrome/common:mojo_bindings",
       "//chrome/common/importer:interfaces",
       "//net:net_utility_services",
+      "//services/data_decoder:lib",
     ]
   }
 
@@ -177,5 +177,12 @@ static_library("utility") {
 
   if (is_mac && safe_browsing_mode == 1) {
     deps += [ "//chrome/utility/safe_browsing/mac" ]
+  }
+
+  if (enable_media_router && !is_android) {
+    sources += [
+      "media_router/dial_device_description_parser_impl.cc",
+      "media_router/dial_device_description_parser_impl.h",
+    ]
   }
 }

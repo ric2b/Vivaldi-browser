@@ -43,7 +43,7 @@ public class WebApkUpdateManagerTest extends ChromeTabbedActivityTestBase {
     private static final String WEBAPK_SHORT_NAME = "Manifest test app";
     private static final String WEBAPK_ICON_URL = "/chrome/test/data/banners/image-512px.png";
     private static final String WEBAPK_ICON_MURMUR2_HASH = "7742433188808797392";
-    private static final int WEBAPK_DISPLAY_MODE = WebDisplayMode.Standalone;
+    private static final int WEBAPK_DISPLAY_MODE = WebDisplayMode.kStandalone;
     private static final int WEBAPK_ORIENTATION = ScreenOrientationValues.LANDSCAPE;
     private static final long WEBAPK_THEME_COLOR = 2147483648L;
     private static final long WEBAPK_BACKGROUND_COLOR = 2147483648L;
@@ -153,12 +153,12 @@ public class WebApkUpdateManagerTest extends ChromeTabbedActivityTestBase {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                WebApkInfo info = WebApkInfo.create(WEBAPK_ID, "", creationData.scope, null,
-                        creationData.name, creationData.shortName, creationData.displayMode,
-                        creationData.orientation, 0, creationData.themeColor,
-                        creationData.backgroundColor, "", WebApkVersion.CURRENT_SHELL_APK_VERSION,
-                        creationData.manifestUrl, creationData.startUrl,
-                        creationData.iconUrlToMurmur2HashMap);
+                WebApkInfo info = WebApkInfo.create(WEBAPK_ID, "", false /* forceNavigation */,
+                        creationData.scope, null, creationData.name, creationData.shortName,
+                        creationData.displayMode, creationData.orientation, 0,
+                        creationData.themeColor, creationData.backgroundColor, "",
+                        WebApkVersion.CURRENT_SHELL_APK_VERSION, creationData.manifestUrl,
+                        creationData.startUrl, creationData.iconUrlToMurmur2HashMap);
                 updateManager.updateIfNeeded(mTab, info);
             }
         });

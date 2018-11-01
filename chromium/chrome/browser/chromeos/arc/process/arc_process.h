@@ -52,6 +52,9 @@ class ArcProcess {
   int64_t last_activity_time_;
   std::vector<std::string> packages_;
 
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const ArcProcess& arc_process);
+
   DISALLOW_COPY_AND_ASSIGN(ArcProcess);
 };
 

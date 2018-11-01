@@ -6,8 +6,6 @@
 
 #include "net/spdy/spdy_bug_tracker.h"
 
-using base::StringPiece;
-
 namespace net {
 
 int32_t FLAGS_gfe_spdy_indexing_set_bound = 50;
@@ -23,7 +21,7 @@ HeaderIndexing::HeaderIndexing()
 HeaderIndexing::~HeaderIndexing() {}
 
 void HeaderIndexing::CreateInitIndexingHeaders() {
-  const std::string initial_fields[] = {
+  const SpdyString initial_fields[] = {
       // Estimated top 100 fields.
       "alt-svc",
       "date",
@@ -134,13 +132,14 @@ void HeaderIndexing::CreateInitIndexingHeaders() {
       HeaderSet(initial_fields, initial_fields + arraysize(initial_fields));
 }
 
-bool HeaderIndexing::ShouldIndex(StringPiece header, StringPiece /* value */) {
+bool HeaderIndexing::ShouldIndex(SpdyStringPiece header,
+                                 SpdyStringPiece /* value */) {
   total_header_count_++;
   if (header.empty()) {
     return false;
   }
   // header is in indexing set.
-  std::string header_str(header.data(), header.size());
+  SpdyString header_str(header.data(), header.size());
   if (indexing_set_.find(header_str) != indexing_set_.end()) {
     return true;
   }
@@ -157,7 +156,7 @@ bool HeaderIndexing::ShouldIndex(StringPiece header, StringPiece /* value */) {
   return false;
 }
 
-void HeaderIndexing::TryInsertHeader(std::string&& header,
+void HeaderIndexing::TryInsertHeader(SpdyString&& header,
                                      HeaderSet* set,
                                      size_t bound) {
   std::pair<HeaderSet::iterator, bool> result = set->insert(std::move(header));

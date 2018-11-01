@@ -27,8 +27,9 @@
 
 namespace {
 
-const int kMaxContentWidth = 600;
-const int kMinColumnWidth = 120;
+constexpr int kMaxContentWidth = 600;
+constexpr int kMinColumnWidth = 120;
+constexpr int kTitleBottomSpacing = 13;
 
 }  // namespace
 
@@ -79,7 +80,7 @@ SadTabView::SadTabView(content::WebContents* web_contents,
   message_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   message_->SetLineHeight(views::kPanelSubVerticalSpacing);
 
-  layout->StartRowWithPadding(0, column_set_id, 0, views::kPanelVertMargin);
+  layout->StartRowWithPadding(0, column_set_id, 0, kTitleBottomSpacing);
   layout->AddView(message_, 2, 1, views::GridLayout::LEADING,
                   views::GridLayout::LEADING);
 

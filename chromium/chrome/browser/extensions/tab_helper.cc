@@ -22,7 +22,6 @@
 #include "chrome/browser/extensions/install_observer.h"
 #include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/extensions/install_tracker_factory.h"
-#include "chrome/browser/extensions/location_bar_controller.h"
 #include "chrome/browser/extensions/webstore_inline_installer.h"
 #include "chrome/browser/extensions/webstore_inline_installer_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -157,7 +156,6 @@ TabHelper::TabHelper(content::WebContents* web_contents)
       update_shortcut_on_load_complete_(false),
       script_executor_(
           new ScriptExecutor(web_contents, &script_execution_observers_)),
-      location_bar_controller_(new LocationBarController(web_contents)),
       extension_action_runner_(new ExtensionActionRunner(web_contents)),
       webstore_inline_installer_factory_(new WebstoreInlineInstallerFactory()),
       registry_observer_(this),
@@ -198,16 +196,6 @@ TabHelper::~TabHelper() {
   RemoveScriptExecutionObserver(ActivityLog::GetInstance(profile_));
 }
 
-void TabHelper::CreateApplicationShortcuts() {
-  DCHECK(CanCreateApplicationShortcuts());
-  if (pending_web_app_action_ != NONE)
-    return;
-
-  // Start fetching web app info for CreateApplicationShortcut dialog and show
-  // the dialog when the data is available in OnDidGetApplicationInfo.
-  GetApplicationInfo(CREATE_SHORTCUT);
-}
-
 void TabHelper::CreateHostedAppFromWebContents() {
   DCHECK(CanCreateBookmarkApp());
   if (pending_web_app_action_ != NONE)
@@ -216,14 +204,6 @@ void TabHelper::CreateHostedAppFromWebContents() {
   // Start fetching web app info for CreateApplicationShortcut dialog and show
   // the dialog when the data is available in OnDidGetApplicationInfo.
   GetApplicationInfo(CREATE_HOSTED_APP);
-}
-
-bool TabHelper::CanCreateApplicationShortcuts() const {
-#if defined(OS_MACOSX)
-  return false;
-#else
-  return web_app::IsValidUrl(web_contents()->GetURL());
-#endif
 }
 
 bool TabHelper::CanCreateBookmarkApp() const {
@@ -350,7 +330,7 @@ void TabHelper::DidFinishNavigation(
         enabled_extensions.GetExtensionOrAppByURL(navigation_handle->GetURL()));
   }
 
-  if (!navigation_handle->IsSamePage())
+  if (!navigation_handle->IsSameDocument())
     ExtensionActionAPI::Get(context)->ClearAllValuesForTab(web_contents());
 }
 
@@ -403,14 +383,6 @@ void TabHelper::OnDidGetWebApplicationInfo(const WebApplicationInfo& info) {
   last_committed_nav_entry_unique_id_ = 0;
 
   switch (pending_web_app_action_) {
-#if !defined(OS_MACOSX)
-    case CREATE_SHORTCUT: {
-      chrome::ShowCreateWebAppShortcutsDialog(
-          web_contents()->GetTopLevelNativeWindow(),
-          web_contents());
-      break;
-    }
-#endif
     case CREATE_HOSTED_APP: {
       if (web_app_info_.app_url.is_empty())
         web_app_info_.app_url = web_contents()->GetURL();

@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
 <translation id="1018656279737460067">Cancelled</translation>
+<translation id="1030173864176315846">Successfully printed <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="1049795001945932310">&amp;Language settings</translation>
 <translation id="1056898198331236512">Warning</translation>
 <translation id="1084824384139382525">Copy link addr&amp;ess</translation>
@@ -12,6 +13,7 @@
 <translation id="1181037720776840403">Remove</translation>
 <translation id="1187722533808055681">Idle wake ups</translation>
 <translation id="119944043368869598">Clear all</translation>
+<translation id="1218323606465324064">Now printing <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="1244303850296295656">Extension error</translation>
 <translation id="1368832886055348810">Left to Right</translation>
 <translation id="1546280085599573572">This extension has changed the page that is shown when you click the Home button.</translation>
@@ -29,8 +31,10 @@
 <translation id="1992397118740194946">Not set</translation>
 <translation id="2076269580855484719">Hide this plug-in</translation>
 <translation id="2087822576218954668">Print: <ph name="PRINT_NAME" /></translation>
+<translation id="2115291620696624944">Error printing <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Update plug-in</translation>
 <translation id="2147827593068025794">Background Sync</translation>
+<translation id="2148892889047469596">Cast tab</translation>
 <translation id="215753907730220065">Exit Full Screen</translation>
 <translation id="2177950615300672361">Incognito Tab: <ph name="TAB_NAME" /></translation>
 <translation id="2187317261103489799">Detect (default)</translation>
@@ -56,6 +60,7 @@
 <translation id="2678063897982469759">Re-enable</translation>
 <translation id="2785873697295365461">File descriptors</translation>
 <translation id="2809586584051668049">and <ph name="NUMBER_ADDITIONAL_DISABLED" /> more</translation>
+<translation id="2847759467426165163">Cast to</translation>
 <translation id="2850541429955027218">Add theme</translation>
 <translation id="2861941300086904918">Native Client security manager</translation>
 <translation id="2868746137289129307">This extension is outdated and disabled by enterprise policy. It might become enabled automatically when a newer version is available.</translation>
@@ -63,6 +68,7 @@
 <translation id="2941112035454246133">Low</translation>
 <translation id="2972581237482394796">&amp;Redo</translation>
 <translation id="299483336428448530">Installed by your parent.</translation>
+<translation id="3031601332414921114">Resume printing</translation>
 <translation id="3080207940057008665">Another programme on your computer added a theme that may change the way Vivaldi works.</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER handles</translation>
@@ -92,6 +98,7 @@
 <translation id="3909791450649380159">Cu&amp;t</translation>
 <translation id="3927932062596804919">Deny</translation>
 <translation id="3936390757709632190">&amp;Open audio in new tab</translation>
+<translation id="3936999098172113189">Waiting to print <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Back</translation>
 <translation id="3979395879372752341">New extension added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -162,10 +169,12 @@
 <translation id="5956585768868398362">Is this the search page that you were expecting?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
 <translation id="5965661248935608907">It also controls what page is shown when you click the Home button or search from the Omnibox.</translation>
+<translation id="6040143037577758943">Close</translation>
 <translation id="6101226222197207147">New app added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Your Internet connection is being controlled</translation>
 <translation id="6124650939968185064">The following extensions depend on this extension:</translation>
 <translation id="6156863943908443225">Script cache</translation>
+<translation id="6171948306033499786">Pause printing</translation>
 <translation id="6196854373336333322">The extension "<ph name="EXTENSION_NAME" />" has taken control of your proxy settings, which means it can change, break or eavesdrop on anything you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
 <translation id="6239558157302047471">Reload &amp;frame</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -183,14 +192,17 @@
 <translation id="6550675742724504774">Options</translation>
 <translation id="6639554308659482635">SQLite memory</translation>
 <translation id="6691936601825168937">&amp;Forward</translation>
+<translation id="6700480081846086223">Cast <ph name="HOST_NAME" /></translation>
 <translation id="6786747875388722282">Extensions</translation>
 <translation id="6787839852456839824">Keyboard shortcuts</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Keep changes</translation>
+<translation id="682123305478866682">Cast desktop</translation>
 <translation id="6863910145616405334">Plug-in not found</translation>
 <translation id="6886871292305414135">Open link in new &amp;tab</translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revoke file access</translation>
+<translation id="6943176775188458830">Cancel printing</translation>
 <translation id="6974053822202609517">Right to Left</translation>
 <translation id="7013485839273047434">Get more extensions</translation>
 <translation id="708060913198414444">C&amp;opy audio address</translation>
@@ -210,6 +222,7 @@
 <translation id="7663719505383602579">Receiver: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">JavaScript memory</translation>
 <translation id="7704305437604973648">Task</translation>
+<translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7760004034676677601">Is this the start-up page that you were expecting?</translation>
 <translation id="7791543448312431591">Add</translation>
 <translation id="7818135753970109980">New theme added (<ph name="EXTENSION_NAME" />)</translation>
@@ -245,6 +258,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8763204422633679667">When <ph name="PLUGIN_NAME" /> finishes installing, reload the page to activate it</translation>
 <translation id="8798099450830957504">Default</translation>
 <translation id="8808478386290700967">Web Store</translation>
+<translation id="8845001906332463065">Get help</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Open link in new &amp;window</translation>
 <translation id="8916476537757519021">Incognito Subframe: <ph name="SUBFRAME_SITE" /></translation>

@@ -85,7 +85,7 @@
 #endif  // OS_WIN
 
 #if defined(USE_OZONE)
-#include "ui/ozone/public/native_pixmap.h"
+#include "ui/gfx/native_pixmap.h"
 #include "ui/ozone/public/ozone_gpu_test_helper.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
@@ -143,6 +143,10 @@ bool g_test_import = false;
 // working directory.
 base::FilePath g_test_file_path;
 
+// The location to output bad thumbnail image. If empty or invalid, fallback to
+// the original location.
+base::FilePath g_thumbnail_output_dir;
+
 // Environment to store rendering thread.
 class VideoDecodeAcceleratorTestEnvironment;
 VideoDecodeAcceleratorTestEnvironment* g_env;
@@ -150,6 +154,8 @@ VideoDecodeAcceleratorTestEnvironment* g_env;
 // Magic constants for differentiating the reasons for NotifyResetDone being
 // called.
 enum ResetPoint {
+  // Reset() right after calling Flush() (before getting NotifyFlushDone()).
+  RESET_BEFORE_NOTIFY_FLUSH_DONE = -5,
   // Reset() just after calling Decode() with a fragment containing config info.
   RESET_AFTER_FIRST_CONFIG_INFO = -4,
   START_OF_STREAM_RESET = -3,
@@ -197,7 +203,14 @@ const int kMD5StringLength = 32;
 base::FilePath GetTestDataFile(const base::FilePath& input_file) {
   if (input_file.IsAbsolute())
     return input_file;
-  return base::MakeAbsoluteFilePath(g_test_file_path.Append(input_file));
+  // input_file needs to be existed, otherwise base::MakeAbsoluteFilePath will
+  // return an empty base::FilePath.
+  base::FilePath abs_path =
+      base::MakeAbsoluteFilePath(g_test_file_path.Append(input_file));
+  LOG_IF(ERROR, abs_path.empty())
+      << g_test_file_path.Append(input_file).value().c_str()
+      << " is not an existing path.";
+  return abs_path;
 }
 
 // Read in golden MD5s for the thumbnailed rendering of this video
@@ -325,7 +338,7 @@ class TextureRef : public base::RefCounted<TextureRef> {
   uint32_t texture_id_;
   base::Closure no_longer_needed_cb_;
 #if defined(USE_OZONE)
-  scoped_refptr<ui::NativePixmap> pixmap_;
+  scoped_refptr<gfx::NativePixmap> pixmap_;
 #endif
 };
 
@@ -387,7 +400,7 @@ gfx::GpuMemoryBufferHandle TextureRef::ExportGpuMemoryBufferHandle() const {
   CHECK(pixmap_);
   int duped_fd = HANDLE_EINTR(dup(pixmap_->GetDmaBufFd(0)));
   LOG_ASSERT(duped_fd != -1) << "Failed duplicating dmabuf fd";
-  handle.type = gfx::OZONE_NATIVE_PIXMAP;
+  handle.type = gfx::NATIVE_PIXMAP;
   handle.native_pixmap_handle.fds.emplace_back(
       base::FileDescriptor(duped_fd, true));
   handle.native_pixmap_handle.planes.emplace_back(
@@ -476,6 +489,8 @@ class GLRenderingVDAClient
 
   // Delete the associated decoder helper.
   void DeleteDecoder();
+  // Reset the associated decoder after flushing.
+  void ResetDecoderAfterFlush();
 
   // Compute & return the first encoded bytes (including a start frame) to send
   // to the decoder, starting at |start_pos| and returning one fragment. Skips
@@ -807,6 +822,20 @@ void GLRenderingVDAClient::ReturnPicture(int32_t picture_buffer_id) {
   }
 }
 
+void GLRenderingVDAClient::ResetDecoderAfterFlush() {
+  --remaining_play_throughs_;
+  DCHECK_GE(remaining_play_throughs_, 0);
+  // SetState(CS_RESETTING) should be called before decoder_->Reset(), because
+  // VDA can call NotifyFlushDone() from Reset().
+  // TODO(johnylin): call SetState() before all decoder Flush() and Reset().
+  SetState(CS_RESETTING);
+  // It is necessary to check decoder deleted here because it is possible to
+  // delete decoder in SetState() in some cases.
+  if (decoder_deleted())
+    return;
+  decoder_->Reset();
+}
+
 void GLRenderingVDAClient::NotifyEndOfBitstreamBuffer(
     int32_t bitstream_buffer_id) {
   if (decoder_deleted())
@@ -824,6 +853,10 @@ void GLRenderingVDAClient::NotifyEndOfBitstreamBuffer(
     if (state_ != CS_FLUSHING) {
       decoder_->Flush();
       SetState(CS_FLUSHING);
+      if (reset_after_frame_num_ == RESET_BEFORE_NOTIFY_FLUSH_DONE) {
+        SetState(CS_FLUSHED);
+        ResetDecoderAfterFlush();
+      }
     }
   } else if (decode_calls_per_second_ == 0) {
     DecodeNextFragment();
@@ -834,13 +867,16 @@ void GLRenderingVDAClient::NotifyFlushDone() {
   if (decoder_deleted())
     return;
 
-  SetState(CS_FLUSHED);
-  --remaining_play_throughs_;
-  DCHECK_GE(remaining_play_throughs_, 0);
-  if (decoder_deleted())
+  if (reset_after_frame_num_ == RESET_BEFORE_NOTIFY_FLUSH_DONE) {
+    // In ResetBeforeNotifyFlushDone case client is not necessary to wait for
+    // NotifyFlushDone(). But if client gets here, it should be always before
+    // NotifyResetDone().
+    ASSERT_EQ(state_, CS_RESETTING);
     return;
-  decoder_->Reset();
-  SetState(CS_RESETTING);
+  }
+
+  SetState(CS_FLUSHED);
+  ResetDecoderAfterFlush();
 }
 
 void GLRenderingVDAClient::NotifyResetDone() {
@@ -1118,7 +1154,10 @@ class VideoDecodeAcceleratorTest : public ::testing::Test {
   void InitializeRenderingHelper(const RenderingHelperParams& helper_params);
   void CreateAndStartDecoder(GLRenderingVDAClient* client,
                              ClientStateNotification<ClientState>* note);
-  void WaitUntilDecodeFinish(ClientStateNotification<ClientState>* note);
+
+  // Wait until decode finishes and return the last state.
+  ClientState WaitUntilDecodeFinish(ClientStateNotification<ClientState>* note);
+
   void WaitUntilIdle();
   void OutputLogFile(const base::FilePath::CharType* log_path,
                      const std::string& content);
@@ -1132,6 +1171,12 @@ class VideoDecodeAcceleratorTest : public ::testing::Test {
   static void Delete(T item) {
     // |item| is cleared when the scope of this function is left.
   }
+  using NotesVector =
+      std::vector<std::unique_ptr<ClientStateNotification<ClientState>>>;
+  using ClientsVector = std::vector<std::unique_ptr<GLRenderingVDAClient>>;
+
+  NotesVector notes_;
+  ClientsVector clients_;
 
  private:
   // Required for Thread to work.  Not used otherwise.
@@ -1147,6 +1192,15 @@ void VideoDecodeAcceleratorTest::SetUp() {
 }
 
 void VideoDecodeAcceleratorTest::TearDown() {
+  // |clients_| must be deleted first because |clients_| use |notes_|.
+  g_env->GetRenderingTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&Delete<ClientsVector>, base::Passed(&clients_)));
+
+  g_env->GetRenderingTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&Delete<NotesVector>, base::Passed(&notes_)));
+
+  WaitUntilIdle();
+
   g_env->GetRenderingTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&Delete<TestFilesVector>, base::Passed(&test_video_files_)));
@@ -1250,12 +1304,15 @@ void VideoDecodeAcceleratorTest::CreateAndStartDecoder(
   ASSERT_EQ(note->Wait(), CS_DECODER_SET);
 }
 
-void VideoDecodeAcceleratorTest::WaitUntilDecodeFinish(
+ClientState VideoDecodeAcceleratorTest::WaitUntilDecodeFinish(
     ClientStateNotification<ClientState>* note) {
+  ClientState state = CS_DESTROYED;
   for (int i = 0; i < CS_MAX; i++) {
-    if (note->Wait() == CS_DESTROYED)
+    state = note->Wait();
+    if (state == CS_DESTROYED || state == CS_ERROR)
       break;
   }
+  return state;
 }
 
 void VideoDecodeAcceleratorTest::WaitUntilIdle() {
@@ -1289,30 +1346,7 @@ class VideoDecodeAcceleratorParamTest
     : public VideoDecodeAcceleratorTest,
       public ::testing::WithParamInterface<
           std::tuple<int, int, int, ResetPoint, ClientState, bool, bool>> {
- protected:
-  using NotesVector =
-      std::vector<std::unique_ptr<ClientStateNotification<ClientState>>>;
-  using ClientsVector = std::vector<std::unique_ptr<GLRenderingVDAClient>>;
-
-  void TearDown() override;
-
-  NotesVector notes_;
-  ClientsVector clients_;
 };
-
-void VideoDecodeAcceleratorParamTest::TearDown() {
-  // |clients_| must be deleted first because |clients_| use |notes_|.
-  g_env->GetRenderingTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&Delete<ClientsVector>, base::Passed(&clients_)));
-
-  g_env->GetRenderingTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&Delete<NotesVector>, base::Passed(&notes_)));
-
-  WaitUntilIdle();
-
-  // Do VideoDecodeAcceleratorTest clean-up after deleting clients and notes.
-  VideoDecodeAcceleratorTest::TearDown();
-}
 
 // Wait for |note| to report a state and if it's not |expected_state| then
 // assert |client| has deleted its decoder.
@@ -1463,7 +1497,10 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
       // could still be returned until resetting done.
       if (video_file->reset_after_frame_num > 0)
         EXPECT_GE(client->num_decoded_frames(), video_file->num_frames);
-      else
+      // In ResetBeforeNotifyFlushDone case the decoded frames may be less than
+      // the video frames because decoder is reset before flush done.
+      else if (video_file->reset_after_frame_num !=
+               RESET_BEFORE_NOTIFY_FLUSH_DONE)
         EXPECT_EQ(client->num_decoded_frames(), video_file->num_frames);
     }
     if (reset_point == END_OF_STREAM_RESET) {
@@ -1512,11 +1549,23 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
       LOG(ERROR) << "Unknown thumbnails MD5: " << md5_string;
 
       base::FilePath filepath(test_video_files_[0]->file_name);
+      if (!g_thumbnail_output_dir.empty() &&
+          base::DirectoryExists(g_thumbnail_output_dir)) {
+        // Write bad thumbnails image to where --thumbnail_output_dir assigned.
+        filepath = g_thumbnail_output_dir.Append(filepath.BaseName());
+      } else {
+        // Fallback to write to test data directory.
+        // Note: test data directory is not writable by vda_unittest while
+        //       running by autotest. It should assign its resultsdir as output
+        //       directory.
+        filepath = GetTestDataFile(filepath);
+      }
       filepath = filepath.AddExtension(FILE_PATH_LITERAL(".bad_thumbnails"));
       filepath = filepath.AddExtension(FILE_PATH_LITERAL(".png"));
-      int num_bytes =
-          base::WriteFile(GetTestDataFile(filepath),
-                          reinterpret_cast<char*>(&png[0]), png.size());
+      LOG(INFO) << "Write bad thumbnails image to: "
+                << filepath.value().c_str();
+      int num_bytes = base::WriteFile(
+          filepath, reinterpret_cast<char*>(&png[0]), png.size());
       EXPECT_EQ(num_bytes, static_cast<int>(png.size()));
     }
     EXPECT_NE(match, golden_md5s.end());
@@ -1562,6 +1611,18 @@ INSTANTIATE_TEST_CASE_P(
                                       1,
                                       1,
                                       RESET_AFTER_FIRST_CONFIG_INFO,
+                                      CS_RESET,
+                                      false,
+                                      false)));
+
+// Test Reset() immediately after Flush() and before NotifyFlushDone().
+INSTANTIATE_TEST_CASE_P(
+    ResetBeforeNotifyFlushDone,
+    VideoDecodeAcceleratorParamTest,
+    ::testing::Values(std::make_tuple(1,
+                                      1,
+                                      1,
+                                      RESET_BEFORE_NOTIFY_FLUSH_DONE,
                                       CS_RESET,
                                       false,
                                       false)));
@@ -1696,39 +1757,22 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 // Measure the median of the decode time when VDA::Decode is called 30 times per
 // second.
 TEST_F(VideoDecodeAcceleratorTest, TestDecodeTimeMedian) {
+  notes_.push_back(base::MakeUnique<ClientStateNotification<ClientState>>());
+  clients_.push_back(base::MakeUnique<GLRenderingVDAClient>(
+      0, &rendering_helper_, notes_[0].get(), test_video_files_[0]->data_str, 1,
+      1, test_video_files_[0]->reset_after_frame_num, CS_RESET,
+      test_video_files_[0]->width, test_video_files_[0]->height,
+      test_video_files_[0]->profile, g_fake_decoder, true,
+      std::numeric_limits<int>::max(), kWebRtcDecodeCallsPerSecond, false));
   RenderingHelperParams helper_params;
-
-  // Disable rendering by setting the rendering_fps = 0.
-  helper_params.rendering_fps = 0;
-  helper_params.warm_up_iterations = 0;
-  helper_params.render_as_thumbnails = false;
-
-  ClientStateNotification<ClientState>* note =
-      new ClientStateNotification<ClientState>();
-  GLRenderingVDAClient* client =
-    new GLRenderingVDAClient(0,
-                             &rendering_helper_,
-                             note,
-                             test_video_files_[0]->data_str,
-                             1,
-                             1,
-                             test_video_files_[0]->reset_after_frame_num,
-                             CS_RESET,
-                             test_video_files_[0]->width,
-                             test_video_files_[0]->height,
-                             test_video_files_[0]->profile,
-                             g_fake_decoder,
-                             true,
-                             std::numeric_limits<int>::max(),
-                             kWebRtcDecodeCallsPerSecond,
-                             false /* render_as_thumbnail */);
   helper_params.window_sizes.push_back(
       gfx::Size(test_video_files_[0]->width, test_video_files_[0]->height));
   InitializeRenderingHelper(helper_params);
-  CreateAndStartDecoder(client, note);
-  WaitUntilDecodeFinish(note);
+  CreateAndStartDecoder(clients_[0].get(), notes_[0].get());
+  ClientState last_state = WaitUntilDecodeFinish(notes_[0].get());
+  EXPECT_NE(CS_ERROR, last_state);
 
-  base::TimeDelta decode_time_median = client->decode_time_median();
+  base::TimeDelta decode_time_median = clients_[0]->decode_time_median();
   std::string output_string =
       base::StringPrintf("Decode time median: %" PRId64 " us",
                          decode_time_median.InMicroseconds());
@@ -1736,10 +1780,25 @@ TEST_F(VideoDecodeAcceleratorTest, TestDecodeTimeMedian) {
 
   if (g_output_log != NULL)
     OutputLogFile(g_output_log, output_string);
+};
 
-  g_env->GetRenderingTaskRunner()->DeleteSoon(FROM_HERE, client);
-  g_env->GetRenderingTaskRunner()->DeleteSoon(FROM_HERE, note);
-  WaitUntilIdle();
+// This test passes as long as there is no crash. If VDA notifies an error, it
+// is not considered as a failure because the input may be unsupported or
+// corrupted videos.
+TEST_F(VideoDecodeAcceleratorTest, NoCrash) {
+  notes_.push_back(base::MakeUnique<ClientStateNotification<ClientState>>());
+  clients_.push_back(base::MakeUnique<GLRenderingVDAClient>(
+      0, &rendering_helper_, notes_[0].get(), test_video_files_[0]->data_str, 1,
+      1, test_video_files_[0]->reset_after_frame_num, CS_RESET,
+      test_video_files_[0]->width, test_video_files_[0]->height,
+      test_video_files_[0]->profile, g_fake_decoder, true,
+      std::numeric_limits<int>::max(), 0, false));
+  RenderingHelperParams helper_params;
+  helper_params.window_sizes.push_back(
+      gfx::Size(test_video_files_[0]->width, test_video_files_[0]->height));
+  InitializeRenderingHelper(helper_params);
+  CreateAndStartDecoder(clients_[0].get(), notes_[0].get());
+  WaitUntilDecodeFinish(notes_[0].get());
 };
 
 // TODO(fischman, vrk): add more tests!  In particular:
@@ -1847,6 +1906,9 @@ int main(int argc, char** argv) {
     if (it->first == "use-test-data-path") {
       media::g_test_file_path = media::GetTestDataFilePath("");
       continue;
+    }
+    if (it->first == "thumbnail_output_dir") {
+      media::g_thumbnail_output_dir = base::FilePath(it->second.c_str());
     }
   }
 

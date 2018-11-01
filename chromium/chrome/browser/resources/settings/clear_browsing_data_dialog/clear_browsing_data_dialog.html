@@ -18,12 +18,6 @@
         visibility: hidden;
       }
 
-      #dialog .button-container {
-        border-top: 1px solid rgba(0, 0, 0, 0.14);
-        margin-top: 0;
-        padding-top: 10px;
-      }
-
       #dialog .footer {
         color: var(--paper-grey-600);
       }
@@ -38,6 +32,13 @@
         -webkit-margin-end: 16px;
         margin-bottom: auto;
         margin-top: auto;
+      }
+
+      settings-checkbox {
+        --settings-row-two-line-min-height: 48px;
+        --settings-checkbox-label: {
+          line-height: 1.25rem;
+        };
       }
 
       #generalFooter {
@@ -89,22 +90,23 @@
        * Replace the bottom margin with padding to avoid the gap between
        * the scrollbar and the bottom separator. */
       @media all and (max-height: 724px) {
-        #dialog .body {
-          margin-bottom: 0;
+        #dialog {
           /* crbug.com/652027: Show four and a *half* items in the list. */
-          max-height: 280px;
-          overflow-y: scroll;
-          padding-bottom: 12px;
+          --cr-dialog-body-container: {
+            max-height: 280px; 
+          };
         }
       }
     </style>
 
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}" ignore-popstate>
+    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}"
+        show-scroll-borders ignore-popstate>
       <div class="title">$i18n{clearBrowsingData}</div>
       <div class="body">
         <div class="row">
           $i18n{clearFollowingItemsFrom}
           <settings-dropdown-menu id="clearFrom"
+              label="$i18n{clearFollowingItemsFrom}"
               pref="{{prefs.browser.clear_data.time_period}}"
               menu-options="[[clearFromOptions_]]">
           </settings-dropdown-menu>

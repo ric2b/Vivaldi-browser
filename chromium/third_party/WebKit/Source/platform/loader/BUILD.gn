@@ -19,6 +19,8 @@ source_set("loader") {
   visibility = [ "//third_party/WebKit/Source/platform" ]
 
   sources = [
+    "LinkHeader.cpp",
+    "LinkHeader.h",
     "fetch/AccessControlStatus.h",
     "fetch/CachedMetadata.cpp",
     "fetch/CachedMetadata.h",
@@ -30,8 +32,8 @@ source_set("loader") {
     "fetch/FetchContext.cpp",
     "fetch/FetchContext.h",
     "fetch/FetchInitiatorInfo.h",
-    "fetch/FetchRequest.cpp",
-    "fetch/FetchRequest.h",
+    "fetch/FetchParameters.cpp",
+    "fetch/FetchParameters.h",
     "fetch/FetchUtils.cpp",
     "fetch/FetchUtils.h",
     "fetch/IntegrityMetadata.cpp",
@@ -44,13 +46,26 @@ source_set("loader") {
     "fetch/Resource.h",
     "fetch/ResourceClient.h",
     "fetch/ResourceClientWalker.h",
+    "fetch/ResourceError.cpp",
+    "fetch/ResourceError.h",
     "fetch/ResourceFetcher.cpp",
     "fetch/ResourceFetcher.h",
+    "fetch/ResourceLoadInfo.h",
+    "fetch/ResourceLoadPriority.h",
+    "fetch/ResourceLoadTiming.cpp",
+    "fetch/ResourceLoadTiming.h",
     "fetch/ResourceLoader.cpp",
     "fetch/ResourceLoader.h",
     "fetch/ResourceLoaderOptions.h",
     "fetch/ResourceLoadingLog.h",
+    "fetch/ResourceOwner.h",
+    "fetch/ResourceRequest.cpp",
+    "fetch/ResourceRequest.h",
+    "fetch/ResourceResponse.cpp",
+    "fetch/ResourceResponse.h",
     "fetch/ResourceStatus.h",
+    "fetch/ResourceTimingInfo.cpp",
+    "fetch/ResourceTimingInfo.h",
     "fetch/SubstituteData.h",
     "fetch/UniqueIdentifier.cpp",
     "fetch/UniqueIdentifier.h",
@@ -72,12 +87,79 @@ source_set("loader") {
 
   deps = [
     ":make_platform_loader_generated_fetch_initiator_type_names",
+    "//components/link_header_util:link_header_util",
   ]
 
   public_deps = [
     "//base",
+    "//net",
     "//skia",
     "//third_party/icu",
     "//v8",
+  ]
+}
+
+source_set("unit_tests") {
+  # This target defines test files for blink_platform_unittests and only the
+  # blink_platform_unittests target should depend on it.
+  visibility = [ "//third_party/WebKit/Source/platform:*" ]
+  testonly = true
+
+  # Source files for blink_platform_unittests.
+  sources = [
+    "LinkHeaderTest.cpp",
+    "fetch/ClientHintsPreferencesTest.cpp",
+    "fetch/CrossOriginAccessControlTest.cpp",
+    "fetch/FetchUtilsTest.cpp",
+    "fetch/MemoryCacheCorrectnessTest.cpp",
+    "fetch/MemoryCacheTest.cpp",
+    "fetch/RawResourceTest.cpp",
+    "fetch/ResourceFetcherTest.cpp",
+    "fetch/ResourceLoaderOptionsTest.cpp",
+    "fetch/ResourceRequestTest.cpp",
+    "fetch/ResourceTest.cpp",
+  ]
+
+  defines = [ "INSIDE_BLINK" ]
+
+  configs += [
+    "//third_party/WebKit/Source/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  deps = [
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/WebKit/Source/platform",
+  ]
+}
+
+source_set("test_support") {
+  # This target defines test files for platform:test_support that
+  # blink_platform_unittests and webkit_unit_tests can use.
+  visibility = [ "//third_party/WebKit/Source/platform:test_support" ]
+  testonly = true
+
+  # Source files that can be called from blink_platform_unittests and
+  # webkit_unit_tests.
+  sources = [
+    "testing/FetchTestingPlatformSupport.cpp",
+    "testing/FetchTestingPlatformSupport.h",
+    "testing/MockFetchContext.h",
+    "testing/MockResource.cpp",
+    "testing/MockResource.h",
+    "testing/MockResourceClient.cpp",
+    "testing/MockResourceClient.h",
+  ]
+
+  defines = [ "INSIDE_BLINK" ]
+
+  configs += [
+    "//third_party/WebKit/Source/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  deps = [
+    "//third_party/WebKit/Source/platform",
   ]
 }

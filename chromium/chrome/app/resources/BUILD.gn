@@ -6,9 +6,10 @@ import("//build/config/chrome_build.gni")
 import("//chrome/common/features.gni")
 import("//tools/grit/grit_rule.gni")
 
+assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
+
 grit("locale_settings") {
   source = "locale_settings.grd"
-  use_qualified_include = true
   defines = chrome_grit_defines
   output_dir = "$root_gen_dir/chrome"
   outputs = [
@@ -73,7 +74,7 @@ grit("locale_settings") {
 grit("platform_locale_settings") {
   if (is_win) {
     source = "locale_settings_win.grd"
-  } else if (is_mac || is_ios) {
+  } else if (is_mac) {
     source = "locale_settings_mac.grd"
   } else if (is_chromeos) {
     if (is_chrome_branded) {
@@ -87,7 +88,6 @@ grit("platform_locale_settings") {
   }
 
   defines = chrome_grit_defines
-  use_qualified_include = true
   outputs = [
     "grit/platform_locale_settings.h",
     "platform_locale_settings_am.pak",

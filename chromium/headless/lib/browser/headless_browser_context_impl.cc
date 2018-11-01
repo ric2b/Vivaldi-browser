@@ -15,12 +15,15 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "headless/grit/headless_lib_resources.h"
 #include "headless/lib/browser/headless_browser_context_options.h"
 #include "headless/lib/browser/headless_browser_impl.h"
+#include "headless/lib/browser/headless_permission_manager.h"
 #include "headless/lib/browser/headless_url_request_context_getter.h"
 #include "headless/public/util/black_hole_protocol_handler.h"
 #include "headless/public/util/in_memory_protocol_handler.h"
 #include "net/url_request/url_request_context.h"
+#include "ui/base/resource/resource_bundle.h"
 
 namespace headless {
 
@@ -83,6 +86,7 @@ HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
     : browser_(browser),
       context_options_(std::move(context_options)),
       resource_context_(new HeadlessResourceContext),
+      permission_manager_(new HeadlessPermissionManager()),
       id_(base::GenerateGUID()) {
   InitWhileIOAllowed();
 }
@@ -199,7 +203,9 @@ HeadlessBrowserContextImpl::GetSSLHostStateDelegate() {
 }
 
 content::PermissionManager* HeadlessBrowserContextImpl::GetPermissionManager() {
-  return nullptr;
+  if (!permission_manager_.get())
+    permission_manager_.reset(new HeadlessPermissionManager());
+  return permission_manager_.get();
 }
 
 content::BackgroundSyncController*
@@ -313,12 +319,6 @@ HeadlessBrowserContext::Builder::SetProtocolHandlers(
   return *this;
 }
 
-HeadlessBrowserContext::Builder& HeadlessBrowserContext::Builder::SetUserAgent(
-    const std::string& user_agent) {
-  options_->user_agent_ = user_agent;
-  return *this;
-}
-
 HeadlessBrowserContext::Builder&
 HeadlessBrowserContext::Builder::SetProductNameAndVersion(
     const std::string& product_name_and_version) {
@@ -364,6 +364,16 @@ HeadlessBrowserContext::Builder::AddJsMojoBindings(
     const std::string& mojom_name,
     const std::string& js_bindings) {
   mojo_bindings_.emplace_back(mojom_name, js_bindings);
+  return *this;
+}
+
+HeadlessBrowserContext::Builder&
+HeadlessBrowserContext::Builder::AddTabSocketMojoBindings() {
+  std::string js_bindings =
+      ui::ResourceBundle::GetSharedInstance()
+          .GetRawDataResource(IDR_HEADLESS_TAB_SOCKET_MOJOM_JS)
+          .as_string();
+  mojo_bindings_.emplace_back("headless/lib/tab_socket.mojom", js_bindings);
   return *this;
 }
 

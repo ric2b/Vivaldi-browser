@@ -58,8 +58,8 @@ class UpdateNotifierWindow::WindowClass {
   DISALLOW_COPY_AND_ASSIGN(WindowClass);
 };
 
-static base::LazyInstance<UpdateNotifierWindow::WindowClass> g_window_class =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<UpdateNotifierWindow::WindowClass>::DestructorAtExit
+    g_window_class = LAZY_INSTANCE_INITIALIZER;
 
 UpdateNotifierWindow::WindowClass::WindowClass()
     : atom_(0), instance_(CURRENT_MODULE()) {
@@ -167,6 +167,8 @@ void UpdateNotifierWindow::RemoveNotification() {
   notify_icon.hWnd = hwnd_;
   notify_icon.uID = kNotificationUid;
   Shell_NotifyIcon(NIM_DELETE, &notify_icon);
+
+  is_showing_notification_ = false;
 }
 
 // static
@@ -227,7 +229,7 @@ bool UpdateNotifierWindow::HandleMessage(UINT message,
 
       UINT message = LOWORD(lparam);
       switch (message) {
-        case WM_LBUTTONDBLCLK:
+        case WM_LBUTTONUP:
         case NIN_BALLOONUSERCLICK: {
           UpdateNotifierManager::GetInstance()->TriggerUpdate();
           RemoveNotification();

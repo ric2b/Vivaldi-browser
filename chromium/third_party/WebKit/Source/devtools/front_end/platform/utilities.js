@@ -164,6 +164,12 @@ String.prototype.trimMiddle = function(maxLength) {
     return String(this);
   var leftHalf = maxLength >> 1;
   var rightHalf = maxLength - leftHalf - 1;
+  if (this.codePointAt(this.length - rightHalf - 1) >= 0x10000) {
+    --rightHalf;
+    ++leftHalf;
+  }
+  if (leftHalf > 0 && this.codePointAt(leftHalf - 1) >= 0x10000)
+    --leftHalf;
   return this.substr(0, leftHalf) + '\u2026' + this.substr(this.length - rightHalf, rightHalf);
 };
 
@@ -1207,12 +1213,14 @@ Multimap.prototype = {
   /**
    * @param {K} key
    * @param {V} value
+   * @return {boolean}
    */
   remove: function(key, value) {
     var values = this.get(key);
-    values.delete(value);
+    var result = values.delete(value);
     if (!values.size)
       this._map.delete(key);
+    return result;
   },
 
   /**

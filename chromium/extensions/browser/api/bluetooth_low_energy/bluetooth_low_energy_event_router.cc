@@ -638,8 +638,9 @@ void BluetoothLowEnergyEventRouter::ReadCharacteristicValue(
   }
 
   characteristic->ReadRemoteCharacteristic(
-      base::Bind(&BluetoothLowEnergyEventRouter::OnValueSuccess,
-                 weak_ptr_factory_.GetWeakPtr(), callback),
+      base::Bind(
+          &BluetoothLowEnergyEventRouter::OnReadRemoteCharacteristicSuccess,
+          weak_ptr_factory_.GetWeakPtr(), instance_id, callback),
       base::Bind(&BluetoothLowEnergyEventRouter::OnError,
                  weak_ptr_factory_.GetWeakPtr(), error_callback));
 }
@@ -800,7 +801,7 @@ void BluetoothLowEnergyEventRouter::ReadDescriptorValue(
   }
 
   descriptor->ReadRemoteDescriptor(
-      base::Bind(&BluetoothLowEnergyEventRouter::OnValueSuccess,
+      base::Bind(&BluetoothLowEnergyEventRouter::OnReadRemoteDescriptorSuccess,
                  weak_ptr_factory_.GetWeakPtr(), callback),
       base::Bind(&BluetoothLowEnergyEventRouter::OnError,
                  weak_ptr_factory_.GetWeakPtr(), error_callback));
@@ -1597,10 +1598,23 @@ BluetoothLowEnergyEventRouter::FindDescriptorById(
   return descriptor;
 }
 
-void BluetoothLowEnergyEventRouter::OnValueSuccess(
+void BluetoothLowEnergyEventRouter::OnReadRemoteCharacteristicSuccess(
+    const std::string& characteristic_instance_id,
     const base::Closure& callback,
     const std::vector<uint8_t>& value) {
-  VLOG(2) << "Remote characteristic/descriptor value read successful.";
+  VLOG(2) << "Remote characteristic value read successful.";
+
+  BluetoothRemoteGattCharacteristic* characteristic =
+      FindCharacteristicById(characteristic_instance_id);
+
+  GattCharacteristicValueChanged(adapter_.get(), characteristic, value);
+  callback.Run();
+}
+
+void BluetoothLowEnergyEventRouter::OnReadRemoteDescriptorSuccess(
+    const base::Closure& callback,
+    const std::vector<uint8_t>& value) {
+  VLOG(2) << "Remote descriptor value read successful.";
   callback.Run();
 }
 
@@ -1669,9 +1683,6 @@ void BluetoothLowEnergyEventRouter::OnConnectError(
   connecting_devices_.erase(connect_id);
   Status error_status = kStatusErrorFailed;
   switch (error_code) {
-    case BluetoothDevice::ERROR_ATTRIBUTE_LENGTH_INVALID:
-      error_status = kStatusErrorAttributeLengthInvalid;
-      break;
     case BluetoothDevice::ERROR_AUTH_CANCELED:
       error_status = kStatusErrorCanceled;
       break;
@@ -1684,35 +1695,17 @@ void BluetoothLowEnergyEventRouter::OnConnectError(
     case BluetoothDevice::ERROR_AUTH_TIMEOUT:
       error_status = kStatusErrorTimeout;
       break;
-    case BluetoothDevice::ERROR_CONNECTION_CONGESTED:
-      error_status = kStatusErrorConnectionCongested;
-      break;
     case BluetoothDevice::ERROR_FAILED:
       error_status = kStatusErrorFailed;
       break;
     case BluetoothDevice::ERROR_INPROGRESS:
       error_status = kStatusErrorInProgress;
       break;
-    case BluetoothDevice::ERROR_INSUFFICIENT_ENCRYPTION:
-      error_status = kStatusErrorInsufficientEncryption;
-      break;
-    case BluetoothDevice::ERROR_OFFSET_INVALID:
-      error_status = kStatusErrorOffsetInvalid;
-      break;
-    case BluetoothDevice::ERROR_READ_NOT_PERMITTED:
-      error_status = kStatusErrorPermissionDenied;
-      break;
-    case BluetoothDevice::ERROR_REQUEST_NOT_SUPPORTED:
-      error_status = kStatusErrorRequestNotSupported;
-      break;
     case BluetoothDevice::ERROR_UNKNOWN:
       error_status = kStatusErrorFailed;
       break;
     case BluetoothDevice::ERROR_UNSUPPORTED_DEVICE:
       error_status = kStatusErrorUnsupportedDevice;
-      break;
-    case BluetoothDevice::ERROR_WRITE_NOT_PERMITTED:
-      error_status = kStatusErrorPermissionDenied;
       break;
     case BluetoothDevice::NUM_CONNECT_ERROR_CODES:
       NOTREACHED();

@@ -51,8 +51,6 @@ bool AcceleratorControllerDelegateMus::HandlesAction(AcceleratorAction action) {
     case MAGNIFY_SCREEN_ZOOM_OUT:
     case POWER_PRESSED:
     case POWER_RELEASED:
-    case ROTATE_WINDOW:
-    case SHOW_SYSTEM_TRAY_BUBBLE:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
@@ -144,15 +142,6 @@ void AcceleratorControllerDelegateMus::PerformAction(
     default:
       NOTREACHED();
   }
-}
-
-void AcceleratorControllerDelegateMus::ShowDeprecatedAcceleratorNotification(
-    const char* const notification_id,
-    int message_id,
-    int old_shortcut_id,
-    int new_shortcut_id) {
-  // TODO: http://crbug.com/630316.
-  NOTIMPLEMENTED();
 }
 
 }  // namespace mus

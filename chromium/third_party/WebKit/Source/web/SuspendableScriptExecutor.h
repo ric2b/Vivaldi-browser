@@ -5,11 +5,13 @@
 #ifndef SuspendableScriptExecutor_h
 #define SuspendableScriptExecutor_h
 
+#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "core/frame/SuspendableTimer.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/SelfKeepAlive.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Vector.h"
 #include "v8/include/v8.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -24,12 +26,15 @@ class SuspendableScriptExecutor final
   USING_GARBAGE_COLLECTED_MIXIN(SuspendableScriptExecutor);
 
  public:
-  static void createAndRun(LocalFrame*,
-                           int worldID,
-                           const HeapVector<ScriptSourceCode>& sources,
-                           bool userGesture,
-                           WebScriptExecutionCallback*);
-  static void createAndRun(LocalFrame*,
+  enum BlockingOption { kNonBlocking, kOnloadBlocking };
+
+  static SuspendableScriptExecutor* Create(
+      LocalFrame*,
+      RefPtr<DOMWrapperWorld>,
+      const HeapVector<ScriptSourceCode>& sources,
+      bool user_gesture,
+      WebScriptExecutionCallback*);
+  static void CreateAndRun(LocalFrame*,
                            v8::Isolate*,
                            v8::Local<v8::Context>,
                            v8::Local<v8::Function>,
@@ -39,7 +44,9 @@ class SuspendableScriptExecutor final
                            WebScriptExecutionCallback*);
   ~SuspendableScriptExecutor() override;
 
-  void contextDestroyed(ExecutionContext*) override;
+  void Run();
+  void RunAsync(BlockingOption);
+  void ContextDestroyed(ExecutionContext*) override;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -47,7 +54,7 @@ class SuspendableScriptExecutor final
    public:
     virtual ~Executor() {}
 
-    virtual Vector<v8::Local<v8::Value>> execute(LocalFrame*) = 0;
+    virtual Vector<v8::Local<v8::Value>> Execute(LocalFrame*) = 0;
 
     DEFINE_INLINE_VIRTUAL_TRACE(){};
   };
@@ -58,18 +65,18 @@ class SuspendableScriptExecutor final
                             WebScriptExecutionCallback*,
                             Executor*);
 
-  void fired() override;
+  void Fired() override;
 
-  void run();
-  void executeAndDestroySelf();
-  void dispose();
+  void ExecuteAndDestroySelf();
+  void Dispose();
 
-  RefPtr<ScriptState> m_scriptState;
-  WebScriptExecutionCallback* m_callback;
+  RefPtr<ScriptState> script_state_;
+  WebScriptExecutionCallback* callback_;
+  BlockingOption blocking_option_;
 
-  SelfKeepAlive<SuspendableScriptExecutor> m_keepAlive;
+  SelfKeepAlive<SuspendableScriptExecutor> keep_alive_;
 
-  Member<Executor> m_executor;
+  Member<Executor> executor_;
 };
 
 }  // namespace blink

@@ -6,11 +6,10 @@
 #define VRFrameData_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "core/dom/DOMHighResTimeStamp.h"
 #include "core/dom/DOMTypedArray.h"
 #include "device/vr/vr_service.mojom-blink.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -22,39 +21,37 @@ class VRFrameData final : public GarbageCollected<VRFrameData>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static VRFrameData* create() { return new VRFrameData(); }
+  static VRFrameData* Create() { return new VRFrameData(); }
 
   VRFrameData();
 
-  DOMHighResTimeStamp timestamp() const { return m_timestamp; }
   DOMFloat32Array* leftProjectionMatrix() const {
-    return m_leftProjectionMatrix;
+    return left_projection_matrix_;
   }
-  DOMFloat32Array* leftViewMatrix() const { return m_leftViewMatrix; }
+  DOMFloat32Array* leftViewMatrix() const { return left_view_matrix_; }
   DOMFloat32Array* rightProjectionMatrix() const {
-    return m_rightProjectionMatrix;
+    return right_projection_matrix_;
   }
-  DOMFloat32Array* rightViewMatrix() const { return m_rightViewMatrix; }
-  VRPose* pose() const { return m_pose; }
+  DOMFloat32Array* rightViewMatrix() const { return right_view_matrix_; }
+  VRPose* pose() const { return pose_; }
 
   // Populate a the VRFrameData with a pose and the necessary eye parameters.
   // TODO(bajones): The full frame data should be provided by the VRService,
   // not computed here.
-  bool update(const device::mojom::blink::VRPosePtr&,
-              VREyeParameters* leftEye,
-              VREyeParameters* rightEye,
-              float depthNear,
-              float depthFar);
+  bool Update(const device::mojom::blink::VRPosePtr&,
+              VREyeParameters* left_eye,
+              VREyeParameters* right_eye,
+              float depth_near,
+              float depth_far);
 
   DECLARE_VIRTUAL_TRACE()
 
  private:
-  DOMHighResTimeStamp m_timestamp;
-  Member<DOMFloat32Array> m_leftProjectionMatrix;
-  Member<DOMFloat32Array> m_leftViewMatrix;
-  Member<DOMFloat32Array> m_rightProjectionMatrix;
-  Member<DOMFloat32Array> m_rightViewMatrix;
-  Member<VRPose> m_pose;
+  Member<DOMFloat32Array> left_projection_matrix_;
+  Member<DOMFloat32Array> left_view_matrix_;
+  Member<DOMFloat32Array> right_projection_matrix_;
+  Member<DOMFloat32Array> right_view_matrix_;
+  Member<VRPose> pose_;
 };
 
 }  // namespace blink

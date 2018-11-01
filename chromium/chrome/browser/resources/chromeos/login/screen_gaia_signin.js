@@ -156,7 +156,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       this.navigation_.closeVisible =
         !this.navigation_.refreshVisible &&
         !isWhitelistError &&
-        !this.authCompleted &&
+        !this.authCompleted_ &&
         this.screenMode_ != ScreenMode.SAML_INTERSTITIAL;
 
       $('login-header-bar').updateUI_();
@@ -731,6 +731,9 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       this.clearLoadingTimer_();
       this.loading = false;
 
+      if (!$('offline-gaia').hidden)
+        $('offline-gaia').focus();
+
       // Warm up the user images screen.
       Oobe.getInstance().preloadScreen({id: SCREEN_USER_IMAGE_PICKER});
     },
@@ -1041,6 +1044,9 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       if (!this.navigation_.refreshVisible && !this.navigation_.closeVisible)
         return;
 
+      if (this.screenMode_ == ScreenMode.AD_AUTH)
+        chrome.send('cancelAdAuthentication');
+
       if (this.closable)
         Oobe.showUserPods();
       else
@@ -1120,13 +1126,14 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       this.updateControlsState();
     },
 
-    invalidateAd: function(username) {
+    invalidateAd: function(username, errorState) {
       if (this.screenMode_ != ScreenMode.AD_AUTH)
         return;
       var adAuthUI = this.getSigninFrame_();
       adAuthUI.setUser(username);
-      adAuthUI.setInvalid(ACTIVE_DIRECTORY_ERROR_STATE.BAD_PASSWORD);
+      adAuthUI.setInvalid(errorState);
       this.loading = false;
+      Oobe.getInstance().headerHidden = false;
     }
   };
 });

@@ -1005,7 +1005,6 @@ bool CreateDesktopShortcut(
   base::FilePath directory_filename;
   std::string directory_contents;
   switch (creation_locations.applications_menu_location) {
-    case web_app::APP_MENU_LOCATION_ROOT:
     case web_app::APP_MENU_LOCATION_HIDDEN:
       break;
     case web_app::APP_MENU_LOCATION_SUBDIR_CHROMEAPPS:

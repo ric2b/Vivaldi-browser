@@ -69,7 +69,7 @@ class VivaldiSigninClient : public SigninClient,
   // Execute |callback| if and when there is a network connection.
   void DelayNetworkCall(const base::Closure& callback) override;
 
-  GaiaAuthFetcher* CreateGaiaAuthFetcher(
+  std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
       const std::string& source,
       net::URLRequestContextGetter* getter) override;

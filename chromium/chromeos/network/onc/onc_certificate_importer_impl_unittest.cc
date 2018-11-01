@@ -19,7 +19,6 @@
 #include "chromeos/network/onc/onc_test_utils.h"
 #include "components/onc/onc_constants.h"
 #include "crypto/scoped_test_nss_db.h"
-#include "net/base/crypto_module.h"
 #include "net/base/hash_value.h"
 #include "net/cert/cert_type.h"
 #include "net/cert/nss_cert_database_chromeos.h"
@@ -178,8 +177,14 @@ class ONCCertificateImporterImplTest : public testing::Test {
     for (CERTCertListNode* node = CERT_LIST_HEAD(cert_list);
          !CERT_LIST_END(node, cert_list);
          node = CERT_LIST_NEXT(node)) {
-      result.push_back(net::X509Certificate::CreateFromHandle(
-          node->cert, net::X509Certificate::OSCertHandles()));
+      scoped_refptr<net::X509Certificate> cert =
+          net::X509Certificate::CreateFromHandle(
+              node->cert, net::X509Certificate::OSCertHandles());
+      if (!cert) {
+        ADD_FAILURE() << "X509Certificate::CreateFromHandle failed";
+        continue;
+      }
+      result.push_back(cert);
     }
     CERT_DestroyCertList(cert_list);
 

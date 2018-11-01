@@ -19,6 +19,13 @@ post_process_template("//chrome/browser:browser") {
   ]
 }
 
+post_process_target("//chrome/browser/extensions:extensions") {
+  deps += [
+    "//vivaldi/extensions/schema:api",
+    "//vivaldi/extensions/schema:api_registration",
+  ]
+}
+
 post_process_template("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",

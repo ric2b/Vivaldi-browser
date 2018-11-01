@@ -7,59 +7,68 @@
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "wtf/PtrUtil.h"
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
 PaintRecordBuilder::PaintRecordBuilder(const FloatRect& bounds,
-                                       SkMetaData* metaData,
-                                       GraphicsContext* containingContext,
-                                       PaintController* paintController)
-    : m_paintController(nullptr), m_bounds(bounds) {
-  GraphicsContext::DisabledMode disabledMode = GraphicsContext::NothingDisabled;
-  if (containingContext && containingContext->contextDisabled())
-    disabledMode = GraphicsContext::FullyDisabled;
+                                       SkMetaData* meta_data,
+                                       GraphicsContext* containing_context,
+                                       PaintController* paint_controller)
+    : paint_controller_(nullptr), bounds_(bounds) {
+  GraphicsContext::DisabledMode disabled_mode =
+      GraphicsContext::kNothingDisabled;
+  if (containing_context && containing_context->ContextDisabled())
+    disabled_mode = GraphicsContext::kFullyDisabled;
 
-  if (paintController) {
-    m_paintController = paintController;
+  if (paint_controller) {
+    paint_controller_ = paint_controller;
   } else {
-    m_paintControllerPtr = PaintController::create();
-    m_paintController = m_paintControllerPtr.get();
-
-    // Content painted with a new paint controller in SPv2 will have an
-    // independent property tree set.
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-      PaintChunk::Id id(*this, DisplayItem::kSVGImage);
-      PropertyTreeState state(TransformPaintPropertyNode::root(),
-                              ClipPaintPropertyNode::root(),
-                              EffectPaintPropertyNode::root());
-      m_paintController->updateCurrentPaintChunkProperties(&id, state);
-    }
+    paint_controller_ptr_ = PaintController::Create();
+    paint_controller_ = paint_controller_ptr_.get();
   }
+
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    paint_controller_->UpdateCurrentPaintChunkProperties(
+        nullptr, PropertyTreeState::Root());
+  }
+
 #if DCHECK_IS_ON()
-  m_paintController->setUsage(PaintController::ForPaintRecordBuilder);
+  paint_controller_->SetUsage(PaintController::kForPaintRecordBuilder);
 #endif
 
-  m_context = WTF::wrapUnique(
-      new GraphicsContext(*m_paintController, disabledMode, metaData));
+  context_ = WTF::WrapUnique(
+      new GraphicsContext(*paint_controller_, disabled_mode, meta_data));
 
-  if (containingContext) {
-    m_context->setDeviceScaleFactor(containingContext->deviceScaleFactor());
-    m_context->setPrinting(containingContext->printing());
+  if (containing_context) {
+    context_->SetDeviceScaleFactor(containing_context->DeviceScaleFactor());
+    context_->SetPrinting(containing_context->Printing());
   }
 }
 
 PaintRecordBuilder::~PaintRecordBuilder() {
 #if DCHECK_IS_ON()
-  m_paintController->setUsage(PaintController::ForNormalUsage);
+  paint_controller_->SetUsage(PaintController::kForNormalUsage);
 #endif
 }
 
-sk_sp<PaintRecord> PaintRecordBuilder::endRecording() {
-  m_context->beginRecording(m_bounds);
-  m_paintController->commitNewDisplayItems();
-  m_paintController->paintArtifact().replay(*m_context);
-  return m_context->endRecording();
+sk_sp<PaintRecord> PaintRecordBuilder::EndRecording() {
+  context_->BeginRecording(bounds_);
+  paint_controller_->CommitNewDisplayItems();
+  paint_controller_->GetPaintArtifact().Replay(bounds_, *context_);
+  return context_->EndRecording();
+}
+
+void PaintRecordBuilder::EndRecording(
+    PaintCanvas& canvas,
+    const PropertyTreeState& property_tree_state) {
+  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    canvas.drawPicture(EndRecording());
+  } else {
+    paint_controller_->CommitNewDisplayItems();
+    paint_controller_->GetPaintArtifact().Replay(bounds_, canvas,
+                                                 property_tree_state);
+  }
 }
 
 }  // namespace blink

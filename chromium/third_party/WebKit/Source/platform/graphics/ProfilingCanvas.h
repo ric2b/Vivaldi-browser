@@ -32,7 +32,7 @@
 #define ProfilingCanvas_h
 
 #include "platform/graphics/InterceptingCanvas.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -46,18 +46,18 @@ class CanvasInterceptor<ProfilingCanvas>
   ~CanvasInterceptor();
 
  private:
-  double m_startTime;
+  double start_time_;
 };
 
 class ProfilingCanvas : public InterceptingCanvas<ProfilingCanvas> {
  public:
   explicit ProfilingCanvas(SkBitmap);
-  void setTimings(Vector<double>*);
+  void SetTimings(Vector<double>*);
 
  private:
   friend class CanvasInterceptor<ProfilingCanvas>;
 
-  Vector<double>* m_timings;
+  Vector<double>* timings_;
 };
 
 }  // namespace blink

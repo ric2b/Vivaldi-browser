@@ -4,10 +4,10 @@
 
 #include "platform/ScriptForbiddenScope.h"
 
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 namespace blink {
 
-unsigned ScriptForbiddenScope::s_scriptForbiddenCount = 0;
+unsigned ScriptForbiddenScope::script_forbidden_count_ = 0;
 
 }  // namespace blink

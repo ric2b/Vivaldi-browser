@@ -15,65 +15,80 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/dom/ExecutionContext.h"
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 namespace blink {
 
 // static
-AnyCallbackFunctionOptionalAnyArg* AnyCallbackFunctionOptionalAnyArg::create(ScriptState* scriptState, v8::Local<v8::Value> callback){
-  if (isUndefinedOrNull(callback))
+AnyCallbackFunctionOptionalAnyArg* AnyCallbackFunctionOptionalAnyArg::Create(ScriptState* scriptState, v8::Local<v8::Value> callback) {
+  if (IsUndefinedOrNull(callback))
     return nullptr;
   return new AnyCallbackFunctionOptionalAnyArg(scriptState, v8::Local<v8::Function>::Cast(callback));
 }
 
 AnyCallbackFunctionOptionalAnyArg::AnyCallbackFunctionOptionalAnyArg(ScriptState* scriptState, v8::Local<v8::Function> callback)
     : m_scriptState(scriptState),
-    m_callback(scriptState->isolate(), this, callback) {
-  DCHECK(!m_callback.isEmpty());
+    m_callback(scriptState->GetIsolate(), this, callback) {
+  DCHECK(!m_callback.IsEmpty());
 }
 
-DEFINE_TRACE(AnyCallbackFunctionOptionalAnyArg) {}
-
 DEFINE_TRACE_WRAPPERS(AnyCallbackFunctionOptionalAnyArg) {
-  visitor->traceWrappers(m_callback.cast<v8::Value>());
+  visitor->TraceWrappers(m_callback.Cast<v8::Value>());
 }
 
 bool AnyCallbackFunctionOptionalAnyArg::call(ScriptWrappable* scriptWrappable, ScriptValue optionalAnyArg, ScriptValue& returnValue) {
-  if (!m_scriptState->contextIsValid())
+  if (m_callback.IsEmpty())
     return false;
 
-  ExecutionContext* context = m_scriptState->getExecutionContext();
+  if (!m_scriptState->ContextIsValid())
+    return false;
+
+  ExecutionContext* context = ExecutionContext::From(m_scriptState.Get());
   DCHECK(context);
-  if (context->isContextSuspended() || context->isContextDestroyed())
-    return false;
-
-  if (m_callback.isEmpty())
+  if (context->IsContextSuspended() || context->IsContextDestroyed())
     return false;
 
   // TODO(bashi): Make sure that using DummyExceptionStateForTesting is OK.
   // crbug.com/653769
   DummyExceptionStateForTesting exceptionState;
-  ScriptState::Scope scope(m_scriptState.get());
+  ScriptState::Scope scope(m_scriptState.Get());
+  v8::Isolate* isolate = m_scriptState->GetIsolate();
 
-  v8::Local<v8::Value> optionalAnyArgArgument = optionalAnyArg.v8Value();
+  v8::Local<v8::Value> thisValue = ToV8(
+      scriptWrappable,
+      m_scriptState->GetContext()->Global(),
+      isolate);
 
-  v8::Local<v8::Value> thisValue = ToV8(scriptWrappable, m_scriptState->context()->Global(), m_scriptState->isolate());
-
+  v8::Local<v8::Value> optionalAnyArgArgument = optionalAnyArg.V8Value();
   v8::Local<v8::Value> argv[] = { optionalAnyArgArgument };
-
-  v8::Local<v8::Value> v8ReturnValue;
-  v8::TryCatch exceptionCatcher(m_scriptState->isolate());
+  v8::TryCatch exceptionCatcher(isolate);
   exceptionCatcher.SetVerbose(true);
 
-  if (V8ScriptRunner::callFunction(m_callback.newLocal(m_scriptState->isolate()), m_scriptState->getExecutionContext(), thisValue, 1, argv, m_scriptState->isolate()).ToLocal(&v8ReturnValue)) {
-    ScriptValue cppValue = ScriptValue(ScriptState::current(m_scriptState->isolate()), v8ReturnValue);
-    returnValue = cppValue;
-    return true;
+  v8::Local<v8::Value> v8ReturnValue;
+  if (!V8ScriptRunner::CallFunction(m_callback.NewLocal(isolate),
+                                    context,
+                                    thisValue,
+                                    1,
+                                    argv,
+                                    isolate).ToLocal(&v8ReturnValue)) {
+    return false;
   }
-  return false;
+
+  ScriptValue cppValue = ScriptValue(ScriptState::Current(m_scriptState->GetIsolate()), v8ReturnValue);
+  returnValue = cppValue;
+  return true;
+}
+
+AnyCallbackFunctionOptionalAnyArg* NativeValueTraits<AnyCallbackFunctionOptionalAnyArg>::NativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
+  AnyCallbackFunctionOptionalAnyArg* nativeValue = AnyCallbackFunctionOptionalAnyArg::Create(ScriptState::Current(isolate), value);
+  if (!nativeValue) {
+    exceptionState.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
+        "AnyCallbackFunctionOptionalAnyArg"));
+  }
+  return nativeValue;
 }
 
 }  // namespace blink

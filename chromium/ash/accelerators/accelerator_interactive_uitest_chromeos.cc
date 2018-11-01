@@ -2,23 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/accelerators/accelerator_controller.h"
+#include "ash/accelerators/accelerator_controller.h"
 
-#include "ash/common/shell_observer.h"
-#include "ash/common/system/chromeos/network/network_observer.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/common/system/tray/system_tray_notifier.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
+#include "ash/shell_observer.h"
+#include "ash/system/network/network_observer.h"
+#include "ash/system/tray/system_tray_delegate.h"
+#include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/ash_interactive_ui_test_base.h"
 #include "ash/test/test_screenshot_delegate.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/run_loop.h"
 #include "base/test/user_action_tester.cc"
 #include "chromeos/network/network_handler.h"
-#include "mojo/edk/embedder/embedder.h"
 #include "ui/app_list/presenter/app_list.h"
 #include "ui/app_list/presenter/test/test_app_list_presenter.h"
 #include "ui/base/test/ui_controls.h"
@@ -62,7 +60,7 @@ class AcceleratorInteractiveUITest : public AshInteractiveUITestBase,
   void SetUp() override {
     AshInteractiveUITestBase::SetUp();
 
-    WmShell::Get()->AddShellObserver(this);
+    Shell::Get()->AddShellObserver(this);
 
     chromeos::NetworkHandler::Initialize();
   }
@@ -70,7 +68,7 @@ class AcceleratorInteractiveUITest : public AshInteractiveUITestBase,
   void TearDown() override {
     chromeos::NetworkHandler::Shutdown();
 
-    WmShell::Get()->RemoveShellObserver(this);
+    Shell::Get()->RemoveShellObserver(this);
 
     AshInteractiveUITestBase::TearDown();
   }
@@ -184,7 +182,7 @@ TEST_F(AcceleratorInteractiveUITest, MAYBE_ChromeOsAccelerators) {
 
   // Test TOGGLE_WIFI.
   TestNetworkObserver network_observer;
-  WmShell::Get()->system_tray_notifier()->AddNetworkObserver(&network_observer);
+  Shell::Get()->system_tray_notifier()->AddNetworkObserver(&network_observer);
 
   EXPECT_FALSE(network_observer.wifi_enabled_status());
   SendKeyPressSync(ui::VKEY_WLAN, false, false, false);
@@ -192,15 +190,14 @@ TEST_F(AcceleratorInteractiveUITest, MAYBE_ChromeOsAccelerators) {
   SendKeyPressSync(ui::VKEY_WLAN, false, false, false);
   EXPECT_FALSE(network_observer.wifi_enabled_status());
 
-  WmShell::Get()->system_tray_notifier()->RemoveNetworkObserver(
+  Shell::Get()->system_tray_notifier()->RemoveNetworkObserver(
       &network_observer);
 }
 
 // Tests the app list accelerator.
 TEST_F(AcceleratorInteractiveUITest, MAYBE_ToggleAppList) {
-  mojo::edk::Init();
   app_list::test::TestAppListPresenter test_app_list_presenter;
-  WmShell::Get()->app_list()->SetAppListPresenter(
+  Shell::Get()->app_list()->SetAppListPresenter(
       test_app_list_presenter.CreateInterfacePtrAndBind());
 
   EXPECT_EQ(0u, test_app_list_presenter.toggle_count());

@@ -10,6 +10,7 @@
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -663,27 +664,6 @@ TEST_F(BookmarkBarControllerTest, TestDragShouldLockBarVisibility) {
   [bar_ updateState:BookmarkBar::DETACHED
          changeType:BookmarkBar::DONT_ANIMATE_STATE_CHANGE];
   EXPECT_FALSE([bar_ dragShouldLockBarVisibility]);
-}
-
-TEST_F(BookmarkBarControllerTest, TagMap) {
-  int64_t ids[] = {1, 3, 4, 40, 400, 4000, 800000000, 2, 123456789};
-  std::vector<int32_t> tags;
-
-  // Generate some tags
-  for (unsigned int i = 0; i < arraysize(ids); i++) {
-    tags.push_back([bar_ menuTagFromNodeId:ids[i]]);
-  }
-
-  // Confirm reverse mapping.
-  for (unsigned int i = 0; i < arraysize(ids); i++) {
-    EXPECT_EQ(ids[i], [bar_ nodeIdFromMenuTag:tags[i]]);
-  }
-
-  // Confirm uniqueness.
-  std::sort(tags.begin(), tags.end());
-  for (unsigned int i=0; i<(tags.size()-1); i++) {
-    EXPECT_NE(tags[i], tags[i+1]);
-  }
 }
 
 // Confirm openBookmark: forwards the request to the controller's delegate
@@ -1691,12 +1671,12 @@ TEST_F(BookmarkBarControllerTest, ManagedShowAppsShortcutInBookmarksBar) {
 
   // Hide the apps shortcut by policy, via the managed pref.
   prefs->SetManagedPref(bookmarks::prefs::kShowAppsShortcutInBookmarkBar,
-                        new base::Value(false));
+                        base::MakeUnique<base::Value>(false));
   EXPECT_TRUE([bar_ appsPageShortcutButtonIsHidden]);
 
   // And try showing it via policy too.
   prefs->SetManagedPref(bookmarks::prefs::kShowAppsShortcutInBookmarkBar,
-                        new base::Value(true));
+                        base::MakeUnique<base::Value>(true));
   EXPECT_FALSE([bar_ appsPageShortcutButtonIsHidden]);
 }
 

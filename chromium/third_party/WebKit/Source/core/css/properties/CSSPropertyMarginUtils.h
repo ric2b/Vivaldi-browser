@@ -6,14 +6,14 @@
 #define CSSPropertyMarginUtils_h
 
 #include "core/css/parser/CSSPropertyParserHelpers.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
 class CSSPropertyMarginUtils {
   STATIC_ONLY(CSSPropertyMarginUtils);
 
-  static CSSValue* consumeMarginOrOffset(
+  static CSSValue* ConsumeMarginOrOffset(
       CSSParserTokenRange&,
       CSSParserMode,
       CSSPropertyParserHelpers::UnitlessQuirk);

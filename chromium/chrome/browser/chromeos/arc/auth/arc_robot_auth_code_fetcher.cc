@@ -59,7 +59,7 @@ void ArcRobotAuthCodeFetcher::Fetch(const FetchCallback& callback) {
   request->set_oauth2_client_id(kAndoidClientId);
   request->add_auth_scope(GaiaConstants::kAnyApiOAuth2Scope);
   request->set_device_type(
-      enterprise_management::DeviceServiceApiAccessRequest::ANDROIDOS);
+      enterprise_management::DeviceServiceApiAccessRequest::ANDROID_OS);
 
   fetch_request_job_->Start(
       base::Bind(&ArcRobotAuthCodeFetcher::OnFetchRobotAuthCodeCompleted,
@@ -81,11 +81,12 @@ void ArcRobotAuthCodeFetcher::OnFetchRobotAuthCodeCompleted(
 
   if (status != policy::DM_STATUS_SUCCESS) {
     LOG(ERROR) << "Fetching of robot auth code failed. DM Status: " << status;
-    callback.Run(std::string());
+    callback.Run(ArcAuthInfoFetcher::Status::FAILURE, std::string());
     return;
   }
 
-  callback.Run(response.service_api_access_response().auth_code());
+  callback.Run(ArcAuthInfoFetcher::Status::SUCCESS,
+               response.service_api_access_response().auth_code());
 }
 
 }  // namespace arc

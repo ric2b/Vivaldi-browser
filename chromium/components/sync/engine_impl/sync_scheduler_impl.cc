@@ -24,10 +24,9 @@
 
 using base::TimeDelta;
 using base::TimeTicks;
+using sync_pb::GetUpdatesCallerInfo;
 
 namespace syncer {
-
-using sync_pb::GetUpdatesCallerInfo;
 
 namespace {
 
@@ -119,23 +118,6 @@ ClearParams::ClearParams(const base::Closure& report_success_task)
 ClearParams::ClearParams(const ClearParams& other) = default;
 ClearParams::~ClearParams() {}
 
-GetUpdatesCallerInfo::GetUpdatesSource GetUpdatesFromNudgeSource(
-    NudgeSource source) {
-  switch (source) {
-    case NUDGE_SOURCE_NOTIFICATION:
-      return GetUpdatesCallerInfo::NOTIFICATION;
-    case NUDGE_SOURCE_LOCAL:
-      return GetUpdatesCallerInfo::LOCAL;
-    case NUDGE_SOURCE_LOCAL_REFRESH:
-      return GetUpdatesCallerInfo::DATATYPE_REFRESH;
-    case NUDGE_SOURCE_UNKNOWN:
-      return GetUpdatesCallerInfo::UNKNOWN;
-    default:
-      NOTREACHED();
-      return GetUpdatesCallerInfo::UNKNOWN;
-  }
-}
-
 // Helper macros to log with the syncer thread name; useful when there
 // are multiple syncer threads involved.
 
@@ -163,11 +145,7 @@ SyncSchedulerImpl::SyncSchedulerImpl(const std::string& name,
       cycle_context_(context),
       next_sync_cycle_job_priority_(NORMAL_PRIORITY),
       ignore_auth_credentials_(ignore_auth_credentials),
-      weak_ptr_factory_(this),
-      weak_ptr_factory_for_weak_handle_(this) {
-  weak_handle_this_ =
-      MakeWeakHandle(weak_ptr_factory_for_weak_handle_.GetWeakPtr());
-}
+      weak_ptr_factory_(this) {}
 
 SyncSchedulerImpl::~SyncSchedulerImpl() {
   DCHECK(CalledOnValidThread());
@@ -450,7 +428,7 @@ void SyncSchedulerImpl::DoNudgeSyncCycleJob(JobPriority priority) {
   DCHECK(CanRunNudgeJobNow(priority));
 
   DVLOG(2) << "Will run normal mode sync cycle with types "
-           << ModelTypeSetToString(cycle_context_->GetEnabledTypes());
+           << ModelTypeSetToString(GetEnabledAndUnblockedTypes());
   std::unique_ptr<SyncCycle> cycle(SyncCycle::Build(cycle_context_, this));
   bool success = syncer_->NormalSyncShare(GetEnabledAndUnblockedTypes(),
                                           &nudge_tracker_, cycle.get());
@@ -485,7 +463,8 @@ void SyncSchedulerImpl::DoConfigurationSyncCycleJob(JobPriority priority) {
   }
 
   SDVLOG(2) << "Will run configure SyncShare with types "
-            << ModelTypeSetToString(cycle_context_->GetEnabledTypes());
+            << ModelTypeSetToString(
+                   pending_configure_params_->types_to_download);
   std::unique_ptr<SyncCycle> cycle(SyncCycle::Build(cycle_context_, this));
   bool success = syncer_->ConfigureSyncShare(
       pending_configure_params_->types_to_download,

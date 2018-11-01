@@ -12,7 +12,9 @@
 
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "headless/lib/browser/headless_window_tree_host.h"
 #include "headless/public/headless_devtools_target.h"
+#include "headless/public/headless_export.h"
 #include "headless/public/headless_web_contents.h"
 
 namespace content {
@@ -26,12 +28,15 @@ class Size;
 
 namespace headless {
 class HeadlessBrowserImpl;
+class HeadlessTabSocketImpl;
 class WebContentsObserverAdapter;
 
-class HeadlessWebContentsImpl : public HeadlessWebContents,
-                                public HeadlessDevToolsTarget,
-                                public content::RenderProcessHostObserver,
-                                public content::WebContentsObserver {
+// Exported for tests.
+class HEADLESS_EXPORT HeadlessWebContentsImpl
+    : public HeadlessWebContents,
+      public HeadlessDevToolsTarget,
+      public content::RenderProcessHostObserver,
+      public content::WebContentsObserver {
  public:
   ~HeadlessWebContentsImpl() override;
 
@@ -49,6 +54,7 @@ class HeadlessWebContentsImpl : public HeadlessWebContents,
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   HeadlessDevToolsTarget* GetDevToolsTarget() override;
+  HeadlessTabSocket* GetHeadlessTabSocket() const override;
 
   // HeadlessDevToolsTarget implementation:
   bool AttachClient(HeadlessDevToolsClient* client) override;
@@ -75,20 +81,28 @@ class HeadlessWebContentsImpl : public HeadlessWebContents,
   HeadlessBrowserImpl* browser() const;
   HeadlessBrowserContextImpl* browser_context() const;
 
+  void set_window_tree_host(std::unique_ptr<HeadlessWindowTreeHost> host) {
+    window_tree_host_ = std::move(host);
+  }
+  HeadlessWindowTreeHost* window_tree_host() const {
+    return window_tree_host_.get();
+  }
+
  private:
   // Takes ownership of |web_contents|.
   HeadlessWebContentsImpl(content::WebContents* web_contents,
                           HeadlessBrowserContextImpl* browser_context);
 
   void InitializeScreen(const gfx::Size& initial_size);
-
   using MojoService = HeadlessWebContents::Builder::MojoService;
 
   class Delegate;
   std::unique_ptr<Delegate> web_contents_delegate_;
+  std::unique_ptr<HeadlessWindowTreeHost> window_tree_host_;
   std::unique_ptr<content::WebContents> web_contents_;
   scoped_refptr<content::DevToolsAgentHost> agent_host_;
   std::list<MojoService> mojo_services_;
+  std::unique_ptr<HeadlessTabSocketImpl> headless_tab_socket_;
 
   HeadlessBrowserContextImpl* browser_context_;      // Not owned.
   content::RenderProcessHost* render_process_host_;  // Not owned.

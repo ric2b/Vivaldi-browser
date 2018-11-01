@@ -45,7 +45,7 @@ using content::WebContents;
 
 namespace {
 // Guards download_controller_
-base::LazyInstance<base::Lock> g_download_controller_lock_;
+base::LazyInstance<base::Lock>::DestructorAtExit g_download_controller_lock_;
 
 WebContents* GetWebContents(int render_process_id, int render_view_id) {
   content::RenderViewHost* render_view_host =
@@ -63,14 +63,23 @@ void CreateContextMenuDownload(int render_process_id,
                                bool is_link,
                                const std::string& extra_headers,
                                bool granted) {
-  if (!granted)
+  if (!granted) {
+    DownloadController::RecordStoragePermission(
+        DownloadController::StoragePermissionType::STORAGE_PERMISSION_DENIED);
     return;
+  }
 
   content::WebContents* web_contents =
       GetWebContents(render_process_id, render_view_id);
-  if (!web_contents)
+  if (!web_contents) {
+    DownloadController::RecordStoragePermission(
+        DownloadController::StoragePermissionType::
+            STORAGE_PERMISSION_NO_WEB_CONTENTS);
     return;
+  }
 
+  DownloadController::RecordStoragePermission(
+      DownloadController::StoragePermissionType::STORAGE_PERMISSION_GRANTED);
   const GURL& url = is_link ? params.link_url : params.src_url;
   const GURL& referring_url =
       params.frame_url.is_empty() ? params.page_url : params.frame_url;
@@ -166,6 +175,12 @@ void DownloadController::RecordDownloadCancelReason(
     DownloadCancelReason reason) {
   UMA_HISTOGRAM_ENUMERATION(
       "MobileDownload.CancelReason", reason, CANCEL_REASON_MAX);
+}
+
+// static
+void DownloadController::RecordStoragePermission(StoragePermissionType type) {
+  UMA_HISTOGRAM_ENUMERATION("MobileDownload.StoragePermission", type,
+                            STORAGE_PERMISSION_MAX);
 }
 
 // static
@@ -390,6 +405,9 @@ void DownloadController::StartContextMenuDownload(
     const std::string& extra_headers) {
   int process_id = web_contents->GetRenderProcessHost()->GetID();
   int routing_id = web_contents->GetRenderViewHost()->GetRoutingID();
+
+  RecordStoragePermission(StoragePermissionType::STORAGE_PERMISSION_REQUESTED);
+
   AcquireFileAccessPermission(
       web_contents, base::Bind(&CreateContextMenuDownload, process_id,
                                routing_id, params, is_link, extra_headers));

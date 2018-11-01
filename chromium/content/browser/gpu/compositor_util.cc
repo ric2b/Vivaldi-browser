@@ -66,12 +66,6 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
   GpuDataManagerImpl* manager = GpuDataManagerImpl::GetInstance();
   gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
 
-  bool accelerated_vpx_disabled =
-      command_line.HasSwitch(switches::kDisableAcceleratedVideoDecode);
-#if defined(OS_WIN)
-  accelerated_vpx_disabled |= !gpu_preferences.enable_accelerated_vpx_decode;
-#endif
-
   const GpuFeatureInfo kGpuFeatureInfo[] = {
     {"2d_canvas",
      manager->IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS),
@@ -86,8 +80,7 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
      " or the command line. The browser will fall back to software compositing"
      " and hardware acceleration will be unavailable.",
      true},
-    {kWebGLFeatureName,
-     manager->IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL),
+    {kWebGLFeatureName, !manager->IsWebGLEnabled(),
      command_line.HasSwitch(switches::kDisableExperimentalWebGL),
      "WebGL has been disabled via blacklist or the command line.", false},
     {"flash_3d", manager->IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_FLASH3D),
@@ -109,15 +102,17 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
      "Using Stage3d Baseline profile in Flash has been disabled, either"
      " via blacklist, about:flags or the command line.",
      true},
-    {"video_decode", manager->IsFeatureBlacklisted(
-                         gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE),
+    {"video_decode",
+     manager->IsFeatureBlacklisted(
+         gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE),
      command_line.HasSwitch(switches::kDisableAcceleratedVideoDecode),
      "Accelerated video decode has been disabled, either via blacklist,"
      " about:flags or the command line.",
      true},
 #if BUILDFLAG(ENABLE_WEBRTC)
-    {"video_encode", manager->IsFeatureBlacklisted(
-                         gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE),
+    {"video_encode",
+     manager->IsFeatureBlacklisted(
+         gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE),
      command_line.HasSwitch(switches::kDisableWebRtcHWEncoding),
      "Accelerated video encode has been disabled, either via blacklist,"
      " about:flags or the command line.",
@@ -146,14 +141,6 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
      !gpu::AreNativeGpuMemoryBuffersEnabled(),
      "Native GpuMemoryBuffers have been disabled, either via about:flags"
      " or command line.",
-     true},
-    {"vpx_decode", manager->IsFeatureBlacklisted(
-                       gpu::GPU_FEATURE_TYPE_ACCELERATED_VPX_DECODE) ||
-                       manager->IsFeatureBlacklisted(
-                           gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE),
-     accelerated_vpx_disabled,
-     "Accelerated VPx video decode has been disabled, either via blacklist"
-     " or the command line.",
      true},
     {kWebGL2FeatureName,
      manager->IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL2),
@@ -354,8 +341,7 @@ base::DictionaryValue* GetFeatureStatus() {
       status = "unavailable_software";
     }
 
-    feature_status_dict->SetString(
-        gpu_feature_info.name.c_str(), status.c_str());
+    feature_status_dict->SetString(gpu_feature_info.name, status);
   }
   return feature_status_dict;
 }
@@ -374,7 +360,6 @@ base::Value* GetProblems() {
     problem->SetString("description",
         "GPU process was unable to boot: " + gpu_access_blocked_reason);
     problem->Set("crBugs", new base::ListValue());
-    problem->Set("webkitBugs", new base::ListValue());
     base::ListValue* disabled_features = new base::ListValue();
     disabled_features->AppendString("all");
     problem->Set("affectedGpuSettings", disabled_features);
@@ -391,7 +376,6 @@ base::Value* GetProblems() {
       problem->SetString(
           "description", gpu_feature_info.disabled_description);
       problem->Set("crBugs", new base::ListValue());
-      problem->Set("webkitBugs", new base::ListValue());
       base::ListValue* disabled_features = new base::ListValue();
       disabled_features->AppendString(gpu_feature_info.name);
       problem->Set("affectedGpuSettings", disabled_features);

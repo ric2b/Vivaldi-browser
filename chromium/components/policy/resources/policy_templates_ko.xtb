@@ -5,6 +5,30 @@
 
       False로 설정하면 구성요소 업데이트가 사용 중지됩니다. 하지만 일부 구성요소는 이 정책에서 제외됩니다. 예를 들어, 실행 코드가 포함되지 않거나, 브라우저 작동을 심각하게 변경하지 않거나, 보안에 중요한 구성요소 업데이트는 사용중지 되지 않습니다.
       이와 같은 구성요소의 예로는 인증서 폐기 목록 및 세이프 브라우징 데이터가 포함됩니다. </translation>
+<translation id="1010564225363223332">프린터 목록을 설정합니다.
+
+      관리자는 이 정책을 통해 사용자에게 프린터 설정을
+      제공할 수 있습니다.
+
+      <ph name="PRINTER_DISPLAY_NAME" /> 및 <ph name="PRINTER_DESCRIPTION" />은(는) 프린터를 쉽게 선택하도록 맞춤설정할 수 있는
+      자유 형식 문자열입니다. <ph name="PRINTER_MANUFACTURER" /> 및 <ph name="PRINTER_MODEL" />은(는) 최종 사용자가 프린터를 쉽게 확인하도록 돕기 위해 제공되며
+      프린터 제조업체 및 모델을 나타냅니다.
+      <ph name="PRINTER_URI" />은(는) <ph name="URI_SCHEME" />, <ph name="URI_PORT" />, <ph name="URI_QUEUE" />을(를) 포함한 클라이언트 컴퓨터에서 연결할 수 있는 주소여야 합니다.
+      <ph name="PRINTER_UUID" />은(는) 선택사항이며, 제공된 경우 <ph name="ZEROCONF_DISCOVERY" /> 프린터의 중복을
+      삭제하는 데 사용됩니다.
+
+      <ph name="PRINTER_EFFECTIVE_MODEL" />은(는) <ph name="PRODUCT_NAME" /> 지원 프린터를 나타내는
+      문자열 중 하나와 일치해야 합니다. 이 문자열은 프린터의 적절한
+      PPD를 확인하고 설치하는 데 사용됩니다. 자세한 정보는
+      https://support.google.com/chrome?p=noncloudprint에서 확인할 수 있습니다.
+
+      프린터 설정은 프린터를 처음 사용할 때 완료됩니다.  PPD는
+      프린터가 사용될 때까지 다운로드되지 않습니다.  그 이후 자주 사용되는
+      PPD가 캐시됩니다.
+
+      이 정책은 사용자가 개별 기기에 프린터를 설정할 수 있는지에
+      영향을 미치지 않습니다.  이 정책은 개별 사용자의 프린터 설정을
+      보완하기 위한 것입니다.</translation>
 <translation id="101438888985615157">180도 화면 회전</translation>
 <translation id="1017967144265860778">로그인 화면의 전원 관리</translation>
 <translation id="1019101089073227242">사용자 데이터 디렉토리 설정</translation>
@@ -57,25 +81,6 @@
 <translation id="1152117524387175066">부팅 시 기기의 개발자 스위치 상태를 보고합니다.
 
       이 정책을 false로 설정하면 기기 개발자 스위치 상태가 보고되지 않습니다.</translation>
-<translation id="1156080716265314451">프린터 목록을 설정하세요.
-
-      이 정책은 관리자가 사용자에게 프린터 설정을 제공하도록
-      허용합니다.
-
-      <ph name="PRINTER_DISPLAY_NAME" /> 및 <ph name="PRINTER_DESCRIPTION" />은(는) 무료 양식 문자열이며 프린터를 간편하게
-      선택할 수 있도록 맞춤설정될 수 있습니다. <ph name="PRINTER_MANUFACTURER" /> 및 <ph name="PRINTER_MODEL" />은(는)
-      <ph name="PRODUCT_NAME" /> 지원 프린터 중 하나와 일치해야 합니다. <ph name="PRINTER_URI" />은(는)
-      <ph name="URI_SCHEME" />, <ph name="URI_PORT" />, <ph name="URI_QUEUE" />을(를) 포함하는 클라이언트 컴퓨터에서 연결될 수 있는
-      주소여야 합니다. <ph name="PRINTER_UUID" />은(는) 선택사항입니다. 제공되는 경우 <ph name="ZEROCONF_DISCOVERY" /> 프린터
-      중복 삭제를 돕는 데 사용될 수 있습니다.
-
-      프린터 설정은 프린터를 처음 사용할 때 완료됩니다. 프린터가 사용될 때까지
-      PPD가 다운로드되지 않습니다. 첫 사용 이후 자주 사용하는
-      PPD가 캐시됩니다.
-
-      이 정책은 사용자가 개별 기기에서 프린터를 설정할 수 있는지에 영향을
-      미치지 않습니다. 이 정책은 개별 사용자의 프린터 설정을
-      보완하기 위해 마련되었습니다.</translation>
 <translation id="1160939557934457296">세이프 브라우징 경고 페이지 사용 중지</translation>
 <translation id="1198465924256827162">기기 상태 업로드가 전송되는 빈도를 밀리초로 나타냅니다.
 
@@ -182,7 +187,6 @@
 <translation id="1583248206450240930">기본으로 <ph name="PRODUCT_FRAME_NAME" /> 사용</translation>
 <translation id="1608755754295374538">별도 메시지를 표시하지 않고 오디오 캡처 기기에 대한 액세스 권한이 부여되는 URL입니다.</translation>
 <translation id="1617235075406854669">브라우저 및 다운로드 기록을 삭제하도록 설정합니다.</translation>
-<translation id="1617384279878333801">프로필 관리자에서 사용자 추가 사용 설정</translation>
 <translation id="163200210584085447">이 목록의 패턴을 요청 URL의 보안 출처와 비교합니다.
       일치하는 항목이 확인되는 경우 SAML 로그인 페이지에서
       동영상 캡처 기기에 액세스할 수 있는 권한이 부여됩니다.
@@ -814,7 +818,6 @@
 
           이 정책을 설정하지 않으면 사용자가 원하는 프록시 설정을 선택할 수 있습니다.</translation>
 <translation id="3205825995289802549">처음 실행 시 첫 번째 브라우저 창 최대화</translation>
-<translation id="3206731874112238027">인쇄 미리보기 사용 중지(지원 중단됨)</translation>
 <translation id="3213821784736959823">내장 DNS 클라이언트를 <ph name="PRODUCT_NAME" />에서 사용할지 여부를 제어합니다.
 
       이 정책이 true로 설정되어 있으면 사용 가능한 경우 내장 DNS 클라이언트를 사용합니다.
@@ -857,6 +860,15 @@
 
       이 설정을 사용중지하면 사용자는 프록시를 사용할 수 없으며 컴퓨터는 <ph name="CLOUD_PRINT_NAME" />와(과)의 프린터 공유를 허용하지 않습니다.</translation>
 <translation id="3297010562646015826">작업 관리자의 종료 프로세스 사용 설정</translation>
+<translation id="3307746730474515290">설치할 수 있는 앱/확장 프로그램의 유형을 제어하고 런타임 액세스를 제한합니다.
+
+          이 설정을 사용하면 <ph name="PRODUCT_NAME" />에 설치할 수 있는 확장 프로그램/앱의 유형과 이러한 유형이 상호작용할 수 있는 호스트의 허용 목록을 만듭니다. 값은 문자열 목록으로 구성되며 각 문자열은 'extension', 'theme', 'user_script', 'hosted_app', 'legacy_packaged_app', 'platform_app' 중 한 가지여야 합니다. 이러한 유형에 관해 자세히 알아보려면 <ph name="PRODUCT_NAME" /> 확장 프로그램 설명서를 참조하세요.
+
+          이 정책은 ExtensionInstallForcelist에 의해 강제 설치되는 확장 프로그램 및 앱에도 적용됩니다.
+
+          이 설정을 구성하면 목록에 없는 유형의 확장 프로그램/앱은 설치되지 않습니다.
+
+          이 설정을 구성하지 않으면 허용되는 확장 프로그램/앱 유형에 제한이 적용되지 않습니다.</translation>
 <translation id="3322771899429619102">키 생성 사용이 허용되는 사이트를 지정하는 URL 패턴 목록을 설정할 수 있습니다. URL 패턴이 'KeygenBlockedForUrls'에 있는 경우 이 예외를 무시합니다.
 
           이 정책을 설정하지 않은 경우 'DefaultKeygenSetting' 정책이 설정되어 있으면 해당 정책의 글로벌 기본값이, 그렇지 않으면 사용자 개인 설정의 글로벌 기본값이 모든 사이트에서 사용됩니다.</translation>
@@ -937,6 +949,7 @@
 <translation id="3660562134618097814">로그인 중 SAML IdP 쿠키 전송</translation>
 <translation id="3709266154059827597">확장 프로그램 설치 차단목록 설정</translation>
 <translation id="3711895659073496551">일시중지</translation>
+<translation id="3736879847913515635">사용자 관리자에서 사용자 추가 허용</translation>
 <translation id="3750220015372671395">이 사이트에서 키 생성 차단</translation>
 <translation id="3756011779061588474">개발자 모드 차단</translation>
 <translation id="3758089716224084329"><ph name="PRODUCT_NAME" />에서사용하는 프록시 서버를 지정하도록 하며 사용자가 프록시 설정을 변경하지 못하게 합니다.
@@ -953,15 +966,6 @@
       이 정책을 설정하지 않으면 사용자가 직접 프록시 설정을 선택할 수 있습니다.</translation>
 <translation id="3758249152301468420">개발자 도구 사용 중지</translation>
 <translation id="3765260570442823273">유휴 로그아웃 경고 메시지 표시 시간</translation>
-<translation id="3768412594120638208">설치할 수 있는 앱/확장 프로그램 유형을 컨트롤합니다.
-
-          이 설정을 사용하면 <ph name="PRODUCT_NAME" />에 설치할 수 있는 확장 프로그램/앱 유형의 허용 목록을 만듭니다. 값은 문자열 목록으로 각 문자열은 'extension', 'theme', 'user_script', 'hosted_app', 'legacy_packaged_app', 'platform_app' 중 한 가지를 사용해야 합니다. 이러한 유형에 대해 더 자세히 알아보려면 <ph name="PRODUCT_NAME" /> 확장 프로그램 설명서를 참조하세요.
-
-          이 정책은 ExtensionInstallForcelist에 의해 강제 설치되는 확장 프로그램 및 앱에도 적용됩니다.
-
-          이 설정을 사용하면 목록에 없는 유형의 확장 프로그램/앱은 설치되지 않습니다.
-
-          이 설정을 사용하지 않으면 허용되는 확장 프로그램/앱 유형에 제한이 없습니다.</translation>
 <translation id="3780152581321609624">Kerberos SPN에 비표준 포트 포함</translation>
 <translation id="3780319008680229708">이 정책을 'true'로 설정하면 Cast 툴바 아이콘이 툴바 또는 더보기 메뉴에 항상 표시되며 사용자는 이 아이콘을 삭제할 수 없습니다.
 
@@ -1062,9 +1066,6 @@
 
           설정하지 않거나 False로 설정하면 파일을 Google 드라이브에 전송할 수 있습니다.</translation>
 <translation id="3915395663995367577">proxy .pac 파일에 대한 URL</translation>
-<translation id="3926940573869375969"><ph name="PRODUCT_OS_NAME" /> 로그인 화면에서 허용되는 키보드 레이아웃을 구성합니다.
-
-      이 정책이 입력 방법 식별자 목록으로 설정되는 경우 주어진 입력 방법을 로그인 화면에서 사용할 수 있습니다. 첫 번째로 주어진 입력 수단이 사전 선택됩니다. 로그인 화면에서는 사용자 포드가 활성화되는데 이때 이 정책에서 주어진 입력 수단과 더불어 사용자가 가장 최근에 사용한 입력 수단을 사용할 수 있습니다. 이 정책이 설정되지 않은 경우 로그인 화면의 입력 수단은 로그인 화면이 표시되는 언어에서 가져옵니다. 유효한 입력 수단 식별자가 아닌 값은 무시됩니다.</translation>
 <translation id="3939893074578116847">온라인 상태를 모니터링하기 위해 관리 서버에 네트워크 패킷을 전송하여
       기기가 오프라인일 때 서버에서 감지할 수 있도록 합니다.
 
@@ -1385,6 +1386,9 @@
 <translation id="4928632305180102854"><ph name="PRODUCT_OS_NAME" />이(가) 새 사용자 계정을 생성할 수 있는지 여부를 조정합니다. 이 정책을 false로 설정하면 계정이 없는 사용자는 로그인할 수 없습니다.
 
       이 정책을 true로 설정하거나 구성하지 않으면 <ph name="DEVICEUSERWHITELISTPROTO_POLICY_NAME" />이(가) 사용자 로그인을 차단하지 않을 경우 새 사용자 계정이 생성될 수 있습니다.</translation>
+<translation id="4962262530309732070">이 정책을 true로 설정하거나 설정하지 않으면 <ph name="PRODUCT_NAME" />의 사용자 관리자에서 사용자를 추가할 수 있습니다.
+
+      이 정책을 false로 설정하면 <ph name="PRODUCT_NAME" />의 사용자 관리자에서 새 프로필을 만들 수 없습니다.</translation>
 <translation id="4971529314808359013">사이트에서 인증서를 요청하는 경우 <ph name="PRODUCT_NAME" />에서 클라이언트 인증서를 자동으로 선택할 사이트를 지정하는 URL 패턴 목록을 지정하도록 허용합니다.
 
           이 값은 문자열화된 JSON 사전의 배열이어야 합니다. 각 사전은 { "pattern": "$URL_PATTERN", "filter" : $FILTER } 형태여야 하며, 여기에서 $URL_PATTERN은 콘텐츠 설정 패턴입니다. $FILTER는 브라우저에서 선택할 수 있는 클라이언트 인증서를 제한합니다. 필터와 관계없이 서버의 인증서 요청과 일치하는 인증서만이 선택됩니다. 또한 $FILTER가 { "ISSUER": { "CN": "$ISSUER_CN" } } 형태인 경우 CommonName $ISSUER_CN으로 된 인증서에 의해 발급된 클라이언트 인증서만이 선택됩니다. $FILTER가 빈 사전 {}인 경우 클라이언트 인증서 선택에 추가 제한은 없습니다.
@@ -1411,6 +1415,7 @@
       설정하지 않으면 인터넷 사용기록을 가져올지 여부를 사용자에게 확인하거나 자동으로 가져올 수 있습니다.</translation>
 <translation id="5056708224511062314">화면 돋보기 사용 중지됨</translation>
 <translation id="5067143124345820993">로그인 사용자 허용 목록</translation>
+<translation id="5085647276663819155">인쇄 미리보기 사용 안함</translation>
 <translation id="5105313908130842249">배터리 전원으로 실행할 때 화면 잠금 지연</translation>
 <translation id="5111573778467334951">배터리 전원으로 실행할 때 유휴 지연 시간에 도달하면 수행할 작업을 지정합니다.
 
@@ -1425,6 +1430,11 @@
 <translation id="5148753489738115745"><ph name="PRODUCT_FRAME_NAME" />이(가) <ph name="PRODUCT_NAME" />을(를) 실행할 때 사용되는 추가 매개변수를 지정하도록 허용합니다.
 
           해당 정책이 설정되지 않았다면 기본 명령줄이 사용됩니다.</translation>
+<translation id="5159469559091666409">모니터링 네트워크 패킷이 전송되는 빈도를 밀리초로 나타냅니다.
+
+      이 정책이 설정되지 않으면 기본 간격이 3분으로 설정됩니다.
+      최소 간격은 30초이며 최대 간격은 24시간입니다.
+      이 범위를 벗어나는 값은 범위에 맞게 잘립니다.</translation>
 <translation id="5182055907976889880"><ph name="PRODUCT_OS_NAME" />에서 Google 드라이브를 구성합니다.</translation>
 <translation id="5183383917553127163">차단목록에 적용되지 않는 확장 프로그램을 지정할 수 있습니다. 차단목록 값 *은 모든 확장 프로그램이 차단되며 사용자가 허용목록에 나열된 확장 프로그램만 설치할 수 있음을 의미합니다. 기본적으로 모든 확장 프로그램은 허용목록에 포함되지만, 모든 확장 프로그램이 정책에 의해 차단목록에 포함된 경우 허용목록을 사용하여 해당 정책을 무시할 수 있습니다.</translation>
 <translation id="5192837635164433517"><ph name="PRODUCT_NAME" />에 내장된 대체 오류 페이지(예: '페이지를 찾을 수 없습니다')를 사용하도록 설정하며 사용자가 이 설정을 변경하지 못하게 합니다.
@@ -1496,6 +1506,9 @@
           이 설정을 사용하도록 설정하면 원격 연결이 진행 중일 때 호스트의 물리적인 입력/출력 기기가 사용 중지됩니다.
 
           이 설정이 사용 중지되거나 설정되지 않으면 공유 중일 때 로컬 및 원격 사용자가 모두 호스트와 상호작용할 수 있습니다.</translation>
+<translation id="5405289061476885481"><ph name="PRODUCT_OS_NAME" /> 로그인 화면에서 허용되는 키보드 레이아웃을 구성합니다.
+
+      이 정책이 입력 방법 식별자 목록으로 설정되는 경우 주어진 입력 방법을 로그인 화면에서 사용할 수 있습니다. 첫 번째로 주어진 입력 수단이 사전 선택됩니다. 로그인 화면에서는 사용자 포드가 활성화되는데 이때 이 정책에서 주어진 입력 수단과 더불어 사용자가 마지막으로 사용한 입력 수단을 사용할 수 있습니다. 이 정책이 설정되지 않은 경우 로그인 화면의 입력 수단은 로그인 화면이 표시되는 언어에서 가져옵니다. 유효한 입력 수단 식별자가 아닌 값은 무시됩니다.</translation>
 <translation id="5423001109873148185">이 정책을 사용하도록 설정하면 현재 기본 브라우저에서 검색엔진을 강제로 가져옵니다. 또한 가져오기 대화상자에 영향을 미칩니다.
 
       사용하지 않으면 기본 검색엔진을 가져오지 않습니다.
@@ -1549,11 +1562,6 @@
       이 정책을 설정하지 않으면 <ph name="PRODUCT_OS_NAME" />에서 기본값 3시간을 사용합니다.
 
       플랫폼에서 정책 알림을 지원하면 정책이 변경될 때마다 정책 알림이 자동으로 강제 새로고침되어 잦은 새로고침이 불필요하므로 새로고침 지연이 24시간으로 설정됩니다(모든 기본값 및 이 정책의 값 무시).</translation>
-<translation id="5535957389335373033">네트워크 패킷 모니터링이 전송되는 빈도를 밀리초로 나타냅니다.
-
-      이 정책이 설정되지 않으면 기본 주기는 3분입니다.
-      최소 주기는 30초이며 최대 주기는 24시간입니다.
-      이 범위를 벗어나는 값은 범위에 맞게 잘립니다.</translation>
 <translation id="5535973522252703021">Kerberos 위임 서버 허용목록</translation>
 <translation id="5559079916187891399">이 정책은 Android 앱에 아무런 영향을 미치지 않습니다.</translation>
 <translation id="5560039246134246593"><ph name="PRODUCT_NAME" />에서 버전 시드 가져오기에 대한 매개변수를 추가합니다.
@@ -2031,9 +2039,6 @@
 <translation id="6786967369487349613">로밍 프로필 디렉토리를 설정합니다.</translation>
 <translation id="6810445994095397827">이 사이트에서 자바스크립트 차단</translation>
 <translation id="681446116407619279">지원되는 인증 스키마</translation>
-<translation id="6828905844648501476">이 정책이 'true'로 설정되거나 설정되지 않으면 <ph name="PRODUCT_NAME" />이(가) 사용자 관리자가 사용자를 추가하도록 허용합니다.
-
-      이 정책이 'false'로 설정되면 <ph name="PRODUCT_NAME" />에서 프로필 관리자가 새 프로필을 생성하도록 허용하지 않습니다.</translation>
 <translation id="685769593149966548">YouTube에 강력 제한 모드 사용</translation>
 <translation id="687046793986382807">이 정책은 <ph name="PRODUCT_NAME" /> 버전 35를 기준으로 지원이 중단되었습니다.
 

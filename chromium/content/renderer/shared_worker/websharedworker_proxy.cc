@@ -16,11 +16,11 @@ namespace content {
 WebSharedWorkerProxy::WebSharedWorkerProxy(
     std::unique_ptr<blink::WebSharedWorkerConnectListener> listener,
     ViewHostMsg_CreateWorker_Params params,
-    blink::WebMessagePortChannel* channel)
+    std::unique_ptr<blink::WebMessagePortChannel> channel)
     : route_id_(MSG_ROUTING_NONE),
       router_(ChildThreadImpl::current()->GetRouter()),
       listener_(std::move(listener)) {
-  connect(params, channel);
+  connect(params, std::move(channel));
 }
 
 WebSharedWorkerProxy::~WebSharedWorkerProxy() {
@@ -28,21 +28,19 @@ WebSharedWorkerProxy::~WebSharedWorkerProxy() {
   router_->RemoveRoute(route_id_);
 }
 
-void WebSharedWorkerProxy::connect(ViewHostMsg_CreateWorker_Params params,
-                                   blink::WebMessagePortChannel* channel) {
+void WebSharedWorkerProxy::connect(
+    ViewHostMsg_CreateWorker_Params params,
+    std::unique_ptr<blink::WebMessagePortChannel> channel) {
   // Send synchronous IPC to get |route_id|.
   // TODO(nhiroki): Stop using synchronous IPC (https://crbug.com/679654).
   ViewHostMsg_CreateWorker_Reply reply;
   router_->Send(new ViewHostMsg_CreateWorker(params, &reply));
   route_id_ = reply.route_id;
   router_->AddRoute(route_id_, this);
-  listener_->workerCreated(reply.error);
+  listener_->WorkerCreated(reply.error);
 
-  // Accept ownership of the channel.
-  std::unique_ptr<WebMessagePortChannelImpl> channel_impl(
-      static_cast<WebMessagePortChannelImpl*>(channel));
-
-  message_port_ = channel_impl->ReleaseMessagePort();
+  message_port_ = static_cast<WebMessagePortChannelImpl*>(channel.get())
+                      ->ReleaseMessagePort();
 
   // An actual connection request will be issued on OnWorkerCreated().
 }
@@ -70,15 +68,15 @@ void WebSharedWorkerProxy::OnWorkerCreated() {
 }
 
 void WebSharedWorkerProxy::OnWorkerScriptLoadFailed() {
-  listener_->scriptLoadFailed();
+  listener_->ScriptLoadFailed();
   delete this;
 }
 
 void WebSharedWorkerProxy::OnWorkerConnected(
     const std::set<uint32_t>& used_features) {
-  listener_->connected();
+  listener_->Connected();
   for (uint32_t feature : used_features)
-    listener_->countFeature(feature);
+    listener_->CountFeature(feature);
 }
 
 void WebSharedWorkerProxy::OnWorkerDestroyed() {
@@ -86,7 +84,7 @@ void WebSharedWorkerProxy::OnWorkerDestroyed() {
 }
 
 void WebSharedWorkerProxy::OnCountFeature(uint32_t feature) {
-  listener_->countFeature(feature);
+  listener_->CountFeature(feature);
 }
 
 }  // namespace content

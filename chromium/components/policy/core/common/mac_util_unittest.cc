@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/mac/scoped_cftyperef.h"
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "components/policy/core/common/policy_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -19,7 +20,7 @@ TEST(PolicyMacUtilTest, PropertyToValue) {
   base::DictionaryValue root;
 
   // base::Value::Type::NONE
-  root.Set("null", base::Value::CreateNullValue());
+  root.Set("null", base::MakeUnique<base::Value>());
 
   // base::Value::Type::BOOLEAN
   root.SetBoolean("false", false);
@@ -38,19 +39,19 @@ TEST(PolicyMacUtilTest, PropertyToValue) {
   root.SetString("empty", "");
 
   // base::Value::Type::LIST
+  root.Set("emptyl", base::MakeUnique<base::Value>(base::Value::Type::LIST));
   base::ListValue list;
-  root.Set("emptyl", list.DeepCopy());
   for (base::DictionaryValue::Iterator it(root); !it.IsAtEnd(); it.Advance())
-    list.Append(it.value().DeepCopy());
+    list.Append(base::MakeUnique<base::Value>(it.value()));
   EXPECT_EQ(root.size(), list.GetSize());
-  list.Append(root.DeepCopy());
-  root.Set("list", list.DeepCopy());
+  list.Append(base::MakeUnique<base::Value>(root));
+  root.Set("list", base::MakeUnique<base::Value>(list));
 
   // base::Value::Type::DICTIONARY
-  base::DictionaryValue dict;
-  root.Set("emptyd", dict.DeepCopy());
+  root.Set("emptyd",
+           base::MakeUnique<base::Value>(base::Value::Type::DICTIONARY));
   // Very meta.
-  root.Set("dict", root.DeepCopy());
+  root.Set("dict", base::MakeUnique<base::Value>(root));
 
   base::ScopedCFTypeRef<CFPropertyListRef> property(ValueToProperty(root));
   ASSERT_TRUE(property);

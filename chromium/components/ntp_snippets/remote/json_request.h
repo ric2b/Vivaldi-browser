@@ -24,8 +24,6 @@ class Value;
 class Clock;
 }  // namespace base
 
-class FetchAPI;
-
 namespace ntp_snippets {
 class UserClassifier;
 
@@ -44,12 +42,8 @@ enum class FetchResult {
   OAUTH_TOKEN_ERROR = 6,
   // DEPRECATED_INTERACTIVE_QUOTA_ERROR = 7,
   // DEPRECATED_NON_INTERACTIVE_QUOTA_ERROR = 8,
-  RESULT_MAX = 9
-};
-
-enum FetchAPI {
-  CHROME_READER_API,
-  CHROME_CONTENT_SUGGESTIONS_API,
+  MISSING_API_KEY = 9,
+  RESULT_MAX = 10
 };
 
 // A single request to query remote suggestions. On success, the suggestions are
@@ -76,7 +70,6 @@ class JsonRequest : public net::URLFetcherDelegate {
     Builder& SetAuthentication(const std::string& account_id,
                                const std::string& auth_header);
     Builder& SetCreationTime(base::TimeTicks creation_time);
-    Builder& SetFetchAPI(FetchAPI fetch_api);
     // The language_model borrowed from the fetcher needs to stay alive until
     // the request body is built.
     Builder& SetLanguageModel(const translate::LanguageModel* language_model);
@@ -117,7 +110,6 @@ class JsonRequest : public net::URLFetcherDelegate {
     // Only required, if the request needs to be sent.
     std::string auth_header_;
     base::Clock* clock_;
-    FetchAPI fetch_api_;
     RequestParams params_;
     ParseJSONCallback parse_json_callback_;
     GURL url_;

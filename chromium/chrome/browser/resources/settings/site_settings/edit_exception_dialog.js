@@ -17,6 +17,15 @@ Polymer({
 
     /** @private */
     origin_: String,
+
+    /**
+     * Whether the current input is invalid.
+     * @private
+     */
+    invalid_: {
+      type: Boolean,
+      value: false,
+    },
   },
 
   /** @private {!settings.SiteSettingsPrefsBrowserProxy} */
@@ -39,21 +48,17 @@ Polymer({
   /** @private */
   onActionButtonTap_: function() {
     if (this.model.origin != this.origin_) {
-      // TODO(dpapad): Only COOKIES category can be edited currently,
-      // crbug.com/695578.
-      var category = settings.ContentSettingsTypes.COOKIES;
-
       // The way to "edit" an exception is to remove it and and a new one.
       this.browserProxy_.resetCategoryPermissionForOrigin(
           this.model.origin,
           this.model.embeddingOrigin,
-          category,
+          this.model.category,
           this.model.incognito);
 
       this.browserProxy_.setCategoryPermissionForOrigin(
           this.origin_,
           this.origin_,
-          category,
+          this.model.category,
           this.model.setting,
           this.model.incognito);
     }
@@ -61,19 +66,15 @@ Polymer({
     this.$.dialog.close();
   },
 
-  /**
-   * @param {!KeyboardEvent} e
-   * @private
-   */
-  onKeypress_: function(e) {
-    if (e.key == 'Enter' && !this.$.actionButton.disabled)
-      this.onActionButtonTap_();
-  },
-
   /** @private */
   validate_: function() {
+    if (this.$$('paper-input').value.trim() == '') {
+      this.invalid_ = true;
+      return;
+    }
+
     this.browserProxy_.isPatternValid(this.origin_).then(function(isValid) {
-      this.$.actionButton.disabled = !isValid;
+      this.invalid_ = !isValid;
     }.bind(this));
   },
 });

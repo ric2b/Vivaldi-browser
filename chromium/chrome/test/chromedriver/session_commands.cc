@@ -177,13 +177,21 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
       new WebDriverLog(WebDriverLog::kDriverType, Log::kAll));
   const base::DictionaryValue* desired_caps;
   bool w3c_capability = false;
-  if (params.GetDictionary("capabilities.desiredCapabilities", &desired_caps)
+  if (params.GetDictionary("capabilities.alwaysMatch", &desired_caps)
       && desired_caps->GetBoolean("chromeOptions.w3c", &w3c_capability)
-      && w3c_capability)
+      && w3c_capability) {
+    // TODO(johnchen): Handle capabilities.firstMatch.
     session->w3c_compliant = true;
-  else if (!params.GetDictionary("desiredCapabilities", &desired_caps) &&
-     !params.GetDictionary("capabilities.desiredCapabilities", &desired_caps))
-    return Status(kUnknownError, "cannot find dict 'desiredCapabilities'");
+  } else if (params.GetDictionary("capabilities.desiredCapabilities",
+                                  &desired_caps)
+             && desired_caps->GetBoolean("chromeOptions.w3c", &w3c_capability)
+             && w3c_capability) {
+    // TODO(johnchen): Remove when clients stop using this.
+    session->w3c_compliant = true;
+  } else if (!params.GetDictionary("desiredCapabilities", &desired_caps)) {
+    return Status(kSessionNotCreatedException,
+                  "Missing or invalid capabilities");
+  }
 
   Capabilities capabilities;
   Status status = capabilities.Parse(*desired_caps);
@@ -201,8 +209,8 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
   // Create Log's and DevToolsEventListener's for ones that are DevTools-based.
   // Session will own the Log's, Chrome will own the listeners.
   // Also create |CommandListener|s for the appropriate logs.
-  ScopedVector<DevToolsEventListener> devtools_event_listeners;
-  ScopedVector<CommandListener> command_listeners;
+  std::vector<std::unique_ptr<DevToolsEventListener>> devtools_event_listeners;
+  std::vector<std::unique_ptr<CommandListener>> command_listeners;
   status = CreateLogs(capabilities,
                       session,
                       &session->devtools_logs,
@@ -214,15 +222,12 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
   // |session| will own the |CommandListener|s.
   session->command_listeners.swap(command_listeners);
 
-  status = LaunchChrome(bound_params.context_getter.get(),
-                        bound_params.socket_factory,
-                        bound_params.device_manager,
-                        bound_params.port_server,
-                        bound_params.port_manager,
-                        capabilities,
-                        &devtools_event_listeners,
-                        &session->chrome,
-                        session->w3c_compliant);
+  status =
+      LaunchChrome(bound_params.context_getter.get(),
+                   bound_params.socket_factory, bound_params.device_manager,
+                   bound_params.port_server, bound_params.port_manager,
+                   capabilities, std::move(devtools_event_listeners),
+                   &session->chrome, session->w3c_compliant);
   if (status.IsError())
     return status;
 
@@ -279,8 +284,7 @@ Status ExecuteGetCurrentWindowHandle(Session* session,
   if (status.IsError())
     return status;
 
-  value->reset(
-      new base::StringValue(WebViewIdToWindowHandle(web_view->GetId())));
+  value->reset(new base::Value(WebViewIdToWindowHandle(web_view->GetId())));
   return Status(kOk);
 }
 
@@ -436,6 +440,9 @@ Status ExecuteSwitchToWindow(Session* session,
       return status;
   }
 
+  status = session->chrome->ActivateWebView(web_view_id);
+  if (status.IsError())
+    return status;
   session->window = web_view_id;
   session->SwitchToTopFrame();
   session->mouse_position = WebPoint(0, 0);
@@ -822,7 +829,7 @@ Status ExecuteUploadFile(Session* session,
   if (status.IsError())
     return Status(kUnknownError, "unable to unzip 'file'", status);
 
-  value->reset(new base::StringValue(upload.value()));
+  value->reset(new base::Value(upload.value()));
   return Status(kOk);
 }
 

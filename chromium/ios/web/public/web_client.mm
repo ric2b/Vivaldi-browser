@@ -70,7 +70,7 @@ base::RefCountedMemory* WebClient::GetDataResourceBytes(int resource_id) const {
   return nullptr;
 }
 
-NSString* WebClient::GetEarlyPageScript() const {
+NSString* WebClient::GetEarlyPageScript(BrowserState* browser_state) const {
   return @"";
 }
 
@@ -82,6 +82,11 @@ void WebClient::AllowCertificateError(
     bool overridable,
     const base::Callback<void(bool)>& callback) {
   callback.Run(false);
+}
+
+std::unique_ptr<base::TaskScheduler::InitParams>
+WebClient::GetTaskSchedulerInitParams() {
+  return nullptr;
 }
 
 }  // namespace web

@@ -22,7 +22,8 @@
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/searchbox/searchbox.h"
 #include "components/crx_file/id_util.h"
-#include "components/ntp_tiles/ntp_tile_source.h"
+#include "components/ntp_tiles/tile_source.h"
+#include "components/ntp_tiles/tile_visual_type.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -94,7 +95,7 @@ void ThrowInvalidParameters(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 void Dispatch(blink::WebFrame* frame, const blink::WebString& script) {
   if (!frame) return;
-  frame->executeScript(blink::WebScriptSource(script));
+  frame->ExecuteScript(blink::WebScriptSource(script));
 }
 
 v8::Local<v8::String> GenerateThumbnailURL(
@@ -108,9 +109,12 @@ v8::Local<v8::String> GenerateThumbnailURL(
 }
 
 v8::Local<v8::String> GenerateThumb2URL(v8::Isolate* isolate,
-                                        const std::string& url) {
-  return UTF8ToV8String(
-      isolate, base::StringPrintf("chrome-search://thumb2/%s", url.c_str()));
+                                        const GURL& page_url,
+                                        const GURL& fallback_thumb_url) {
+  return UTF8ToV8String(isolate,
+                        base::StringPrintf("chrome-search://thumb2/%s?fb=%s",
+                                           page_url.spec().c_str(),
+                                           fallback_thumb_url.spec().c_str()));
 }
 
 // Populates a Javascript MostVisitedItem object from |mv_item|.
@@ -149,21 +153,13 @@ v8::Local<v8::Object> GenerateMostVisitedItem(
   obj->Set(v8::String::NewFromUtf8(isolate, "rid"),
            v8::Int32::New(isolate, restricted_id));
 
-  // If the suggestion already has a suggested thumbnail, we create an thumbnail
-  // array with both the local thumbnail and the proposed one.
-  // Otherwise, we just create an array with the generated one.
-  if (!mv_item.thumbnail.spec().empty()) {
-    v8::Local<v8::Array> thumbs = v8::Array::New(isolate, 2);
-    // Note: The "thumb2" source captures a thumbnail on the next visit.
-    thumbs->Set(0, GenerateThumb2URL(isolate, mv_item.url.spec()));
-    thumbs->Set(1, UTF8ToV8String(isolate, mv_item.thumbnail.spec()));
-    obj->Set(v8::String::NewFromUtf8(isolate, "thumbnailUrls"), thumbs);
-  } else {
-    v8::Local<v8::Array> thumbs = v8::Array::New(isolate, 1);
-    thumbs->Set(0,
-                GenerateThumbnailURL(isolate, render_view_id, restricted_id));
-    obj->Set(v8::String::NewFromUtf8(isolate, "thumbnailUrls"), thumbs);
-  }
+  // If the suggestion already has a suggested thumbnail, we create a thumbnail
+  // URL with both the local thumbnail and the proposed one as a fallback.
+  // Otherwise, we just pass on the generated one.
+  obj->Set(v8::String::NewFromUtf8(isolate, "thumbnailUrl"),
+           mv_item.thumbnail.is_valid()
+               ? GenerateThumb2URL(isolate, mv_item.url, mv_item.thumbnail)
+               : GenerateThumbnailURL(isolate, render_view_id, restricted_id));
 
   // If the suggestion already has a favicon, we populate the element with it.
   if (!mv_item.favicon.spec().empty()) {
@@ -190,14 +186,14 @@ v8::Local<v8::Object> GenerateMostVisitedItem(
 // chrome-search://most-visited and chrome-search://suggestions.
 content::RenderFrame* GetRenderFrameWithCheckedOrigin(const GURL& origin) {
   blink::WebLocalFrame* webframe =
-      blink::WebLocalFrame::frameForCurrentContext();
+      blink::WebLocalFrame::FrameForCurrentContext();
   if (!webframe)
     return NULL;
-  auto* main_frame = content::RenderFrame::FromWebFrame(webframe->localRoot());
+  auto* main_frame = content::RenderFrame::FromWebFrame(webframe->LocalRoot());
   if (!main_frame || !main_frame->IsMainFrame())
     return NULL;
 
-  GURL url(webframe->document().url());
+  GURL url(webframe->GetDocument().Url());
   if (url.GetOrigin() != origin.GetOrigin())
     return NULL;
 
@@ -467,7 +463,7 @@ v8::Extension* SearchBoxExtension::Get() {
 bool SearchBoxExtension::PageSupportsInstant(blink::WebFrame* frame) {
   if (!frame) return false;
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  v8::Local<v8::Value> v = frame->executeScriptAndReturnValue(
+  v8::Local<v8::Value> v = frame->ExecuteScriptAndReturnValue(
       blink::WebScriptSource(kSupportsInstantScript));
   return !v.IsEmpty() && v->BooleanValue();
 }
@@ -478,7 +474,7 @@ void SearchBoxExtension::DispatchChromeIdentityCheckResult(
     const base::string16& identity,
     bool identity_match) {
   std::string escaped_identity = base::GetQuotedJSONString(identity);
-  blink::WebString script(blink::WebString::fromUTF8(base::StringPrintf(
+  blink::WebString script(blink::WebString::FromUTF8(base::StringPrintf(
       kDispatchChromeIdentityCheckResult, escaped_identity.c_str(),
       identity_match ? "true" : "false")));
   Dispatch(frame, script);
@@ -493,7 +489,7 @@ void SearchBoxExtension::DispatchFocusChange(blink::WebFrame* frame) {
 void SearchBoxExtension::DispatchHistorySyncCheckResult(
     blink::WebFrame* frame,
     bool sync_history) {
-  blink::WebString script(blink::WebString::fromUTF8(base::StringPrintf(
+  blink::WebString script(blink::WebString::FromUTF8(base::StringPrintf(
       kDispatchHistorySyncCheckResult, sync_history ? "true" : "false")));
   Dispatch(frame, script);
 }
@@ -599,10 +595,10 @@ SearchBoxExtensionWrapper::GetNativeFunctionTemplate(
 // static
 content::RenderFrame* SearchBoxExtensionWrapper::GetRenderFrame() {
   blink::WebLocalFrame* webframe =
-      blink::WebLocalFrame::frameForCurrentContext();
+      blink::WebLocalFrame::FrameForCurrentContext();
   if (!webframe) return NULL;
 
-  auto* main_frame = content::RenderFrame::FromWebFrame(webframe->localRoot());
+  auto* main_frame = content::RenderFrame::FromWebFrame(webframe->LocalRoot());
   if (!main_frame || !main_frame->IsMainFrame())
     return NULL;
 
@@ -999,19 +995,23 @@ void SearchBoxExtensionWrapper::LogMostVisitedImpression(
   if (!render_frame)
     return;
 
-  if (args.Length() < 2 || !args[0]->IsNumber() || !args[1]->IsNumber()) {
+  if (args.Length() < 3 || !args[0]->IsNumber() || !args[1]->IsNumber() ||
+      !args[2]->IsNumber()) {
     ThrowInvalidParameters(args);
     return;
   }
 
   DVLOG(1) << render_frame << " LogMostVisitedImpression";
 
-  if (args[1]->Uint32Value() <=
-      static_cast<int>(ntp_tiles::NTPTileSource::LAST)) {
-    ntp_tiles::NTPTileSource tile_source =
-        static_cast<ntp_tiles::NTPTileSource>(args[1]->Uint32Value());
+  if (args[1]->Uint32Value() <= static_cast<int>(ntp_tiles::TileSource::LAST) &&
+      args[2]->Uint32Value() <= ntp_tiles::TileVisualType::TILE_TYPE_MAX) {
+    auto tile_source =
+        static_cast<ntp_tiles::TileSource>(args[1]->Uint32Value());
+    auto tile_type =
+        static_cast<ntp_tiles::TileVisualType>(args[2]->Uint32Value());
     SearchBox::Get(render_frame)
-        ->LogMostVisitedImpression(args[0]->IntegerValue(), tile_source);
+        ->LogMostVisitedImpression(args[0]->IntegerValue(), tile_source,
+                                   tile_type);
   }
 }
 
@@ -1030,12 +1030,15 @@ void SearchBoxExtensionWrapper::LogMostVisitedNavigation(
 
   DVLOG(1) << render_frame << " LogMostVisitedNavigation";
 
-  if (args[1]->Uint32Value() <=
-      static_cast<int>(ntp_tiles::NTPTileSource::LAST)) {
-    ntp_tiles::NTPTileSource tile_source =
-        static_cast<ntp_tiles::NTPTileSource>(args[1]->Uint32Value());
+  if (args[1]->Uint32Value() <= static_cast<int>(ntp_tiles::TileSource::LAST) &&
+      args[2]->Uint32Value() <= ntp_tiles::TileVisualType::TILE_TYPE_MAX) {
+    auto tile_source =
+        static_cast<ntp_tiles::TileSource>(args[1]->Uint32Value());
+    auto tile_type =
+        static_cast<ntp_tiles::TileVisualType>(args[2]->Uint32Value());
     SearchBox::Get(render_frame)
-        ->LogMostVisitedNavigation(args[0]->IntegerValue(), tile_source);
+        ->LogMostVisitedNavigation(args[0]->IntegerValue(), tile_source,
+                                   tile_type);
   }
 }
 

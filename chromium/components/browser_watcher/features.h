@@ -9,7 +9,13 @@
 
 namespace browser_watcher {
 
+// Enables recording persistent stability information, which can later be
+// collected in the event of an unclean shutdown.
 extern const base::Feature kStabilityDebuggingFeature;
+
+// Name of an experiment parameter that controls whether to perform an initial
+// flush.
+extern const char kInitFlushParam[];
 
 }  // namespace browser_watcher
 

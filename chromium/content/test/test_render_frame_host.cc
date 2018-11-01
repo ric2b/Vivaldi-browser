@@ -95,8 +95,8 @@ TestRenderFrameHost* TestRenderFrameHost::AppendChild(
     const std::string& frame_name) {
   std::string frame_unique_name = base::GenerateGUID();
   OnCreateChildFrame(GetProcess()->GetNextRoutingID(),
-                     blink::WebTreeScopeType::Document, frame_name,
-                     frame_unique_name, blink::WebSandboxFlags::None,
+                     blink::WebTreeScopeType::kDocument, frame_name,
+                     frame_unique_name, blink::WebSandboxFlags::kNone,
                      FrameOwnerProperties());
   return static_cast<TestRenderFrameHost*>(
       child_creation_observer_.last_created_frame());
@@ -169,9 +169,9 @@ void TestRenderFrameHost::SimulateNavigationCommit(const GURL& url) {
   replacements.ClearRef();
 
   // This approach to determining whether a navigation is to be treated as
-  // same page is not robust, as it will not handle pushState type navigation.
-  // Do not use elsewhere!
-  params.was_within_same_page =
+  // same document is not robust, as it will not handle pushState type
+  // navigation. Do not use elsewhere!
+  params.was_within_same_document =
       (GetLastCommittedURL().is_valid() && !last_commit_was_error_page_ &&
        url.ReplaceComponents(replacements) ==
            GetLastCommittedURL().ReplaceComponents(replacements));
@@ -222,7 +222,7 @@ void TestRenderFrameHost::SimulateNavigationErrorPageCommit() {
   params.url = navigation_handle()->GetURL();
   params.transition = GetParent() ? ui::PAGE_TRANSITION_MANUAL_SUBFRAME
                                   : ui::PAGE_TRANSITION_LINK;
-  params.was_within_same_page = false;
+  params.was_within_same_document = false;
   params.url_is_unreachable = true;
   params.page_state = PageState::CreateForTesting(navigation_handle()->GetURL(),
                                                   false, nullptr, nullptr);
@@ -235,7 +235,7 @@ void TestRenderFrameHost::SimulateNavigationStop() {
   } else if (IsBrowserSideNavigationEnabled()) {
     // Even if the RenderFrameHost is not loading, there may still be an
     // ongoing navigation in the FrameTreeNode. Cancel this one as well.
-    frame_tree_node()->ResetNavigationRequest(false);
+    frame_tree_node()->ResetNavigationRequest(false, true);
   }
 }
 
@@ -378,9 +378,9 @@ void TestRenderFrameHost::SendNavigateWithParameters(
   replacements.ClearRef();
 
   // This approach to determining whether a navigation is to be treated as
-  // same page is not robust, as it will not handle pushState type navigation.
-  // Do not use elsewhere!
-  params.was_within_same_page =
+  // same document is not robust, as it will not handle pushState type
+  // navigation. Do not use elsewhere!
+  params.was_within_same_document =
       !ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_RELOAD) &&
       !ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED) &&
       (GetLastCommittedURL().is_valid() && !last_commit_was_error_page_ &&
@@ -424,10 +424,12 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
     BeginNavigationParams begin_params(
         std::string(), net::LOAD_NORMAL, has_user_gesture, false,
         REQUEST_CONTEXT_TYPE_HYPERLINK,
-        blink::WebMixedContentContextType::Blockable, url::Origin());
+        blink::WebMixedContentContextType::kBlockable,
+        false,  // is_form_submission
+        url::Origin());
     CommonNavigationParams common_params;
     common_params.url = url;
-    common_params.referrer = Referrer(GURL(), blink::WebReferrerPolicyDefault);
+    common_params.referrer = Referrer(GURL(), blink::kWebReferrerPolicyDefault);
     common_params.transition = ui::PAGE_TRANSITION_LINK;
     common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
     OnBeginNavigation(common_params, begin_params);
@@ -520,7 +522,7 @@ void TestRenderFrameHost::SimulateWillStartRequest(
   if (!navigation_handle() || IsBrowserSideNavigationEnabled())
     return;
   navigation_handle()->CallWillStartRequestForTesting(
-      false /* is_post */, Referrer(GURL(), blink::WebReferrerPolicyDefault),
+      false /* is_post */, Referrer(GURL(), blink::kWebReferrerPolicyDefault),
       true /* user_gesture */, transition, false /* is_external_protocol */);
 }
 

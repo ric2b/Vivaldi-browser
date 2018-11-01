@@ -43,7 +43,8 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
  public:
   class Delegate {
    public:
-    virtual void OnMenuItemActivated(int command_id, int event_flags) = 0;
+    virtual void OnMenuActivated(int command_id, int event_flags) = 0;
+    virtual void OnMenuCanceled()= 0;
   };
 
   VivaldiMenuController(Delegate* delegate,
@@ -155,7 +156,8 @@ class ShowMenuCreateFunction : public ChromeAsyncExtensionFunction,
   ShowMenuCreateFunction();
 
   // VivaldiMenuController::Delegate
-  void OnMenuItemActivated(int command_id, int event_flags) override;
+  void OnMenuActivated(int command_id, int event_flags) override;
+  void OnMenuCanceled() override;
 
  protected:
   ~ShowMenuCreateFunction() override;
@@ -164,8 +166,7 @@ class ShowMenuCreateFunction : public ChromeAsyncExtensionFunction,
   bool RunAsync() override;
 
  private:
-  // If the user click outside the menu we send -1 as result.
-  bool menu_cancelled_;
+  std::unique_ptr<vivaldi::show_menu::Create::Params> params_;
 
   DISALLOW_COPY_AND_ASSIGN(ShowMenuCreateFunction);
 };

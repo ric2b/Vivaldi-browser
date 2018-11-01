@@ -36,63 +36,83 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "core/CoreExport.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefCounted.h"
+#include "platform/wtf/RefPtr.h"
 #include "v8/include/v8.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
 class DOMDataStore;
-
-enum WorldIdConstants {
-  MainWorldId = 0,
-  // Embedder isolated worlds can use IDs in [1, 1<<29).
-  EmbedderWorldIdLimit = (1 << 29),
-  DocumentXMLTreeViewerWorldId,
-  IsolatedWorldIdLimit,
-  WorkerWorldId,
-  TestingWorldId,
-};
-
 class DOMObjectHolderBase;
 
-// This class represent a collection of DOM wrappers for a specific world.
+// This class represent a collection of DOM wrappers for a specific world. This
+// is identified by a world id that is a per-thread global identifier (see
+// WorldId enum).
 class CORE_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
  public:
-  static PassRefPtr<DOMWrapperWorld> create(v8::Isolate*, int worldId = -1);
+  // Per-thread global identifiers for DOMWrapperWorld.
+  enum WorldId {
+    kInvalidWorldId = -1,
+    kMainWorldId = 0,
 
-  static PassRefPtr<DOMWrapperWorld> ensureIsolatedWorld(v8::Isolate*,
-                                                         int worldId);
+    // Embedder isolated worlds can use IDs in [1, 1<<29).
+    kEmbedderWorldIdLimit = (1 << 29),
+    kDocumentXMLTreeViewerWorldId,
+    kIsolatedWorldIdLimit,
+
+    // Other worlds can use IDs after this. Don't manually pick up an ID from
+    // this range. generateWorldIdForType() picks it up on behalf of you.
+    kUnspecifiedWorldIdStart,
+  };
+
+  enum class WorldType {
+    kMain,
+    kIsolated,
+    kGarbageCollector,
+    kRegExp,
+    kTesting,
+    kWorker,
+  };
+
+  // Creates a world other than IsolatedWorld.
+  static PassRefPtr<DOMWrapperWorld> Create(v8::Isolate*, WorldType);
+
+  // Ensures an IsolatedWorld for |worldId|.
+  static PassRefPtr<DOMWrapperWorld> EnsureIsolatedWorld(v8::Isolate*,
+                                                         int world_id);
   ~DOMWrapperWorld();
-  void dispose();
+  void Dispose();
 
-  static bool isolatedWorldsExist() { return isolatedWorldCount; }
-  static void allWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld>>& worlds);
-  static void markWrappersInAllWorlds(ScriptWrappable*,
+  // Called from performance-sensitive functions, so we should keep this simple
+  // and fast as much as possible.
+  static bool NonMainWorldsExistInMainThread() {
+    return number_of_non_main_worlds_in_main_thread_;
+  }
+
+  static void AllWorldsInCurrentThread(Vector<RefPtr<DOMWrapperWorld>>& worlds);
+  static void MarkWrappersInAllWorlds(ScriptWrappable*,
                                       const ScriptWrappableVisitor*);
 
-  static DOMWrapperWorld& world(v8::Local<v8::Context> context) {
-    return ScriptState::from(context)->world();
+  static DOMWrapperWorld& World(v8::Local<v8::Context> context) {
+    return ScriptState::From(context)->World();
   }
 
-  static DOMWrapperWorld& current(v8::Isolate* isolate) {
-    return world(isolate->GetCurrentContext());
+  static DOMWrapperWorld& Current(v8::Isolate* isolate) {
+    return World(isolate->GetCurrentContext());
   }
 
-  static DOMWrapperWorld*& workerWorld();
-  static DOMWrapperWorld& mainWorld();
-  static PassRefPtr<DOMWrapperWorld> fromWorldId(v8::Isolate*, int worldId);
+  static DOMWrapperWorld& MainWorld();
 
-  static void setIsolatedWorldHumanReadableName(int worldID, const String&);
-  String isolatedWorldHumanReadableName();
+  static void SetIsolatedWorldHumanReadableName(int world_id, const String&);
+  String IsolatedWorldHumanReadableName();
 
   // Associates an isolated world (see above for description) with a security
   // origin. XMLHttpRequest instances used in that world will be considered
   // to come from that origin, not the frame's.
-  static void setIsolatedWorldSecurityOrigin(int worldId,
+  static void SetIsolatedWorldSecurityOrigin(int world_id,
                                              PassRefPtr<SecurityOrigin>);
-  SecurityOrigin* isolatedWorldSecurityOrigin();
+  SecurityOrigin* IsolatedWorldSecurityOrigin();
 
   // Associated an isolated world with a Content Security Policy. Resources
   // embedded into the main world's DOM from script executed in an isolated
@@ -102,36 +122,40 @@ class CORE_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
   // FIXME: Right now, resource injection simply bypasses the main world's
   // DOM. More work is necessary to allow the isolated world's policy to be
   // applied correctly.
-  static void setIsolatedWorldContentSecurityPolicy(int worldId,
+  static void SetIsolatedWorldContentSecurityPolicy(int world_id,
                                                     const String& policy);
-  bool isolatedWorldHasContentSecurityPolicy();
+  bool IsolatedWorldHasContentSecurityPolicy();
 
-  bool isMainWorld() const { return m_worldId == MainWorldId; }
-  bool isWorkerWorld() const { return m_worldId == WorkerWorldId; }
-  bool isIsolatedWorld() const {
-    return MainWorldId < m_worldId && m_worldId < IsolatedWorldIdLimit;
-  }
+  bool IsMainWorld() const { return world_type_ == WorldType::kMain; }
+  bool IsWorkerWorld() const { return world_type_ == WorldType::kWorker; }
+  bool IsIsolatedWorld() const { return world_type_ == WorldType::kIsolated; }
 
-  int worldId() const { return m_worldId; }
-  DOMDataStore& domDataStore() const { return *m_domDataStore; }
+  int GetWorldId() const { return world_id_; }
+  DOMDataStore& DomDataStore() const { return *dom_data_store_; }
 
  public:
   template <typename T>
-  void registerDOMObjectHolder(v8::Isolate*, T*, v8::Local<v8::Value>);
+  void RegisterDOMObjectHolder(v8::Isolate*, T*, v8::Local<v8::Value>);
 
  private:
-  DOMWrapperWorld(v8::Isolate*, int worldId);
+  DOMWrapperWorld(v8::Isolate*, WorldType, int world_id);
 
-  static void weakCallbackForDOMObjectHolder(
+  static void WeakCallbackForDOMObjectHolder(
       const v8::WeakCallbackInfo<DOMObjectHolderBase>&);
-  void registerDOMObjectHolderInternal(std::unique_ptr<DOMObjectHolderBase>);
-  void unregisterDOMObjectHolder(DOMObjectHolderBase*);
+  void RegisterDOMObjectHolderInternal(std::unique_ptr<DOMObjectHolderBase>);
+  void UnregisterDOMObjectHolder(DOMObjectHolderBase*);
 
-  static unsigned isolatedWorldCount;
+  static unsigned number_of_non_main_worlds_in_main_thread_;
 
-  const int m_worldId;
-  std::unique_ptr<DOMDataStore> m_domDataStore;
-  HashSet<std::unique_ptr<DOMObjectHolderBase>> m_domObjectHolders;
+  // Returns an identifier for a given world type. This must not be called for
+  // WorldType::IsolatedWorld because an identifier for the world is given from
+  // out of DOMWrapperWorld.
+  static int GenerateWorldIdForType(WorldType);
+
+  const WorldType world_type_;
+  const int world_id_;
+  std::unique_ptr<DOMDataStore> dom_data_store_;
+  HashSet<std::unique_ptr<DOMObjectHolderBase>> dom_object_holders_;
 };
 
 }  // namespace blink

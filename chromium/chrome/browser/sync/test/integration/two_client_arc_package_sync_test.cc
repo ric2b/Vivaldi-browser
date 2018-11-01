@@ -20,34 +20,13 @@ bool AllProfilesHaveSameArcPackageDetails() {
 
 class TwoClientArcPackageSyncTest : public SyncTest {
  public:
-  TwoClientArcPackageSyncTest()
-      : SyncTest(TWO_CLIENT_LEGACY), sync_helper_(nullptr) {
+  TwoClientArcPackageSyncTest() : SyncTest(TWO_CLIENT_LEGACY) {
     DisableVerifier();
   }
 
   ~TwoClientArcPackageSyncTest() override {}
 
-  bool SetupClients() override {
-    if (!SyncTest::SetupClients())
-      return false;
-
-    // Init SyncArcPackageHelper to ensure that the arc services are initialized
-    // for each Profile.
-    sync_helper_ = SyncArcPackageHelper::GetInstance();
-    return sync_helper_ != nullptr;
-  }
-
-  void TearDownOnMainThread() override {
-    sync_helper_->CleanUp();
-    sync_helper_ = nullptr;
-    SyncTest::TearDownOnMainThread();
-  }
-
-  SyncArcPackageHelper* sync_helper() { return sync_helper_; }
-
  private:
-  SyncArcPackageHelper* sync_helper_;
-
   DISALLOW_COPY_AND_ASSIGN(TwoClientArcPackageSyncTest);
 };
 
@@ -62,8 +41,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientArcPackageSyncTest, StartWithSamePackages) {
 
   constexpr size_t kNumPackages = 5;
   for (size_t i = 0; i < kNumPackages; ++i) {
-    sync_helper()->InstallPackageWithIndex(GetProfile(0), i);
-    sync_helper()->InstallPackageWithIndex(GetProfile(1), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(1), i);
   }
 
   ASSERT_TRUE(SetupSync());
@@ -79,13 +58,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientArcPackageSyncTest,
 
   constexpr size_t kNumPackages = 5;
   for (size_t i = 0; i < kNumPackages; ++i) {
-    sync_helper()->InstallPackageWithIndex(GetProfile(0), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), i);
   }
 
   ASSERT_FALSE(AllProfilesHaveSameArcPackageDetails());
 
   ASSERT_TRUE(SetupSync());
-
+  ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllProfilesHaveSameArcPackageDetails());
 }
 
@@ -97,18 +76,18 @@ IN_PROC_BROWSER_TEST_F(TwoClientArcPackageSyncTest,
 
   constexpr size_t kNumPackages = 5;
   for (size_t i = 0; i < kNumPackages; ++i) {
-    sync_helper()->InstallPackageWithIndex(GetProfile(0), i);
-    sync_helper()->InstallPackageWithIndex(GetProfile(1), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(1), i);
   }
 
   for (size_t i = 0; i < kNumPackages; ++i) {
-    sync_helper()->InstallPackageWithIndex(GetProfile(0), i + kNumPackages);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), i + kNumPackages);
   }
 
   ASSERT_FALSE(AllProfilesHaveSameArcPackageDetails());
 
   ASSERT_TRUE(SetupSync());
-
+  ASSERT_TRUE(AwaitQuiescence());
   EXPECT_TRUE(AllProfilesHaveSameArcPackageDetails());
 }
 
@@ -121,14 +100,15 @@ IN_PROC_BROWSER_TEST_F(TwoClientArcPackageSyncTest,
   constexpr size_t kNumPackages = 5;
   constexpr size_t kPackageIdDiff = 1;
   for (size_t i = 0; i < kNumPackages; ++i) {
-    sync_helper()->InstallPackageWithIndex(GetProfile(0), i);
-    sync_helper()->InstallPackageWithIndex(GetProfile(1), i + kPackageIdDiff);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(1),
+                                               i + kPackageIdDiff);
   }
 
   EXPECT_FALSE(AllProfilesHaveSameArcPackageDetails());
 
   ASSERT_TRUE(SetupSync());
-
+  ASSERT_TRUE(AwaitQuiescence());
   EXPECT_TRUE(AllProfilesHaveSameArcPackageDetails());
 }
 
@@ -137,7 +117,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientArcPackageSyncTest, Install) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AllProfilesHaveSameArcPackageDetails());
 
-  sync_helper()->InstallPackageWithIndex(GetProfile(0), 0);
+  sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), 0);
   ASSERT_TRUE(AwaitQuiescence());
   EXPECT_TRUE(AllProfilesHaveSameArcPackageDetails());
 }
@@ -151,8 +131,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientArcPackageSyncTest, InstallDifferent) {
   constexpr size_t kNumPackages = 5;
   constexpr size_t kPackageIdDiff = 3;
   for (size_t i = 0; i < kNumPackages; ++i) {
-    sync_helper()->InstallPackageWithIndex(GetProfile(0), i);
-    sync_helper()->InstallPackageWithIndex(GetProfile(1), i + kPackageIdDiff);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), i);
+    sync_arc_helper()->InstallPackageWithIndex(GetProfile(1),
+                                               i + kPackageIdDiff);
   }
 
   ASSERT_TRUE(AwaitQuiescence());
@@ -165,11 +146,11 @@ IN_PROC_BROWSER_TEST_F(TwoClientArcPackageSyncTest, Uninstall) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AllProfilesHaveSameArcPackageDetails());
 
-  sync_helper()->InstallPackageWithIndex(GetProfile(0), 1);
+  sync_arc_helper()->InstallPackageWithIndex(GetProfile(0), 1);
   ASSERT_TRUE(AwaitQuiescence());
   EXPECT_TRUE(AllProfilesHaveSameArcPackageDetails());
 
-  sync_helper()->UninstallPackageWithIndex(GetProfile(1), 1);
+  sync_arc_helper()->UninstallPackageWithIndex(GetProfile(1), 1);
   EXPECT_FALSE(AllProfilesHaveSameArcPackageDetails());
   ASSERT_TRUE(AwaitQuiescence());
   EXPECT_TRUE(AllProfilesHaveSameArcPackageDetails());

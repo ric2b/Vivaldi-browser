@@ -12,6 +12,7 @@
 #include "components/offline_pages/content/background_loader/background_loader_contents.h"
 #include "components/offline_pages/core/background/offliner.h"
 #include "components/offline_pages/core/offline_page_types.h"
+#include "components/offline_pages/core/snapshot_controller.h"
 #include "content/public/browser/web_contents_observer.h"
 
 namespace content {
@@ -27,7 +28,8 @@ class OfflinePageModel;
 // of an offline page. It uses the BackgroundLoader to load the page and the
 // OfflinePageModel to save it. Only one request may be active at a time.
 class BackgroundLoaderOffliner : public Offliner,
-                                 public content::WebContentsObserver {
+                                 public content::WebContentsObserver,
+                                 public SnapshotController::Client {
  public:
   BackgroundLoaderOffliner(content::BrowserContext* browser_context,
                            const OfflinerPolicy* policy,
@@ -45,30 +47,38 @@ class BackgroundLoaderOffliner : public Offliner,
   bool HandleTimeout(const SavePageRequest& request) override;
 
   // WebContentsObserver implementation.
-  void DidStopLoading() override;
+  void DocumentAvailableInMainFrame() override;
+  void DocumentOnLoadCompletedInMainFrame() override;
   void RenderProcessGone(base::TerminationStatus status) override;
   void WebContentsDestroyed() override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
 
-  void SetPageDelayForTest(long delay_ms);
+  // SnapshotController::Client implementation.
+  void StartSnapshot() override;
+
+  void SetSnapshotControllerForTest(
+      std::unique_ptr<SnapshotController> controller);
   void OnNetworkBytesChanged(int64_t bytes);
 
  protected:
-  // Called to reset internal loader and observer state.
-  virtual void ResetState();
+  // Called to reset the loader.
+  virtual void ResetLoader();
 
  private:
   friend class TestBackgroundLoaderOffliner;
 
   enum SaveState { NONE, SAVING, DELETE_AFTER_SAVE };
-  enum PageLoadState { SUCCESS, RETRIABLE, NONRETRIABLE };
-
-  // Called when the page is ready to be saved.
-  void SavePage();
+  enum PageLoadState { SUCCESS, RETRIABLE, NONRETRIABLE, DELAY_RETRY };
 
   // Called when the page has been saved.
   void OnPageSaved(SavePageResult save_result, int64_t offline_id);
+
+  // Called to reset internal loader and observer state.
+  void ResetState();
+
+  // Called to attach 'this' as the observer to the loader.
+  void AttachObservers();
 
   // Called when application state has changed.
   void OnApplicationStateChange(
@@ -83,6 +93,8 @@ class BackgroundLoaderOffliner : public Offliner,
   OfflinePageModel* offline_page_model_;
   // Tracks pending request, if any.
   std::unique_ptr<SavePageRequest> pending_request_;
+  // Handles determining when a page should be snapshotted.
+  std::unique_ptr<SnapshotController> snapshot_controller_;
   // Callback when pending request completes.
   CompletionCallback completion_callback_;
   // Callback to report progress.
@@ -96,8 +108,6 @@ class BackgroundLoaderOffliner : public Offliner,
   SaveState save_state_;
   // Page load state.
   PageLoadState page_load_state_;
-  // Seconds to delay before taking snapshot.
-  long page_delay_ms_;
   // Network bytes loaded.
   int64_t network_bytes_;
 

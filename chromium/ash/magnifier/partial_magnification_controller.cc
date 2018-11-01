@@ -4,8 +4,8 @@
 
 #include "ash/magnifier/partial_magnification_controller.h"
 
-#include "ash/common/system/chromeos/palette/palette_utils.h"
 #include "ash/shell.h"
+#include "ash/system/palette/palette_utils.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
@@ -162,8 +162,7 @@ class PartialMagnificationController::BorderRenderer
     cc::PaintFlags shadow_flags;
     shadow_flags.setAntiAlias(true);
     shadow_flags.setColor(SK_ColorTRANSPARENT);
-    shadow_flags.setLooper(
-        gfx::CreateShadowDrawLooperCorrectBlur(magnifier_shadows_));
+    shadow_flags.setLooper(gfx::CreateShadowDrawLooper(magnifier_shadows_));
     gfx::Rect shadow_bounds(magnifier_window_bounds_.size());
     recorder.canvas()->DrawCircle(
         shadow_bounds.CenterPoint(),
@@ -207,13 +206,13 @@ class PartialMagnificationController::BorderRenderer
 };
 
 PartialMagnificationController::PartialMagnificationController() {
-  Shell::GetInstance()->AddPreTargetHandler(this);
+  Shell::Get()->AddPreTargetHandler(this);
 }
 
 PartialMagnificationController::~PartialMagnificationController() {
   CloseMagnifierWindow();
 
-  Shell::GetInstance()->RemovePreTargetHandler(this);
+  Shell::Get()->RemovePreTargetHandler(this);
 }
 
 void PartialMagnificationController::SetEnabled(bool enabled) {

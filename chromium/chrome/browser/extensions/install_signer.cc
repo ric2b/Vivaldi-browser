@@ -15,6 +15,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_info.h"
@@ -125,10 +126,10 @@ bool ValidateExpireDateFormat(const std::string& input) {
 void SetExtensionIdSet(base::DictionaryValue* dictionary,
                        const char* key,
                        const ExtensionIdSet& ids) {
-  base::ListValue* id_list = new base::ListValue();
+  auto id_list = base::MakeUnique<base::ListValue>();
   for (ExtensionIdSet::const_iterator i = ids.begin(); i != ids.end(); ++i)
     id_list->AppendString(*i);
-  dictionary->Set(key, id_list);
+  dictionary->Set(key, std::move(id_list));
 }
 
 // Tries to fetch a list of strings from |dictionay| for |key|, and inserts
@@ -145,7 +146,7 @@ bool GetExtensionIdSet(const base::DictionaryValue& dictionary,
        i != id_list->end();
        ++i) {
     std::string id;
-    if (!(*i)->GetAsString(&id)) {
+    if (!i->GetAsString(&id)) {
       return false;
     }
     ids->insert(id);
@@ -306,11 +307,11 @@ namespace {
 
 static int g_request_count = 0;
 
-base::LazyInstance<base::TimeTicks> g_last_request_time =
+base::LazyInstance<base::TimeTicks>::DestructorAtExit g_last_request_time =
     LAZY_INSTANCE_INITIALIZER;
 
-base::LazyInstance<base::ThreadChecker> g_single_thread_checker =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ThreadChecker>::DestructorAtExit
+    g_single_thread_checker = LAZY_INSTANCE_INITIALIZER;
 
 void LogRequestStartHistograms() {
   // Make sure we only ever call this from one thread, so that we don't have to
@@ -390,7 +391,7 @@ void InstallSigner::GetSignature(const SignatureCallback& callback) {
   for (ExtensionIdSet::const_iterator i = ids_.begin(); i != ids_.end(); ++i) {
     id_list->AppendString(*i);
   }
-  dictionary.Set(kIdsKey, id_list.release());
+  dictionary.Set(kIdsKey, std::move(id_list));
   std::string json;
   base::JSONWriter::Write(dictionary, &json);
   if (json.empty()) {

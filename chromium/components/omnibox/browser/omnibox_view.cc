@@ -21,7 +21,6 @@
 #include "components/toolbar/toolbar_model.h"
 #include "extensions/common/constants.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/vector_icons_public.h"
 
 // static
 base::string16 OmniboxView::StripJavascriptSchemas(const base::string16& text) {
@@ -187,10 +186,6 @@ void OmniboxView::TextChanged() {
     model_->OnChanged();
 }
 
-bool OmniboxView::CurrentTextIsURL() {
-  return model_->CurrentTextIsURL();
-}
-
 void OmniboxView::UpdateTextStyle(
     const base::string16& display_text,
     const AutocompleteSchemeClassifier& classifier) {
@@ -205,7 +200,7 @@ void OmniboxView::UpdateTextStyle(
   AutocompleteInput::ParseForEmphasizeComponents(display_text, classifier,
                                                  &scheme, &host);
 
-  if (CurrentTextIsURL()) {
+  if (model_->CurrentTextIsURL()) {
     const base::string16 url_scheme =
         display_text.substr(scheme.begin, scheme.len);
     // Extension IDs are not human-readable, so deemphasize everything to draw

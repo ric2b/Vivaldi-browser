@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
@@ -113,7 +113,8 @@ class CC_EXPORT InputHandler {
   // Binds a client to this handler to receive notifications. Only one client
   // can be bound to an InputHandler. The client must live at least until the
   // handler calls WillShutdown() on the client.
-  virtual void BindToClient(InputHandlerClient* client) = 0;
+  virtual void BindToClient(InputHandlerClient* client,
+                            bool wheel_scroll_latching_enabled) = 0;
 
   // Selects a layer to be scrolled using the |scroll_state| start position.
   // Returns SCROLL_STARTED if the layer at the coordinates can be scrolled,
@@ -215,6 +216,8 @@ class CC_EXPORT InputHandler {
   virtual bool GetScrollOffsetForLayer(int layer_id,
                                        gfx::ScrollOffset* offset) = 0;
   virtual bool ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) = 0;
+
+  virtual bool ScrollingShouldSwitchtoMainThread() = 0;
 
  protected:
   InputHandler() {}

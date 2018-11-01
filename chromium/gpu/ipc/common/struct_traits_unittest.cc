@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <string>
 
 #include "base/message_loop/message_loop.h"
+#include "gpu/config/gpu_feature_type.h"
+#include "gpu/ipc/common/gpu_feature_info.mojom.h"
+#include "gpu/ipc/common/gpu_feature_info_struct_traits.h"
 #include "gpu/ipc/common/traits_test_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -151,6 +155,7 @@ TEST_F(StructTraitsTest, GpuInfo) {
   const int process_crash_count = 0xdead;
   const bool in_process_gpu = true;
   const bool passthrough_cmd_decoder = true;
+  const bool supports_overlays = true;
   const gpu::CollectInfoResult basic_info_state =
       gpu::CollectInfoResult::kCollectInfoSuccess;
   const gpu::CollectInfoResult context_info_state =
@@ -198,6 +203,7 @@ TEST_F(StructTraitsTest, GpuInfo) {
   input.process_crash_count = process_crash_count;
   input.in_process_gpu = in_process_gpu;
   input.passthrough_cmd_decoder = passthrough_cmd_decoder;
+  input.supports_overlays = supports_overlays;
   input.basic_info_state = basic_info_state;
   input.context_info_state = context_info_state;
 #if defined(OS_WIN)
@@ -258,6 +264,7 @@ TEST_F(StructTraitsTest, GpuInfo) {
   EXPECT_EQ(process_crash_count, output.process_crash_count);
   EXPECT_EQ(in_process_gpu, output.in_process_gpu);
   EXPECT_EQ(passthrough_cmd_decoder, output.passthrough_cmd_decoder);
+  EXPECT_EQ(supports_overlays, output.supports_overlays);
   EXPECT_EQ(basic_info_state, output.basic_info_state);
   EXPECT_EQ(context_info_state, output.context_info_state);
 #if defined(OS_WIN)
@@ -440,6 +447,23 @@ TEST_F(StructTraitsTest, GpuPreferences) {
 #if defined(OS_WIN)
   EXPECT_EQ(vendor, echo.enable_accelerated_vpx_decode);
 #endif
+}
+
+TEST_F(StructTraitsTest, GpuFeatureInfo) {
+  GpuFeatureInfo input;
+  input.status_values[GPU_FEATURE_TYPE_FLASH3D] =
+      gpu::kGpuFeatureStatusBlacklisted;
+  input.status_values[GPU_FEATURE_TYPE_PANEL_FITTING] =
+      gpu::kGpuFeatureStatusUndefined;
+  input.status_values[GPU_FEATURE_TYPE_GPU_RASTERIZATION] =
+      gpu::kGpuFeatureStatusDisabled;
+
+  GpuFeatureInfo output;
+  ASSERT_TRUE(mojom::GpuFeatureInfo::Deserialize(
+      mojom::GpuFeatureInfo::Serialize(&input), &output));
+  EXPECT_TRUE(std::equal(input.status_values,
+                         input.status_values + NUMBER_OF_GPU_FEATURE_TYPES,
+                         output.status_values));
 }
 
 }  // namespace gpu

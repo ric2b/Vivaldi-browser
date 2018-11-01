@@ -10,7 +10,7 @@
 #include "platform/animation/CompositorKeyframe.h"
 #include "platform/animation/CompositorTransformOperations.h"
 #include "platform/animation/TimingFunction.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -23,14 +23,14 @@ class PLATFORM_EXPORT CompositorTransformKeyframe : public CompositorKeyframe {
                               const TimingFunction&);
   ~CompositorTransformKeyframe();
 
-  std::unique_ptr<cc::TransformKeyframe> cloneToCC() const;
+  std::unique_ptr<cc::TransformKeyframe> CloneToCC() const;
 
   // CompositorKeyframe implementation.
-  double time() const override;
-  const cc::TimingFunction* ccTimingFunction() const override;
+  double Time() const override;
+  const cc::TimingFunction* CcTimingFunction() const override;
 
  private:
-  std::unique_ptr<cc::TransformKeyframe> m_transformKeyframe;
+  std::unique_ptr<cc::TransformKeyframe> transform_keyframe_;
 };
 
 }  // namespace blink

@@ -7,16 +7,17 @@
 
 #include <memory>
 
-#include "ash/common/accelerators/accelerator_controller_delegate.h"
+#include "ash/accelerators/accelerator_controller_delegate.h"
 #include "base/macros.h"
 
 namespace ash {
 
 class ScreenshotDelegate;
 
-// Contains all the accelerators that have dependencies on portions of ash
-// not yet converted to ash/common. When adding a new accelerator that only
-// depends on ash/common code, add it to accelerator_controller.cc instead.
+// Support for accelerators that only work in classic ash and not in mash,
+// for example accelerators related to display management. These sorts of
+// accelerators should be rare. Most new accelerators should be added to
+// accelerator_controller.cc instead.
 class ASH_EXPORT AcceleratorControllerDelegateAura
     : public AcceleratorControllerDelegate {
  public:
@@ -36,10 +37,6 @@ class ASH_EXPORT AcceleratorControllerDelegateAura
                         const ui::Accelerator& previous_accelerator) override;
   void PerformAction(AcceleratorAction action,
                      const ui::Accelerator& accelerator) override;
-  void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
-                                             int message_id,
-                                             int old_shortcut_id,
-                                             int new_shortcut_id) override;
 
  private:
   std::unique_ptr<ScreenshotDelegate> screenshot_delegate_;

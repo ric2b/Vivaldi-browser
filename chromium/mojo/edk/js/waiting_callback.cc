@@ -14,7 +14,7 @@ namespace js {
 
 namespace {
 
-v8::Handle<v8::Private> GetHiddenPropertyName(v8::Isolate* isolate) {
+v8::Local<v8::Private> GetHiddenPropertyName(v8::Isolate* isolate) {
   return v8::Private::ForApi(
       isolate, gin::StringToV8(isolate, "::mojo::js::WaitingCallback"));
 }
@@ -26,13 +26,13 @@ gin::WrapperInfo WaitingCallback::kWrapperInfo = { gin::kEmbedderNativeGin };
 // static
 gin::Handle<WaitingCallback> WaitingCallback::Create(
     v8::Isolate* isolate,
-    v8::Handle<v8::Function> callback,
+    v8::Local<v8::Function> callback,
     gin::Handle<HandleWrapper> handle_wrapper,
     MojoHandleSignals signals,
     bool one_shot) {
   gin::Handle<WaitingCallback> waiting_callback = gin::CreateHandle(
       isolate, new WaitingCallback(isolate, callback, one_shot));
-  MojoResult result = waiting_callback->watcher_.Start(
+  MojoResult result = waiting_callback->watcher_.Watch(
       handle_wrapper->get(), signals,
       base::Bind(&WaitingCallback::OnHandleReady,
                  base::Unretained(waiting_callback.get())));
@@ -50,16 +50,16 @@ void WaitingCallback::Cancel() {
 }
 
 WaitingCallback::WaitingCallback(v8::Isolate* isolate,
-                                 v8::Handle<v8::Function> callback,
+                                 v8::Local<v8::Function> callback,
                                  bool one_shot)
     : one_shot_(one_shot),
-      watcher_(FROM_HERE),
+      watcher_(FROM_HERE, SimpleWatcher::ArmingPolicy::AUTOMATIC),
       weak_factory_(this) {
-  v8::Handle<v8::Context> context = isolate->GetCurrentContext();
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   runner_ = gin::PerContextData::From(context)->runner()->GetWeakPtr();
-  GetWrapper(isolate)
-      ->SetPrivate(context, GetHiddenPropertyName(isolate), callback)
-      .FromJust();
+  v8::Maybe<bool> result = GetWrapper(isolate).ToLocalChecked()->SetPrivate(
+      context, GetHiddenPropertyName(isolate), callback);
+  DCHECK(result.IsJust() && result.FromJust());
 }
 
 WaitingCallback::~WaitingCallback() {
@@ -73,15 +73,22 @@ void WaitingCallback::OnHandleReady(MojoResult result) {
   gin::Runner::Scope scope(runner_.get());
   v8::Isolate* isolate = runner_->GetContextHolder()->isolate();
 
-  v8::Handle<v8::Value> hidden_value =
-      GetWrapper(isolate)
+  v8::Local<v8::Object> wrapper;
+  if (!GetWrapper(isolate).ToLocal(&wrapper)) {
+    Cancel();
+    return;
+  }
+
+  v8::Local<v8::Value> hidden_value =
+      wrapper
           ->GetPrivate(runner_->GetContextHolder()->context(),
                        GetHiddenPropertyName(isolate))
           .ToLocalChecked();
-  v8::Handle<v8::Function> callback;
-  CHECK(gin::ConvertFromV8(isolate, hidden_value, &callback));
+  v8::Local<v8::Function> callback;
+  bool convert_result = gin::ConvertFromV8(isolate, hidden_value, &callback);
+  DCHECK(convert_result);
 
-  v8::Handle<v8::Value> args[] = { gin::ConvertToV8(isolate, result) };
+  v8::Local<v8::Value> args[] = {gin::ConvertToV8(isolate, result)};
   runner_->Call(callback, runner_->global(), 1, args);
 
   if (one_shot_ || result == MOJO_RESULT_CANCELLED) {

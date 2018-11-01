@@ -6,7 +6,7 @@
 #define ScopedWindowFocusAllowedIndicator_h
 
 #include "core/dom/ExecutionContext.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -15,18 +15,19 @@ class ScopedWindowFocusAllowedIndicator final {
   WTF_MAKE_NONCOPYABLE(ScopedWindowFocusAllowedIndicator);
 
  public:
-  explicit ScopedWindowFocusAllowedIndicator(ExecutionContext* executionContext)
-      : m_executionContext(executionContext) {
-    executionContext->allowWindowInteraction();
+  explicit ScopedWindowFocusAllowedIndicator(
+      ExecutionContext* execution_context)
+      : execution_context_(execution_context) {
+    execution_context->AllowWindowInteraction();
   }
   ~ScopedWindowFocusAllowedIndicator() {
-    m_executionContext->consumeWindowInteraction();
+    execution_context_->ConsumeWindowInteraction();
   }
 
  private:
   // This doesn't create a cycle because ScopedWindowFocusAllowedIndicator
   // is used only on a machine stack.
-  Persistent<ExecutionContext> m_executionContext;
+  Persistent<ExecutionContext> execution_context_;
 };
 
 }  // namespace blink

@@ -4,8 +4,8 @@
 
 #include "ash/mus/shelf_delegate_mus.h"
 
-#include "ash/common/shelf/shelf_controller.h"
-#include "ash/common/wm_shell.h"
+#include "ash/shelf/shelf_controller.h"
+#include "ash/shell.h"
 #include "base/strings/string_util.h"
 
 namespace ash {
@@ -18,8 +18,8 @@ ShelfDelegateMus::~ShelfDelegateMus() {}
 // ShelfDelegate:
 
 ShelfID ShelfDelegateMus::GetShelfIDForAppID(const std::string& app_id) {
-  if (WmShell::Get()->shelf_controller()->app_id_to_shelf_id().count(app_id))
-    return WmShell::Get()->shelf_controller()->app_id_to_shelf_id().at(app_id);
+  if (Shell::Get()->shelf_controller()->app_id_to_shelf_id().count(app_id))
+    return Shell::Get()->shelf_controller()->app_id_to_shelf_id().at(app_id);
   return 0;
 }
 
@@ -29,13 +29,9 @@ ShelfID ShelfDelegateMus::GetShelfIDForAppIDAndLaunchID(
   return ShelfDelegateMus::GetShelfIDForAppID(app_id);
 }
 
-bool ShelfDelegateMus::HasShelfIDToAppIDMapping(ShelfID id) const {
-  return WmShell::Get()->shelf_controller()->shelf_id_to_app_id().count(id) > 0;
-}
-
 const std::string& ShelfDelegateMus::GetAppIDForShelfID(ShelfID id) {
-  if (WmShell::Get()->shelf_controller()->shelf_id_to_app_id().count(id))
-    return WmShell::Get()->shelf_controller()->shelf_id_to_app_id().at(id);
+  if (Shell::Get()->shelf_controller()->shelf_id_to_app_id().count(id))
+    return Shell::Get()->shelf_controller()->shelf_id_to_app_id().at(id);
   return base::EmptyString();
 }
 

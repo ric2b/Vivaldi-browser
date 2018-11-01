@@ -29,8 +29,8 @@ namespace {
 class PostTaskAndReplyRelay {
  public:
   PostTaskAndReplyRelay(const tracked_objects::Location& from_here,
-                        Closure task,
-                        Closure reply)
+                        OnceClosure task,
+                        OnceClosure reply)
       : sequence_checker_(),
         from_here_(from_here),
         origin_task_runner_(SequencedTaskRunnerHandle::Get()),
@@ -39,27 +39,25 @@ class PostTaskAndReplyRelay {
 
   ~PostTaskAndReplyRelay() {
     DCHECK(sequence_checker_.CalledOnValidSequence());
-    task_.Reset();
-    reply_.Reset();
   }
 
   void RunTaskAndPostReply() {
-    task_.Run();
+    std::move(task_).Run();
     origin_task_runner_->PostTask(
-        from_here_, Bind(&PostTaskAndReplyRelay::RunReplyAndSelfDestruct,
-                         base::Unretained(this)));
+        from_here_, BindOnce(&PostTaskAndReplyRelay::RunReplyAndSelfDestruct,
+                             base::Unretained(this)));
   }
 
  private:
   void RunReplyAndSelfDestruct() {
     DCHECK(sequence_checker_.CalledOnValidSequence());
 
-    // Force |task_| to be released before |reply_| is to ensure that no one
-    // accidentally depends on |task_| keeping one of its arguments alive while
-    // |reply_| is executing.
-    task_.Reset();
+    // Ensure |task_| has already been released before |reply_| to ensure that
+    // no one accidentally depends on |task_| keeping one of its arguments alive
+    // while |reply_| is executing.
+    DCHECK(!task_);
 
-    reply_.Run();
+    std::move(reply_).Run();
 
     // Cue mission impossible theme.
     delete this;
@@ -68,8 +66,8 @@ class PostTaskAndReplyRelay {
   const SequenceChecker sequence_checker_;
   const tracked_objects::Location from_here_;
   const scoped_refptr<SequencedTaskRunner> origin_task_runner_;
-  Closure reply_;
-  Closure task_;
+  OnceClosure reply_;
+  OnceClosure task_;
 };
 
 }  // namespace
@@ -78,8 +76,8 @@ namespace internal {
 
 bool PostTaskAndReplyImpl::PostTaskAndReply(
     const tracked_objects::Location& from_here,
-    Closure task,
-    Closure reply) {
+    OnceClosure task,
+    OnceClosure reply) {
   DCHECK(!task.is_null()) << from_here.ToString();
   DCHECK(!reply.is_null()) << from_here.ToString();
   PostTaskAndReplyRelay* relay =
@@ -90,8 +88,8 @@ bool PostTaskAndReplyImpl::PostTaskAndReply(
   // to avoid having to suppress every callsite which happens to flakily trigger
   // this race.
   ANNOTATE_LEAKING_OBJECT_PTR(relay);
-  if (!PostTask(from_here, Bind(&PostTaskAndReplyRelay::RunTaskAndPostReply,
-                                Unretained(relay)))) {
+  if (!PostTask(from_here, BindOnce(&PostTaskAndReplyRelay::RunTaskAndPostReply,
+                                    Unretained(relay)))) {
     delete relay;
     return false;
   }

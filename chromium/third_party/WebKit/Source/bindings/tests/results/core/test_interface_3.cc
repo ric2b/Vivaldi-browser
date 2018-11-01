@@ -13,8 +13,8 @@
 #include "web/api/test_interface_3.h"
 
 // TODO(dglazkov): Properly sort the includes.
-#include "wtf/text/WTFString.h"
 #include "bindings/tests/idls/core/TestInterface3.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace web {
 
@@ -33,7 +33,8 @@ DEFINE_TRACE(TestInterface3) {
 // DOMString readonlyStringifierAttribute
 
 // TODO(dglazkov): Implement method generation
-// void TestInterface3::voidMethodDocument
+// void TestInterface3::VoidMethodDocument
+//   Document document
 
 TestInterface3::TestInterface3(blink::TestInterface3* test_interface_3)
     : test_interface_3_(test_interface_3) {}

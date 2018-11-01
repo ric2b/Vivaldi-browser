@@ -60,22 +60,41 @@ Polymer({
   },
 
   /**
+   * @param {boolean} canChangeChannel
+   * @return {string}
+   * @private
+   */
+  getChangeChannelIndicatorSourceName_: function(canChangeChannel) {
+    return loadTimeData.getBoolean('aboutEnterpriseManaged') ? '' :
+        loadTimeData.getString('ownerEmail');
+  },
+
+  /**
+   * @param {boolean} canChangeChannel
+   * @return {CrPolicyIndicatorType}
+   * @private
+   */
+  getChangeChannelIndicatorType_: function(canChangeChannel) {
+    if (canChangeChannel)
+      return CrPolicyIndicatorType.NONE;
+    return loadTimeData.getBoolean('aboutEnterpriseManaged') ?
+        CrPolicyIndicatorType.DEVICE_POLICY :
+        CrPolicyIndicatorType.OWNER;
+  },
+
+  /**
    * @param {!Event} e
    * @private
    */
   onChangeChannelTap_: function(e) {
     e.preventDefault();
     this.showChannelSwitcherDialog_ = true;
-    // Async to wait for dialog to appear in the DOM.
-    this.async(function() {
-      var dialog = this.$$('settings-channel-switcher-dialog');
-      // Register listener to detect when the dialog is closed. Flip the boolean
-      // once closed to force a restamp next time it is shown such that the
-      // previous dialog's contents are cleared.
-      dialog.addEventListener('close', function() {
-        this.showChannelSwitcherDialog_ = false;
-        this.updateChannelInfo_();
-      }.bind(this));
-    }.bind(this));
+  },
+
+  /** @private */
+  onChannelSwitcherDialogClosed_: function() {
+    this.showChannelSwitcherDialog_ = false;
+    this.$$('paper-button').focus();
+    this.updateChannelInfo_();
   },
 });

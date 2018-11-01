@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Введите комбинацию</translation>
 <translation id="2509495747794740764">Укажите значение от 10 до 200.</translation>
 <translation id="2509857212037838238">Установка <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Количество соединений keepalive</translation>
 <translation id="2550212893339833758">Память подкачки</translation>
 <translation id="2580924999637585241">Всего: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Интернет-магазин Vivaldi</translation>
@@ -317,7 +318,7 @@
 <translation id="5556459405103347317">Перезагрузить</translation>
 <translation id="5575473780076478375">Расширение в приватном режиме: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5581700288664681403">Загрузка <ph name="CLOUD_PRINT_NAME" /></translation>
-<translation id="5623842676595125836">Низкий</translation>
+<translation id="5623842676595125836">Журнал</translation>
 <translation id="5627086634964711283">Также расширение изменило домашнюю страницу по умолчанию.</translation>
 <translation id="5646376287012673985">Местоположение</translation>
 <translation id="5707185214361380026">Не удалась загрузка расширения с:</translation>
@@ -366,6 +367,7 @@
 <translation id="6273677812470008672">Качество</translation>
 <translation id="6295855836753816081">Сохранение...</translation>
 <translation id="6308937455967653460">Сохранить ссылку как...</translation>
+<translation id="6326855256003666642">Количество соединений keepalive</translation>
 <translation id="6348109281845364640">Сбой настройки принтера</translation>
 <translation id="6370021412472292592">Манифест не загружен.</translation>
 <translation id="6398765197997659313">Обычный режим</translation>

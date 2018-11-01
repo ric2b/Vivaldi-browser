@@ -6,14 +6,36 @@ source_set("browser") {
   sources = [
     "cdm_message_filter_android.cc",
     "cdm_message_filter_android.h",
+    "media_drm_storage_impl.cc",
+    "media_drm_storage_impl.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//content/public/browser",
+    "//media/mojo/interfaces",
+    "//url",
   ]
 
   deps = [
-    "//base",
     "//components/cdm/common",
-    "//content/public/browser",
+    "//components/prefs",
     "//content/public/common",
     "//ipc",
     "//media",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "media_drm_storage_impl_unittest.cc",
+  ]
+  deps = [
+    ":browser",
+    "//base/test:test_support",
+    "//components/prefs:test_support",
+    "//media/mojo/services",
+    "//testing/gtest",
   ]
 }

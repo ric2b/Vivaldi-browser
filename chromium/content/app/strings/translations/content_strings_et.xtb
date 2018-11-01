@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">Sisestage kehtiv väärtus. Lähim kehtiv väärtus on <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Esita</translation>
 <translation id="2674318244760992338">jalus</translation>
+<translation id="2709516037105925701">Automaatne täitmine</translation>
 <translation id="2723001399770238859">heli</translation>
 <translation id="2746543609216772311">Väärtus peab olema <ph name="MINIMUM_DATE_OR_TIME" /> või hilisem.</translation>
 <translation id="2759744352195237655">hüpikunupp</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">kataloog</translation>
 <translation id="6934078000481955284">plokktsitaat</translation>
 <translation id="6941933287844615239">laadi meedia alla</translation>
+<translation id="6989848892321993519">Pikendage teksti vähemalt <ph name="MIN_CHARACTERS" /> tähemärgini (kasutate praegu ühte tähemärki).</translation>
 <translation id="7057186640035488495">video aeg</translation>
 <translation id="709897737746224366">Vastendage nõutav vorming.</translation>
 <translation id="7223624360433298498">möödunud aeg</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">Valige üks fail.</translation>
 <translation id="8461852803063341183">raadionupp</translation>
 <translation id="8511325616783751178">rippmenüü nupp</translation>
+<translation id="8519420564908284378">Esita mõlemal ekraanikuval</translation>
 <translation id="8534579021159131403">Minutid</translation>
 <translation id="8541249477527128034">meedia juhtimine</translation>
 <translation id="8583702881314752957">definitsioonide loend</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">kaugesituse juhtimine</translation>
 <translation id="8750798805984357768">Tehke üks nendest valikutest.</translation>
 <translation id="8785498733064193001">taasesituse alustamine</translation>
+<translation id="8845239796550121995">Kantakse nüüd üle telerisse</translation>
 <translation id="8851136666856101339">pea</translation>
 <translation id="8987927404178983737">kuu</translation>
 <translation id="901493112792887934">praegune aeg sekundites</translation>

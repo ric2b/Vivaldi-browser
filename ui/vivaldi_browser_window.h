@@ -80,7 +80,7 @@ class VivaldiBrowserWindow : public BrowserWindow,
   void UpdateTitleBar() override {}
   void BookmarkBarStateChanged(
       BookmarkBar::AnimateChangeType change_type) override {}
-  void UpdateDevTools() override {}
+  void UpdateDevTools() override;
   void UpdateLoadingAnimations(bool should_animate) override {}
   void SetStarredState(bool is_starred) override {}
   void SetTranslateIconToggled(bool is_lit) override {}
@@ -113,8 +113,8 @@ class VivaldiBrowserWindow : public BrowserWindow,
   void FocusInfobars() override {}
   void RotatePaneFocus(bool forwards) override {}
   void ShowAppMenu() override {}
-  bool PreHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event,
-                              bool* is_keyboard_shortcut) override;
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      const content::NativeWebKeyboardEvent& event) override;
   void HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override {}
 
@@ -140,11 +140,6 @@ class VivaldiBrowserWindow : public BrowserWindow,
       bool app_modal,
       const base::Callback<void(bool)>& callback) override {}
   void UserChangedTheme() override {}
-  void ShowWebsiteSettings(
-      Profile* profile,
-      content::WebContents* web_contents,
-      const GURL& url,
-      const security_state::SecurityInfo& security_info) override;
   void VivaldiShowWebsiteSettingsAt(
       Profile* profile,
       content::WebContents* web_contents,
@@ -202,6 +197,15 @@ class VivaldiBrowserWindow : public BrowserWindow,
   void MaybeShowNewBackShortcutBubble(bool forward) override {}
   void HideNewBackShortcutBubble() override {}
   bool IsVisibleOnAllWorkspaces() const override;
+
+  void ResetDockingState(int tab_id);
+
+  bool IsToolbarShowing() const override;
+  void ShowPageInfo(
+    Profile* profile,
+    content::WebContents* web_contents,
+    const GURL& virtual_url,
+    const security_state::SecurityInfo& security_info) override {};
 
  protected:
   void DestroyBrowser() override;

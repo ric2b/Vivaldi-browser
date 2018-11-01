@@ -26,31 +26,31 @@ class CORE_EXPORT InspectorLogAgent
   ~InspectorLogAgent() override;
   DECLARE_VIRTUAL_TRACE();
 
-  void restore() override;
+  void Restore() override;
 
   // Called from InspectorInstrumentation.
-  void consoleMessageAdded(ConsoleMessage*);
+  void ConsoleMessageAdded(ConsoleMessage*);
 
   // Protocol methods.
-  Response enable() override;
-  Response disable() override;
-  Response clear() override;
-  Response startViolationsReport(
+  protocol::Response enable() override;
+  protocol::Response disable() override;
+  protocol::Response clear() override;
+  protocol::Response startViolationsReport(
       std::unique_ptr<protocol::Array<protocol::Log::ViolationSetting>>)
       override;
-  Response stopViolationsReport() override;
+  protocol::Response stopViolationsReport() override;
 
  private:
   // PerformanceMonitor::Client implementation.
-  void reportLongLayout(double duration) override;
-  void reportGenericViolation(PerformanceMonitor::Violation,
+  void ReportLongLayout(double duration) override;
+  void ReportGenericViolation(PerformanceMonitor::Violation,
                               const String& text,
                               double time,
                               SourceLocation*) override;
 
-  bool m_enabled;
-  Member<ConsoleMessageStorage> m_storage;
-  Member<PerformanceMonitor> m_performanceMonitor;
+  bool enabled_;
+  Member<ConsoleMessageStorage> storage_;
+  Member<PerformanceMonitor> performance_monitor_;
 };
 
 }  // namespace blink

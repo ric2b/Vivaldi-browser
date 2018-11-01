@@ -17,6 +17,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "autologin.icon",
     "blocked_badge.icon",
     "bluetooth_connected.icon",
+    "browser_tools.1x.icon",
     "browser_tools.icon",
     "browser_tools_error.icon",
     "browser_tools_update.icon",
@@ -30,6 +31,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "crashed_tab.icon",
     "credit_card.1x.icon",
     "credit_card.icon",
+    "eol.icon",
     "extension.icon",
     "extension_crashed.icon",
     "file_download.icon",
@@ -49,7 +51,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "laptop.icon",
     "lock.icon",
     "mixed_content.icon",
-    "mode_edit.icon",
     "my_location.icon",
     "navigate_home.1x.icon",
     "navigate_home.icon",
@@ -57,7 +58,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "navigate_reload.icon",
     "navigate_stop.1x.icon",
     "navigate_stop.icon",
-    "open_in_phone.icon",
     "overflow_chevron.1x.icon",
     "overflow_chevron.icon",
     "paintbrush.icon",
@@ -95,7 +95,19 @@ aggregate_vector_icons("chrome_vector_icons") {
   ]
 
   if (is_mac) {
-    icons += [ "new_tab_mac_touchbar.icon" ]
+    icons += [
+      "default_favicon.icon",
+      "google_search_mac_touchbar.icon",
+      "new_tab_mac_touchbar.icon",
+    ]
+  }
+
+  if (is_win) {
+    icons += [ "open_in_phone.icon" ]
+  }
+
+  if (is_chromeos) {
+    icons += [ "arc_migrate_encryption_notification.icon" ]
   }
 }
 

@@ -60,6 +60,7 @@ class AutofillClientIOS : public AutofillClient {
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   ukm::UkmService* GetUkmService() override;
+  SaveCardBubbleController* GetSaveCardBubbleController() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -70,6 +71,7 @@ class AutofillClientIOS : public AutofillClient {
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
+      bool should_cvc_be_requested,
       const base::Closure& callback) override;
   void ConfirmCreditCardFillAssist(const CreditCard& card,
                                    const base::Closure& callback) override;
@@ -92,7 +94,6 @@ class AutofillClientIOS : public AutofillClient {
       const std::vector<FormStructure*>& forms) override;
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
-  void OnFirstUserGestureObserved() override;
   scoped_refptr<AutofillWebDataService> GetDatabase() override;
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;

@@ -4,14 +4,14 @@
 
 #include <utility>
 
-#include "ash/common/shelf/shelf_button.h"
-#include "ash/common/shelf/shelf_model.h"
-#include "ash/common/shelf/shelf_view.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/test/test_shelf_item_delegate.h"
+#include "ash/shelf/shelf_button.h"
+#include "ash/shelf/shelf_model.h"
+#include "ash/shelf/shelf_view.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shelf_view_test_api.h"
+#include "ash/test/test_shelf_item_delegate.h"
 
 namespace ash {
 
@@ -72,10 +72,9 @@ TEST_F(ShelfTest, CheckHoverAfterMenu) {
   item.status = STATUS_RUNNING;
   int index = shelf_model()->Add(item);
 
-  std::unique_ptr<ShelfItemDelegate> delegate(
-      new test::TestShelfItemDelegate(NULL));
-  shelf_model()->SetShelfItemDelegate(shelf_model()->items()[index].id,
-                                      std::move(delegate));
+  shelf_model()->SetShelfItemDelegate(
+      shelf_model()->items()[index].id,
+      base::MakeUnique<test::TestShelfItemDelegate>(nullptr));
 
   ASSERT_EQ(++button_count, test_api()->GetButtonCount());
   ShelfButton* button = test_api()->GetButton(index);

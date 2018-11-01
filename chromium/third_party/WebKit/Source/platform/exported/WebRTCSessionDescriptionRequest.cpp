@@ -31,34 +31,34 @@
 #include "public/platform/WebRTCSessionDescriptionRequest.h"
 
 #include "platform/peerconnection/RTCSessionDescriptionRequest.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebRTCSessionDescription.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
 WebRTCSessionDescriptionRequest::WebRTCSessionDescriptionRequest(
     RTCSessionDescriptionRequest* constraints)
-    : m_private(constraints) {}
+    : private_(constraints) {}
 
-void WebRTCSessionDescriptionRequest::assign(
+void WebRTCSessionDescriptionRequest::Assign(
     const WebRTCSessionDescriptionRequest& other) {
-  m_private = other.m_private;
+  private_ = other.private_;
 }
 
-void WebRTCSessionDescriptionRequest::reset() {
-  m_private.reset();
+void WebRTCSessionDescriptionRequest::Reset() {
+  private_.Reset();
 }
 
-void WebRTCSessionDescriptionRequest::requestSucceeded(
-    const WebRTCSessionDescription& sessionDescription) const {
-  ASSERT(m_private.get());
-  m_private->requestSucceeded(sessionDescription);
+void WebRTCSessionDescriptionRequest::RequestSucceeded(
+    const WebRTCSessionDescription& session_description) const {
+  DCHECK(private_.Get());
+  private_->RequestSucceeded(session_description);
 }
 
-void WebRTCSessionDescriptionRequest::requestFailed(
+void WebRTCSessionDescriptionRequest::RequestFailed(
     const WebString& error) const {
-  ASSERT(m_private.get());
-  m_private->requestFailed(error);
+  DCHECK(private_.Get());
+  private_->RequestFailed(error);
 }
 
 }  // namespace blink

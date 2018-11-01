@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/strings/string16.h"
+#include "components/payments/content/payment_request.mojom.h"
 
 namespace autofill {
 class AutofillProfile;
@@ -16,12 +17,16 @@ class AutofillProfile;
 
 namespace views {
 class Border;
+class ButtonListener;
 class ImageView;
-class VectorIconButtonDelegate;
+class Label;
 class View;
 }
 
 namespace payments {
+
+class PaymentOptionsProvider;
+enum class PaymentShippingType;
 
 constexpr int kPaymentRequestRowHorizontalInsets = 16;
 constexpr int kPaymentRequestRowVerticalInsets = 8;
@@ -30,6 +35,10 @@ constexpr int kPaymentRequestRowVerticalInsets = 8;
 // close button's X rather than its invisible right edge.
 constexpr int kPaymentRequestRowExtraRightInset = 8;
 constexpr int kPaymentRequestButtonSpacing = 10;
+
+// Dimensions of the dialog itself.
+constexpr int kDialogWidth = 450;
+constexpr int kDialogHeight = 450;
 
 enum class PaymentRequestCommonTags {
   BACK_BUTTON_TAG = 0,
@@ -51,12 +60,16 @@ enum class PaymentRequestCommonTags {
 std::unique_ptr<views::View> CreateSheetHeaderView(
     bool show_back_arrow,
     const base::string16& title,
-    views::VectorIconButtonDelegate* delegate);
+    views::ButtonListener* delegate);
 
-// Returns a card image view for the given |card_type|. Includes a rounded rect
-// border. Callers need to set the size of the resulting ImageView.
-std::unique_ptr<views::ImageView> CreateCardIconView(
-    const std::string& card_type);
+// Returns an instrument image view for the given |icon_resource_id|. Includes
+// a rounded rect border. Callers need to set the size of the resulting
+// ImageView. Callers should set a |tooltip_text|.
+std::unique_ptr<views::ImageView> CreateInstrumentIconView(
+    int icon_resource_id,
+    const base::string16& tooltip_text);
+
+std::unique_ptr<views::View> CreateProductLogoFooterView();
 
 // Represents formatting options for each of the different contexts in which an
 // Address label may be displayed.
@@ -76,13 +89,18 @@ std::unique_ptr<views::View> GetContactInfoLabel(
     AddressStyleType type,
     const std::string& locale,
     const autofill::AutofillProfile& profile,
-    bool show_payer_name,
-    bool show_payer_email,
-    bool show_payer_phone);
+    const PaymentOptionsProvider& options);
 
 // Creates a views::Border object that can paint the gray horizontal ruler used
 // as a separator between items in the Payment Request dialog.
 std::unique_ptr<views::Border> CreatePaymentRequestRowBorder();
+
+// Creates a label with a bold font.
+std::unique_ptr<views::Label> CreateBoldLabel(const base::string16& text);
+
+std::unique_ptr<views::View> CreateShippingOptionLabel(
+    payments::mojom::PaymentShippingOption* shipping_option,
+    const base::string16& formatted_amount);
 
 }  // namespace payments
 

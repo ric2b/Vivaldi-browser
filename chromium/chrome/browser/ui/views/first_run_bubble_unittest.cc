@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/views/first_run_bubble.h"
 #include "base/macros.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/ui/views/first_run_bubble.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -13,7 +13,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event.h"
-#include "ui/events/event_processor.h"
+#include "ui/events/event_sink.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view.h"
@@ -103,15 +103,15 @@ void FirstRunBubbleTest::CreateAndCloseBubbleOnEventTest(ui::Event* event) {
       FirstRunBubble::ShowBubble(NULL, anchor_widget->GetContentsView());
   EXPECT_TRUE(delegate != NULL);
 
-  anchor_widget->GetFocusManager()->SetFocusedView(
-      anchor_widget->GetContentsView());
+  anchor_widget->GetContentsView()->RequestFocus();
 
   std::unique_ptr<WidgetClosingObserver> widget_observer(
       new WidgetClosingObserver(delegate->GetWidget()));
 
-  ui::EventDispatchDetails details =
-      anchor_widget->GetNativeWindow()->GetHost()->event_processor()->
-          OnEventFromSource(event);
+  ui::EventDispatchDetails details = anchor_widget->GetNativeWindow()
+                                         ->GetHost()
+                                         ->event_sink()
+                                         ->OnEventFromSource(event);
   EXPECT_FALSE(details.dispatcher_destroyed);
 
   EXPECT_TRUE(widget_observer->widget_destroyed());
@@ -149,7 +149,8 @@ TEST_F(FirstRunBubbleTest, CloseBubbleOnMouseDownEvent) {
 
 TEST_F(FirstRunBubbleTest, CloseBubbleOnTouchDownEvent) {
   ui::TouchEvent touch_down(
-      ui::ET_TOUCH_PRESSED, gfx::Point(10, 10), 0, ui::EventTimeForNow());
+      ui::ET_TOUCH_PRESSED, gfx::Point(10, 10), ui::EventTimeForNow(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   CreateAndCloseBubbleOnEventTest(&touch_down);
 }
 

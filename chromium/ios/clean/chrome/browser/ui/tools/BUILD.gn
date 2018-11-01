@@ -6,6 +6,8 @@ source_set("tools") {
   sources = [
     "tools_coordinator.h",
     "tools_coordinator.mm",
+    "tools_mediator.h",
+    "tools_mediator.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -13,11 +15,11 @@ source_set("tools") {
   deps = [
     ":tools_ui",
     "//base",
-    "//ios/clean/chrome/browser",
     "//ios/clean/chrome/browser/ui/actions",
     "//ios/clean/chrome/browser/ui/animators",
     "//ios/clean/chrome/browser/ui/presenters",
-    "//ios/shared/chrome/browser/coordinator_context",
+    "//ios/shared/chrome/browser/ui/browser_list",
+    "//ios/shared/chrome/browser/ui/coordinators",
   ]
 }
 
@@ -27,6 +29,10 @@ source_set("tools_ui") {
     "menu_overflow_controls_stackview.mm",
     "menu_view_controller.h",
     "menu_view_controller.mm",
+    "tools_actions.h",
+    "tools_consumer.h",
+    "tools_menu_item.h",
+    "tools_menu_item.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -35,8 +41,28 @@ source_set("tools_ui") {
     "//base",
     "//base:i18n",
     "//ios/chrome/browser/ui",
-    "//ios/clean/chrome/browser/ui/actions",
+    "//ios/clean/chrome/browser/ui/commands",
     "//ios/clean/chrome/browser/ui/toolbar:toolbar_components_ui",
-    "//ios/third_party/material_roboto_font_loader_ios",
+    "//ios/third_party/material_components_ios",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "tools_coordinator_unittest.mm",
+    "tools_mediator_unittest.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  deps = [
+    ":tools",
+    ":tools_ui",
+    "//base/test:test_support",
+    "//ios/chrome/test/base",
+    "//testing/gtest",
+    "//third_party/ocmock",
   ]
 }

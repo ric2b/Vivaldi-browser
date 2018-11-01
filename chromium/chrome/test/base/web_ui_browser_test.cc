@@ -50,7 +50,7 @@ using content::WebUIMessageHandler;
 
 namespace {
 
-base::LazyInstance<std::vector<std::string> > error_messages_ =
+base::LazyInstance<std::vector<std::string>>::DestructorAtExit error_messages_ =
     LAZY_INSTANCE_INITIALIZER;
 
 // Intercepts all log messages.
@@ -126,8 +126,8 @@ bool WebUIBrowserTest::RunJavascriptTestF(bool is_async,
                                           const std::string& test_fixture,
                                           const std::string& test_name) {
   ConstValueVector args;
-  args.push_back(new base::StringValue(test_fixture));
-  args.push_back(new base::StringValue(test_name));
+  args.push_back(new base::Value(test_fixture));
+  args.push_back(new base::Value(test_name));
 
   if (is_async)
     return RunJavascriptAsyncTest("RUN_TEST_F", args);
@@ -207,8 +207,8 @@ void WebUIBrowserTest::PreLoadJavascriptLibraries(
     RenderViewHost* preload_host) {
   ASSERT_FALSE(libraries_preloaded_);
   ConstValueVector args;
-  args.push_back(new base::StringValue(preload_test_fixture));
-  args.push_back(new base::StringValue(preload_test_name));
+  args.push_back(new base::Value(preload_test_fixture));
+  args.push_back(new base::Value(preload_test_name));
   RunJavascriptUsingHandler(
       "preloadJavascriptLibraries", args, false, false, preload_host);
   libraries_preloaded_ = true;
@@ -365,7 +365,7 @@ class MockWebUIProvider
   DISALLOW_COPY_AND_ASSIGN(MockWebUIProvider);
 };
 
-base::LazyInstance<MockWebUIProvider> mock_provider_ =
+base::LazyInstance<MockWebUIProvider>::DestructorAtExit mock_provider_ =
     LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace

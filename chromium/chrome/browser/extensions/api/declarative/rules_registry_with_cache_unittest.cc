@@ -9,6 +9,7 @@
 // RulesRegistryWithCache.
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_environment.h"
@@ -242,11 +243,11 @@ TEST_F(RulesRegistryWithCacheTest, DeclarativeRulesStored) {
   EXPECT_TRUE(cache_delegate->GetDeclarativeRulesStored(extension1_->id()));
 
   extension_prefs->UpdateExtensionPref(extension1_->id(), rules_stored_key,
-                                       new base::Value(false));
+                                       base::MakeUnique<base::Value>(false));
   EXPECT_FALSE(cache_delegate->GetDeclarativeRulesStored(extension1_->id()));
 
   extension_prefs->UpdateExtensionPref(extension1_->id(), rules_stored_key,
-                                       new base::Value(true));
+                                       base::MakeUnique<base::Value>(true));
   EXPECT_TRUE(cache_delegate->GetDeclarativeRulesStored(extension1_->id()));
 
   // 2. Test writing behavior.
@@ -325,7 +326,7 @@ TEST_F(RulesRegistryWithCacheTest, RulesStoredFlagMultipleRegistries) {
 
   // Update the flag for the first registry.
   extension_prefs->UpdateExtensionPref(extension1_->id(), rules_stored_key1,
-                                       new base::Value(false));
+                                       base::MakeUnique<base::Value>(false));
   EXPECT_FALSE(cache_delegate1->GetDeclarativeRulesStored(extension1_->id()));
   EXPECT_TRUE(cache_delegate2->GetDeclarativeRulesStored(extension1_->id()));
 }
@@ -342,13 +343,9 @@ TEST_F(RulesRegistryWithCacheTest, RulesPreservedAcrossRestart) {
 
   // 1. Add an extension, before rules registry gets created.
   std::string error;
-  scoped_refptr<Extension> extension(
-      LoadManifestUnchecked("permissions",
-                            "web_request_all_host_permissions.json",
-                            Manifest::INVALID_LOCATION,
-                            Extension::NO_FLAGS,
-                            extension1_->id(),
-                            &error));
+  scoped_refptr<Extension> extension(LoadManifestUnchecked(
+      "permissions", "web_request_all_host_permissions.json",
+      Manifest::UNPACKED, Extension::NO_FLAGS, extension1_->id(), &error));
   ASSERT_TRUE(error.empty());
   extension_service->AddExtension(extension.get());
   EXPECT_TRUE(extensions::ExtensionRegistry::Get(env_.profile())

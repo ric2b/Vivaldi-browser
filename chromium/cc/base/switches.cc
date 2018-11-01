@@ -50,14 +50,18 @@ const char kEnableColorCorrectRendering[] = "enable-color-correct-rendering";
 // Enables the GPU benchmarking extension
 const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
 
-// Force all rasterization and compositing to be done in linear color space,
-// with physically correct blending and interpolation.
-const char kEnableTrueColorRendering[] = "enable-true-color-rendering";
+// Enables multi-client Surface synchronization. In practice, this indicates
+// that LayerTreeHost expects to be given a valid LocalSurfaceId provided by
+// the parent compositor.
+const char kEnableSurfaceSynchronization[] = "enable-surface-synchronization";
 
 // Renders a border around compositor layers to help debug and study
 // layer compositing.
 const char kShowCompositedLayerBorders[] = "show-composited-layer-borders";
 const char kUIShowCompositedLayerBorders[] = "ui-show-layer-borders";
+const char kCompositedRenderPassBorders[] = "renderpass";
+const char kCompositedSurfaceBorders[] = "surface";
+const char kCompositedLayerBorders[] = "layer";
 
 // Renders a green border around GL composited texture quads to help
 // debug and study overlay support.

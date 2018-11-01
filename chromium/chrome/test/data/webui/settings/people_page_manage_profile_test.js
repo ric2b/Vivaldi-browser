@@ -11,7 +11,9 @@ cr.define('settings_people_page_manage_profile', function() {
   var TestManageProfileBrowserProxy = function() {
     settings.TestBrowserProxy.call(this, [
       'getAvailableIcons',
-      'setProfileIconAndName',
+      'setProfileIconToGaiaAvatar',
+      'setProfileIconToDefaultAvatar',
+      'setProfileName',
       'getProfileShortcutStatus',
       'addProfileShortcut',
       'removeProfileShortcut',
@@ -32,13 +34,26 @@ cr.define('settings_people_page_manage_profile', function() {
     /** @override */
     getAvailableIcons: function() {
       this.methodCalled('getAvailableIcons');
-      return Promise.resolve([{url: 'fake-icon-1.png', label: 'fake-icon-1'},
-                              {url: 'fake-icon-2.png', label: 'fake-icon-2'}]);
+      return Promise.resolve([
+        {url: 'fake-icon-1.png', label: 'fake-icon-1'},
+        {url: 'fake-icon-2.png', label: 'fake-icon-2'},
+        {url: 'gaia-icon.png', label: 'gaia-icon', isGaiaAvatar: true}
+      ]);
     },
 
     /** @override */
-    setProfileIconAndName: function(iconUrl, name) {
-      this.methodCalled('setProfileIconAndName', [iconUrl, name]);
+    setProfileIconToGaiaAvatar: function() {
+      this.methodCalled('setProfileIconToGaiaAvatar');
+    },
+
+    /** @override */
+    setProfileIconToDefaultAvatar: function(iconUrl) {
+      this.methodCalled('setProfileIconToDefaultAvatar', [iconUrl]);
+    },
+
+    /** @override */
+    setProfileName: function(name) {
+      this.methodCalled('setProfileName', [name]);
     },
 
     /** @override */
@@ -85,21 +100,27 @@ cr.define('settings_people_page_manage_profile', function() {
         var selector = manageProfile.$.selector.$['avatar-grid'];
         assertTrue(!!selector);
 
-        return browserProxy.whenCalled('getAvailableIcons').then(function() {
-          Polymer.dom.flush();
+        return browserProxy.whenCalled('getAvailableIcons')
+            .then(function() {
+              Polymer.dom.flush();
 
-          assertEquals('fake-icon-1.png', manageProfile.profileIconUrl);
-          assertEquals(2, selector.items.length);
-          assertTrue(selector.items[0].classList.contains('iron-selected'));
-          assertFalse(selector.items[1].classList.contains('iron-selected'));
+              assertEquals('fake-icon-1.png', manageProfile.profileIconUrl);
+              assertEquals(3, selector.items.length);
+              assertTrue(selector.items[0].classList.contains('iron-selected'));
+              assertFalse(
+                  selector.items[1].classList.contains('iron-selected'));
+              assertFalse(
+                  selector.items[2].classList.contains('iron-selected'));
 
-          MockInteractions.tap(selector.items[1]);
-          return browserProxy.whenCalled('setProfileIconAndName').then(
-              function(args) {
-                assertEquals('fake-icon-2.png', args[0]);
-                assertEquals('Initial Fake Name', args[1]);
-              });
-        });
+              MockInteractions.tap(selector.items[1]);
+              return browserProxy.whenCalled('setProfileIconToDefaultAvatar');
+            })
+            .then(function(args) {
+              assertEquals('fake-icon-2.png', args[0]);
+
+              MockInteractions.tap(selector.items[2]);
+              return browserProxy.whenCalled('setProfileIconToGaiaAvatar');
+            });
       });
 
       // Tests profile icon updates pushed from the browser.
@@ -113,9 +134,10 @@ cr.define('settings_people_page_manage_profile', function() {
           Polymer.dom.flush();
 
           assertEquals('fake-icon-2.png', manageProfile.profileIconUrl);
-          assertEquals(2, selector.items.length);
+          assertEquals(3, selector.items.length);
           assertFalse(selector.items[0].classList.contains('iron-selected'));
           assertTrue(selector.items[1].classList.contains('iron-selected'));
+          assertFalse(selector.items[2].classList.contains('iron-selected'));
         });
       });
 
@@ -129,10 +151,9 @@ cr.define('settings_people_page_manage_profile', function() {
         nameField.value = 'New Name';
         nameField.fire('change');
 
-        return browserProxy.whenCalled('setProfileIconAndName').then(
+        return browserProxy.whenCalled('setProfileName').then(
             function(args) {
-              assertEquals('fake-icon-1.png', args[0]);
-              assertEquals('New Name', args[1]);
+              assertEquals('New Name', args[0]);
             });
       });
 

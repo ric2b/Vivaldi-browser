@@ -13,12 +13,13 @@ bool IsMultiTaskingSupported() {
   return [[UIDevice currentDevice] isMultitaskingSupported];
 }
 
-CriticalClosure::CriticalClosure(const Closure& closure) : closure_(closure) {}
+CriticalClosure::CriticalClosure(OnceClosure closure)
+    : closure_(std::move(closure)) {}
 
 CriticalClosure::~CriticalClosure() {}
 
 void CriticalClosure::Run() {
-  closure_.Run();
+  std::move(closure_).Run();
 }
 
 }  // namespace internal

@@ -90,8 +90,9 @@ class FileMetricsProvider : public MetricsProvider,
   // within that directory are used. Because some metadata may need to persist
   // across process restarts, preferences entries are used based on the
   // |prefs_key| name. Call RegisterPrefs() with the same name to create the
-  // necessary keys in advance. Set |prefs_key| empty if no persistence is
-  // required.
+  // necessary keys in advance. Set |prefs_key| empty (nullptr will work) if
+  // no persistence is required. ACTIVE files shouldn't have a pref key as
+  // they update internal state about what has been previously sent.
   void RegisterSource(const base::FilePath& path,
                       SourceType type,
                       SourceAssociation source_association,
@@ -128,6 +129,9 @@ class FileMetricsProvider : public MetricsProvider,
 
     // File could not be opened.
     ACCESS_RESULT_NO_OPEN,
+
+    // File contents were internally deleted.
+    ACCESS_RESULT_MEMORY_DELETED,
 
     ACCESS_RESULT_MAX
   };

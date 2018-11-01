@@ -28,7 +28,7 @@
 
 #include "core/html/parser/HTMLToken.h"
 #include "platform/text/SegmentedString.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -44,18 +44,20 @@ class HTMLSourceTracker {
   // FIXME: Once we move "end" into HTMLTokenizer, rename "start" to
   // something that makes it obvious that this method can be called multiple
   // times.
-  void start(SegmentedString&, HTMLTokenizer*, HTMLToken&);
+  void Start(SegmentedString&, HTMLTokenizer*, HTMLToken&);
   void end(SegmentedString&, HTMLTokenizer*, HTMLToken&);
 
-  String sourceForToken(const HTMLToken&);
+  String SourceForToken(const HTMLToken&);
 
  private:
-  SegmentedString m_previousSource;
-  SegmentedString m_currentSource;
+  bool NeedToCheckTokenizerBuffer(HTMLTokenizer*);
 
-  String m_cachedSourceForToken;
+  SegmentedString previous_source_;
+  SegmentedString current_source_;
 
-  bool m_isStarted;
+  String cached_source_for_token_;
+
+  bool is_started_;
 };
 
 }  // namespace blink

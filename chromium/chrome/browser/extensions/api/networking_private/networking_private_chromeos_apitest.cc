@@ -14,6 +14,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_test_impl.h"
+#include "chrome/browser/extensions/api/networking_cast_private/chrome_networking_cast_private_delegate.h"
 #include "chrome/browser/extensions/api/networking_private/networking_private_credentials_getter.h"
 #include "chrome/browser/extensions/api/networking_private/networking_private_ui_delegate_chromeos.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -73,6 +74,7 @@ using chromeos::ShillManagerClient;
 using chromeos::ShillProfileClient;
 using chromeos::ShillServiceClient;
 
+using extensions::ChromeNetworkingCastPrivateDelegate;
 using extensions::NetworkingPrivateDelegate;
 using extensions::NetworkingPrivateDelegateFactory;
 using extensions::NetworkingPrivateChromeOS;
@@ -91,30 +93,51 @@ const char kCellular1ServicePath[] = "stub_cellular1";
 
 // Stub Verify* methods implementation to satisfy expectations of
 // networking_private_apitest.
-class CryptoVerifyStub : public NetworkingPrivateDelegate::VerifyDelegate {
- private:
+class TestNetworkingCastPrivateDelegate
+    : public ChromeNetworkingCastPrivateDelegate {
+ public:
+  TestNetworkingCastPrivateDelegate() = default;
+  ~TestNetworkingCastPrivateDelegate() override = default;
+
   // VerifyDelegate
-  void VerifyDestination(const VerificationProperties& verification_properties,
-                         const BoolCallback& success_callback,
+  void VerifyDestination(std::unique_ptr<Credentials> credentials,
+                         const VerifiedCallback& success_callback,
                          const FailureCallback& failure_callback) override {
+    AssertCredentials(*credentials);
     success_callback.Run(true);
   }
 
   void VerifyAndEncryptCredentials(
       const std::string& guid,
-      const VerificationProperties& verification_properties,
-      const StringCallback& success_callback,
+      std::unique_ptr<Credentials> credentials,
+      const DataCallback& success_callback,
       const FailureCallback& failure_callback) override {
+    AssertCredentials(*credentials);
     success_callback.Run("encrypted_credentials");
   }
 
-  void VerifyAndEncryptData(
-      const VerificationProperties& verification_properties,
-      const std::string& data,
-      const StringCallback& success_callback,
-      const FailureCallback& failure_callback) override {
+  void VerifyAndEncryptData(const std::string& data,
+                            std::unique_ptr<Credentials> credentials,
+                            const DataCallback& success_callback,
+                            const FailureCallback& failure_callback) override {
+    AssertCredentials(*credentials);
     success_callback.Run("encrypted_data");
   }
+
+ private:
+  void AssertCredentials(const Credentials& credentials) {
+    ASSERT_EQ("certificate", credentials.certificate());
+    ASSERT_EQ("ica1,ica2,ica3",
+              base::JoinString(credentials.intermediate_certificates(), ","));
+    ASSERT_EQ("cHVibGljX2tleQ==", credentials.public_key());
+    ASSERT_EQ("00:01:02:03:04:05", credentials.device_bssid());
+    ASSERT_EQ("c2lnbmVkX2RhdGE=", credentials.signed_data());
+    ASSERT_EQ(
+        "Device 0123,device_serial,00:01:02:03:04:05,cHVibGljX2tleQ==,nonce",
+        credentials.unsigned_data());
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(TestNetworkingCastPrivateDelegate);
 };
 
 class UIDelegateStub : public NetworkingPrivateDelegate::UIDelegate {
@@ -231,16 +254,31 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
                             "stub_cellular_device1");
     device_test_->SetDeviceProperty(kCellularDevicePath,
                                     shill::kCarrierProperty,
-                                    base::StringValue("Cellular1_Carrier"));
+                                    base::Value("Cellular1_Carrier"));
     base::DictionaryValue home_provider;
     home_provider.SetString("name", "Cellular1_Provider");
     home_provider.SetString("code", "000000");
     home_provider.SetString("country", "us");
     device_test_->SetDeviceProperty(
         kCellularDevicePath, shill::kHomeProviderProperty, home_provider);
-    device_test_->SetDeviceProperty(
-        kCellularDevicePath, shill::kTechnologyFamilyProperty,
-        base::StringValue(shill::kNetworkTechnologyGsm));
+    device_test_->SetDeviceProperty(kCellularDevicePath,
+                                    shill::kTechnologyFamilyProperty,
+                                    base::Value(shill::kNetworkTechnologyGsm));
+    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kMeidProperty,
+                                    base::Value("test_meid"));
+    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kImeiProperty,
+                                    base::Value("test_imei"));
+    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kIccidProperty,
+                                    base::Value("test_iccid"));
+    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kEsnProperty,
+                                    base::Value("test_esn"));
+    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kMdnProperty,
+                                    base::Value("test_mdn"));
+    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kMinProperty,
+                                    base::Value("test_min"));
+    device_test_->SetDeviceProperty(kCellularDevicePath,
+                                    shill::kModelIDProperty,
+                                    base::Value("test_model_id"));
     device_test_->SetSimLocked(kCellularDevicePath, false);
 
     // Add the Cellular Service.
@@ -250,13 +288,13 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
         kCellular1ServicePath, shill::kAutoConnectProperty, base::Value(true));
     service_test_->SetServiceProperty(
         kCellular1ServicePath, shill::kNetworkTechnologyProperty,
-        base::StringValue(shill::kNetworkTechnologyGsm));
+        base::Value(shill::kNetworkTechnologyGsm));
     service_test_->SetServiceProperty(
         kCellular1ServicePath, shill::kActivationStateProperty,
-        base::StringValue(shill::kActivationStateNotActivated));
-    service_test_->SetServiceProperty(
-        kCellular1ServicePath, shill::kRoamingStateProperty,
-        base::StringValue(shill::kRoamingStateHome));
+        base::Value(shill::kActivationStateNotActivated));
+    service_test_->SetServiceProperty(kCellular1ServicePath,
+                                      shill::kRoamingStateProperty,
+                                      base::Value(shill::kRoamingStateHome));
 
     profile_test_->AddService(kUser1ProfilePath, kCellular1ServicePath);
     content::RunAllPendingInMessageLoop();
@@ -272,13 +310,22 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
 
   static std::unique_ptr<KeyedService> CreateNetworkingPrivateServiceClient(
       content::BrowserContext* context) {
-    std::unique_ptr<CryptoVerifyStub> crypto_verify(new CryptoVerifyStub);
     std::unique_ptr<NetworkingPrivateDelegate> result(
-        new NetworkingPrivateChromeOS(context, std::move(crypto_verify)));
+        new NetworkingPrivateChromeOS(context));
     std::unique_ptr<NetworkingPrivateDelegate::UIDelegate> ui_delegate(
         new UIDelegateStub);
     result->set_ui_delegate(std::move(ui_delegate));
-    return std::move(result);
+    return result;
+  }
+
+  void SetUp() override {
+    networking_cast_delegate_factory_ = base::Bind(
+        &NetworkingPrivateChromeOSApiTest::CreateNetworkingCastPrivateDelegate,
+        base::Unretained(this));
+    ChromeNetworkingCastPrivateDelegate::SetFactoryCallbackForTest(
+        &networking_cast_delegate_factory_);
+
+    ExtensionApiTest::SetUp();
   }
 
   void SetUpOnMainThread() override {
@@ -331,14 +378,14 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     device_test_->SetDeviceProperty(kWifiDevicePath, shill::kIPConfigsProperty,
                                     wifi_ip_configs);
     device_test_->SetDeviceProperty(kWifiDevicePath, shill::kAddressProperty,
-                                    base::StringValue("001122aabbcc"));
+                                    base::Value("001122aabbcc"));
 
     // Add Services
     AddService("stub_ethernet", "eth0", shill::kTypeEthernet,
                shill::kStateOnline);
     service_test_->SetServiceProperty(
         "stub_ethernet", shill::kProfileProperty,
-        base::StringValue(ShillProfileClient::GetSharedProfilePath()));
+        base::Value(ShillProfileClient::GetSharedProfilePath()));
     profile_test_->AddService(ShillProfileClient::GetSharedProfilePath(),
                               "stub_ethernet");
 
@@ -346,19 +393,18 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
                shill::kStateOnline);
     service_test_->SetServiceProperty(kWifi1ServicePath,
                                       shill::kSecurityClassProperty,
-                                      base::StringValue(shill::kSecurityWep));
-    service_test_->SetServiceProperty(kWifi1ServicePath,
-                                      shill::kWifiBSsid,
-                                      base::StringValue("00:01:02:03:04:05"));
+                                      base::Value(shill::kSecurityWep));
+    service_test_->SetServiceProperty(kWifi1ServicePath, shill::kWifiBSsid,
+                                      base::Value("00:01:02:03:04:05"));
     service_test_->SetServiceProperty(
         kWifi1ServicePath, shill::kSignalStrengthProperty, base::Value(40));
     service_test_->SetServiceProperty(kWifi1ServicePath,
                                       shill::kProfileProperty,
-                                      base::StringValue(kUser1ProfilePath));
+                                      base::Value(kUser1ProfilePath));
     service_test_->SetServiceProperty(
         kWifi1ServicePath, shill::kConnectableProperty, base::Value(true));
     service_test_->SetServiceProperty(kWifi1ServicePath, shill::kDeviceProperty,
-                                      base::StringValue(kWifiDevicePath));
+                                      base::Value(kWifiDevicePath));
     base::DictionaryValue static_ipconfig;
     static_ipconfig.SetStringWithoutPathExpansion(shill::kAddressProperty,
                                                   "1.2.3.4");
@@ -376,7 +422,7 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
                shill::kStateIdle);
     service_test_->SetServiceProperty(kWifi2ServicePath,
                                       shill::kSecurityClassProperty,
-                                      base::StringValue(shill::kSecurityPsk));
+                                      base::Value(shill::kSecurityPsk));
     service_test_->SetServiceProperty(
         kWifi2ServicePath, shill::kSignalStrengthProperty, base::Value(80));
     service_test_->SetServiceProperty(
@@ -386,7 +432,7 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     service_test_->SetServiceProperty(
         "stub_wimax", shill::kSignalStrengthProperty, base::Value(40));
     service_test_->SetServiceProperty("stub_wimax", shill::kProfileProperty,
-                                      base::StringValue(kUser1ProfilePath));
+                                      base::Value(kUser1ProfilePath));
     service_test_->SetServiceProperty("stub_wimax", shill::kConnectableProperty,
                                       base::Value(true));
     profile_test_->AddService(kUser1ProfilePath, "stub_wimax");
@@ -400,25 +446,35 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
                                       base::Value(5000));
     service_test_->SetServiceProperty(kWifi2ServicePath,
                                       shill::kProfileProperty,
-                                      base::StringValue(kUser1ProfilePath));
+                                      base::Value(kUser1ProfilePath));
     profile_test_->AddService(kUser1ProfilePath, kWifi2ServicePath);
 
     AddService("stub_vpn1", "vpn1", shill::kTypeVPN, shill::kStateOnline);
-    service_test_->SetServiceProperty(
-        "stub_vpn1", shill::kProviderTypeProperty,
-        base::StringValue(shill::kProviderOpenVpn));
+    service_test_->SetServiceProperty("stub_vpn1", shill::kProviderTypeProperty,
+                                      base::Value(shill::kProviderOpenVpn));
     profile_test_->AddService(kUser1ProfilePath, "stub_vpn1");
 
     AddService("stub_vpn2", "vpn2", shill::kTypeVPN, shill::kStateOffline);
     service_test_->SetServiceProperty(
         "stub_vpn2", shill::kProviderTypeProperty,
-        base::StringValue(shill::kProviderThirdPartyVpn));
+        base::Value(shill::kProviderThirdPartyVpn));
     service_test_->SetServiceProperty(
         "stub_vpn2", shill::kProviderHostProperty,
-        base::StringValue("third_party_provider_extension_id"));
+        base::Value("third_party_provider_extension_id"));
     profile_test_->AddService(kUser1ProfilePath, "stub_vpn2");
 
     content::RunAllPendingInMessageLoop();
+  }
+
+  void TearDown() override {
+    ExtensionApiTest::TearDown();
+    ChromeNetworkingCastPrivateDelegate::SetFactoryCallbackForTest(nullptr);
+  }
+
+ private:
+  std::unique_ptr<ChromeNetworkingCastPrivateDelegate>
+  CreateNetworkingCastPrivateDelegate() {
+    return base::MakeUnique<TestNetworkingCastPrivateDelegate>();
   }
 
  protected:
@@ -431,6 +487,12 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
   ShillDeviceClient::TestInterface* device_test_;
   policy::MockConfigurationPolicyProvider provider_;
   std::string userhash_;
+
+ private:
+  ChromeNetworkingCastPrivateDelegate::FactoryCallback
+      networking_cast_delegate_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateChromeOSApiTest);
 };
 
 // Place each subtest into a separate browser test so that the stub networking
@@ -454,9 +516,8 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, StartActivate) {
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, StartActivateSprint) {
   SetupCellular();
   // Set the carrier to Sprint.
-  device_test_->SetDeviceProperty(kCellularDevicePath,
-                                  shill::kCarrierProperty,
-                                  base::StringValue(shill::kCarrierSprint));
+  device_test_->SetDeviceProperty(kCellularDevicePath, shill::kCarrierProperty,
+                                  base::Value(shill::kCarrierSprint));
   EXPECT_TRUE(RunNetworkingSubtest("startActivateSprint")) << message_;
   EXPECT_EQ(0, UIDelegateStub::s_show_account_details_called_);
 }
@@ -553,8 +614,70 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, CreateNetwork) {
   EXPECT_TRUE(RunNetworkingSubtest("createNetwork")) << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
+                       CreateNetworkForPolicyControlledNetwork) {
+  const std::string user_policy_blob =
+      R"({
+           "NetworkConfigurations": [{
+             "GUID": "stub_wifi2",
+             "Type": "WiFi",
+             "Name": "My WiFi Network",
+             "WiFi": {
+               "HexSSID": "77696669325F50534B",
+               "Passphrase": "passphrase",
+               "Recommended": [ "AutoConnect", "Passphrase" ],
+               "Security": "WPA-PSK"
+             }
+           }],
+           "Certificates": [],
+           "Type": "UnencryptedConfiguration"
+         })";
+
+  policy::PolicyMap policy;
+  policy.Set(policy::key::kOpenNetworkConfiguration,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
+             base::WrapUnique(new base::Value(user_policy_blob)), nullptr);
+  provider_.UpdateChromePolicy(policy);
+
+  content::RunAllPendingInMessageLoop();
+
+  EXPECT_TRUE(RunNetworkingSubtest("createNetworkForPolicyControlledNetwork"));
+}
+
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, ForgetNetwork) {
   EXPECT_TRUE(RunNetworkingSubtest("forgetNetwork")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
+                       ForgetPolicyControlledNetwork) {
+  const std::string user_policy_blob =
+      R"({
+           "NetworkConfigurations": [{
+             "GUID": "stub_wifi2",
+             "Type": "WiFi",
+             "Name": "My WiFi Network",
+             "WiFi": {
+               "HexSSID": "77696669325F50534B",
+               "Passphrase": "passphrase",
+               "Recommended": [ "AutoConnect", "Passphrase" ],
+               "Security": "WPA-PSK"
+             }
+           }],
+           "Certificates": [],
+           "Type": "UnencryptedConfiguration"
+         })";
+
+  policy::PolicyMap policy;
+  policy.Set(policy::key::kOpenNetworkConfiguration,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
+             base::WrapUnique(new base::Value(user_policy_blob)), nullptr);
+  provider_.UpdateChromePolicy(policy);
+
+  content::RunAllPendingInMessageLoop();
+
+  EXPECT_TRUE(RunNetworkingSubtest("forgetPolicyControlledNetwork"));
 }
 
 // TODO(stevenjb): Find a better way to set this up on Chrome OS.
@@ -566,7 +689,7 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetManagedProperties) {
       "    }"
       "}";
   service_test_->SetServiceProperty(kWifi2ServicePath, shill::kUIDataProperty,
-                                    base::StringValue(uidata_blob));
+                                    base::Value(uidata_blob));
   service_test_->SetServiceProperty(
       kWifi2ServicePath, shill::kAutoConnectProperty, base::Value(false));
 
@@ -592,10 +715,10 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetManagedProperties) {
       "}";
 
   policy::PolicyMap policy;
-  policy.Set(
-      policy::key::kOpenNetworkConfiguration, policy::POLICY_LEVEL_MANDATORY,
-      policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-      base::WrapUnique(new base::StringValue(user_policy_blob)), nullptr);
+  policy.Set(policy::key::kOpenNetworkConfiguration,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
+             base::WrapUnique(new base::Value(user_policy_blob)), nullptr);
   provider_.UpdateChromePolicy(policy);
 
   content::RunAllPendingInMessageLoop();
@@ -732,6 +855,7 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetGlobalPolicy) {
 // using API methods and event does not cause access exceptions (due to
 // missing permissions).
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, Alias) {
+  SetupCellular();
   EXPECT_TRUE(RunPlatformAppTest("networking_private/alias")) << message_;
 }
 

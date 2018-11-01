@@ -9,21 +9,6 @@
     },
     "types": [
       {
-        "id": "EncodingItem",
-        "type": "object",
-        "description": "EncodingItem. Object that keeps track of information about encoding properties",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Encoding display name."
-          },
-          "encoding": {
-            "type": "string",
-            "description": "Encoding."
-          }
-        }
-      },
-      {
         "id": "UrlValidResults",
         "type": "object",
         "description": "Object that describes the validitity of a given url.",
@@ -35,6 +20,17 @@
           "schemeValid": {
             "type": "boolean",
             "description": "The protocol scheme is known and one we can show directly."
+          }
+        }
+      },
+      {
+        "id": "FileExtension",
+        "type": "object",
+        "description": "A single extension item used for filtering ",
+        "properties": {
+          "ext": {
+            "type": "string",
+            "description": "Extension ending, eg. 'jpg'"
           }
         }
       }
@@ -175,6 +171,118 @@
             "type": "integer",
             "description": "The ID of the window id.",
             "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "pauseAllDownloads",
+        "type": "function",
+        "description": "Pauses all downloads so the exit sequence can continue.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": []
+          }
+        ]
+      },
+      {
+        "name": "createUrlMapping",
+        "type": "function",
+        "description": "Creates a mapping to a local file so it can be accessed using the chrome://vivaldi-data/local-image/ protocol.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The local path to the image file.",
+            "name": "localPath"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "string",
+                "description": "The generated url for the file using for accessing it as chrome://vivaldi-data/local-image/<id>",
+                "name": "generatedUrl"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "removeUrlMapping",
+        "type": "function",
+        "description": "Remove the given url mapping, if it exists.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The url mapping to remove.",
+            "name": "url"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "description": "true if the given mapping was found and removed, otherwise false.",
+                "name": "success"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "selectFile",
+        "type": "function",
+        "description": "Select a single file and returns the file name.",
+        "parameters": [
+          {
+            "name": "accepts",
+            "type": "array",
+            "description": "Extensions to filter file names on.",
+            "optional": true,
+            "items": { "$ref": "FileExtension" }
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "description": "Title of the file select dialog.",
+            "optional": true
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "string",
+                "description": "Full path to the selected file.",
+                "name": "path"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getVersion",
+        "type": "function",
+        "description": "Gets the Vivaldi version and Chromium versions.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "vivaldiVer",
+                "type": "string",
+                "description": "The Vivaldi version as a string."
+              },
+              {
+                "name": "chromiumVer",
+                "type": "string",
+                "description": "The Chromium version as a string."
+              }
+            ]
           }
         ]
       }

@@ -31,50 +31,52 @@
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 
 #include "platform/graphics/skia/SkiaUtils.h"
-#include "wtf/PassRefPtr.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "third_party/skia/include/core/SkSurface.h"
 
 namespace blink {
 
 UnacceleratedImageBufferSurface::UnacceleratedImageBufferSurface(
     const IntSize& size,
-    OpacityMode opacityMode,
-    ImageInitializationMode initializationMode,
-    sk_sp<SkColorSpace> colorSpace,
-    SkColorType colorType)
-    : ImageBufferSurface(size, opacityMode, colorSpace, colorType) {
-  SkAlphaType alphaType =
-      (Opaque == opacityMode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
-  SkImageInfo info = SkImageInfo::Make(size.width(), size.height(), colorType,
-                                       alphaType, colorSpace);
-  SkSurfaceProps disableLCDProps(0, kUnknown_SkPixelGeometry);
-  m_surface = PaintSurface::MakeRaster(
-      info, Opaque == opacityMode ? 0 : &disableLCDProps);
+    OpacityMode opacity_mode,
+    ImageInitializationMode initialization_mode,
+    sk_sp<SkColorSpace> color_space,
+    SkColorType color_type)
+    : ImageBufferSurface(size, opacity_mode, color_space, color_type) {
+  SkAlphaType alpha_type =
+      (kOpaque == opacity_mode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
+  SkImageInfo info = SkImageInfo::Make(size.Width(), size.Height(), color_type,
+                                       alpha_type, color_space);
+  SkSurfaceProps disable_lcd_props(0, kUnknown_SkPixelGeometry);
+  surface_ = SkSurface::MakeRaster(
+      info, kOpaque == opacity_mode ? 0 : &disable_lcd_props);
+
+  if (!surface_)
+    return;
 
   // Always save an initial frame, to support resetting the top level matrix
   // and clip.
-  if (m_surface)
-    m_surface->getCanvas()->save();
+  canvas_ = WTF::WrapUnique(new SkiaPaintCanvas(surface_->getCanvas()));
+  canvas_->save();
 
-  if (initializationMode == InitializeImagePixels) {
-    if (m_surface)
-      clear();
-  }
+  if (initialization_mode == kInitializeImagePixels)
+    Clear();
 }
 
 UnacceleratedImageBufferSurface::~UnacceleratedImageBufferSurface() {}
 
-PaintCanvas* UnacceleratedImageBufferSurface::canvas() {
-  return m_surface->getCanvas();
+PaintCanvas* UnacceleratedImageBufferSurface::Canvas() {
+  return canvas_.get();
 }
 
-bool UnacceleratedImageBufferSurface::isValid() const {
-  return m_surface;
+bool UnacceleratedImageBufferSurface::IsValid() const {
+  return surface_;
 }
 
-sk_sp<SkImage> UnacceleratedImageBufferSurface::newImageSnapshot(
+sk_sp<SkImage> UnacceleratedImageBufferSurface::NewImageSnapshot(
     AccelerationHint,
     SnapshotReason) {
-  return m_surface->makeImageSnapshot();
+  return surface_->makeImageSnapshot();
 }
 
 }  // namespace blink

@@ -74,6 +74,16 @@ bool GetServicePathFromGuid(const std::string& guid,
   return true;
 }
 
+bool IsSharedNetwork(const std::string& service_path) {
+  const chromeos::NetworkState* network =
+      GetStateHandler()->GetNetworkStateFromServicePath(
+          service_path, true /* configured only */);
+  if (!network)
+    return false;
+
+  return !network->IsPrivate();
+}
+
 bool GetPrimaryUserIdHash(content::BrowserContext* browser_context,
                           std::string* user_hash,
                           std::string* error) {
@@ -280,9 +290,9 @@ void SetManualProxy(base::DictionaryValue* manual,
   base::DictionaryValue* dict = EnsureDictionaryValue(key, manual);
   base::DictionaryValue* host_dict =
       EnsureDictionaryValue(::onc::proxy::kHost, dict);
-  SetProxyEffectiveValue(host_dict, state,
-                         base::MakeUnique<base::StringValue>(
-                             proxy.server.host_port_pair().host()));
+  SetProxyEffectiveValue(
+      host_dict, state,
+      base::MakeUnique<base::Value>(proxy.server.host_port_pair().host()));
   uint16_t port = proxy.server.host_port_pair().port();
   base::DictionaryValue* port_dict =
       EnsureDictionaryValue(::onc::proxy::kPort, dict);
@@ -296,11 +306,8 @@ void SetManualProxy(base::DictionaryValue* manual,
 namespace extensions {
 
 NetworkingPrivateChromeOS::NetworkingPrivateChromeOS(
-    content::BrowserContext* browser_context,
-    std::unique_ptr<VerifyDelegate> verify_delegate)
-    : NetworkingPrivateDelegate(std::move(verify_delegate)),
-      browser_context_(browser_context),
-      weak_ptr_factory_(this) {}
+    content::BrowserContext* browser_context)
+    : browser_context_(browser_context), weak_ptr_factory_(this) {}
 
 NetworkingPrivateChromeOS::~NetworkingPrivateChromeOS() {}
 
@@ -380,12 +387,28 @@ void NetworkingPrivateChromeOS::GetState(
 void NetworkingPrivateChromeOS::SetProperties(
     const std::string& guid,
     std::unique_ptr<base::DictionaryValue> properties,
+    bool allow_set_shared_config,
     const VoidCallback& success_callback,
     const FailureCallback& failure_callback) {
   std::string service_path, error;
   if (!GetServicePathFromGuid(guid, &service_path, &error)) {
     failure_callback.Run(error);
     return;
+  }
+
+  if (IsSharedNetwork(service_path)) {
+    if (!allow_set_shared_config) {
+      failure_callback.Run(networking_private::kErrorAccessToSharedConfig);
+      return;
+    }
+  } else {
+    std::string user_id_hash;
+    std::string error;
+    // Do not allow changing a non-shared network from a secondary users.
+    if (!GetPrimaryUserIdHash(browser_context_, &user_id_hash, &error)) {
+      failure_callback.Run(error);
+      return;
+    }
   }
 
   GetManagedConfigurationHandler()->SetProperties(
@@ -421,6 +444,7 @@ void NetworkingPrivateChromeOS::CreateNetwork(
 
 void NetworkingPrivateChromeOS::ForgetNetwork(
     const std::string& guid,
+    bool allow_forget_shared_config,
     const VoidCallback& success_callback,
     const FailureCallback& failure_callback) {
   std::string service_path, error;
@@ -429,9 +453,50 @@ void NetworkingPrivateChromeOS::ForgetNetwork(
     return;
   }
 
-  GetManagedConfigurationHandler()->RemoveConfiguration(
-      service_path, success_callback,
-      base::Bind(&NetworkHandlerFailureCallback, failure_callback));
+  const chromeos::NetworkState* network =
+      GetStateHandler()->GetNetworkStateFromServicePath(
+          service_path, true /* configured only */);
+  if (!network) {
+    failure_callback.Run(networking_private::kErrorNetworkUnavailable);
+    return;
+  }
+
+  std::string user_id_hash;
+  // Don't allow non-primary user to remove private configs - the private
+  // configs belong to the primary user (non-primary users' network configs
+  // never get loaded by shill).
+  if (!GetPrimaryUserIdHash(browser_context_, &user_id_hash, &error) &&
+      network->IsPrivate()) {
+    failure_callback.Run(error);
+    return;
+  }
+
+  if (!allow_forget_shared_config && !network->IsPrivate()) {
+    failure_callback.Run(networking_private::kErrorAccessToSharedConfig);
+    return;
+  }
+
+  onc::ONCSource onc_source = onc::ONC_SOURCE_UNKNOWN;
+  if (GetManagedConfigurationHandler()->FindPolicyByGUID(user_id_hash, guid,
+                                                         &onc_source)) {
+    // Prevent a policy controlled configuration removal.
+    if (onc_source == onc::ONC_SOURCE_DEVICE_POLICY) {
+      allow_forget_shared_config = false;
+    } else {
+      failure_callback.Run(networking_private::kErrorPolicyControlled);
+      return;
+    }
+  }
+
+  if (allow_forget_shared_config) {
+    GetManagedConfigurationHandler()->RemoveConfiguration(
+        service_path, success_callback,
+        base::Bind(&NetworkHandlerFailureCallback, failure_callback));
+  } else {
+    GetManagedConfigurationHandler()->RemoveConfigurationFromCurrentProfile(
+        service_path, success_callback,
+        base::Bind(&NetworkHandlerFailureCallback, failure_callback));
+  }
 }
 
 void NetworkingPrivateChromeOS::GetNetworks(
@@ -447,9 +512,9 @@ void NetworkingPrivateChromeOS::GetNetworks(
       chromeos::network_util::TranslateNetworkListToONC(
           pattern, configured_only, visible_only, limit);
 
-  for (const auto& value : *network_properties_list) {
+  for (auto& value : *network_properties_list) {
     base::DictionaryValue* network_dict = nullptr;
-    value->GetAsDictionary(&network_dict);
+    value.GetAsDictionary(&network_dict);
     DCHECK(network_dict);
     if (GetThirdPartyVPNDictionary(network_dict))
       AppendThirdPartyProviderName(network_dict);
@@ -471,9 +536,7 @@ void NetworkingPrivateChromeOS::StartConnect(
   const bool check_error_state = false;
   NetworkHandler::Get()->network_connection_handler()->ConnectToNetwork(
       service_path, success_callback,
-      base::Bind(&NetworkingPrivateChromeOS::ConnectFailureCallback,
-                 weak_ptr_factory_.GetWeakPtr(), guid, success_callback,
-                 failure_callback),
+      base::Bind(&NetworkHandlerFailureCallback, failure_callback),
       check_error_state);
 }
 
@@ -779,7 +842,7 @@ void NetworkingPrivateChromeOS::SetManagedActiveProxyValues(
   base::DictionaryValue* proxy_type_dict =
       EnsureDictionaryValue(::onc::network_config::kType, proxy_settings);
   SetProxyEffectiveValue(proxy_type_dict, state,
-                         base::WrapUnique<base::Value>(new base::StringValue(
+                         base::WrapUnique<base::Value>(new base::Value(
                              GetProxySettingsType(config.mode))));
 
   // Update any appropriate sub dictionary based on the new type.
@@ -797,18 +860,22 @@ void NetworkingPrivateChromeOS::SetManagedActiveProxyValues(
     case UIProxyConfig::MODE_PROXY_PER_SCHEME: {
       base::DictionaryValue* manual =
           EnsureDictionaryValue(::onc::proxy::kManual, proxy_settings);
-      SetManualProxy(manual, state, ::onc::proxy::kHttp, config.http_proxy);
-      SetManualProxy(manual, state, ::onc::proxy::kHttps, config.https_proxy);
-      SetManualProxy(manual, state, ::onc::proxy::kFtp, config.ftp_proxy);
-      SetManualProxy(manual, state, ::onc::proxy::kSocks, config.socks_proxy);
+      if (config.http_proxy.server.is_valid())
+        SetManualProxy(manual, state, ::onc::proxy::kHttp, config.http_proxy);
+      if (config.https_proxy.server.is_valid())
+        SetManualProxy(manual, state, ::onc::proxy::kHttps, config.https_proxy);
+      if (config.ftp_proxy.server.is_valid())
+        SetManualProxy(manual, state, ::onc::proxy::kFtp, config.ftp_proxy);
+      if (config.socks_proxy.server.is_valid())
+        SetManualProxy(manual, state, ::onc::proxy::kSocks, config.socks_proxy);
       break;
     }
     case UIProxyConfig::MODE_PAC_SCRIPT: {
       base::DictionaryValue* pac =
           EnsureDictionaryValue(::onc::proxy::kPAC, proxy_settings);
-      SetProxyEffectiveValue(
-          pac, state, base::WrapUnique<base::Value>(new base::StringValue(
-                          config.automatic_proxy.pac_url.spec())));
+      SetProxyEffectiveValue(pac, state,
+                             base::WrapUnique<base::Value>(new base::Value(
+                                 config.automatic_proxy.pac_url.spec())));
       break;
     }
     case UIProxyConfig::MODE_DIRECT:
@@ -817,22 +884,6 @@ void NetworkingPrivateChromeOS::SetManagedActiveProxyValues(
   }
 
   VLOG(2) << " NEW PROXY: " << *proxy_settings;
-}
-
-void NetworkingPrivateChromeOS::ConnectFailureCallback(
-    const std::string& guid,
-    const VoidCallback& success_callback,
-    const FailureCallback& failure_callback,
-    const std::string& error_name,
-    std::unique_ptr<base::DictionaryValue> error_data) {
-  // TODO(stevenjb): Temporary workaround to show the configuration UI.
-  // Eventually the caller (e.g. Settings) should handle any failures and
-  // show its own configuration UI. crbug.com/380937.
-  if (ui_delegate()->HandleConnectFailed(guid, error_name)) {
-    success_callback.Run();
-    return;
-  }
-  failure_callback.Run(error_name);
 }
 
 }  // namespace extensions

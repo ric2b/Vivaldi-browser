@@ -25,7 +25,7 @@
 #ifndef CSSMarkup_h
 #define CSSMarkup_h
 
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 // Helper functions for converting from CSSValues to text.
 
@@ -33,13 +33,13 @@ namespace blink {
 
 // Common serializing methods. See:
 // http://dev.w3.org/csswg/cssom/#common-serializing-idioms
-void serializeIdentifier(const String& identifier,
-                         StringBuilder& appendTo,
-                         bool skipStartChecks = false);
-void serializeString(const String&, StringBuilder& appendTo);
-String serializeString(const String&);
-String serializeURI(const String&);
-String serializeFontFamily(const String&);
+void SerializeIdentifier(const String& identifier,
+                         StringBuilder& append_to,
+                         bool skip_start_checks = false);
+void SerializeString(const String&, StringBuilder& append_to);
+String SerializeString(const String&);
+String SerializeURI(const String&);
+String SerializeFontFamily(const String&);
 
 }  // namespace blink
 

@@ -118,7 +118,7 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
   base::Base64Encode(stream_as_string, &base64_result);
   base64_result.insert(
       0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
-  SetResult(base::MakeUnique<base::StringValue>(base64_result));
+  SetResult(base::MakeUnique<base::Value>(base64_result));
   SendResponse(true);
 }
 
@@ -268,7 +268,7 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
     thumbnail_service->SetPageThumbnail(*context, image);
   }
 
-  SetResult(base::MakeUnique<base::StringValue>(std::string("chrome://thumb/") +
+  SetResult(base::MakeUnique<base::Value>(std::string("chrome://thumb/") +
                                                 context->url.spec()));
   SendResponse(true);
 }
@@ -305,7 +305,7 @@ void WebViewPrivateAddToThumbnailServiceFunction::SetPageThumbnailOnUIThread(
   thumbnail_service->SetPageThumbnail(*context, thumbnail);
 
   if (send_result) {
-    SetResult(base::MakeUnique<base::StringValue>(
+    SetResult(base::MakeUnique<base::Value>(
         std::string("chrome://thumb/") + context->url.spec()));
     SendResponse(true);
   }
@@ -347,7 +347,7 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
   }
   // Do not store any urls for private windows.
   if (is_incognito_) {
-    SetResult(base::MakeUnique<base::StringValue>(
+    SetResult(base::MakeUnique<base::Value>(
         std::string("chrome://thumb/") + context->url.spec()));
     SendResponse(true);
   } else {

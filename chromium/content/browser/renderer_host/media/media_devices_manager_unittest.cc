@@ -13,12 +13,15 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/browser/renderer_host/media/in_process_video_capture_provider.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/audio/audio_device_name.h"
+#include "media/audio/audio_system_impl.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/fake_audio_manager.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
+#include "media/capture/video/video_capture_system_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -140,15 +143,20 @@ class MediaDevicesManagerTest : public ::testing::Test {
  protected:
   void SetUp() override {
     audio_manager_.reset(new MockAudioManager());
-    video_capture_manager_ = new VideoCaptureManager(
-        std::unique_ptr<media::VideoCaptureDeviceFactory>(
-            new MockVideoCaptureDeviceFactory()),
-        base::ThreadTaskRunnerHandle::Get());
-    video_capture_manager_->RegisterListener(nullptr);
-    video_capture_device_factory_ = static_cast<MockVideoCaptureDeviceFactory*>(
-        video_capture_manager_->video_capture_device_factory());
+    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
+    auto video_capture_device_factory =
+        base::MakeUnique<MockVideoCaptureDeviceFactory>();
+    video_capture_device_factory_ = video_capture_device_factory.get();
+    auto video_capture_system = base::MakeUnique<media::VideoCaptureSystemImpl>(
+        std::move(video_capture_device_factory));
+    auto video_capture_provider =
+        base::MakeUnique<InProcessVideoCaptureProvider>(
+            std::move(video_capture_system),
+            base::ThreadTaskRunnerHandle::Get());
+    video_capture_manager_ =
+        new VideoCaptureManager(std::move(video_capture_provider));
     media_devices_manager_.reset(new MediaDevicesManager(
-        audio_manager_.get(), video_capture_manager_, nullptr));
+        audio_system_.get(), video_capture_manager_, nullptr));
   }
 
   void EnableCache(MediaDeviceType type) {
@@ -164,6 +172,7 @@ class MediaDevicesManagerTest : public ::testing::Test {
   scoped_refptr<VideoCaptureManager> video_capture_manager_;
   MockVideoCaptureDeviceFactory* video_capture_device_factory_;
   std::unique_ptr<MockAudioManager, media::AudioManagerDeleter> audio_manager_;
+  std::unique_ptr<media::AudioSystem> audio_system_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MediaDevicesManagerTest);

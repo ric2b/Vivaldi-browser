@@ -12,45 +12,54 @@
 #include "V8TestInterfaceEventInit.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/V8EventInit.h"
 
 namespace blink {
 
+static const v8::Eternal<v8::Name>* eternalV8TestInterfaceEventInitKeys(v8::Isolate* isolate) {
+  static const char* const kKeys[] = {
+    "stringMember",
+  };
+  return V8PerIsolateData::From(isolate)->FindOrCreateEternalNameCache(
+      kKeys, kKeys, WTF_ARRAY_LENGTH(kKeys));
+}
+
 void V8TestInterfaceEventInit::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, TestInterfaceEventInit& impl, ExceptionState& exceptionState) {
-  if (isUndefinedOrNull(v8Value)) {
+  if (IsUndefinedOrNull(v8Value)) {
     return;
   }
   if (!v8Value->IsObject()) {
-    exceptionState.throwTypeError("cannot convert to dictionary.");
+    exceptionState.ThrowTypeError("cannot convert to dictionary.");
     return;
   }
+  v8::Local<v8::Object> v8Object = v8Value.As<v8::Object>();
+  ALLOW_UNUSED_LOCAL(v8Object);
 
   V8EventInit::toImpl(isolate, v8Value, impl, exceptionState);
-  if (exceptionState.hadException())
+  if (exceptionState.HadException())
     return;
 
+  const v8::Eternal<v8::Name>* keys = eternalV8TestInterfaceEventInitKeys(isolate);
   v8::TryCatch block(isolate);
-  v8::Local<v8::Object> v8Object;
-  if (!v8Call(v8Value->ToObject(isolate->GetCurrentContext()), v8Object, block)) {
-    exceptionState.rethrowV8Exception(block.Exception());
-    return;
-  }
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   v8::Local<v8::Value> stringMemberValue;
-  if (!v8Object->Get(isolate->GetCurrentContext(), v8AtomicString(isolate, "stringMember")).ToLocal(&stringMemberValue)) {
-    exceptionState.rethrowV8Exception(block.Exception());
+  if (!v8Object->Get(context, keys[0].Get(isolate)).ToLocal(&stringMemberValue)) {
+    exceptionState.RethrowV8Exception(block.Exception());
     return;
   }
   if (stringMemberValue.IsEmpty() || stringMemberValue->IsUndefined()) {
     // Do nothing.
   } else {
     V8StringResource<> stringMember = stringMemberValue;
-    if (!stringMember.prepare(exceptionState))
+    if (!stringMember.Prepare(exceptionState))
       return;
     impl.setStringMember(stringMember);
   }
 }
 
-v8::Local<v8::Value> TestInterfaceEventInit::toV8Impl(v8::Local<v8::Object> creationContext, v8::Isolate* isolate) const {
+v8::Local<v8::Value> TestInterfaceEventInit::ToV8Impl(v8::Local<v8::Object> creationContext, v8::Isolate* isolate) const {
   v8::Local<v8::Object> v8Object = v8::Object::New(isolate);
   if (!toV8TestInterfaceEventInit(*this, v8Object, creationContext, isolate))
     return v8::Undefined(isolate);
@@ -61,15 +70,23 @@ bool toV8TestInterfaceEventInit(const TestInterfaceEventInit& impl, v8::Local<v8
   if (!toV8EventInit(impl, dictionary, creationContext, isolate))
     return false;
 
+  const v8::Eternal<v8::Name>* keys = eternalV8TestInterfaceEventInitKeys(isolate);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  v8::Local<v8::Value> stringMemberValue;
+  bool stringMemberHasValueOrDefault = false;
   if (impl.hasStringMember()) {
-    if (!v8CallBoolean(dictionary->CreateDataProperty(isolate->GetCurrentContext(), v8AtomicString(isolate, "stringMember"), v8String(isolate, impl.stringMember()))))
-      return false;
+    stringMemberValue = V8String(isolate, impl.stringMember());
+    stringMemberHasValueOrDefault = true;
+  }
+  if (stringMemberHasValueOrDefault &&
+      !V8CallBoolean(dictionary->CreateDataProperty(context, keys[0].Get(isolate), stringMemberValue))) {
+    return false;
   }
 
   return true;
 }
 
-TestInterfaceEventInit NativeValueTraits<TestInterfaceEventInit>::nativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
+TestInterfaceEventInit NativeValueTraits<TestInterfaceEventInit>::NativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
   TestInterfaceEventInit impl;
   V8TestInterfaceEventInit::toImpl(isolate, value, impl, exceptionState);
   return impl;

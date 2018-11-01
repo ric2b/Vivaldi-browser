@@ -31,12 +31,14 @@ namespace IPC {
 class Message;
 }
 
+namespace service_manager {
+class BinderRegistry;
+}
+
 namespace content {
 void RouteToGpuProcessHostUIShimTask(int host_id, const IPC::Message& msg);
 
-class GpuProcessHostUIShim : public IPC::Listener,
-                             public IPC::Sender,
-                             public base::NonThreadSafe {
+class GpuProcessHostUIShim : public base::NonThreadSafe {
  public:
   // Create a GpuProcessHostUIShim with the given ID.  The object can be found
   // using FromID with the same id.
@@ -47,47 +49,23 @@ class GpuProcessHostUIShim : public IPC::Listener,
   // UI shim.
   static void Destroy(int host_id, const std::string& message);
 
-  // Destroy all remaining GpuProcessHostUIShims.
-  CONTENT_EXPORT static void DestroyAll();
-
   CONTENT_EXPORT static GpuProcessHostUIShim* FromID(int host_id);
 
-  // Get a GpuProcessHostUIShim instance; it doesn't matter which one.
-  // Return NULL if none has been created.
-  CONTENT_EXPORT static GpuProcessHostUIShim* GetOneInstance();
-
-  // Stops the GPU process.
-  CONTENT_EXPORT void StopGpuProcess(const base::Closure& callback);
-
-  // IPC::Sender implementation.
-  bool Send(IPC::Message* msg) override;
-
-  // IPC::Listener implementation.
   // The GpuProcessHost causes this to be called on the UI thread to
   // dispatch the incoming messages from the GPU process, which are
   // actually received on the IO thread.
-  bool OnMessageReceived(const IPC::Message& message) override;
+  void OnMessageReceived(const IPC::Message& message);
 
-  CONTENT_EXPORT void SimulateRemoveAllContext();
-  CONTENT_EXPORT void SimulateCrash();
-  CONTENT_EXPORT void SimulateHang();
-#if defined(OS_ANDROID)
-  CONTENT_EXPORT void SimulateJavaCrash();
-#endif
+  // Register Mojo interfaces that must be bound on the UI thread.
+  static void RegisterUIThreadMojoInterfaces(
+      service_manager::BinderRegistry* registry);
 
  private:
   explicit GpuProcessHostUIShim(int host_id);
-  ~GpuProcessHostUIShim() override;
-
-  // Message handlers.
-  bool OnControlMessageReceived(const IPC::Message& message);
-  void OnLogMessage(int level, const std::string& header,
-      const std::string& message);
-  void OnGraphicsInfoCollected(const gpu::GPUInfo& gpu_info);
+  ~GpuProcessHostUIShim();
 
   // The serial number of the GpuProcessHost / GpuProcessHostUIShim pair.
   int host_id_;
-  base::Closure close_callback_;
 };
 
 }  // namespace content

@@ -274,7 +274,7 @@ TEST_F(CommonCustomTypesTest, Value) {
   ASSERT_TRUE(ptr->BounceValue(nullptr, &output));
   EXPECT_FALSE(output);
 
-  std::unique_ptr<base::Value> input = base::Value::CreateNullValue();
+  auto input = base::MakeUnique<base::Value>();
   ASSERT_TRUE(ptr->BounceValue(input->CreateDeepCopy(), &output));
   EXPECT_TRUE(base::Value::Equals(input.get(), output.get()));
 
@@ -290,11 +290,11 @@ TEST_F(CommonCustomTypesTest, Value) {
   ASSERT_TRUE(ptr->BounceValue(input->CreateDeepCopy(), &output));
   EXPECT_TRUE(base::Value::Equals(input.get(), output.get()));
 
-  input = base::MakeUnique<base::StringValue>("test string");
+  input = base::MakeUnique<base::Value>("test string");
   ASSERT_TRUE(ptr->BounceValue(input->CreateDeepCopy(), &output));
   EXPECT_TRUE(base::Value::Equals(input.get(), output.get()));
 
-  input = base::BinaryValue::CreateWithCopiedBuffer("mojo", 4);
+  input = base::Value::CreateWithCopiedBuffer("mojo", 4);
   ASSERT_TRUE(ptr->BounceValue(input->CreateDeepCopy(), &output));
   EXPECT_TRUE(base::Value::Equals(input.get(), output.get()));
 
@@ -304,9 +304,8 @@ TEST_F(CommonCustomTypesTest, Value) {
   dict->SetString("string", "some string");
   dict->SetBoolean("nested.bool", true);
   dict->SetInteger("nested.int", 9);
-  dict->Set("some_binary",
-            base::BinaryValue::CreateWithCopiedBuffer("mojo", 4));
-  dict->Set("null_value", base::Value::CreateNullValue());
+  dict->Set("some_binary", base::Value::CreateWithCopiedBuffer("mojo", 4));
+  dict->Set("null_value", base::MakeUnique<base::Value>());
   dict->SetIntegerWithoutPathExpansion("non_nested.int", 10);
   {
     std::unique_ptr<base::ListValue> dict_list(new base::ListValue());
@@ -327,8 +326,8 @@ TEST_F(CommonCustomTypesTest, Value) {
   list->AppendString("string");
   list->AppendDouble(42.1);
   list->AppendBoolean(true);
-  list->Append(base::BinaryValue::CreateWithCopiedBuffer("mojo", 4));
-  list->Append(base::Value::CreateNullValue());
+  list->Append(base::Value::CreateWithCopiedBuffer("mojo", 4));
+  list->Append(base::MakeUnique<base::Value>());
   {
     std::unique_ptr<base::DictionaryValue> list_dict(
         new base::DictionaryValue());

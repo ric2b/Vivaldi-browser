@@ -37,28 +37,22 @@
 
 namespace blink {
 
-class CORE_EXPORT AnimatableShapeValue final : public AnimatableValue {
+class AnimatableShapeValue final : public AnimatableValue {
  public:
   ~AnimatableShapeValue() override {}
-  static PassRefPtr<AnimatableShapeValue> create(ShapeValue* shape) {
-    return adoptRef(new AnimatableShapeValue(shape));
+  static PassRefPtr<AnimatableShapeValue> Create(ShapeValue* shape) {
+    return AdoptRef(new AnimatableShapeValue(shape));
   }
-  ShapeValue* getShapeValue() const { return m_shape.get(); }
-
- protected:
-  PassRefPtr<AnimatableValue> interpolateTo(const AnimatableValue*,
-                                            double fraction) const override;
-  bool usesDefaultInterpolationWith(const AnimatableValue*) const override;
 
  private:
-  AnimatableShapeValue(ShapeValue* shape) : m_shape(shape) { DCHECK(m_shape); }
-  AnimatableType type() const override { return TypeShapeValue; }
-  bool equalTo(const AnimatableValue*) const override;
+  AnimatableShapeValue(ShapeValue* shape) : shape_(shape) { DCHECK(shape_); }
+  AnimatableType GetType() const override { return kTypeShapeValue; }
+  bool EqualTo(const AnimatableValue*) const override;
 
-  Persistent<ShapeValue> m_shape;
+  Persistent<ShapeValue> shape_;
 };
 
-DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableShapeValue, isShapeValue());
+DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableShapeValue, IsShapeValue());
 
 }  // namespace blink
 

@@ -12,7 +12,6 @@
 
 #include "base/command_line.h"
 #include "base/debug/alias.h"
-#include "base/feature_list.h"
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -44,7 +43,6 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "net/http/http_response_headers.h"
@@ -74,8 +72,8 @@ const char kClaimClientsShutdownErrorMesage[] =
 
 const char kNotRespondingErrorMesage[] = "Service Worker is not responding.";
 const char kForceUpdateInfoMessage[] =
-    "Service Worker was updated because \"Update on load\" was "
-    "checked in DevTools Service Workers toolbar.";
+    "Service Worker was updated because \"Update on reload\" was "
+    "checked in the DevTools Application panel.";
 
 void RunSoon(const base::Closure& callback) {
   if (!callback.is_null())
@@ -242,12 +240,7 @@ class ServiceWorkerVersion::PingController {
     if (ping_state_ != PINGING || !ping_time_.is_null())
       return;
 
-    if (version_->PingWorker() != SERVICE_WORKER_OK) {
-      // TODO(falken): Maybe try resending Ping a few times first?
-      ping_state_ = PING_TIMED_OUT;
-      version_->OnPingTimeout();
-      return;
-    }
+    version_->PingWorker();
     version_->RestartTick(&ping_time_);
   }
 
@@ -717,7 +710,7 @@ void ServiceWorkerVersion::ReportError(ServiceWorkerStatusCode status,
 }
 
 void ServiceWorkerVersion::ReportForceUpdateToDevTools() {
-  embedded_worker_->AddMessageToConsole(blink::WebConsoleMessage::LevelWarning,
+  embedded_worker_->AddMessageToConsole(blink::WebConsoleMessage::kLevelWarning,
                                         kForceUpdateInfoMessage);
 }
 
@@ -750,7 +743,8 @@ void ServiceWorkerVersion::SetValidOriginTrialTokens(
 }
 
 void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
-  embedded_worker()->set_devtools_attached(attached);
+  embedded_worker()->SetDevToolsAttached(attached);
+
   if (stop_when_devtools_detached_ && !attached) {
     DCHECK_EQ(REDUNDANT, status());
     if (running_status() == EmbeddedWorkerStatus::STARTING ||
@@ -967,7 +961,6 @@ bool ServiceWorkerVersion::OnMessageReceived(const IPC::Message& message) {
                         OnSkipWaiting)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_ClaimClients,
                         OnClaimClients)
-    IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_Pong, OnPongFromWorker)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_RegisterForeignFetchScopes,
                         OnRegisterForeignFetchScopes)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -1066,57 +1059,11 @@ void ServiceWorkerVersion::OnSimpleEventFinished(
   callback.Run(status);
 }
 
-ServiceWorkerVersion::NavigationPreloadSupportStatus
-ServiceWorkerVersion::GetNavigationPreloadSupportStatus() const {
-  // The origin trial of Navigation Preload started from M57. And the worker
-  // entry in the database written by Chrome (>= M56) must have the
-  // origin_trial_tokens field.
-  const bool has_valid_token =
-      origin_trial_tokens_ &&
-      base::ContainsKey(*origin_trial_tokens_,
-                        "ServiceWorkerNavigationPreload");
-  if (!has_valid_token) {
-    if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
-            features::kServiceWorkerNavigationPreload.name,
-            base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
-      return NavigationPreloadSupportStatus::SUPPORTED;
-    } else {
-      return NavigationPreloadSupportStatus::
-          NOT_SUPPORTED_NO_VALID_ORIGIN_TRIAL_TOKEN;
-    }
-  }
-  if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
-          features::kServiceWorkerNavigationPreload.name,
-          base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
-    return NavigationPreloadSupportStatus::SUPPORTED;
-  }
-  if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
-          features::kServiceWorkerNavigationPreload.name,
-          base::FeatureList::OVERRIDE_DISABLE_FEATURE)) {
-    return NavigationPreloadSupportStatus::
-        NOT_SUPPORTED_DISABLED_BY_COMMAND_LINE;
-  }
-  if (base::FeatureList::IsEnabled(features::kServiceWorkerNavigationPreload)) {
-    return NavigationPreloadSupportStatus::SUPPORTED;
-  }
-  return NavigationPreloadSupportStatus::NOT_SUPPORTED_FIELD_TRIAL_STOPPED;
-}
-
 void ServiceWorkerVersion::CountFeature(uint32_t feature) {
   if (!used_features_.insert(feature).second)
     return;
   for (auto provider_host_by_uuid : controllee_map_)
     provider_host_by_uuid.second->CountFeature(feature);
-}
-
-void ServiceWorkerVersion::OnSimpleEventResponse(
-    int request_id,
-    blink::WebServiceWorkerEventResult result,
-    base::Time dispatch_event_time) {
-  ServiceWorkerStatusCode status = SERVICE_WORKER_OK;
-  if (result == blink::WebServiceWorkerEventResultRejected)
-    status = SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED;
-  OnSimpleEventFinished(request_id, status, dispatch_event_time);
 }
 
 void ServiceWorkerVersion::OnOpenWindow(int request_id, GURL url) {
@@ -1255,7 +1202,8 @@ void ServiceWorkerVersion::OnFocusClient(int request_id,
     // possibly due to timing issue or bad message.
     return;
   }
-  if (provider_host->client_type() != blink::WebServiceWorkerClientTypeWindow) {
+  if (provider_host->client_type() !=
+      blink::kWebServiceWorkerClientTypeWindow) {
     // focus() should be called only for WindowClient. This may happen due to
     // bad message.
     return;
@@ -1366,7 +1314,7 @@ void ServiceWorkerVersion::DidSkipWaiting(int request_id) {
 void ServiceWorkerVersion::OnClaimClients(int request_id) {
   if (status_ != ACTIVATING && status_ != ACTIVATED) {
     embedded_worker_->SendMessage(ServiceWorkerMsg_ClaimClientsError(
-        request_id, blink::WebServiceWorkerError::ErrorTypeState,
+        request_id, blink::WebServiceWorkerError::kErrorTypeState,
         base::ASCIIToUTF16(kClaimClientsStateErrorMesage)));
     return;
   }
@@ -1381,7 +1329,7 @@ void ServiceWorkerVersion::OnClaimClients(int request_id) {
   }
 
   embedded_worker_->SendMessage(ServiceWorkerMsg_ClaimClientsError(
-      request_id, blink::WebServiceWorkerError::ErrorTypeAbort,
+      request_id, blink::WebServiceWorkerError::kErrorTypeAbort,
       base::ASCIIToUTF16(kClaimClientsShutdownErrorMesage)));
 }
 
@@ -1473,8 +1421,6 @@ void ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker(
             "ServiceWorker", "ServiceWorkerVersion::StartWorker", trace_id,
             "Script", script_url_.spec(), "Purpose",
             ServiceWorkerMetrics::EventTypeToString(purpose));
-        DCHECK(!start_worker_first_purpose_);
-        start_worker_first_purpose_ = purpose;
         start_callbacks_.push_back(
             base::Bind(&ServiceWorkerVersion::RecordStartWorkerResult,
                        weak_factory_.GetWeakPtr(), purpose, prestart_status,
@@ -1494,18 +1440,12 @@ void ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker(
 
 void ServiceWorkerVersion::StartWorkerInternal() {
   DCHECK_EQ(EmbeddedWorkerStatus::STOPPED, running_status());
-  DCHECK(start_worker_first_purpose_);
 
   if (!ServiceWorkerMetrics::ShouldExcludeSiteFromHistogram(site_for_uma_)) {
     DCHECK(!event_recorder_);
     event_recorder_ =
-        base::MakeUnique<ServiceWorkerMetrics::ScopedEventRecorder>(
-            start_worker_first_purpose_.value());
+        base::MakeUnique<ServiceWorkerMetrics::ScopedEventRecorder>();
   }
-
-  // We don't clear |start_worker_first_purpose_| here but clear in
-  // FinishStartWorker. This is because StartWorkerInternal may be called
-  // again from OnStoppedInternal if StopWorker is called before OnStarted.
 
   StartTimeoutTimer();
 
@@ -1657,17 +1597,19 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
   ping_controller_->CheckPingStatus();
 }
 
-ServiceWorkerStatusCode ServiceWorkerVersion::PingWorker() {
+void ServiceWorkerVersion::PingWorker() {
   DCHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
          running_status() == EmbeddedWorkerStatus::RUNNING);
-  return embedded_worker_->SendMessage(ServiceWorkerMsg_Ping());
+  // base::Unretained here is safe because event_dispatcher is owned by |this|.
+  event_dispatcher()->Ping(base::Bind(&ServiceWorkerVersion::OnPongFromWorker,
+                                      base::Unretained(this)));
 }
 
 void ServiceWorkerVersion::OnPingTimeout() {
   DCHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
          running_status() == EmbeddedWorkerStatus::RUNNING);
   // TODO(falken): Change the error code to SERVICE_WORKER_ERROR_TIMEOUT.
-  embedded_worker_->AddMessageToConsole(blink::WebConsoleMessage::LevelVerbose,
+  embedded_worker_->AddMessageToConsole(blink::WebConsoleMessage::kLevelVerbose,
                                         kNotRespondingErrorMesage);
   StopWorkerIfIdle();
 }
@@ -1893,7 +1835,6 @@ void ServiceWorkerVersion::OnBeginEvent() {
 }
 
 void ServiceWorkerVersion::FinishStartWorker(ServiceWorkerStatusCode status) {
-  start_worker_first_purpose_ = base::nullopt;
   RunCallbacks(this, &start_callbacks_, status);
 }
 

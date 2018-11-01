@@ -23,6 +23,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/gpu_data_manager.h"
+#include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
@@ -51,10 +52,6 @@ class ShaderDiskCache;
 struct SyncToken;
 }
 
-namespace service_manager {
-class InterfaceProvider;
-}
-
 namespace content {
 class BrowserChildProcessHostImpl;
 
@@ -69,20 +66,26 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
     GPU_PROCESS_KIND_COUNT
   };
 
-  typedef base::Callback<void(const IPC::ChannelHandle&, const gpu::GPUInfo&)>
-      EstablishChannelCallback;
-
-  struct EstablishChannelRequest {
-    EstablishChannelRequest();
-    EstablishChannelRequest(const EstablishChannelRequest& other);
-    ~EstablishChannelRequest();
-    int32_t client_id;
-    bool force_access_to_gpu = false;
-    EstablishChannelCallback callback;
+  enum class EstablishChannelStatus {
+    GPU_ACCESS_DENIED,  // GPU access was not allowed.
+    GPU_HOST_INVALID,   // Request failed because the gpu host became invalid
+                        // while processing the request (e.g. the gpu process
+                        // may have been killed). The caller should normally
+                        // make another request to establish a new channel.
+    SUCCESS
   };
+  using EstablishChannelCallback =
+      base::Callback<void(const IPC::ChannelHandle&,
+                          const gpu::GPUInfo&,
+                          EstablishChannelStatus status)>;
 
-  typedef base::Callback<void(const gfx::GpuMemoryBufferHandle& handle)>
-      CreateGpuMemoryBufferCallback;
+  enum class BufferCreationStatus {
+    GPU_HOST_INVALID,
+    SUCCESS,
+  };
+  using CreateGpuMemoryBufferCallback =
+      base::Callback<void(const gfx::GpuMemoryBufferHandle& handle,
+                          BufferCreationStatus status)>;
 
   static bool gpu_enabled() { return gpu_enabled_; }
   static int gpu_crash_count() { return gpu_crash_count_; }
@@ -93,31 +96,25 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // has returned to the message loop as it can be destroyed. Instead store the
   // associated GPU host ID.  This could return NULL if GPU access is not
   // allowed (blacklisted).
-  CONTENT_EXPORT static GpuProcessHost* Get(GpuProcessKind kind,
-                                            bool force_create = true,
-                                            bool force_access_to_gpu = false);
+  CONTENT_EXPORT static GpuProcessHost* Get(
+      GpuProcessKind kind = GPU_PROCESS_KIND_SANDBOXED,
+      bool force_create = true,
+      bool force_access_to_gpu = false);
 
-  // Retrieves a list of process handles for all gpu processes.
-  static void GetProcessHandles(
-      const GpuDataManager::GetGpuProcessHandlesCallback& callback);
-
-  // Helper function to send the given message to the GPU process on the IO
-  // thread. Calls Get and if a host is returned, sends it. |force_create| can
-  // be set to force the creation of GpuProcessHost if one doesn't already
-  // exist. This function can be called from any thread. Deletes the message if
-  // it cannot be sent.
-  CONTENT_EXPORT static void SendOnIO(GpuProcessKind kind,
-                                      bool force_create,
-                                      IPC::Message* message);
+  // Returns whether there is an active GPU process or not.
+  static void GetHasGpuProcess(const base::Callback<void(bool)>& callback);
 
   // Helper function to run a callback on the IO thread. The callback receives
-  // the appropriate GpuProcessHost instance. If |force_create| is false, and no
-  // GpuProcessHost instance exists, then the callback is never called.
-  static void CallOnIO(GpuProcessKind kind,
-                       bool force_create,
-                       const base::Callback<void(GpuProcessHost*)>& callback);
+  // the appropriate GpuProcessHost instance. Note that the callback can be
+  // called with a null host (e.g. when |force_create| is false, and no
+  // GpuProcessHost instance exists).
+  CONTENT_EXPORT static void CallOnIO(
+      GpuProcessKind kind,
+      bool force_create,
+      const base::Callback<void(GpuProcessHost*)>& callback);
 
-  service_manager::InterfaceProvider* GetRemoteInterfaces();
+  void BindInterface(const std::string& interface_name,
+                     mojo::ScopedMessagePipeHandle interface_pipe);
 
   // Get the GPU process host for the GPU process with the given ID. Returns
   // null if the process no longer exists.
@@ -126,9 +123,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   // IPC::Sender implementation.
   bool Send(IPC::Message* msg) override;
-
-  // Adds a message filter to the GpuProcessHost's channel.
-  void AddFilter(IPC::MessageFilter* filter);
 
   // Tells the GPU process to create a new channel for communication with a
   // client. Once the GPU process responds asynchronously with the IPC handle
@@ -167,12 +161,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Forcefully terminates the GPU process.
   void ForceShutdown();
 
-  // Asks the GPU process to stop by itself.
-  void StopGpuProcess();
-
   void LoadedShader(const std::string& key, const std::string& data);
 
-  ui::mojom::GpuService* gpu_service() { return gpu_service_ptr_.get(); }
+  CONTENT_EXPORT ui::mojom::GpuService* gpu_service();
 
  private:
   class ConnectionFilterImpl;
@@ -195,7 +186,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void OnProcessCrashed(int exit_code) override;
 
   // ui::mojom::GpuHost:
-  void DidInitialize(const gpu::GPUInfo& gpu_info) override;
+  void DidInitialize(const gpu::GPUInfo& gpu_info,
+                     const gpu::GpuFeatureInfo& gpu_feature_info) override;
+  void DidFailInitialize() override;
   void DidCreateOffscreenContext(const GURL& url) override;
   void DidDestroyOffscreenContext(const GURL& url) override;
   void DidDestroyChannel(int32_t client_id) override;
@@ -207,15 +200,18 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void StoreShaderToDisk(int32_t client_id,
                          const std::string& key,
                          const std::string& shader) override;
+  void RecordLogMessage(int32_t severity,
+                        const std::string& header,
+                        const std::string& message) override;
+
+  void OnChannelEstablished(bool force_access_to_gpu, int client_id,
+                            const EstablishChannelCallback& callback,
+                            mojo::ScopedMessagePipeHandle channel_handle);
+  void OnGpuMemoryBufferCreated(const gfx::GpuMemoryBufferHandle& handle);
 
   // Message handlers.
-  void OnInitialized(bool result,
-                     const gpu::GPUInfo& gpu_info,
-                     const gpu::GpuFeatureInfo& gpu_feature_info);
-  void OnChannelEstablished(const IPC::ChannelHandle& channel_handle);
-  void OnGpuMemoryBufferCreated(const gfx::GpuMemoryBufferHandle& handle);
 #if defined(OS_ANDROID)
-  void OnDestroyingVideoSurfaceAck(int surface_id);
+  void OnDestroyingVideoSurfaceAck();
 #endif
   void OnFieldTrialActivated(const std::string& trial_name);
 
@@ -237,7 +233,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   // These are the channel requests that we have already sent to
   // the GPU process, but haven't heard back about yet.
-  std::queue<EstablishChannelRequest> channel_requests_;
+  std::queue<EstablishChannelCallback> channel_requests_;
 
   // The pending create gpu memory buffer requests we need to reply to.
   std::queue<CreateGpuMemoryBufferCallback> create_gpu_memory_buffer_requests_;
@@ -303,6 +299,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   ui::mojom::GpuMainAssociatedPtr gpu_main_ptr_;
   ui::mojom::GpuServicePtr gpu_service_ptr_;
   mojo::Binding<ui::mojom::GpuHost> gpu_host_binding_;
+  gpu::GpuProcessHostActivityFlags activity_flags_;
+
+  base::WeakPtrFactory<GpuProcessHost> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuProcessHost);
 };

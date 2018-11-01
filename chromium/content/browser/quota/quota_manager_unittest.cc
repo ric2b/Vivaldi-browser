@@ -22,13 +22,14 @@
 #include "base/stl_util.h"
 #include "base/sys_info.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/mock_storage_client.h"
 #include "storage/browser/quota/quota_database.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -167,6 +168,8 @@ class QuotaManagerTest : public testing::Test {
     storage::QuotaSettings settings;
     settings.pool_size = pool_size;
     settings.per_host_quota = per_host_quota;
+    settings.session_only_per_host_quota =
+        (per_host_quota > 0) ? (per_host_quota - 1) : 0;
     settings.must_remain_available = must_remain_available;
     settings.refresh_interval = base::TimeDelta::Max();
     quota_manager_->SetQuotaSettings(settings);
@@ -445,7 +448,7 @@ class QuotaManagerTest : public testing::Test {
     return base::Time::FromDoubleT(mock_time_counter_ * 10.0);
   }
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::ScopedTempDir data_dir_;
 
   scoped_refptr<QuotaManager> quota_manager_;
@@ -2250,6 +2253,19 @@ TEST_F(QuotaManagerTest, GetUsageAndQuota_Incognito) {
   EXPECT_EQ(kQuotaStatusOk, status());
   EXPECT_EQ(10, usage());
   EXPECT_EQ(available_space() + usage(), quota());
+}
+
+TEST_F(QuotaManagerTest, GetUsageAndQuota_SessionOnly) {
+  const GURL kEpheremalOrigin("http://ephemeral/");
+  mock_special_storage_policy()->AddSessionOnly(kEpheremalOrigin);
+
+  GetUsageAndQuotaForWebApps(kEpheremalOrigin, kTemp);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(quota_manager()->settings().session_only_per_host_quota, quota());
+
+  GetUsageAndQuotaForWebApps(kEpheremalOrigin, kPerm);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0, quota());
 }
 
 }  // namespace content

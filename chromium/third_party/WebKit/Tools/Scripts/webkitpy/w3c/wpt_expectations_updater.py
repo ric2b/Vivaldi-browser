@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Updates layout test expectations and baselines when updating w3c tests.
+"""Updates expectations and baselines when updating web-platform-tests.
 
 Specifically, this class fetches results from try bots for the current CL, then
 (1) downloads new baseline files for any tests that can be rebaselined, and
@@ -17,18 +17,20 @@ from webkitpy.common.memoized import memoized
 from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.layout_tests.models.test_expectations import TestExpectationLine, TestExpectations
-from webkitpy.w3c.test_parser import TestParser
+from webkitpy.w3c.wpt_manifest import WPTManifest
 
 _log = logging.getLogger(__name__)
 
-MARKER_COMMENT = '# ====== New tests from w3c-test-autoroller added here ======'
+MARKER_COMMENT = '# ====== New tests from wpt-importer added here ======'
 
 
 class WPTExpectationsUpdater(object):
 
     def __init__(self, host):
         self.host = host
+        self.port = self.host.port_factory.get()
         self.finder = WebKitFinder(self.host.filesystem)
+        self.port = self.host.port_factory.get()
 
     def run(self, args=None):
         """Downloads text new baselines and adds test expectations lines."""
@@ -49,6 +51,9 @@ class WPTExpectationsUpdater(object):
         if not builds:
             _log.error('No try job information was collected.')
             return 1
+
+        # The manifest may be used below to do check which tests are reference tests.
+        WPTManifest.ensure_manifest(self.host)
 
         # Here we build up a dict of failing test results for all platforms.
         test_expectations = {}
@@ -100,7 +105,7 @@ class WPTExpectationsUpdater(object):
             _log.warning('No results for build %s', build)
             return {}
         port_name = self.host.builders.port_name_for_builder_name(build.builder_name)
-        test_results = layout_test_results.didnt_run_as_expected_results()
+        test_results = [result for result in layout_test_results.didnt_run_as_expected_results() if not result.did_pass()]
         failing_results_dict = self.generate_results_dict(port_name, test_results)
         return failing_results_dict
 
@@ -197,10 +202,11 @@ class WPTExpectationsUpdater(object):
         return merged_dict
 
     def get_expectations(self, results):
-        """Returns a set of test expectations for a given test dict.
+        """Returns a set of test expectations to use based on results.
 
         Returns a set of one or more test expectations based on the expected
-        and actual results of a given test name.
+        and actual results of a given test name. This function is to decide
+        expectations for tests that could not be rebaselined.
 
         Args:
             results: A dictionary that maps one test to its results. Example:
@@ -217,16 +223,13 @@ class WPTExpectationsUpdater(object):
             capitalized. Example: set(['Failure', 'Timeout']).
         """
         expectations = set()
-        failure_types = ['TEXT', 'FAIL', 'IMAGE+TEXT', 'IMAGE', 'AUDIO', 'MISSING', 'LEAK']
-        test_expectation_types = ['SLOW', 'TIMEOUT', 'CRASH', 'PASS', 'REBASELINE', 'NEEDSREBASELINE', 'NEEDSMANUALREBASELINE']
-        for expected in results['expected'].split():
-            for actual in results['actual'].split():
-                if expected in test_expectation_types and actual in failure_types:
-                    expectations.add('Failure')
-                if expected in failure_types and actual in test_expectation_types:
-                    expectations.add(actual.capitalize())
-                if expected in test_expectation_types and actual in test_expectation_types:
-                    expectations.add(actual.capitalize())
+        failure_types = ('TEXT', 'IMAGE+TEXT', 'IMAGE', 'AUDIO')
+        other_types = ('TIMEOUT', 'CRASH', 'PASS')
+        for actual in results['actual'].split():
+            if actual in failure_types:
+                expectations.add('Failure')
+            if actual in other_types:
+                expectations.add(actual.capitalize())
         return expectations
 
     def create_line_list(self, merged_results):
@@ -236,7 +239,7 @@ class WPTExpectationsUpdater(object):
         value to create one test expectations line per key.
 
         Args:
-            merged_results: A merged_results with the format:
+            merged_results: A dictionary with the format:
                 {
                     'test_name': {
                         'platform': {
@@ -253,16 +256,26 @@ class WPTExpectationsUpdater(object):
         """
         line_list = []
         for test_name, port_results in sorted(merged_results.iteritems()):
-            for port_names in sorted(port_results):
-                if test_name.startswith('external'):
-                    line_parts = [port_results[port_names]['bug']]
-                    specifier_part = self.specifier_part(self.to_list(port_names), test_name)
-                    if specifier_part:
-                        line_parts.append(specifier_part)
-                    line_parts.append(test_name)
-                    line_parts.append('[ %s ]' % ' '.join(self.get_expectations(port_results[port_names])))
-                    line_list.append(' '.join(line_parts))
+            if not self.port.is_wpt_test(test_name):
+                continue
+            for port_names, results in sorted(port_results.iteritems()):
+                line_list.append(self._create_line(test_name, port_names, results))
         return line_list
+
+    def _create_line(self, test_name, port_names, results):
+        """Constructs one test expectations line string."""
+        line_parts = [results['bug']]
+        specifier_part = self.specifier_part(self.to_list(port_names), test_name)
+        if specifier_part:
+            line_parts.append(specifier_part)
+        line_parts.append(test_name)
+
+        # Skip new manual tests; see crbug.com/708241 for context.
+        if '-manual.' in test_name and results['actual'] in ('MISSING', 'TIMEOUT'):
+            line_parts.append('[ Skip ]')
+        else:
+            line_parts.append('[ %s ]' % ' '.join(self.get_expectations(results)))
+        return ' '.join(line_parts)
 
     def specifier_part(self, port_names, test_name):
         """Returns the specifier part for a new test expectations line.
@@ -278,9 +291,9 @@ class WPTExpectationsUpdater(object):
         specifiers = []
         for name in sorted(port_names):
             specifiers.append(self.host.builders.version_specifier_for_port_name(name))
-        port = self.host.port_factory.get()
+
         specifiers.extend(self.skipped_specifiers(test_name))
-        specifiers = self.simplify_specifiers(specifiers, port.configuration_specifier_macros())
+        specifiers = self.simplify_specifiers(specifiers, self.port.configuration_specifier_macros())
         if not specifiers:
             return ''
         return '[ %s ]' % ' '.join(specifiers)
@@ -352,8 +365,7 @@ class WPTExpectationsUpdater(object):
         _log.info('Lines to write to TestExpectations:')
         for line in line_list:
             _log.info('  %s', line)
-        port = self.host.port_factory.get()
-        expectations_file_path = port.path_to_generic_test_expectations_file()
+        expectations_file_path = self.port.path_to_generic_test_expectations_file()
         file_contents = self.host.filesystem.read_text_file(expectations_file_path)
         marker_comment_index = file_contents.find(MARKER_COMMENT)
         line_list = [line for line in line_list if self._test_name_from_expectation_string(line) not in file_contents]
@@ -419,29 +431,25 @@ class WPTExpectationsUpdater(object):
             the test results dictionary. The tests to be rebaselined should
             include testharness.js tests that failed due to a baseline mismatch.
         """
-        test_results = copy.deepcopy(test_results)
+        new_test_results = copy.deepcopy(test_results)
         tests_to_rebaseline = set()
         for test_path in test_results:
-            if not (self.is_js_test(test_path) and test_results.get(test_path)):
-                continue
-            for platform in test_results[test_path].keys():
-                if test_results[test_path][platform]['actual'] not in ['CRASH', 'TIMEOUT']:
-                    del test_results[test_path][platform]
+            for platform, result in test_results[test_path].iteritems():
+                if self.can_rebaseline(test_path, result):
+                    del new_test_results[test_path][platform]
                     tests_to_rebaseline.add(test_path)
-        return sorted(tests_to_rebaseline), test_results
+        return sorted(tests_to_rebaseline), new_test_results
 
-    def is_js_test(self, test_path):
-        """Checks whether a given file is a testharness.js test.
-
-        Args:
-            test_path: A file path relative to the layout tests directory.
-                This might correspond to a deleted file or a non-test.
-        """
-        absolute_path = self.host.filesystem.join(self.finder.layout_tests_dir(), test_path)
-        test_parser = TestParser(absolute_path, self.host)
-        if not test_parser.test_doc:
+    def can_rebaseline(self, test_path, result):
+        if self.is_reference_test(test_path):
             return False
-        return test_parser.is_jstest()
+        if result['actual'] in ('CRASH', 'TIMEOUT', 'MISSING'):
+            return False
+        return True
+
+    def is_reference_test(self, test_path):
+        """Checks whether a given file is a testharness.js test."""
+        return bool(self.port.reference_files(test_path))
 
     def _get_try_bots(self):
         return self.host.builders.all_try_builder_names()

@@ -26,14 +26,14 @@
 #ifndef HTMLResourcePreloader_h
 #define HTMLResourcePreloader_h
 
+#include <memory>
 #include "core/html/parser/CSSPreloadScanner.h"
 #include "core/html/parser/PreloadRequest.h"
 #include "core/html/parser/ResourcePreloader.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "platform/heap/Heap.h"
-#include "wtf/CurrentTime.h"
-#include "wtf/text/TextPosition.h"
-#include <memory>
+#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/text/TextPosition.h"
 
 namespace blink {
 
@@ -46,19 +46,19 @@ class CORE_EXPORT HTMLResourcePreloader
   friend class HTMLResourcePreloaderTest;
 
  public:
-  static HTMLResourcePreloader* create(Document&);
-  int countPreloads();
-  Document* document() { return m_document.get(); }
+  static HTMLResourcePreloader* Create(Document&);
+  int CountPreloads();
+  Document* GetDocument() { return document_.Get(); }
   DECLARE_TRACE();
 
  protected:
-  void preload(std::unique_ptr<PreloadRequest>,
+  void Preload(std::unique_ptr<PreloadRequest>,
                const NetworkHintsInterface&) override;
   explicit HTMLResourcePreloader(Document&);
 
  private:
-  Member<Document> m_document;
-  HeapHashSet<Member<CSSPreloaderResourceClient>> m_cssPreloaders;
+  Member<Document> document_;
+  HeapHashSet<Member<CSSPreloaderResourceClient>> css_preloaders_;
 };
 
 }  // namespace blink

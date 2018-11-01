@@ -36,35 +36,7 @@ void GoogleChromeDistribution::DoPostUninstallOperations(
     const base::string16& distribution_data) {
 }
 
-base::string16 GoogleChromeDistribution::GetActiveSetupGuid() {
-  return base::string16();
-}
-
-base::string16 GoogleChromeDistribution::GetBaseAppName() {
-  return base::string16();
-}
-
 base::string16 GoogleChromeDistribution::GetShortcutName() {
-  return base::string16();
-}
-
-int GoogleChromeDistribution::GetIconIndex() {
-  return 0;
-}
-
-base::string16 GoogleChromeDistribution::GetBaseAppId() {
-  return base::string16();
-}
-
-base::string16 GoogleChromeDistribution::GetBrowserProgIdPrefix() {
-  return base::string16();
-}
-
-base::string16 GoogleChromeDistribution::GetBrowserProgIdDesc() {
-  return base::string16();
-}
-
-base::string16 GoogleChromeDistribution::GetInstallSubDir() {
   return base::string16();
 }
 
@@ -84,31 +56,7 @@ base::string16 GoogleChromeDistribution::GetDistributionData(HKEY root_key) {
   return base::string16();
 }
 
-base::string16 GetRegistryPath() {
-  return base::string16();
-}
-
-base::string16 GoogleChromeDistribution::GetUninstallRegPath() {
-  return base::string16();
-}
-
-base::string16 GoogleChromeDistribution::GetIconFilename() {
-  return base::string16();
-}
-
-base::string16 GoogleChromeDistribution::GetCommandExecuteImplClsid() {
-  return base::string16();
-}
-
 void GoogleChromeDistribution::UpdateInstallStatus(bool system_install,
     installer::ArchiveType archive_type,
     installer::InstallStatus install_status) {
-}
-
-bool GoogleChromeDistribution::ShouldSetExperimentLabels() {
-  return false;
-}
-
-bool GoogleChromeDistribution::HasUserExperiments() {
-  return false;
 }

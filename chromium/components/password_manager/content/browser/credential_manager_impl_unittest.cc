@@ -59,13 +59,12 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_CONST_METHOD0(IsSavingAndFillingEnabledForCurrentPage, bool());
   MOCK_CONST_METHOD0(IsFillingEnabledForCurrentPage, bool());
   MOCK_METHOD0(OnCredentialManagerUsed, bool());
-  MOCK_CONST_METHOD0(IsOffTheRecord, bool());
+  MOCK_CONST_METHOD0(IsIncognito, bool());
   MOCK_METHOD0(NotifyUserAutoSigninPtr, bool());
   MOCK_METHOD1(NotifyUserCouldBeAutoSignedInPtr,
                bool(autofill::PasswordForm* form));
   MOCK_METHOD0(NotifyStorePasswordCalled, void());
-  MOCK_METHOD2(PromptUserToSavePasswordPtr,
-               void(PasswordFormManager*, CredentialSourceType type));
+  MOCK_METHOD1(PromptUserToSavePasswordPtr, void(PasswordFormManager*));
   MOCK_METHOD3(PromptUserToChooseCredentialsPtr,
                bool(const std::vector<autofill::PasswordForm*>& local_forms,
                     const GURL& origin,
@@ -81,10 +80,9 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
 
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<PasswordFormManager> manager,
-      CredentialSourceType type,
       bool update_password) override {
     manager_.swap(manager);
-    PromptUserToSavePasswordPtr(manager_.get(), type);
+    PromptUserToSavePasswordPtr(manager_.get());
     return true;
   }
 
@@ -226,7 +224,7 @@ class CredentialManagerImplTest : public content::RenderViewHostTestHarness {
         .WillByDefault(testing::Return(true));
     ON_CALL(*client_, OnCredentialManagerUsed())
         .WillByDefault(testing::Return(true));
-    ON_CALL(*client_, IsOffTheRecord()).WillByDefault(testing::Return(false));
+    ON_CALL(*client_, IsIncognito()).WillByDefault(testing::Return(false));
 
     NavigateAndCommit(GURL("https://example.com/test.html"));
 
@@ -403,8 +401,7 @@ TEST_F(CredentialManagerImplTest, IsZeroClickAllowed) {
 
 TEST_F(CredentialManagerImplTest, CredentialManagerOnStore) {
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(1));
   EXPECT_CALL(*client_, NotifyStorePasswordCalled());
 
@@ -433,8 +430,7 @@ TEST_F(CredentialManagerImplTest, CredentialManagerOnStore) {
 }
 
 TEST_F(CredentialManagerImplTest, CredentialManagerOnStoreFederated) {
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(1));
   EXPECT_CALL(*client_, NotifyStorePasswordCalled());
 
@@ -477,8 +473,7 @@ TEST_F(CredentialManagerImplTest, StoreFederatedAfterPassword) {
   federated.federation_origin = url::Origin(GURL("https://google.com/"));
   federated.signon_realm = "federation://example.com/google.com";
   CredentialInfo info(federated, CredentialType::CREDENTIAL_TYPE_FEDERATED);
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API));
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_));
   EXPECT_CALL(*client_, NotifyStorePasswordCalled());
 
   bool called = false;
@@ -511,7 +506,7 @@ TEST_F(CredentialManagerImplTest, CredentialManagerStoreOverwrite) {
   // the password without prompting the user.
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
   info.password = base::ASCIIToUTF16("Totally new password.");
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_, _)).Times(0);
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_)).Times(0);
   EXPECT_CALL(*client_, NotifyStorePasswordCalled());
   bool called = false;
   CallStore(info, base::Bind(&RespondCallback, &called));
@@ -540,7 +535,7 @@ TEST_F(CredentialManagerImplTest,
   // credential with identical username and password should result in a silent
   // save without prompting the user.
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_, _))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(0));
   EXPECT_CALL(*client_, NotifyStorePasswordCalled());
   bool called = false;
@@ -567,7 +562,7 @@ TEST_F(CredentialManagerImplTest,
   // credential but has a different username should prompt the user and not
   // result in a silent save.
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_, _))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(1));
   EXPECT_CALL(*client_, NotifyStorePasswordCalled());
   bool called = false;
@@ -598,7 +593,7 @@ TEST_F(CredentialManagerImplTest,
   // credential but has a different password should prompt the user and not
   // result in a silent save.
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_, _))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(1));
   EXPECT_CALL(*client_, NotifyStorePasswordCalled());
   bool called = false;
@@ -701,8 +696,7 @@ TEST_F(CredentialManagerImplTest,
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
   EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(testing::Return(false));
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(0));
   EXPECT_CALL(*client_, NotifyStorePasswordCalled()).Times(0);
 
@@ -811,8 +805,7 @@ TEST_F(CredentialManagerImplTest,
 TEST_F(CredentialManagerImplTest,
        CredentialManagerOnRequestCredentialWithEmptyPasswordStore) {
   std::vector<GURL> federations;
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(0));
   EXPECT_CALL(*client_, PromptUserToChooseCredentialsPtr(_, _, _))
       .Times(testing::Exactly(0));
@@ -928,8 +921,7 @@ TEST_F(CredentialManagerImplTest,
   store_->AddLogin(cross_origin_form_);
 
   std::vector<GURL> federations;
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API))
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(0));
   EXPECT_CALL(*client_, PromptUserToChooseCredentialsPtr(_, _, _))
       .Times(testing::Exactly(0));
@@ -1306,7 +1298,7 @@ TEST_F(CredentialManagerImplTest, ResetSkipZeroClickAfterPrompt) {
 }
 
 TEST_F(CredentialManagerImplTest, NoResetSkipZeroClickAfterPromptInIncognito) {
-  EXPECT_CALL(*client_, IsOffTheRecord()).WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, IsIncognito()).WillRepeatedly(testing::Return(true));
   // Turn on the global zero-click flag which should be overriden by Incognito.
   client_->set_zero_click_enabled(true);
   form_.skip_zero_click = true;
@@ -1341,7 +1333,7 @@ TEST_F(CredentialManagerImplTest, NoResetSkipZeroClickAfterPromptInIncognito) {
 }
 
 TEST_F(CredentialManagerImplTest, IncognitoZeroClickRequestCredential) {
-  EXPECT_CALL(*client_, IsOffTheRecord()).WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, IsIncognito()).WillRepeatedly(testing::Return(true));
   store_->AddLogin(form_);
 
   std::vector<GURL> federations;
@@ -1476,6 +1468,14 @@ TEST_F(CredentialManagerImplTest, ZeroClickAfterMigratingHttpCredential) {
                                CredentialType::CREDENTIAL_TYPE_PASSWORD);
 }
 
+TEST_F(CredentialManagerImplTest, MigrateWithEmptyStore) {
+  // HTTP scheme is valid for localhost. Nothing should crash.
+  NavigateAndCommit(GURL("http://127.0.0.1:8000/"));
+
+  std::vector<GURL> federations;
+  ExpectZeroClickSignInFailure(false, true, federations);
+}
+
 TEST_F(CredentialManagerImplTest, GetSynthesizedFormForOrigin) {
   PasswordStore::FormDigest synthesized =
       cm_service_impl_->GetSynthesizedFormForOrigin();
@@ -1485,8 +1485,7 @@ TEST_F(CredentialManagerImplTest, GetSynthesizedFormForOrigin) {
 }
 
 TEST_F(CredentialManagerImplTest, BlacklistPasswordCredential) {
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API));
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_));
 
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
   bool called = false;
@@ -1515,8 +1514,7 @@ TEST_F(CredentialManagerImplTest, BlacklistFederatedCredential) {
   form_.password_value = base::string16();
   form_.signon_realm = "federation://example.com/example.com";
 
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API));
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_));
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_FEDERATED);
   bool called = false;
   CallStore(info, base::Bind(&RespondCallback, &called));
@@ -1551,8 +1549,7 @@ TEST_F(CredentialManagerImplTest, RespectBlacklistingPasswordCredential) {
 
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
   bool called = false;
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API));
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_));
   CallStore(info, base::Bind(&RespondCallback, &called));
   // Allow the PasswordFormManager to talk to the password store
   RunAllPendingTasks();
@@ -1573,8 +1570,7 @@ TEST_F(CredentialManagerImplTest, RespectBlacklistingFederatedCredential) {
   form_.signon_realm = "federation://example.com/example.com";
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_FEDERATED);
   bool called = false;
-  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(
-                            _, CredentialSourceType::CREDENTIAL_SOURCE_API));
+  EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_));
   CallStore(info, base::Bind(&RespondCallback, &called));
   // Allow the PasswordFormManager to talk to the password store
   RunAllPendingTasks();

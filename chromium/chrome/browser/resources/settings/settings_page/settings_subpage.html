@@ -14,18 +14,14 @@
   <template>
     <style include="settings-shared">
       :host {
-        --iron-icon-fill-color: var(--settings-nav-grey);
         display: block;
         padding-bottom: 60px;
       }
 
-      .settings-box.first {
+      #headerLine {
         min-height: 40px;
+        padding-bottom: 24px;
         padding-top: 8px;
-      }
-
-      .settings-box.first > h1 {
-        -webkit-margin-start: 4px;
       }
 
       #learnMore {
@@ -40,8 +36,8 @@
 
       paper-icon-button {
         /* Centers the ripple on the icon with appropriate margin on right. */
-        -webkit-margin-end: 8px;
-        -webkit-margin-start: -8px;
+        -webkit-margin-end: 10px;
+        -webkit-margin-start: -10px;
       }
 
       paper-spinner {
@@ -60,7 +56,7 @@
         -webkit-margin-start: 16px;
       }
     </style>
-    <div class="settings-box first">
+    <div class="settings-box first" id="headerLine">
       <paper-icon-button icon="settings:arrow-back" on-tap="onTapBack_"
           aria-label="$i18n{back}">
       </paper-icon-button>

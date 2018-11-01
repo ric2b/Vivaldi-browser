@@ -31,36 +31,12 @@
 #include "core/animation/animatable/AnimatableImage.h"
 
 #include "core/css/CSSImageValue.h"
-#include "core/style/StyleGeneratedImage.h"
-#include "wtf/MathExtras.h"
+#include "platform/wtf/MathExtras.h"
 
 namespace blink {
 
-bool AnimatableImage::usesDefaultInterpolationWith(
-    const AnimatableValue* value) const {
-  if (!m_value->isImageValue())
-    return true;
-  if (!toAnimatableImage(value)->toCSSValue()->isImageValue())
-    return true;
-  return false;
-}
-
-PassRefPtr<AnimatableValue> AnimatableImage::interpolateTo(
-    const AnimatableValue* value,
-    double fraction) const {
-  if (fraction <= 0 || fraction >= 1 || usesDefaultInterpolationWith(value))
-    return defaultInterpolateTo(this, value, fraction);
-
-  CSSValue* fromValue = toCSSValue();
-  CSSValue* toValue = toAnimatableImage(value)->toCSSValue();
-
-  return create(CSSCrossfadeValue::create(
-      fromValue, toValue, CSSPrimitiveValue::create(
-                              fraction, CSSPrimitiveValue::UnitType::Number)));
-}
-
-bool AnimatableImage::equalTo(const AnimatableValue* value) const {
-  return m_value->equals(*toAnimatableImage(value)->m_value.get());
+bool AnimatableImage::EqualTo(const AnimatableValue* value) const {
+  return DataEquivalent(value_, ToAnimatableImage(value)->value_);
 }
 
 }  // namespace blink

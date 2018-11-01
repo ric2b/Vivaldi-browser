@@ -28,7 +28,7 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/Element.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -41,7 +41,7 @@ class NamedNodeMap final : public GarbageCollected<NamedNodeMap>,
   friend class Element;
 
  public:
-  static NamedNodeMap* create(Element* element) {
+  static NamedNodeMap* Create(Element* element) {
     return new NamedNodeMap(element);
   }
 
@@ -50,10 +50,10 @@ class NamedNodeMap final : public GarbageCollected<NamedNodeMap>,
   Attr* getNamedItem(const AtomicString&) const;
   Attr* removeNamedItem(const AtomicString& name, ExceptionState&);
 
-  Attr* getNamedItemNS(const AtomicString& namespaceURI,
-                       const AtomicString& localName) const;
-  Attr* removeNamedItemNS(const AtomicString& namespaceURI,
-                          const AtomicString& localName,
+  Attr* getNamedItemNS(const AtomicString& namespace_uri,
+                       const AtomicString& local_name) const;
+  Attr* removeNamedItemNS(const AtomicString& namespace_uri,
+                          const AtomicString& local_name,
                           ExceptionState&);
 
   Attr* setNamedItem(Attr*, ExceptionState&);
@@ -65,12 +65,12 @@ class NamedNodeMap final : public GarbageCollected<NamedNodeMap>,
   DECLARE_TRACE();
 
  private:
-  explicit NamedNodeMap(Element* element) : m_element(element) {
+  explicit NamedNodeMap(Element* element) : element_(element) {
     // Only supports NamedNodeMaps with Element associated.
-    DCHECK(m_element);
+    DCHECK(element_);
   }
 
-  Member<Element> m_element;
+  Member<Element> element_;
 };
 
 }  // namespace blink

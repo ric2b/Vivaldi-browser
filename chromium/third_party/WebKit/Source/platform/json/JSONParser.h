@@ -6,7 +6,7 @@
 #define JSONParser_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 #include <memory>
 
@@ -14,10 +14,10 @@ namespace blink {
 
 class JSONValue;
 
-PLATFORM_EXPORT std::unique_ptr<JSONValue> parseJSON(const String& json);
+PLATFORM_EXPORT std::unique_ptr<JSONValue> ParseJSON(const String& json);
 
-PLATFORM_EXPORT std::unique_ptr<JSONValue> parseJSON(const String& json,
-                                                     int maxDepth);
+PLATFORM_EXPORT std::unique_ptr<JSONValue> ParseJSON(const String& json,
+                                                     int max_depth);
 
 }  // namespace blink
 

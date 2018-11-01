@@ -25,7 +25,7 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "modules/plugins/DOMMimeType.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -39,19 +39,19 @@ class DOMMimeTypeArray final : public GarbageCollected<DOMMimeTypeArray>,
   USING_GARBAGE_COLLECTED_MIXIN(DOMMimeTypeArray);
 
  public:
-  static DOMMimeTypeArray* create(LocalFrame* frame) {
+  static DOMMimeTypeArray* Create(LocalFrame* frame) {
     return new DOMMimeTypeArray(frame);
   }
 
   unsigned length() const;
   DOMMimeType* item(unsigned index);
-  DOMMimeType* namedItem(const AtomicString& propertyName);
+  DOMMimeType* namedItem(const AtomicString& property_name);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit DOMMimeTypeArray(LocalFrame*);
-  PluginData* getPluginData() const;
+  PluginData* GetPluginData() const;
 };
 
 }  // namespace blink

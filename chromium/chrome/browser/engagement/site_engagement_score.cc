@@ -15,6 +15,8 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/variations/variations_associated_data.h"
 
 namespace {
@@ -44,7 +46,7 @@ std::unique_ptr<base::DictionaryValue> GetScoreDictForSettings(
   std::unique_ptr<base::DictionaryValue> value =
       base::DictionaryValue::From(settings->GetWebsiteSetting(
           origin_url, origin_url, CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
-          std::string(), NULL));
+          content_settings::ResourceIdentifier(), NULL));
 
   if (value.get())
     return value;
@@ -88,6 +90,10 @@ SiteEngagementScore::ParamValues SiteEngagementScore::BuildParamValues() {
   param_values[MAX_DECAYS_PER_SCORE] = {"max_decays_per_score", 4};
   param_values[LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS] = {
       "last_engagement_grace_period_in_hours", 1};
+  param_values[NOTIFICATION_PERMISSION_POINTS] = {
+      "notification_permission_points", 5};
+  param_values[NOTIFICATION_INTERACTION_POINTS] = {
+      "notification_interaction_points", 1};
   return param_values;
 }
 
@@ -155,6 +161,37 @@ double SiteEngagementScore::GetLastEngagementGracePeriodInHours() {
   return GetParamValues()[LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS].second;
 }
 
+double SiteEngagementScore::GetNotificationPermissionPoints() {
+  return GetParamValues()[NOTIFICATION_PERMISSION_POINTS].second;
+}
+
+double SiteEngagementScore::GetNotificationInteractionPoints() {
+  return GetParamValues()[NOTIFICATION_INTERACTION_POINTS].second;
+}
+
+void SiteEngagementScore::SetParamValuesForTesting() {
+  GetParamValues()[MAX_POINTS_PER_DAY].second = 5;
+  GetParamValues()[DECAY_PERIOD_IN_HOURS].second = 7 * 24;
+  GetParamValues()[DECAY_POINTS].second = 5;
+  GetParamValues()[NAVIGATION_POINTS].second = 0.5;
+  GetParamValues()[USER_INPUT_POINTS].second = 0.05;
+  GetParamValues()[VISIBLE_MEDIA_POINTS].second = 0.02;
+  GetParamValues()[HIDDEN_MEDIA_POINTS].second = 0.01;
+  GetParamValues()[WEB_APP_INSTALLED_POINTS].second = 5;
+  GetParamValues()[BOOTSTRAP_POINTS].second = 8;
+  GetParamValues()[MEDIUM_ENGAGEMENT_BOUNDARY].second = 5;
+  GetParamValues()[HIGH_ENGAGEMENT_BOUNDARY].second = 50;
+  GetParamValues()[MAX_DECAYS_PER_SCORE].second = 1;
+  GetParamValues()[LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS].second = 72;
+  GetParamValues()[NOTIFICATION_PERMISSION_POINTS].second = 5;
+  GetParamValues()[NOTIFICATION_INTERACTION_POINTS].second = 1;
+
+  // This is set to values that avoid interference with tests and are set when
+  // testing these features.
+  GetParamValues()[FIRST_DAILY_ENGAGEMENT].second = 0;
+  GetParamValues()[DECAY_PROPORTION].second = 1;
+  GetParamValues()[SCORE_CLEANUP_THRESHOLD].second = 0;
+}
 // static
 void SiteEngagementScore::UpdateFromVariations(const char* param_name) {
   double param_vals[MAX_VARIATION];
@@ -233,8 +270,20 @@ void SiteEngagementScore::AddPoints(double points) {
   last_engagement_time_ = now;
 }
 
-double SiteEngagementScore::GetScore() const {
-  return std::min(DecayedScore() + BonusScore(), kMaxPoints);
+double SiteEngagementScore::GetTotalScore() const {
+  return std::min(
+      DecayedScore() + BonusIfShortcutLaunched() + BonusIfHasNotifications(),
+      kMaxPoints);
+}
+
+mojom::SiteEngagementDetails SiteEngagementScore::GetDetails() const {
+  mojom::SiteEngagementDetails engagement;
+  engagement.origin = origin_;
+  engagement.base_score = DecayedScore();
+  engagement.installed_bonus = BonusIfShortcutLaunched();
+  engagement.notifications_bonus = BonusIfHasNotifications();
+  engagement.total_score = GetTotalScore();
+  return engagement;
 }
 
 void SiteEngagementScore::Commit() {
@@ -243,14 +292,14 @@ void SiteEngagementScore::Commit() {
     return;
 
   settings_map_->SetWebsiteSettingDefaultScope(
-      origin_, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      std::move(score_dict_));
+      origin_, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
+      content_settings::ResourceIdentifier(), std::move(score_dict_));
 }
 
 blink::mojom::EngagementLevel SiteEngagementScore::GetEngagementLevel() const {
   DCHECK_LT(GetMediumEngagementBoundary(), GetHighEngagementBoundary());
 
-  double score = GetScore();
+  double score = GetTotalScore();
   if (score == 0)
     return blink::mojom::EngagementLevel::NONE;
 
@@ -333,7 +382,8 @@ SiteEngagementScore::SiteEngagementScore(
       last_engagement_time_(),
       last_shortcut_launch_time_(),
       score_dict_(score_dict.release()),
-      origin_(origin) {
+      origin_(origin),
+      settings_map_(nullptr) {
   if (!score_dict_)
     return;
 
@@ -362,33 +412,23 @@ double SiteEngagementScore::DecayedScore() const {
                            periods * GetDecayPoints());
 }
 
-double SiteEngagementScore::BonusScore() const {
+double SiteEngagementScore::BonusIfShortcutLaunched() const {
   int days_since_shortcut_launch =
       (clock_->Now() - last_shortcut_launch_time_).InDays();
   if (days_since_shortcut_launch <= kMaxDaysSinceShortcutLaunch)
     return GetWebAppInstalledPoints();
-
   return 0;
 }
 
-void SiteEngagementScore::SetParamValuesForTesting() {
-  GetParamValues()[MAX_POINTS_PER_DAY].second = 5;
-  GetParamValues()[DECAY_PERIOD_IN_HOURS].second = 7 * 24;
-  GetParamValues()[DECAY_POINTS].second = 5;
-  GetParamValues()[NAVIGATION_POINTS].second = 0.5;
-  GetParamValues()[USER_INPUT_POINTS].second = 0.05;
-  GetParamValues()[VISIBLE_MEDIA_POINTS].second = 0.02;
-  GetParamValues()[HIDDEN_MEDIA_POINTS].second = 0.01;
-  GetParamValues()[WEB_APP_INSTALLED_POINTS].second = 5;
-  GetParamValues()[BOOTSTRAP_POINTS].second = 8;
-  GetParamValues()[MEDIUM_ENGAGEMENT_BOUNDARY].second = 5;
-  GetParamValues()[HIGH_ENGAGEMENT_BOUNDARY].second = 50;
-  GetParamValues()[MAX_DECAYS_PER_SCORE].second = 1;
-  GetParamValues()[LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS].second = 72;
+double SiteEngagementScore::BonusIfHasNotifications() const {
+  // TODO(dominickn, raymes): call PermissionManager::GetPermissionStatus when
+  // the PermissionManager is thread-safe.
+  if (settings_map_ &&
+      settings_map_->GetContentSetting(
+          origin_, GURL(), CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+          content_settings::ResourceIdentifier()) == CONTENT_SETTING_ALLOW) {
+    return GetNotificationPermissionPoints();
+  }
 
-  // This is set to values that avoid interference with tests and are set when
-  // testing these features.
-  GetParamValues()[FIRST_DAILY_ENGAGEMENT].second = 0;
-  GetParamValues()[DECAY_PROPORTION].second = 1;
-  GetParamValues()[SCORE_CLEANUP_THRESHOLD].second = 0;
+  return 0;
 }

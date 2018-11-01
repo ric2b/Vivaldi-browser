@@ -13,7 +13,8 @@ root = common.create_self_signed_root_certificate('Root')
 
 # Intermediate using an EC key for the P-384 curve.
 intermediate = common.create_intermediate_certificate('Intermediate', root)
-intermediate.set_key(common.generate_ec_key('secp384r1'))
+intermediate.set_key(common.get_or_generate_ec_key(
+    'secp384r1', common.create_key_path(intermediate.name)))
 
 # Target certificate contains an RSA key (but is signed using ECDSA).
 target = common.create_end_entity_certificate('Target', intermediate)
@@ -21,7 +22,9 @@ target = common.create_end_entity_certificate('Target', intermediate)
 chain = [target, intermediate]
 trusted = common.TrustAnchor(root, constrained=False)
 time = common.DEFAULT_TIME
+key_purpose = common.DEFAULT_KEY_PURPOSE
 verify_result = True
 errors = None
 
-common.write_test_file(__doc__, chain, trusted, time, verify_result, errors)
+common.write_test_file(__doc__, chain, trusted, time, key_purpose,
+                       verify_result, errors)

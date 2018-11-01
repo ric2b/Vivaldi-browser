@@ -1384,10 +1384,13 @@ GLenum Texture::SetParameterf(
     case GL_TEXTURE_BASE_LEVEL:
     case GL_TEXTURE_MAX_LEVEL:
     case GL_TEXTURE_USAGE_ANGLE:
-      {
-        GLint iparam = static_cast<GLint>(std::round(param));
-        return SetParameteri(feature_info, pname, iparam);
-      }
+    case GL_TEXTURE_SWIZZLE_R:
+    case GL_TEXTURE_SWIZZLE_G:
+    case GL_TEXTURE_SWIZZLE_B:
+    case GL_TEXTURE_SWIZZLE_A: {
+      GLint iparam = static_cast<GLint>(std::round(param));
+      return SetParameteri(feature_info, pname, iparam);
+    }
     case GL_TEXTURE_MIN_LOD:
       sampler_state_.min_lod = param;
       break;
@@ -1753,17 +1756,15 @@ void Texture::DumpLevelMemory(base::trace_event::ProcessMemoryDump* pmd,
         continue;
 
       // If a level has a GLImage, ask the GLImage to dump itself.
+      // If a level does not have a GLImage bound to it, then dump the
+      // texture allocation also as the storage is not provided by the
+      // GLImage in that case.
       if (level_infos[level_index].image) {
         level_infos[level_index].image->OnMemoryDump(
             pmd, client_tracing_id,
             base::StringPrintf("%s/face_%d/level_%d", dump_name.c_str(),
                                face_index, level_index));
-      }
-
-      // If a level does not have a GLImage bound to it, then dump the
-      // texture allocation also as the storage is not provided by the
-      // GLImage in that case.
-      if (level_infos[level_index].image_state != BOUND) {
+      } else {
         MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(base::StringPrintf(
             "%s/face_%d/level_%d", dump_name.c_str(), face_index, level_index));
         dump->AddScalar(

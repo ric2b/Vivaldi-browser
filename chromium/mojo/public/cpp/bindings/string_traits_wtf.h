@@ -7,13 +7,13 @@
 
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/string_traits.h"
-#include "third_party/WebKit/Source/wtf/text/WTFString.h"
+#include "third_party/WebKit/Source/platform/wtf/text/WTFString.h"
 
 namespace mojo {
 
 template <>
 struct StringTraits<WTF::String> {
-  static bool IsNull(const WTF::String& input) { return input.isNull(); }
+  static bool IsNull(const WTF::String& input) { return input.IsNull(); }
   static void SetToNull(WTF::String* output);
 
   static void* SetUpContext(const WTF::String& input);

@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "ash/common/shell_observer.h"
+#include "ash/shell_observer.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/login/app_launch_controller.h"
@@ -67,7 +67,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   OobeUI* GetOobeUI() const override;
   WebUILoginView* GetWebUILoginView() const override;
   void BeforeSessionStart() override;
-  void Finalize() override;
+  void Finalize(base::OnceClosure completion_callback) override;
   void OnCompleteLogin() override;
   void OpenProxySettings() override;
   void SetStatusAreaVisible(bool visible) override;
@@ -75,7 +75,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   void StartWizard(OobeScreen first_screen) override;
   WizardController* GetWizardController() override;
   AppLaunchController* GetAppLaunchController() override;
-  void StartUserAdding(const base::Closure& completion_callback) override;
+  void StartUserAdding(base::OnceClosure completion_callback) override;
   void CancelUserAdding() override;
   void StartSignInScreen(const LoginScreenContext& context) override;
   void OnPreferencesChanged() override;
@@ -122,7 +122,8 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   void OnActiveOutputNodeChanged() override;
 
   // ash::ShellObserver:
-  void OnVirtualKeyboardStateChanged(bool activated) override;
+  void OnVirtualKeyboardStateChanged(bool activated,
+                                     ash::WmWindow* root_window) override;
 
   // Overridden from keyboard::KeyboardControllerObserver:
   void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
@@ -286,8 +287,8 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   // Stored parameters for StartWizard, required to restore in case of crash.
   OobeScreen first_screen_;
 
-  // Called before host deletion.
-  base::Closure completion_callback_;
+  // Called after host deletion.
+  std::vector<base::OnceClosure> completion_callbacks_;
 
   // Active instance of authentication prewarmer.
   std::unique_ptr<AuthPrewarmer> auth_prewarmer_;

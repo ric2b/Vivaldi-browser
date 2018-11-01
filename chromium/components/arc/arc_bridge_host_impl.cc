@@ -198,6 +198,11 @@ void ArcBridgeHostImpl::OnStorageManagerInstanceReady(
                   std::move(storage_manager_ptr));
 }
 
+void ArcBridgeHostImpl::OnTracingInstanceReady(
+    mojom::TracingInstancePtr tracing_ptr) {
+  OnInstanceReady(arc_bridge_service_->tracing(), std::move(tracing_ptr));
+}
+
 void ArcBridgeHostImpl::OnTtsInstanceReady(mojom::TtsInstancePtr tts_ptr) {
   OnInstanceReady(arc_bridge_service_->tts(), std::move(tts_ptr));
 }
@@ -205,6 +210,12 @@ void ArcBridgeHostImpl::OnTtsInstanceReady(mojom::TtsInstancePtr tts_ptr) {
 void ArcBridgeHostImpl::OnVideoInstanceReady(
     mojom::VideoInstancePtr video_ptr) {
   OnInstanceReady(arc_bridge_service_->video(), std::move(video_ptr));
+}
+
+void ArcBridgeHostImpl::OnVoiceInteractionFrameworkInstanceReady(
+    mojom::VoiceInteractionFrameworkInstancePtr framework_ptr) {
+  OnInstanceReady(arc_bridge_service_->voice_interaction_framework(),
+                  std::move(framework_ptr));
 }
 
 void ArcBridgeHostImpl::OnWallpaperInstanceReady(

@@ -22,14 +22,14 @@
 
 #include "core/css/CSSBorderImageSliceValue.h"
 #include "core/css/CSSValueList.h"
-#include "wtf/PassRefPtr.h"
+#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
 // TODO(sashab): Make this take const CSSValue&s.
-CSSValueList* createBorderImageValue(CSSValue* image,
-                                     CSSValue* imageSlice,
-                                     CSSValue* borderSlice,
+CSSValueList* CreateBorderImageValue(CSSValue* image,
+                                     CSSValue* image_slice,
+                                     CSSValue* border_slice,
                                      CSSValue* outset,
                                      CSSValue* repeat);
 

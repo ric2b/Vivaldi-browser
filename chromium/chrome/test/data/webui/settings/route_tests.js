@@ -19,6 +19,10 @@ suite('route', function() {
     return promise;
   }
 
+  teardown(function() {
+    PolymerTest.clearBody();
+  });
+
   /**
    * Tests a specific navigation situation.
    * @param {!settings.Route} previousRoute
@@ -102,7 +106,7 @@ suite('route', function() {
     return testNavigateBackUsesHistory(
         settings.Route.ADVANCED,
         settings.Route.PEOPLE,
-        settings.Route.ADVANCED);
+        settings.Route.BASIC);
   });
 
   test('navigate back to sibling route', function() {
@@ -138,6 +142,11 @@ suite('route', function() {
     settings.navigateTo(
         settings.Route.SEARCH_ENGINES, null, /* removeSearch */ true);
     assertEquals('', settings.getQueryParameters().toString());
+  });
+
+  test('navigateTo ADVANCED forwards to BASIC', function() {
+    settings.navigateTo(settings.Route.ADVANCED);
+    assertEquals(settings.Route.BASIC, settings.getCurrentRoute());
   });
 
   test('popstate flag works', function() {
@@ -183,5 +192,16 @@ suite('route', function() {
           settings.Route.KEYBOARD,
           settings.getRouteForPath('/keyboard-overlay/'));
     }
+  });
+
+  test('isNavigableDialog', function() {
+    assertTrue(settings.Route.CLEAR_BROWSER_DATA.isNavigableDialog);
+    assertTrue(settings.Route.IMPORT_DATA.isNavigableDialog);
+    assertTrue(settings.Route.RESET_DIALOG.isNavigableDialog);
+    assertTrue(settings.Route.SIGN_OUT.isNavigableDialog);
+    assertTrue(settings.Route.TRIGGERED_RESET_DIALOG.isNavigableDialog);
+
+    assertFalse(settings.Route.PRIVACY.isNavigableDialog);
+    assertFalse(settings.Route.DEFAULT_BROWSER.isNavigableDialog);
   });
 });

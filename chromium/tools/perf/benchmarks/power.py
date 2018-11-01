@@ -4,13 +4,15 @@
 
 from core import perf_benchmark
 
-from benchmarks import silk_flags
 from measurements import power
 import page_sets
 from telemetry import benchmark
+from telemetry.timeline import chrome_trace_category_filter
+from telemetry.web_perf import timeline_based_measurement
 
 
 @benchmark.Enabled('android')
+@benchmark.Owner(emails=['perezju@chromium.org'])
 class PowerAndroidAcceptance(perf_benchmark.PerfBenchmark):
   """Android power acceptance test."""
   test = power.Power
@@ -25,6 +27,7 @@ class PowerAndroidAcceptance(perf_benchmark.PerfBenchmark):
 
 
 @benchmark.Enabled('android')
+@benchmark.Owner(emails=['perezju@chromium.org'])
 class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
   """Android typical 10 mobile power test."""
   test = power.Power
@@ -52,6 +55,7 @@ class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
 # @benchmark.Enabled('android')
 @benchmark.Disabled('all')
 @benchmark.Disabled('android-webview')  # http://crbug.com/622300
+@benchmark.Owner(emails=['skyostil@chromium.org'])
 class PowerToughAdCases(perf_benchmark.PerfBenchmark):
   """Android power test with tough ad pages."""
   test = power.Power
@@ -87,37 +91,6 @@ class PowerTypical10MobileReload(perf_benchmark.PerfBenchmark):
     return 'power.typical_10_mobile_reload'
 
 
-@benchmark.Enabled('android')
-class PowerGpuRasterizationTypical10Mobile(perf_benchmark.PerfBenchmark):
-  """Measures power on key mobile sites with GPU rasterization."""
-  tag = 'gpu_rasterization'
-  test = power.Power
-  page_set = page_sets.Typical10MobilePageSet
-
-  def SetExtraBrowserOptions(self, options):
-    silk_flags.CustomizeBrowserOptionsForGpuRasterization(options)
-    options.full_performance_mode = False
-
-  @classmethod
-  def Name(cls):
-    return 'power.gpu_rasterization.typical_10_mobile'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    # http://crbug.com/563968
-    if cls.IsSvelte(possible_browser):
-      return True
-
-
-    # http://crbug.com/593973
-    if (possible_browser.browser_type ==  'reference' and
-        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
-      return True
-
-    # http://crbug.com/671631
-    return possible_browser.platform.GetDeviceTypeName() == 'Nexus 9'
-
-
 @benchmark.Enabled('mac')
 class PowerTop10(perf_benchmark.PerfBenchmark):
   """Top 10 quiescent power test."""
@@ -130,22 +103,6 @@ class PowerTop10(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'power.top_10'
-
-
-@benchmark.Enabled('mac')
-class PowerGpuRasterizationTop10(perf_benchmark.PerfBenchmark):
-  """Top 10 quiescent power test with GPU rasterization enabled."""
-  tag = 'gpu_rasterization'
-  test = power.QuiescentPower
-  page_set = page_sets.Top10QuiescentPageSet
-
-  def SetExtraBrowserOptions(self, options):
-    silk_flags.CustomizeBrowserOptionsForGpuRasterization(options)
-    options.full_performance_mode = False
-
-  @classmethod
-  def Name(cls):
-    return 'power.gpu_rasterization.top_10'
 
 
 @benchmark.Enabled('mac')
@@ -182,20 +139,7 @@ class PowerTop25(perf_benchmark.PerfBenchmark):
 
 
 @benchmark.Enabled('mac')
-class PowerGpuRasterizationTop25(PowerTop25):
-  """Top 25 quiescent power test with GPU rasterization enabled."""
-  tag = 'gpu_rasterization'
-
-  def SetExtraBrowserOptions(self, options):
-    silk_flags.CustomizeBrowserOptionsForGpuRasterization(options)
-    options.full_performance_mode = False
-
-  @classmethod
-  def Name(cls):
-    return 'power.gpu_rasterization.top_25'
-
-
-@benchmark.Enabled('mac')
+@benchmark.Owner(emails=['erikchen@chromium.org'])
 class PowerScrollingTrivialPage(perf_benchmark.PerfBenchmark):
   """Measure power consumption for some very simple pages."""
   test = power.QuiescentPower
@@ -204,6 +148,7 @@ class PowerScrollingTrivialPage(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'power.trivial_pages'
+
 
 @benchmark.Enabled('mac')
 class PowerSteadyStatePages(perf_benchmark.PerfBenchmark):
@@ -215,3 +160,42 @@ class PowerSteadyStatePages(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'power.steady_state'
+
+
+class IdlePlatformBenchmark(perf_benchmark.PerfBenchmark):
+  """Idle platform benchmark.
+
+  This benchmark just starts up tracing agents and lets the platform sit idle.
+  Our power benchmarks are prone to noise caused by other things running on the
+  system. This benchmark is intended to help find the sources of noise.
+  """
+  def CreateTimelineBasedMeasurementOptions(self):
+    options = timeline_based_measurement.Options(
+        chrome_trace_category_filter.ChromeTraceCategoryFilter())
+    # Enable CPU tracing when the bug is resolved.
+    # https://github.com/catapult-project/catapult/issues/3463
+    options.config.enable_battor_trace = True
+    # Atrace tracing agent autodetects if its android and only runs if it is.
+    options.config.enable_atrace_trace = True
+    options.config.enable_chrome_trace = False
+    options.SetTimelineBasedMetrics([
+        'clockSyncLatencyMetric',
+        'powerMetric',
+        'tracingMetric'
+    ])
+    return options
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return not possible_browser.platform.HasBattOrConnected()
+
+  def CreateStorySet(self, options):
+    return page_sets.IdleStorySet()
+
+  @classmethod
+  def ShouldTearDownStateAfterEachStoryRun(cls):
+    return True
+
+  @classmethod
+  def Name(cls):
+    return 'power.idle_platform'

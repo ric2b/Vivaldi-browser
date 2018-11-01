@@ -81,7 +81,10 @@ unsigned int ColorLUTCache::MakeLUT(const gfx::ColorTransform* transform,
     }
   }
 
-  unsigned int lut_texture;
+  GLuint previously_bound_texture = 0;
+  GLuint lut_texture = 0;
+  gl_->GetIntegerv(GL_TEXTURE_BINDING_2D,
+                   reinterpret_cast<GLint*>(&previously_bound_texture));
   gl_->GenTextures(1, &lut_texture);
   gl_->BindTexture(GL_TEXTURE_2D, lut_texture);
   gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -92,6 +95,7 @@ unsigned int ColorLUTCache::MakeLUT(const gfx::ColorTransform* transform,
                   lut_samples * lut_samples, 0, GL_RGBA,
                   sizeof(T) == 1 ? GL_UNSIGNED_BYTE : GL_HALF_FLOAT_OES,
                   lut.data());
+  gl_->BindTexture(GL_TEXTURE_2D, previously_bound_texture);
   return lut_texture;
 }
 
@@ -103,11 +107,11 @@ ColorLUTCache::LUT ColorLUTCache::GetLUT(const gfx::ColorTransform* transform) {
   }
 
   LUT lut;
-  // If input is HDR, and the output is scRGB, we're going to need
+  // If input is HDR, and the output is full range, we're going to need
   // to produce values outside of 0-1, so we'll need to make a half-float
   // LUT. Also, we'll need to build a larger lut to maintain accuracy.
-  // All LUT sizes should be odd a some transforms hav a knee at 0.5.
-  if (transform->GetDstColorSpace() == gfx::ColorSpace::CreateSCRGBLinear() &&
+  // All LUT sizes should be odd as some transforms have a knee at 0.5.
+  if (transform->GetDstColorSpace().FullRangeEncodedValues() &&
       transform->GetSrcColorSpace().IsHDR() && texture_half_float_linear_) {
     lut.size = 37;
     lut.texture = MakeLUT<uint16_t>(transform, lut.size);

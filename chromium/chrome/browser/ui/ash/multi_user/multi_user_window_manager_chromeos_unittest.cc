@@ -4,28 +4,28 @@
 
 #include <stddef.h>
 
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_window_manager.h"
-#include "ash/common/wm/mru_window_tracker.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm/wm_event.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/content/shell_content_state.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_environment_content.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_shell_delegate.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/maximize_mode/maximize_mode_window_manager.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/wm_event.h"
+#include "ash/wm_window.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -273,13 +273,13 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
   // Create a maximize mode window manager.
   MaximizeModeWindowManager* CreateMaximizeModeWindowManager() {
     EXPECT_FALSE(maximize_mode_window_manager());
-    WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+    Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
         true);
     return maximize_mode_window_manager();
   }
 
   MaximizeModeWindowManager* maximize_mode_window_manager() {
-    return WmShell::Get()
+    return Shell::Get()
         ->maximize_mode_controller()
         ->maximize_mode_window_manager_.get();
   }
@@ -379,7 +379,7 @@ MultiUserWindowManagerChromeOSTest::GetOwnersOfVisibleWindowsAsString() {
   std::set<AccountId> owners;
   multi_user_window_manager_->GetOwnersOfVisibleWindows(&owners);
 
-  std::vector<std::string> owner_list;
+  std::vector<base::StringPiece> owner_list;
   for (auto& owner : owners)
     owner_list.push_back(owner.GetUserEmail());
   return base::JoinString(owner_list, " ");
@@ -1522,7 +1522,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
   aura::Window::Windows mru_list = WmWindow::ToAuraWindows(
-      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
+      Shell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
   EXPECT_EQ(mru_list[2], window(2));
@@ -1540,7 +1540,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
   mru_list = WmWindow::ToAuraWindows(
-      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
+      Shell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
   EXPECT_EQ(mru_list[2], window(2));

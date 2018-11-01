@@ -27,10 +27,10 @@
 #define TextStream_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/Forward.h"
-#include "wtf/Vector.h"
-#include "wtf/text/StringBuilder.h"
-#include "wtf/text/Unicode.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/StringBuilder.h"
+#include "platform/wtf/text/Unicode.h"
 
 namespace blink {
 
@@ -67,10 +67,10 @@ class PLATFORM_EXPORT TextStream final {
   TextStream& operator<<(const String&);
   TextStream& operator<<(const FormatNumberRespectingIntegers&);
 
-  String release();
+  String Release();
 
  private:
-  StringBuilder m_text;
+  StringBuilder text_;
 };
 
 PLATFORM_EXPORT TextStream& operator<<(TextStream&, const IntPoint&);
@@ -83,7 +83,7 @@ PLATFORM_EXPORT TextStream& operator<<(TextStream&, const LayoutPoint&);
 PLATFORM_EXPORT TextStream& operator<<(TextStream&, const LayoutRect&);
 PLATFORM_EXPORT TextStream& operator<<(TextStream&, const LayoutSize&);
 
-PLATFORM_EXPORT void writeIndent(TextStream&, int indent);
+PLATFORM_EXPORT void WriteIndent(TextStream&, int indent);
 
 template <typename Item>
 TextStream& operator<<(TextStream& ts, const Vector<Item>& vector) {

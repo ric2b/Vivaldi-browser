@@ -1,11 +1,11 @@
-achuith@chromium.org
-aiolos@chromium.org
-dtu@chromium.org
-eakuefner@chromium.org
+charliea@chromium.org
 nednguyen@google.com
-skyostil@chromium.org
 sullivan@chromium.org
-zhenw@chromium.org
+
+# For changes related to ChromeOS.
+achuith@chromium.org
+
+# For changes related to generate_perf_json.
 eyaich@chromium.org
 
 # Simple rubberstamp-only oilpan-related changes.
@@ -16,13 +16,3 @@ perezju@chromium.org
 
 # For page_cycler and loading benchmarks related changes.
 kouhei@chromium.org
-
-# emeritus:
-# marja@chromium.org
-# nduca@chromium.org
-# petrcermak@chromium.org
-# qyearsley@chromium.org
-# tonyg@chromium.org
-
-# TEAM: benchmarking-dev@chromium.org
-# COMPONENT: Speed>Benchmarking

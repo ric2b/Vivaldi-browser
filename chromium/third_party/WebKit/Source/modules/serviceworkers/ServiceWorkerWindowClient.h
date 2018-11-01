@@ -5,12 +5,12 @@
 #ifndef ServiceWorkerWindowClient_h
 #define ServiceWorkerWindowClient_h
 
+#include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "modules/ModulesExport.h"
 #include "modules/serviceworkers/ServiceWorkerClient.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
-#include <memory>
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -25,16 +25,16 @@ class MODULES_EXPORT ServiceWorkerWindowClient final
   // To be used by CallbackPromiseAdapter.
   using WebType = std::unique_ptr<WebServiceWorkerClientInfo>;
 
-  static ServiceWorkerWindowClient* take(
+  static ServiceWorkerWindowClient* Take(
       ScriptPromiseResolver*,
       std::unique_ptr<WebServiceWorkerClientInfo>);
 
-  static ServiceWorkerWindowClient* create(const WebServiceWorkerClientInfo&);
+  static ServiceWorkerWindowClient* Create(const WebServiceWorkerClientInfo&);
   ~ServiceWorkerWindowClient() override;
 
   // WindowClient.idl
   String visibilityState() const;
-  bool focused() const { return m_isFocused; }
+  bool focused() const { return is_focused_; }
   ScriptPromise focus(ScriptState*);
   ScriptPromise navigate(ScriptState*, const String& url);
 
@@ -43,8 +43,8 @@ class MODULES_EXPORT ServiceWorkerWindowClient final
  private:
   explicit ServiceWorkerWindowClient(const WebServiceWorkerClientInfo&);
 
-  WebPageVisibilityState m_pageVisibilityState;
-  bool m_isFocused;
+  WebPageVisibilityState page_visibility_state_;
+  bool is_focused_;
 };
 
 }  // namespace blink

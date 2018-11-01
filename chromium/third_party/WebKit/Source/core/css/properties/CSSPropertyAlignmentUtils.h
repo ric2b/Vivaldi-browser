@@ -5,7 +5,7 @@
 #ifndef CSSPropertyAlignmentUtils_h
 #define CSSPropertyAlignmentUtils_h
 
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -15,7 +15,11 @@ class CSSValue;
 class CSSPropertyAlignmentUtils {
   STATIC_ONLY(CSSPropertyAlignmentUtils);
 
-  static CSSValue* consumeSelfPositionOverflowPosition(CSSParserTokenRange&);
+  static CSSValue* ConsumeSelfPositionOverflowPosition(CSSParserTokenRange&);
+  static CSSValue* ConsumeSimplifiedItemPosition(CSSParserTokenRange&);
+  static CSSValue* ConsumeContentDistributionOverflowPosition(
+      CSSParserTokenRange&);
+  static CSSValue* ConsumeSimplifiedContentPosition(CSSParserTokenRange&);
 };
 
 }  // namespace blink

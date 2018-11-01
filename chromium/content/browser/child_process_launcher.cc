@@ -66,8 +66,7 @@ void ChildProcessLauncher::SetProcessBackgrounded(bool background) {
       BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
       base::Bind(
           &ChildProcessLauncherHelper::SetProcessBackgroundedOnLauncherThread,
-          base::Passed(&to_pass),
-          background));
+          helper_, base::Passed(&to_pass), background));
 }
 
 void ChildProcessLauncher::Notify(
@@ -85,9 +84,10 @@ void ChildProcessLauncher::Notify(
   if (process_.process.IsValid()) {
     // Set up Mojo IPC to the new process.
     DCHECK(pending_connection);
-    pending_connection->Connect(process_.process.Handle(),
-                                std::move(server_handle),
-                                process_error_callback_);
+    pending_connection->Connect(
+        process_.process.Handle(),
+        mojo::edk::ConnectionParams(std::move(server_handle)),
+        process_error_callback_);
     client_->OnProcessLaunched();
   } else {
     termination_status_ = base::TERMINATION_STATUS_LAUNCH_FAILED;
@@ -120,8 +120,8 @@ base::TerminationStatus ChildProcessLauncher::GetChildTerminationStatus(
     return termination_status_;
   }
 
-  termination_status_ = ChildProcessLauncherHelper::GetTerminationStatus(
-      process_, known_dead, &exit_code_);
+  termination_status_ =
+      helper_->GetTerminationStatus(process_, known_dead, &exit_code_);
   if (exit_code)
     *exit_code = exit_code_;
 
@@ -157,6 +157,18 @@ void ChildProcessLauncher::SetRegisteredFilesForService(
   ChildProcessLauncherHelper::SetRegisteredFilesForService(
       service_name, std::move(required_files));
 }
+
+// static
+void ChildProcessLauncher::ResetRegisteredFilesForTesting() {
+  ChildProcessLauncherHelper::ResetRegisteredFilesForTesting();
+}
+
+#if defined(OS_ANDROID)
+// static
+size_t ChildProcessLauncher::GetNumberOfRendererSlots() {
+  return ChildProcessLauncherHelper::GetNumberOfRendererSlots();
+}
+#endif  // OS_ANDROID
 
 ChildProcessLauncher::Client* ChildProcessLauncher::ReplaceClientForTest(
     Client* client) {

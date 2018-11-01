@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 from webkitpy.w3c.chromium_finder import absolute_chromium_dir, absolute_chromium_wpt_dir
+from webkitpy.common.system.executive import ScriptError
 
 CHROMIUM_WPT_DIR = 'third_party/WebKit/LayoutTests/external/wpt/'
 
@@ -26,15 +27,22 @@ class ChromiumCommit(object):
         assert sha or position, 'requires sha or position'
         assert not (sha and position), 'cannot accept both sha and position'
 
-        if position and not sha:
+        if position:
             if position.startswith('Cr-Commit-Position: '):
                 position = position[len('Cr-Commit-Position: '):]
 
             sha = self.position_to_sha(position)
+        else:
+            position = self.sha_to_position(sha)
 
         assert len(sha) == 40, 'Expected SHA-1 hash, got {}'.format(sha)
+        assert sha and position, 'ChromiumCommit should have sha and position after __init__'
         self.sha = sha
         self.position = position
+
+    @property
+    def short_sha(self):
+        return self.sha[0:10]
 
     def num_behind_master(self):
         """Returns the number of commits this commit is behind origin/master.
@@ -48,6 +56,18 @@ class ChromiumCommit(object):
         return self.host.executive.run_command([
             'git', 'crrev-parse', commit_position
         ], cwd=self.absolute_chromium_dir).strip()
+
+    def sha_to_position(self, sha):
+        try:
+            return self.host.executive.run_command([
+                'git', 'footers', '--position', sha
+            ], cwd=self.absolute_chromium_dir).strip()
+        except ScriptError as e:
+            # Some commits don't have a position, e.g. when creating PRs for Gerrit CLs.
+            if 'Unable to infer commit position from footers' in e.message:
+                return 'no-commit-position-yet'
+            else:
+                raise
 
     def subject(self):
         return self.host.executive.run_command([
@@ -83,7 +103,12 @@ class ChromiumCommit(object):
         ]
         qualified_blacklist = [CHROMIUM_WPT_DIR + f for f in blacklist]
 
-        return [f for f in changed_files if f not in qualified_blacklist and not self.is_baseline(f)]
+        is_ignored = lambda f: (
+            f in qualified_blacklist or
+            self.is_baseline(f) or
+            # See http://crbug.com/702283 for context.
+            self.host.filesystem.basename(f) == 'OWNERS')
+        return [f for f in changed_files if not is_ignored(f)]
 
     @staticmethod
     def is_baseline(basename):

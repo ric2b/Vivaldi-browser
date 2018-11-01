@@ -4,7 +4,7 @@
 
 #include "net/spdy/spdy_http_utils.h"
 
-#include <string>
+#include <vector>
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -18,25 +18,27 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_util.h"
+#include "net/spdy/platform/api/spdy_string.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 
 namespace net {
 
 namespace {
 
-void AddSpdyHeader(const std::string& name,
-                   const std::string& value,
+void AddSpdyHeader(const SpdyString& name,
+                   const SpdyString& value,
                    SpdyHeaderBlock* headers) {
   if (headers->find(name) == headers->end()) {
     (*headers)[name] = value;
   } else {
-    std::string joint_value = (*headers)[name].as_string();
+    SpdyString joint_value = (*headers)[name].as_string();
     joint_value.append(1, '\0');
     joint_value.append(value);
     (*headers)[name] = joint_value;
   }
 }
 
-} // namespace
+}  // namespace
 
 bool SpdyHeadersToHttpResponse(const SpdyHeaderBlock& headers,
                                HttpResponseInfo* response) {
@@ -44,8 +46,8 @@ bool SpdyHeadersToHttpResponse(const SpdyHeaderBlock& headers,
   SpdyHeaderBlock::const_iterator it = headers.find(":status");
   if (it == headers.end())
     return false;
-  std::string status = it->second.as_string();
-  std::string raw_headers("HTTP/1.1 ");
+  SpdyString status = it->second.as_string();
+  SpdyString raw_headers("HTTP/1.1 ");
   raw_headers.append(status);
   raw_headers.push_back('\0');
   for (it = headers.begin(); it != headers.end(); ++it) {
@@ -57,12 +59,12 @@ bool SpdyHeadersToHttpResponse(const SpdyHeaderBlock& headers,
     // becomes
     //    Set-Cookie: foo\0
     //    Set-Cookie: bar\0
-    std::string value = it->second.as_string();
+    SpdyString value = it->second.as_string();
     size_t start = 0;
     size_t end = 0;
     do {
       end = value.find('\0', start);
-      std::string tval;
+      SpdyString tval;
       if (end != value.npos)
         tval = value.substr(start, (end - start));
       else
@@ -98,7 +100,7 @@ void CreateSpdyHeadersFromHttpRequest(const HttpRequestInfo& info,
 
   HttpRequestHeaders::Iterator it(request_headers);
   while (it.GetNext()) {
-    std::string name = base::ToLowerASCII(it.name());
+    SpdyString name = base::ToLowerASCII(it.name());
     if (name.empty() || name[0] == ':' || name == "connection" ||
         name == "proxy-connection" || name == "transfer-encoding" ||
         name == "host") {
@@ -133,11 +135,11 @@ NET_EXPORT_PRIVATE void ConvertHeaderBlockToHttpRequestHeaders(
     const SpdyHeaderBlock& spdy_headers,
     HttpRequestHeaders* http_headers) {
   for (const auto& it : spdy_headers) {
-    base::StringPiece key = it.first;
+    SpdyStringPiece key = it.first;
     if (key[0] == ':') {
       key.remove_prefix(1);
     }
-    std::vector<base::StringPiece> values = base::SplitStringPiece(
+    std::vector<SpdyStringPiece> values = base::SplitStringPiece(
         it.second, "\0", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     for (const auto& value : values) {
       http_headers->SetHeader(key, value);
@@ -149,7 +151,7 @@ GURL GetUrlFromHeaderBlock(const SpdyHeaderBlock& headers) {
   SpdyHeaderBlock::const_iterator it = headers.find(":scheme");
   if (it == headers.end())
     return GURL();
-  std::string url = it->second.as_string();
+  SpdyString url = it->second.as_string();
   url.append("://");
 
   it = headers.find(":authority");

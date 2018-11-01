@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "base/base_export.h"
+#include "third_party/apple_apsl/malloc.h"
 
 namespace base {
 namespace allocator {
@@ -35,6 +36,20 @@ bool UncheckedCallocMac(size_t num_items, size_t size, void** result);
 // Has no effect on the default malloc zone if the allocator shim already
 // performs that interception.
 BASE_EXPORT void InterceptAllocationsMac();
+
+// Updates all malloc zones to use their original functions.
+// Also calls ClearAllMallocZonesForTesting.
+BASE_EXPORT void UninterceptMallocZonesForTesting();
+
+// Periodically checks for, and shims new malloc zones. Stops checking after 1
+// minute.
+BASE_EXPORT void PeriodicallyShimNewMallocZones();
+
+// Exposed for testing.
+BASE_EXPORT void ShimNewMallocZones();
+BASE_EXPORT void ReplaceZoneFunctions(ChromeMallocZone* zone,
+                                      const MallocZoneFunctions* functions);
+
 }  // namespace allocator
 }  // namespace base
 

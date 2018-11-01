@@ -32,10 +32,18 @@ Persistence.Persistence = class extends Common.Object {
   }
 
   /**
+   * @param {function(function(!Persistence.PersistenceBinding), function(!Persistence.PersistenceBinding)):{dispose: function()}} mappingFactory
+   */
+  _setMappingForTest(mappingFactory) {
+    this._mapping.dispose();
+    this._mapping = mappingFactory(this._validateBinding.bind(this), this._onBindingRemoved.bind(this));
+  }
+
+  /**
    * @param {!Persistence.PersistenceBinding} binding
    */
   _validateBinding(binding) {
-    if (!Runtime.experiments.isEnabled('persistenceValidation') || binding.network.contentType().isFromSourceMap() ||
+    if (!Runtime.experiments.isEnabled('persistence2') || binding.network.contentType().isFromSourceMap() ||
         !binding.fileSystem.contentType().isTextType()) {
       this._establishBinding(binding);
       return;

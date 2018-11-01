@@ -54,21 +54,6 @@ void CreateTestPasswordFormFillData(PasswordFormFillData* fill_data) {
   pr.realm = "https://bar.com/";
   fill_data->additional_logins[name] = pr;
 
-  UsernamesCollectionKey key;
-  key.username = base::ASCIIToUTF16("Tom");
-  key.password = base::ASCIIToUTF16("Tom_Password");
-  key.realm = "https://foo.com/";
-  std::vector<base::string16>& possible_names =
-      fill_data->other_possible_usernames[key];
-  possible_names.push_back(base::ASCIIToUTF16("Tom_1"));
-  possible_names.push_back(base::ASCIIToUTF16("Tom_2"));
-  key.username = base::ASCIIToUTF16("Jerry");
-  key.password = base::ASCIIToUTF16("Jerry_Password");
-  key.realm = "https://bar.com/";
-  possible_names = fill_data->other_possible_usernames[key];
-  possible_names.push_back(base::ASCIIToUTF16("Jerry_1"));
-  possible_names.push_back(base::ASCIIToUTF16("Jerry_2"));
-
   fill_data->wait_for_username = true;
   fill_data->is_possible_change_password_form = false;
 }
@@ -83,8 +68,10 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->username_element = base::ASCIIToUTF16("username");
   form->username_marked_by_site = true;
   form->username_value = base::ASCIIToUTF16("test@gmail.com");
-  form->other_possible_usernames.push_back(base::ASCIIToUTF16("Jerry_1"));
-  form->other_possible_usernames.push_back(base::ASCIIToUTF16("Jerry_2"));
+  form->other_possible_usernames.push_back(PossibleUsernamePair(
+      base::ASCIIToUTF16("Jerry_1"), base::ASCIIToUTF16("id1")));
+  form->other_possible_usernames.push_back(PossibleUsernamePair(
+      base::ASCIIToUTF16("Jerry_2"), base::ASCIIToUTF16("id2")));
   form->password_element = base::ASCIIToUTF16("password");
   form->password_value = base::ASCIIToUTF16("test");
   form->password_value_is_default = true;
@@ -201,6 +188,10 @@ void CheckEqualPasswordFormGenerationData(
     const PasswordFormGenerationData& actual) {
   EXPECT_EQ(expected.form_signature, actual.form_signature);
   EXPECT_EQ(expected.field_signature, actual.field_signature);
+  ASSERT_EQ(expected.confirmation_field_signature.has_value(),
+            actual.confirmation_field_signature.has_value());
+  EXPECT_EQ(expected.confirmation_field_signature.value(),
+            actual.confirmation_field_signature.value());
 }
 
 }  // namespace
@@ -407,7 +398,10 @@ TEST_F(AutofillTypeTraitsTestImpl, PassPasswordFormGenerationData) {
   FormSignature form_signature = CalculateFormSignature(form);
   FieldSignature field_signature =
       CalculateFieldSignatureForField(form.fields[0]);
-  PasswordFormGenerationData input{form_signature, field_signature};
+  FieldSignature confirmation_field_signature =
+      CalculateFieldSignatureForField(form.fields[1]);
+  PasswordFormGenerationData input(form_signature, field_signature);
+  input.confirmation_field_signature.emplace(confirmation_field_signature);
 
   base::RunLoop loop;
   mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();

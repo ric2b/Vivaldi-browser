@@ -8,7 +8,6 @@
 #include <ostream>
 #include <string>
 
-#include "base/strings/string_piece.h"
 #include "net/quic/core/quic_types.h"
 #include "net/quic/platform/api/quic_containers.h"
 #include "net/quic/platform/api/quic_export.h"
@@ -49,6 +48,9 @@ class QUIC_EXPORT_PRIVATE PacketNumberQueue {
   // Removes packets with values less than |higher| from the set of packets in
   // the queue. Returns true if packets were removed.
   bool RemoveUpTo(QuicPacketNumber higher);
+
+  // Removes the smallest interval in the queue.
+  void RemoveSmallestInterval();
 
   // Mutates packet number set so that it contains only those packet numbers
   // from minimum to maximum packet number not currently in the set. Do nothing
@@ -115,9 +117,6 @@ struct QUIC_EXPORT_PRIVATE QuicAckFrame {
 
   // Set of packets.
   PacketNumberQueue packets;
-
-  // Path which this ack belongs to.
-  QuicPathId path_id;
 };
 
 // True if the packet number is greater than largest_observed or is listed

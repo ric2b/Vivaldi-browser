@@ -6,7 +6,7 @@
 #define CC_TEST_FAKE_RASTER_SOURCE_H_
 
 #include "base/memory/ref_counted.h"
-#include "cc/playback/raster_source.h"
+#include "cc/raster/raster_source.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -38,6 +38,7 @@ class FakeRasterSource : public RasterSource {
       base::WaitableEvent* playback_allowed_event);
 
   void PlaybackToCanvas(SkCanvas* canvas,
+                        const gfx::ColorSpace& canvas_color_space,
                         const PlaybackSettings& settings) const override;
 
  protected:

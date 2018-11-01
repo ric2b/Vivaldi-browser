@@ -137,8 +137,10 @@ WindowManagerState::~WindowManagerState() {
   for (auto& display_root : window_manager_display_roots_)
     display_root->display()->OnWillDestroyTree(window_tree_);
 
-  for (auto& display_root : orphaned_window_manager_display_roots_)
-    display_root->root()->RemoveObserver(this);
+  if (window_tree_->automatically_create_display_roots()) {
+    for (auto& display_root : orphaned_window_manager_display_roots_)
+      display_root->root()->RemoveObserver(this);
+  }
 }
 
 void WindowManagerState::SetFrameDecorationValues(
@@ -182,7 +184,7 @@ void WindowManagerState::SetDragDropSourceWindow(
     DragTargetConnection* source_connection,
     const std::unordered_map<std::string, std::vector<uint8_t>>& drag_data,
     uint32_t drag_operation) {
-  int32_t drag_pointer = PointerEvent::kMousePointerId;
+  int32_t drag_pointer = MouseEvent::kMousePointerId;
   if (in_flight_event_details_ &&
       in_flight_event_details_->event->IsPointerEvent()) {
     drag_pointer =
@@ -209,8 +211,29 @@ void WindowManagerState::EndDragDrop() {
 }
 
 void WindowManagerState::AddSystemModalWindow(ServerWindow* window) {
-  DCHECK(!window->transient_parent());
   event_dispatcher_.AddSystemModalWindow(window);
+}
+
+void WindowManagerState::DeleteWindowManagerDisplayRoot(
+    ServerWindow* display_root) {
+  for (auto iter = orphaned_window_manager_display_roots_.begin();
+       iter != orphaned_window_manager_display_roots_.end(); ++iter) {
+    if ((*iter)->root() == display_root) {
+      orphaned_window_manager_display_roots_.erase(iter);
+      return;
+    }
+  }
+
+  for (auto iter = window_manager_display_roots_.begin();
+       iter != window_manager_display_roots_.end(); ++iter) {
+    if ((*iter)->root() == display_root) {
+      (*iter)->display()->RemoveWindowManagerDisplayRoot((*iter).get());
+      window_manager_display_roots_.erase(iter);
+      return;
+    }
+  }
+
+  NOTREACHED();
 }
 
 const UserId& WindowManagerState::user_id() const {
@@ -299,7 +322,9 @@ void WindowManagerState::OnEventAck(mojom::WindowTree* tree,
   ProcessNextEventFromQueue();
 }
 
-void WindowManagerState::OnAcceleratorAck(mojom::EventResult result) {
+void WindowManagerState::OnAcceleratorAck(
+    mojom::EventResult result,
+    const std::unordered_map<std::string, std::vector<uint8_t>>& properties) {
   if (!in_flight_event_details_ ||
       in_flight_event_details_->phase !=
           EventDispatchPhase::PRE_TARGET_ACCELERATOR) {
@@ -312,6 +337,9 @@ void WindowManagerState::OnAcceleratorAck(mojom::EventResult result) {
       std::move(in_flight_event_details_);
 
   if (result == mojom::EventResult::UNHANDLED) {
+    DCHECK(details->event->IsKeyEvent());
+    if (!properties.empty())
+      details->event->AsKeyEvent()->SetProperties(properties);
     event_processing_display_id_ = details->display_id;
     event_dispatcher_.ProcessEvent(
         *details->event, EventDispatcher::AcceleratorMatchPhase::POST_ONLY);
@@ -352,14 +380,15 @@ void WindowManagerState::OnDisplayDestroying(Display* display) {
   for (auto iter = window_manager_display_roots_.begin();
        iter != window_manager_display_roots_.end(); ++iter) {
     if ((*iter)->display() == display) {
-      (*iter)->root()->AddObserver(this);
+      if (window_tree_->automatically_create_display_roots())
+        (*iter)->root()->AddObserver(this);
       orphaned_window_manager_display_roots_.push_back(std::move(*iter));
       window_manager_display_roots_.erase(iter);
       window_tree_->OnDisplayDestroying(display->GetId());
+      orphaned_window_manager_display_roots_.back()->display_ = nullptr;
       return;
     }
   }
-  NOTREACHED();
 }
 
 void WindowManagerState::SetAllRootWindowsVisible(bool value) {
@@ -382,7 +411,7 @@ void WindowManagerState::OnEventAckTimeout(ClientSpecificId client_id) {
     window_tree_->ClientJankinessChanged(hung_tree);
   if (in_flight_event_details_->phase ==
       EventDispatchPhase::PRE_TARGET_ACCELERATOR) {
-    OnAcceleratorAck(mojom::EventResult::UNHANDLED);
+    OnAcceleratorAck(mojom::EventResult::UNHANDLED, KeyEvent::Properties());
   } else {
     OnEventAck(
         in_flight_event_details_ ? in_flight_event_details_->tree : nullptr,
@@ -560,7 +589,8 @@ void WindowManagerState::ReleaseNativeCapture() {
 }
 
 void WindowManagerState::UpdateNativeCursorFromDispatcher() {
-  const ui::mojom::Cursor cursor_id = event_dispatcher_.GetCurrentMouseCursor();
+  const ui::mojom::CursorType cursor_id =
+      event_dispatcher_.GetCurrentMouseCursor();
   for (Display* display : display_manager()->displays())
     display->UpdateNativeCursor(cursor_id);
 }
@@ -631,9 +661,11 @@ ServerWindow* WindowManagerState::GetRootWindowContaining(
   if (window_manager_display_roots_.empty())
     return nullptr;
 
+  // TODO(riajiang): This is broken for HDPI because it mixes PPs and DIPs. See
+  // http://crbug.com/701036 for details.
   WindowManagerDisplayRoot* target_display_root = nullptr;
   for (auto& display_root_ptr : window_manager_display_roots_) {
-    if (display_root_ptr->display()->platform_display()->GetBounds().Contains(
+    if (display_root_ptr->display()->GetDisplay().bounds().Contains(
             *location)) {
       target_display_root = display_root_ptr.get();
       break;
@@ -650,7 +682,7 @@ ServerWindow* WindowManagerState::GetRootWindowContaining(
   // Translate the location to be relative to the display instead of relative
   // to the screen space.
   gfx::Point origin =
-      target_display_root->display()->platform_display()->GetBounds().origin();
+      target_display_root->display()->GetDisplay().bounds().origin();
   *location -= origin.OffsetFromOrigin();
   return target_display_root->root();
 }

@@ -26,11 +26,12 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
+#include "core/frame/UseCounter.h"
 #include "core/page/Page.h"
-#include "wtf/Assertions.h"
-#include "wtf/Vector.h"
-#include "wtf/text/CString.h"
-#include "wtf/text/StringBuilder.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/CString.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 using std::swap;
 
@@ -38,403 +39,159 @@ namespace blink {
 
 namespace {
 
-const unsigned invalidChildCount = ~0U;
+const unsigned kInvalidChildCount = ~0U;
 
 }  // namespace
 
-FrameTree::FrameTree(Frame* thisFrame)
-    : m_thisFrame(thisFrame), m_scopedChildCount(invalidChildCount) {}
+FrameTree::FrameTree(Frame* this_frame)
+    : this_frame_(this_frame), scoped_child_count_(kInvalidChildCount) {}
 
 FrameTree::~FrameTree() {}
 
-void FrameTree::setName(const AtomicString& name) {
-  // This method should only be called for local frames
-  // (remote frames should be updated via setPrecalculatedName).
-  DCHECK(m_thisFrame->isLocalFrame());
-
-  // When this method is called, m_uniqueName should be already initialized.
-  // This assert helps ensure that early return (a few lines below) won't
-  // result in an uninitialized m_uniqueName.
-  DCHECK(!m_uniqueName.isNull() || (m_uniqueName.isNull() && !parent()));
-
-  // Do not recalculate m_uniqueName if there is no real change of m_name.
-  // This is not just a performance optimization - other code relies on the
-  // assumption that unique name shouldn't change if the assigned name didn't
-  // change (i.e. code in content::FrameTreeNode::SetFrameName).
-  if (m_name == name)
-    return;
-
-  m_name = name;
-
-  // https://crbug.com/607205: Make sure m_uniqueName doesn't change after
-  // initial navigation - session history depends on this.
-  if (toLocalFrame(m_thisFrame)
-          ->loader()
-          .stateMachine()
-          ->committedFirstRealDocumentLoad())
-    return;
-
-  // Leave main frame's unique name set to a null string.
-  if (!parent())
-    return;
-
-  // Remove our old frame name so it's not considered in
-  // calculateUniqueNameForChildFrame call below.
-  m_uniqueName = AtomicString();
-
-  // Calculate a new unique name based on inputs.
-  setUniqueName(parent()->tree().calculateUniqueNameForChildFrame(
-      m_thisFrame, name, nullAtom));
+const AtomicString& FrameTree::GetName() const {
+  // TODO(andypaicu): remove this once we have gathered the data
+  if (experimental_set_nulled_name_) {
+    UseCounter::Count(this_frame_.Get(),
+                      UseCounter::kCrossOriginMainFrameNulledNameAccessed);
+  }
+  return name_;
 }
 
-void FrameTree::setPrecalculatedName(const AtomicString& name,
-                                     const AtomicString& uniqueName) {
-  m_name = name;
+// TODO(andypaicu): remove this once we have gathered the data
+void FrameTree::ExperimentalSetNulledName() {
+  experimental_set_nulled_name_ = true;
+}
 
-  if (parent()) {
-    // Non-main frames should have a non-empty unique name.
-    DCHECK(!uniqueName.isEmpty());
-  } else {
-    // Unique name of main frames should always stay empty.
-    DCHECK(uniqueName.isEmpty());
-  }
-
-  // TODO(lukasza): We would like to assert uniqueness below (i.e. by calling
-  // setUniqueName), but
-  // 1) uniqueness is currently violated by provisional/old frame pairs.
-  // 2) there is an unresolved race between 2 OOPIFs, that can result in a
-  //    non-unique |uniqueName| - see https://crbug.com/558680#c14.
-  m_uniqueName = uniqueName;
+void FrameTree::SetName(const AtomicString& name) {
+  // TODO(andypaicu): remove this once we have gathered the data
+  experimental_set_nulled_name_ = false;
+  name_ = name;
 }
 
 DISABLE_CFI_PERF
-Frame* FrameTree::parent() const {
-  if (!m_thisFrame->client())
+Frame* FrameTree::Parent() const {
+  if (!this_frame_->Client())
     return nullptr;
-  return m_thisFrame->client()->parent();
+  return this_frame_->Client()->Parent();
 }
 
-Frame* FrameTree::top() const {
+Frame* FrameTree::Top() const {
   // FIXME: top() should never return null, so here are some hacks to deal
   // with EmptyLocalFrameClient and cases where the frame is detached
   // already...
-  if (!m_thisFrame->client())
-    return m_thisFrame;
-  Frame* candidate = m_thisFrame->client()->top();
-  return candidate ? candidate : m_thisFrame.get();
+  if (!this_frame_->Client())
+    return this_frame_;
+  Frame* candidate = this_frame_->Client()->Top();
+  return candidate ? candidate : this_frame_.Get();
 }
 
-Frame* FrameTree::nextSibling() const {
-  if (!m_thisFrame->client())
+Frame* FrameTree::NextSibling() const {
+  if (!this_frame_->Client())
     return nullptr;
-  return m_thisFrame->client()->nextSibling();
+  return this_frame_->Client()->NextSibling();
 }
 
-Frame* FrameTree::firstChild() const {
-  if (!m_thisFrame->client())
+Frame* FrameTree::FirstChild() const {
+  if (!this_frame_->Client())
     return nullptr;
-  return m_thisFrame->client()->firstChild();
+  return this_frame_->Client()->FirstChild();
 }
 
-bool FrameTree::uniqueNameExists(const String& uniqueNameCandidate) const {
-  // This method is currently O(N), where N = number of frames in the tree.
-
-  // Before recalculating or checking unique name, we set m_uniqueName
-  // to an empty string (so the soon-to-be-removed name does not count
-  // as a collision).  This means that uniqueNameExists would return
-  // false positives when called with an empty |name|.
-  DCHECK(!uniqueNameCandidate.isEmpty());
-
-  for (Frame* frame = top(); frame; frame = frame->tree().traverseNext()) {
-    if (frame->tree().uniqueName() == uniqueNameCandidate)
-      return true;
-  }
-  return false;
-}
-
-AtomicString FrameTree::calculateUniqueNameForNewChildFrame(
-    const AtomicString& name,
-    const AtomicString& fallbackName) const {
-  AtomicString uniqueName =
-      calculateUniqueNameForChildFrame(nullptr, name, fallbackName);
-
-  // Caller will likely set the name via setPrecalculatedName, which
-  // unfortunately cannot currently assert uniqueness of the name - let's
-  // therefore assert the uniqueness here.
-  DCHECK(!uniqueNameExists(uniqueName));
-
-  return uniqueName;
-}
-
-String FrameTree::generateUniqueNameCandidate(bool existingChildFrame) const {
-  const char framePathPrefix[] = "<!--framePath ";
-  const int framePathPrefixLength = 14;
-  const int framePathSuffixLength = 3;
-
-  // Find the nearest parent that has a frame with a path in it.
-  HeapVector<Member<Frame>, 16> chain;
-  Frame* frame;
-  for (frame = m_thisFrame; frame; frame = frame->tree().parent()) {
-    if (frame->tree().uniqueName().startsWith(framePathPrefix))
-      break;
-    chain.push_back(frame);
-  }
-  StringBuilder uniqueName;
-  uniqueName.append(framePathPrefix);
-  if (frame) {
-    uniqueName.append(frame->tree().uniqueName().getString().substring(
-        framePathPrefixLength, frame->tree().uniqueName().length() -
-                                   framePathPrefixLength -
-                                   framePathSuffixLength));
-  }
-  for (int i = chain.size() - 1; i >= 0; --i) {
-    frame = chain[i];
-    uniqueName.append('/');
-    uniqueName.append(frame->tree().uniqueName());
-  }
-
-  uniqueName.append("/<!--frame");
-  uniqueName.appendNumber(childCount() - (existingChildFrame ? 1 : 0));
-  uniqueName.append("-->-->");
-
-  // NOTE: This name might not be unique - see http://crbug.com/588800.
-  return uniqueName.toAtomicString();
-}
-
-String FrameTree::generateFramePosition(Frame* child) const {
-  // This method is currently O(N), where N = number of frames in the tree.
-
-  StringBuilder framePositionBuilder;
-  framePositionBuilder.append("<!--framePosition");
-
-  if (!child) {
-    framePositionBuilder.append('-');
-    framePositionBuilder.appendNumber(childCount());
-    child = m_thisFrame;
-  }
-
-  while (child->tree().parent()) {
-    int numberOfSiblingsBeforeChild = 0;
-    Frame* sibling = child->tree().parent()->tree().firstChild();
-    while (sibling != child) {
-      sibling = sibling->tree().nextSibling();
-      numberOfSiblingsBeforeChild++;
-    }
-
-    framePositionBuilder.append('-');
-    framePositionBuilder.appendNumber(numberOfSiblingsBeforeChild);
-
-    child = child->tree().parent();
-  }
-
-  // NOTE: The generated string is not guaranteed to be unique, but should
-  // have a better chance of being unique than the string generated by
-  // generateUniqueNameCandidate, because we embed extra information into the
-  // string:
-  // 1) we walk the full chain of ancestors, all the way to the main frame
-  // 2) we use frame-position-within-parent (aka |numberOfSiblingsBeforeChild|)
-  //    instead of sibling-count.
-  return framePositionBuilder.toString();
-}
-
-AtomicString FrameTree::appendUniqueSuffix(
-    const String& prefix,
-    const String& likelyUniqueSuffix) const {
-  // Verify that we are not doing unnecessary work.
-  DCHECK(uniqueNameExists(prefix));
-
-  // We want unique name to be stable across page reloads - this is why
-  // we use a deterministic |numberOfTries| rather than a random number
-  // (a random number would be more likely to avoid a collision, but
-  // would change after every page reload).
-  int numberOfTries = 0;
-
-  // Keep trying |prefix| + |likelyUniqueSuffix| + |numberOfTries|
-  // concatenations until we get a truly unique name.
-  String candidate;
-  do {
-    StringBuilder uniqueNameBuilder;
-    uniqueNameBuilder.append(prefix);
-    uniqueNameBuilder.append(likelyUniqueSuffix);
-    uniqueNameBuilder.append('/');
-    uniqueNameBuilder.appendNumber(numberOfTries++);
-    uniqueNameBuilder.append("-->");
-
-    candidate = uniqueNameBuilder.toString();
-  } while (uniqueNameExists(candidate));
-  return AtomicString(candidate);
-}
-
-AtomicString FrameTree::calculateUniqueNameForChildFrame(
-    Frame* child,
-    const AtomicString& assignedName,
-    const AtomicString& fallbackName) const {
-  // Try to use |assignedName| (i.e. window.name or iframe.name) or
-  // |fallbackName| if possible.
-  const AtomicString& requestedName =
-      assignedName.isEmpty() ? fallbackName : assignedName;
-  if (!requestedName.isEmpty() && !uniqueNameExists(requestedName) &&
-      requestedName != "_blank")
-    return requestedName;
-
-  String candidate = generateUniqueNameCandidate(child);
-  if (!uniqueNameExists(candidate))
-    return AtomicString(candidate);
-
-  String likelyUniqueSuffix = generateFramePosition(child);
-  return appendUniqueSuffix(candidate, likelyUniqueSuffix);
-
-  // Description of the current unique name format
-  // ---------------------------------------------
-  //
-  // Changing the format of unique name is undesirable, because it breaks
-  // backcompatibility of session history (which stores unique names
-  // generated in the past on user's disk).  This incremental,
-  // backcompatibility-aware approach has resulted so far in the following
-  // rather baroque format... :
-  //
-  //   uniqueName ::= <nullForMainFrame> | <assignedName> | <generatedName>
-  //                 (generatedName is used if assignedName is
-  //                 non-unique / conflicts with other frame's unique name.
-  //
-  //   assignedName ::= value of iframe's name attribute
-  //                 or value assigned to window.name (*before* the first
-  //                    real commit - afterwards unique name stays immutable).
-  //
-  //   generatedName ::= oldGeneratedName newUniqueSuffix?
-  //                  (newUniqueSuffix is only present if oldGeneratedName was
-  //                  not unique after all)
-  //
-  //   oldGeneratedName ::= "<!--framePath //" ancestorChain
-  //                        "/<!--frame" childCount "-->-->"
-  //                  (oldGeneratedName is generated by
-  //                  generateUniqueNameCandidate method).
-  //
-  //   childCount ::= current number of siblings
-  //
-  //   ancestorChain ::= concatenated unique names of ancestor chain,
-  //                     terminated on the first ancestor (if any) starting with
-  //                     "<!--framePath"; each ancestor's unique name is
-  //                     separated by "/" character
-  //   ancestorChain example1: "grandparent/parent"
-  //  (ancestor's unique names :   #1--^   | #2-^ )
-  //   ancestorChain example2:
-  //                     "<!--framePath //foo/bar/<!--frame42-->-->/blah/foobar"
-  //  (ancestor's unique names:
-  //                              ^--#1--^                         | #2 | #3-^ )
-  //
-  //   newUniqueSuffix ::= "<!--framePosition" framePosition "/" retryNumber
-  //                       "-->"
-  //
-  //   framePosition ::= "-" numberOfSiblingsBeforeChild
-  //                     [ framePosition-forParent? ]
-  //
-  //   retryNumber ::= smallest non-negative integer resulting in unique name
-}
-
-void FrameTree::setUniqueName(const AtomicString& uniqueName) {
-  // Only subframes can have a non-null unique name - setUniqueName should
-  // only be called for subframes and never for a main frame.
-  DCHECK(parent());
-
-  DCHECK(!uniqueName.isEmpty() && !uniqueNameExists(uniqueName));
-  m_uniqueName = uniqueName;
-}
-
-Frame* FrameTree::scopedChild(unsigned index) const {
-  unsigned scopedIndex = 0;
-  for (Frame* child = firstChild(); child;
-       child = child->tree().nextSibling()) {
-    if (child->client()->inShadowTree())
+Frame* FrameTree::ScopedChild(unsigned index) const {
+  unsigned scoped_index = 0;
+  for (Frame* child = FirstChild(); child;
+       child = child->Tree().NextSibling()) {
+    if (child->Client()->InShadowTree())
       continue;
-    if (scopedIndex == index)
+    if (scoped_index == index)
       return child;
-    scopedIndex++;
+    scoped_index++;
   }
 
   return nullptr;
 }
 
-Frame* FrameTree::scopedChild(const AtomicString& name) const {
-  for (Frame* child = firstChild(); child;
-       child = child->tree().nextSibling()) {
-    if (child->client()->inShadowTree())
+Frame* FrameTree::ScopedChild(const AtomicString& name) const {
+  for (Frame* child = FirstChild(); child;
+       child = child->Tree().NextSibling()) {
+    if (child->Client()->InShadowTree())
       continue;
-    if (child->tree().name() == name)
+    if (child->Tree().GetName() == name)
       return child;
   }
   return nullptr;
 }
 
-unsigned FrameTree::scopedChildCount() const {
-  if (m_scopedChildCount == invalidChildCount) {
-    unsigned scopedCount = 0;
-    for (Frame* child = firstChild(); child;
-         child = child->tree().nextSibling()) {
-      if (child->client()->inShadowTree())
+unsigned FrameTree::ScopedChildCount() const {
+  if (scoped_child_count_ == kInvalidChildCount) {
+    unsigned scoped_count = 0;
+    for (Frame* child = FirstChild(); child;
+         child = child->Tree().NextSibling()) {
+      if (child->Client()->InShadowTree())
         continue;
-      scopedCount++;
+      scoped_count++;
     }
-    m_scopedChildCount = scopedCount;
+    scoped_child_count_ = scoped_count;
   }
-  return m_scopedChildCount;
+  return scoped_child_count_;
 }
 
-void FrameTree::invalidateScopedChildCount() {
-  m_scopedChildCount = invalidChildCount;
+void FrameTree::InvalidateScopedChildCount() {
+  scoped_child_count_ = kInvalidChildCount;
 }
 
-unsigned FrameTree::childCount() const {
+unsigned FrameTree::ChildCount() const {
   unsigned count = 0;
-  for (Frame* result = firstChild(); result;
-       result = result->tree().nextSibling())
+  for (Frame* result = FirstChild(); result;
+       result = result->Tree().NextSibling())
     ++count;
   return count;
 }
 
-Frame* FrameTree::find(const AtomicString& name) const {
-  if (name == "_self" || name == "_current" || name.isEmpty())
-    return m_thisFrame;
+Frame* FrameTree::Find(const AtomicString& name) const {
+  if (EqualIgnoringASCIICase(name, "_self") ||
+      EqualIgnoringASCIICase(name, "_current") || name.IsEmpty())
+    return this_frame_;
 
-  if (name == "_top")
-    return top();
+  if (EqualIgnoringASCIICase(name, "_top"))
+    return Top();
 
-  if (name == "_parent")
-    return parent() ? parent() : m_thisFrame.get();
+  if (EqualIgnoringASCIICase(name, "_parent"))
+    return Parent() ? Parent() : this_frame_.Get();
 
   // Since "_blank" should never be any frame's name, the following just amounts
   // to an optimization.
-  if (name == "_blank")
+  if (EqualIgnoringASCIICase(name, "_blank"))
     return nullptr;
 
   // Search subtree starting with this frame first.
-  for (Frame* frame = m_thisFrame; frame;
-       frame = frame->tree().traverseNext(m_thisFrame)) {
-    if (frame->tree().name() == name)
+  for (Frame* frame = this_frame_; frame;
+       frame = frame->Tree().TraverseNext(this_frame_)) {
+    if (frame->Tree().GetName() == name)
       return frame;
   }
 
   // Search the entire tree for this page next.
-  Page* page = m_thisFrame->page();
+  Page* page = this_frame_->GetPage();
 
   // The frame could have been detached from the page, so check it.
   if (!page)
     return nullptr;
 
-  for (Frame* frame = page->mainFrame(); frame;
-       frame = frame->tree().traverseNext()) {
-    if (frame->tree().name() == name)
+  for (Frame* frame = page->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    if (frame->Tree().GetName() == name)
       return frame;
   }
 
   // Search the entire tree of each of the other pages in this namespace.
   // FIXME: Is random order OK?
-  for (const Page* otherPage : Page::ordinaryPages()) {
-    if (otherPage == page || otherPage->isClosing())
+  for (const Page* other_page : Page::OrdinaryPages()) {
+    if (other_page == page || other_page->IsClosing())
       continue;
-    for (Frame* frame = otherPage->mainFrame(); frame;
-         frame = frame->tree().traverseNext()) {
-      if (frame->tree().name() == name)
+    for (Frame* frame = other_page->MainFrame(); frame;
+         frame = frame->Tree().TraverseNext()) {
+      if (frame->Tree().GetName() == name)
         return frame;
     }
   }
@@ -442,14 +199,14 @@ Frame* FrameTree::find(const AtomicString& name) const {
   return nullptr;
 }
 
-bool FrameTree::isDescendantOf(const Frame* ancestor) const {
+bool FrameTree::IsDescendantOf(const Frame* ancestor) const {
   if (!ancestor)
     return false;
 
-  if (m_thisFrame->page() != ancestor->page())
+  if (this_frame_->GetPage() != ancestor->GetPage())
     return false;
 
-  for (Frame* frame = m_thisFrame; frame; frame = frame->tree().parent()) {
+  for (Frame* frame = this_frame_; frame; frame = frame->Tree().Parent()) {
     if (frame == ancestor)
       return true;
   }
@@ -457,33 +214,33 @@ bool FrameTree::isDescendantOf(const Frame* ancestor) const {
 }
 
 DISABLE_CFI_PERF
-Frame* FrameTree::traverseNext(const Frame* stayWithin) const {
-  Frame* child = firstChild();
+Frame* FrameTree::TraverseNext(const Frame* stay_within) const {
+  Frame* child = FirstChild();
   if (child) {
-    ASSERT(!stayWithin || child->tree().isDescendantOf(stayWithin));
+    ASSERT(!stay_within || child->Tree().IsDescendantOf(stay_within));
     return child;
   }
 
-  if (m_thisFrame == stayWithin)
+  if (this_frame_ == stay_within)
     return nullptr;
 
-  Frame* sibling = nextSibling();
+  Frame* sibling = NextSibling();
   if (sibling) {
-    ASSERT(!stayWithin || sibling->tree().isDescendantOf(stayWithin));
+    ASSERT(!stay_within || sibling->Tree().IsDescendantOf(stay_within));
     return sibling;
   }
 
-  Frame* frame = m_thisFrame;
-  while (!sibling && (!stayWithin || frame->tree().parent() != stayWithin)) {
-    frame = frame->tree().parent();
+  Frame* frame = this_frame_;
+  while (!sibling && (!stay_within || frame->Tree().Parent() != stay_within)) {
+    frame = frame->Tree().Parent();
     if (!frame)
       return nullptr;
-    sibling = frame->tree().nextSibling();
+    sibling = frame->Tree().NextSibling();
   }
 
   if (frame) {
-    ASSERT(!stayWithin || !sibling ||
-           sibling->tree().isDescendantOf(stayWithin));
+    ASSERT(!stay_within || !sibling ||
+           sibling->Tree().IsDescendantOf(stay_within));
     return sibling;
   }
 
@@ -491,7 +248,7 @@ Frame* FrameTree::traverseNext(const Frame* stayWithin) const {
 }
 
 DEFINE_TRACE(FrameTree) {
-  visitor->trace(m_thisFrame);
+  visitor->Trace(this_frame_);
 }
 
 }  // namespace blink
@@ -514,24 +271,25 @@ static void printFrames(const blink::Frame* frame,
   }
 
   blink::FrameView* view =
-      frame->isLocalFrame() ? toLocalFrame(frame)->view() : 0;
-  printf("Frame %p %dx%d\n", frame, view ? view->width() : 0,
-         view ? view->height() : 0);
+      frame->IsLocalFrame() ? ToLocalFrame(frame)->View() : 0;
+  printf("Frame %p %dx%d\n", frame, view ? view->Width() : 0,
+         view ? view->Height() : 0);
   printIndent(indent);
-  printf("  owner=%p\n", frame->owner());
+  printf("  owner=%p\n", frame->Owner());
   printIndent(indent);
   printf("  frameView=%p\n", view);
   printIndent(indent);
   printf("  document=%p\n",
-         frame->isLocalFrame() ? toLocalFrame(frame)->document() : 0);
+         frame->IsLocalFrame() ? ToLocalFrame(frame)->GetDocument() : 0);
   printIndent(indent);
-  printf("  uri=%s\n\n",
-         frame->isLocalFrame()
-             ? toLocalFrame(frame)->document()->url().getString().utf8().data()
-             : 0);
+  printf(
+      "  uri=%s\n\n",
+      frame->IsLocalFrame()
+          ? ToLocalFrame(frame)->GetDocument()->Url().GetString().Utf8().Data()
+          : 0);
 
-  for (blink::Frame* child = frame->tree().firstChild(); child;
-       child = child->tree().nextSibling())
+  for (blink::Frame* child = frame->Tree().FirstChild(); child;
+       child = child->Tree().NextSibling())
     printFrames(child, targetFrame, indent + 1);
 }
 
@@ -541,7 +299,7 @@ void showFrameTree(const blink::Frame* frame) {
     return;
   }
 
-  printFrames(frame->tree().top(), frame, 0);
+  printFrames(frame->Tree().Top(), frame, 0);
 }
 
 #endif

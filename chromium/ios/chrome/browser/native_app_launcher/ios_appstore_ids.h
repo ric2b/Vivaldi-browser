@@ -15,8 +15,6 @@ extern const char kIOSAppStoreGooglePlayMusic[];
 extern const char kIOSAppStoreGooglePlus[];
 extern const char kIOSAppStoreGoogleSheets[];
 extern const char kIOSAppStoreGoogleSlides[];
-extern const char kIOSAppStoreSpaces[];
 extern const char kIOSAppStoreTestFlight[];
-extern const char kIOSAppStoreYouTube[];
 
 #endif  // IOS_CHROME_BROWSER_NATIVE_APP_LAUNCHER_IOS_APPSTORE_IDS_H_

@@ -18,14 +18,12 @@
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
@@ -34,6 +32,7 @@
 #include "extensions/browser/extension_function_registry.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/feature_switch.h"
@@ -91,8 +90,8 @@ ExtensionActionAPI::Observer::~Observer() {
 // ExtensionActionAPI
 //
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<ExtensionActionAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<ExtensionActionAPI>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 ExtensionActionAPI::ExtensionActionAPI(content::BrowserContext* context)
     : browser_context_(context),
@@ -164,8 +163,9 @@ void ExtensionActionAPI::SetBrowserActionVisibility(
   if (GetBrowserActionVisibility(extension_id) == visible)
     return;
 
-  GetExtensionPrefs()->UpdateExtensionPref(extension_id, kBrowserActionVisible,
-                                           new base::Value(visible));
+  GetExtensionPrefs()->UpdateExtensionPref(
+      extension_id, kBrowserActionVisible,
+      base::MakeUnique<base::Value>(visible));
   for (auto& observer : observers_)
     observer.OnExtensionActionVisibilityChanged(extension_id, visible);
 }
@@ -179,14 +179,6 @@ bool ExtensionActionAPI::ShowExtensionActionPopup(
           *extension);
   if (!extension_action)
     return false;
-
-  if (extension_action->action_type() == ActionInfo::TYPE_PAGE &&
-      !FeatureSwitch::extension_action_redesign()->IsEnabled()) {
-    // We show page actions in the location bar unless the new toolbar is
-    // enabled.
-    return browser->window()->GetLocationBar()->ShowPageActionPopup(
-        extension, grant_active_tab_permissions);
-  }
 
   // Don't support showing action popups in a popup window.
   if (!browser->SupportsWindowFeature(Browser::FEATURE_TOOLBAR))
@@ -294,20 +286,9 @@ void ExtensionActionAPI::NotifyPageActionsChanged(
       web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
   if (!browser)
     return;
-  // Note: In Vivaldi the pageactions and browseractions is in the same model.
-  if (browser->is_vivaldi()) {
-    for (auto& observer : observers_)
-      observer.OnPageActionsUpdated(web_contents);
-  } else {
-  LocationBar* location_bar =
-      browser->window() ? browser->window()->GetLocationBar() : NULL;
-  if (!location_bar)
-    return;
-  location_bar->UpdatePageActions();
 
   for (auto& observer : observers_)
     observer.OnPageActionsUpdated(web_contents);
-  }
 }
 
 void ExtensionActionAPI::Shutdown() {
@@ -534,20 +515,20 @@ ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetTitleFunction::RunExtensionAction() {
-  return RespondNow(OneArgument(base::MakeUnique<base::StringValue>(
-      extension_action_->GetTitle(tab_id_))));
+  return RespondNow(OneArgument(
+      base::MakeUnique<base::Value>(extension_action_->GetTitle(tab_id_))));
 }
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetPopupFunction::RunExtensionAction() {
-  return RespondNow(OneArgument(base::MakeUnique<base::StringValue>(
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
       extension_action_->GetPopupUrl(tab_id_).spec())));
 }
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetBadgeTextFunction::RunExtensionAction() {
-  return RespondNow(OneArgument(base::MakeUnique<base::StringValue>(
-      extension_action_->GetBadgeText(tab_id_))));
+  return RespondNow(OneArgument(
+      base::MakeUnique<base::Value>(extension_action_->GetBadgeText(tab_id_))));
 }
 
 ExtensionFunction::ResponseAction

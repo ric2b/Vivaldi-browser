@@ -22,6 +22,8 @@ const char kVivaldiLastTopSitesVacuumDate[] =
 const char kVivaldiNumberOfDaysToKeepVisits[] = "vivaldi.days_to_keep_visits";
 const char kVivaldiTabZoom[] = "vivaldi.tab_zoom_enabled";
 const char kVivaldiTabsToLinks[] = "vivaldi.tabs_to_links";
+const char kVivaldiHasDesktopWallpaperProtocol[] =
+    "vivaldi.has_desktop_wallpaper-protocol";
 
 // Used to store active vivaldi experiments
 const char kVivaldiExperiments[] = "vivaldi.experiments";

@@ -32,10 +32,6 @@ class Version;
 // independently.
 class InstallUtil {
  public:
-  // Get the path to this distribution's Active Setup registry entries.
-  // e.g. Software\Microsoft\Active Setup\Installed Components\<dist_guid>
-  static base::string16 GetActiveSetupPath(BrowserDistribution* dist);
-
   // Attempts to trigger the command that would be run by Active Setup for a
   // system-level Chrome. For use only when system-level Chrome is installed.
   static void TriggerActiveSetupCommand();
@@ -89,12 +85,6 @@ class InstallUtil {
   // TODO(grt): consider replacing all callers with direct use of
   // InstallDetails.
   static bool IsPerUserInstall();
-
-  // Returns true if this is running setup process for Chrome SxS (as
-  // indicated by the presence of --chrome-sxs on the command line) or if this
-  // is running Chrome process from the Chrome SxS installation (as indicated
-  // by either --chrome-sxs or the executable path).
-  static bool IsChromeSxSProcess();
 
   // [Vivaldi] Shows a modal messagebox with the installer result localized string
   static void ShowInstallerResultMessage(installer::InstallStatus status,

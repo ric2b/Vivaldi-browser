@@ -8,11 +8,13 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/payments/cells/payment_method_item.h"
 #import "ios/chrome/browser/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/payments/payment_method_selection_view_controller_actions.h"
 #include "ios/chrome/browser/payments/payment_request.h"
+#include "ios/chrome/browser/payments/payment_request_util.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
@@ -23,6 +25,7 @@
 #include "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
+#include "ios/web/public/payments/payment_request.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -34,6 +37,7 @@ NSString* const kPaymentMethodSelectionCollectionViewID =
     @"kPaymentMethodSelectionCollectionViewID";
 
 namespace {
+using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 
 const CGFloat kSeparatorEdgeInset = 14;
 
@@ -50,9 +54,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 @interface PaymentMethodSelectionViewController ()<
     PaymentMethodSelectionViewControllerActions> {
-  // The PaymentRequest object owning an instance of web::PaymentRequest as
-  // provided by the page invoking the Payment Request API. This is a weak
-  // pointer and should outlive this class.
+  // The PaymentRequest object having a copy of web::PaymentRequest as provided
+  // by the page invoking the Payment Request API. This is a weak pointer and
+  // should outlive this class.
   PaymentRequest* _paymentRequest;
 
   // The currently selected item. May be nil.
@@ -99,15 +103,28 @@ typedef NS_ENUM(NSInteger, ItemType) {
   for (const auto* paymentMethod : _paymentRequest->credit_cards()) {
     PaymentMethodItem* paymentMethodItem =
         [[PaymentMethodItem alloc] initWithType:ItemTypePaymentMethod];
+
     paymentMethodItem.accessibilityTraits |= UIAccessibilityTraitButton;
     paymentMethodItem.methodID =
         base::SysUTF16ToNSString(paymentMethod->TypeAndLastFourDigits());
     paymentMethodItem.methodDetail = base::SysUTF16ToNSString(
         paymentMethod->GetRawInfo(autofill::CREDIT_CARD_NAME_FULL));
+
+    autofill::AutofillProfile* billingAddress =
+        autofill::PersonalDataManager::GetProfileFromProfilesByGUID(
+            paymentMethod->billing_address_id(),
+            _paymentRequest->billing_profiles());
+    if (billingAddress) {
+      paymentMethodItem.methodAddress =
+          GetBillingAddressLabelFromAutofillProfile(*billingAddress);
+    }
+
     int methodTypeIconID =
         autofill::data_util::GetPaymentRequestData(paymentMethod->type())
             .icon_resource_id;
     paymentMethodItem.methodTypeIcon = NativeImage(methodTypeIconID);
+
+    paymentMethodItem.reserveRoomForAccessoryType = YES;
 
     if (_paymentRequest->selected_credit_card() == paymentMethod) {
       paymentMethodItem.accessoryType = MDCCollectionViewCellAccessoryCheckmark;
@@ -171,9 +188,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
         paymentMethodSelectionViewController:self
                       didSelectPaymentMethod:_paymentRequest
                                                  ->credit_cards()[index]];
+  } else if (item.type == ItemTypeAddMethod) {
+    [_delegate paymentMethodSelectionViewControllerDidSelectAddCard:self];
   }
-  // TODO(crbug.com/602666): Present a credit card addition UI when
-  // itemType == ItemTypeAddMethod.
 }
 
 #pragma mark MDCCollectionViewStylingDelegate
@@ -184,7 +201,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.collectionViewModel itemAtIndexPath:indexPath];
   switch (item.type) {
     case ItemTypePaymentMethod:
-      return MDCCellDefaultTwoLineHeight;
     case ItemTypeAddMethod:
       return [MDCCollectionViewCell
           cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds)

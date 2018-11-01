@@ -4,40 +4,34 @@
 
 suite('<bookmarks-sidebar>', function() {
   var sidebar;
-  var TEST_TREE;
+  var store;
 
   setup(function() {
-    TEST_TREE = createFolder('0', [
-      createFolder(
-          '1',
-          [
-            createFolder(
-                '2',
-                [
-                  createFolder('3', []),
-                  createFolder('4', []),
-                ]),
-            createItem('5'),
-            createItem('6'),
-          ]),
-      createFolder('7', []),
-      createFolder('8', []),
-    ]);
+    store = new bookmarks.TestStore({
+      nodes: testTree(
+          createFolder(
+              '1',
+              [
+                createFolder(
+                    '2',
+                    [
+                      createFolder('3', []),
+                      createFolder('4', []),
+                    ]),
+                createItem('5'),
+              ]),
+          createFolder('7', [])),
+    });
+    bookmarks.Store.instance_ = store;
 
-    setupTreeForUITests(TEST_TREE);
     sidebar = document.createElement('bookmarks-sidebar');
     replaceBody(sidebar);
-    sidebar.rootFolders = TEST_TREE.children;
+    Polymer.dom.flush();
   });
 
-  test('selecting and deselecting folders fires event', function() {
-    var firedId;
-    document.addEventListener('selected-folder-changed', function(e) {
-      firedId = /** @type {string} */ (e.detail);
-    });
-
-    Polymer.dom.flush();
-    var rootFolders = sidebar.$['folder-tree'].children;
+  test('selecting and deselecting folders dispatches action', function() {
+    var rootFolders =
+        sidebar.$['folder-tree'].querySelectorAll('bookmarks-folder-node');
     var firstGen = rootFolders[0].$['descendants'].querySelectorAll(
         'bookmarks-folder-node');
     var secondGen =
@@ -46,11 +40,55 @@ suite('<bookmarks-sidebar>', function() {
     // Select nested folder.
     firedId = '';
     MockInteractions.tap(secondGen[0].$['folder-label']);
-    assertEquals(secondGen[0].item.id, firedId);
+    assertEquals('select-folder', store.lastAction.name);
+    assertEquals(secondGen[0].itemId, store.lastAction.id);
 
     // Select folder in a separate subtree.
     firedId = '';
     MockInteractions.tap(rootFolders[1].$['folder-label']);
-    assertEquals(rootFolders[1].item.id, firedId);
+    assertEquals('select-folder', store.lastAction.name);
+    assertEquals(rootFolders[1].itemId, store.lastAction.id);
+  });
+
+  test('depth calculation', function() {
+    var rootFolders =
+        sidebar.$['folder-tree'].querySelectorAll('bookmarks-folder-node');
+    var firstGen = rootFolders[0].$['descendants'].querySelectorAll(
+        'bookmarks-folder-node');
+    var secondGen =
+        firstGen[0].$['descendants'].querySelectorAll('bookmarks-folder-node');
+
+    Array.prototype.forEach.call(rootFolders, function(f) {
+      assertEquals(0, f.depth);
+      assertEquals('0', f.style.getPropertyValue('--node-depth'));
+    });
+    Array.prototype.forEach.call(firstGen, function(f) {
+      assertEquals(1, f.depth);
+      assertEquals('1', f.style.getPropertyValue('--node-depth'));
+    });
+    Array.prototype.forEach.call(secondGen, function(f) {
+      assertEquals(2, f.depth);
+      assertEquals('2', f.style.getPropertyValue('--node-depth'));
+    });
+  });
+
+  test('doesn\'t highlight selected folder while searching', function() {
+    var rootFolders =
+        sidebar.$['folder-tree'].querySelectorAll('bookmarks-folder-node');
+
+    store.data.selectedFolder = '1';
+    store.notifyObservers();
+
+    assertEquals('1', rootFolders['0'].itemId);
+    assertTrue(rootFolders['0'].isSelectedFolder_);
+
+    store.data.search = {
+      term: 'test',
+      inProgress: false,
+      results: ['3'],
+    };
+    store.notifyObservers();
+
+    assertFalse(rootFolders['0'].isSelectedFolder_);
   });
 });

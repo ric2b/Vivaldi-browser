@@ -219,6 +219,8 @@ component("proxy") {
     sources += [
       "audio_input_resource.cc",
       "audio_input_resource.h",
+      "audio_output_resource.cc",
+      "audio_output_resource.h",
       "broker_dispatcher.cc",
       "broker_dispatcher.h",
       "browser_font_singleton_resource.cc",
@@ -274,6 +276,7 @@ component("proxy") {
   ]
 
   public_deps = [
+    "//ipc",
     "//ppapi/proxy:ipc_sources",
   ]
 
@@ -282,7 +285,6 @@ component("proxy") {
     "//base",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/ipc/common:command_buffer_traits",
-    "//ipc",
     "//media:shared_memory_support",
     "//mojo/edk/system",
     "//ppapi/c",
@@ -308,13 +310,9 @@ component("proxy") {
 
 source_set("common") {
   sources = [
-    "tcp_socket_resource_constants.cc",
     "tcp_socket_resource_constants.h",
-    "udp_socket_resource_constants.cc",
     "udp_socket_resource_constants.h",
   ]
-
-  configs += [ ":proxy_implementation" ]
 }
 
 group("ipc") {
@@ -361,10 +359,14 @@ source_set("ipc_sources") {
   deps = [
     "//base",
     "//gpu/ipc/common:command_buffer_traits",
-    "//ipc",
     "//ppapi/c",
     "//ppapi/shared_impl",
   ]
+
+  public_deps = [
+    "//ipc",
+  ]
+
   if (!is_nacl) {
     deps += [ "//skia" ]
   }

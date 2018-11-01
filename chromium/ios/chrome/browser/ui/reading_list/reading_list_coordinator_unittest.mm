@@ -7,14 +7,16 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon/core/test/mock_favicon_service.h"
-#include "components/reading_list/ios/reading_list_entry.h"
-#include "components/reading_list/ios/reading_list_model_impl.h"
+#include "components/reading_list/core/reading_list_entry.h"
+#include "components/reading_list/core/reading_list_model_impl.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_controller.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_item.h"
+#import "ios/chrome/browser/ui/reading_list/reading_list_utils.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #include "ios/web/public/referrer.h"
 #import "ios/web/public/test/web_test_with_web_state.h"
@@ -94,9 +96,11 @@ class ReadingListCoordinatorTest : public web::WebTestWithWebState {
     TestChromeBrowserState::Builder builder;
     browser_state_ = builder.Build();
 
-    reading_list_model_.reset(new ReadingListModelImpl(nullptr, nullptr));
+    reading_list_model_.reset(new ReadingListModelImpl(
+        nullptr, nullptr, base::MakeUnique<base::DefaultClock>()));
     large_icon_service_.reset(new favicon::LargeIconService(
-        &mock_favicon_service_, base::ThreadTaskRunnerHandle::Get()));
+        &mock_favicon_service_, base::ThreadTaskRunnerHandle::Get(),
+        /*image_fetcher=*/nullptr));
     coordinator_.reset([[ReadingListCoordinator alloc]
         initWithBaseViewController:nil
                       browserState:browser_state_.get()
@@ -139,16 +143,15 @@ TEST_F(ReadingListCoordinatorTest, OpenItem) {
   GURL url("https://chromium.org");
   std::string title("Chromium");
   std::unique_ptr<ReadingListEntry> entry =
-      base::MakeUnique<ReadingListEntry>(url, title);
+      base::MakeUnique<ReadingListEntry>(url, title, base::Time::FromTimeT(10));
   ReadingListModel* model = GetReadingListModel();
   model->AddEntry(url, title, reading_list::ADDED_VIA_CURRENT_APP);
 
   base::scoped_nsobject<ReadingListCollectionViewItem> item(
       [[ReadingListCollectionViewItem alloc]
-                initWithType:0
-          attributesProvider:nil
-                         url:url
-           distillationState:ReadingListEntry::PROCESSED]);
+               initWithType:0
+                        url:url
+          distillationState:ReadingListUIDistillationStatusSuccess]);
 
   // Action.
   [GetCoordinator() readingListCollectionViewController:

@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/run_loop.h"
@@ -19,6 +20,7 @@
 #include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media.h"
+#include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/media_util.h"
 #include "media/cast/common/rtp_time.h"
@@ -128,7 +130,8 @@ class EndToEndFrameChecker
     : public base::RefCountedThreadSafe<EndToEndFrameChecker> {
  public:
   explicit EndToEndFrameChecker(const VideoDecoderConfig& config)
-      : decoder_(), count_frames_checked_(0) {
+      : decoder_(make_scoped_refptr(new media::MediaLog())),
+        count_frames_checked_(0) {
     bool decoder_init_result;
     decoder_.Initialize(
         config, false, nullptr,
@@ -178,7 +181,7 @@ void CreateFrameAndMemsetPlane(VideoFrameFactory* const video_frame_factory) {
       video_frame_factory->MaybeCreateFrame(
           gfx::Size(kVideoWidth, kVideoHeight), base::TimeDelta());
   ASSERT_TRUE(video_frame.get());
-  auto* cv_pixel_buffer = video_frame->cv_pixel_buffer();
+  auto* cv_pixel_buffer = video_frame->CvPixelBuffer();
   ASSERT_TRUE(cv_pixel_buffer);
   CVPixelBufferLockBaseAddress(cv_pixel_buffer, 0);
   auto* ptr = CVPixelBufferGetBaseAddressOfPlane(cv_pixel_buffer, 0);

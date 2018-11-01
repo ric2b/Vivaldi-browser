@@ -6,20 +6,18 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/i18n/rtl.h"
 #include "content/public/utility/utility_thread.h"
 #include "extensions/common/constants.h"
-#include "extensions/common/extension.h"
 #include "extensions/common/extension_l10n_util.h"
-#include "extensions/common/extension_utility_messages.h"
+#include "extensions/common/extension_unpacker.mojom.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/manifest_parser.mojom.h"
 #include "extensions/common/update_manifest.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "extensions/utility/unpacker.h"
-#include "ipc/ipc_message.h"
-#include "ipc/ipc_message_macros.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "third_party/zlib/google/zip.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_switches.h"
@@ -28,115 +26,125 @@ namespace extensions {
 
 namespace {
 
-bool Send(IPC::Message* message) {
-  return content::UtilityThread::Get()->Send(message);
-}
+class ExtensionUnpackerImpl : public extensions::mojom::ExtensionUnpacker {
+ public:
+  ExtensionUnpackerImpl() = default;
+  ~ExtensionUnpackerImpl() override = default;
 
-void ReleaseProcessIfNeeded() {
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
-}
+  static void Create(extensions::mojom::ExtensionUnpackerRequest request) {
+    mojo::MakeStrongBinding(base::MakeUnique<ExtensionUnpackerImpl>(),
+                            std::move(request));
+  }
 
-const char kExtensionHandlerUnzipError[] =
-    "Could not unzip extension for install.";
+ private:
+  // extensions::mojom::ExtensionUnpacker:
+  void Unzip(const base::FilePath& file,
+             const base::FilePath& path,
+             const UnzipCallback& callback) override {
+    std::unique_ptr<base::DictionaryValue> manifest;
+    if (UnzipFileManifestIntoPath(file, path, &manifest)) {
+      callback.Run(UnzipFileIntoPath(file, path, std::move(manifest)));
+    } else {
+      callback.Run(false);
+    }
+  }
+
+  void Unpack(const base::FilePath& path,
+              const std::string& extension_id,
+              Manifest::Location location,
+              int32_t creation_flags,
+              const UnpackCallback& callback) override {
+    CHECK_GT(location, Manifest::INVALID_LOCATION);
+    CHECK_LT(location, Manifest::NUM_LOCATIONS);
+    DCHECK(ExtensionsClient::Get());
+
+    content::UtilityThread::Get()->EnsureBlinkInitialized();
+
+    Unpacker unpacker(path.DirName(), path, extension_id, location,
+                      creation_flags);
+    if (unpacker.Run()) {
+      callback.Run(base::string16(), unpacker.TakeParsedManifest());
+    } else {
+      callback.Run(unpacker.error_message(), nullptr);
+    }
+  }
+
+  static bool UnzipFileManifestIntoPath(
+      const base::FilePath& file,
+      const base::FilePath& path,
+      std::unique_ptr<base::DictionaryValue>* manifest) {
+    if (zip::UnzipWithFilterCallback(
+            file, path, base::Bind(&Unpacker::IsManifestFile), false)) {
+      std::string error;
+      *manifest = Unpacker::ReadManifest(path, &error);
+      return error.empty() && manifest->get();
+    }
+
+    return false;
+  }
+
+  static bool UnzipFileIntoPath(
+      const base::FilePath& file,
+      const base::FilePath& path,
+      std::unique_ptr<base::DictionaryValue> manifest) {
+    Manifest internal(Manifest::INTERNAL, std::move(manifest));
+    // TODO(crbug.com/645263): This silently ignores blocked file types.
+    //                         Add install warnings.
+    return zip::UnzipWithFilterCallback(
+        file, path,
+        base::Bind(&Unpacker::ShouldExtractFile, internal.is_theme()),
+        true /* log_skipped_files */);
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionUnpackerImpl);
+};
+
+class ManifestParserImpl : public extensions::mojom::ManifestParser {
+ public:
+  ManifestParserImpl() = default;
+  ~ManifestParserImpl() override = default;
+
+  static void Create(extensions::mojom::ManifestParserRequest request) {
+    mojo::MakeStrongBinding(base::MakeUnique<ManifestParserImpl>(),
+                            std::move(request));
+  }
+
+ private:
+  void Parse(const std::string& xml, const ParseCallback& callback) override {
+    UpdateManifest manifest;
+    if (manifest.Parse(xml)) {
+      callback.Run(manifest.results());
+    } else {
+      LOG(WARNING) << "Error parsing update manifest:\n" << manifest.errors();
+      callback.Run(base::nullopt);
+    }
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ManifestParserImpl);
+};
 
 }  // namespace
 
-UtilityHandler::UtilityHandler() {
-}
+namespace utility_handler {
 
-UtilityHandler::~UtilityHandler() {
-}
-
-// static
-void UtilityHandler::UtilityThreadStarted() {
+void UtilityThreadStarted() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   std::string lang = command_line->GetSwitchValueASCII(switches::kLang);
   if (!lang.empty())
     extension_l10n_util::SetProcessLocale(lang);
 }
 
-bool UtilityHandler::OnMessageReceived(const IPC::Message& message) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(UtilityHandler, message)
-    IPC_MESSAGE_HANDLER(ExtensionUtilityMsg_ParseUpdateManifest,
-                        OnParseUpdateManifest)
-    IPC_MESSAGE_HANDLER(ExtensionUtilityMsg_UnzipToDir, OnUnzipToDir)
-    IPC_MESSAGE_HANDLER(ExtensionUtilityMsg_UnpackExtension, OnUnpackExtension)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-}
-
-void UtilityHandler::OnParseUpdateManifest(const std::string& xml) {
-  UpdateManifest manifest;
-  if (!manifest.Parse(xml)) {
-    Send(new ExtensionUtilityHostMsg_ParseUpdateManifest_Failed(
-        manifest.errors()));
-  } else {
-    Send(new ExtensionUtilityHostMsg_ParseUpdateManifest_Succeeded(
-        manifest.results()));
-  }
-  ReleaseProcessIfNeeded();
-}
-
-void UtilityHandler::OnUnzipToDir(const base::FilePath& zip_path,
-                                  const base::FilePath& dir) {
-  // First extract only the manifest to determine the extension type.
-  if (!zip::UnzipWithFilterCallback(zip_path, dir,
-                                    base::Bind(&Unpacker::IsManifestFile),
-                                    false /* log_skipped_files */)) {
-    Send(new ExtensionUtilityHostMsg_UnzipToDir_Failed(
-        std::string(kExtensionHandlerUnzipError)));
-    ReleaseProcessIfNeeded();
+void ExposeInterfacesToBrowser(service_manager::InterfaceRegistry* registry,
+                               bool running_elevated) {
+  // If our process runs with elevated privileges, only add elevated Mojo
+  // interfaces to the interface registry.
+  if (running_elevated)
     return;
-  }
 
-  // Load the manifest.
-  std::string error;
-  std::unique_ptr<base::DictionaryValue> dict =
-      Unpacker::ReadManifest(dir, &error);
-  if (!dict.get()) {
-    Send(new ExtensionUtilityHostMsg_UnzipToDir_Failed(
-        std::string(kExtensionHandlerUnzipError)));
-    ReleaseProcessIfNeeded();
-    return;
-  }
-
-  Manifest manifest(Manifest::INTERNAL, std::move(dict));
-  base::Callback<bool(const base::FilePath&)> filetype_filter_cb =
-      base::Bind(&Unpacker::ShouldExtractFile, manifest.is_theme());
-
-  // TODO(crbug.com/645263): This silently ignores blocked file types.
-  //                         Add install warnings.
-  if (!zip::UnzipWithFilterCallback(zip_path, dir, filetype_filter_cb,
-                                    true /* log_skipped_files */)) {
-    Send(new ExtensionUtilityHostMsg_UnzipToDir_Failed(
-        std::string(kExtensionHandlerUnzipError)));
-  } else {
-    Send(new ExtensionUtilityHostMsg_UnzipToDir_Succeeded(dir));
-  }
-  ReleaseProcessIfNeeded();
+  registry->AddInterface(base::Bind(&ExtensionUnpackerImpl::Create));
+  registry->AddInterface(base::Bind(&ManifestParserImpl::Create));
 }
 
-void UtilityHandler::OnUnpackExtension(const base::FilePath& directory_path,
-                                       const std::string& extension_id,
-                                       int location,
-                                       int creation_flags) {
-  CHECK_GT(location, Manifest::INVALID_LOCATION);
-  CHECK_LT(location, Manifest::NUM_LOCATIONS);
-  DCHECK(ExtensionsClient::Get());
-  content::UtilityThread::Get()->EnsureBlinkInitialized();
-  Unpacker unpacker(directory_path.DirName(), directory_path, extension_id,
-                    static_cast<Manifest::Location>(location), creation_flags);
-  if (unpacker.Run()) {
-    Send(new ExtensionUtilityHostMsg_UnpackExtension_Succeeded(
-        *unpacker.parsed_manifest()));
-  } else {
-    Send(new ExtensionUtilityHostMsg_UnpackExtension_Failed(
-        unpacker.error_message()));
-  }
-  ReleaseProcessIfNeeded();
-}
-
+}  // namespace utility_handler
 
 }  // namespace extensions

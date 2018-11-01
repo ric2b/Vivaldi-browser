@@ -3,7 +3,9 @@
 <link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
+<link rel="import" href="chrome://bookmarks/actions.html">
 <link rel="import" href="chrome://bookmarks/shared_style.html">
+<link rel="import" href="chrome://bookmarks/store_client.html">
 
 <dom-module id="bookmarks-item">
   <template>
@@ -12,18 +14,19 @@
         -webkit-padding-start: 20px;
         -webkit-user-select: none;
         align-items: center;
+        cursor: pointer;
         display: flex;
         flex-direction: row;
         height: 40px;
+        position: relative;
       }
 
-      :host([is-selected-item]) {
+      :host([is-selected-item_]) {
         background-color: rgb(225, 235, 253);
       }
 
       #website-title {
         color: var(--primary-text-color);
-        cursor: pointer;
         flex: 1;
         overflow: hidden;
         text-decoration: none;
@@ -60,10 +63,10 @@
       <div id="icon" hidden$="[[isFolder_]]"></div>
     </div>
     <div id="website-title">
-      [[item.title]]
+      [[item_.title]]
     </div>
     <button is="paper-icon-button-light" class="more-vert-button"
-        on-click="onMenuButtonOpenClick_">
+        on-click="onMenuButtonClick_" on-dblclick="onMenuButtonDblClick_">
       <div></div>
       <div></div>
       <div></div>

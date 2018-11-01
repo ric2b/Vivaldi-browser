@@ -14,6 +14,7 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/NativeValueTraits.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
@@ -26,15 +27,15 @@ class CORE_EXPORT UnrestrictedDoubleOrString final {
   UnrestrictedDoubleOrString();
   bool isNull() const { return m_type == SpecificTypeNone; }
 
-  bool isUnrestrictedDouble() const { return m_type == SpecificTypeUnrestrictedDouble; }
-  double getAsUnrestrictedDouble() const;
-  void setUnrestrictedDouble(double);
-  static UnrestrictedDoubleOrString fromUnrestrictedDouble(double);
-
   bool isString() const { return m_type == SpecificTypeString; }
   String getAsString() const;
   void setString(String);
   static UnrestrictedDoubleOrString fromString(String);
+
+  bool isUnrestrictedDouble() const { return m_type == SpecificTypeUnrestrictedDouble; }
+  double getAsUnrestrictedDouble() const;
+  void setUnrestrictedDouble(double);
+  static UnrestrictedDoubleOrString fromUnrestrictedDouble(double);
 
   UnrestrictedDoubleOrString(const UnrestrictedDoubleOrString&);
   ~UnrestrictedDoubleOrString();
@@ -44,13 +45,13 @@ class CORE_EXPORT UnrestrictedDoubleOrString final {
  private:
   enum SpecificTypes {
     SpecificTypeNone,
-    SpecificTypeUnrestrictedDouble,
     SpecificTypeString,
+    SpecificTypeUnrestrictedDouble,
   };
   SpecificTypes m_type;
 
-  double m_unrestrictedDouble;
   String m_string;
+  double m_unrestrictedDouble;
 
   friend CORE_EXPORT v8::Local<v8::Value> ToV8(const UnrestrictedDoubleOrString&, v8::Local<v8::Object>, v8::Isolate*);
 };
@@ -63,18 +64,23 @@ class V8UnrestrictedDoubleOrString final {
 CORE_EXPORT v8::Local<v8::Value> ToV8(const UnrestrictedDoubleOrString&, v8::Local<v8::Object>, v8::Isolate*);
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, UnrestrictedDoubleOrString& impl) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, UnrestrictedDoubleOrString& impl) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, UnrestrictedDoubleOrString& impl, v8::Local<v8::Object> creationContext) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, UnrestrictedDoubleOrString& impl, v8::Local<v8::Object> creationContext) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
 }
 
 template <>
-struct NativeValueTraits<UnrestrictedDoubleOrString> {
-  CORE_EXPORT static UnrestrictedDoubleOrString nativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+struct NativeValueTraits<UnrestrictedDoubleOrString> : public NativeValueTraitsBase<UnrestrictedDoubleOrString> {
+  CORE_EXPORT static UnrestrictedDoubleOrString NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+};
+
+template <>
+struct V8TypeOf<UnrestrictedDoubleOrString> {
+  typedef V8UnrestrictedDoubleOrString Type;
 };
 
 }  // namespace blink

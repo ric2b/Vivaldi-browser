@@ -2,16 +2,42 @@ import("../vulcanize.gni")
 import("//tools/grit/grit_rule.gni")
 import("//chrome/common/features.gni")
 
-vulcanized_unbuilt = "vulcanized.unbuilt.html"
+app_unbuilt = "vulcanized.unbuilt.html"
+lazy_load_unbuilt = "lazy_load.vulcanized.unbuilt.html"
+settings_pak_file = "settings_resources.pak"
+unpak_folder = "settings_resources.unpak"
 
-vulcanize("vulcanize") {
+vulcanize("vulcanize_app") {
   host = "md-settings"
   html_in_file = "settings.html"
-  html_out_file = vulcanized_unbuilt
+  html_out_file = app_unbuilt
   insert_in_head = "<base href=\"chrome://\$i18n{hostname}\">"
-  input = rebase_path(root_gen_dir, root_build_dir) +
-          "/chrome/browser/resources/settings/settings_resources.pak"
+  input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
   js_out_file = "crisper.js"
+
+  deps = [
+    ":unpak",
+  ]
+}
+
+vulcanize("vulcanize_lazy_load") {
+  host = "md-settings"
+  html_in_file = "lazy_load.html"
+  html_out_file = lazy_load_unbuilt
+  insert_in_head = "<base href=\"chrome://\$i18n{hostname}\">"
+  input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
+  js_out_file = "lazy_load.crisper.js"
+
+  excludes = [ "/settings.html" ]
+
+  deps = [
+    ":unpak",
+  ]
+}
+
+unpak("unpak") {
+  pak_file = settings_pak_file
+  out_folder = unpak_folder
 
   deps = [
     ":flattened_resources",
@@ -19,23 +45,28 @@ vulcanize("vulcanize") {
 }
 
 polymer_css_build("build") {
-  input_files = [ vulcanized_unbuilt ]
-  output_files = [ "vulcanized.html" ]
+  input_files = [
+    app_unbuilt,
+    lazy_load_unbuilt,
+  ]
+  output_files = [
+    "vulcanized.html",
+    "lazy_load.vulcanized.html",
+  ]
   deps = [
-    ":vulcanize",
+    ":vulcanize_app",
+    ":vulcanize_lazy_load",
   ]
 }
 
 grit("flattened_resources") {
   source = "settings_resources.grd"
-
-  # TODO(thestig): use_qualified_include = true
   defines = chrome_grit_defines
   outputs = [
     "grit/settings_resources.h",
     "grit/settings_resources_map.cc",
     "grit/settings_resources_map.h",
-    "settings_resources.pak",
+    settings_pak_file,
   ]
   output_dir = "$root_gen_dir/chrome/browser/resources/settings"
 }

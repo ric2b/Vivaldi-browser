@@ -96,9 +96,15 @@ copy("common_packaging_files") {
   ]
 
   if (is_chrome_branded) {
-    sources += [ "common/google-chrome/google-chrome.info" ]
+    sources += [
+      "common/google-chrome/google-chrome.appdata.xml.template",
+      "common/google-chrome/google-chrome.info",
+    ]
   } else {
-    sources += [ "common/chromium-browser/chromium-browser.info" ]
+    sources += [
+      "common/chromium-browser/chromium-browser.appdata.xml",
+      "common/chromium-browser/chromium-browser.info",
+    ]
   }
 
   if (current_cpu == "x86") {
@@ -120,9 +126,7 @@ copy("deb_packaging_files") {
     "debian/control.template",
     "debian/debian.menu",
     "debian/expected_deps_ia32_jessie",
-    "debian/expected_deps_ia32_wheezy",
     "debian/expected_deps_x64_jessie",
-    "debian/expected_deps_x64_wheezy",
     "debian/postinst",
     "debian/postrm",
     "debian/prerm",

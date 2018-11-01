@@ -13,12 +13,12 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "cc/resources/returned_resource.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/compositor_frame_sink_support_client.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface_info.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "content/browser/compositor/image_transport_factory.h"
@@ -62,7 +62,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // This functions registers single-use callbacks that want to be notified when
   // the next frame is swapped. The callback is triggered by
-  // OnSwapCompositorFrame, which is the appropriate time to request pixel
+  // ProcessCompositorFrame, which is the appropriate time to request pixel
   // readback for the frame that is about to be drawn. Once called, the callback
   // pointer is released.
   // TODO(wjmaclean): We should consider making this available in other view
@@ -90,6 +90,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   gfx::NativeView GetNativeView() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void SetBackgroundColor(SkColor color) override;
+  SkColor background_color() const override;
   gfx::Size GetPhysicalBackingSize() const override;
   bool IsMouseLocked() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
@@ -107,8 +108,13 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result) override;
-  void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
+  void DidCreateNewRendererCompositorFrameSink(
+      cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink)
+      override;
+  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
+  void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack) override;
+  void OnSurfaceChanged(const cc::SurfaceInfo& surface_info) override;
   // Since the URL of content rendered by this class is not displayed in
   // the URL bar, this method does not need an implementation.
   void ClearCompositorFrame() override {}
@@ -155,7 +161,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
 
   // cc::CompositorFrameSinkSupportClient implementation.
-  void DidReceiveCompositorFrameAck() override;
+  void DidReceiveCompositorFrameAck(
+      const cc::ReturnedResourceArray& resources) override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
   void WillDrawSurface(const cc::LocalSurfaceId& id,
@@ -181,18 +188,19 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   void UpdateViewportIntersection(const gfx::Rect& viewport_intersection);
 
+  bool has_frame() { return has_frame_; }
+
  protected:
   friend class RenderWidgetHostView;
   friend class RenderWidgetHostViewChildFrameTest;
   friend class RenderWidgetHostViewGuestSurfaceTest;
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewChildFrameTest,
+                           ForwardsBeginFrameAcks);
 
   explicit RenderWidgetHostViewChildFrame(RenderWidgetHost* widget);
   void Init();
 
-  virtual bool ShouldCreateNewSurfaceId(uint32_t compositor_frame_sink_id,
-                                        const cc::CompositorFrame& frame);
-
-  void ProcessCompositorFrame(uint32_t compositor_frame_sink_id,
+  void ProcessCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                               cc::CompositorFrame frame);
 
   void SendSurfaceInfoToEmbedder();
@@ -213,11 +221,9 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   cc::FrameSinkId frame_sink_id_;
 
   // Surface-related state.
-  std::unique_ptr<cc::LocalSurfaceIdAllocator> id_allocator_;
   std::unique_ptr<cc::CompositorFrameSinkSupport> support_;
   cc::LocalSurfaceId local_surface_id_;
   uint32_t next_surface_sequence_;
-  uint32_t last_compositor_frame_sink_id_;
   gfx::Size current_surface_size_;
   float current_surface_scale_factor_;
   gfx::Rect last_screen_rect_;
@@ -245,6 +251,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void CreateCompositorFrameSinkSupport();
   void ResetCompositorFrameSinkSupport();
 
+  virtual bool HasEmbedderChanged();
+
   using FrameSwappedCallbackList = std::deque<std::unique_ptr<base::Closure>>;
   // Since frame-drawn callbacks are "fire once", we use std::deque to make
   // it convenient to swap() when processing the list.
@@ -252,6 +260,13 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // The surface client ID of the parent RenderWidgetHostView.  0 if none.
   cc::FrameSinkId parent_frame_sink_id_;
+
+  bool has_frame_ = false;
+  cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+      nullptr;
+
+  // The background color of the widget.
+  SkColor background_color_;
 
   base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);

@@ -413,6 +413,9 @@ bool DrmDevice::Initialize(bool use_atomic) {
   if (use_atomic && SetCapability(DRM_CLIENT_CAP_ATOMIC, 1))
     plane_manager_.reset(new HardwareDisplayPlaneManagerAtomic());
 
+  LOG_IF(WARNING, use_atomic && !plane_manager_)
+      << "Drm atomic requested but capabilities don't allow it. Falling back "
+         "to legacy page flip.";
   if (!plane_manager_)
     plane_manager_.reset(new HardwareDisplayPlaneManagerLegacy());
   if (!plane_manager_->Initialize(this)) {
@@ -675,18 +678,6 @@ bool DrmDevice::CommitProperties(drmModeAtomicReq* properties,
 
 bool DrmDevice::SetCapability(uint64_t capability, uint64_t value) {
   DCHECK(file_.IsValid());
-
-#ifndef DRM_IOCTL_SET_CLIENT_CAP
-// drmSetClientCap was introduced in a later version of libdrm than the wheezy
-// sysroot supplies.
-// TODO(thomasanderson): Remove this when support for the wheezy sysroot is
-// dropped in favor of jessie.
-#define DRM_IOCTL_SET_CLIENT_CAP DRM_IOW(0x0d, struct drm_set_client_cap)
-  struct drm_set_client_cap {
-    __u64 capability;
-    __u64 value;
-  };
-#endif
 
   struct drm_set_client_cap cap = {capability, value};
   return !drmIoctl(file_.GetPlatformFile(), DRM_IOCTL_SET_CLIENT_CAP, &cap);

@@ -13,7 +13,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
-#include "base/template_util.h"
 
 namespace ntp_snippets {
 namespace metrics {
@@ -76,14 +75,15 @@ enum HistogramCategories {
   PHYSICAL_WEB_PAGES,
   FOREIGN_TABS,
   ARTICLES,
+  READING_LIST,
   // Insert new values here!
   COUNT
 };
 
 HistogramCategories GetHistogramCategory(Category category) {
   static_assert(
-      std::is_same<decltype(category.id()), typename base::underlying_type<
-                                                KnownCategories>::type>::value,
+      std::is_same<decltype(category.id()),
+                   typename std::underlying_type<KnownCategories>::type>::value,
       "KnownCategories must have the same underlying type as category.id()");
   // Note: Since the underlying type of KnownCategories is int, it's legal to
   // cast from int to KnownCategories, even if the given value isn't listed in
@@ -103,6 +103,8 @@ HistogramCategories GetHistogramCategory(Category category) {
       return HistogramCategories::FOREIGN_TABS;
     case KnownCategories::ARTICLES:
       return HistogramCategories::ARTICLES;
+    case KnownCategories::READING_LIST:
+      return HistogramCategories::READING_LIST;
     case KnownCategories::LOCAL_CATEGORIES_COUNT:
     case KnownCategories::REMOTE_CATEGORIES_OFFSET:
       NOTREACHED();
@@ -131,6 +133,8 @@ std::string GetCategorySuffix(Category category) {
       return "Articles";
     case HistogramCategories::EXPERIMENTAL:
       return "Experimental";
+    case HistogramCategories::READING_LIST:
+      return "ReadingList";
     case HistogramCategories::COUNT:
       NOTREACHED();
       break;
@@ -355,6 +359,11 @@ void OnCategoryDismissed(Category category) {
   UMA_HISTOGRAM_ENUMERATION(kHistogramCategoryDismissed,
                             GetHistogramCategory(category),
                             HistogramCategories::COUNT);
+}
+
+void RecordRemoteSuggestionsProviderState(bool enabled) {
+  UMA_HISTOGRAM_BOOLEAN(
+      "NewTabPage.ContentSuggestions.Preferences.RemoteSuggestions", enabled);
 }
 
 }  // namespace metrics

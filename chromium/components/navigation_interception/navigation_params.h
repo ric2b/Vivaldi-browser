@@ -21,9 +21,10 @@ class NavigationParams {
                    ui::PageTransition page_transition_type,
                    bool is_redirect,
                    bool is_external_protocol,
-                   bool is_main_frame);
-  NavigationParams(const NavigationParams& other);
-  void operator=(const NavigationParams& rhs);
+                   bool is_main_frame,
+                   const GURL& base_url_for_data_url);
+  NavigationParams(const NavigationParams&);
+  NavigationParams& operator=(const NavigationParams&) = delete;
 
   const GURL& url() const { return url_; }
   GURL& url() { return url_; }
@@ -34,9 +35,9 @@ class NavigationParams {
   bool is_redirect() const { return is_redirect_; }
   bool is_external_protocol() const { return is_external_protocol_; }
   bool is_main_frame() const { return is_main_frame_; }
+  const GURL& base_url_for_data_url() const { return base_url_for_data_url_; }
 
  private:
-  void Assign(const NavigationParams& other);
 
   GURL url_;
   content::Referrer referrer_;
@@ -46,6 +47,7 @@ class NavigationParams {
   bool is_redirect_;
   bool is_external_protocol_;
   bool is_main_frame_;
+  GURL base_url_for_data_url_;
 };
 
 }  // namespace navigation_interception

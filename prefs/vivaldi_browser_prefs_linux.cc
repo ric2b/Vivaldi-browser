@@ -15,6 +15,9 @@ void RegisterPlatformPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(
       vivaldiprefs::kHideMouseCursorInFullscreen, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiHasDesktopWallpaperProtocol, false);
 }
 
 }  // namespace vivaldi

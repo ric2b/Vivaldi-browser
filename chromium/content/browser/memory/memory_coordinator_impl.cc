@@ -9,9 +9,10 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
+#include "content/browser/memory/memory_condition_observer.h"
 #include "content/browser/memory/memory_monitor.h"
-#include "content/browser/memory/memory_state_updater.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -22,22 +23,69 @@
 
 namespace content {
 
+using MemoryState = base::MemoryState;
+
 namespace {
 
-mojom::MemoryState ToMojomMemoryState(base::MemoryState state) {
+const int kDefaultMinimumTransitionPeriodSeconds = 30;
+const int kDefaultBackgroundChildPurgeCandidatePeriodSeconds = 30;
+
+mojom::MemoryState ToMojomMemoryState(MemoryState state) {
   switch (state) {
-    case base::MemoryState::UNKNOWN:
+    case MemoryState::UNKNOWN:
       return mojom::MemoryState::UNKNOWN;
-    case base::MemoryState::NORMAL:
+    case MemoryState::NORMAL:
       return mojom::MemoryState::NORMAL;
-    case base::MemoryState::THROTTLED:
+    case MemoryState::THROTTLED:
       return mojom::MemoryState::THROTTLED;
-    case base::MemoryState::SUSPENDED:
+    case MemoryState::SUSPENDED:
       return mojom::MemoryState::SUSPENDED;
     default:
       NOTREACHED();
       return mojom::MemoryState::UNKNOWN;
   }
+}
+
+const char* MemoryConditionToString(MemoryCondition condition) {
+  switch (condition) {
+    case MemoryCondition::NORMAL:
+      return "normal";
+    case MemoryCondition::WARNING:
+      return "warning";
+    case MemoryCondition::CRITICAL:
+      return "critical";
+  }
+  NOTREACHED();
+  return "N/A";
+}
+
+MemoryState CalculateMemoryStateForProcess(MemoryCondition condition,
+                                           bool is_visible) {
+  // The current heuristics for state calculation:
+  // - Foregrounded(visible) processes: THROTTLED when condition is CRITICAL,
+  //   otherwise NORMAL.
+  // - Backgrounded(invisible) processes: THROTTLED when condition is
+  //   WARNING/CRITICAL, otherwise NORMAL.
+  switch (condition) {
+    case MemoryCondition::NORMAL:
+      return MemoryState::NORMAL;
+    case MemoryCondition::WARNING:
+      return is_visible ? MemoryState::NORMAL : MemoryState::THROTTLED;
+    case MemoryCondition::CRITICAL:
+      return MemoryState::THROTTLED;
+  }
+  NOTREACHED();
+  return MemoryState::NORMAL;
+}
+
+void RecordBrowserPurge(size_t before) {
+  auto metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
+  size_t after = metrics->GetWorkingSetSize();
+  int64_t bytes = static_cast<int64_t>(before) - static_cast<int64_t>(after);
+  if (bytes < 0)
+    bytes = 0;
+  UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Experimental.Browser.PurgedMemory",
+                                bytes / 1024 / 1024);
 }
 
 }  // namespace
@@ -111,14 +159,25 @@ MemoryCoordinatorImpl* MemoryCoordinatorImpl::GetInstance() {
 MemoryCoordinatorImpl::MemoryCoordinatorImpl(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     std::unique_ptr<MemoryMonitor> memory_monitor)
-    : delegate_(GetContentClient()->browser()->GetMemoryCoordinatorDelegate()),
+    : task_runner_(task_runner),
+      delegate_(GetContentClient()->browser()->GetMemoryCoordinatorDelegate()),
       memory_monitor_(std::move(memory_monitor)),
-      state_updater_(base::MakeUnique<MemoryStateUpdater>(this, task_runner)) {
+      condition_observer_(
+          base::MakeUnique<MemoryConditionObserver>(this, task_runner)),
+      tick_clock_(base::MakeUnique<base::DefaultTickClock>()),
+      minimum_state_transition_period_(base::TimeDelta::FromSeconds(
+          kDefaultMinimumTransitionPeriodSeconds)) {
   DCHECK(memory_monitor_.get());
   base::MemoryCoordinatorProxy::SetMemoryCoordinator(this);
+
+  // Force the "memory_coordinator" category to show up in the trace viewer.
+  base::trace_event::TraceLog::GetCategoryGroupEnabled(
+      TRACE_DISABLED_BY_DEFAULT("memory_coordinator"));
 }
 
-MemoryCoordinatorImpl::~MemoryCoordinatorImpl() {}
+MemoryCoordinatorImpl::~MemoryCoordinatorImpl() {
+  base::MemoryCoordinatorProxy::SetMemoryCoordinator(nullptr);
+}
 
 void MemoryCoordinatorImpl::Start() {
   DCHECK(CalledOnValidThread());
@@ -127,8 +186,15 @@ void MemoryCoordinatorImpl::Start() {
   notification_registrar_.Add(
       this, NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
       NotificationService::AllBrowserContextsAndSources());
-  last_state_change_ = base::TimeTicks::Now();
-  state_updater_->ScheduleUpdateState(base::TimeDelta());
+  condition_observer_->ScheduleUpdateCondition(base::TimeDelta());
+}
+
+void MemoryCoordinatorImpl::OnForegrounded() {
+  condition_observer_->OnForegrounded();
+}
+
+void MemoryCoordinatorImpl::OnBackgrounded() {
+  condition_observer_->OnBackgrounded();
 }
 
 void MemoryCoordinatorImpl::CreateHandle(
@@ -158,7 +224,7 @@ bool MemoryCoordinatorImpl::SetChildMemoryState(int render_process_id,
   if (!iter->second.handle->child().is_bound())
     return false;
 
-  memory_state = OverrideGlobalState(memory_state, iter->second);
+  memory_state = OverrideState(memory_state, iter->second);
 
   // A nop doesn't need to be sent, but is considered successful.
   if (iter->second.memory_state == memory_state)
@@ -175,11 +241,11 @@ bool MemoryCoordinatorImpl::SetChildMemoryState(int render_process_id,
   return true;
 }
 
-base::MemoryState MemoryCoordinatorImpl::GetChildMemoryState(
+MemoryState MemoryCoordinatorImpl::GetChildMemoryState(
     int render_process_id) const {
   auto iter = children_.find(render_process_id);
   if (iter == children_.end())
-    return base::MemoryState::UNKNOWN;
+    return MemoryState::UNKNOWN;
   return iter->second.memory_state;
 }
 
@@ -188,30 +254,14 @@ void MemoryCoordinatorImpl::RecordMemoryPressure(
   // TODO(bashi): Record memory pressure level.
 }
 
-base::MemoryState MemoryCoordinatorImpl::GetGlobalMemoryState() const {
-  return current_state_;
+MemoryState MemoryCoordinatorImpl::GetCurrentMemoryState() const {
+  return browser_memory_state_;
 }
 
-base::MemoryState MemoryCoordinatorImpl::GetCurrentMemoryState() const {
-  // SUSPENDED state may not make sense to the browser process. Use THROTTLED
-  // instead when the global state is SUSPENDED.
-  // TODO(bashi): Maybe worth considering another state for the browser.
-  return current_state_ == MemoryState::SUSPENDED ? MemoryState::THROTTLED
-                                                  : current_state_;
-}
-
-void MemoryCoordinatorImpl::SetCurrentMemoryStateForTesting(
-    base::MemoryState memory_state) {
-  // This changes the current state temporariy for testing. The state will be
-  // updated 1 minute later.
-  ForceSetGlobalState(memory_state, base::TimeDelta::FromMinutes(1));
-}
-
-void MemoryCoordinatorImpl::ForceSetGlobalState(base::MemoryState new_state,
-                                                base::TimeDelta duration) {
-  DCHECK(new_state != MemoryState::UNKNOWN);
-  ChangeStateIfNeeded(current_state_, new_state);
-  state_updater_->ScheduleUpdateState(duration);
+void MemoryCoordinatorImpl::ForceSetMemoryCondition(MemoryCondition condition,
+                                                    base::TimeDelta duration) {
+  UpdateConditionIfNeeded(condition);
+  condition_observer_->ScheduleUpdateCondition(duration);
 }
 
 void MemoryCoordinatorImpl::Observe(int type,
@@ -222,21 +272,17 @@ void MemoryCoordinatorImpl::Observe(int type,
   RenderProcessHost* process = render_widget_host->GetProcess();
   if (!process)
     return;
-  auto iter = children().find(process->GetID());
-  if (iter == children().end())
-    return;
-  iter->second.is_visible = *Details<bool>(details).ptr();
-  auto new_state = GetGlobalMemoryState();
-  SetChildMemoryState(iter->first, new_state);
+  bool is_visible = *Details<bool>(details).ptr();
+  OnChildVisibilityChanged(process->GetID(), is_visible);
 }
 
-base::MemoryState MemoryCoordinatorImpl::GetStateForProcess(
+MemoryState MemoryCoordinatorImpl::GetStateForProcess(
     base::ProcessHandle handle) {
   DCHECK(CalledOnValidThread());
   if (handle == base::kNullProcessHandle)
     return MemoryState::UNKNOWN;
   if (handle == base::GetCurrentProcessHandle())
-    return GetCurrentMemoryState();
+    return browser_memory_state_;
 
   for (auto& iter : children()) {
     auto* render_process_host = GetRenderProcessHost(iter.first);
@@ -246,22 +292,47 @@ base::MemoryState MemoryCoordinatorImpl::GetStateForProcess(
   return MemoryState::UNKNOWN;
 }
 
-bool MemoryCoordinatorImpl::ChangeStateIfNeeded(base::MemoryState prev_state,
-                                                base::MemoryState next_state) {
+void MemoryCoordinatorImpl::UpdateConditionIfNeeded(
+    MemoryCondition next_condition) {
   DCHECK(CalledOnValidThread());
-  if (prev_state == next_state)
-    return false;
 
-  last_state_change_ = base::TimeTicks::Now();
-  current_state_ = next_state;
+  if (next_condition == MemoryCondition::WARNING)
+    OnWarningCondition();
+  else if (next_condition == MemoryCondition::CRITICAL)
+    OnCriticalCondition();
 
-  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("memory-infra"),
-               "MemoryCoordinatorImpl::ChangeStateIfNeeded", "prev",
-               MemoryStateToString(prev_state), "next",
-               MemoryStateToString(next_state));
-  NotifyStateToClients();
-  NotifyStateToChildren();
-  return true;
+  if (memory_condition_ == next_condition)
+    return;
+
+  MemoryCondition prev_condition = memory_condition_;
+  memory_condition_ = next_condition;
+
+  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("memory_coordinator"),
+               "MemoryCoordinatorImpl::UpdateConditionIfNeeded", "prev",
+               MemoryConditionToString(prev_condition), "next",
+               MemoryConditionToString(next_condition));
+
+  // TODO(bashi): Following actions are tentative. We might want to prioritize
+  // processes and handle them one-by-one.
+
+  if (next_condition == MemoryCondition::NORMAL) {
+    // Set NORMAL state to all clients/processes.
+    UpdateBrowserStateAndNotifyStateToClients(MemoryState::NORMAL);
+    NotifyStateToChildren(MemoryState::NORMAL);
+  } else if (next_condition == MemoryCondition::WARNING) {
+    // Set NORMAL state to foreground proceses and clients in the browser
+    // process. Set THROTTLED state to background processes.
+    UpdateBrowserStateAndNotifyStateToClients(MemoryState::NORMAL);
+    for (auto& iter : children()) {
+      auto state =
+          iter.second.is_visible ? MemoryState::NORMAL : MemoryState::THROTTLED;
+      SetChildMemoryState(iter.first, state);
+    }
+  } else if (next_condition == MemoryCondition::CRITICAL) {
+    // Set THROTTLED state to all clients/processes.
+    UpdateBrowserStateAndNotifyStateToClients(MemoryState::THROTTLED);
+    NotifyStateToChildren(MemoryState::THROTTLED);
+  }
 }
 
 void MemoryCoordinatorImpl::DiscardTab() {
@@ -291,6 +362,11 @@ void MemoryCoordinatorImpl::AddChildForTesting(
   CreateChildInfoMapEntry(dummy_render_process_id, std::move(handle));
 }
 
+void MemoryCoordinatorImpl::SetTickClockForTesting(
+    std::unique_ptr<base::TickClock> tick_clock) {
+  tick_clock_ = std::move(tick_clock);
+}
+
 void MemoryCoordinatorImpl::OnConnectionError(int render_process_id) {
   children_.erase(render_process_id);
 }
@@ -308,14 +384,41 @@ bool MemoryCoordinatorImpl::CanSuspendRenderer(int render_process_id) {
 }
 
 void MemoryCoordinatorImpl::OnChildAdded(int render_process_id) {
-  // Populate the global state as an initial state of a newly created process.
-  auto new_state = GetGlobalMemoryState();
+  RenderProcessHost* render_process_host =
+      GetRenderProcessHost(render_process_id);
+  if (!render_process_host)
+    return;
+
+  // Populate an initial state of a newly created process.
+  // TODO(bashi): IsProcessBackgrounded() may return true even when tabs in the
+  // renderer process are invisible (e.g. restoring tabs all at once).
+  // Figure out a better way to set visibility.
+  OnChildVisibilityChanged(render_process_id,
+                           !render_process_host->IsProcessBackgrounded());
+}
+
+void MemoryCoordinatorImpl::OnChildVisibilityChanged(int render_process_id,
+                                                     bool is_visible) {
+  auto iter = children().find(render_process_id);
+  if (iter == children().end())
+    return;
+
+  iter->second.is_visible = is_visible;
+  if (!is_visible) {
+    // A backgrounded process becomes a candidate for purging memory when
+    // the process remains backgrounded for a certian period of time.
+    iter->second.can_purge_after =
+        tick_clock_->NowTicks() +
+        base::TimeDelta::FromSeconds(
+            kDefaultBackgroundChildPurgeCandidatePeriodSeconds);
+  }
+  MemoryState new_state =
+      CalculateMemoryStateForProcess(GetMemoryCondition(), is_visible);
   SetChildMemoryState(render_process_id, new_state);
 }
 
-base::MemoryState MemoryCoordinatorImpl::OverrideGlobalState(
-    MemoryState memory_state,
-    const ChildInfo& child) {
+MemoryState MemoryCoordinatorImpl::OverrideState(MemoryState memory_state,
+                                                 const ChildInfo& child) {
   // We don't suspend foreground renderers. Throttle them instead.
   if (child.is_visible && memory_state == MemoryState::SUSPENDED)
     return MemoryState::THROTTLED;
@@ -343,16 +446,98 @@ void MemoryCoordinatorImpl::CreateChildInfoMapEntry(
   child_info.handle = std::move(handle);
 }
 
-void MemoryCoordinatorImpl::NotifyStateToClients() {
-  auto state = GetCurrentMemoryState();
+void MemoryCoordinatorImpl::UpdateBrowserStateAndNotifyStateToClients(
+    MemoryState memory_state) {
+  if (memory_state == browser_memory_state_)
+    return;
+
+  base::TimeTicks now = tick_clock_->NowTicks();
+  base::TimeDelta elapsed = now - last_state_change_;
+  if (!last_state_change_.is_null() &&
+      (elapsed < minimum_state_transition_period_)) {
+    base::TimeDelta delay = minimum_state_transition_period_ - elapsed +
+                            base::TimeDelta::FromSeconds(1);
+    delayed_browser_memory_state_setter_.Reset(base::Bind(
+        &MemoryCoordinatorImpl::UpdateBrowserStateAndNotifyStateToClients,
+        base::Unretained(this), memory_state));
+    task_runner_->PostDelayedTask(
+        FROM_HERE, delayed_browser_memory_state_setter_.callback(), delay);
+    return;
+  }
+
+  if (!delayed_browser_memory_state_setter_.IsCancelled())
+    delayed_browser_memory_state_setter_.Cancel();
+
+  last_state_change_ = now;
+  browser_memory_state_ = memory_state;
+  NotifyStateToClients(memory_state);
+}
+
+void MemoryCoordinatorImpl::NotifyStateToClients(MemoryState state) {
   base::MemoryCoordinatorClientRegistry::GetInstance()->Notify(state);
 }
 
-void MemoryCoordinatorImpl::NotifyStateToChildren() {
+void MemoryCoordinatorImpl::NotifyStateToChildren(MemoryState state) {
   // It's OK to call SetChildMemoryState() unconditionally because it checks
   // whether this state transition is valid.
   for (auto& iter : children())
-    SetChildMemoryState(iter.first, current_state_);
+    SetChildMemoryState(iter.first, state);
+}
+
+void MemoryCoordinatorImpl::OnWarningCondition() {
+  TryToPurgeMemoryFromChildren(PurgeTarget::BACKGROUNDED);
+}
+
+void MemoryCoordinatorImpl::OnCriticalCondition() {
+  DiscardTab();
+
+  // Prefer to purge memory from child processes than browser process because
+  // we prioritize the brower process.
+  if (TryToPurgeMemoryFromChildren(PurgeTarget::ALL))
+    return;
+
+  TryToPurgeMemoryFromBrowser();
+}
+
+bool MemoryCoordinatorImpl::TryToPurgeMemoryFromChildren(PurgeTarget target) {
+  base::TimeTicks now = tick_clock_->NowTicks();
+  // TODO(bashi): Better to sort child processes based on their priorities.
+  for (auto& iter : children()) {
+    MemoryCoordinatorHandleImpl* handle = iter.second.handle.get();
+    if (!handle || !handle->child() || !handle->child().is_bound())
+      continue;
+    if (iter.second.is_visible && target == PurgeTarget::BACKGROUNDED)
+      continue;
+    if (!iter.second.can_purge_after.is_null() &&
+        iter.second.can_purge_after > now)
+      continue;
+
+    // Set |can_purge_after| to the maximum value to suppress another purge
+    // request until the child process goes foreground and then goes background
+    // again.
+    iter.second.can_purge_after = base::TimeTicks::Max();
+    handle->child()->PurgeMemory();
+    return true;
+  }
+  return false;
+}
+
+bool MemoryCoordinatorImpl::TryToPurgeMemoryFromBrowser() {
+  base::TimeTicks now = tick_clock_->NowTicks();
+  if (can_purge_after_ > now)
+    return false;
+
+  auto metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
+  size_t before = metrics->GetWorkingSetSize();
+  task_runner_->PostDelayedTask(FROM_HERE,
+                                base::Bind(&RecordBrowserPurge, before),
+                                base::TimeDelta::FromSeconds(2));
+
+  // Suppress purging in the browser process until a certain period of time is
+  // passed.
+  can_purge_after_ = now + base::TimeDelta::FromMinutes(2);
+  base::MemoryCoordinatorClientRegistry::GetInstance()->PurgeMemory();
+  return true;
 }
 
 MemoryCoordinatorImpl::ChildInfo::ChildInfo() {}

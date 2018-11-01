@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/locales.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 
@@ -92,7 +93,6 @@ source_set("unittests") {
 
 grit("resources") {
   source = "//chromecast/app/resources/shell_resources.grd"
-  use_qualified_include = true
 
   resource_ids = "//chromecast/app/resources/resource_ids"
 
@@ -106,64 +106,36 @@ grit("chromecast_settings") {
   source = "//chromecast/app/resources/chromecast_settings.grd"
   resource_ids = "//chromecast/app/resources/resource_ids"
 
-  # TODO(thakis): Consider removing this in favor of the default directory.
-  output_dir = "$root_gen_dir/chromecast_strings"
-
   outputs = [
     "grit/chromecast_settings.h",
-    "chromecast_settings_am.pak",
-    "chromecast_settings_ar.pak",
-    "chromecast_settings_bg.pak",
-    "chromecast_settings_bn.pak",
-    "chromecast_settings_ca.pak",
-    "chromecast_settings_cs.pak",
-    "chromecast_settings_da.pak",
-    "chromecast_settings_de.pak",
-    "chromecast_settings_el.pak",
-    "chromecast_settings_en-GB.pak",
-    "chromecast_settings_en-US.pak",
-    "chromecast_settings_es.pak",
-    "chromecast_settings_es-419.pak",
-    "chromecast_settings_et.pak",
-    "chromecast_settings_fa.pak",
-    "chromecast_settings_fake-bidi.pak",
-    "chromecast_settings_fi.pak",
-    "chromecast_settings_fil.pak",
-    "chromecast_settings_fr.pak",
-    "chromecast_settings_gu.pak",
-    "chromecast_settings_he.pak",
-    "chromecast_settings_hi.pak",
-    "chromecast_settings_hr.pak",
-    "chromecast_settings_hu.pak",
-    "chromecast_settings_id.pak",
-    "chromecast_settings_it.pak",
-    "chromecast_settings_ja.pak",
-    "chromecast_settings_kn.pak",
-    "chromecast_settings_ko.pak",
-    "chromecast_settings_lt.pak",
-    "chromecast_settings_lv.pak",
-    "chromecast_settings_ml.pak",
-    "chromecast_settings_mr.pak",
-    "chromecast_settings_ms.pak",
-    "chromecast_settings_nl.pak",
-    "chromecast_settings_nb.pak",
-    "chromecast_settings_pl.pak",
-    "chromecast_settings_pt-BR.pak",
-    "chromecast_settings_pt-PT.pak",
-    "chromecast_settings_ro.pak",
-    "chromecast_settings_ru.pak",
-    "chromecast_settings_sk.pak",
-    "chromecast_settings_sl.pak",
-    "chromecast_settings_sr.pak",
-    "chromecast_settings_sv.pak",
-    "chromecast_settings_sw.pak",
-    "chromecast_settings_ta.pak",
-    "chromecast_settings_te.pak",
-    "chromecast_settings_th.pak",
-    "chromecast_settings_tr.pak",
-    "chromecast_settings_uk.pak",
-    "chromecast_settings_vi.pak",
-    "chromecast_settings_zh-CN.pak",
-    "chromecast_settings_zh-TW.pak",
+  ]
+  foreach(locale, locales_with_fake_bidi) {
+    outputs += [ "chromecast_settings_${locale}.pak" ]
+  }
+
+  deps = [
+    ":verify_cast_locales",
+  ]
+}
+
+# This target ensures that Chromecast developers are notified when locales
+# change. If this target is breaking the build, the CAST_LOCALES list in
+# //chromecast/app/verify_cast_locales.py must be updated to match
+# |locales_with_fake_bidi|. Please see that file for more details. This action
+# will be run on fresh builds, and whenever |locales_with_fake_bidi| is updated.
+action("verify_cast_locales") {
+  script = "//chromecast/app/verify_cast_locales.py"
+
+  # This file will be stamped on success, preventing an unnecessary rebuild.
+  stamp_file = "$target_gen_dir/cast_locales_verified"
+  args = [
+    "-s",
+    rebase_path(stamp_file, "$root_out_dir"),
+  ]
+
+  args += locales_with_fake_bidi
+
+  outputs = [
+    stamp_file,
   ]
 }

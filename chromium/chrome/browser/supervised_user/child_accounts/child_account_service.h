@@ -82,6 +82,7 @@ class ChildAccountService : public KeyedService,
 
   // AccountTrackerService::Observer implementation.
   void OnAccountUpdated(const AccountInfo& info) override;
+  void OnAccountRemoved(const AccountInfo& info) override;
 
   // FamilyInfoFetcher::Consumer implementation.
   void OnGetFamilyMembersSuccess(

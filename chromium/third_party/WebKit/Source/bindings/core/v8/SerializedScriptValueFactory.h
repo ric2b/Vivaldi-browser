@@ -7,8 +7,8 @@
 
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/CoreExport.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -19,9 +19,9 @@ class CORE_EXPORT SerializedScriptValueFactory {
  public:
   // SerializedScriptValueFactory::initialize() should be invoked when Blink is
   // initialized, i.e. initialize() in WebKit.cpp.
-  static void initialize(SerializedScriptValueFactory* newFactory) {
-    DCHECK(!m_instance);
-    m_instance = newFactory;
+  static void Initialize(SerializedScriptValueFactory* new_factory) {
+    DCHECK(!instance_);
+    instance_ = new_factory;
   }
 
  protected:
@@ -34,31 +34,31 @@ class CORE_EXPORT SerializedScriptValueFactory {
   // be thrown using v8::ThrowException(), and sets |didThrow|. In this case
   // the caller must not invoke any V8 operations until control returns to
   // V8. When serialization is successful, |didThrow| is false.
-  virtual PassRefPtr<SerializedScriptValue> create(v8::Isolate*,
-                                                   v8::Local<v8::Value>,
-                                                   Transferables*,
-                                                   WebBlobInfoArray*,
-                                                   ExceptionState&);
+  virtual PassRefPtr<SerializedScriptValue> Create(
+      v8::Isolate*,
+      v8::Local<v8::Value>,
+      const SerializedScriptValue::SerializeOptions&,
+      ExceptionState&);
 
-  virtual v8::Local<v8::Value> deserialize(SerializedScriptValue*,
-                                           v8::Isolate*,
-                                           MessagePortArray*,
-                                           const WebBlobInfoArray*);
+  virtual v8::Local<v8::Value> Deserialize(
+      SerializedScriptValue*,
+      v8::Isolate*,
+      const SerializedScriptValue::DeserializeOptions&);
 
   // Following methods are expected to be called in
   // SerializedScriptValueFactory{ForModules}.
   SerializedScriptValueFactory() {}
 
  private:
-  static SerializedScriptValueFactory& instance() {
-    if (!m_instance) {
+  static SerializedScriptValueFactory& Instance() {
+    if (!instance_) {
       NOTREACHED();
-      m_instance = new SerializedScriptValueFactory;
+      instance_ = new SerializedScriptValueFactory;
     }
-    return *m_instance;
+    return *instance_;
   }
 
-  static SerializedScriptValueFactory* m_instance;
+  static SerializedScriptValueFactory* instance_;
 };
 
 }  // namespace blink

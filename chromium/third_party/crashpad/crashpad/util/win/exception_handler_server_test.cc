@@ -143,10 +143,11 @@ TEST_F(ExceptionHandlerServerTest, StopWhileConnected) {
 
 std::wstring ReadWString(FileHandle handle) {
   size_t length = 0;
-  EXPECT_TRUE(LoggingReadFile(handle, &length, sizeof(length)));
+  EXPECT_TRUE(LoggingReadFileExactly(handle, &length, sizeof(length)));
   std::wstring str(length, L'\0');
   if (length > 0) {
-    EXPECT_TRUE(LoggingReadFile(handle, &str[0], length * sizeof(str[0])));
+    EXPECT_TRUE(
+        LoggingReadFileExactly(handle, &str[0], length * sizeof(str[0])));
   }
   return str;
 }
@@ -202,9 +203,9 @@ TEST_F(ExceptionHandlerServerTest, MultipleConnections) {
     WriteWString(handles_2->write.get(), pipe_name());
     WriteWString(handles_3->write.get(), pipe_name());
 
-    ASSERT_EQ(L"OK", ReadWString(handles_3->read.get()));
-    ASSERT_EQ(L"OK", ReadWString(handles_2->read.get()));
-    ASSERT_EQ(L"OK", ReadWString(handles_1->read.get()));
+    ASSERT_EQ(ReadWString(handles_3->read.get()), L"OK");
+    ASSERT_EQ(ReadWString(handles_2->read.get()), L"OK");
+    ASSERT_EQ(ReadWString(handles_1->read.get()), L"OK");
   }
 }
 

@@ -9,8 +9,9 @@
 
 namespace blink {
 
-struct WebPresentationSessionInfo;
 class WebPresentationConnection;
+struct WebPresentationInfo;
+enum class WebPresentationConnectionState;
 
 // The delegate Blink provides to WebPresentationReceiverClient in order to get
 // updates.
@@ -19,8 +20,16 @@ class BLINK_PLATFORM_EXPORT WebPresentationReceiver {
   virtual ~WebPresentationReceiver() = default;
 
   // Called when receiver page gets an incoming connection.
-  virtual WebPresentationConnection* onReceiverConnectionAvailable(
-      const WebPresentationSessionInfo&) = 0;
+  virtual WebPresentationConnection* OnReceiverConnectionAvailable(
+      const WebPresentationInfo&) = 0;
+
+  // Called when receiver page gets destroyed.
+  // TODO: Rename to onReceiverTerminated?
+  virtual void DidChangeConnectionState(WebPresentationConnectionState) = 0;
+
+  // Called when any PresentationConnection object on receiver page invokes
+  // connnection.terminate().
+  virtual void TerminateConnection() = 0;
 };
 
 }  // namespace blink

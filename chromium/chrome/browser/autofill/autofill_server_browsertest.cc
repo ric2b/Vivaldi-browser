@@ -114,7 +114,7 @@ IN_PROC_BROWSER_TEST_F(AutofillServerTest,
   // Load the test page. Expect a query request upon loading the page.
   const char kDataURIPrefix[] = "data:text/html;charset=utf-8,";
   const char kFormHtml[] =
-      "<form id='test_form'>"
+      "<form id='test_form' action='about:blank'>"
       "  <input id='one'>"
       "  <input id='two' autocomplete='off'>"
       "  <input id='three'>"
@@ -173,8 +173,8 @@ IN_PROC_BROWSER_TEST_F(AutofillServerTest,
   WindowedNetworkObserver upload_network_observer(expected_upload_string);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  content::SimulateMouseClick(
-      web_contents, 0, blink::WebMouseEvent::Button::Left);
+  content::SimulateMouseClick(web_contents, 0,
+                              blink::WebMouseEvent::Button::kLeft);
   upload_network_observer.Wait();
 }
 

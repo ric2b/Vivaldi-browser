@@ -522,7 +522,10 @@ MockGLInterface::Mock_glCopyBufferSubData(GLenum readTarget,
 
 void GL_BINDING_CALL MockGLInterface::Mock_glCopySubTextureCHROMIUM(
     GLuint sourceId,
+    GLint sourceLevel,
+    GLenum destTarget,
     GLuint destId,
+    GLint destLevel,
     GLint xoffset,
     GLint yoffset,
     GLint x,
@@ -534,8 +537,9 @@ void GL_BINDING_CALL MockGLInterface::Mock_glCopySubTextureCHROMIUM(
     GLboolean unpackUnmultiplyAlpha) {
   MakeFunctionUnique("glCopySubTextureCHROMIUM");
   interface_->CopySubTextureCHROMIUM(
-      sourceId, destId, xoffset, yoffset, x, y, width, height, unpackFlipY,
-      unpackPremultiplyAlpha, unpackUnmultiplyAlpha);
+      sourceId, sourceLevel, destTarget, destId, destLevel, xoffset, yoffset, x,
+      y, width, height, unpackFlipY, unpackPremultiplyAlpha,
+      unpackUnmultiplyAlpha);
 }
 
 void GL_BINDING_CALL
@@ -581,16 +585,19 @@ void GL_BINDING_CALL MockGLInterface::Mock_glCopyTexSubImage3D(GLenum target,
 
 void GL_BINDING_CALL
 MockGLInterface::Mock_glCopyTextureCHROMIUM(GLuint sourceId,
+                                            GLint sourceLevel,
+                                            GLenum destTarget,
                                             GLuint destId,
+                                            GLint destLevel,
                                             GLint internalFormat,
                                             GLenum destType,
                                             GLboolean unpackFlipY,
                                             GLboolean unpackPremultiplyAlpha,
                                             GLboolean unpackUnmultiplyAlpha) {
   MakeFunctionUnique("glCopyTextureCHROMIUM");
-  interface_->CopyTextureCHROMIUM(sourceId, destId, internalFormat, destType,
-                                  unpackFlipY, unpackPremultiplyAlpha,
-                                  unpackUnmultiplyAlpha);
+  interface_->CopyTextureCHROMIUM(
+      sourceId, sourceLevel, destTarget, destId, destLevel, internalFormat,
+      destType, unpackFlipY, unpackPremultiplyAlpha, unpackUnmultiplyAlpha);
 }
 
 void GL_BINDING_CALL MockGLInterface::Mock_glCoverFillPathInstancedNV(
@@ -2844,10 +2851,12 @@ MockGLInterface::Mock_glReadPixelsRobustANGLE(GLint x,
                                               GLenum type,
                                               GLsizei bufSize,
                                               GLsizei* length,
+                                              GLsizei* columns,
+                                              GLsizei* rows,
                                               void* pixels) {
   MakeFunctionUnique("glReadPixelsRobustANGLE");
   interface_->ReadPixelsRobustANGLE(x, y, width, height, format, type, bufSize,
-                                    length, pixels);
+                                    length, columns, rows, pixels);
 }
 
 void GL_BINDING_CALL
@@ -2859,10 +2868,12 @@ MockGLInterface::Mock_glReadnPixelsRobustANGLE(GLint x,
                                                GLenum type,
                                                GLsizei bufSize,
                                                GLsizei* length,
+                                               GLsizei* columns,
+                                               GLsizei* rows,
                                                void* data) {
   MakeFunctionUnique("glReadnPixelsRobustANGLE");
   interface_->ReadnPixelsRobustANGLE(x, y, width, height, format, type, bufSize,
-                                     length, data);
+                                     length, columns, rows, data);
 }
 
 void GL_BINDING_CALL MockGLInterface::Mock_glReleaseShaderCompiler(void) {
@@ -2931,6 +2942,12 @@ MockGLInterface::Mock_glRenderbufferStorageMultisampleIMG(GLenum target,
   MakeFunctionUnique("glRenderbufferStorageMultisampleIMG");
   interface_->RenderbufferStorageMultisampleIMG(target, samples, internalformat,
                                                 width, height);
+}
+
+void GL_BINDING_CALL
+MockGLInterface::Mock_glRequestExtensionANGLE(const char* name) {
+  MakeFunctionUnique("glRequestExtensionANGLE");
+  interface_->RequestExtensionANGLE(name);
 }
 
 void GL_BINDING_CALL MockGLInterface::Mock_glResumeTransformFeedback(void) {
@@ -4723,6 +4740,9 @@ MockGLInterface::GetGLProcAddress(const char* name) {
   if (strcmp(name, "glRenderbufferStorageMultisampleIMG") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glRenderbufferStorageMultisampleIMG);
+  if (strcmp(name, "glRequestExtensionANGLE") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(
+        Mock_glRequestExtensionANGLE);
   if (strcmp(name, "glResumeTransformFeedback") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glResumeTransformFeedback);

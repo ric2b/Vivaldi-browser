@@ -12,40 +12,49 @@
 #include "V8TestPermissiveDictionary.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 
 namespace blink {
 
+static const v8::Eternal<v8::Name>* eternalV8TestPermissiveDictionaryKeys(v8::Isolate* isolate) {
+  static const char* const kKeys[] = {
+    "booleanMember",
+  };
+  return V8PerIsolateData::From(isolate)->FindOrCreateEternalNameCache(
+      kKeys, kKeys, WTF_ARRAY_LENGTH(kKeys));
+}
+
 void V8TestPermissiveDictionary::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, TestPermissiveDictionary& impl, ExceptionState& exceptionState) {
-  if (isUndefinedOrNull(v8Value)) {
+  if (IsUndefinedOrNull(v8Value)) {
     return;
   }
   if (!v8Value->IsObject()) {
     // Do nothing.
     return;
   }
+  v8::Local<v8::Object> v8Object = v8Value.As<v8::Object>();
+  ALLOW_UNUSED_LOCAL(v8Object);
 
+  const v8::Eternal<v8::Name>* keys = eternalV8TestPermissiveDictionaryKeys(isolate);
   v8::TryCatch block(isolate);
-  v8::Local<v8::Object> v8Object;
-  if (!v8Call(v8Value->ToObject(isolate->GetCurrentContext()), v8Object, block)) {
-    exceptionState.rethrowV8Exception(block.Exception());
-    return;
-  }
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   v8::Local<v8::Value> booleanMemberValue;
-  if (!v8Object->Get(isolate->GetCurrentContext(), v8AtomicString(isolate, "booleanMember")).ToLocal(&booleanMemberValue)) {
-    exceptionState.rethrowV8Exception(block.Exception());
+  if (!v8Object->Get(context, keys[0].Get(isolate)).ToLocal(&booleanMemberValue)) {
+    exceptionState.RethrowV8Exception(block.Exception());
     return;
   }
   if (booleanMemberValue.IsEmpty() || booleanMemberValue->IsUndefined()) {
     // Do nothing.
   } else {
-    bool booleanMember = toBoolean(isolate, booleanMemberValue, exceptionState);
-    if (exceptionState.hadException())
+    bool booleanMember = NativeValueTraits<IDLBoolean>::NativeValue(isolate, booleanMemberValue, exceptionState);
+    if (exceptionState.HadException())
       return;
     impl.setBooleanMember(booleanMember);
   }
 }
 
-v8::Local<v8::Value> TestPermissiveDictionary::toV8Impl(v8::Local<v8::Object> creationContext, v8::Isolate* isolate) const {
+v8::Local<v8::Value> TestPermissiveDictionary::ToV8Impl(v8::Local<v8::Object> creationContext, v8::Isolate* isolate) const {
   v8::Local<v8::Object> v8Object = v8::Object::New(isolate);
   if (!toV8TestPermissiveDictionary(*this, v8Object, creationContext, isolate))
     return v8::Undefined(isolate);
@@ -53,15 +62,23 @@ v8::Local<v8::Value> TestPermissiveDictionary::toV8Impl(v8::Local<v8::Object> cr
 }
 
 bool toV8TestPermissiveDictionary(const TestPermissiveDictionary& impl, v8::Local<v8::Object> dictionary, v8::Local<v8::Object> creationContext, v8::Isolate* isolate) {
+  const v8::Eternal<v8::Name>* keys = eternalV8TestPermissiveDictionaryKeys(isolate);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  v8::Local<v8::Value> booleanMemberValue;
+  bool booleanMemberHasValueOrDefault = false;
   if (impl.hasBooleanMember()) {
-    if (!v8CallBoolean(dictionary->CreateDataProperty(isolate->GetCurrentContext(), v8AtomicString(isolate, "booleanMember"), v8Boolean(impl.booleanMember(), isolate))))
-      return false;
+    booleanMemberValue = V8Boolean(impl.booleanMember(), isolate);
+    booleanMemberHasValueOrDefault = true;
+  }
+  if (booleanMemberHasValueOrDefault &&
+      !V8CallBoolean(dictionary->CreateDataProperty(context, keys[0].Get(isolate), booleanMemberValue))) {
+    return false;
   }
 
   return true;
 }
 
-TestPermissiveDictionary NativeValueTraits<TestPermissiveDictionary>::nativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
+TestPermissiveDictionary NativeValueTraits<TestPermissiveDictionary>::NativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
   TestPermissiveDictionary impl;
   V8TestPermissiveDictionary::toImpl(isolate, value, impl, exceptionState);
   return impl;

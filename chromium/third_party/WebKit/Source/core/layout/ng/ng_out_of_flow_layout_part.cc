@@ -22,10 +22,10 @@ namespace {
 bool IsContainingBlockForAbsoluteDescendant(
     const ComputedStyle& container_style,
     const ComputedStyle& descendant_style) {
-  EPosition position = descendant_style.position();
-  bool contains_fixed = container_style.canContainFixedPositionObjects();
+  EPosition position = descendant_style.GetPosition();
+  bool contains_fixed = container_style.CanContainFixedPositionObjects();
   bool contains_absolute =
-      container_style.canContainAbsolutePositionObjects() || contains_fixed;
+      container_style.CanContainAbsolutePositionObjects() || contains_fixed;
 
   return (contains_absolute && position == EPosition::kAbsolute) ||
          (contains_fixed && position == EPosition::kFixed);
@@ -39,14 +39,14 @@ NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
     NGFragmentBuilder* container_builder)
     : container_style_(container_style), container_builder_(container_builder) {
   NGWritingMode writing_mode(
-      FromPlatformWritingMode(container_style_.getWritingMode()));
+      FromPlatformWritingMode(container_style_.GetWritingMode()));
 
   NGBoxStrut borders = ComputeBorders(container_space, container_style_);
   container_border_offset_ =
       NGLogicalOffset{borders.inline_start, borders.block_start};
   container_border_physical_offset_ =
       container_border_offset_.ConvertToPhysical(
-          writing_mode, container_style_.direction(),
+          writing_mode, container_style_.Direction(),
           container_builder_->Size().ConvertToPhysical(writing_mode),
           NGPhysicalSize());
 
@@ -59,7 +59,7 @@ NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
   space_builder.SetAvailableSize(space_size);
   space_builder.SetPercentageResolutionSize(space_size);
   space_builder.SetIsNewFormattingContext(true);
-  space_builder.SetTextDirection(container_style_.direction());
+  space_builder.SetTextDirection(container_style_.Direction());
   container_space_ = space_builder.ToConstraintSpace(writing_mode);
 }
 
@@ -89,8 +89,8 @@ void NGOutOfFlowLayoutPart::Run() {
     }
     // Sweep any descendants that might have been added.
     // This happens when an absolute container has a fixed child.
-    out_of_flow_candidates.clear();
-    out_of_flow_candidate_positions.clear();
+    out_of_flow_candidates.Clear();
+    out_of_flow_candidate_positions.Clear();
     container_builder_->GetAndClearOutOfFlowDescendantCandidates(
         &out_of_flow_candidates, &out_of_flow_candidate_positions);
   }
@@ -105,12 +105,16 @@ RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
   // relative to the container's padding box.
   static_position.offset -= container_border_physical_offset_;
 
-  RefPtr<NGLayoutResult> layout_result = nullptr;
-  Optional<MinAndMaxContentSizes> inline_estimate;
+  // The inline and block estimates are in the descendant's writing mode.
+  Optional<MinMaxContentSize> inline_estimate;
   Optional<LayoutUnit> block_estimate;
 
+  RefPtr<NGLayoutResult> layout_result = nullptr;
+  NGWritingMode descendant_writing_mode(
+      FromPlatformWritingMode(descendant.Style().GetWritingMode()));
+
   if (AbsoluteNeedsChildInlineSize(descendant.Style())) {
-    inline_estimate = descendant.ComputeMinAndMaxContentSizes();
+    inline_estimate = descendant.ComputeMinMaxContentSize();
   }
 
   NGAbsolutePhysicalPosition node_position =
@@ -121,10 +125,9 @@ RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
   if (AbsoluteNeedsChildBlockSize(descendant.Style())) {
     layout_result = GenerateFragment(descendant, block_estimate, node_position);
 
-    // TODO(ikilpatrick): the writing mode switching here looks wrong.
     NGBoxFragment fragment(
-        container_space_->WritingMode(),
-        toNGPhysicalBoxFragment(layout_result->PhysicalFragment().get()));
+        descendant_writing_mode,
+        ToNGPhysicalBoxFragment(layout_result->PhysicalFragment().Get()));
 
     block_estimate = fragment.BlockSize();
   }
@@ -136,8 +139,7 @@ RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
   // Skip this step if we produced a fragment when estimating the block size.
   if (!layout_result) {
     block_estimate =
-        node_position.size.ConvertToLogical(container_space_->WritingMode())
-            .block_size;
+        node_position.size.ConvertToLogical(descendant_writing_mode).block_size;
     layout_result = GenerateFragment(descendant, block_estimate, node_position);
   }
 
@@ -153,35 +155,41 @@ RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
   return layout_result;
 }
 
+// The fragment is generated in one of these two scenarios:
+// 1. To estimate descendant's block size, in this case block_size is
+//    container's available size.
+// 2. To compute final fragment, when block size is known from the absolute
+//    position calculation.
 RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::GenerateFragment(
     NGBlockNode& descendant,
     const Optional<LayoutUnit>& block_estimate,
     const NGAbsolutePhysicalPosition node_position) {
-  // The fragment is generated in one of these two scenarios:
-  // 1. To estimate descendant's block size, in this case block_size is
-  //    container's available size.
-  // 2. To compute final fragment, when block size is known from the absolute
-  //    position calculation.
+  // As the block_estimate is always in the descendant's writing mode, we build
+  // the constraint space in the descendant's writing mode.
+  NGWritingMode writing_mode(
+      FromPlatformWritingMode(descendant.Style().GetWritingMode()));
+  NGLogicalSize container_size(
+      container_space_->AvailableSize()
+          .ConvertToPhysical(container_space_->WritingMode())
+          .ConvertToLogical(writing_mode));
+
   LayoutUnit inline_size =
-      node_position.size.ConvertToLogical(container_space_->WritingMode())
-          .inline_size;
-  LayoutUnit block_size = block_estimate
-                              ? *block_estimate
-                              : container_space_->AvailableSize().block_size;
+      node_position.size.ConvertToLogical(writing_mode).inline_size;
+  LayoutUnit block_size =
+      block_estimate ? *block_estimate : container_size.block_size;
 
   NGLogicalSize available_size{inline_size, block_size};
 
-  NGConstraintSpaceBuilder builder(container_space_->WritingMode());
+  NGConstraintSpaceBuilder builder(writing_mode);
   builder.SetAvailableSize(available_size);
-  builder.SetPercentageResolutionSize(container_space_->AvailableSize());
+  builder.SetPercentageResolutionSize(container_size);
   if (block_estimate)
     builder.SetIsFixedSizeBlock(true);
   builder.SetIsFixedSizeInline(true);
   builder.SetIsNewFormattingContext(true);
-  RefPtr<NGConstraintSpace> space =
-      builder.ToConstraintSpace(container_space_->WritingMode());
+  RefPtr<NGConstraintSpace> space = builder.ToConstraintSpace(writing_mode);
 
-  return descendant.Layout(space.get());
+  return descendant.Layout(space.Get());
 }
 
 }  // namespace blink

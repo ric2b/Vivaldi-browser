@@ -19,6 +19,7 @@
 #include "net/base/privacy_mode.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_stream_factory.h"
+#include "net/log/net_log_source.h"
 #include "net/proxy/proxy_server.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/spdy_session_key.h"
@@ -48,6 +49,8 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
                                    const SSLConfig& server_ssl_config,
                                    const SSLConfig& proxy_ssl_config,
                                    HttpStreamRequest::Delegate* delegate,
+                                   bool enable_ip_based_pooling,
+                                   bool enable_alternative_services,
                                    const NetLogWithSource& net_log) override;
 
   HttpStreamRequest* RequestWebSocketHandshakeStream(
@@ -57,6 +60,8 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       const SSLConfig& proxy_ssl_config,
       HttpStreamRequest::Delegate* delegate,
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
+      bool enable_ip_based_pooling,
+      bool enable_alternative_services,
       const NetLogWithSource& net_log) override;
 
   HttpStreamRequest* RequestBidirectionalStreamImpl(
@@ -65,6 +70,8 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       const SSLConfig& server_ssl_config,
       const SSLConfig& proxy_ssl_config,
       HttpStreamRequest::Delegate* delegate,
+      bool enable_ip_based_pooling,
+      bool enable_alternative_services,
       const NetLogWithSource& net_log) override;
 
   void PreconnectStreams(int num_streams, const HttpRequestInfo& info) override;
@@ -121,6 +128,8 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       HttpStreamRequest::Delegate* delegate,
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
       HttpStreamRequest::StreamType stream_type,
+      bool enable_ip_based_pooling,
+      bool enable_alternative_services,
       const NetLogWithSource& net_log);
 
   // Called when a SpdySession is ready. It will find appropriate Requests and
@@ -132,7 +141,8 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
                              const ProxyInfo& used_proxy_info,
                              bool was_alpn_negotiated,
                              NextProto negotiated_protocol,
-                             bool using_spdy);
+                             bool using_spdy,
+                             NetLogSource source_dependency);
 
   // Called when the Job detects that the endpoint indicated by the
   // Alternate-Protocol does not work. Lets the factory update
@@ -161,12 +171,12 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
   // priorities.
   bool ProxyServerSupportsPriorities(const ProxyInfo& proxy_info) const;
 
-  HttpNetworkSession* const session_;
+  // Adds the count of JobControllers that are not completed to UMA histogram if
+  // the count is a multiple of 100: 100, 200, 400, etc. Break down
+  // JobControllers count based on the type of JobController.
+  void AddJobControllerCountToHistograms();
 
-  // All Requests are handed out to clients. By the time HttpStreamFactoryImpl
-  // is destroyed, all Requests should be deleted (which should remove them from
-  // |request_map_|. The Requests will delete the corresponding job.
-  std::map<const Job*, Request*> request_map_;
+  HttpNetworkSession* const session_;
 
   // All Requests/Preconnects are assigned with a JobController to manage
   // serving Job(s). JobController might outlive Request when Request
@@ -185,6 +195,9 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
   SpdySessionRequestMap spdy_session_request_map_;
 
   const bool for_websockets_;
+
+  // The count of JobControllers that was most recently logged to histograms.
+  size_t last_logged_job_controller_count_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpStreamFactoryImpl);
 };

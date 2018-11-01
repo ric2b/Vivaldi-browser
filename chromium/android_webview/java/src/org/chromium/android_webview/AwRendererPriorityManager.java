@@ -16,9 +16,9 @@ import org.chromium.content.browser.ChildProcessLauncher;
 @JNINamespace("android_webview")
 public class AwRendererPriorityManager {
     @CalledByNative
-    private static void setRendererPriority(
-            int pid, @RendererPriority.RendererPriorityEnum int rendererPriority) {
+    private static void setRendererPriority(int pid, @RendererPriority int rendererPriority) {
         // TODO(tobiasjs): handle RendererPriority.LOW separately from WAIVED.
-        ChildProcessLauncher.setInForeground(pid, rendererPriority == RendererPriority.HIGH);
+        ChildProcessLauncher.getBindingManager().setInForeground(
+                pid, rendererPriority == RendererPriority.HIGH);
     }
 }

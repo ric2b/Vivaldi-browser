@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_device_client.h"
 #include "chromeos/dbus/shill_service_client.h"
@@ -16,6 +17,7 @@
 #include "chromeos/network/network_connect.h"
 #include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_handler.h"
+#include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -106,9 +108,9 @@ class NetworkConnectTest : public testing::Test {
                             "stub_wifi_device1");
     device_test_->AddDevice(kCellular1DevicePath, shill::kTypeCellular,
                             "stub_cellular_device1");
-    device_test_->SetDeviceProperty(
-        kCellular1DevicePath, shill::kTechnologyFamilyProperty,
-        base::StringValue(shill::kNetworkTechnologyGsm));
+    device_test_->SetDeviceProperty(kCellular1DevicePath,
+                                    shill::kTechnologyFamilyProperty,
+                                    base::Value(shill::kNetworkTechnologyGsm));
 
     service_test_ =
         DBusThreadManager::Get()->GetShillServiceClient()->GetTestInterface();
@@ -121,12 +123,11 @@ class NetworkConnectTest : public testing::Test {
                               add_to_visible);
     service_test_->SetServiceProperty(kWiFi1ServicePath,
                                       shill::kSecurityClassProperty,
-                                      base::StringValue(shill::kSecurityWep));
+                                      base::Value(shill::kSecurityWep));
     service_test_->SetServiceProperty(
         kWiFi1ServicePath, shill::kConnectableProperty, base::Value(true));
-    service_test_->SetServiceProperty(kWiFi1ServicePath,
-                                      shill::kPassphraseProperty,
-                                      base::StringValue("password"));
+    service_test_->SetServiceProperty(
+        kWiFi1ServicePath, shill::kPassphraseProperty, base::Value("password"));
 
     // Create a cellular network.
     service_test_->AddService(kCellular1ServicePath, kCellular1Guid,
@@ -136,7 +137,7 @@ class NetworkConnectTest : public testing::Test {
         kCellular1ServicePath, shill::kConnectableProperty, base::Value(true));
     service_test_->SetServiceProperty(
         kCellular1ServicePath, shill::kActivationStateProperty,
-        base::StringValue(shill::kActivationStateActivated));
+        base::Value(shill::kActivationStateActivated));
     service_test_->SetServiceProperty(kCellular1ServicePath,
                                       shill::kOutOfCreditsProperty,
                                       base::Value(false));
@@ -146,7 +147,7 @@ class NetworkConnectTest : public testing::Test {
 
   std::unique_ptr<MockDelegate> mock_delegate_;
   std::unique_ptr<MockTetherDelegate> mock_tether_delegate_;
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   ShillDeviceClient::TestInterface* device_test_;
   ShillServiceClient::TestInterface* service_test_;
 
@@ -224,6 +225,21 @@ TEST_F(NetworkConnectTest,
       kWiFi1Guid, NetworkConnectionHandler::kErrorCertificateRequired);
 }
 
+TEST_F(NetworkConnectTest, ConnectThenDisconnectWiFiNetwork) {
+  const NetworkState* network =
+      NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
+          kWiFi1Guid);
+
+  NetworkConnect::Get()->ConnectToNetworkId(kWiFi1Guid);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(network->IsConnectedState());
+
+  NetworkConnect::Get()->DisconnectFromNetworkId(kWiFi1Guid);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(network->IsConnectedState());
+  EXPECT_FALSE(network->IsConnectingState());
+}
+
 // ShowNetworkSettings only applies to cellular networks.
 TEST_F(NetworkConnectTest, ShowNetworkSettings) {
   EXPECT_CALL(*mock_delegate_, ShowNetworkSettings(kCellular1Guid));
@@ -249,7 +265,7 @@ TEST_F(NetworkConnectTest, ActivateCellular) {
 
   service_test_->SetServiceProperty(
       kCellular1ServicePath, shill::kActivationStateProperty,
-      base::StringValue(shill::kActivationStateNotActivated));
+      base::Value(shill::kActivationStateNotActivated));
   base::RunLoop().RunUntilIdle();
 
   NetworkConnect::Get()->ConnectToNetworkId(kCellular1Guid);
@@ -260,10 +276,10 @@ TEST_F(NetworkConnectTest, ActivateCellular_Error) {
 
   service_test_->SetServiceProperty(
       kCellular1ServicePath, shill::kActivationStateProperty,
-      base::StringValue(shill::kActivationStateNotActivated));
+      base::Value(shill::kActivationStateNotActivated));
   service_test_->SetServiceProperty(
       kCellular1ServicePath, shill::kActivationTypeProperty,
-      base::StringValue(shill::kActivationTypeNonCellular));
+      base::Value(shill::kActivationTypeNonCellular));
   base::RunLoop().RunUntilIdle();
 
   NetworkConnect::Get()->ConnectToNetworkId(kCellular1Guid);

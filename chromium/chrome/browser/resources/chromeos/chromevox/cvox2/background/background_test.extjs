@@ -564,7 +564,7 @@ TEST_F('BackgroundTest', 'ModeSwitching', function() {
     localStorage['useClassic'] = false;
     fakeWebRoot.docUrl = 'http://docs.google.com/document/#123123';
     bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('next_compat', bk.mode);
+    assertEquals('force_next', bk.mode);
 
     // And, back to force next.
     fakeWebRoot.docUrl = 'http://docs.google.com/form/123';
@@ -1225,6 +1225,19 @@ TEST_F('BackgroundTest', 'BrailleCaretNavigation', function() {
         .call(doCmd('nextLine'))
         // Ensure nothing is selected when the range covers the entire line.
         .expectBraille('with a second line', {startIndex: -1, endIndex: -1})
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'InPageLinks', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <a href="#there">hi</a>
+    <button id="there">there</button>
+  */}, function(root) {
+    mockFeedback.expectSpeech('hi', 'Internal link')
+        .call(doCmd('forceClickOnCurrentItem'))
+        .expectSpeech('there', 'Button')
         .replay();
   });
 });

@@ -5,18 +5,17 @@
 
 #include <string>
 
-#include "ash/common/shelf/shelf_delegate.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_lookup.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
-#include "ash/common/wm_window_property.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/shared/app_types.h"
+#include "ash/shelf/shelf_delegate.h"
+#include "ash/shelf/shelf_model.h"
 #include "ash/shell.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/window_properties.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
@@ -51,19 +50,19 @@ blink::WebScreenOrientationLockType BlinkOrientationLockFromMojom(
   DCHECK_NE(arc::mojom::OrientationLock::CURRENT, orientation_lock);
   switch (orientation_lock) {
     case arc::mojom::OrientationLock::PORTRAIT:
-      return blink::WebScreenOrientationLockPortrait;
+      return blink::kWebScreenOrientationLockPortrait;
     case arc::mojom::OrientationLock::LANDSCAPE:
-      return blink::WebScreenOrientationLockLandscape;
+      return blink::kWebScreenOrientationLockLandscape;
     case arc::mojom::OrientationLock::PORTRAIT_PRIMARY:
-      return blink::WebScreenOrientationLockPortraitPrimary;
+      return blink::kWebScreenOrientationLockPortraitPrimary;
     case arc::mojom::OrientationLock::LANDSCAPE_PRIMARY:
-      return blink::WebScreenOrientationLockLandscapePrimary;
+      return blink::kWebScreenOrientationLockLandscapePrimary;
     case arc::mojom::OrientationLock::PORTRAIT_SECONDARY:
-      return blink::WebScreenOrientationLockPortraitSecondary;
+      return blink::kWebScreenOrientationLockPortraitSecondary;
     case arc::mojom::OrientationLock::LANDSCAPE_SECONDARY:
-      return blink::WebScreenOrientationLockLandscapeSecondary;
+      return blink::kWebScreenOrientationLockLandscapeSecondary;
     default:
-      return blink::WebScreenOrientationLockAny;
+      return blink::kWebScreenOrientationLockAny;
   }
 }
 
@@ -263,7 +262,7 @@ ArcAppWindowLauncherController::~ArcAppWindowLauncherController() {
   if (observed_profile_)
     StopObserving(observed_profile_);
   if (observing_shell_)
-    ash::WmShell::Get()->RemoveShellObserver(this);
+    ash::Shell::Get()->RemoveShellObserver(this);
 }
 
 // static
@@ -397,7 +396,7 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   // the layout switch information.
   if (!observing_shell_) {
     observing_shell_ = true;
-    ash::WmShell::Get()->AddShellObserver(this);
+    ash::Shell::Get()->AddShellObserver(this);
   }
 
   // Check if we have controller for this task.
@@ -421,9 +420,8 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
       base::MakeUnique<AppWindow>(task_id, info->app_shelf_id(), widget, this));
   RegisterApp(info);
   DCHECK(info->app_window()->controller());
-  ash::WmWindow::Get(window)->SetIntProperty(ash::WmWindowProperty::SHELF_ID,
-                                             info->app_window()->shelf_id());
-  if (ash::WmShell::Get()
+  window->SetProperty(ash::kShelfIDKey, info->app_window()->shelf_id());
+  if (ash::Shell::Get()
           ->maximize_mode_controller()
           ->IsMaximizeModeWindowManagerEnabled()) {
     SetOrientationLockForAppWindow(info->app_window());
@@ -566,7 +564,7 @@ void ArcAppWindowLauncherController::OnTaskOrientationLockRequested(
         ScreenOrientationController::LockCompletionBehavior::None);
   }
 
-  if (ash::WmShell::Get()
+  if (ash::Shell::Get()
           ->maximize_mode_controller()
           ->IsMaximizeModeWindowManagerEnabled()) {
     AppWindow* app_window = info->app_window();
@@ -617,7 +615,7 @@ void ArcAppWindowLauncherController::OnMaximizeModeStarted() {
 
 void ArcAppWindowLauncherController::OnMaximizeModeEnded() {
   ash::ScreenOrientationController* orientation_controller =
-      ash::Shell::GetInstance()->screen_orientation_controller();
+      ash::Shell::Get()->screen_orientation_controller();
   // Don't unlock one by one because it'll switch to next rotation.
   orientation_controller->UnlockAll();
 }
@@ -653,20 +651,22 @@ ArcAppWindowLauncherController::AttachControllerToTask(
     return it->second;
   }
 
-  ArcAppWindowLauncherItemController* controller =
-      new ArcAppWindowLauncherItemController(app_shelf_id.ToString(), owner());
+  std::unique_ptr<ArcAppWindowLauncherItemController> controller =
+      base::MakeUnique<ArcAppWindowLauncherItemController>(
+          app_shelf_id.ToString());
+  ArcAppWindowLauncherItemController* item_controller = controller.get();
   const ash::ShelfID shelf_id =
       shelf_delegate_->GetShelfIDForAppID(app_shelf_id.ToString());
   if (!shelf_id) {
-    owner()->CreateAppLauncherItem(controller, app_shelf_id.ToString(),
-                                   ash::STATUS_RUNNING);
+    owner()->CreateAppLauncherItem(std::move(controller), ash::STATUS_RUNNING);
   } else {
-    owner()->SetItemController(shelf_id, controller);
+    ash::ShelfModel* shelf_model = ash::Shell::Get()->shelf_model();
+    shelf_model->SetShelfItemDelegate(shelf_id, std::move(controller));
     owner()->SetItemStatus(shelf_id, ash::STATUS_RUNNING);
   }
-  controller->AddTaskId(task_id);
-  app_shelf_group_to_controller_map_[app_shelf_id] = controller;
-  return controller;
+  item_controller->AddTaskId(task_id);
+  app_shelf_group_to_controller_map_[app_shelf_id] = item_controller;
+  return item_controller;
 }
 
 void ArcAppWindowLauncherController::RegisterApp(
@@ -702,7 +702,7 @@ void ArcAppWindowLauncherController::UnregisterApp(
 void ArcAppWindowLauncherController::SetOrientationLockForAppWindow(
     AppWindow* app_window) {
   ash::WmWindow* window =
-      ash::WmLookup::Get()->GetWindowForWidget(app_window->widget());
+      ash::WmWindow::Get(app_window->widget()->GetNativeWindow());
   if (!window)
     return;
   AppWindowInfo* info = GetAppWindowInfoForTask(app_window->task_id());
@@ -726,7 +726,7 @@ void ArcAppWindowLauncherController::SetOrientationLockForAppWindow(
           ScreenOrientationController::LockCompletionBehavior::DisableSensor;
     }
   }
-  ash::Shell* shell = ash::Shell::GetInstance();
+  ash::Shell* shell = ash::Shell::Get();
   shell->screen_orientation_controller()->LockOrientationForWindow(
       window, BlinkOrientationLockFromMojom(orientation_lock),
       lock_completion_behavior);

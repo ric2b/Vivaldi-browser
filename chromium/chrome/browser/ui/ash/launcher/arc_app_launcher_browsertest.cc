@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/shelf/shelf_delegate.h"
-#include "ash/common/wm_shell.h"
+#include "ash/public/cpp/shelf_item_delegate.h"
+#include "ash/shelf/shelf_delegate.h"
+#include "ash/shelf/shelf_model.h"
+#include "ash/shell.h"
 #include "ash/wm/window_util.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -22,7 +24,6 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 #include "components/arc/arc_util.h"
 #include "content/public/test/browser_test_utils.h"
 #include "ui/events/event_constants.h"
@@ -108,7 +109,7 @@ ChromeLauncherController* chrome_controller() {
 }
 
 ash::ShelfDelegate* shelf_delegate() {
-  return ash::WmShell::Get()->shelf_delegate();
+  return ash::Shell::Get()->shelf_delegate();
 }
 
 class AppAnimatedWaiter {
@@ -257,11 +258,9 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
     app_instance_observer()->OnInstanceClosed();
   }
 
-  LauncherItemController* GetAppItemController(const std::string& id) {
+  ash::ShelfItemDelegate* GetAppItemController(const std::string& id) {
     const ash::ShelfID shelf_id = shelf_delegate()->GetShelfIDForAppID(id);
-    if (!shelf_id)
-      return nullptr;
-    return chrome_controller()->GetLauncherItemController(shelf_id);
+    return ash::Shell::Get()->shelf_model()->GetShelfItemDelegate(shelf_id);
   }
 
   ArcAppListPrefs* app_prefs() { return ArcAppListPrefs::Get(profile()); }
@@ -364,7 +363,7 @@ IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherBrowserTest, StartAppDeferred) {
     case TEST_ACTION_CLOSE:
       // Close item during animation.
       {
-        LauncherItemController* controller = GetAppItemController(app_id);
+        ash::ShelfItemDelegate* controller = GetAppItemController(app_id);
         ASSERT_TRUE(controller);
         controller->Close();
         EXPECT_TRUE(chrome_controller()
@@ -508,14 +507,14 @@ IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, ShelfGroup) {
   app_host()->OnTaskCreated(1, info->package_name, info->activity, info->name,
                             CreateIntentUriWithShelfGroup(kTestShelfGroup));
 
-  LauncherItemController* controller1 = GetAppItemController(shelf_id1);
+  ash::ShelfItemDelegate* controller1 = GetAppItemController(shelf_id1);
   ASSERT_TRUE(controller1);
 
   // 2 tasks for group 2
   app_host()->OnTaskCreated(2, info->package_name, info->activity, info->name,
                             CreateIntentUriWithShelfGroup(kTestShelfGroup2));
 
-  LauncherItemController* controller2 = GetAppItemController(shelf_id2);
+  ash::ShelfItemDelegate* controller2 = GetAppItemController(shelf_id2);
   ASSERT_TRUE(controller2);
   ASSERT_NE(controller1, controller2);
 
@@ -528,7 +527,7 @@ IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, ShelfGroup) {
   app_host()->OnTaskCreated(4, info->package_name, info->activity, info->name,
                             CreateIntentUriWithShelfGroup(kTestShelfGroup3));
 
-  LauncherItemController* controller3 = GetAppItemController(shelf_id3);
+  ash::ShelfItemDelegate* controller3 = GetAppItemController(shelf_id3);
   ASSERT_TRUE(controller3);
   ASSERT_NE(controller1, controller3);
   ASSERT_NE(controller2, controller3);

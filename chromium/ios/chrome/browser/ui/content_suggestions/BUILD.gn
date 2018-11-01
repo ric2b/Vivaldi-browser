@@ -3,70 +3,61 @@
 # found in the LICENSE file.
 
 source_set("content_suggestions") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "content_suggestion.h",
     "content_suggestion.mm",
-    "content_suggestion_identifier.h",
-    "content_suggestion_identifier.mm",
-    "content_suggestions_article_item.h",
-    "content_suggestions_article_item.mm",
+    "content_suggestion_extra_builder.h",
+    "content_suggestion_extra_builder.mm",
     "content_suggestions_collection_updater.h",
     "content_suggestions_collection_updater.mm",
     "content_suggestions_commands.h",
     "content_suggestions_data_sink.h",
     "content_suggestions_data_source.h",
-    "content_suggestions_expandable_item.h",
-    "content_suggestions_expandable_item.mm",
-    "content_suggestions_favicon_internal_cell.h",
-    "content_suggestions_favicon_internal_cell.mm",
-    "content_suggestions_favicon_item.h",
-    "content_suggestions_favicon_item.mm",
     "content_suggestions_image_fetcher.h",
-    "content_suggestions_section_information.h",
-    "content_suggestions_section_information.mm",
-    "content_suggestions_stack_item.h",
-    "content_suggestions_stack_item.mm",
-    "content_suggestions_stack_item_actions.h",
-    "content_suggestions_text_item.h",
-    "content_suggestions_text_item.mm",
-    "content_suggestions_text_item_actions.h",
     "content_suggestions_view_controller.h",
     "content_suggestions_view_controller.mm",
-    "expandable_item.h",
   ]
   deps = [
+    ":resources",
     "//base",
-    "//ios/chrome/browser/ui",
+    "//components/strings",
     "//ios/chrome/browser/ui/collection_view",
-    "//ios/chrome/browser/ui/colors",
-    "//ios/chrome/browser/ui/util",
-    "//ios/third_party/material_roboto_font_loader_ios",
+    "//ios/chrome/browser/ui/content_suggestions/cells",
+    "//ios/chrome/browser/ui/content_suggestions/identifier",
+    "//ios/chrome/browser/ui/favicon:favicon_ui",
+    "//ios/chrome/browser/ui/reading_list",
     "//ui/base",
     "//url",
   ]
   public_deps = [
     "//ios/third_party/material_components_ios",
   ]
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "content_suggestion_identifier_unittest.mm",
-    "content_suggestions_article_item_unittest.mm",
-    "content_suggestions_expandable_item_unittest.mm",
-    "content_suggestions_favicon_item_unittest.mm",
-    "content_suggestions_stack_item_unittest.mm",
-    "content_suggestions_text_item_unittest.mm",
+    "content_suggestions_collection_updater_unittest.mm",
   ]
   deps = [
     ":content_suggestions",
     "//base",
     "//ios/chrome/browser/ui/collection_view",
+    "//ios/chrome/browser/ui/content_suggestions/identifier",
     "//testing/gtest",
     "//third_party/ocmock",
-    "//url",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+bundle_data("resources") {
+  sources = [
+    "resources/content_suggestions_no_image.png",
+    "resources/content_suggestions_no_image@2x.png",
+    "resources/content_suggestions_no_image@3x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
   ]
 }

@@ -29,8 +29,8 @@
 #include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
 #include "platform/fonts/FontTraits.h"
-#include "wtf/Allocator.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -38,17 +38,17 @@ class CORE_EXPORT LayoutThemeFontProvider {
   STATIC_ONLY(LayoutThemeFontProvider);
 
  public:
-  static void systemFont(CSSValueID systemFontID,
+  static void SystemFont(CSSValueID system_font_id,
                          FontStyle&,
                          FontWeight&,
-                         float& fontSize,
-                         AtomicString& fontFamily);
-  static void setDefaultFontSize(int);
+                         float& font_size,
+                         AtomicString& font_family);
+  static void SetDefaultFontSize(int);
 
  protected:
-  static const WTF::AtomicString& defaultGUIFont();
+  static const WTF::AtomicString& DefaultGUIFont();
 
-  static float s_defaultFontSize;
+  static float default_font_size_;
 };
 
 }  // namespace blink

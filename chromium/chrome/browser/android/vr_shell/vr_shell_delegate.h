@@ -12,10 +12,13 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/callback.h"
 #include "base/macros.h"
-#include "device/vr/android/gvr/gvr_delegate.h"
+#include "device/vr/android/gvr/gvr_delegate_provider.h"
+#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 namespace device {
+class GvrDelegate;
 class GvrDeviceProvider;
+class PresentingGvrDelegate;
 }
 
 namespace vr_shell {
@@ -32,12 +35,13 @@ class VrShellDelegate : public device::GvrDelegateProvider {
   static VrShellDelegate* GetNativeVrShellDelegate(JNIEnv* env,
                                                    jobject jdelegate);
 
-  void SetDelegate(device::GvrDelegate* delegate, gvr_context* context);
+  void SetPresentingDelegate(device::PresentingGvrDelegate* delegate,
+                             gvr_context* context);
   void RemoveDelegate();
 
   void SetPresentResult(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj,
-                        jboolean result);
+                        jboolean success);
   void DisplayActivate(JNIEnv* env,
                        const base::android::JavaParamRef<jobject>& obj);
   void UpdateVSyncInterval(JNIEnv* env,
@@ -47,19 +51,18 @@ class VrShellDelegate : public device::GvrDelegateProvider {
   void OnPause(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void OnResume(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
-  void ShowTab(int id);
-  void OpenNewTab(bool incognito);
 
   device::GvrDeviceProvider* device_provider() { return device_provider_; }
-  void OnVRVsyncProviderRequest(device::mojom::VRVSyncProviderRequest request);
-  base::WeakPtr<VrShellDelegate> GetWeakPtr();
+
+  // device::GvrDelegateProvider implementation.
+  void ExitWebVRPresent() override;
 
  private:
-  // device::GvrDelegateProvider implementation
+  // device::GvrDelegateProvider implementation.
   void SetDeviceProvider(device::GvrDeviceProvider* device_provider) override;
   void ClearDeviceProvider() override;
-  void RequestWebVRPresent(const base::Callback<void(bool)>& callback) override;
-  void ExitWebVRPresent() override;
+  void RequestWebVRPresent(device::mojom::VRSubmitFrameClientPtr submit_client,
+                           const base::Callback<void(bool)>& callback) override;
   device::GvrDelegate* GetDelegate() override;
   void SetListeningForActivate(bool listening) override;
 
@@ -68,16 +71,12 @@ class VrShellDelegate : public device::GvrDelegateProvider {
   std::unique_ptr<NonPresentingGvrDelegate> non_presenting_delegate_;
   base::android::ScopedJavaGlobalRef<jobject> j_vr_shell_delegate_;
   device::GvrDeviceProvider* device_provider_ = nullptr;
-  device::GvrDelegate* delegate_ = nullptr;
+  device::PresentingGvrDelegate* presenting_delegate_ = nullptr;
   base::Callback<void(bool)> present_callback_;
   int64_t timebase_nanos_ = 0;
   double interval_seconds_ = 0;
-
-  // TODO(mthiesse): Remove the need for this to be stored here.
-  // crbug.com/674594
-  gvr_context* context_ = nullptr;
-
-  base::WeakPtrFactory<VrShellDelegate> weak_ptr_factory_;
+  device::mojom::VRSubmitFrameClientPtr submit_client_;
+  bool pending_successful_present_request_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(VrShellDelegate);
 };

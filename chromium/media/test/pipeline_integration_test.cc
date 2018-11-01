@@ -109,7 +109,7 @@ const char kVideoOnlyWebM[] = "video/webm; codecs=\"vp8\"";
 const char kADTS[] = "audio/aac";
 const char kMP4[] = "video/mp4; codecs=\"avc1.4D4041,mp4a.40.2\"";
 const char kMP4VideoAVC3[] = "video/mp4; codecs=\"avc3.64001f\"";
-const char kMP4VideoVP9[] = "video/mp4; codecs=\"vp09.00.00.08.01.01.00.00\"";
+const char kMP4VideoVP9[] = "video/mp4; codecs=\"vp09.00.10.08.01.05.01\"";
 const char kMP4VideoHEVC1[] = "video/mp4; codecs=\"hvc1.1.6.L93.B0\"";
 const char kMP4VideoHEVC2[] = "video/mp4; codecs=\"hev1.1.6.L93.B0\"";
 const char kMP4Video[] = "video/mp4; codecs=\"avc1.4D4041\"";
@@ -547,8 +547,9 @@ class MockMediaSource {
     chunk_demuxer_->SetMemoryLimitsForTest(DemuxerStream::VIDEO, limit_bytes);
   }
 
-  void EvictCodedFrames(base::TimeDelta currentMediaTime, size_t newDataSize) {
-    chunk_demuxer_->EvictCodedFrames(kSourceId, currentMediaTime, newDataSize);
+  bool EvictCodedFrames(base::TimeDelta currentMediaTime, size_t newDataSize) {
+    return chunk_demuxer_->EvictCodedFrames(kSourceId, currentMediaTime,
+                                            newDataSize);
   }
 
   void RemoveRange(base::TimeDelta start, base::TimeDelta end) {
@@ -693,8 +694,8 @@ class PipelineIntegrationTestHost : public service_manager::test::ServiceTest,
 
  protected:
   std::unique_ptr<Renderer> CreateRenderer(
-      ScopedVector<VideoDecoder> prepend_video_decoders,
-      ScopedVector<AudioDecoder> prepend_audio_decoders) override {
+      CreateVideoDecodersCB prepend_video_decoders_cb,
+      CreateAudioDecodersCB prepend_audio_decoders_cb) override {
     connector()->BindInterface("media", &media_interface_factory_);
 
     mojom::RendererPtr mojo_renderer;
@@ -1150,6 +1151,30 @@ TEST_F(PipelineIntegrationTest, PipelineStoppedWhileVideoRestartPending) {
   Stop();
 }
 
+TEST_F(PipelineIntegrationTest, SwitchAudioTrackDuringPlayback) {
+  ASSERT_EQ(PIPELINE_OK, Start("multitrack-3video-2audio.webm", kHashed));
+  Play();
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(TimestampMs(100)));
+  // The first audio track (TrackId=4) is enabled by default. This should
+  // disable TrackId=4 and enable TrackId=5.
+  std::vector<MediaTrack::Id> track_ids;
+  track_ids.push_back("5");
+  pipeline_->OnEnabledAudioTracksChanged(track_ids);
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(TimestampMs(200)));
+  Stop();
+}
+
+TEST_F(PipelineIntegrationTest, SwitchVideoTrackDuringPlayback) {
+  ASSERT_EQ(PIPELINE_OK, Start("multitrack-3video-2audio.webm", kHashed));
+  Play();
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(TimestampMs(100)));
+  // The first video track (TrackId=1) is enabled by default. This should
+  // disable TrackId=1 and enable TrackId=2.
+  pipeline_->OnSelectedVideoTrackChanged(MediaTrack::Id("2"));
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(TimestampMs(200)));
+  Stop();
+}
+
 TEST_F(PipelineIntegrationTest,
        MAYBE_CLOCKLESS(BasicPlaybackOpusOggTrimmingHashed)) {
   ASSERT_EQ(PIPELINE_OK,
@@ -1576,6 +1601,36 @@ TEST_F(PipelineIntegrationTest, MediaSource_FillUp_Buffer) {
   Stop();
 }
 
+TEST_F(PipelineIntegrationTest, MediaSource_GCWithDisabledVideoStream) {
+  const char* input_filename = "bear-320x240.webm";
+  MockMediaSource source(input_filename, kWebM, kAppendWholeFile);
+  EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
+  scoped_refptr<DecoderBuffer> file = ReadTestDataFile(input_filename);
+  // The input file contains audio + video data. Assuming video data size is
+  // larger than audio, so setting memory limits to half of file data_size will
+  // ensure that video SourceBuffer is above memory limit and the audio
+  // SourceBuffer is below the memory limit.
+  source.SetMemoryLimits(file->data_size() / 2);
+
+  // Disable the video track and start playback. Renderer won't read from the
+  // disabled video stream, so the video stream read position should be 0.
+  pipeline_->OnSelectedVideoTrackChanged(base::nullopt);
+  Play();
+
+  // Wait until audio playback advances past 2 seconds and call MSE GC algorithm
+  // to prepare for more data to be appended.
+  base::TimeDelta media_time = base::TimeDelta::FromSeconds(2);
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(media_time));
+  // At this point the video SourceBuffer is over the memory limit (see the
+  // SetMemoryLimits comment above), but MSE GC should be able to remove some
+  // of video data and return true indicating success, even though no data has
+  // been read from the disabled video stream and its read position is 0.
+  ASSERT_TRUE(source.EvictCodedFrames(media_time, 10));
+
+  source.Shutdown();
+  Stop();
+}
+
 TEST_F(PipelineIntegrationTest,
        MAYBE_EME(MediaSource_ConfigChange_Encrypted_WebM)) {
   MockMediaSource source("bear-320x240-16x9-aspect-av_enc-av.webm", kWebM,
@@ -1693,12 +1748,15 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHi10P) {
   ASSERT_TRUE(WaitUntilOnEnded());
 }
 
-TEST_F(PipelineIntegrationTest, BasicFallback) {
+ScopedVector<VideoDecoder> CreateFailingVideoDecoder() {
   ScopedVector<VideoDecoder> failing_video_decoder;
   failing_video_decoder.push_back(new FailingVideoDecoder());
+  return failing_video_decoder;
+}
 
-  ASSERT_EQ(PIPELINE_OK,
-            Start("bear.mp4", kClockless, std::move(failing_video_decoder)));
+TEST_F(PipelineIntegrationTest, BasicFallback) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear.mp4", kClockless,
+                               base::Bind(&CreateFailingVideoDecoder)));
 
   Play();
 
@@ -2252,6 +2310,34 @@ TEST_F(PipelineIntegrationTest, Mp2ts_AAC_HE_SBR_Audio) {
   // calculated incorrectly and that leads to gaps in buffered ranges (so this
   // check will fail) and eventually leads to stalled playback.
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
+#else
+  EXPECT_EQ(
+      DEMUXER_ERROR_COULD_NOT_OPEN,
+      StartPipelineWithMediaSource(&source, kExpectDemuxerFailure, nullptr));
+#endif
+}
+
+TEST_F(PipelineIntegrationTest, Mpeg2ts_MP3Audio_Mp4a_6B) {
+  MockMediaSource source("bear-audio-mp4a.6B.ts",
+                         "video/mp2t; codecs=\"mp4a.6B\"", kAppendWholeFile);
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+  EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
+  source.EndOfStream();
+  ASSERT_EQ(PIPELINE_OK, pipeline_status_);
+#else
+  EXPECT_EQ(
+      DEMUXER_ERROR_COULD_NOT_OPEN,
+      StartPipelineWithMediaSource(&source, kExpectDemuxerFailure, nullptr));
+#endif
+}
+
+TEST_F(PipelineIntegrationTest, Mpeg2ts_MP3Audio_Mp4a_69) {
+  MockMediaSource source("bear-audio-mp4a.69.ts",
+                         "video/mp2t; codecs=\"mp4a.69\"", kAppendWholeFile);
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+  EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
+  source.EndOfStream();
+  ASSERT_EQ(PIPELINE_OK, pipeline_status_);
 #else
   EXPECT_EQ(
       DEMUXER_ERROR_COULD_NOT_OPEN,

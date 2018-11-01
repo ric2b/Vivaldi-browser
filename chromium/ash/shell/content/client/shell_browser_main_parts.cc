@@ -4,12 +4,12 @@
 
 #include "ash/shell/content/client/shell_browser_main_parts.h"
 
-#include "ash/common/login_status.h"
-#include "ash/common/wm_shell.h"
 #include "ash/content/shell_content_state.h"
+#include "ash/login_status.h"
 #include "ash/shell.h"
 #include "ash/shell/content/shell_content_state_impl.h"
 #include "ash/shell/example_app_list_presenter.h"
+#include "ash/shell/example_session_controller_client.h"
 #include "ash/shell/shell_delegate_impl.h"
 #include "ash/shell/window_watcher.h"
 #include "ash/shell_init_params.h"
@@ -60,7 +60,7 @@ class ShellViewsDelegate : public views::TestViewsDelegate {
   // Overridden from views::TestViewsDelegate:
   views::NonClientFrameView* CreateDefaultNonClientFrameView(
       views::Widget* widget) override {
-    return ash::Shell::GetInstance()->CreateDefaultNonClientFrameView(widget);
+    return ash::Shell::Get()->CreateDefaultNonClientFrameView(widget);
   }
   void OnBeforeWidgetInit(
       views::Widget::InitParams* params,
@@ -131,8 +131,13 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
   init_params.context_factory_private = content::GetContextFactoryPrivate();
   init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
   ash::Shell::CreateInstance(init_params);
-  ash::WmShell::Get()->CreateShelfView();
-  ash::WmShell::Get()->UpdateAfterLoginStatusChange(LoginStatus::USER);
+
+  // Initialize session controller client and create fake user sessions. The
+  // fake user sessions makes ash into the logged in state.
+  example_session_controller_client_ =
+      base::MakeUnique<ExampleSessionControllerClient>(
+          Shell::Get()->session_controller());
+  example_session_controller_client_->Initialize();
 
   window_watcher_.reset(new ash::shell::WindowWatcher);
   display::Screen::GetScreen()->AddObserver(window_watcher_.get());
@@ -141,7 +146,7 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 
   // Initialize the example app list presenter.
   example_app_list_presenter_ = base::MakeUnique<ExampleAppListPresenter>();
-  WmShell::Get()->app_list()->SetAppListPresenter(
+  Shell::Get()->app_list()->SetAppListPresenter(
       example_app_list_presenter_->CreateInterfacePtrAndBind());
 
   ash::Shell::GetPrimaryRootWindow()->GetHost()->Show();

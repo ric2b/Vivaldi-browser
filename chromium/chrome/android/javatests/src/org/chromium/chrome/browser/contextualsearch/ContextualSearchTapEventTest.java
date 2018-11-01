@@ -14,16 +14,14 @@ import android.widget.LinearLayout;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManagerWrapper;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilterHost;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.ContextualSearchClient;
+import org.chromium.content.browser.SelectionClient;
 import org.chromium.content.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
@@ -40,7 +38,7 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
     private ContextualSearchManagerWrapper mContextualSearchManager;
     private ContextualSearchPanel mPanel;
     private OverlayPanelManagerWrapper mPanelManager;
-    private ContextualSearchClient mContextualSearchClient;
+    private SelectionClient mContextualSearchClient;
 
     /**
      * A ContextualSearchRequest that forgoes URI template lookup.
@@ -63,9 +61,9 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
      * ContextualSearchPanel wrapper that prevents native calls.
      */
     private static class ContextualSearchPanelWrapper extends ContextualSearchPanel {
-        public ContextualSearchPanelWrapper(Context context, LayoutUpdateHost updateHost,
-                EventFilterHost eventHost, OverlayPanelManager panelManager) {
-            super(context, updateHost, eventHost, panelManager);
+        public ContextualSearchPanelWrapper(
+                Context context, LayoutUpdateHost updateHost, OverlayPanelManager panelManager) {
+            super(context, updateHost, panelManager);
         }
 
         @Override
@@ -92,7 +90,7 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
             contentView.setSelectionPopupControllerForTesting(
                     new SelectionPopupController(activity, null, null, null,
                             contentView.getRenderCoordinates(), null));
-            contentView.setContextualSearchClient(this);
+            contentView.setSelectionClient(this);
             MockContextualSearchPolicy policy = new MockContextualSearchPolicy();
             setContextualSearchPolicy(policy);
             mTranslateController = new MockedCSTranslateController(activity, policy, null);
@@ -114,8 +112,7 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
 
         @Override
         protected void nativeGatherSurroundingText(long nativeContextualSearchManager,
-                String selection, String homeCountry, WebContents webContents,
-                boolean maySendBasePageUrl) {}
+                ContextualSearchContext contextualSearchContext, WebContents baseWebContents) {}
 
         /**
          * @return A stubbed ContentViewCore for mocking text selection.
@@ -140,7 +137,7 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
         }
 
         @Override
-        public StubbedContentViewCore getBaseContentView() {
+        StubbedContentViewCore getBaseContentView() {
             return mContentViewCore;
         }
     }
@@ -212,9 +209,14 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
      * Trigger empty space tap.
      */
     private void mockTapEmptySpace() {
-        mContextualSearchClient.showUnhandledTapUIIfNeeded(0, 0);
-        mContextualSearchClient.onSelectionEvent(
-                SelectionEventType.SELECTION_HANDLES_CLEARED, 0, 0);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mContextualSearchClient.showUnhandledTapUIIfNeeded(0, 0);
+                mContextualSearchClient.onSelectionEvent(
+                        SelectionEventType.SELECTION_HANDLES_CLEARED, 0, 0);
+            }
+        });
     }
 
     // --------------------------------------------------------------------------------------------
@@ -227,17 +229,24 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
     protected void setUp() throws Exception {
         super.setUp();
 
-        mPanelManager = new OverlayPanelManagerWrapper();
-        mPanelManager.setContainerView(new LinearLayout(getActivity()));
-        mPanelManager.setDynamicResourceLoader(new DynamicResourceLoader(0, null));
+        final ChromeActivity activity = getActivity();
 
-        mContextualSearchManager =
-                new ContextualSearchManagerWrapper(getActivity(), getActivity().getWindowAndroid());
-        mPanel = new ContextualSearchPanelWrapper(getActivity(), null, null, mPanelManager);
-        mPanel.setManagementDelegate(mContextualSearchManager);
-        mContextualSearchManager.setContextualSearchPanel(mPanel);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mPanelManager = new OverlayPanelManagerWrapper();
+                mPanelManager.setContainerView(new LinearLayout(activity));
+                mPanelManager.setDynamicResourceLoader(new DynamicResourceLoader(0, null));
 
-        mContextualSearchClient = mContextualSearchManager;
+                mContextualSearchManager =
+                        new ContextualSearchManagerWrapper(activity, activity.getWindowAndroid());
+                mPanel = new ContextualSearchPanelWrapper(activity, null, mPanelManager);
+                mPanel.setManagementDelegate(mContextualSearchManager);
+                mContextualSearchManager.setContextualSearchPanel(mPanel);
+
+                mContextualSearchClient = mContextualSearchManager;
+            }
+        });
     }
 
     @Override
@@ -251,7 +260,6 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testTextTapFollowedByNonTextTap() {
         assertTrue(mPanelManager.getRequestPanelShowCount() == 0);
 

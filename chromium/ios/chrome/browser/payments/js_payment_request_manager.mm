@@ -6,8 +6,10 @@
 
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
+#include "components/payments/core/payment_address.h"
 #include "ios/web/public/payments/payment_request.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -79,7 +81,7 @@ NSString* JSONEscape(NSString* JSON) {
   [self executeScript:script completionHandler:completionHandler];
 }
 
-- (void)updateShippingAddress:(const web::PaymentAddress&)shippingAddress
+- (void)updateShippingAddress:(const payments::PaymentAddress&)shippingAddress
             completionHandler:(ProceduralBlockWithBool)completionHanlder {
   std::unique_ptr<base::DictionaryValue> shippingAddressData =
       shippingAddress.ToDictionaryValue();
@@ -111,10 +113,6 @@ NSString* JSONEscape(NSString* JSON) {
 }
 
 #pragma mark - Protected methods
-
-- (NSString*)scriptPath {
-  return @"payment_request_manager";
-}
 
 - (NSString*)presenceBeacon {
   return @"__gCrWeb.paymentRequestManager";

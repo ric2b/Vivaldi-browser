@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "components/password_manager/core/browser/form_fetcher.h"
-#include "components/password_manager/core/browser/http_password_migrator.h"
+#include "components/password_manager/core/browser/http_password_store_migrator.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 
@@ -23,7 +23,7 @@ class PasswordManagerClient;
 // with a particular origin.
 class FormFetcherImpl : public FormFetcher,
                         public PasswordStoreConsumer,
-                        public HttpPasswordMigrator::Consumer {
+                        public HttpPasswordStoreMigrator::Consumer {
  public:
   // |form_digest| describes what credentials need to be retrieved and
   // |client| serves the PasswordStore, the logging information etc.
@@ -35,18 +35,20 @@ class FormFetcherImpl : public FormFetcher,
 
   // FormFetcher:
   void AddConsumer(FormFetcher::Consumer* consumer) override;
+  void RemoveConsumer(FormFetcher::Consumer* consumer) override;
   State GetState() const override;
   const std::vector<InteractionsStats>& GetInteractionsStats() const override;
   const std::vector<const autofill::PasswordForm*>& GetFederatedMatches()
       const override;
   void Fetch() override;
+  std::unique_ptr<FormFetcher> Clone() override;
 
   // PasswordStoreConsumer:
   void OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
   void OnGetSiteStatistics(std::vector<InteractionsStats> stats) override;
 
-  // HttpPasswordMigrator::Consumer:
+  // HttpPasswordStoreMigrator::Consumer:
   void ProcessMigratedForms(
       std::vector<std::unique_ptr<autofill::PasswordForm>> forms) override;
 
@@ -94,7 +96,7 @@ class FormFetcherImpl : public FormFetcher,
   const bool should_migrate_http_passwords_;
 
   // Does the actual migration.
-  std::unique_ptr<HttpPasswordMigrator> http_migrator_;
+  std::unique_ptr<HttpPasswordStoreMigrator> http_migrator_;
 
   DISALLOW_COPY_AND_ASSIGN(FormFetcherImpl);
 };

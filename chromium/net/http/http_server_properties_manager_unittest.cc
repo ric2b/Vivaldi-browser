@@ -929,6 +929,24 @@ TEST_P(HttpServerPropertiesManagerTest, ServerNetworkStats) {
   const ServerNetworkStats* stats2 =
       http_server_props_manager_->GetServerNetworkStats(mail_server);
   EXPECT_EQ(10, stats2->srtt.ToInternalValue());
+
+  ExpectPrefsUpdate(1);
+  ExpectScheduleUpdatePrefsOnNetworkThread();
+
+  http_server_props_manager_->ClearServerNetworkStats(mail_server);
+
+  // Run the task.
+  EXPECT_FALSE(pref_test_task_runner_->HasPendingTask());
+  EXPECT_TRUE(net_test_task_runner_->HasPendingTask());
+  net_test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(pref_test_task_runner_->HasPendingTask());
+  pref_test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_FALSE(net_test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(pref_test_task_runner_->HasPendingTask());
+
+  Mock::VerifyAndClearExpectations(http_server_props_manager_.get());
+  EXPECT_EQ(nullptr,
+            http_server_props_manager_->GetServerNetworkStats(mail_server));
 }
 
 TEST_P(HttpServerPropertiesManagerTest, QuicServerInfo) {
@@ -1380,7 +1398,7 @@ TEST_P(HttpServerPropertiesManagerTest,
   ASSERT_TRUE(pref_dict.GetListWithoutPathExpansion("servers", &servers_list));
   base::ListValue::const_iterator it = servers_list->begin();
   const base::DictionaryValue* server_pref_dict;
-  ASSERT_TRUE((*it)->GetAsDictionary(&server_pref_dict));
+  ASSERT_TRUE(it->GetAsDictionary(&server_pref_dict));
 
   const base::DictionaryValue* example_pref_dict;
 

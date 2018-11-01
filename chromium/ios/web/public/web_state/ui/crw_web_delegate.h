@@ -18,7 +18,6 @@
 #include "ui/base/page_transition_types.h"
 
 class GURL;
-@class CRWSessionEntry;
 @class CRWWebController;
 
 // Methods implemented by the delegate of the CRWWebController.
@@ -27,13 +26,13 @@ class GURL;
 // TODO(crbug.com/674991): Remove this protocol.
 @protocol CRWWebDelegate<NSObject>
 
-// Called when the page calls window.close() on itself. Begin the shut-down
-// sequence for this controller.
-- (void)webPageOrderedClose;
 // Called when an external app needs to be opened, it also passes |linkClicked|
 // to track if this call was a result of user action or not. Returns YES iff
 // |URL| is launched in an external app.
-- (BOOL)openExternalURL:(const GURL&)URL linkClicked:(BOOL)linkClicked;
+// |sourceURL| is the original URL that triggered the navigation to |URL|.
+- (BOOL)openExternalURL:(const GURL&)URL
+              sourceURL:(const GURL&)sourceURL
+            linkClicked:(BOOL)linkClicked;
 
 // This method is invoked whenever the system believes the URL is about to
 // change, or immediately after any unexpected change of the URL, prior to
@@ -41,18 +40,6 @@ class GURL;
 // Phase will be LOAD_REQUESTED.
 - (void)webWillAddPendingURL:(const GURL&)url
                   transition:(ui::PageTransition)transition;
-// Called when webWillStartLoadingURL was called, but something went wrong, and
-// webDidStartLoadingURL will now never be called.
-- (void)webCancelStartLoadingRequest;
-// Called when the page URL has changed. Phase will be PAGE_LOADING. Can be
-// followed by webDidFinishWithURL or webWillStartLoadingURL.
-// |updateHistory| is YES if the URL should be added to the history DB.
-// TODO(crbug.com/692331): Remove this method and use |DidFinishNavigation|.
-- (void)webDidStartLoadingURL:(const GURL&)url
-          shouldUpdateHistory:(BOOL)updateHistory;
-// Called when the page load was cancelled by page activity (before a success /
-// failure state is known). Phase will be PAGE_LOADED.
-- (void)webLoadCancelled:(const GURL&)url;
 // Called when a placeholder image should be displayed instead of the WebView.
 - (void)webController:(CRWWebController*)webController
     retrievePlaceholderOverlayImage:(void (^)(UIImage*))block;
@@ -65,29 +52,10 @@ class GURL;
 
 // Called when the page is reloaded.
 - (void)webWillReload;
-// Called when a page is loaded using loadWithParams.  In
-// |webWillInitiateLoadWithParams|, the |params| argument is non-const so that
-// the delegate can make changes if necessary.
-// TODO(rohitrao): This is not a great API.  Clean it up.
-- (void)webWillInitiateLoadWithParams:
-    (web::NavigationManager::WebLoadParams&)params;
+// Called when a page is loaded using loadWithParams.
 - (void)webDidUpdateSessionForLoadWithParams:
             (const web::NavigationManager::WebLoadParams&)params
                         wasInitialNavigation:(BOOL)initialNavigation;
-// Called from finishHistoryNavigationFromEntry.
-// TODO(crbug.com/692331): Remove this method and use |DidFinishNavigation|.
-- (void)webWillFinishHistoryNavigation;
-// ---------------------------------------------------------------------
-
-// Called when |webController| wants to open a new window. |URL| is the URL of
-// the new window; |openerURL| is the URL of the page which requested a window
-// to be open; |initiatedByUser| is YES if action was caused by the user.
-// |webController| will not open a window if this method returns nil. This
-// method can not return |webController|.
-- (CRWWebController*)webController:(CRWWebController*)webController
-         createWebControllerForURL:(const GURL&)URL
-                         openerURL:(const GURL&)openerURL
-                   initiatedByUser:(BOOL)initiatedByUser;
 
 @optional
 
@@ -122,21 +90,11 @@ class GURL;
 // or nil otherwise.
 - (id<CRWNativeContent>)controllerForUnhandledContentAtURL:(const GURL&)url;
 
-// Called when CRWWebController did suppress a dialog (JavaScript, HTTP
-// authentication or window.open).
-// NOTE: Called only if CRWWebController.shouldSuppressDialogs is set to YES.
-- (void)webControllerDidSuppressDialog:(CRWWebController*)webController;
-
 // Called to retrieve the height of any header that is overlaying on top of the
 // web view. This can be used to implement, for e.g. a toolbar that changes
 // height dynamically. Returning a non-zero height affects the visible frame
 // shown by the CRWWebController. 0.0 is assumed if not implemented.
 - (CGFloat)headerHeightForWebController:(CRWWebController*)webController;
-
-// Called when CRWWebController updated the SSL status for the current
-// NagivationItem.
-- (void)webControllerDidUpdateSSLStatusForCurrentNavigationItem:
-    (CRWWebController*)webController;
 
 // Called when a PassKit file is downloaded. |data| should be the data from a
 // PassKit file, but this is not guaranteed, and the delegate is responsible for

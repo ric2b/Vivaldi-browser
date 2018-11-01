@@ -1,7 +1,8 @@
 {
     "dependencies": [
         "components",
-        "object_ui"
+        "network_log",
+        "common"
     ],
     "scripts": [
         "ExtensionAPI.js",

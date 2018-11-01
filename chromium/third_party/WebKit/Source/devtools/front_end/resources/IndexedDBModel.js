@@ -37,7 +37,7 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
    */
   constructor(target) {
     super(target);
-    this._securityOriginManager = SDK.SecurityOriginManager.fromTarget(target);
+    this._securityOriginManager = target.model(SDK.SecurityOriginManager);
     this._agent = target.indexedDBAgent();
 
     /** @type {!Map.<!Resources.IndexedDBModel.DatabaseId, !Resources.IndexedDBModel.Database>} */
@@ -136,14 +136,6 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
     if (idbKeyPath instanceof Array)
       return '["' + idbKeyPath.join('", "') + '"]';
     return null;
-  }
-
-  /**
-   * @param {!SDK.Target} target
-   * @return {!Resources.IndexedDBModel}
-   */
-  static fromTarget(target) {
-    return /** @type {!Resources.IndexedDBModel} */ (target.model(Resources.IndexedDBModel));
   }
 
   enable() {
@@ -407,13 +399,14 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
         return;
       }
 
-      if (!this._databaseNamesBySecurityOrigin[databaseId.securityOrigin])
+      var runtimeModel = this.target().model(SDK.RuntimeModel);
+      if (!runtimeModel || !this._databaseNamesBySecurityOrigin[databaseId.securityOrigin])
         return;
       var entries = [];
       for (var i = 0; i < dataEntries.length; ++i) {
-        var key = this.target().runtimeModel.createRemoteObject(dataEntries[i].key);
-        var primaryKey = this.target().runtimeModel.createRemoteObject(dataEntries[i].primaryKey);
-        var value = this.target().runtimeModel.createRemoteObject(dataEntries[i].value);
+        var key = runtimeModel.createRemoteObject(dataEntries[i].key);
+        var primaryKey = runtimeModel.createRemoteObject(dataEntries[i].primaryKey);
+        var value = runtimeModel.createRemoteObject(dataEntries[i].value);
         entries.push(new Resources.IndexedDBModel.Entry(key, primaryKey, value));
       }
       callback(entries, hasMore);
@@ -426,7 +419,7 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
   }
 };
 
-SDK.SDKModel.register(Resources.IndexedDBModel, SDK.Target.Capability.None);
+SDK.SDKModel.register(Resources.IndexedDBModel, SDK.Target.Capability.None, false);
 
 Resources.IndexedDBModel.KeyTypes = {
   NumberType: 'number',

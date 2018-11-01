@@ -112,6 +112,7 @@ interface TestObject {
     attribute FrozenArray<DOMString> stringFrozenArrayAttribute;
     attribute FrozenArray<TestInterfaceEmpty> testInterfaceEmptyFrozenArrayAttribute;
     // Nullable attributes
+    attribute boolean? booleanOrNullAttribute;
     attribute DOMString? stringOrNullAttribute;
     attribute long? longOrNullAttribute;
     attribute TestInterface? testInterfaceOrNullAttribute;
@@ -130,6 +131,7 @@ interface TestObject {
     attribute (DOMString or sequence<DOMString>) stringOrStringSequenceAttribute;
     attribute (TestEnum or double) testEnumOrDoubleAttribute;
     attribute (unrestricted double or DOMString) unrestrictedDoubleOrStringAttribute;
+    attribute ((double or DOMString) or sequence<(double or DOMString)>) nestedUnionAtribute;
 
     // Extended attributes
     [LogActivity, LogAllWorlds] attribute long activityLoggingAccessForAllWorldsLongAttribute;
@@ -283,6 +285,7 @@ interface TestObject {
     // Typed arrays
     ArrayBuffer arrayBufferMethod();
     ArrayBufferView arrayBufferViewMethod();
+    [RaisesException] ArrayBufferView arrayBufferViewMethodRaisesException();
     Float32Array float32ArrayMethod();
     Int32Array int32ArrayMethod();
     Uint8Array uint8ArrayMethod();
@@ -330,6 +333,10 @@ interface TestObject {
     void voidMethodDoubleOrNullOrDOMStringArg((double? or DOMString) arg);
     void voidMethodDOMStringOrArrayBufferOrArrayBufferViewArg((DOMString or ArrayBuffer or ArrayBufferView) arg);
     void voidMethodArrayBufferOrArrayBufferViewOrDictionaryArg((ArrayBuffer or ArrayBufferView or Dictionary) arg);
+    // Unions with types that need extra includes/forward declarations in container types
+    void voidMethodBooleanOrElementSequenceArg((BooleanType or sequence<Element>) arg);
+    void voidMethodDoubleOrLongOrBooleanSequenceArg((double or sequence<(long or boolean)>) arg);
+    void voidMethodElementSequenceOrByteStringDoubleOrStringRecord((sequence<Element> or record<ByteString, (double or DOMString)>) arg);
     // Array of Union types
     void voidMethodArrayOfDoubleOrDOMStringArg((double or DOMString)... arg);
     // Currently only used on interface type arguments

@@ -85,6 +85,7 @@
           './actions_model.js',
           './app_state_controller.js',
           './column_visibility_controller.js',
+          './constants.js',
           './dialog_action_controller.js',
           './dialog_type.js',
           './directory_contents.js',
@@ -162,6 +163,7 @@
           './ui/suggest_apps_dialog.js',
           './main_window_component.js',
           './volume_manager_wrapper.js',
+          './web_store_utils.js',
           './metadata/byte_reader.js',
         ],
         'externs': [
@@ -180,6 +182,7 @@
           '../../../externs/connection.js',
           '../../../externs/css_rule.js',
           '../../../externs/directory_change_event.js',
+          '../../../externs/drag_target.js',
           '../../../externs/entry_location.js',
           '../../../externs/es6_workaround.js',
           '../../../externs/file_browser_background.js',

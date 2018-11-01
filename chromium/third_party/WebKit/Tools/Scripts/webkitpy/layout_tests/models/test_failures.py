@@ -32,9 +32,14 @@ from webkitpy.layout_tests.models import test_expectations
 
 
 def is_reftest_failure(failure_list):
-    failure_types = [type(f) for f in failure_list]
-    return set((FailureReftestMismatch, FailureReftestMismatchDidNotOccur, FailureReftestNoImagesGenerated)).intersection(
-        failure_types)
+    input_failure_types = {type(f) for f in failure_list}
+    reftest_failure_types = {
+        FailureReftestMismatch,
+        FailureReftestMismatchDidNotOccur,
+        FailureReftestNoImageGenerated,
+        FailureReftestNoReferenceImageGenerated
+    }
+    return bool(input_failure_types & reftest_failure_types)
 
 # FIXME: This is backwards.  Each TestFailure subclass should know what
 # test_expectation type it corresponds too.  Then this method just
@@ -82,7 +87,7 @@ def determine_result_type(failure_list):
         elif is_audio_failure:
             return test_expectations.AUDIO
         else:
-            raise ValueError("unclassifiable set of failures: "
+            raise ValueError('unclassifiable set of failures: '
                              + str(failure_types))
 
 
@@ -123,7 +128,7 @@ class FailureTimeout(TestFailure):
         self.is_reftest = is_reftest
 
     def message(self):
-        return "test timed out"
+        return 'test timed out'
 
     def driver_needs_restart(self):
         return True
@@ -140,8 +145,8 @@ class FailureCrash(TestFailure):
 
     def message(self):
         if self.pid:
-            return "%s crashed [pid=%d]" % (self.process_name, self.pid)
-        return self.process_name + " crashed"
+            return '%s crashed [pid=%d]' % (self.process_name, self.pid)
+        return self.process_name + ' crashed'
 
     def driver_needs_restart(self):
         return True
@@ -155,49 +160,49 @@ class FailureLeak(TestFailure):
         self.log = log
 
     def message(self):
-        return "leak detected: %s" % (self.log)
+        return 'leak detected: %s' % (self.log)
 
 
 class FailureMissingResult(TestFailure):
 
     def message(self):
-        return "-expected.txt was missing"
+        return '-expected.txt was missing'
 
 
 class FailureTestHarnessAssertion(TestFailure):
 
     def message(self):
-        return "asserts failed"
+        return 'asserts failed'
 
 
 class FailureTextMismatch(TestFailure):
 
     def message(self):
-        return "text diff"
+        return 'text diff'
 
 
 class FailureMissingImageHash(TestFailure):
 
     def message(self):
-        return "-expected.png was missing an embedded checksum"
+        return '-expected.png was missing an embedded checksum'
 
 
 class FailureMissingImage(TestFailure):
 
     def message(self):
-        return "-expected.png was missing"
+        return '-expected.png was missing'
 
 
 class FailureImageHashMismatch(TestFailure):
 
     def message(self):
-        return "image diff"
+        return 'image diff'
 
 
 class FailureImageHashIncorrect(TestFailure):
 
     def message(self):
-        return "-expected.png embedded checksum is incorrect"
+        return '-expected.png embedded checksum is incorrect'
 
 
 class FailureReftestMismatch(TestFailure):
@@ -207,7 +212,7 @@ class FailureReftestMismatch(TestFailure):
         self.reference_filename = reference_filename
 
     def message(self):
-        return "reference mismatch"
+        return 'reference mismatch'
 
 
 class FailureReftestMismatchDidNotOccur(TestFailure):
@@ -220,32 +225,42 @@ class FailureReftestMismatchDidNotOccur(TestFailure):
         return "reference mismatch didn't happen"
 
 
-class FailureReftestNoImagesGenerated(TestFailure):
+class FailureReftestNoImageGenerated(TestFailure):
 
     def __init__(self, reference_filename=None):
-        super(FailureReftestNoImagesGenerated, self).__init__()
+        super(FailureReftestNoImageGenerated, self).__init__()
         self.reference_filename = reference_filename
 
     def message(self):
-        return "reference didn't generate pixel results."
+        return "reference test didn't generate pixel results"
+
+
+class FailureReftestNoReferenceImageGenerated(TestFailure):
+
+    def __init__(self, reference_filename=None):
+        super(FailureReftestNoReferenceImageGenerated, self).__init__()
+        self.reference_filename = reference_filename
+
+    def message(self):
+        return "-expected.html didn't generate pixel results"
 
 
 class FailureMissingAudio(TestFailure):
 
     def message(self):
-        return "expected audio result was missing"
+        return 'expected audio result was missing'
 
 
 class FailureAudioMismatch(TestFailure):
 
     def message(self):
-        return "audio mismatch"
+        return 'audio mismatch'
 
 
 class FailureEarlyExit(TestFailure):
 
     def message(self):
-        return "skipped due to early exit"
+        return 'skipped due to early exit'
 
 
 # Convenient collection of all failure classes for anything that might
@@ -255,6 +270,8 @@ ALL_FAILURE_CLASSES = (FailureTimeout, FailureCrash, FailureMissingResult,
                        FailureTextMismatch, FailureMissingImageHash,
                        FailureMissingImage, FailureImageHashMismatch,
                        FailureImageHashIncorrect, FailureReftestMismatch,
-                       FailureReftestMismatchDidNotOccur, FailureReftestNoImagesGenerated,
+                       FailureReftestMismatchDidNotOccur,
+                       FailureReftestNoImageGenerated,
+                       FailureReftestNoReferenceImageGenerated,
                        FailureMissingAudio, FailureAudioMismatch,
                        FailureEarlyExit)

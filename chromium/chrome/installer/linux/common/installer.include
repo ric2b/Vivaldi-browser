@@ -87,6 +87,8 @@ prep_staging_common() {
   install -m 755 -d "${STAGEDIR}/${INSTALLDIR}" \
     "${STAGEDIR}/usr/bin" \
     "${STAGEDIR}/usr/share/applications" \
+    "${STAGEDIR}/usr/share/appdata" \
+    "${STAGEDIR}/usr/share/gnome-control-center/default-apps" \
     "${STAGEDIR}/usr/share/xfce4/helpers"
 }
 
@@ -198,6 +200,13 @@ stage_install_common() {
   if [ "${CHANNEL}" != "stable" ]; then
     install -m 644 "${BUILDDIR}/libGLESv2.so" "${STAGEDIR}/${INSTALLDIR}/"
     install -m 644 "${BUILDDIR}/libEGL.so" "${STAGEDIR}/${INSTALLDIR}/"
+  fi
+
+  # SwiftShader
+  if [ -f "${BUILDDIR}/swiftshader/libEGL.so" ]; then
+    install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/swiftshader/"
+    install -m 644 "${BUILDDIR}/swiftshader/libEGL.so" "${STAGEDIR}/${INSTALLDIR}/swiftshader/"
+    install -m 644 "${BUILDDIR}/swiftshader/libGLESv2.so" "${STAGEDIR}/${INSTALLDIR}/swiftshader/"
   fi
 
   # libc++

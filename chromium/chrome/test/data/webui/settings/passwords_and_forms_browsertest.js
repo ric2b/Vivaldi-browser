@@ -32,6 +32,7 @@ PasswordsAndFormsBrowserTest.prototype = {
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
       '../fake_chrome_event.js',
       'fake_settings_private.js',
+      'ensure_lazy_loaded.js',
   ]),
 
   /** @override */
@@ -40,6 +41,8 @@ PasswordsAndFormsBrowserTest.prototype = {
 
     // Test is run on an individual element that won't have a page language.
     this.accessibilityAuditConfig.auditRulesToIgnore.push('humanLangMissing');
+
+    settings.ensureLazyLoaded();
   },
 };
 
@@ -248,29 +251,6 @@ TEST_F('PasswordsAndFormsBrowserTest', 'uiTests', function() {
         // have additional calls to the manager after the base expectations.
         passwordManager.assertExpectations(basePasswordExpectations());
         autofillManager.assertExpectations(baseAutofillExpectations());
-
-        destroyPrefs(prefs);
-      });
-    });
-
-    test('testActionabilityNope', function() {
-      return createPrefs(false, false).then(function(prefs) {
-
-        var element = createPasswordsAndFormsElement(prefs);
-
-        assertFalse(element.$.autofillManagerButton.hasAttribute('actionable'));
-        assertFalse(element.$.passwordManagerButton.hasAttribute('actionable'));
-
-        destroyPrefs(prefs);
-      });
-    });
-
-    test('testActionabilityYes', function() {
-      return createPrefs(true, true).then(function(prefs) {
-        var element = createPasswordsAndFormsElement(prefs);
-
-        assertTrue(element.$.autofillManagerButton.hasAttribute('actionable'));
-        assertTrue(element.$.passwordManagerButton.hasAttribute('actionable'));
 
         destroyPrefs(prefs);
       });

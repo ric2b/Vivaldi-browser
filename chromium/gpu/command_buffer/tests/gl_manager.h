@@ -35,7 +35,7 @@ namespace gpu {
 class CommandBufferService;
 class CommandExecutor;
 class ImageFactory;
-class SyncPointClient;
+class SyncPointClientState;
 class SyncPointOrderData;
 class SyncPointManager;
 class TransferBuffer;
@@ -146,7 +146,8 @@ class GLManager : private GpuControl {
   bool IsFenceSyncReleased(uint64_t release) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        const base::Closure& callback) override;
-  bool CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) override;
+  void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
+  bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
 
  private:
   void PumpCommands();
@@ -160,7 +161,7 @@ class GLManager : private GpuControl {
   SyncPointManager* sync_point_manager_ = nullptr;  // Non-owning.
 
   scoped_refptr<SyncPointOrderData> sync_point_order_data_;
-  std::unique_ptr<SyncPointClient> sync_point_client_;
+  scoped_refptr<SyncPointClientState> sync_point_client_state_;
   scoped_refptr<gles2::MailboxManager> mailbox_manager_;
   scoped_refptr<gl::GLShareGroup> share_group_;
   std::unique_ptr<CommandBufferService> command_buffer_;

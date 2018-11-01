@@ -81,6 +81,8 @@ source_set("audio") {
     "audio_manager_base.h",
     "audio_output_controller.cc",
     "audio_output_controller.h",
+    "audio_output_delegate.cc",
+    "audio_output_delegate.h",
     "audio_output_device.cc",
     "audio_output_device.h",
     "audio_output_dispatcher.cc",
@@ -160,6 +162,8 @@ source_set("audio") {
       "mac/audio_low_latency_input_mac.h",
       "mac/audio_manager_mac.cc",
       "mac/audio_manager_mac.h",
+      "mac/scoped_audio_unit.cc",
+      "mac/scoped_audio_unit.h",
     ]
     libs += [
       "AudioToolbox.framework",

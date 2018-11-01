@@ -7,7 +7,6 @@
 #include <string>
 #include <tuple>
 
-#include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,12 +24,14 @@ const char kLearningMode[] = "learning";
 const char kExternalPrefetchingMode[] = "external-prefetching";
 const char kPrefetchingMode[] = "prefetching";
 const char kEnableUrlLearningParamName[] = "enable-url-learning";
+const char kEnableManifestsParamName[] = "enable-manifests";
+const char kEnableOriginLearningParamName[] = "enable-origin-learning";
+
+const base::Feature kSpeculativeResourcePrefetchingFeature =
+    base::Feature(kSpeculativeResourcePrefetchingFeatureName,
+                  base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
-
-const base::Feature kSpeculativeResourcePrefetchingFeature{
-    kSpeculativeResourcePrefetchingFeatureName,
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsPrefetchingEnabledInternal(Profile* profile, int mode, int mask) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -63,9 +64,24 @@ bool IsSpeculativeResourcePrefetchingEnabled(
   std::string enable_url_learning_value =
       base::GetFieldTrialParamValueByFeature(
           kSpeculativeResourcePrefetchingFeature, kEnableUrlLearningParamName);
-  if (enable_url_learning_value == "true") {
+  if (enable_url_learning_value == "true")
     config->is_url_learning_enabled = true;
-  }
+
+  std::string enable_manifests_value = base::GetFieldTrialParamValueByFeature(
+      kSpeculativeResourcePrefetchingFeature, kEnableManifestsParamName);
+  if (enable_manifests_value == "true")
+    config->is_manifests_enabled = true;
+
+  bool enable_origin_learning = base::GetFieldTrialParamValueByFeature(
+                                    kSpeculativeResourcePrefetchingFeature,
+                                    kEnableOriginLearningParamName) == "true";
+  config->is_origin_learning_enabled = enable_origin_learning;
+
+  // Ensure that a resource that was only seen once is never prefetched. This
+  // prevents the easy mistake of trying to prefetch an ephemeral url.
+  DCHECK_GT(config->min_resource_hits_to_trigger_prefetch, 1U);
+  if (config->min_resource_hits_to_trigger_prefetch < 2)
+    config->min_resource_hits_to_trigger_prefetch = 2;
 
   std::string mode_value = base::GetFieldTrialParamValueByFeature(
       kSpeculativeResourcePrefetchingFeature, kModeParamName);
@@ -127,13 +143,16 @@ ResourcePrefetchPredictorConfig::ResourcePrefetchPredictorConfig()
       max_hosts_to_track(200),
       min_url_visit_count(2),
       max_resources_per_entry(50),
+      max_origins_per_entry(50),
       max_consecutive_misses(3),
+      max_redirect_consecutive_misses(5),
       min_resource_confidence_to_trigger_prefetch(0.7f),
       min_resource_hits_to_trigger_prefetch(2),
       max_prefetches_inflight_per_navigation(5),
       max_prefetches_inflight_per_host_per_navigation(3),
-      is_url_learning_enabled(false) {
-}
+      is_url_learning_enabled(false),
+      is_manifests_enabled(false),
+      is_origin_learning_enabled(false) {}
 
 ResourcePrefetchPredictorConfig::ResourcePrefetchPredictorConfig(
     const ResourcePrefetchPredictorConfig& other) = default;

@@ -20,7 +20,6 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_activity_monitor.h"
-#include "net/http/http_log_util.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
@@ -34,6 +33,7 @@
 #include "net/quic/core/spdy_utils.h"
 #include "net/socket/datagram_client_socket.h"
 #include "net/spdy/spdy_http_utils.h"
+#include "net/spdy/spdy_log_util.h"
 #include "net/spdy/spdy_session.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/ssl_connection_status_flags.h"
@@ -62,6 +62,9 @@ const size_t kTokenBindingSignatureMapSize = 10;
 // Time to wait (in seconds) when no networks are available and
 // migrating sessions need to wait for a new network to connect.
 const size_t kWaitTimeForNewNetworkSecs = 10;
+
+// The maximum size of uncompressed QUIC headers that will be allowed.
+const size_t kMaxUncompressedHeaderSize = 256 * 1024;
 
 // Histograms for tracking down the crashes from http://crbug.com/354669
 // Note: these values must be kept in sync with the corresponding values in:
@@ -298,6 +301,9 @@ QuicChromiumClientSession::QuicChromiumClientSession(
 }
 
 QuicChromiumClientSession::~QuicChromiumClientSession() {
+  DCHECK(callback_.is_null());
+
+  net_log_.EndEvent(NetLogEventType::QUIC_SESSION);
   if (!dynamic_streams().empty())
     RecordUnexpectedOpenStreams(DESTRUCTOR);
   if (!observers_.empty())
@@ -426,7 +432,6 @@ QuicChromiumClientSession::~QuicChromiumClientSession() {
   UMA_HISTOGRAM_COUNTS(
       "Net.QuicSession.MaxReordering",
       static_cast<base::HistogramBase::Sample>(stats.max_sequence_reordering));
-  net_log_.EndEvent(NetLogEventType::QUIC_SESSION);
 }
 
 void QuicChromiumClientSession::Initialize() {
@@ -435,6 +440,7 @@ void QuicChromiumClientSession::Initialize() {
       base::MakeUnique<HpackEncoderDebugVisitor>());
   SetHpackDecoderDebugVisitor(
       base::MakeUnique<HpackDecoderDebugVisitor>());
+  set_max_uncompressed_header_bytes(kMaxUncompressedHeaderSize);
 }
 
 void QuicChromiumClientSession::OnHeadersHeadOfLineBlocking(
@@ -668,11 +674,8 @@ int QuicChromiumClientSession::CryptoConnect(
   connect_timing_.connect_start = base::TimeTicks::Now();
   RecordHandshakeState(STATE_STARTED);
   DCHECK(flow_controller());
-  crypto_stream_->CryptoConnect();
 
-  // Check if the connection is still open, issues during CryptoConnect like
-  // packet write error could cause the connection to be torn down.
-  if (!connection()->connected())
+  if (!crypto_stream_->CryptoConnect())
     return ERR_QUIC_HANDSHAKE_FAILED;
 
   if (IsCryptoHandshakeConfirmed()) {
@@ -684,20 +687,6 @@ int QuicChromiumClientSession::CryptoConnect(
   // we have established initial encryption.
   if (!require_confirmation_ && IsEncryptionEstablished())
     return OK;
-
-  callback_ = callback;
-  return ERR_IO_PENDING;
-}
-
-int QuicChromiumClientSession::ResumeCryptoConnect(
-    const CompletionCallback& callback) {
-  if (IsCryptoHandshakeConfirmed()) {
-    connect_timing_.connect_end = base::TimeTicks::Now();
-    return OK;
-  }
-
-  if (!connection()->connected())
-    return ERR_QUIC_HANDSHAKE_FAILED;
 
   callback_ = callback;
   return ERR_IO_PENDING;
@@ -855,11 +844,6 @@ void QuicChromiumClientSession::OnConfigNegotiated() {
 
 void QuicChromiumClientSession::OnCryptoHandshakeEvent(
     CryptoHandshakeEvent event) {
-  if (stream_factory_ && event == HANDSHAKE_CONFIRMED &&
-      stream_factory_->OnHandshakeConfirmed(this)) {
-    return;
-  }
-
   if (!callback_.is_null() &&
       (!require_confirmation_ || event == HANDSHAKE_CONFIRMED ||
        event == ENCRYPTION_REESTABLISHED)) {
@@ -921,10 +905,11 @@ void QuicChromiumClientSession::OnCryptoHandshakeMessageReceived(
     const CryptoHandshakeMessage& message) {
   logger_->OnCryptoHandshakeMessageReceived(message);
   if (message.tag() == kREJ || message.tag() == kSREJ) {
-    UMA_HISTOGRAM_CUSTOM_COUNTS("Net.QuicSession.RejectLength",
-                                message.GetSerialized().length(), 1000, 10000,
-                                50);
-    base::StringPiece proof;
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "Net.QuicSession.RejectLength",
+        message.GetSerialized(Perspective::IS_CLIENT).length(), 1000, 10000,
+        50);
+    QuicStringPiece proof;
     UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.RejectHasProof",
                           message.GetStringPiece(kPROF, &proof));
   }
@@ -981,10 +966,6 @@ void QuicChromiumClientSession::OnConnectionClosed(
     UMA_HISTOGRAM_COUNTS(
         "Net.QuicSession.ConnectionClose.NumOpenStreams.TimedOut",
         GetNumOpenOutgoingStreams());
-    // Notify the factory the connection timed out with open streams.
-    if (GetNumOpenOutgoingStreams() > 0 && stream_factory_) {
-      stream_factory_->OnTimeoutWithOpenStreams();
-    }
     if (IsCryptoHandshakeConfirmed()) {
       if (GetNumOpenOutgoingStreams() > 0) {
         UMA_HISTOGRAM_BOOLEAN(
@@ -1010,7 +991,18 @@ void QuicChromiumClientSession::OnConnectionClosed(
     }
   }
 
-  if (!IsCryptoHandshakeConfirmed()) {
+  if (IsCryptoHandshakeConfirmed()) {
+    // QUIC connections should not timeout while there are open streams,
+    // since PING frames are sent to prevent timeouts. If, however, the
+    // connection timed out with open streams then QUIC traffic has become
+    // blackholed. Alternatively, if too many retransmission timeouts occur
+    // then QUIC traffic has become blackholed.
+    if (stream_factory_ &&
+        (error == QUIC_TOO_MANY_RTOS || (error == QUIC_NETWORK_IDLE_TIMEOUT &&
+                                         GetNumOpenOutgoingStreams() > 0))) {
+      stream_factory_->OnBlackholeAfterHandshakeConfirmed(this);
+    }
+  } else {
     if (error == QUIC_PUBLIC_RESET) {
       RecordHandshakeFailureReason(HANDSHAKE_FAILURE_PUBLIC_RESET);
     } else if (connection()->GetStats().packets_received == 0) {
@@ -1183,12 +1175,16 @@ void QuicChromiumClientSession::OnNetworkConnected(
   // migration process. Allows tests to be more uniform.
   stream_factory_->OnSessionGoingAway(this);
   stream_factory_->MigrateSessionToNewNetwork(
-      this, network, /*close_session_on_error=*/true, net_log_);
+      this, network, /*close_session_on_error=*/true, net_log);
 }
 
 void QuicChromiumClientSession::OnWriteError(int error_code) {
   DCHECK_NE(ERR_IO_PENDING, error_code);
   DCHECK_GT(0, error_code);
+  if (IsCryptoHandshakeConfirmed()) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicSession.WriteError.HandshakeConfirmed",
+                                -error_code);
+  }
   connection()->OnWriteError(error_code);
 }
 
@@ -1349,9 +1345,8 @@ void QuicChromiumClientSession::OnReadError(
   }
   DVLOG(1) << "Closing session on read error: " << result;
   UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicSession.ReadError", -result);
-  NotifyFactoryOfSessionGoingAway();
-  CloseSessionOnErrorInner(result, QUIC_PACKET_READ_ERROR);
-  NotifyFactoryOfSessionClosedLater();
+  connection()->CloseConnection(QUIC_PACKET_READ_ERROR, ErrorToString(result),
+                                ConnectionCloseBehavior::SILENT_CLOSE);
 }
 
 bool QuicChromiumClientSession::OnPacket(const QuicReceivedPacket& packet,

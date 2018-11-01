@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
@@ -129,10 +130,10 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest {
   std::string GetMultilingualDictionaries() {
     const base::ListValue* list_value =
         prefs_->GetList(spellcheck::prefs::kSpellCheckDictionaries);
-    std::vector<std::string> dictionaries;
+    std::vector<base::StringPiece> dictionaries;
     for (const auto& item_value : *list_value) {
-      std::string dictionary;
-      EXPECT_TRUE(item_value->GetAsString(&dictionary));
+      base::StringPiece dictionary;
+      EXPECT_TRUE(item_value.GetAsString(&dictionary));
       dictionaries.push_back(dictionary);
     }
     return base::JoinString(dictionaries, ",");
@@ -235,17 +236,12 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
   EXPECT_FALSE(GetFirstEnableSpellcheckMessageParam());
 }
 
-// Flaky on Windows, see https://crbug.com/611029.
-#if defined(OS_WIN)
-#define MAYBE_StartWithoutLanguages DISABLED_StartWithoutLanguages
-#else
-#define MAYBE_StartWithoutLanguages StartWithoutLanguages
-#endif
 // Starting without spellcheck languages should send the 'disable spellcheck'
 // message to the renderer. Consequently adding spellchecking languages should
 // enable spellcheck.
+// Flaky, see https://crbug.com/600153
 IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
-                       MAYBE_StartWithoutLanguages) {
+                       DISABLED_StartWithoutLanguages) {
   InitSpellcheck(true, "", "");
   EXPECT_FALSE(GetFirstEnableSpellcheckMessageParam());
 

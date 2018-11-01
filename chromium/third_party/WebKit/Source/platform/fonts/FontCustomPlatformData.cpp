@@ -40,82 +40,90 @@
 #include "platform/fonts/opentype/FontSettings.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkTypeface.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
+#if OS(WIN)
+#include "third_party/skia/include/ports/SkFontMgr_empty.h"
+#endif
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
 FontCustomPlatformData::FontCustomPlatformData(sk_sp<SkTypeface> typeface,
-                                               size_t dataSize)
-    : m_baseTypeface(typeface), m_dataSize(dataSize) {}
+                                               size_t data_size)
+    : base_typeface_(std::move(typeface)), data_size_(data_size) {}
 
 FontCustomPlatformData::~FontCustomPlatformData() {}
 
-FontPlatformData FontCustomPlatformData::fontPlatformData(
+FontPlatformData FontCustomPlatformData::GetFontPlatformData(
     float size,
     bool bold,
     bool italic,
     FontOrientation orientation,
-    const FontVariationSettings* variationSettings) {
-  DCHECK(m_baseTypeface);
+    const FontVariationSettings* variation_settings) {
+  DCHECK(base_typeface_);
 
-  sk_sp<SkTypeface> returnTypeface = m_baseTypeface;
+  sk_sp<SkTypeface> return_typeface = base_typeface_;
 
-  // Maximum axis count is maximum value for the OpenType USHORT, which is a
-  // 16bit unsigned.  https://www.microsoft.com/typography/otspec/fvar.htm
-  // Variation settings coming from CSS can have duplicate assignments and the
-  // list can be longer than UINT16_MAX, but ignoring this for now, going with a
-  // reasonable upper limit and leaving the deduplication for TODO(drott),
-  // crbug.com/674878 second duplicate value should supersede first..
-  if (variationSettings && variationSettings->size() < UINT16_MAX) {
+  // Maximum axis count is maximum value for the OpenType USHORT,
+  // which is a 16bit unsigned.
+  // https://www.microsoft.com/typography/otspec/fvar.htm Variation
+  // settings coming from CSS can have duplicate assignments and the
+  // list can be longer than UINT16_MAX, but ignoring the length for
+  // now, going with a reasonable upper limit. Deduplication is
+  // handled by Skia with priority given to the last occuring
+  // assignment.
+  if (variation_settings && variation_settings->size() < UINT16_MAX) {
+#if OS(WIN)
+    sk_sp<SkFontMgr> fm(SkFontMgr_New_Custom_Empty());
+#else
     sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
+#endif
     Vector<SkFontMgr::FontParameters::Axis, 0> axes;
-    axes.reserveCapacity(variationSettings->size());
-    for (size_t i = 0; i < variationSettings->size(); ++i) {
+    axes.ReserveCapacity(variation_settings->size());
+    for (size_t i = 0; i < variation_settings->size(); ++i) {
       SkFontMgr::FontParameters::Axis axis = {
-          atomicStringToFourByteTag(variationSettings->at(i).tag()),
-          SkFloatToScalar(variationSettings->at(i).value())};
+          AtomicStringToFourByteTag(variation_settings->at(i).Tag()),
+          SkFloatToScalar(variation_settings->at(i).Value())};
       axes.push_back(axis);
     }
 
-    sk_sp<SkTypeface> skVariationFont(fm->createFromStream(
-        m_baseTypeface->openStream(nullptr)->duplicate(),
-        SkFontMgr::FontParameters().setAxes(axes.data(), axes.size())));
+    sk_sp<SkTypeface> sk_variation_font(fm->createFromStream(
+        base_typeface_->openStream(nullptr)->duplicate(),
+        SkFontMgr::FontParameters().setAxes(axes.Data(), axes.size())));
 
-    if (skVariationFont) {
-      returnTypeface = skVariationFont;
+    if (sk_variation_font) {
+      return_typeface = sk_variation_font;
     } else {
-      SkString familyName;
-      m_baseTypeface->getFamilyName(&familyName);
+      SkString family_name;
+      base_typeface_->getFamilyName(&family_name);
       // TODO: Surface this as a console message?
       LOG(ERROR) << "Unable for apply variation axis properties for font: "
-                 << familyName.c_str();
+                 << family_name.c_str();
     }
   }
 
-  return FontPlatformData(returnTypeface, "", size,
-                          bold && !m_baseTypeface->isBold(),
-                          italic && !m_baseTypeface->isItalic(), orientation);
+  return FontPlatformData(return_typeface, "", size,
+                          bold && !base_typeface_->isBold(),
+                          italic && !base_typeface_->isItalic(), orientation);
 }
 
-std::unique_ptr<FontCustomPlatformData> FontCustomPlatformData::create(
+PassRefPtr<FontCustomPlatformData> FontCustomPlatformData::Create(
     SharedBuffer* buffer,
-    String& otsParseMessage) {
+    String& ots_parse_message) {
   DCHECK(buffer);
   WebFontDecoder decoder;
-  sk_sp<SkTypeface> typeface = decoder.decode(buffer);
+  sk_sp<SkTypeface> typeface = decoder.Decode(buffer);
   if (!typeface) {
-    otsParseMessage = decoder.getErrorString();
+    ots_parse_message = decoder.GetErrorString();
     return nullptr;
   }
-  return WTF::wrapUnique(
-      new FontCustomPlatformData(std::move(typeface), decoder.decodedSize()));
+  return AdoptRef(
+      new FontCustomPlatformData(std::move(typeface), decoder.DecodedSize()));
 }
 
-bool FontCustomPlatformData::supportsFormat(const String& format) {
-  return equalIgnoringCase(format, "truetype") ||
-         equalIgnoringCase(format, "opentype") ||
-         WebFontDecoder::supportsFormat(format);
+bool FontCustomPlatformData::SupportsFormat(const String& format) {
+  return DeprecatedEqualIgnoringCase(format, "truetype") ||
+         DeprecatedEqualIgnoringCase(format, "opentype") ||
+         WebFontDecoder::SupportsFormat(format);
 }
 
 }  // namespace blink

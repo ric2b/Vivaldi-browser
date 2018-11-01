@@ -15,40 +15,43 @@ namespace gpu {
 
 ProprietaryMediaGpuChannelManager::ProprietaryMediaGpuChannelManager(
                     const GpuPreferences& gpu_preferences,
+                    const GpuDriverBugWorkarounds& workarounds,
                     GpuChannelManagerDelegate* delegate,
                     GpuWatchdogThread* watchdog,
-                    base::SingleThreadTaskRunner* task_runner,
-                    base::SingleThreadTaskRunner* io_task_runner,
-                    base::WaitableEvent* shutdown_event,
+                    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
                     SyncPointManager* sync_point_manager,
                     GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-                    const GpuFeatureInfo& gpu_feature_info)
+                    const GpuFeatureInfo& gpu_feature_info,
+                    GpuProcessActivityFlags activity_flags)
    : GpuChannelManager(
                     gpu_preferences,
+                    workarounds,
                     delegate,
                     watchdog,
                     task_runner,
                     io_task_runner,
-                    shutdown_event,
                     sync_point_manager,
                     gpu_memory_buffer_factory,
-                    gpu_feature_info) {}
+                    gpu_feature_info,
+                    std::move(activity_flags)) {}
 
 ProprietaryMediaGpuChannelManager::~ProprietaryMediaGpuChannelManager() {}
 
-std::unique_ptr<GpuChannel> ProprietaryMediaGpuChannelManager::CreateGpuChannel(
+GpuChannel* ProprietaryMediaGpuChannelManager::EstablishChannel(
     int client_id,
     uint64_t client_tracing_id,
-    bool preempts,
-    bool allow_view_command_buffers,
-    bool allow_real_time_streams) {
-  return base::WrapUnique(
-      new ProprietaryMediaGpuChannel(
-                     this, sync_point_manager(), watchdog(), share_group(),
-                     mailbox_manager(), preempts ? preemption_flag() : nullptr,
-                     preempts ? nullptr : preemption_flag(), task_runner_.get(),
-                     io_task_runner_.get(), client_id, client_tracing_id,
-                     allow_view_command_buffers, allow_real_time_streams));
+    bool is_gpu_host) {
+
+    std::unique_ptr<ProprietaryMediaGpuChannel> gpu_channel = base::MakeUnique<ProprietaryMediaGpuChannel>(
+                this, sync_point_manager(), watchdog(), share_group(),
+                mailbox_manager(), is_gpu_host ? preemption_flag() : nullptr,
+                is_gpu_host ? nullptr : preemption_flag(), task_runner_.get(),
+                io_task_runner_.get(), client_id, client_tracing_id,
+                is_gpu_host);
+    GpuChannel* gpu_channel_ptr = gpu_channel.get();
+    gpu_channels_[client_id] = std::move(gpu_channel);
+    return gpu_channel_ptr;
 }
 
 }  // namespace gpu

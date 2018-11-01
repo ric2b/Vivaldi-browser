@@ -1,3 +1,4 @@
+<link rel="import" href="chrome://resources/html/util.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
@@ -12,7 +13,7 @@
     <div class="settings-box first two-line">
       <div class="start">
         <div>$i18n{downloadLocation}</div>
-        <div class="secondary">
+        <div class="secondary" no-search>
 <if expr="not chromeos">
           [[prefs.download.default_directory.value]]
 </if>
@@ -23,10 +24,10 @@
       </div>
       <div class="secondary-action">
         <controlled-button class="secondary-button" id="changeDownloadsPath"
+            label="$i18n{changeDownloadLocation}"
             on-tap="selectDownloadLocation_"
             pref="[[prefs.download.default_directory]]"
             end-justified>
-          $i18n{changeDownloadLocation}
         </controlled-button>
       </div>
     </div>

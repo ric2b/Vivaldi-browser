@@ -4,7 +4,7 @@
 
 #include "core/layout/ng/geometry/ng_physical_location.h"
 
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -13,7 +13,7 @@ bool NGPhysicalLocation::operator==(const NGPhysicalLocation& other) const {
 }
 
 String NGPhysicalLocation::ToString() const {
-  return String::format("%dx%d", left.toInt(), top.toInt());
+  return String::Format("%dx%d", left.ToInt(), top.ToInt());
 }
 
 }  // namespace blink

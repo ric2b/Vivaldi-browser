@@ -29,10 +29,6 @@
 #define IDC_RELOAD_BYPASSING_CACHE      33007
 #define IDC_LOAD_NEW_TAB_PAGE           33008
 #define IDC_RELOAD_CLEARING_CACHE       33009
-// Temporary commands to capture the old Back/Forward shortcuts and tell users
-// the new shortcut. May also trigger Back/Forward action if the
-// BackspaceGoesBack field trial is enabled.
-// TODO(mgiuca): Remove these in M54 (https://crbug.com/610039).
 #define IDC_BACKSPACE_BACK              33010
 #define IDC_BACKSPACE_FORWARD           33011
 
@@ -119,7 +115,6 @@
 
 // Show various bits of UI
 #define IDC_OPEN_FILE                   40000
-#define IDC_CREATE_SHORTCUTS            40001
 #define IDC_CREATE_HOSTED_APP           40002
 #define IDC_DEVELOPER_MENU              40003
 #define IDC_DEV_TOOLS                   40004
@@ -173,8 +168,7 @@
 #define IDC_ELEVATED_RECOVERY_DIALOG    40247
 #define IDC_TAKE_SCREENSHOT             40248
 #define IDC_MORE_TOOLS_MENU             40249
-#define IDC_SHOW_FAST_USER_SWITCHER     40250
-#define IDC_TOGGLE_FULLSCREEN_TOOLBAR   40251
+#define IDC_TOGGLE_FULLSCREEN_TOOLBAR   40250
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.
@@ -332,6 +326,7 @@
 #define IDC_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE 51205
 #define IDC_MEDIA_ROUTER_MANAGE_DEVICES 51206
 #define IDC_MEDIA_ROUTER_SHOWN_BY_POLICY 51207
+#define IDC_MEDIA_ROUTER_SHOW_IN_TOOLBAR 51208
 
 // Context menu items for media stream status tray
 #define IDC_MEDIA_STREAM_DEVICE_STATUS_TRAY 51300

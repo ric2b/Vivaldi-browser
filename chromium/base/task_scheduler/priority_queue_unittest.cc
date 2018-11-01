@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -59,26 +61,26 @@ TEST(TaskSchedulerPriorityQueueTest, PushPopPeek) {
   // Create test sequences.
   scoped_refptr<Sequence> sequence_a(new Sequence);
   sequence_a->PushTask(MakeUnique<Task>(
-      FROM_HERE, Closure(),
+      FROM_HERE, Bind(&DoNothing),
       TaskTraits().WithPriority(TaskPriority::USER_VISIBLE), TimeDelta()));
   SequenceSortKey sort_key_a = sequence_a->GetSortKey();
 
   scoped_refptr<Sequence> sequence_b(new Sequence);
   sequence_b->PushTask(MakeUnique<Task>(
-      FROM_HERE, Closure(),
+      FROM_HERE, Bind(&DoNothing),
       TaskTraits().WithPriority(TaskPriority::USER_BLOCKING), TimeDelta()));
   SequenceSortKey sort_key_b = sequence_b->GetSortKey();
 
   scoped_refptr<Sequence> sequence_c(new Sequence);
   sequence_c->PushTask(MakeUnique<Task>(
-      FROM_HERE, Closure(),
+      FROM_HERE, Bind(&DoNothing),
       TaskTraits().WithPriority(TaskPriority::USER_BLOCKING), TimeDelta()));
   SequenceSortKey sort_key_c = sequence_c->GetSortKey();
 
   scoped_refptr<Sequence> sequence_d(new Sequence);
   sequence_d->PushTask(MakeUnique<Task>(
-      FROM_HERE, Closure(), TaskTraits().WithPriority(TaskPriority::BACKGROUND),
-      TimeDelta()));
+      FROM_HERE, Bind(&DoNothing),
+      TaskTraits().WithPriority(TaskPriority::BACKGROUND), TimeDelta()));
   SequenceSortKey sort_key_d = sequence_d->GetSortKey();
 
   // Create a PriorityQueue and a Transaction.
@@ -139,19 +141,6 @@ TEST(TaskSchedulerPriorityQueueTest, IllegalTwoTransactionsSameThread) {
         std::unique_ptr<PriorityQueue::Transaction> transaction_b =
             pq_b.BeginTransaction();
       });
-}
-
-// Check that there is no crash when Transactions are created on the same thread
-// for 2 PriorityQueues which have a predecessor relationship.
-TEST(TaskSchedulerPriorityQueueTest, LegalTwoTransactionsSameThread) {
-  PriorityQueue pq_a;
-  PriorityQueue pq_b(&pq_a);
-
-  // This shouldn't crash.
-  std::unique_ptr<PriorityQueue::Transaction> transaction_a =
-      pq_a.BeginTransaction();
-  std::unique_ptr<PriorityQueue::Transaction> transaction_b =
-      pq_b.BeginTransaction();
 }
 
 // Check that it is possible to begin multiple Transactions for the same

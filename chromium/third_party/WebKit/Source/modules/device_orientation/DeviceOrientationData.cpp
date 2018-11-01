@@ -24,15 +24,17 @@
  */
 
 #include "modules/device_orientation/DeviceOrientationData.h"
-#include "public/platform/modules/device_orientation/WebDeviceOrientationData.h"
+
+#include "device/sensors/public/cpp/orientation_data.h"
+#include "modules/device_orientation/DeviceOrientationEventInit.h"
 
 namespace blink {
 
-DeviceOrientationData* DeviceOrientationData::create() {
+DeviceOrientationData* DeviceOrientationData::Create() {
   return new DeviceOrientationData;
 }
 
-DeviceOrientationData* DeviceOrientationData::create(
+DeviceOrientationData* DeviceOrientationData::Create(
     const Nullable<double>& alpha,
     const Nullable<double>& beta,
     const Nullable<double>& gamma,
@@ -40,18 +42,32 @@ DeviceOrientationData* DeviceOrientationData::create(
   return new DeviceOrientationData(alpha, beta, gamma, absolute);
 }
 
-DeviceOrientationData* DeviceOrientationData::create(
-    const WebDeviceOrientationData& data) {
+DeviceOrientationData* DeviceOrientationData::Create(
+    const DeviceOrientationEventInit& init) {
   Nullable<double> alpha;
   Nullable<double> beta;
   Nullable<double> gamma;
-  if (data.hasAlpha)
+  if (init.hasAlpha())
+    alpha = init.alpha();
+  if (init.hasBeta())
+    beta = init.beta();
+  if (init.hasGamma())
+    gamma = init.gamma();
+  return DeviceOrientationData::Create(alpha, beta, gamma, init.absolute());
+}
+
+DeviceOrientationData* DeviceOrientationData::Create(
+    const device::OrientationData& data) {
+  Nullable<double> alpha;
+  Nullable<double> beta;
+  Nullable<double> gamma;
+  if (data.has_alpha)
     alpha = data.alpha;
-  if (data.hasBeta)
+  if (data.has_beta)
     beta = data.beta;
-  if (data.hasGamma)
+  if (data.has_gamma)
     gamma = data.gamma;
-  return DeviceOrientationData::create(alpha, beta, gamma, data.absolute);
+  return DeviceOrientationData::Create(alpha, beta, gamma, data.absolute);
 }
 
 DeviceOrientationData::DeviceOrientationData() {}
@@ -60,38 +76,38 @@ DeviceOrientationData::DeviceOrientationData(const Nullable<double>& alpha,
                                              const Nullable<double>& beta,
                                              const Nullable<double>& gamma,
                                              bool absolute)
-    : m_alpha(alpha), m_beta(beta), m_gamma(gamma), m_absolute(absolute) {}
+    : alpha_(alpha), beta_(beta), gamma_(gamma), absolute_(absolute) {}
 
-double DeviceOrientationData::alpha() const {
-  return m_alpha.get();
+double DeviceOrientationData::Alpha() const {
+  return alpha_.Get();
 }
 
-double DeviceOrientationData::beta() const {
-  return m_beta.get();
+double DeviceOrientationData::Beta() const {
+  return beta_.Get();
 }
 
-double DeviceOrientationData::gamma() const {
-  return m_gamma.get();
+double DeviceOrientationData::Gamma() const {
+  return gamma_.Get();
 }
 
-bool DeviceOrientationData::absolute() const {
-  return m_absolute;
+bool DeviceOrientationData::Absolute() const {
+  return absolute_;
 }
 
-bool DeviceOrientationData::canProvideAlpha() const {
-  return !m_alpha.isNull();
+bool DeviceOrientationData::CanProvideAlpha() const {
+  return !alpha_.IsNull();
 }
 
-bool DeviceOrientationData::canProvideBeta() const {
-  return !m_beta.isNull();
+bool DeviceOrientationData::CanProvideBeta() const {
+  return !beta_.IsNull();
 }
 
-bool DeviceOrientationData::canProvideGamma() const {
-  return !m_gamma.isNull();
+bool DeviceOrientationData::CanProvideGamma() const {
+  return !gamma_.IsNull();
 }
 
-bool DeviceOrientationData::canProvideEventData() const {
-  return canProvideAlpha() || canProvideBeta() || canProvideGamma();
+bool DeviceOrientationData::CanProvideEventData() const {
+  return CanProvideAlpha() || CanProvideBeta() || CanProvideGamma();
 }
 
 }  // namespace blink

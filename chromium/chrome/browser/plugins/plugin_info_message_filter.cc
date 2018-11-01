@@ -183,8 +183,7 @@ PluginInfoMessageFilter::PluginInfoMessageFilter(int render_process_id,
     : BrowserMessageFilter(ChromeMsgStart),
       context_(render_process_id, profile),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      ukm_source_id_(ukm::UkmService::GetNewSourceID()),
-      weak_ptr_factory_(this) {
+      ukm_source_id_(ukm::UkmService::GetNewSourceID()) {
   shutdown_notifier_ =
       ShutdownNotifierFactory::GetInstance()->Get(profile)->Subscribe(
           base::Bind(&PluginInfoMessageFilter::ShutdownOnUIThread,
@@ -212,9 +211,6 @@ bool PluginInfoMessageFilter::OnMessageReceived(const IPC::Message& message) {
 }
 
 void PluginInfoMessageFilter::OnDestruct() const {
-  const_cast<PluginInfoMessageFilter*>(this)->
-      weak_ptr_factory_.InvalidateWeakPtrs();
-
   // Destroy on the UI thread because we contain a |PrefMember|.
   content::BrowserThread::DeleteOnUIThread::Destruct(this);
 }
@@ -236,10 +232,8 @@ void PluginInfoMessageFilter::OnGetPluginInfo(
     IPC::Message* reply_msg) {
   GetPluginInfo_Params params = {render_frame_id, url, main_frame_origin,
                                  mime_type};
-  PluginService::GetInstance()->GetPlugins(
-      base::Bind(&PluginInfoMessageFilter::PluginsLoaded,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 params, reply_msg));
+  PluginService::GetInstance()->GetPlugins(base::Bind(
+      &PluginInfoMessageFilter::PluginsLoaded, this, params, reply_msg));
 }
 
 void PluginInfoMessageFilter::PluginsLoaded(
@@ -356,7 +350,7 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
     return;
   }
 
-#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // Check if the plugin is outdated.
   if (security_status == PluginMetadata::SECURITY_STATUS_OUT_OF_DATE &&
       !allow_outdated_plugins_.GetValue()) {
@@ -367,7 +361,7 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
     }
     return;
   }
-#endif
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
   // Check if the plugin is crashing too much.
   if (PluginService::GetInstance()->IsPluginUnstable(plugin.path) &&

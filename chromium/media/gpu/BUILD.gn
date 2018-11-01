@@ -128,6 +128,8 @@ component("gpu") {
   defines = [ "MEDIA_GPU_IMPLEMENTATION" ]
 
   sources = [
+    "fake_jpeg_decode_accelerator.cc",
+    "fake_jpeg_decode_accelerator.h",
     "fake_video_decode_accelerator.cc",
     "fake_video_decode_accelerator.h",
     "gpu_video_accelerator_util.cc",
@@ -187,6 +189,14 @@ component("gpu") {
       "avda_shared_state.cc",
       "avda_shared_state.h",
       "avda_state_provider.h",
+      "avda_surface_bundle.cc",
+      "avda_surface_bundle.h",
+      "content_video_view_overlay.cc",
+      "content_video_view_overlay.h",
+      "content_video_view_overlay_allocator.cc",
+      "content_video_view_overlay_allocator.h",
+      "surface_texture_gl_owner.cc",
+      "surface_texture_gl_owner.h",
     ]
 
     if (enable_webrtc) {
@@ -330,6 +340,7 @@ component("gpu") {
     deps += [
       "//third_party/angle:includes",
       "//third_party/libyuv",
+      "//ui/display",
     ]
     libs += [
       "d3d9.lib",
@@ -434,6 +445,8 @@ source_set("android_video_decode_accelerator_unittests") {
     sources = [
       "android_video_decode_accelerator_unittest.cc",
       "avda_codec_allocator_unittest.cc",
+      "content_video_view_overlay_allocator_unittest.cc",
+      "surface_texture_gl_owner_unittest.cc",
     ]
     if (enable_media_codec_video_decoder) {
       sources += [ "android/media_codec_video_decoder_unittest.cc" ]
@@ -442,7 +455,7 @@ source_set("android_video_decode_accelerator_unittests") {
       ":gpu",
       "//base/test:test_support",
       "//gpu:test_support",
-      "//media/base/android",
+      "//media",
       "//testing/gmock",
       "//testing/gtest",
     ]

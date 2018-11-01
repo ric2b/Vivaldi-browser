@@ -53,12 +53,10 @@ InitializationParams& InitializationParams::operator=(InitializationParams&&) =
 AsyncDocumentSubresourceFilter::AsyncDocumentSubresourceFilter(
     VerifiedRuleset::Handle* ruleset_handle,
     InitializationParams params,
-    base::Callback<void(ActivationState)> activation_state_callback,
-    base::OnceClosure first_disallowed_load_callback)
+    base::Callback<void(ActivationState)> activation_state_callback)
     : task_runner_(ruleset_handle->task_runner()),
       core_(new Core(), base::OnTaskRunnerDeleter(task_runner_)),
-      first_disallowed_load_callback_(
-          std::move(first_disallowed_load_callback)) {
+      weak_ptr_factory_(this) {
   DCHECK_NE(ActivationLevel::DISABLED,
             params.parent_activation_state.activation_level);
 
@@ -70,17 +68,26 @@ AsyncDocumentSubresourceFilter::AsyncDocumentSubresourceFilter(
       task_runner_, FROM_HERE,
       base::Bind(&Core::Initialize, base::Unretained(core_.get()),
                  base::Passed(&params), ruleset_handle->ruleset_.get()),
-      std::move(activation_state_callback));
+      base::Bind(&AsyncDocumentSubresourceFilter::OnActivateStateCalculated,
+                 weak_ptr_factory_.GetWeakPtr(),
+                 std::move(activation_state_callback)));
 }
 
 AsyncDocumentSubresourceFilter::~AsyncDocumentSubresourceFilter() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+}
+
+void AsyncDocumentSubresourceFilter::OnActivateStateCalculated(
+    base::Callback<void(ActivationState)> activation_state_callback,
+    ActivationState activation_state) {
+  activation_state_ = activation_state;
+  activation_state_callback.Run(activation_state);
 }
 
 void AsyncDocumentSubresourceFilter::GetLoadPolicyForSubdocument(
     const GURL& subdocument_url,
     LoadPolicyCallback result_callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(sequence_checker_.CalledOnValidSequence());
 
   // TODO(pkalinnikov): Think about avoiding copy of |subdocument_url| if it is
   // too big and won't be allowed anyway (e.g., it's a data: URI).
@@ -108,17 +115,17 @@ void AsyncDocumentSubresourceFilter::ReportDisallowedLoad() {
 // AsyncDocumentSubresourceFilter::Core ----------------------------------------
 
 AsyncDocumentSubresourceFilter::Core::Core() {
-  thread_checker_.DetachFromThread();
+  sequence_checker_.DetachFromSequence();
 }
 
 AsyncDocumentSubresourceFilter::Core::~Core() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(sequence_checker_.CalledOnValidSequence());
 }
 
 ActivationState AsyncDocumentSubresourceFilter::Core::Initialize(
     InitializationParams params,
     VerifiedRuleset* verified_ruleset) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   DCHECK(verified_ruleset);
 
   if (!verified_ruleset->Get())

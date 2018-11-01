@@ -31,34 +31,24 @@ AXTreeSourceAura::~AXTreeSourceAura() {
   root_.reset();
 }
 
-void AXTreeSourceAura::DoDefault(int32_t id) {
-  AXAuraObjWrapper* obj = AXAuraObjCache::GetInstance()->Get(id);
-  if (obj)
-    obj->DoDefault();
-}
+bool AXTreeSourceAura::HandleAccessibleAction(const ui::AXActionData& action) {
+  int id = action.target_node_id;
 
-void AXTreeSourceAura::Focus(int32_t id) {
-  AXAuraObjWrapper* obj = AXAuraObjCache::GetInstance()->Get(id);
-  if (obj)
-    obj->Focus();
-}
+  // In Views, we only support setting the selection within a single node,
+  // not across multiple nodes like on the web.
+  if (action.action == ui::AX_ACTION_SET_SELECTION) {
+    if (action.anchor_node_id != action.focus_node_id) {
+      NOTREACHED();
+      return false;
+    }
+    id = action.anchor_node_id;
+  }
 
-void AXTreeSourceAura::MakeVisible(int32_t id) {
   AXAuraObjWrapper* obj = AXAuraObjCache::GetInstance()->Get(id);
   if (obj)
-    obj->MakeVisible();
-}
+    return obj->HandleAccessibleAction(action);
 
-void AXTreeSourceAura::SetSelection(int32_t id, int32_t start, int32_t end) {
-  AXAuraObjWrapper* obj = AXAuraObjCache::GetInstance()->Get(id);
-  if (obj)
-    obj->SetSelection(start, end);
-}
-
-void AXTreeSourceAura::ShowContextMenu(int32_t id) {
-  AXAuraObjWrapper* obj = AXAuraObjCache::GetInstance()->Get(id);
-  if (obj)
-    obj->ShowContextMenu();
+  return false;
 }
 
 bool AXTreeSourceAura::GetTreeData(ui::AXTreeData* tree_data) const {

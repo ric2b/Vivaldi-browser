@@ -4,11 +4,12 @@
 
 #include "ash/sticky_keys/sticky_keys_overlay.h"
 
-#include "ash/common/wm_shell.h"
-#include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm_window.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -47,7 +48,7 @@ TEST_F(StickyKeysOverlayTest, ModifierKeyState) {
 // caused by using sticky keys with multiple displays.
 TEST_F(StickyKeysOverlayTest, OverlayNotDestroyedAfterDisplayRemoved) {
   // TODO: investigate failure in mash, http://crbug.com/696006.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   // Add a secondary display to the left of the primary one.
@@ -56,6 +57,10 @@ TEST_F(StickyKeysOverlayTest, OverlayNotDestroyedAfterDisplayRemoved) {
       display_manager()->GetCurrentDisplayIdList();
   int64_t primary_display_id = display_ids[0];
   int64_t secondary_display_id = display_ids[1];
+  // TODO: disabled as ScreenRotationAnimator does not work in mash,
+  // http://crbug.com/696754.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
   display_manager()->SetLayoutForCurrentDisplays(
       display::test::CreateDisplayLayout(display_manager(),
                                          display::DisplayPlacement::LEFT, 0));
@@ -63,18 +68,18 @@ TEST_F(StickyKeysOverlayTest, OverlayNotDestroyedAfterDisplayRemoved) {
   // The overlay should belong to the secondary root window.
   StickyKeysOverlay overlay;
   views::Widget* overlay_widget = overlay.GetWidgetForTesting();
-  WindowTreeHostManager* window_tree_host_manager =
-      Shell::GetInstance()->window_tree_host_manager();
-  EXPECT_EQ(
-      window_tree_host_manager->GetRootWindowForDisplayId(secondary_display_id),
-      overlay_widget->GetNativeWindow()->GetRootWindow());
+  EXPECT_EQ(ShellPort::Get()
+                ->GetRootWindowForDisplayId(secondary_display_id)
+                ->aura_window(),
+            overlay_widget->GetNativeWindow()->GetRootWindow());
 
   // Removing the second display should move the overlay to the primary root
   // window.
   UpdateDisplay("1280x1024");
-  EXPECT_EQ(
-      window_tree_host_manager->GetRootWindowForDisplayId(primary_display_id),
-      overlay_widget->GetNativeWindow()->GetRootWindow());
+  EXPECT_EQ(ShellPort::Get()
+                ->GetRootWindowForDisplayId(primary_display_id)
+                ->aura_window(),
+            overlay_widget->GetNativeWindow()->GetRootWindow());
 
   overlay.SetModifierKeyState(ui::EF_SHIFT_DOWN, STICKY_KEY_STATE_ENABLED);
   EXPECT_EQ(STICKY_KEY_STATE_ENABLED,
@@ -84,7 +89,7 @@ TEST_F(StickyKeysOverlayTest, OverlayNotDestroyedAfterDisplayRemoved) {
             overlay.GetModifierKeyState(ui::EF_SHIFT_DOWN));
 }
 
-// Additional sticky key overlay tests that depend on chromeos::EventRewriter
+// Additional sticky key overlay tests that depend on ui::EventRewriterChromeOS
 // are now in chrome/browser/chromeos/events/event_rewriter_unittest.cc .
 
 }  // namespace ash

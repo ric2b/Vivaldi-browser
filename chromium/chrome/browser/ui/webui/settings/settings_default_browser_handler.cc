@@ -22,16 +22,16 @@ bool DefaultBrowserIsDisabledByPolicy() {
       g_browser_process->local_state()->FindPreference(
           prefs::kDefaultBrowserSettingEnabled);
   DCHECK(pref);
-  return pref->IsManaged() && !pref->GetValue();
+  bool may_set_default_browser;
+  bool success = pref->GetValue()->GetAsBoolean(&may_set_default_browser);
+  DCHECK(success);
+  return pref->IsManaged() && !may_set_default_browser;
 }
 
 }  // namespace
 
 DefaultBrowserHandler::DefaultBrowserHandler(content::WebUI* webui)
     : weak_ptr_factory_(this) {
-  default_browser_worker_ = new shell_integration::DefaultBrowserWorker(
-      base::Bind(&DefaultBrowserHandler::OnDefaultBrowserWorkerFinished,
-                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 DefaultBrowserHandler::~DefaultBrowserHandler() {}
@@ -54,10 +54,15 @@ void DefaultBrowserHandler::OnJavascriptAllowed() {
       prefs::kDefaultBrowserSettingEnabled,
       base::Bind(&DefaultBrowserHandler::RequestDefaultBrowserState,
                  base::Unretained(this), nullptr));
+  default_browser_worker_ = new shell_integration::DefaultBrowserWorker(
+      base::Bind(&DefaultBrowserHandler::OnDefaultBrowserWorkerFinished,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void DefaultBrowserHandler::OnJavascriptDisallowed() {
   local_state_pref_registrar_.RemoveAll();
+  weak_ptr_factory_.InvalidateWeakPtrs();
+  default_browser_worker_ = nullptr;
 }
 
 void DefaultBrowserHandler::RequestDefaultBrowserState(
@@ -97,7 +102,8 @@ void DefaultBrowserHandler::OnDefaultBrowserWorkerFinished(
   dict.SetBoolean("isDisabledByPolicy", DefaultBrowserIsDisabledByPolicy());
 
   CallJavascriptFunction("cr.webUIListenerCallback",
-      base::StringValue("settings.updateDefaultBrowserState"), dict);
+                         base::Value("settings.updateDefaultBrowserState"),
+                         dict);
 }
 
 }  // namespace settings

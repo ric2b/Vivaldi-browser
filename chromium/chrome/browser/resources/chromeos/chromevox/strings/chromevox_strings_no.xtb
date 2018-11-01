@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Sammenslåtte celler.</translation>
 <translation id="1025074108959230262">Trege taster er slått av</translation>
 <translation id="1031961866430398710">deretter</translation>
+<translation id="1038643060055067718">Linjer:</translation>
 <translation id="1038795173450935438">For å gå frem eller tilbake mellom elementer på en side, trykk på Søk+høyrepilen eller Søk+venstrepilen. For å gå til neste linje, trykk på Søk+nedoverpilen. For å se forrige linje, trykk på Søk+oppoverpilen. Hvis du kommer til et element du vil klikke på, kan du trykke på Søk+mellomrom.</translation>
 <translation id="1044777062731150180">Ingen overskrifter</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,8 @@
 <translation id="2110480898214777136">Gå fra begynnelsen til slutten eller fra slutten til begynnelsen av en side, dialogboks eller annen beholder</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">tilgangsnøkkel: <ph name="KEY" /></translation>
-<translation id="2155457205053847599">Endre den gjeldende tabellen for 6-punkts punktskrift ved å velge et alternativ fra listen nedenfor.</translation>
+<translation id="2138345533858834403">Simulerer utdataene fra en leselist som kan oppdateres,
+        i ChromeVox-panelet øverst på skjermen.</translation>
 <translation id="2169714232367507776">Klikk på det aktuelle elementet</translation>
 <translation id="2179452035581866348">ChromeVox bruker lyder for å gi deg viktig informasjon og tilleggsinformasjon. Hvis du lærer hva hver lyd betyr, kan du bruke dem til å navigere raskere. Når du er mer komfortabel, kan du slå av de omfattende beskrivelsene i tale og bruke dem for å få viktig informasjon om siden. Her er en komplett liste over lyder og hva de betyr.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{høyreparentes}other{# høyreparenteser}}</translation>
@@ -124,6 +126,7 @@
 <translation id="2344193891939537199">Kontroll av dato/tidspunkt</translation>
 <translation id="2347456970887948350">En link</translation>
 <translation id="2359897517538099099">Tabellmodus er ikke aktiv.</translation>
+<translation id="2381733276052567791">Slå tale på eller av</translation>
 <translation id="2390264819538553347">Trykk på Enter for å gå videre eller på tilbaketasten for å gå tilbake.</translation>
 <translation id="241124561063364910">etterfulgt av</translation>
 <translation id="2416512023405990736">En avmerkingsboks uten hake</translation>
@@ -166,6 +169,7 @@
 <translation id="2800204403141299078">Det er ingen flere ulike elementer.</translation>
 <translation id="2800780099804980316">Det finnes ikke tidligere overskrifter på nivå 1.</translation>
 <translation id="280499067616661124">Søk på siden med ChromeVox</translation>
+<translation id="2808001342598757276">Gjør skjermen lysere</translation>
 <translation id="2811019999044652585">For å gå til andre deler av skjermen – f.eks. verktøyradene eller systemfeltet – trykk på Control+Fremover. Fremover-tasten på Chromebook er plassert rett over 2-tasten.</translation>
 <translation id="2811204574343810641">Rad</translation>
 <translation id="2816654101880605877">Det fins ikke flere glidebrytere.</translation>
@@ -185,11 +189,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{tabulator}other{# tabulatorer}}</translation>
 <translation id="2972078295414139404">Ingen tidligere besøkt link.</translation>
 <translation id="2972205263822847197">Verktøytips</translation>
-<translation id="2978549349327282388">Kolonner</translation>
 <translation id="2998131015536248178">Forrige tegn</translation>
 <translation id="2999559350546931576">Reduser stemmeleiet</translation>
 <translation id="2999945368667127852">Det finnes ingen neste mediamodul.</translation>
 <translation id="3012414509011670858">Det finnes ingen forrige del.</translation>
+<translation id="3014130421870723208">@endre 8 p</translation>
 <translation id="3030432017085518523">Alternativknapp for menyelement</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}other{# apostrofer}}</translation>
 <translation id="3040901448410802366">Fremdriftsindikator</translation>
@@ -212,6 +216,7 @@
 <translation id="3138767756593758860">Vis liste over landemerker</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">Neste linje</translation>
+<translation id="3153024374267644603">Slå på tale</translation>
 <translation id="3155083529632865074">Det fins ingen foregående knapp.</translation>
 <translation id="3163593631834463955">Tom kolonneoverskrift</translation>
 <translation id="316542773973815724">Navigering</translation>
@@ -224,6 +229,7 @@ Hvis du er ferdig med veiledningen, kan du bruke ChromeVox til å navigere til L
 <translation id="3229375994964697375">Besøkt link.</translation>
 <translation id="3232388865800379423">En forgrunnsknapp</translation>
 <translation id="3241052487511142956">Tidligere besøkt link</translation>
+<translation id="3241638166094654466">Celler i hver linje:</translation>
 <translation id="3286390186030710347">Glidebryter</translation>
 <translation id="3299925995433437805">Ingen neste besøkte link.</translation>
 <translation id="3307886118343381874">Gå til slutten av tabellen</translation>
@@ -380,6 +386,7 @@ Hvis du er ferdig med veiledningen, kan du bruke ChromeVox til å navigere til L
 <translation id="4376316291247992553">Se grafikk som punktskrift</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">reset</translation>
+<translation id="4457472090507035117">Velg nåværende stemme:</translation>
 <translation id="4471074325120394300">Det fins ingen linker.</translation>
 <translation id="4476183483923481720">ny linje</translation>
 <translation id="4482330759234983253">Forrige tabell</translation>
@@ -453,7 +460,6 @@ Hvis du er ferdig med veiledningen, kan du bruke ChromeVox til å navigere til L
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">Det fins ikke noe foregående skjemafelt.</translation>
 <translation id="5111640677200759579">Kolonneoverskrift</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">Det finnes ingen tidligere linker.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="517143700877085897">, ikke valgt</translation>
@@ -564,10 +570,10 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="5968607524793740041">Vis den kontekstuelle menyen</translation>
 <translation id="5983179082906765664">Øk detaljnivået for navigeringen</translation>
 <translation id="5999630716831179808">Stemmer</translation>
-<translation id="6000417740266304866">Endre den gjeldende tabellen for 8-punkts punktskrift ved å velge et alternativ fra listen nedenfor.</translation>
 <translation id="6006050241733874051">Skjema</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{omvendt skråstrek}other{# omvendte skråstreker}}</translation>
 <translation id="6037602951055904232">Panorer frem</translation>
+<translation id="6044160928851315051">Gjør skjermen mørk</translation>
 <translation id="6082768461603900813">Grunnleggende navigering</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Slutten av cellen.</translation>
@@ -606,7 +612,6 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="6444046323172968959">Varseldialog</translation>
 <translation id="6459511626086141404">Flatt tastaturoppsett</translation>
 <translation id="6468049171101508116">Neste-knappen</translation>
-<translation id="6491972999578897419">Endre den gjeldende stemmen ved å velge et alternativ fra listen nedenfor.</translation>
 <translation id="6493991254603208962">Lysstyrke ned</translation>
 <translation id="6508059270146105198">Flytt leselisten til nederst på siden</translation>
 <translation id="6536864053412760904">MathML-token</translation>
@@ -658,6 +663,7 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">ordekko</translation>
 <translation id="713824876195128146">Neste blokksitat-element</translation>
+<translation id="7143034430156387447">Bytt mellom 6- og 8-punkts punktskrift</translation>
 <translation id="7161771961008409533">Knapp med forgrunnsvindu</translation>
 <translation id="7165714724802225287">Nåværende visningsstil er innfelt.</translation>
 <translation id="7167657087543110">tegnekko</translation>
@@ -668,6 +674,7 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">linje</translation>
 <translation id="7226216518520804442">lst</translation>
+<translation id="7229749224609077523">Bytt til en tabell for 6-punkts punktskrift:</translation>
 <translation id="72393384879519786">Overskrift</translation>
 <translation id="7241683698754534149">Åpne lange beskrivelser i en ny fane</translation>
 <translation id="7248671827512403053">App</translation>
@@ -741,6 +748,7 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="7974390230414479278">Menyelement</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{anførselstegn}other{# anførselstegn}}</translation>
+<translation id="8017588669690167134">Slå av tale</translation>
 <translation id="8033827949643255796">valgt</translation>
 <translation id="8035962149453661158">maks.: <ph name="X" /></translation>
 <translation id="8042761080832772327">Rediger tekst – søkeord</translation>
@@ -759,7 +767,6 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="820417203470636242">Tom celle.</translation>
 <translation id="8215202828671303819">Flervalg</translation>
 <translation id="8224171046658870249">Byttet til ChromeVox Next</translation>
-<translation id="8259358278692921574">Rader:</translation>
 <translation id="8276439074553447000">Gå til forrige fokuserbare element</translation>
 <translation id="8278417001922463147">Ingen tidligere artikler.</translation>
 <translation id="8283603667300770666">Neste skjemafelt</translation>
@@ -797,7 +804,6 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="8638532244051952400">Les opp gjeldende cellekoordinater</translation>
 <translation id="8650576015643545550">Det finnes ingen tidligere lister.</translation>
 <translation id="8651481478098336970">kutt lyden</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">Vis linklisten</translation>
 <translation id="8664519043722036194">sekunder</translation>
 <translation id="867187640362843212">Overskrift 5</translation>
@@ -817,6 +823,7 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="8856538297388979332">Trykk opp eller ned for å se gjennom kommandoene, og trykk på Enter for å slå på</translation>
 <translation id="8864099967139188018">Det finnes ikke flere overskrifter på nivå 6.</translation>
 <translation id="8882002077197914455">Radoverskrift</translation>
+<translation id="8883850400338911892">endre URL 8 p</translation>
 <translation id="8896347895970027998">Velg om ChromeVox skal være på eller av.</translation>
 <translation id="8898516272131543774">Slå av eller på tegnsettingsekko</translation>
 <translation id="8900148057318340779">Prefikstast</translation>
@@ -830,6 +837,7 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="9027462562263121875">Det finnes ingen tabeller.</translation>
 <translation id="9040132695316389094">Overskrift 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" /> %</translation>
+<translation id="9061884144798498064">Velg en tabell for 8-punkts punktskrift:</translation>
 <translation id="9065283790526219006">+forgrunnsvindu</translation>
 <translation id="9077213568694924680">fjernet fra utvalget</translation>
 <translation id="9082874451376019682">Det fins ingen tidligere glidebrytere.</translation>

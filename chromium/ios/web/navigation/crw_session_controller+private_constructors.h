@@ -21,14 +21,13 @@ class NavigationItem;
 // web/, these methods can go back into session_controller.h. crbug.com/318974
 @interface CRWSessionController (PrivateConstructors)
 // Initializes a session controller.
-- (instancetype)initWithBrowserState:(web::BrowserState*)browserState
-                         openedByDOM:(BOOL)openedByDOM;
+- (instancetype)initWithBrowserState:(web::BrowserState*)browserState;
 
 // Initializes a session controller, supplying a list of NavigationItem objects
-// and the current index in the navigation history.
+// and the last committed item index in the navigation history.
 - (instancetype)initWithBrowserState:(web::BrowserState*)browserState
                      navigationItems:(web::ScopedNavigationItemList)items
-                        currentIndex:(NSUInteger)currentIndex;
+              lastCommittedItemIndex:(NSUInteger)lastCommittedItemIndex;
 @end
 
 #endif  // IOS_WEB_NAVIGATION_CRW_SESSION_CONTROLLER_PRIVATE_CONSTRUCTORS_H_

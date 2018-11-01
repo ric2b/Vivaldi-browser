@@ -27,7 +27,7 @@ APIRequestHandler::PendingRequest::PendingRequest(
       context(isolate, context),
       callback(isolate, callback),
       user_gesture_token(
-          blink::WebUserGestureIndicator::currentUserGestureToken()) {
+          blink::WebUserGestureIndicator::CurrentUserGestureToken()) {
   if (!local_callback_args.empty()) {
     callback_arguments.reserve(local_callback_args.size());
     for (const auto& arg : local_callback_args)
@@ -53,7 +53,8 @@ int APIRequestHandler::StartRequest(v8::Local<v8::Context> context,
                                     const std::string& method,
                                     std::unique_ptr<base::ListValue> arguments,
                                     v8::Local<v8::Function> callback,
-                                    v8::Local<v8::Function> custom_callback) {
+                                    v8::Local<v8::Function> custom_callback,
+                                    binding::RequestThread thread) {
   auto request = base::MakeUnique<Request>();
 
   if (!custom_callback.IsEmpty() || !callback.IsEmpty()) {
@@ -71,7 +72,11 @@ int APIRequestHandler::StartRequest(v8::Local<v8::Context> context,
       // bindings to get away from some of those. For now, just pass in an empty
       // object (most APIs don't rely on it).
       v8::Local<v8::Object> request = v8::Object::New(isolate);
-      callback_args = {gin::StringToSymbol(isolate, method), request, callback};
+      v8::Local<v8::Value> callback_to_pass = callback;
+      if (callback_to_pass.IsEmpty())
+        callback_to_pass = v8::Undefined(isolate);
+      callback_args = {gin::StringToSymbol(isolate, method), request,
+                       callback_to_pass};
       callback = custom_callback;
     }
 
@@ -88,9 +93,10 @@ int APIRequestHandler::StartRequest(v8::Local<v8::Context> context,
   }
 
   request->has_user_gesture =
-      blink::WebUserGestureIndicator::isProcessingUserGestureThreadSafe();
+      blink::WebUserGestureIndicator::IsProcessingUserGestureThreadSafe();
   request->arguments = std::move(arguments);
   request->method_name = method;
+  request->thread = thread;
 
   int id = request->request_id;
   send_request_.Run(std::move(request), context);
@@ -121,7 +127,7 @@ void APIRequestHandler::CompleteRequest(int request_id,
   for (const auto& arg : pending_request.callback_arguments)
     args.push_back(arg.Get(isolate));
   for (const auto& arg : response_args)
-    args.push_back(converter->ToV8Value(arg.get(), context));
+    args.push_back(converter->ToV8Value(&arg, context));
 
   blink::WebScopedUserGesture user_gesture(pending_request.user_gesture_token);
   if (!error.empty())

@@ -27,16 +27,17 @@ GpuMemoryBufferHandle CloneHandleForIPC(
     case gfx::SHARED_MEMORY_BUFFER: {
       gfx::GpuMemoryBufferHandle handle;
       handle.type = gfx::SHARED_MEMORY_BUFFER;
+      handle.id = source_handle.id;
       handle.handle = base::SharedMemory::DuplicateHandle(source_handle.handle);
       handle.offset = source_handle.offset;
       handle.stride = source_handle.stride;
       return handle;
     }
-    case gfx::OZONE_NATIVE_PIXMAP: {
+    case gfx::NATIVE_PIXMAP: {
       gfx::GpuMemoryBufferHandle handle;
-      handle.type = gfx::OZONE_NATIVE_PIXMAP;
+      handle.type = gfx::NATIVE_PIXMAP;
       handle.id = source_handle.id;
-#if defined(USE_OZONE)
+#if defined(OS_LINUX)
       handle.native_pixmap_handle =
           gfx::CloneHandleForIPC(source_handle.native_pixmap_handle);
 #endif

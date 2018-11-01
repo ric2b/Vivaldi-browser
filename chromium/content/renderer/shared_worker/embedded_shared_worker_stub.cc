@@ -26,10 +26,9 @@
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "third_party/WebKit/public/web/WebSharedWorker.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerClient.h"
-#include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "url/origin.h"
 
 namespace content {
@@ -49,87 +48,68 @@ class SharedWorkerWebApplicationCacheHostImpl
   // Main resource loading is different for workers. The main resource is
   // loaded by the worker using WorkerScriptLoader.
   // These overrides are stubbed out.
-  void willStartMainResourceRequest(
+  void WillStartMainResourceRequest(
       blink::WebURLRequest&,
       const blink::WebApplicationCacheHost*) override {}
-  void didReceiveResponseForMainResource(
+  void DidReceiveResponseForMainResource(
       const blink::WebURLResponse&) override {}
-  void didReceiveDataForMainResource(const char* data, unsigned len) override {}
-  void didFinishLoadingMainResource(bool success) override {}
+  void DidReceiveDataForMainResource(const char* data, unsigned len) override {}
+  void DidFinishLoadingMainResource(bool success) override {}
 
   // Cache selection is also different for workers. We know at construction
   // time what cache to select and do so then.
   // These overrides are stubbed out.
-  void selectCacheWithoutManifest() override {}
-  bool selectCacheWithManifest(const blink::WebURL& manifestURL) override {
+  void SelectCacheWithoutManifest() override {}
+  bool SelectCacheWithManifest(const blink::WebURL& manifestURL) override {
     return true;
   }
-};
-
-// We store an instance of this class in the "extra data" of the WebDataSource
-// and attach a ServiceWorkerNetworkProvider to it as base::UserData.
-// (see createServiceWorkerNetworkProvider).
-class DataSourceExtraData
-    : public blink::WebDataSource::ExtraData,
-      public base::SupportsUserData {
- public:
-  DataSourceExtraData() {}
-  ~DataSourceExtraData() override {}
-  bool is_secure_context = false;
 };
 
 // Called on the main thread only and blink owns it.
 class WebServiceWorkerNetworkProviderImpl
     : public blink::WebServiceWorkerNetworkProvider {
  public:
+  WebServiceWorkerNetworkProviderImpl(
+      std::unique_ptr<ServiceWorkerNetworkProvider> provider,
+      bool is_secure_context)
+      : provider_(std::move(provider)), is_secure_context_(is_secure_context) {}
+
   // Blink calls this method for each request starting with the main script,
   // we tag them with the provider id.
-  void willSendRequest(blink::WebDataSource* data_source,
-                       blink::WebURLRequest& request) override {
-    ServiceWorkerNetworkProvider* provider =
-        GetNetworkProviderFromDataSource(data_source);
+  void WillSendRequest(blink::WebURLRequest& request) override {
     std::unique_ptr<RequestExtraData> extra_data(new RequestExtraData);
-    extra_data->set_service_worker_provider_id(provider->provider_id());
-    extra_data->set_initiated_in_secure_context(
-        static_cast<DataSourceExtraData*>(data_source->getExtraData())
-            ->is_secure_context);
-    request.setExtraData(extra_data.release());
+    extra_data->set_service_worker_provider_id(provider_->provider_id());
+    extra_data->set_initiated_in_secure_context(is_secure_context_);
+    request.SetExtraData(extra_data.release());
     // If the provider does not have a controller at this point, the renderer
     // expects subresource requests to never be handled by a controlling service
     // worker, so set the ServiceWorkerMode to skip local workers here.
     // Otherwise, a service worker that is in the process of becoming the
     // controller (i.e., via claim()) on the browser-side could handle the
     // request and break the assumptions of the renderer.
-    if (request.getRequestContext() !=
-            blink::WebURLRequest::RequestContextSharedWorker &&
-        !provider->IsControlledByServiceWorker() &&
-        request.getServiceWorkerMode() !=
-            blink::WebURLRequest::ServiceWorkerMode::None) {
-      request.setServiceWorkerMode(
-          blink::WebURLRequest::ServiceWorkerMode::Foreign);
+    if (request.GetRequestContext() !=
+            blink::WebURLRequest::kRequestContextSharedWorker &&
+        !provider_->IsControlledByServiceWorker() &&
+        request.GetServiceWorkerMode() !=
+            blink::WebURLRequest::ServiceWorkerMode::kNone) {
+      request.SetServiceWorkerMode(
+          blink::WebURLRequest::ServiceWorkerMode::kForeign);
     }
   }
 
-  bool isControlledByServiceWorker(blink::WebDataSource& data_source) override {
-    ServiceWorkerNetworkProvider* provider =
-        GetNetworkProviderFromDataSource(&data_source);
-    return provider->IsControlledByServiceWorker();
+  bool IsControlledByServiceWorker() override {
+    return provider_->IsControlledByServiceWorker();
   }
 
-  int64_t serviceWorkerID(blink::WebDataSource& data_source) override {
-    ServiceWorkerNetworkProvider* provider =
-        GetNetworkProviderFromDataSource(&data_source);
-    if (provider->context()->controller())
-      return provider->context()->controller()->version_id();
+  int64_t ServiceWorkerID() override {
+    if (provider_->context()->controller())
+      return provider_->context()->controller()->version_id();
     return kInvalidServiceWorkerVersionId;
   }
 
  private:
-  ServiceWorkerNetworkProvider* GetNetworkProviderFromDataSource(
-      const blink::WebDataSource* data_source) {
-    return ServiceWorkerNetworkProvider::FromDocumentState(
-        static_cast<DataSourceExtraData*>(data_source->getExtraData()));
-  }
+  std::unique_ptr<ServiceWorkerNetworkProvider> provider_;
+  const bool is_secure_context_;
 };
 
 }  // namespace
@@ -144,17 +124,17 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
     int route_id)
     : route_id_(route_id), name_(name), url_(url) {
   RenderThreadImpl::current()->AddEmbeddedWorkerRoute(route_id_, this);
-  impl_ = blink::WebSharedWorker::create(this);
+  impl_ = blink::WebSharedWorker::Create(this);
   if (pause_on_start) {
     // Pause worker context when it starts and wait until either DevTools client
     // is attached or explicit resume notification is received.
-    impl_->pauseWorkerContextOnStart();
+    impl_->PauseWorkerContextOnStart();
   }
   worker_devtools_agent_.reset(
       new SharedWorkerDevToolsAgent(route_id, impl_));
-  impl_->startWorkerContext(
-      url, blink::WebString::fromUTF16(name_),
-      blink::WebString::fromUTF16(content_security_policy),
+  impl_->StartWorkerContext(
+      url, blink::WebString::FromUTF16(name_),
+      blink::WebString::FromUTF16(content_security_policy),
       security_policy_type, creation_address_space);
 }
 
@@ -181,11 +161,11 @@ void EmbeddedSharedWorkerStub::OnChannelError() {
   OnTerminateWorkerContext();
 }
 
-void EmbeddedSharedWorkerStub::workerReadyForInspection() {
+void EmbeddedSharedWorkerStub::WorkerReadyForInspection() {
   Send(new WorkerHostMsg_WorkerReadyForInspection(route_id_));
 }
 
-void EmbeddedSharedWorkerStub::workerScriptLoaded() {
+void EmbeddedSharedWorkerStub::WorkerScriptLoaded() {
   Send(new WorkerHostMsg_WorkerScriptLoaded(route_id_));
   running_ = true;
   // Process any pending connections.
@@ -194,26 +174,26 @@ void EmbeddedSharedWorkerStub::workerScriptLoaded() {
   pending_channels_.clear();
 }
 
-void EmbeddedSharedWorkerStub::workerScriptLoadFailed() {
+void EmbeddedSharedWorkerStub::WorkerScriptLoadFailed() {
   Send(new WorkerHostMsg_WorkerScriptLoadFailed(route_id_));
   pending_channels_.clear();
   Shutdown();
 }
 
-void EmbeddedSharedWorkerStub::countFeature(uint32_t feature) {
+void EmbeddedSharedWorkerStub::CountFeature(uint32_t feature) {
   Send(new WorkerHostMsg_CountFeature(route_id_, feature));
 }
 
-void EmbeddedSharedWorkerStub::workerContextClosed() {
+void EmbeddedSharedWorkerStub::WorkerContextClosed() {
   Send(new WorkerHostMsg_WorkerContextClosed(route_id_));
 }
 
-void EmbeddedSharedWorkerStub::workerContextDestroyed() {
+void EmbeddedSharedWorkerStub::WorkerContextDestroyed() {
   Send(new WorkerHostMsg_WorkerContextDestroyed(route_id_));
   Shutdown();
 }
 
-void EmbeddedSharedWorkerStub::selectAppCacheID(long long app_cache_id) {
+void EmbeddedSharedWorkerStub::SelectAppCacheID(long long app_cache_id) {
   if (app_cache_host_) {
     // app_cache_host_ could become stale as it's owned by blink's
     // DocumentLoader. This method is assumed to be called while it's valid.
@@ -223,30 +203,29 @@ void EmbeddedSharedWorkerStub::selectAppCacheID(long long app_cache_id) {
 }
 
 blink::WebNotificationPresenter*
-EmbeddedSharedWorkerStub::notificationPresenter() {
+EmbeddedSharedWorkerStub::NotificationPresenter() {
   // TODO(horo): delete this method if we have no plan to implement this.
   NOTREACHED();
   return NULL;
 }
 
 blink::WebApplicationCacheHost*
-EmbeddedSharedWorkerStub::createApplicationCacheHost(
+EmbeddedSharedWorkerStub::CreateApplicationCacheHost(
     blink::WebApplicationCacheHostClient* client) {
   app_cache_host_ = new SharedWorkerWebApplicationCacheHostImpl(client);
   return app_cache_host_;
 }
 
 blink::WebWorkerContentSettingsClientProxy*
-    EmbeddedSharedWorkerStub::createWorkerContentSettingsClientProxy(
+EmbeddedSharedWorkerStub::CreateWorkerContentSettingsClientProxy(
     const blink::WebSecurityOrigin& origin) {
   return new EmbeddedSharedWorkerContentSettingsClientProxy(
-      url::Origin(origin).GetURL(), origin.isUnique(), route_id_,
+      url::Origin(origin).GetURL(), origin.IsUnique(), route_id_,
       ChildThreadImpl::current()->thread_safe_sender());
 }
 
 blink::WebServiceWorkerNetworkProvider*
-EmbeddedSharedWorkerStub::createServiceWorkerNetworkProvider(
-    blink::WebDataSource* data_source) {
+EmbeddedSharedWorkerStub::CreateServiceWorkerNetworkProvider() {
   // Create a content::ServiceWorkerNetworkProvider for this data source so
   // we can observe its requests.
   std::unique_ptr<ServiceWorkerNetworkProvider> provider(
@@ -254,19 +233,12 @@ EmbeddedSharedWorkerStub::createServiceWorkerNetworkProvider(
           route_id_, SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER,
           true /* is_parent_frame_secure */));
 
-  // The provider is kept around for the lifetime of the DataSource
-  // and ownership is transferred to the DataSource.
-  DataSourceExtraData* extra_data = new DataSourceExtraData();
-  extra_data->is_secure_context = IsOriginSecure(url_);
-  data_source->setExtraData(extra_data);
-  ServiceWorkerNetworkProvider::AttachToDocumentState(extra_data,
-                                                      std::move(provider));
-
   // Blink is responsible for deleting the returned object.
-  return new WebServiceWorkerNetworkProviderImpl();
+  return new WebServiceWorkerNetworkProviderImpl(std::move(provider),
+                                                 IsOriginSecure(url_));
 }
 
-void EmbeddedSharedWorkerStub::sendDevToolsMessage(
+void EmbeddedSharedWorkerStub::SendDevToolsMessage(
     int session_id,
     int call_id,
     const blink::WebString& message,
@@ -276,7 +248,7 @@ void EmbeddedSharedWorkerStub::sendDevToolsMessage(
 }
 
 blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
-EmbeddedSharedWorkerStub::createDevToolsMessageLoop() {
+EmbeddedSharedWorkerStub::CreateDevToolsMessageLoop() {
   return DevToolsAgent::createMessageLoopWrapper();
 }
 
@@ -294,7 +266,7 @@ bool EmbeddedSharedWorkerStub::Send(IPC::Message* message) {
 void EmbeddedSharedWorkerStub::ConnectToChannel(
     int connection_request_id,
     std::unique_ptr<WebMessagePortChannelImpl> channel) {
-  impl_->connect(channel.release());
+  impl_->Connect(std::move(channel));
   Send(new WorkerHostMsg_WorkerConnected(connection_request_id, route_id_));
 }
 
@@ -316,7 +288,7 @@ void EmbeddedSharedWorkerStub::OnConnect(int connection_request_id,
 void EmbeddedSharedWorkerStub::OnTerminateWorkerContext() {
   // After this we wouldn't get any IPC for this stub.
   running_ = false;
-  impl_->terminateWorkerContext();
+  impl_->TerminateWorkerContext();
 }
 
 }  // namespace content

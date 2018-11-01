@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/callback.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -50,7 +50,6 @@ class GURL;
 namespace base {
 class CommandLine;
 class FilePath;
-class SchedulerWorkerPoolParams;
 }
 
 namespace gfx {
@@ -66,8 +65,10 @@ class CdmFactory;
 }
 
 namespace service_manager {
+class BinderRegistry;
 class InterfaceRegistry;
 class Service;
+struct ServiceInfo;
 }
 
 namespace net {
@@ -110,7 +111,6 @@ class BrowserURLHandler;
 class ClientCertificateDelegate;
 class ControllerPresentationServiceDelegate;
 class DevToolsManagerDelegate;
-class GpuProcessHost;
 class MediaObserver;
 class MemoryCoordinatorDelegate;
 class NavigationHandle;
@@ -160,7 +160,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void PostAfterStartupTask(
       const tracked_objects::Location& from_here,
       const scoped_refptr<base::TaskRunner>& task_runner,
-      const base::Closure& task);
+      base::OnceClosure task);
 
   // Allows the embedder to indicate whether it considers startup to be
   // complete. May be called on any thread. This should be called on a one-off
@@ -660,7 +660,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // |registry| will by default be run immediately on the IO thread, unless a
   // task runner is provided.
   virtual void ExposeInterfacesToRenderer(
-      service_manager::InterfaceRegistry* registry,
+      service_manager::BinderRegistry* registry,
       RenderProcessHost* render_process_host) {}
 
   // Called when RenderFrameHostImpl connects to the Media service. Expose
@@ -675,13 +675,14 @@ class CONTENT_EXPORT ContentBrowserClient {
       service_manager::InterfaceRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
-  // Allows to register browser Mojo interfaces exposed through the
-  // GpuProcessHost. Called on the IO thread. Note that interface factory
-  // callbacks added to |registry| will by default be run immediately on the IO
-  // thread, unless a task runner is provided.
-  virtual void ExposeInterfacesToGpuProcess(
-      service_manager::InterfaceRegistry* registry,
-      GpuProcessHost* render_process_host) {}
+  // (Currently called only from GPUProcessHost, move somewhere more central).
+  // Called when a request to bind |interface_name| on |interface_pipe| is
+  // received from |source_info.identity|. If the request is bound,
+  // |interface_pipe| will become invalid (taken by the client).
+  virtual void BindInterfaceRequest(
+      const service_manager::ServiceInfo& source_info,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) {}
 
   using StaticServiceMap = std::map<std::string, ServiceInfo>;
 
@@ -813,12 +814,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns the RapporService from the browser process.
   virtual ::rappor::RapporService* GetRapporService();
 
-  // Provides parameters for initializing the global task scheduler. If
-  // |params_vector| is empty, default parameters are used.
-  virtual void GetTaskSchedulerInitializationParams(
-      std::vector<base::SchedulerWorkerPoolParams>* params_vector,
-      base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
-          index_to_traits_callback) {}
+  // Provides parameters for initializing the global task scheduler. Default
+  // params are used if this returns nullptr.
+  virtual std::unique_ptr<base::TaskScheduler::InitParams>
+  GetTaskSchedulerInitParams();
 
   // Performs any necessary PostTask API redirection to the task scheduler.
   virtual void PerformExperimentalTaskSchedulerRedirections() {}

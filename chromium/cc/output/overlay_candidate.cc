@@ -22,6 +22,11 @@ namespace {
 // Tolerance for considering axis vector elements to be zero.
 const SkMScalar kEpsilon = std::numeric_limits<float>::epsilon();
 
+const gfx::BufferFormat kOverlayFormats[] = {
+    gfx::BufferFormat::RGBX_8888, gfx::BufferFormat::RGBA_8888,
+    gfx::BufferFormat::BGRX_8888, gfx::BufferFormat::BGRA_8888,
+    gfx::BufferFormat::BGR_565,   gfx::BufferFormat::YUV_420_BIPLANAR};
+
 enum Axis { NONE, AXIS_POS_X, AXIS_NEG_X, AXIS_POS_Y, AXIS_NEG_Y };
 
 Axis VectorToAxis(const gfx::Vector3dF& vec) {
@@ -168,9 +173,10 @@ gfx::OverlayTransform ComposeTransforms(gfx::OverlayTransform delta,
 
 OverlayCandidate::OverlayCandidate()
     : transform(gfx::OVERLAY_TRANSFORM_NONE),
-      format(RGBA_8888),
+      format(gfx::BufferFormat::RGBA_8888),
       uv_rect(0.f, 0.f, 1.f, 1.f),
       is_clipped(false),
+      is_opaque(false),
       use_output_surface_for_resource(false),
       resource_id(0),
 #if defined(OS_ANDROID)
@@ -190,9 +196,12 @@ OverlayCandidate::~OverlayCandidate() {}
 bool OverlayCandidate::FromDrawQuad(ResourceProvider* resource_provider,
                                     const DrawQuad* quad,
                                     OverlayCandidate* candidate) {
-  if (quad->ShouldDrawWithBlending() ||
-      quad->shared_quad_state->opacity != 1.f ||
-      quad->shared_quad_state->blend_mode != SkBlendMode::kSrcOver)
+  // We don't support an opacity value different than one for an overlay plane.
+  if (quad->shared_quad_state->opacity != 1.f)
+    return false;
+  // We support only kSrc (no blending) and kSrcOver (blending with premul).
+  if (!(quad->shared_quad_state->blend_mode == SkBlendMode::kSrc ||
+        quad->shared_quad_state->blend_mode == SkBlendMode::kSrcOver))
     return false;
 
   auto& transform = quad->shared_quad_state->quad_to_target_transform;
@@ -201,9 +210,9 @@ bool OverlayCandidate::FromDrawQuad(ResourceProvider* resource_provider,
   candidate->quad_rect_in_target_space =
       MathUtil::MapEnclosingClippedRect(transform, quad->rect);
 
-  candidate->format = RGBA_8888;
   candidate->clip_rect = quad->shared_quad_state->clip_rect;
   candidate->is_clipped = quad->shared_quad_state->is_clipped;
+  candidate->is_opaque = !quad->ShouldDrawWithBlending();
 
   switch (quad->material) {
     case DrawQuad::TEXTURE_CONTENT:
@@ -256,6 +265,10 @@ bool OverlayCandidate::FromTextureQuad(ResourceProvider* resource_provider,
                                        const TextureDrawQuad* quad,
                                        OverlayCandidate* candidate) {
   if (!resource_provider->IsOverlayCandidate(quad->resource_id()))
+    return false;
+  candidate->format = resource_provider->GetBufferFormat(quad->resource_id());
+  if (std::find(std::begin(kOverlayFormats), std::end(kOverlayFormats),
+                candidate->format) == std::end(kOverlayFormats))
     return false;
   gfx::OverlayTransform overlay_transform = GetOverlayTransform(
       quad->shared_quad_state->quad_to_target_transform, quad->y_flipped);

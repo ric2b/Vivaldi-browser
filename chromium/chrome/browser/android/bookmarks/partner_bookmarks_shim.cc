@@ -5,8 +5,10 @@
 #include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
 
 #include <tuple>
+#include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -35,8 +37,8 @@ struct PartnerModelKeeper {
     : loaded(false) {}
 };
 
-base::LazyInstance<PartnerModelKeeper> g_partner_model_keeper =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<PartnerModelKeeper>::DestructorAtExit
+    g_partner_model_keeper = LAZY_INSTANCE_INITIALIZER;
 
 const void* const kPartnerBookmarksShimUserDataKey =
     &kPartnerBookmarksShimUserDataKey;
@@ -253,7 +255,7 @@ void PartnerBookmarksShim::ReloadNodeMapping() {
   for (base::ListValue::const_iterator it = list->begin();
        it != list->end(); ++it) {
     const base::DictionaryValue* dict = NULL;
-    if (!*it || !(*it)->GetAsDictionary(&dict)) {
+    if (!it->GetAsDictionary(&dict)) {
       NOTREACHED();
       continue;
     }
@@ -282,11 +284,11 @@ void PartnerBookmarksShim::SaveNodeMapping() {
   for (NodeRenamingMap::const_iterator i = node_rename_remove_map_.begin();
        i != node_rename_remove_map_.end();
        ++i) {
-    base::DictionaryValue* dict = new base::DictionaryValue();
+    auto dict = base::MakeUnique<base::DictionaryValue>();
     dict->SetString(kMappingUrl, i->first.url().spec());
     dict->SetString(kMappingProviderTitle, i->first.provider_title());
     dict->SetString(kMappingTitle, i->second);
-    list.Append(dict);
+    list.Append(std::move(dict));
   }
   prefs_->Set(prefs::kPartnerBookmarkMappings, list);
 }

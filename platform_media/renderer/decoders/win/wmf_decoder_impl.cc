@@ -150,13 +150,6 @@ void WMFDecoderImpl<StreamType>::Decode(
                                             ? media::DecodeStatus::OK
                                             : media::DecodeStatus::DECODE_ERROR;
 
-  if (status == media::DecodeStatus::OK &&
-      buffer->splice_timestamp() != kNoTimestamp) {
-    DVLOG(1) << "Splice detected, must drain the decoder";
-    if (!Drain())
-      status = media::DecodeStatus::DECODE_ERROR;
-  }
-
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
 }
 
@@ -425,7 +418,7 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
       return false;
     }
 
-    out_media_type.Release();
+    out_media_type.Reset();
   }
 
   MFT_OUTPUT_STREAM_INFO output_stream_info = {0};

@@ -5,8 +5,10 @@
 #include "headless/test/headless_browser_test.h"
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -121,6 +123,14 @@ void LoadObserver::OnResponseReceived(
 }
 
 HeadlessBrowserTest::HeadlessBrowserTest() {
+#if defined(OS_MACOSX)
+  // On Mac the source root is not set properly. We override it by assuming
+  // that is two directories up from the execution test file.
+  base::FilePath dir_exe_path;
+  CHECK(PathService::Get(base::DIR_EXE, &dir_exe_path));
+  dir_exe_path = dir_exe_path.Append("../../");
+  CHECK(PathService::Override(base::DIR_SOURCE_ROOT, dir_exe_path));
+#endif  // defined(OS_MACOSX)
   base::FilePath headless_test_data(FILE_PATH_LITERAL("headless/test/data"));
   CreateTestServer(headless_test_data);
 }
@@ -214,13 +224,20 @@ void HeadlessAsyncDevTooledBrowserTest::RenderProcessExited(
 }
 
 void HeadlessAsyncDevTooledBrowserTest::RunTest() {
-  browser_context_ = browser()
-                         ->CreateBrowserContextBuilder()
-                         .SetProtocolHandlers(GetProtocolHandlers())
-                         .Build();
+  HeadlessBrowserContext::Builder builder =
+      browser()->CreateBrowserContextBuilder();
+  builder.SetProtocolHandlers(GetProtocolHandlers());
+  if (GetCreateTabSocket()) {
+    builder.EnableUnsafeNetworkAccessWithMojoBindings(true);
+    builder.AddTabSocketMojoBindings();
+  }
+  browser_context_ = builder.Build();
+
   browser()->SetDefaultBrowserContext(browser_context_);
 
-  web_contents_ = browser_context_->CreateWebContentsBuilder().Build();
+  web_contents_ = browser_context_->CreateWebContentsBuilder()
+                      .CreateTabSocket(GetCreateTabSocket())
+                      .Build();
   web_contents_->AddObserver(this);
 
   RunAsynchronousTest();
@@ -236,6 +253,10 @@ void HeadlessAsyncDevTooledBrowserTest::RunTest() {
 
 ProtocolHandlerMap HeadlessAsyncDevTooledBrowserTest::GetProtocolHandlers() {
   return ProtocolHandlerMap();
+}
+
+bool HeadlessAsyncDevTooledBrowserTest::GetCreateTabSocket() {
+  return false;
 }
 
 }  // namespace headless

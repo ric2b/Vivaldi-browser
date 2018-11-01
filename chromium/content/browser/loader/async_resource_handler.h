@@ -50,8 +50,9 @@ class CONTENT_EXPORT AsyncResourceHandler : public ResourceHandler,
       std::unique_ptr<ResourceController> controller) override;
   void OnWillStart(const GURL& url,
                    std::unique_ptr<ResourceController> controller) override;
-  bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
-                  int* buf_size) override;
+  void OnWillRead(scoped_refptr<net::IOBuffer>* buf,
+                  int* buf_size,
+                  std::unique_ptr<ResourceController> controller) override;
   void OnReadCompleted(int bytes_read,
                        std::unique_ptr<ResourceController> controller) override;
   void OnResponseCompleted(
@@ -60,8 +61,6 @@ class CONTENT_EXPORT AsyncResourceHandler : public ResourceHandler,
   void OnDataDownloaded(int bytes_downloaded) override;
 
  private:
-  class InliningHelper;
-
   // IPC message handlers:
   void OnFollowRedirect(int request_id);
   void OnDataReceivedACK(int request_id);
@@ -95,7 +94,6 @@ class CONTENT_EXPORT AsyncResourceHandler : public ResourceHandler,
   bool sent_received_response_msg_;
   bool sent_data_buffer_msg_;
 
-  std::unique_ptr<InliningHelper> inlining_helper_;
   base::TimeTicks response_started_ticks_;
 
   std::unique_ptr<UploadProgressTracker> upload_progress_tracker_;

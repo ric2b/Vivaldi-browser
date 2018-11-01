@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <string>
 
 #include "base/memory/ptr_util.h"
+#import "ios/web/public/navigation_item.h"
+#import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/test/http_server.h"
 #include "ios/web/public/test/http_server_util.h"
 #include "ios/web/public/web_state/navigation_context.h"
@@ -20,6 +23,8 @@ namespace web {
 
 namespace {
 
+const char kExpectedMimeType[] = "text/html";
+
 // Verifies correctness of |NavigationContext| for new page navigation passed to
 // |DidFinishNavigation|.
 ACTION_P2(VerifyNewPageContext, web_state, url) {
@@ -27,19 +32,48 @@ ACTION_P2(VerifyNewPageContext, web_state, url) {
   ASSERT_TRUE(context);
   EXPECT_EQ(web_state, context->GetWebState());
   EXPECT_EQ(url, context->GetUrl());
-  EXPECT_FALSE(context->IsSamePage());
+  EXPECT_FALSE(context->IsSameDocument());
   EXPECT_FALSE(context->IsErrorPage());
+  ASSERT_TRUE(context->GetResponseHeaders());
+  std::string mime_type;
+  context->GetResponseHeaders()->GetMimeType(&mime_type);
+  EXPECT_EQ(kExpectedMimeType, mime_type);
+  NavigationManager* navigation_manager = web_state->GetNavigationManager();
+  NavigationItem* item = navigation_manager->GetLastCommittedItem();
+  EXPECT_GT(item->GetTimestamp().ToInternalValue(), 0);
+  EXPECT_EQ(url, item->GetURL());
 }
 
 // Verifies correctness of |NavigationContext| for same page navigation passed
 // to |DidFinishNavigation|.
-ACTION_P2(VerifySamePageContext, web_state, url) {
+ACTION_P2(VerifySameDocumentContext, web_state, url) {
   NavigationContext* context = arg0;
   ASSERT_TRUE(context);
   EXPECT_EQ(web_state, context->GetWebState());
   EXPECT_EQ(url, context->GetUrl());
-  EXPECT_TRUE(context->IsSamePage());
+  EXPECT_TRUE(context->IsSameDocument());
   EXPECT_FALSE(context->IsErrorPage());
+  EXPECT_FALSE(context->GetResponseHeaders());
+  NavigationManager* navigation_manager = web_state->GetNavigationManager();
+  NavigationItem* item = navigation_manager->GetLastCommittedItem();
+  EXPECT_GT(item->GetTimestamp().ToInternalValue(), 0);
+  EXPECT_EQ(url, item->GetURL());
+}
+
+// Verifies correctness of |NavigationContext| for new page navigation to native
+// URLs passed to |DidFinishNavigation|.
+ACTION_P2(VerifyNewNativePageContext, web_state, url) {
+  NavigationContext* context = arg0;
+  ASSERT_TRUE(context);
+  EXPECT_EQ(web_state, context->GetWebState());
+  EXPECT_EQ(url, context->GetUrl());
+  EXPECT_FALSE(context->IsSameDocument());
+  EXPECT_FALSE(context->IsErrorPage());
+  EXPECT_FALSE(context->GetResponseHeaders());
+  NavigationManager* navigation_manager = web_state->GetNavigationManager();
+  NavigationItem* item = navigation_manager->GetLastCommittedItem();
+  EXPECT_GT(item->GetTimestamp().ToInternalValue(), 0);
+  EXPECT_EQ(url, item->GetURL());
 }
 
 // Mocks DidFinishNavigation navigation callback.
@@ -93,12 +127,12 @@ TEST_F(DidFinishNavigationTest, UserInitiatedHashChangeNavigation) {
   // Perform same-page navigation.
   const GURL hash_url = HttpServer::MakeUrl("http://chromium.test#1");
   EXPECT_CALL(*observer_, DidFinishNavigation(_))
-      .WillOnce(VerifySamePageContext(web_state(), hash_url));
+      .WillOnce(VerifySameDocumentContext(web_state(), hash_url));
   LoadUrl(hash_url);
 
   // Perform same-page navigation by going back.
   EXPECT_CALL(*observer_, DidFinishNavigation(_))
-      .WillOnce(VerifySamePageContext(web_state(), url));
+      .WillOnce(VerifySameDocumentContext(web_state(), url));
   ExecuteBlockAndWaitForLoad(url, ^{
     navigation_manager()->GoBack();
   });
@@ -119,7 +153,7 @@ TEST_F(DidFinishNavigationTest, RendererInitiatedHashChangeNavigation) {
   // Perform same-page navigation using JavaScript.
   const GURL hash_url = HttpServer::MakeUrl("http://chromium.test#1");
   EXPECT_CALL(*observer_, DidFinishNavigation(_))
-      .WillOnce(VerifySamePageContext(web_state(), hash_url));
+      .WillOnce(VerifySameDocumentContext(web_state(), hash_url));
   ExecuteJavaScript(@"window.location.hash = '#1'");
 }
 
@@ -138,13 +172,13 @@ TEST_F(DidFinishNavigationTest, StateNavigation) {
   // Perform push state using JavaScript.
   const GURL push_url = HttpServer::MakeUrl("http://chromium.test/test.html");
   EXPECT_CALL(*observer_, DidFinishNavigation(_))
-      .WillOnce(VerifySamePageContext(web_state(), push_url));
+      .WillOnce(VerifySameDocumentContext(web_state(), push_url));
   ExecuteJavaScript(@"window.history.pushState('', 'Test', 'test.html')");
 
   // Perform replace state using JavaScript.
   const GURL replace_url = HttpServer::MakeUrl("http://chromium.test/1.html");
   EXPECT_CALL(*observer_, DidFinishNavigation(_))
-      .WillOnce(VerifySamePageContext(web_state(), replace_url));
+      .WillOnce(VerifySameDocumentContext(web_state(), replace_url));
   ExecuteJavaScript(@"window.history.replaceState('', 'Test', '1.html')");
 }
 
@@ -152,7 +186,7 @@ TEST_F(DidFinishNavigationTest, StateNavigation) {
 TEST_F(DidFinishNavigationTest, NativeContentNavigation) {
   GURL url(url::SchemeHostPort(kTestNativeContentScheme, "ui", 0).Serialize());
   EXPECT_CALL(*observer_, DidFinishNavigation(_))
-      .WillOnce(VerifyNewPageContext(web_state(), url));
+      .WillOnce(VerifyNewNativePageContext(web_state(), url));
   LoadUrl(url);
 }
 

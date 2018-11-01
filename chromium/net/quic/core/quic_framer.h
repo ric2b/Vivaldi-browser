@@ -11,9 +11,9 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/platform/api/quic_export.h"
+#include "net/quic/platform/api/quic_string_piece.h"
 
 namespace net {
 
@@ -134,9 +134,6 @@ class QUIC_EXPORT_PRIVATE QuicFramerVisitorInterface {
   // Called when a BlockedFrame has been parsed.
   virtual bool OnBlockedFrame(const QuicBlockedFrame& frame) = 0;
 
-  // Called when a PathCloseFrame has been parsed.
-  virtual bool OnPathCloseFrame(const QuicPathCloseFrame& frame) = 0;
-
   // Called when a packet has been completely processed.
   virtual void OnPacketComplete() = 0;
 };
@@ -211,8 +208,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   static size_t GetWindowUpdateFrameSize();
   // Size in bytes of all Blocked frame fields.
   static size_t GetBlockedFrameSize();
-  // Size in bytes of all PathClose frame fields.
-  static size_t GetPathCloseFrameSize();
   // Size in bytes required to serialize the stream id.
   static size_t GetStreamIdSize(QuicStreamId stream_id);
   // Size in bytes required to serialize the stream offset.
@@ -231,7 +226,7 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
 
   // Returns the associated data from the encrypted packet |encrypted| as a
   // stringpiece.
-  static base::StringPiece GetAssociatedDataFromEncryptedPacket(
+  static QuicStringPiece GetAssociatedDataFromEncryptedPacket(
       QuicVersion version,
       const QuicEncryptedPacket& encrypted,
       QuicConnectionIdLength connection_id_length,
@@ -296,7 +291,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   // data. |total_len| is the length of the associated data plus plaintext.
   // |buffer_len| is the full length of the allocated buffer.
   size_t EncryptInPlace(EncryptionLevel level,
-                        QuicPathId path_id,
                         QuicPacketNumber packet_number,
                         size_t ad_len,
                         size_t total_len,
@@ -370,7 +364,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   bool ProcessUnauthenticatedHeader(QuicDataReader* encrypted_reader,
                                     QuicPacketHeader* header);
 
-  bool ProcessPathId(QuicDataReader* reader, QuicPathId* path_id);
   bool ProcessPacketSequenceNumber(QuicDataReader* reader,
                                    QuicPacketNumberLength packet_number_length,
                                    QuicPacketNumber base_packet_number,
@@ -393,7 +386,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   bool ProcessWindowUpdateFrame(QuicDataReader* reader,
                                 QuicWindowUpdateFrame* frame);
   bool ProcessBlockedFrame(QuicDataReader* reader, QuicBlockedFrame* frame);
-  bool ProcessPathCloseFrame(QuicDataReader* reader, QuicPathCloseFrame* frame);
 
   bool DecryptPayload(QuicDataReader* encrypted_reader,
                       const QuicPacketHeader& header,
@@ -468,8 +460,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
                                QuicDataWriter* writer);
   bool AppendBlockedFrame(const QuicBlockedFrame& frame,
                           QuicDataWriter* writer);
-  bool AppendPathCloseFrame(const QuicPathCloseFrame& frame,
-                            QuicDataWriter* writer);
 
   bool RaiseError(QuicErrorCode error);
 

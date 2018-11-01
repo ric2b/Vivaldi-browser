@@ -14,6 +14,7 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/NativeValueTraits.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
@@ -28,15 +29,15 @@ class CORE_EXPORT TestInterfaceOrLong final {
   TestInterfaceOrLong();
   bool isNull() const { return m_type == SpecificTypeNone; }
 
+  bool isLong() const { return m_type == SpecificTypeLong; }
+  int32_t getAsLong() const;
+  void setLong(int32_t);
+  static TestInterfaceOrLong fromLong(int32_t);
+
   bool isTestInterface() const { return m_type == SpecificTypeTestInterface; }
   TestInterfaceImplementation* getAsTestInterface() const;
   void setTestInterface(TestInterfaceImplementation*);
   static TestInterfaceOrLong fromTestInterface(TestInterfaceImplementation*);
-
-  bool isLong() const { return m_type == SpecificTypeLong; }
-  int getAsLong() const;
-  void setLong(int);
-  static TestInterfaceOrLong fromLong(int);
 
   TestInterfaceOrLong(const TestInterfaceOrLong&);
   ~TestInterfaceOrLong();
@@ -46,13 +47,13 @@ class CORE_EXPORT TestInterfaceOrLong final {
  private:
   enum SpecificTypes {
     SpecificTypeNone,
-    SpecificTypeTestInterface,
     SpecificTypeLong,
+    SpecificTypeTestInterface,
   };
   SpecificTypes m_type;
 
+  int32_t m_long;
   Member<TestInterfaceImplementation> m_testInterface;
-  int m_long;
 
   friend CORE_EXPORT v8::Local<v8::Value> ToV8(const TestInterfaceOrLong&, v8::Local<v8::Object>, v8::Isolate*);
 };
@@ -65,18 +66,23 @@ class V8TestInterfaceOrLong final {
 CORE_EXPORT v8::Local<v8::Value> ToV8(const TestInterfaceOrLong&, v8::Local<v8::Object>, v8::Isolate*);
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, TestInterfaceOrLong& impl) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, TestInterfaceOrLong& impl) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, TestInterfaceOrLong& impl, v8::Local<v8::Object> creationContext) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, TestInterfaceOrLong& impl, v8::Local<v8::Object> creationContext) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
 }
 
 template <>
-struct NativeValueTraits<TestInterfaceOrLong> {
-  CORE_EXPORT static TestInterfaceOrLong nativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+struct NativeValueTraits<TestInterfaceOrLong> : public NativeValueTraitsBase<TestInterfaceOrLong> {
+  CORE_EXPORT static TestInterfaceOrLong NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+};
+
+template <>
+struct V8TypeOf<TestInterfaceOrLong> {
+  typedef V8TestInterfaceOrLong Type;
 };
 
 }  // namespace blink

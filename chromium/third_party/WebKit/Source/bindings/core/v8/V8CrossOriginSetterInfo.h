@@ -5,8 +5,8 @@
 #ifndef V8CrossOriginSetterInfo_h
 #define V8CrossOriginSetterInfo_h
 
+#include "platform/wtf/Allocator.h"
 #include "v8/include/v8.h"
-#include "wtf/Allocator.h"
 
 namespace blink {
 
@@ -24,14 +24,14 @@ class V8CrossOriginSetterInfo {
 
  public:
   V8CrossOriginSetterInfo(v8::Isolate* isolate, v8::Local<v8::Object> holder)
-      : m_isolate(isolate), m_holder(holder) {}
+      : isolate_(isolate), holder_(holder) {}
 
-  v8::Isolate* GetIsolate() const { return m_isolate; }
-  v8::Local<v8::Object> Holder() const { return m_holder; }
+  v8::Isolate* GetIsolate() const { return isolate_; }
+  v8::Local<v8::Object> Holder() const { return holder_; }
 
  private:
-  v8::Isolate* m_isolate;
-  v8::Local<v8::Object> m_holder;
+  v8::Isolate* isolate_;
+  v8::Local<v8::Object> holder_;
 };
 
 }  // namespace blink

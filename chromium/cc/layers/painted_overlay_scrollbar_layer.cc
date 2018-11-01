@@ -9,6 +9,7 @@
 #include "base/auto_reset.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/painted_overlay_scrollbar_layer_impl.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "cc/resources/ui_resource_bitmap.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/layer_tree_host.h"
@@ -137,7 +138,7 @@ bool PaintedOverlayScrollbarLayer::Update() {
 }
 
 bool PaintedOverlayScrollbarLayer::PaintThumbIfNeeded() {
-  if (!scrollbar_->NeedsPaintPart(THUMB))
+  if (!scrollbar_->NeedsPaintPart(THUMB) && thumb_resource_)
     return false;
 
   gfx::Rect paint_rect = OriginThumbRectForPainting();
@@ -148,16 +149,16 @@ bool PaintedOverlayScrollbarLayer::PaintThumbIfNeeded() {
 
   SkBitmap skbitmap;
   skbitmap.allocN32Pixels(paint_rect.width(), paint_rect.height());
-  SkCanvas skcanvas(skbitmap);
+  SkiaPaintCanvas canvas(skbitmap);
 
   SkRect content_skrect = RectToSkRect(paint_rect);
-  SkPaint paint;
-  paint.setAntiAlias(false);
-  paint.setBlendMode(SkBlendMode::kClear);
-  skcanvas.drawRect(content_skrect, paint);
-  skcanvas.clipRect(content_skrect);
+  PaintFlags flags;
+  flags.setAntiAlias(false);
+  flags.setBlendMode(SkBlendMode::kClear);
+  canvas.drawRect(content_skrect, flags);
+  canvas.clipRect(content_skrect);
 
-  scrollbar_->PaintPart(&skcanvas, THUMB, paint_rect);
+  scrollbar_->PaintPart(&canvas, THUMB, paint_rect);
   // Make sure that the pixels are no longer mutable to unavoid unnecessary
   // allocation and copying.
   skbitmap.setImmutable();

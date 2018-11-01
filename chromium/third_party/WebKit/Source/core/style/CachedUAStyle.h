@@ -23,36 +23,36 @@
 #ifndef CachedUAStyle_h
 #define CachedUAStyle_h
 
-#include "core/style/ComputedStyle.h"
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PtrUtil.h"
 #include <memory>
+#include "core/style/ComputedStyle.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
-// LayoutTheme::adjustStyle wants the background and borders
+// LayoutTheme::AdjustStyle wants the background and borders
 // as specified by the UA sheets, excluding any author rules.
 // We use this class to cache those values during
-// applyMatchedProperties for later use during adjustComputedStyle.
+// ApplyMatchedProperties for later use during AdjustComputedStyle.
 class CachedUAStyle {
   USING_FAST_MALLOC(CachedUAStyle);
   WTF_MAKE_NONCOPYABLE(CachedUAStyle);
 
  public:
-  static std::unique_ptr<CachedUAStyle> create(const ComputedStyle* style) {
-    return WTF::wrapUnique(new CachedUAStyle(style));
+  static std::unique_ptr<CachedUAStyle> Create(const ComputedStyle* style) {
+    return WTF::WrapUnique(new CachedUAStyle(style));
   }
 
   BorderData border;
-  FillLayer backgroundLayers;
-  StyleColor backgroundColor;
+  FillLayer background_layers;
+  StyleColor background_color;
 
  private:
   explicit CachedUAStyle(const ComputedStyle* style)
-      : border(style->border()),
-        backgroundLayers(style->backgroundLayers()),
-        backgroundColor(style->backgroundColor()) {}
+      : border(style->Border()),
+        background_layers(style->BackgroundLayers()),
+        background_color(style->BackgroundColor()) {}
 };
 
 }  // namespace blink

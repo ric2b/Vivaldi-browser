@@ -9,18 +9,21 @@
 // These are also used in the IPCs for coordinating inter-process memory dumps.
 
 #include <stdint.h>
+#include <map>
 #include <string>
 
 #include "base/base_export.h"
 #include "base/callback.h"
+#include "base/optional.h"
+#include "base/process/process_handle.h"
 
 namespace base {
 namespace trace_event {
 
 // Captures the reason why a memory dump is being requested. This is to allow
-// selective enabling of dumps, filtering and post-processing. Important: this
-// must be kept consistent with
-// services/resource_coordinator/public/cpp/memory/memory_infra_traits.cc.
+// selective enabling of dumps, filtering and post-processing. Keep this
+// consistent with memory_instrumentation.mojo and
+// memory_instrumentation_struct_traits.{h,cc}
 enum class MemoryDumpType {
   PERIODIC_INTERVAL,     // Dumping memory at periodic intervals.
   EXPLICITLY_TRIGGERED,  // Non maskable dump request.
@@ -29,8 +32,8 @@ enum class MemoryDumpType {
 };
 
 // Tells the MemoryDumpProvider(s) how much detailed their dumps should be.
-// Important: this must be kept consistent with
-// services/resource_Coordinator/public/cpp/memory/memory_infra_traits.cc.
+// Keep this consistent with memory_instrumentation.mojo and
+// memory_instrumentation_struct_traits.{h,cc}
 enum class MemoryDumpLevelOfDetail : uint32_t {
   FIRST,
 
@@ -53,8 +56,8 @@ enum class MemoryDumpLevelOfDetail : uint32_t {
 };
 
 // Initial request arguments for a global memory dump. (see
-// MemoryDumpManager::RequestGlobalMemoryDump()). Important: this must be kept
-// consistent with services/memory_infra/public/cpp/memory_infra_traits.cc.
+// MemoryDumpManager::RequestGlobalMemoryDump()). Keep this consistent with
+// memory_instrumentation.mojo and memory_instrumentation_struct_traits.{h,cc}
 struct BASE_EXPORT MemoryDumpRequestArgs {
   // Globally unique identifier. In multi-process dumps, all processes issue a
   // local dump with the same guid. This allows the trace importers to
@@ -72,7 +75,41 @@ struct MemoryDumpArgs {
   MemoryDumpLevelOfDetail level_of_detail;
 };
 
-using MemoryDumpCallback = Callback<void(uint64_t dump_guid, bool success)>;
+// TODO(hjd): Not used yet, see crbug.com/703184
+// Summarises information about memory use as seen by a single process.
+// This information will eventually be passed to a service to be colated
+// and reported.
+struct BASE_EXPORT MemoryDumpCallbackResult {
+  struct OSMemDump {
+    uint32_t resident_set_kb = 0;
+  };
+  struct ChromeMemDump {
+    uint32_t malloc_total_kb = 0;
+    uint32_t partition_alloc_total_kb = 0;
+    uint32_t blink_gc_total_kb = 0;
+    uint32_t v8_total_kb = 0;
+  };
+
+  // These are for the current process.
+  OSMemDump os_dump;
+  ChromeMemDump chrome_dump;
+
+  // In some cases, OS stats can only be dumped from a privileged process to
+  // get around to sandboxing/selinux restrictions (see crbug.com/461788).
+  std::map<ProcessId, OSMemDump> extra_processes_dump;
+
+  MemoryDumpCallbackResult();
+  MemoryDumpCallbackResult(const MemoryDumpCallbackResult&);
+  ~MemoryDumpCallbackResult();
+};
+
+using GlobalMemoryDumpCallback =
+    Callback<void(uint64_t dump_guid, bool success)>;
+
+using ProcessMemoryDumpCallback =
+    Callback<void(uint64_t dump_guid,
+                  bool success,
+                  const Optional<MemoryDumpCallbackResult>& result)>;
 
 BASE_EXPORT const char* MemoryDumpTypeToString(const MemoryDumpType& dump_type);
 

@@ -234,6 +234,10 @@ URLDatabase* HistoryService::InMemoryDatabase() {
   return in_memory_backend_ ? in_memory_backend_->db() : nullptr;
 }
 
+TypedURLSyncBridge* HistoryService::GetTypedURLSyncBridge() const {
+  return history_backend_->GetTypedURLSyncBridge();
+}
+
 TypedUrlSyncableService* HistoryService::GetTypedUrlSyncableService() const {
   return history_backend_->GetTypedUrlSyncableService();
 }
@@ -644,6 +648,24 @@ void HistoryService::SetFavicons(const GURL& page_url,
                           page_url, icon_type, icon_url, bitmaps));
 }
 
+void HistoryService::SetLastResortFavicons(
+    const GURL& page_url,
+    favicon_base::IconType icon_type,
+    const GURL& icon_url,
+    const std::vector<SkBitmap>& bitmaps,
+    base::Callback<void(bool)> callback) {
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (history_client_ && !history_client_->CanAddURL(page_url))
+    return;
+
+  PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&HistoryBackend::SetLastResortFavicons, history_backend_,
+                 page_url, icon_type, icon_url, bitmaps),
+      callback);
+}
+
 void HistoryService::SetFaviconsOutOfDateForPage(const GURL& page_url) {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -955,11 +977,11 @@ void HistoryService::ScheduleAutocomplete(
 }
 
 void HistoryService::ScheduleTask(SchedulePriority priority,
-                                  const base::Closure& task) {
+                                  base::OnceClosure task) {
   DCHECK(thread_checker_.CalledOnValidThread());
   CHECK(backend_task_runner_);
   // TODO(brettw): Do prioritization.
-  backend_task_runner_->PostTask(FROM_HERE, task);
+  backend_task_runner_->PostTask(FROM_HERE, std::move(task));
 }
 
 base::WeakPtr<HistoryService> HistoryService::AsWeakPtr() {

@@ -38,7 +38,7 @@ class DrawWaiterForTest : public CompositorObserver {
     WAIT_FOR_COMPOSITING_ENDED,
   };
   DrawWaiterForTest(WaitEvent wait_event);
-  ~DrawWaiterForTest();
+  ~DrawWaiterForTest() override;
 
   void WaitImpl(Compositor* compositor);
 

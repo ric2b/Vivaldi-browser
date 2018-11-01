@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/stl_util.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_events.h"
 #include "cc/animation/animation_host.h"
@@ -817,9 +818,7 @@ void AnimationPlayer::ActivateAnimations() {
     return !animation->affects_active_elements() &&
            !animation->affects_pending_elements();
   };
-  animations_.erase(std::remove_if(animations_.begin(), animations_.end(),
-                                   affects_no_elements),
-                    animations_.end());
+  base::EraseIf(animations_, affects_no_elements);
 
   if (animation_activated)
     element_animations_->UpdateClientAnimationState();
@@ -1101,14 +1100,11 @@ void AnimationPlayer::MarkAbortedAnimationsForDeletion(
 }
 
 void AnimationPlayer::PurgeAnimationsMarkedForDeletion(bool impl_only) {
-  animations_.erase(
-      std::remove_if(animations_.begin(), animations_.end(),
-                     [impl_only](const std::unique_ptr<Animation>& animation) {
-                       return animation->run_state() ==
-                              Animation::WAITING_FOR_DELETION &&
-                              (!impl_only || animation->is_impl_only());
-                     }),
-      animations_.end());
+  base::EraseIf(
+      animations_, [impl_only](const std::unique_ptr<Animation>& animation) {
+        return animation->run_state() == Animation::WAITING_FOR_DELETION &&
+               (!impl_only || animation->is_impl_only());
+      });
 }
 
 void AnimationPlayer::PushNewAnimationsToImplThread(
@@ -1179,10 +1175,7 @@ void AnimationPlayer::RemoveAnimationsCompletedOnMainThread(
         return animation->run_state() == Animation::WAITING_FOR_DELETION &&
                !animation->affects_pending_elements();
       };
-  animations.erase(
-      std::remove_if(animations.begin(), animations.end(),
-                     affects_active_only_and_is_waiting_for_deletion),
-      animations.end());
+  base::EraseIf(animations, affects_active_only_and_is_waiting_for_deletion);
 
   if (element_animations_ && animation_completed)
     element_animations_->SetNeedsUpdateImplClientState();

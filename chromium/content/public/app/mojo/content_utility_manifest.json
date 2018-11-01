@@ -5,6 +5,7 @@
     "service_manager:connector": {
       "provides": {
         "browser": [
+          "content::mojom::Child",
           "IPC::mojom::ChannelBootstrap",
           "service_manager::mojom::ServiceFactory"
         ],
@@ -13,6 +14,7 @@
         ]
       },
       "requires": {
+        "content_browser": [ "utility" ],
         "device": [
           "device:power_monitor",
           "device:time_zone_monitor"

@@ -4,22 +4,20 @@
 
 #include "ash/app_list/app_list_presenter_delegate.h"
 
-#include "ash/common/ash_switches.h"
-#include "ash/common/shelf/app_list_button.h"
-#include "ash/common/shelf/shelf_layout_manager.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm/wm_screen_util.h"
-#include "ash/common/wm_lookup.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
-#include "ash/display/window_tree_host_manager.h"
+#include "ash/ash_switches.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
+#include "ash/shelf/app_list_button.h"
+#include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/wm_screen_util.h"
+#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_switches.h"
@@ -68,7 +66,7 @@ AppListPresenterDelegate::AppListPresenterDelegate(
     app_list::AppListPresenterImpl* presenter,
     app_list::AppListViewDelegateFactory* view_delegate_factory)
     : presenter_(presenter), view_delegate_factory_(view_delegate_factory) {
-  WmShell::Get()->AddShellObserver(this);
+  Shell::Get()->AddShellObserver(this);
 }
 
 AppListPresenterDelegate::~AppListPresenterDelegate() {
@@ -77,10 +75,10 @@ AppListPresenterDelegate::~AppListPresenterDelegate() {
       keyboard::KeyboardController::GetInstance();
   if (keyboard_controller)
     keyboard_controller->RemoveObserver(this);
-  Shell::GetInstance()->RemovePreTargetHandler(this);
-  WmWindow* window = WmLookup::Get()->GetWindowForWidget(view_->GetWidget());
+  Shell::Get()->RemovePreTargetHandler(this);
+  WmWindow* window = WmWindow::Get(view_->GetWidget()->GetNativeWindow());
   window->GetRootWindowController()->GetShelf()->RemoveObserver(this);
-  WmShell::Get()->RemoveShellObserver(this);
+  Shell::Get()->RemoveShellObserver(this);
 }
 
 app_list::AppListViewDelegate* AppListPresenterDelegate::GetViewDelegate() {
@@ -96,10 +94,9 @@ void AppListPresenterDelegate::Init(app_list::AppListView* view,
       ->GetShelfLayoutManager()
       ->UpdateAutoHideState();
   view_ = view;
-  aura::Window* root_window = Shell::GetInstance()
-                                  ->window_tree_host_manager()
-                                  ->GetRootWindowForDisplayId(display_id);
-  WmWindow* wm_root_window = WmWindow::Get(root_window);
+  WmWindow* wm_root_window =
+      ShellPort::Get()->GetRootWindowForDisplayId(display_id);
+  aura::Window* root_window = wm_root_window->aura_window();
   aura::Window* container = GetRootWindowController(root_window)
                                 ->GetContainer(kShellWindowId_AppListContainer);
   view->InitAsBubble(container, current_apps_page);
@@ -111,7 +108,7 @@ void AppListPresenterDelegate::Init(app_list::AppListView* view,
       keyboard::KeyboardController::GetInstance();
   if (keyboard_controller)
     keyboard_controller->AddObserver(this);
-  Shell::GetInstance()->AddPreTargetHandler(this);
+  Shell::Get()->AddPreTargetHandler(this);
   WmShelf* shelf = WmShelf::ForWindow(wm_root_window);
   shelf->AddObserver(this);
 
@@ -124,7 +121,8 @@ void AppListPresenterDelegate::Init(app_list::AppListView* view,
 void AppListPresenterDelegate::OnShown(int64_t display_id) {
   is_visible_ = true;
   // Update applist button status when app list visibility is changed.
-  WmWindow* root_window = WmShell::Get()->GetRootWindowForDisplayId(display_id);
+  WmWindow* root_window =
+      ShellPort::Get()->GetRootWindowForDisplayId(display_id);
   AppListButton* app_list_button =
       WmShelf::ForWindow(root_window)->shelf_widget()->GetAppListButton();
   if (app_list_button)
@@ -138,7 +136,7 @@ void AppListPresenterDelegate::OnDismissed() {
   is_visible_ = false;
 
   // Update applist button status when app list visibility is changed.
-  WmWindow* window = WmLookup::Get()->GetWindowForWidget(view_->GetWidget());
+  WmWindow* window = WmWindow::Get(view_->GetWidget()->GetNativeWindow());
   AppListButton* app_list_button =
       WmShelf::ForWindow(window)->shelf_widget()->GetAppListButton();
   if (app_list_button)
@@ -151,7 +149,7 @@ void AppListPresenterDelegate::UpdateBounds() {
 
   view_->UpdateBounds();
   view_->SetAnchorPoint(GetCenterOfDisplayForWindow(
-      WmLookup::Get()->GetWindowForWidget(view_->GetWidget()),
+      WmWindow::Get(view_->GetWidget()->GetNativeWindow()),
       GetMinimumBoundsHeightForAppList(view_)));
 }
 

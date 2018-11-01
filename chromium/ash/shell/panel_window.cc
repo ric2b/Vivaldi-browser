@@ -4,9 +4,9 @@
 
 #include "ash/shell/panel_window.h"
 
-#include "ash/common/wm/panels/panel_frame_view.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/wm/panels/panel_frame_view.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/canvas.h"
@@ -44,7 +44,8 @@ views::Widget* PanelWindow::CreateWidget() {
     params().bounds.set_width(kDefaultWidth);
   if (params().bounds.height() == 0)
     params().bounds.set_height(kDefaultHeight);
-  ::wm::ConvertRectToScreen(Shell::GetTargetRootWindow(), &params().bounds);
+  ::wm::ConvertRectToScreen(Shell::GetRootWindowForNewWindows(),
+                            &params().bounds);
 
   widget->Init(params());
   widget->GetNativeView()->SetName(name_);

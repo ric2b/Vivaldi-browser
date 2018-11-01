@@ -29,7 +29,6 @@
       }
 
       #icon {
-        --paper-icon-button-ink-color: white;
         transition: margin 150ms, opacity 200ms;
       }
 
@@ -126,7 +125,7 @@
 
       :host([narrow][showing-search]) #icon,
       :host([narrow][showing-search]) paper-spinner-lite {
-        -webkit-margin-start: 18px;
+        -webkit-margin-start: var(--cr-control-spacing);
       }
     </style>
     <template is="dom-if" if="[[isSpinnerShown_]]">
@@ -134,10 +133,11 @@
       </paper-spinner-lite>
     </template>
     <paper-icon-button id="icon" icon="cr:search" title="[[label]]"
-        tabindex$="[[computeIconTabIndex_(narrow)]]">
+        tabindex$="[[computeIconTabIndex_(narrow)]]"
+        aria-hidden$="[[computeIconAriaHidden_(narrow)]]">
     </paper-icon-button>
     <div id="searchTerm">
-      <label id="prompt" for="searchInput">[[label]]</label>
+      <label id="prompt" for="searchInput" aria-hidden="true">[[label]]</label>
       <input id="searchInput"
           type="search"
           on-input="onSearchTermInput"

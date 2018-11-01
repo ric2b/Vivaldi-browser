@@ -70,7 +70,6 @@ bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
 
 bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
     std::unique_ptr<PasswordFormManager> form_to_save,
-    password_manager::CredentialSourceType type,
     bool update_password) {
   if (form_to_save->IsBlacklisted())
     return false;
@@ -89,7 +88,7 @@ void IOSChromePasswordManagerClient::AutomaticPasswordSave(
   NOTIMPLEMENTED();
 }
 
-bool IOSChromePasswordManagerClient::IsOffTheRecord() const {
+bool IOSChromePasswordManagerClient::IsIncognito() const {
   return (delegate_.browserState)->IsOffTheRecord();
 }
 
@@ -121,7 +120,7 @@ void IOSChromePasswordManagerClient::ForceSavePassword() {
 
 bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage()
     const {
-  return *saving_passwords_enabled_ && !IsOffTheRecord() &&
+  return *saving_passwords_enabled_ && !IsIncognito() &&
          !DidLastPageLoadEncounterSSLErrors() &&
          IsFillingEnabledForCurrentPage();
 }

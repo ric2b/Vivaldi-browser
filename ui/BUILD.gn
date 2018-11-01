@@ -1,5 +1,7 @@
 static_library("ui") {
   sources = [
+    "devtools/devtools_connector.cc",
+    "devtools/devtools_connector.h",
     "dragging/drag_tab_handler.cc",
     "dragging/drag_tab_handler.h",
     "views/vivaldi_pin_shortcut.cpp",
@@ -22,5 +24,6 @@ static_library("ui") {
     "//components/translate/content/browser",
     "//content/public/browser",
     "//skia",
+    "//vivaldi/extensions/schema:api"
   ]
 }

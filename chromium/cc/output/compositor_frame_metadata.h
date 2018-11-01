@@ -9,14 +9,15 @@
 
 #include <vector>
 
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/input/selection.h"
+#include "cc/output/begin_frame_args.h"
 #include "cc/surfaces/surface_id.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/selection_bound.h"
+#include "ui/latency/latency_info.h"
 
 namespace cc {
 
@@ -76,7 +77,16 @@ class CC_EXPORT CompositorFrameMetadata {
   std::vector<ui::LatencyInfo> latency_info;
 
   // This is the set of Surfaces that are referenced by this frame.
+  // Note: this includes occluded and clipped surfaces and surfaces that may
+  // be accessed by this CompositorFrame in the future.
+  // TODO(fsamuel): In the future, a generalized frame eviction system will
+  // determine which surfaces to retain and which to evict. It will likely
+  // be unnecessary for the embedder to explicitly specify which surfaces to
+  // retain. Thus, this field will likely go away.
   std::vector<SurfaceId> referenced_surfaces;
+
+  // This is the set of SurfaceIds embedded in DrawQuads.
+  std::vector<SurfaceId> embedded_surfaces;
 
   // This indicates whether this CompositorFrame can be activated before
   // dependencies have been resolved.
@@ -87,6 +97,14 @@ class CC_EXPORT CompositorFrameMetadata {
   // TODO(kenrb, fsamuel): This should eventually by SurfaceID, when they
   // become available in all renderer processes. See https://crbug.com/695579.
   uint32_t content_source_id = 0;
+
+  // BeginFrameAck for the BeginFrame that this CompositorFrame answers.
+  BeginFrameAck begin_frame_ack;
+
+  // Once the display compositor processes a frame containing a non-zero frame
+  // token, the token is sent to embedder of the frame. This is helpful when
+  // the embedder wants to do something after a particular frame is processed.
+  uint32_t frame_token = 0;
 
  private:
   CompositorFrameMetadata(const CompositorFrameMetadata& other);

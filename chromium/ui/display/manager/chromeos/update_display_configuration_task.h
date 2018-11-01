@@ -14,13 +14,15 @@
 #include "base/memory/weak_ptr.h"
 #include "ui/display/manager/chromeos/configure_displays_task.h"
 #include "ui/display/manager/chromeos/display_configurator.h"
+#include "ui/display/types/native_display_observer.h"
 
 namespace display {
 
 class DisplaySnapshot;
 class NativeDisplayDelegate;
 
-class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask {
+class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask
+    : public NativeDisplayObserver {
  public:
   typedef base::Callback<void(
       bool /* success */,
@@ -38,14 +40,13 @@ class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask {
                                  uint32_t background_color_argb,
                                  bool force_configure,
                                  const ResponseCallback& callback);
-  ~UpdateDisplayConfigurationTask();
-
-  // The pointers to the DisplaySnapshots in this vector are owned by
-  // DisplayConfigurator.
-  void SetVirtualDisplaySnapshots(
-      const std::vector<std::unique_ptr<DisplaySnapshot>>& snapshots);
+  ~UpdateDisplayConfigurationTask() override;
 
   void Run();
+
+  // display::NativeDisplayObserver:
+  void OnConfigurationChanged() override;
+  void OnDisplaySnapshotsInvalidated() override;
 
  private:
   // Callback to NativeDisplayDelegate::GetDisplays().
@@ -99,11 +100,10 @@ class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask {
 
   bool force_dpms_;
 
+  bool requesting_displays_;
+
   // List of updated displays.
   std::vector<DisplaySnapshot*> cached_displays_;
-
-  // Vector of unowned VirtualDisplaySnapshots to be added when doing the task.
-  std::vector<DisplaySnapshot*> virtual_display_snapshots_;
 
   gfx::Size framebuffer_size_;
 

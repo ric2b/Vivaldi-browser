@@ -31,6 +31,7 @@
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "components/tracing/child/child_trace_message_filter.h"
@@ -65,7 +66,7 @@
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/device/public/cpp/power_monitor/power_monitor_broadcast_source.h"
-#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/resource_coordinator/public/cpp/memory/memory_dump_manager_delegate_impl.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -77,6 +78,10 @@
 #include "content/public/common/content_descriptors.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "base/allocator/allocator_interception_mac.h"
+#endif
+
 using tracked_objects::ThreadData;
 
 namespace content {
@@ -85,8 +90,8 @@ namespace {
 // How long to wait for a connection to the browser process before giving up.
 const int kConnectionTimeoutS = 15;
 
-base::LazyInstance<base::ThreadLocalPointer<ChildThreadImpl> > g_lazy_tls =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ThreadLocalPointer<ChildThreadImpl>>::DestructorAtExit
+    g_lazy_tls = LAZY_INSTANCE_INITIALIZER;
 
 // This isn't needed on Windows because there the sandbox's job object
 // terminates child processes automatically. For unsandboxed processes (i.e.
@@ -226,7 +231,8 @@ void QuitClosure::PostQuitFromNonMainThread() {
   closure_.Run();
 }
 
-base::LazyInstance<QuitClosure> g_quit_closure = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<QuitClosure>::DestructorAtExit g_quit_closure =
+    LAZY_INSTANCE_INITIALIZER;
 #endif
 
 void InitializeMojoIPCChannel() {
@@ -258,28 +264,26 @@ void InitializeMojoIPCChannel() {
 class ChannelBootstrapFilter : public ConnectionFilter {
  public:
   explicit ChannelBootstrapFilter(IPC::mojom::ChannelBootstrapPtrInfo bootstrap)
-      : bootstrap_(std::move(bootstrap)), weak_factory_(this) {}
+      : bootstrap_(std::move(bootstrap)) {}
 
  private:
   // ConnectionFilter:
-  bool OnConnect(const service_manager::Identity& remote_identity,
-                 service_manager::InterfaceRegistry* registry,
-                 service_manager::Connector* connector) override {
-    if (remote_identity.name() != mojom::kBrowserServiceName)
-      return false;
+  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle* interface_pipe,
+                       service_manager::Connector* connector) override {
+    if (source_info.identity.name() != mojom::kBrowserServiceName)
+      return;
 
-    registry->AddInterface(base::Bind(&ChannelBootstrapFilter::CreateBootstrap,
-                                      weak_factory_.GetWeakPtr()));
-    return true;
-  }
-
-  void CreateBootstrap(IPC::mojom::ChannelBootstrapRequest request) {
-    DCHECK(bootstrap_.is_valid());
-    mojo::FuseInterface(std::move(request), std::move(bootstrap_));
+    if (interface_name == IPC::mojom::ChannelBootstrap::Name_) {
+      DCHECK(bootstrap_.is_valid());
+      mojo::FuseInterface(mojo::MakeRequest<IPC::mojom::ChannelBootstrap>(
+                              std::move(*interface_pipe)),
+                          std::move(bootstrap_));
+    }
   }
 
   IPC::mojom::ChannelBootstrapPtrInfo bootstrap_;
-  base::WeakPtrFactory<ChannelBootstrapFilter> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ChannelBootstrapFilter);
 };
@@ -448,24 +452,12 @@ void ChildThreadImpl::Init(const Options& options) {
         mojo::MakeRequest<service_manager::mojom::Service>(std::move(handle)),
         GetIOTaskRunner());
 
-    // When connect_to_browser is true, we obtain interfaces from the browser
-    // process by connecting to it, rather than from the incoming interface
-    // provider. Exposed interfaces are subject to manifest capability spec.
-    service_manager::InterfaceProvider* remote_interfaces = nullptr;
-    if (options.connect_to_browser) {
-      browser_connection_ =
-          service_manager_connection_->GetConnector()->Connect(
-              mojom::kBrowserServiceName);
-    } else {
-      remote_interfaces = GetRemoteInterfaces();
-    }
-
     // TODO(rockot): Remove this once all child-to-browser interface connections
     // are made via a Connector rather than directly through an
     // InterfaceProvider, and all exposed interfaces are exposed via a
     // ConnectionFilter.
     service_manager_connection_->SetupInterfaceRequestProxies(
-        GetInterfaceRegistry(), remote_interfaces);
+        GetInterfaceRegistry(), nullptr);
   }
 
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
@@ -502,19 +494,23 @@ void ChildThreadImpl::Init(const Options& options) {
     channel_->AddFilter(new tracing::ChildTraceMessageFilter(
         ChildProcess::current()->io_task_runner()));
     channel_->AddFilter(new ChildMemoryMessageFilter());
+
+    if (service_manager_connection_) {
+      memory_instrumentation::MemoryDumpManagerDelegateImpl::Config config(
+          GetConnector(), mojom::kBrowserServiceName);
+      auto delegate = base::MakeUnique<
+          memory_instrumentation::MemoryDumpManagerDelegateImpl>(config);
+      base::trace_event::MemoryDumpManager::GetInstance()->Initialize(
+          std::move(delegate));
+    }
   }
 
   // In single process mode we may already have a power monitor,
   // also for some edge cases where there is no ServiceManagerConnection, we do
   // not create the power monitor.
   if (!base::PowerMonitor::Get() && service_manager_connection_) {
-    std::unique_ptr<service_manager::Connection> device_connection =
-        service_manager_connection_->GetConnector()->Connect(
-            device::mojom::kServiceName);
     auto power_monitor_source =
-        base::MakeUnique<device::PowerMonitorBroadcastSource>(
-            device_connection->GetRemoteInterfaces());
-
+        base::MakeUnique<device::PowerMonitorBroadcastSource>(GetConnector());
     power_monitor_.reset(
         new base::PowerMonitor(std::move(power_monitor_source)));
   }
@@ -549,6 +545,14 @@ void ChildThreadImpl::Init(const Options& options) {
     if (base::StringToInt(connection_override, &temp))
       connection_timeout = temp;
   }
+
+#if defined(OS_MACOSX)
+  if (base::CommandLine::InitializedForCurrentProcess() &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableHeapProfiling)) {
+    base::allocator::PeriodicallyShimNewMallocZones();
+  }
+#endif
 
   message_loop_->task_runner()->PostDelayedTask(
       FROM_HERE, base::Bind(&ChildThreadImpl::EnsureConnected,
@@ -641,13 +645,8 @@ service_manager::InterfaceRegistry* ChildThreadImpl::GetInterfaceRegistry() {
   return interface_registry_.get();
 }
 
-service_manager::InterfaceProvider* ChildThreadImpl::GetRemoteInterfaces() {
-  if (browser_connection_)
-    return browser_connection_->GetRemoteInterfaces();
-
-  if (!remote_interfaces_.get())
-    remote_interfaces_.reset(new service_manager::InterfaceProvider);
-  return remote_interfaces_.get();
+service_manager::Connector* ChildThreadImpl::GetConnector() {
+  return service_manager_connection_->GetConnector();
 }
 
 const service_manager::ServiceInfo&

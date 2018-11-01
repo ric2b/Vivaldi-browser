@@ -37,7 +37,9 @@ class WebDataConsumerHandleImpl::Context
 WebDataConsumerHandleImpl::ReaderImpl::ReaderImpl(
     scoped_refptr<Context> context,
     Client* client)
-    : context_(context), handle_watcher_(FROM_HERE), client_(client) {
+    : context_(context),
+      handle_watcher_(FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL),
+      client_(client) {
   if (client_)
     StartWatching();
 }
@@ -45,12 +47,12 @@ WebDataConsumerHandleImpl::ReaderImpl::ReaderImpl(
 WebDataConsumerHandleImpl::ReaderImpl::~ReaderImpl() {
 }
 
-Result WebDataConsumerHandleImpl::ReaderImpl::read(void* data,
+Result WebDataConsumerHandleImpl::ReaderImpl::Read(void* data,
                                                    size_t size,
                                                    Flags flags,
                                                    size_t* read_size) {
   // We need this variable definition to avoid a link error.
-  const Flags kNone = FlagNone;
+  const Flags kNone = kFlagNone;
   DCHECK_EQ(flags, kNone);
   DCHECK_LE(size, std::numeric_limits<uint32_t>::max());
 
@@ -60,20 +62,13 @@ Result WebDataConsumerHandleImpl::ReaderImpl::read(void* data,
     // Even if there is unread data available, mojo::ReadDataRaw() returns
     // FAILED_PRECONDITION when |size| is 0 and the producer handle was closed.
     // But in this case, WebDataConsumerHandle::Reader::read() must return Ok.
-    // So we use mojo::Wait() with 0 deadline to check whether readable or not.
-    MojoResult wait_result = mojo::Wait(
-        context_->handle().get(), MOJO_HANDLE_SIGNAL_READABLE, 0, nullptr);
-    switch (wait_result) {
-      case MOJO_RESULT_OK:
-        return Ok;
-      case MOJO_RESULT_FAILED_PRECONDITION:
-        return Done;
-      case MOJO_RESULT_DEADLINE_EXCEEDED:
-        return ShouldWait;
-      default:
-        NOTREACHED();
-        return UnexpectedError;
-    }
+    // So we query the signals state directly.
+    mojo::HandleSignalsState state = context_->handle()->QuerySignalsState();
+    if (state.readable())
+      return kOk;
+    if (state.never_readable())
+      return kDone;
+    return kShouldWait;
   }
 
   uint32_t size_to_pass = size;
@@ -82,15 +77,17 @@ Result WebDataConsumerHandleImpl::ReaderImpl::read(void* data,
                                     &size_to_pass, flags_to_pass);
   if (rv == MOJO_RESULT_OK)
     *read_size = size_to_pass;
+  if (rv == MOJO_RESULT_OK || rv == MOJO_RESULT_SHOULD_WAIT)
+    handle_watcher_.ArmOrNotify();
 
   return HandleReadResult(rv);
 }
 
-Result WebDataConsumerHandleImpl::ReaderImpl::beginRead(const void** buffer,
+Result WebDataConsumerHandleImpl::ReaderImpl::BeginRead(const void** buffer,
                                                         Flags flags,
                                                         size_t* available) {
   // We need this variable definition to avoid a link error.
-  const Flags kNone = FlagNone;
+  const Flags kNone = kFlagNone;
   DCHECK_EQ(flags, kNone);
 
   *buffer = nullptr;
@@ -106,38 +103,41 @@ Result WebDataConsumerHandleImpl::ReaderImpl::beginRead(const void** buffer,
   return HandleReadResult(rv);
 }
 
-Result WebDataConsumerHandleImpl::ReaderImpl::endRead(size_t read_size) {
+Result WebDataConsumerHandleImpl::ReaderImpl::EndRead(size_t read_size) {
   MojoResult rv = mojo::EndReadDataRaw(context_->handle().get(), read_size);
-  return rv == MOJO_RESULT_OK ? Ok : UnexpectedError;
+  if (rv == MOJO_RESULT_OK)
+    handle_watcher_.ArmOrNotify();
+  return rv == MOJO_RESULT_OK ? kOk : kUnexpectedError;
 }
 
 Result WebDataConsumerHandleImpl::ReaderImpl::HandleReadResult(
     MojoResult mojo_result) {
   switch (mojo_result) {
     case MOJO_RESULT_OK:
-      return Ok;
+      return kOk;
     case MOJO_RESULT_FAILED_PRECONDITION:
-      return Done;
+      return kDone;
     case MOJO_RESULT_BUSY:
-      return Busy;
+      return kBusy;
     case MOJO_RESULT_SHOULD_WAIT:
-      return ShouldWait;
+      return kShouldWait;
     case MOJO_RESULT_RESOURCE_EXHAUSTED:
-      return ResourceExhausted;
+      return kResourceExhausted;
     default:
-      return UnexpectedError;
+      return kUnexpectedError;
   }
 }
 
 void WebDataConsumerHandleImpl::ReaderImpl::StartWatching() {
-  handle_watcher_.Start(
+  handle_watcher_.Watch(
       context_->handle().get(), MOJO_HANDLE_SIGNAL_READABLE,
       base::Bind(&ReaderImpl::OnHandleGotReadable, base::Unretained(this)));
+  handle_watcher_.ArmOrNotify();
 }
 
 void WebDataConsumerHandleImpl::ReaderImpl::OnHandleGotReadable(MojoResult) {
   DCHECK(client_);
-  client_->didGetReadable();
+  client_->DidGetReadable();
 }
 
 WebDataConsumerHandleImpl::WebDataConsumerHandleImpl(Handle handle)
@@ -147,11 +147,11 @@ WebDataConsumerHandleImpl::~WebDataConsumerHandleImpl() {
 }
 
 std::unique_ptr<blink::WebDataConsumerHandle::Reader>
-WebDataConsumerHandleImpl::obtainReader(Client* client) {
+WebDataConsumerHandleImpl::ObtainReader(Client* client) {
   return base::WrapUnique(new ReaderImpl(context_, client));
 }
 
-const char* WebDataConsumerHandleImpl::debugName() const {
+const char* WebDataConsumerHandleImpl::DebugName() const {
   return "WebDataConsumerHandleImpl";
 }
 

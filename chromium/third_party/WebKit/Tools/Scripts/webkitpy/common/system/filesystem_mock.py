@@ -31,6 +31,7 @@ import hashlib
 import os
 import re
 import StringIO
+import unittest
 
 
 class MockFileSystem(object):
@@ -88,16 +89,16 @@ class MockFileSystem(object):
         return self._split(path)[1]
 
     def expanduser(self, path):
-        if path[0] != "~":
+        if path[0] != '~':
             return path
         parts = path.split(self.sep, 1)
-        home_directory = self.sep + "Users" + self.sep + "mock"
+        home_directory = self.sep + 'Users' + self.sep + 'mock'
         if len(parts) == 1:
             return home_directory
         return home_directory + self.sep + parts[1]
 
     def path_to_module(self, module_name):
-        return "/mock-checkout/third_party/WebKit/Tools/Scripts/" + module_name.replace('.', '/') + ".py"
+        return '/mock-checkout/third_party/WebKit/Tools/Scripts/' + module_name.replace('.', '/') + '.py'
 
     def chdir(self, path):
         path = self.normpath(path)
@@ -209,7 +210,7 @@ class MockFileSystem(object):
     def walk(self, top):
         sep = self.sep
         if not self.isdir(top):
-            raise OSError("%s is not a directory" % top)
+            raise OSError('%s is not a directory' % top)
 
         if not top.endswith(sep):
             top += sep
@@ -316,6 +317,9 @@ class MockFileSystem(object):
         if self.files[path] is None:
             self._raise_not_found(path)
         return ReadableBinaryFileObject(self, path, self.files[path])
+
+    def open_binary_file_for_writing(self, path):
+        return WritableBinaryFileObject(self, path)
 
     def read_binary_file(self, path):
         # Intentionally raises KeyError if we don't recognize the path.
@@ -431,7 +435,7 @@ class WritableBinaryFileObject(object):
         self.fs = fs
         self.path = path
         self.closed = False
-        self.fs.files[path] = ""
+        self.fs.files[path] = ''
 
     def __enter__(self):
         return self
@@ -451,6 +455,10 @@ class WritableTextFileObject(WritableBinaryFileObject):
 
     def write(self, string):
         WritableBinaryFileObject.write(self, string.encode('utf-8'))
+
+    def writelines(self, lines):
+        self.fs.files[self.path] = "".join(lines).encode('utf-8')
+        self.fs.written_files[self.path] = self.fs.files[self.path]
 
 
 class ReadableBinaryFileObject(object):
@@ -478,11 +486,21 @@ class ReadableBinaryFileObject(object):
         self.offset += num_bytes
         return self.data[start:self.offset]
 
+    def seek(self, offset, whence=os.SEEK_SET):
+        if whence == os.SEEK_SET:
+            self.offset = offset
+        elif whence == os.SEEK_CUR:
+            self.offset += offset
+        elif whence == os.SEEK_END:
+            self.offset = len(self.data) + offset
+        else:
+            assert False, "Unknown seek mode %s" % whence
+
 
 class ReadableTextFileObject(ReadableBinaryFileObject):
 
     def __init__(self, fs, path, data):
-        super(ReadableTextFileObject, self).__init__(fs, path, StringIO.StringIO(data.decode("utf-8")))
+        super(ReadableTextFileObject, self).__init__(fs, path, StringIO.StringIO(data.decode('utf-8')))
 
     def close(self):
         self.data.close()
@@ -494,6 +512,9 @@ class ReadableTextFileObject(ReadableBinaryFileObject):
     def readline(self, length=None):
         return self.data.readline(length)
 
+    def readlines(self):
+        return self.data.readlines()
+
     def __iter__(self):
         return self.data.__iter__()
 
@@ -502,3 +523,43 @@ class ReadableTextFileObject(ReadableBinaryFileObject):
 
     def seek(self, offset, whence=os.SEEK_SET):
         self.data.seek(offset, whence)
+
+
+class FileSystemTestCase(unittest.TestCase):
+    # pylint: disable=invalid-name
+    # Use assertFilesAdded to be consistent with unittest.
+
+    class _AssertFilesAddedContext(object):
+        """Internal class used by FileTestCase.assertFilesAdded()."""
+
+        def __init__(self, test_case, mock_filesystem, expected_files):
+            self.test_case = test_case
+            self.mock_filesystem = mock_filesystem
+            self.expected_files = expected_files
+
+        def __enter__(self):
+            # Make sure that the expected_files aren't already in the mock
+            # file system.
+            for filepath in self.expected_files:
+                assert filepath not in self.mock_filesystem.files, "%s was already in mock file system (%r)" % (
+                    filepath, self.mock_filesystem.files)
+            return self
+
+        def __exit__(self, exc_type, exc_value, tb):
+            # Exception already occurring, just exit.
+            if exc_type is not None:
+                return
+
+            for filepath in sorted(self.expected_files):
+                self.test_case.assertIn(filepath, self.mock_filesystem.files)
+                self.test_case.assertEqual(self.expected_files[filepath], self.mock_filesystem.files[filepath])
+
+    def assertFilesAdded(self, mock_filesystem, files):
+        """Assert that the given files where added to the mock_filesystem.
+
+        Use in a similar manner to self.assertRaises;
+
+        with self.assertFilesAdded(mock_filesystem, {'/newfile': 'contents'}):
+            code(mock_filesystem)
+        """
+        return self._AssertFilesAddedContext(self, mock_filesystem, files)

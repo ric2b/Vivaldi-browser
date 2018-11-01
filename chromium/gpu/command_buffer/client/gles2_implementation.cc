@@ -376,21 +376,14 @@ void GLES2Implementation::RunIfContextNotLost(const base::Closure& callback) {
 
 void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
                                           const base::Closure& callback) {
+  SyncToken verified_sync_token;
   if (sync_token.HasData() &&
-      (sync_token.verified_flush() ||
-       gpu_control_->CanWaitUnverifiedSyncToken(&sync_token))) {
-
-    gpu::SyncToken intermediate_sync_token = sync_token;
-
-    // Mark the intermediate sync token as verified if we can wait on
-    // unverified sync tokens.
-    intermediate_sync_token.SetVerifyFlush();
-
+      GetVerifiedSyncTokenForIPC(sync_token, &verified_sync_token)) {
+    // We can only send verified sync tokens across IPC.
     gpu_control_->SignalSyncToken(
-        intermediate_sync_token,
+        verified_sync_token,
         base::Bind(&GLES2Implementation::RunIfContextNotLost,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   callback));
+                   weak_ptr_factory_.GetWeakPtr(), callback));
   } else {
     // Invalid sync token, just call the callback immediately.
     callback.Run();
@@ -399,7 +392,7 @@ void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
 
 // This may be called from any thread. It's safe to access gpu_control_ without
 // the lock because it is const.
-bool GLES2Implementation::IsSyncTokenSignalled(
+bool GLES2Implementation::IsSyncTokenSignaled(
     const gpu::SyncToken& sync_token) {
   // Check that the sync token belongs to this context.
   DCHECK_EQ(gpu_control_->GetNamespaceID(), sync_token.namespace_id());
@@ -4985,6 +4978,47 @@ void GLES2Implementation::ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                    buffer.offset());
 }
 
+void GLES2Implementation::ScheduleDCLayerSharedStateCHROMIUM(
+    GLfloat opacity,
+    GLboolean is_clipped,
+    const GLfloat* clip_rect,
+    GLint z_order,
+    const GLfloat* transform) {
+  size_t shm_size = 20 * sizeof(GLfloat);
+  ScopedTransferBufferPtr buffer(shm_size, helper_, transfer_buffer_);
+  if (!buffer.valid() || buffer.size() < shm_size) {
+    SetGLError(GL_OUT_OF_MEMORY, "GLES2::ScheduleDCLayerSharedStateCHROMIUM",
+               "out of memory");
+    return;
+  }
+  GLfloat* mem = static_cast<GLfloat*>(buffer.address());
+  memcpy(mem + 0, clip_rect, 4 * sizeof(GLfloat));
+  memcpy(mem + 4, transform, 16 * sizeof(GLfloat));
+  helper_->ScheduleDCLayerSharedStateCHROMIUM(opacity, is_clipped, z_order,
+                                              buffer.shm_id(), buffer.offset());
+}
+
+void GLES2Implementation::ScheduleDCLayerCHROMIUM(GLuint contents_texture_id,
+                                                  const GLfloat* contents_rect,
+                                                  GLuint background_color,
+                                                  GLuint edge_aa_mask,
+                                                  const GLfloat* bounds_rect,
+                                                  GLuint filter) {
+  size_t shm_size = 8 * sizeof(GLfloat);
+  ScopedTransferBufferPtr buffer(shm_size, helper_, transfer_buffer_);
+  if (!buffer.valid() || buffer.size() < shm_size) {
+    SetGLError(GL_OUT_OF_MEMORY, "GLES2::ScheduleDCLayerCHROMIUM",
+               "out of memory");
+    return;
+  }
+  GLfloat* mem = static_cast<GLfloat*>(buffer.address());
+  memcpy(mem + 0, contents_rect, 4 * sizeof(GLfloat));
+  memcpy(mem + 4, bounds_rect, 4 * sizeof(GLfloat));
+  helper_->ScheduleDCLayerCHROMIUM(contents_texture_id, background_color,
+                                   edge_aa_mask, filter, buffer.shm_id(),
+                                   buffer.offset());
+}
+
 void GLES2Implementation::CommitOverlayPlanesCHROMIUM() {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] CommitOverlayPlanesCHROMIUM()");
@@ -6086,15 +6120,15 @@ void GLES2Implementation::GenSyncTokenCHROMIUM(GLuint64 fence_sync,
 void GLES2Implementation::GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
                                                          GLbyte* sync_token) {
   if (!sync_token) {
-    SetGLError(GL_INVALID_VALUE, "glGenNonFlushedSyncTokenCHROMIUM",
+    SetGLError(GL_INVALID_VALUE, "glGenUnverifiedSyncTokenCHROMIUM",
                "empty sync_token");
     return;
   } else if (!gpu_control_->IsFenceSyncRelease(fence_sync)) {
-    SetGLError(GL_INVALID_VALUE, "glGenNonFlushedSyncTokenCHROMIUM",
+    SetGLError(GL_INVALID_VALUE, "glGenUnverifiedSyncTokenCHROMIUM",
                "invalid fence sync");
     return;
   } else if (!gpu_control_->IsFenceSyncFlushed(fence_sync)) {
-    SetGLError(GL_INVALID_OPERATION, "glGenSyncTokenCHROMIUM",
+    SetGLError(GL_INVALID_OPERATION, "glGenUnverifiedSyncTokenCHROMIUM",
                "fence sync must be flushed before generating sync token");
     return;
   }
@@ -6115,12 +6149,14 @@ void GLES2Implementation::VerifySyncTokensCHROMIUM(GLbyte **sync_tokens,
       memcpy(&sync_token, sync_tokens[i], sizeof(sync_token));
 
       if (sync_token.HasData() && !sync_token.verified_flush()) {
-        if (!gpu_control_->CanWaitUnverifiedSyncToken(&sync_token)) {
+        if (!GetVerifiedSyncTokenForIPC(sync_token, &sync_token)) {
           SetGLError(GL_INVALID_VALUE, "glVerifySyncTokensCHROMIUM",
                      "Cannot verify sync token using this context.");
           return;
         }
         requires_synchronization = true;
+        DCHECK(sync_token.verified_flush());
+        memcpy(sync_tokens[i], &sync_token, sizeof(sync_token));
       }
     }
   }
@@ -6131,43 +6167,51 @@ void GLES2Implementation::VerifySyncTokensCHROMIUM(GLbyte **sync_tokens,
   if (requires_synchronization) {
     // Make sure we have no pending ordering barriers by flushing now.
     FlushHelper();
-
     // Ensure all the fence syncs are visible on GPU service.
     gpu_control_->EnsureWorkVisible();
-
-    // We can automatically mark everything as verified now.
-    for (GLsizei i = 0; i < count; ++i) {
-      if (sync_tokens[i]) {
-        SyncToken sync_token;
-        memcpy(&sync_token, sync_tokens[i], sizeof(sync_token));
-        if (sync_token.HasData() && !sync_token.verified_flush()) {
-          sync_token.SetVerifyFlush();
-          memcpy(sync_tokens[i], &sync_token, sizeof(sync_token));
-        }
-      }
-    }
   }
 }
 
-void GLES2Implementation::WaitSyncTokenCHROMIUM(const GLbyte* sync_token) {
-  if (sync_token) {
-    // Copy the data over before data access to ensure alignment.
-    SyncToken sync_token_data;
-    memcpy(&sync_token_data, sync_token, sizeof(SyncToken));
-    if (sync_token_data.HasData()) {
-      if (!sync_token_data.verified_flush() &&
-          !gpu_control_->CanWaitUnverifiedSyncToken(&sync_token_data)) {
-        SetGLError(GL_INVALID_VALUE, "glWaitSyncTokenCHROMIUM",
-                   "Cannot wait on sync_token which has not been verified");
-        return;
-      }
+void GLES2Implementation::WaitSyncTokenCHROMIUM(const GLbyte* sync_token_data) {
+  if (!sync_token_data)
+    return;
 
-      helper_->WaitSyncTokenCHROMIUM(
-          static_cast<GLint>(sync_token_data.namespace_id()),
-          sync_token_data.command_buffer_id().GetUnsafeValue(),
-          sync_token_data.release_count());
-    }
+  // Copy the data over before data access to ensure alignment.
+  SyncToken sync_token, verified_sync_token;
+  memcpy(&sync_token, sync_token_data, sizeof(SyncToken));
+
+  if (!sync_token.HasData())
+    return;
+
+  if (!GetVerifiedSyncTokenForIPC(sync_token, &verified_sync_token)) {
+    SetGLError(GL_INVALID_VALUE, "glWaitSyncTokenCHROMIUM",
+               "Cannot wait on sync_token which has not been verified");
+    return;
   }
+
+  helper_->WaitSyncTokenCHROMIUM(
+      static_cast<GLint>(sync_token.namespace_id()),
+      sync_token.command_buffer_id().GetUnsafeValue(),
+      sync_token.release_count());
+
+  // Enqueue sync token in flush after inserting command so that it's not
+  // included in an automatic flush.
+  gpu_control_->WaitSyncTokenHint(verified_sync_token);
+}
+
+bool GLES2Implementation::GetVerifiedSyncTokenForIPC(
+    const SyncToken& sync_token,
+    SyncToken* verified_sync_token) {
+  DCHECK(sync_token.HasData());
+  DCHECK(verified_sync_token);
+
+  if (!sync_token.verified_flush() &&
+      !gpu_control_->CanWaitUnverifiedSyncToken(sync_token))
+    return false;
+
+  *verified_sync_token = sync_token;
+  verified_sync_token->SetVerifyFlush();
+  return true;
 }
 
 namespace {

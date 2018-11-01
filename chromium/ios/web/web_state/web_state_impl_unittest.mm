@@ -162,7 +162,10 @@ bool HandleScriptCommand(bool* is_called,
 // Test fixture for web::WebStateImpl class.
 class WebStateImplTest : public web::WebTest {
  protected:
-  WebStateImplTest() : web_state_(new WebStateImpl(GetBrowserState())) {}
+  WebStateImplTest() : web::WebTest() {
+    web::WebState::CreateParams params(GetBrowserState());
+    web_state_ = base::MakeUnique<web::WebStateImpl>(params);
+  }
 
   std::unique_ptr<WebStateImpl> web_state_;
 };
@@ -212,10 +215,11 @@ TEST_F(WebStateImplTest, ResponseHeaders) {
   web_state_->OnHttpResponseHeadersReceived(real_headers.get(), real_url);
   web_state_->OnHttpResponseHeadersReceived(frame_headers.get(), frame_url);
   // Include a hash to be sure it's handled correctly.
-  web_state_->OnNavigationCommitted(
+  web_state_->UpdateHttpResponseHeaders(
       GURL(real_url.spec() + std::string("#baz")));
 
   // Verify that the right header set was kept.
+  ASSERT_TRUE(web_state_->GetHttpResponseHeaders());
   EXPECT_TRUE(
       web_state_->GetHttpResponseHeaders()->HasHeader("X-Should-Be-Here"));
   EXPECT_FALSE(
@@ -239,14 +243,15 @@ TEST_F(WebStateImplTest, ResponseHeaderClearing) {
   EXPECT_EQ(NULL, web_state_->GetHttpResponseHeaders());
 
   // There should be headers and parsed values after loading.
-  web_state_->OnNavigationCommitted(url);
+  web_state_->UpdateHttpResponseHeaders(url);
+  ASSERT_TRUE(web_state_->GetHttpResponseHeaders());
   EXPECT_TRUE(web_state_->GetHttpResponseHeaders()->HasHeader("Content-Type"));
   EXPECT_NE("", web_state_->GetContentsMimeType());
   EXPECT_NE("", web_state_->GetContentLanguageHeader());
 
   // ... but not after loading another page, nor should there be specific
   // parsed values.
-  web_state_->OnNavigationCommitted(GURL("http://elsewhere.com/"));
+  web_state_->UpdateHttpResponseHeaders(GURL("http://elsewhere.com/"));
   EXPECT_EQ(NULL, web_state_->GetHttpResponseHeaders());
   EXPECT_EQ("", web_state_->GetContentsMimeType());
   EXPECT_EQ("", web_state_->GetContentLanguageHeader());
@@ -273,6 +278,20 @@ TEST_F(WebStateImplTest, ObserverTest) {
   web_state_->OnTitleChanged();
   ASSERT_TRUE(observer->title_was_set_info());
   EXPECT_EQ(web_state_.get(), observer->title_was_set_info()->web_state);
+
+  // Test that DidChangeVisibleSecurityState() is called.
+  ASSERT_FALSE(observer->did_change_visible_security_state_info());
+  web_state_->OnVisibleSecurityStateChange();
+  ASSERT_TRUE(observer->did_change_visible_security_state_info());
+  EXPECT_EQ(web_state_.get(),
+            observer->did_change_visible_security_state_info()->web_state);
+
+  // Test that DidSuppressDialog() is called.
+  ASSERT_FALSE(observer->did_suppress_dialog_info());
+  web_state_->SetShouldSuppressDialogs(true);
+  web_state_->OnDialogSuppressed();
+  ASSERT_TRUE(observer->did_suppress_dialog_info());
+  EXPECT_EQ(web_state_.get(), observer->did_suppress_dialog_info()->web_state);
 
   // Test that DocumentSubmitted() is called.
   ASSERT_FALSE(observer->submit_document_info());
@@ -374,9 +393,9 @@ TEST_F(WebStateImplTest, ObserverTest) {
   EXPECT_EQ(web_state_.get(), observer->load_page_info()->web_state);
   EXPECT_TRUE(observer->load_page_info()->success);
 
-  // Test that DidFinishNavigation() is called for same page navigations.
+  // Test that DidFinishNavigation() is called for same document navigations.
   ASSERT_FALSE(observer->did_finish_navigation_info());
-  web_state_->OnSamePageNavigation(url);
+  web_state_->OnSameDocumentNavigation(url);
   ASSERT_TRUE(observer->did_finish_navigation_info());
   EXPECT_EQ(web_state_.get(),
             observer->did_finish_navigation_info()->web_state);
@@ -384,8 +403,9 @@ TEST_F(WebStateImplTest, ObserverTest) {
       observer->did_finish_navigation_info()->context.get();
   ASSERT_TRUE(context);
   EXPECT_EQ(url, context->GetUrl());
-  EXPECT_TRUE(context->IsSamePage());
+  EXPECT_TRUE(context->IsSameDocument());
   EXPECT_FALSE(context->IsErrorPage());
+  EXPECT_FALSE(context->GetResponseHeaders());
 
   // Reset the observer and test that DidFinishNavigation() is called
   // for error navigations.
@@ -398,8 +418,9 @@ TEST_F(WebStateImplTest, ObserverTest) {
   context = observer->did_finish_navigation_info()->context.get();
   ASSERT_TRUE(context);
   EXPECT_EQ(url, context->GetUrl());
-  EXPECT_FALSE(context->IsSamePage());
+  EXPECT_FALSE(context->IsSameDocument());
   EXPECT_TRUE(context->IsErrorPage());
+  EXPECT_FALSE(context->GetResponseHeaders());
 
   // Test that OnTitleChanged() is called.
   ASSERT_FALSE(observer->title_was_set_info());
@@ -419,6 +440,44 @@ TEST_F(WebStateImplTest, ObserverTest) {
 TEST_F(WebStateImplTest, DelegateTest) {
   TestWebStateDelegate delegate;
   web_state_->SetDelegate(&delegate);
+
+  // Test that CreateNewWebState() is called.
+  GURL child_url("https://child.test/");
+  GURL opener_url("https://opener.test/");
+  EXPECT_FALSE(delegate.last_create_new_web_state_request());
+  web_state_->CreateNewWebState(child_url, opener_url, true);
+  TestCreateNewWebStateRequest* create_new_web_state_request =
+      delegate.last_create_new_web_state_request();
+  ASSERT_TRUE(create_new_web_state_request);
+  EXPECT_EQ(web_state_.get(), create_new_web_state_request->web_state);
+  EXPECT_EQ(child_url, create_new_web_state_request->url);
+  EXPECT_EQ(opener_url, create_new_web_state_request->opener_url);
+  EXPECT_TRUE(create_new_web_state_request->initiated_by_user);
+
+  // Test that CloseWebState() is called.
+  EXPECT_FALSE(delegate.last_close_web_state_request());
+  web_state_->CloseWebState();
+  ASSERT_TRUE(delegate.last_close_web_state_request());
+  EXPECT_EQ(web_state_.get(),
+            delegate.last_close_web_state_request()->web_state);
+
+  // Test that OpenURLFromWebState() is called.
+  WebState::OpenURLParams params(GURL("https://chromium.test/"), Referrer(),
+                                 WindowOpenDisposition::CURRENT_TAB,
+                                 ui::PAGE_TRANSITION_LINK, true);
+  EXPECT_FALSE(delegate.last_open_url_request());
+  web_state_->OpenURL(params);
+  TestOpenURLRequest* open_url_request = delegate.last_open_url_request();
+  ASSERT_TRUE(open_url_request);
+  EXPECT_EQ(web_state_.get(), open_url_request->web_state);
+  WebState::OpenURLParams actual_params = open_url_request->params;
+  EXPECT_EQ(params.url, actual_params.url);
+  EXPECT_EQ(params.referrer.url, actual_params.referrer.url);
+  EXPECT_EQ(params.referrer.policy, actual_params.referrer.policy);
+  EXPECT_EQ(params.disposition, actual_params.disposition);
+  EXPECT_TRUE(
+      PageTransitionCoreTypeIs(params.transition, actual_params.transition));
+  EXPECT_EQ(params.is_renderer_initiated, actual_params.is_renderer_initiated);
 
   // Test that HandleContextMenu() is called.
   EXPECT_FALSE(delegate.handle_context_menu_called());
@@ -625,6 +684,21 @@ TEST_F(WebStateImplTest, ScriptCommand) {
   EXPECT_TRUE(is_called_2);
 
   web_state_->RemoveScriptCommandCallback(kPrefix2);
+}
+
+// Tests that WebState::CreateParams::created_with_opener is translated to
+// WebState::HasOpener() return values.
+TEST_F(WebStateImplTest, CreatedWithOpener) {
+  // Verify that the HasOpener() returns false if not specified in the create
+  // params.
+  EXPECT_FALSE(web_state_->HasOpener());
+  // Set |created_with_opener| to true and verify that HasOpener() returns true.
+  WebState::CreateParams params_with_opener =
+      WebState::CreateParams(GetBrowserState());
+  params_with_opener.created_with_opener = true;
+  std::unique_ptr<WebState> web_state_with_opener =
+      WebState::Create(params_with_opener);
+  EXPECT_TRUE(web_state_with_opener->HasOpener());
 }
 
 }  // namespace web

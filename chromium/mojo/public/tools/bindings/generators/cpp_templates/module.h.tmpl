@@ -40,6 +40,7 @@ namespace {{variant}} {
 #include <utility>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/optional.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
@@ -51,7 +52,6 @@ namespace {{variant}} {
 #include "mojo/public/cpp/bindings/lib/control_message_handler.h"
 #include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
 #include "mojo/public/cpp/bindings/lib/serialization.h"
-#include "mojo/public/cpp/bindings/lib/union_accessor.h"
 #include "mojo/public/cpp/bindings/native_struct.h"
 #include "mojo/public/cpp/bindings/raw_ptr_impl_ref_traits.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
@@ -73,9 +73,9 @@ namespace {{variant}} {
 {# hash_util.h includes template specializations that should be present for
    every use of {Inlined}StructPtr. #}
 #include "mojo/public/cpp/bindings/lib/wtf_hash_util.h"
-#include "third_party/WebKit/Source/wtf/HashFunctions.h"
-#include "third_party/WebKit/Source/wtf/Optional.h"
-#include "third_party/WebKit/Source/wtf/text/WTFString.h"
+#include "third_party/WebKit/Source/platform/wtf/HashFunctions.h"
+#include "third_party/WebKit/Source/platform/wtf/Optional.h"
+#include "third_party/WebKit/Source/platform/wtf/text/WTFString.h"
 {%- endif %}
 
 {%- for header in extra_public_headers %}
@@ -84,6 +84,16 @@ namespace {{variant}} {
 
 {%- if export_header %}
 #include "{{export_header}}"
+{%- endif %}
+
+{#--- WTF enum hashing #}
+{%- from "enum_macros.tmpl" import enum_hash_blink%}
+{%- if for_blink %}
+{%-   for enum in all_enums %}
+{%-     if not enum|is_native_only_kind %}
+{{enum_hash_blink(enum)}}
+{%-     endif %}
+{%-   endfor %}
 {%- endif %}
 
 {{namespace_begin()}}

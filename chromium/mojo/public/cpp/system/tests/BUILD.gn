@@ -7,7 +7,10 @@ source_set("tests") {
 
   sources = [
     "core_unittest.cc",
-    "watcher_unittest.cc",
+    "handle_signals_state_unittest.cc",
+    "simple_watcher_unittest.cc",
+    "wait_set_unittest.cc",
+    "wait_unittest.cc",
   ]
 
   deps = [

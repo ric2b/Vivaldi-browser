@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">拡張されました。</translation>
 <translation id="1025074108959230262">スティッキー モードは無効</translation>
 <translation id="1031961866430398710">この場合</translation>
+<translation id="1038643060055067718">行数:</translation>
 <translation id="1038795173450935438">ページ上の項目間を移動するには、順方向の場合は検索+右矢印キー、逆方向の場合は検索+左矢印キーを押します。次の行に移動するには検索+下矢印キー、前の行に移動するには検索+上矢印キーを押します。クリックする項目まで移動したら、検索+スペースキーを押します。</translation>
 <translation id="1044777062731150180">見出しなし</translation>
 <translation id="106222400312645156">行見出し</translation>
@@ -109,7 +110,8 @@
 <translation id="2110480898214777136">ページ、ダイアログ、またはその他のコンテナの内部での、行頭から行末、または行末から行頭への折り返し</translation>
 <translation id="2119965627982867824">スピンボタン</translation>
 <translation id="2121067395472282800">アクセス キー: <ph name="KEY" /></translation>
-<translation id="2155457205053847599">現在の 6 点点字表を変更するには、下のリストからオプションを選択します。</translation>
+<translation id="2138345533858834403">点字ディスプレイの出力を
+        画面上部の ChromeVox パネルにシミュレートします。</translation>
 <translation id="2169714232367507776">現在の項目をクリック</translation>
 <translation id="2179452035581866348">ChromeVox を使用すると、基本情報や追加情報を通知音で知ることができます。それぞれの通知音の意味を把握しておくと、すばやく操作するのに便利です。慣れてきたら、詳しい音声説明を無効にして、通知音だけでページの情報を把握できます。通知音の一覧とその意味については、以下をご覧ください。</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{右丸かっこ}other{# 個の右丸かっこ}}</translation>
@@ -124,6 +126,7 @@
 <translation id="2344193891939537199">日時の設定</translation>
 <translation id="2347456970887948350">リンク</translation>
 <translation id="2359897517538099099">表モードではありません。</translation>
+<translation id="2381733276052567791">読み上げの有効と無効を切り替えます</translation>
 <translation id="2390264819538553347">次に進むには Enter キー、前に戻るには Backspace キーを押します。</translation>
 <translation id="241124561063364910">を押して、次のキーを押します:</translation>
 <translation id="2416512023405990736">チェックボックスがオフ</translation>
@@ -166,6 +169,7 @@
 <translation id="2800204403141299078">この他に異なる要素はありません。</translation>
 <translation id="2800780099804980316">前のレベル 1 見出しはありません。</translation>
 <translation id="280499067616661124">ChromeVox でページ内を検索します</translation>
+<translation id="2808001342598757276">画面表示をオンにする</translation>
 <translation id="2811019999044652585">ツールバーやシステムトレイなど画面の他の部分に移動するには、Ctrl+Forward キーを押します。Chromebook では、Forward キーは数字キー 2 のすぐ上にあります。</translation>
 <translation id="2811204574343810641">行</translation>
 <translation id="2816654101880605877">次のスライダはありません。</translation>
@@ -185,11 +189,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{タブ}other{# 個のタブ}}</translation>
 <translation id="2972078295414139404">前にアクセスしたリンクはありません。</translation>
 <translation id="2972205263822847197">ツールチップ</translation>
-<translation id="2978549349327282388">列:</translation>
 <translation id="2998131015536248178">前の文字</translation>
 <translation id="2999559350546931576">ピッチを下げる</translation>
 <translation id="2999945368667127852">次のメディア ウィジェットはありません。</translation>
 <translation id="3012414509011670858">前のセクションはありません。</translation>
+<translation id="3014130421870723208">@ 8 点入力</translation>
 <translation id="3030432017085518523">メニュー項目のラジオボタン</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{アポストロフィ}other{# 個のアポストロフィ}}</translation>
 <translation id="3040901448410802366">進行状況インジケーター</translation>
@@ -212,6 +216,7 @@
 <translation id="3138767756593758860">ランドマーク リストを表示</translation>
 <translation id="3143851963874289911">セル</translation>
 <translation id="3149472044574196936">次の行</translation>
+<translation id="3153024374267644603">読み上げを有効にします</translation>
 <translation id="3155083529632865074">前のボタンはありません。</translation>
 <translation id="3163593631834463955">列見出しが空です</translation>
 <translation id="316542773973815724">ナビゲーション</translation>
@@ -224,6 +229,7 @@
 <translation id="3229375994964697375">アクセス済みのリンク</translation>
 <translation id="3232388865800379423">ポップアップ ボタン</translation>
 <translation id="3241052487511142956">前にアクセスしたリンク</translation>
+<translation id="3241638166094654466">各行のセル数:</translation>
 <translation id="3286390186030710347">スライダ</translation>
 <translation id="3299925995433437805">次にアクセスしたリンクはありません。</translation>
 <translation id="3307886118343381874">表の末尾に移動</translation>
@@ -380,6 +386,7 @@
 <translation id="4376316291247992553">画像を点字パターンで表示します</translation>
 <translation id="4391478986194775161">コンテンツ情報</translation>
 <translation id="443163561286008705">リセット</translation>
+<translation id="4457472090507035117">現在の音声を選択:</translation>
 <translation id="4471074325120394300">リンクがありません。</translation>
 <translation id="4476183483923481720">新しい行</translation>
 <translation id="4482330759234983253">前の表</translation>
@@ -453,7 +460,6 @@
 <translation id="5105050547967751155">必須</translation>
 <translation id="5110983769041734144">前のフォーム フィールドはありません。</translation>
 <translation id="5111640677200759579">列見出し</translation>
-<translation id="5117636609870536415">メールアドレスを編集</translation>
 <translation id="5136967254288895616">前のリンクはありません。</translation>
 <translation id="513774504516943387">リンク</translation>
 <translation id="517143700877085897">、選択されていません</translation>
@@ -564,10 +570,10 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="5968607524793740041">コンテキスト メニューを表示</translation>
 <translation id="5983179082906765664">一度に移動する単位を小さくする</translation>
 <translation id="5999630716831179808">音声</translation>
-<translation id="6000417740266304866">現在の 8 点点字表を変更するには、下のリストからオプションを選択します。</translation>
 <translation id="6006050241733874051">フォーム</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{バックスラッシュ}other{# 個のバックスラッシュ}}</translation>
 <translation id="6037602951055904232">前方にパンします</translation>
+<translation id="6044160928851315051">画面表示をオフにする</translation>
 <translation id="6082768461603900813">基本的な操作</translation>
 <translation id="611827076493383239">アクセス済み</translation>
 <translation id="6119955456199054975">ここでセルは終わりです。</translation>
@@ -606,7 +612,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="6444046323172968959">アラート ダイアログ</translation>
 <translation id="6459511626086141404">フラット キーマップ</translation>
 <translation id="6468049171101508116">次のボタン</translation>
-<translation id="6491972999578897419">下のリストからオプションを選択して、現在の音声を変更できます。</translation>
 <translation id="6493991254603208962">明るさを下げる</translation>
 <translation id="6508059270146105198">ブライユ点字表示をページ下部に移動</translation>
 <translation id="6536864053412760904">MathML トークン</translation>
@@ -658,6 +663,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="7116595520562830928">複数行</translation>
 <translation id="712735679809149106">単語読み上げ</translation>
 <translation id="713824876195128146">次の引用文</translation>
+<translation id="7143034430156387447">6 点点字と 8 点点字を切り替えます</translation>
 <translation id="7161771961008409533">ポップアップ ボタン</translation>
 <translation id="7165714724802225287">現在の表示スタイルは交互です。</translation>
 <translation id="7167657087543110">文字読み上げ</translation>
@@ -668,6 +674,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">行</translation>
 <translation id="7226216518520804442">リスト</translation>
+<translation id="7229749224609077523">6 点点字表を選択:</translation>
 <translation id="72393384879519786">見出し</translation>
 <translation id="7241683698754534149">長い説明を新しいタブで開きます</translation>
 <translation id="7248671827512403053">アプリケーション</translation>
@@ -693,7 +700,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="7408482676469142474">表</translation>
 <translation id="7420313809195758138">アイテムのコンテキストを他の情報（名前など）より前に表示する。</translation>
 <translation id="7425395583360211003">改行</translation>
-<translation id="7434509671034404296">開発/管理</translation>
+<translation id="7434509671034404296">開発 / 管理</translation>
 <translation id="7439060726180460871">ディレクトリ</translation>
 <translation id="744163271241493234">パスワードを編集</translation>
 <translation id="7491962110804786152">タブ</translation>
@@ -741,6 +748,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="7974390230414479278">メニュー項目</translation>
 <translation id="8007540374018858731">見出し 3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{引用符}other{# 個の引用符}}</translation>
+<translation id="8017588669690167134">読み上げを無効にします</translation>
 <translation id="8033827949643255796">選択しました</translation>
 <translation id="8035962149453661158">最大: <ph name="X" /></translation>
 <translation id="8042761080832772327">テキスト編集、検索エントリ</translation>
@@ -759,7 +767,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="820417203470636242">セルは空欄です。</translation>
 <translation id="8215202828671303819">複数選択可</translation>
 <translation id="8224171046658870249">ChromeVox Next に切り替えました</translation>
-<translation id="8259358278692921574">行:</translation>
 <translation id="8276439074553447000">前のフォーカス可能項目にジャンプ</translation>
 <translation id="8278417001922463147">前の記事はありません。</translation>
 <translation id="8283603667300770666">次のフォーム フィールド</translation>
@@ -797,7 +804,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="8638532244051952400">現在のセルの座標を読み上げる</translation>
 <translation id="8650576015643545550">前のリストはありません。</translation>
 <translation id="8651481478098336970">音量をミュート</translation>
-<translation id="8653031188082306838">URL を編集</translation>
 <translation id="8653646212587894517">リンク リストを表示</translation>
 <translation id="8664519043722036194">秒</translation>
 <translation id="867187640362843212">見出し 5</translation>
@@ -817,6 +823,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="8856538297388979332">上下の矢印キーでコマンドを確認し、Enter キーを押して有効にしてください</translation>
 <translation id="8864099967139188018">次のレベル 6 見出しはありません。</translation>
 <translation id="8882002077197914455">行見出し</translation>
+<translation id="8883850400338911892">url 8 点入力</translation>
 <translation id="8896347895970027998">ChromeVox の有効/無効を切り替えます。</translation>
 <translation id="8898516272131543774">句読点読み上げを切り替えます</translation>
 <translation id="8900148057318340779">プレフィックス キー</translation>
@@ -830,6 +837,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="9027462562263121875">表がありません。</translation>
 <translation id="9040132695316389094">見出し 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" />%</translation>
+<translation id="9061884144798498064">8 点点字表を選択:</translation>
 <translation id="9065283790526219006">ポップアップあり</translation>
 <translation id="9077213568694924680">選択範囲から削除されています</translation>
 <translation id="9082874451376019682">前のスライダはありません。</translation>

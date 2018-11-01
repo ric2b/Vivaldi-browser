@@ -59,6 +59,7 @@ class RecentTabHelper
     // There is no expectations that tab_id is always present.
     virtual bool GetTabId(content::WebContents* web_contents, int* tab_id) = 0;
     virtual bool IsLowEndDevice() = 0;
+    virtual bool IsCustomTab(content::WebContents* web_contents) = 0;
   };
   void SetDelegate(std::unique_ptr<RecentTabHelper::Delegate> delegate);
 
@@ -127,12 +128,19 @@ class RecentTabHelper
   bool downloads_snapshot_on_hold_ = false;
 
   // Snapshot information for the last successful snapshot requested by
-  // downloads. Null if no successful one has ever completed.
+  // downloads. Null if no successful one has ever completed for the current
+  // page.
   std::unique_ptr<SnapshotProgressInfo> downloads_latest_saved_snapshot_info_;
 
   // Snapshot progress information for a last_n triggered request. Null if
-  // last_n is not currently capturing the current page.
+  // last_n is not currently capturing the current page. It is cleared upon non
+  // ignored navigations.
   std::unique_ptr<SnapshotProgressInfo> last_n_ongoing_snapshot_info_;
+
+  // Snapshot information for the last successful snapshot requested by
+  // last_n. Null if no successful one has ever completed for the current page.
+  // It is cleared when the referenced snapshot is deleted.
+  std::unique_ptr<SnapshotProgressInfo> last_n_latest_saved_snapshot_info_;
 
   // If empty, the tab does not have AndroidId and can not capture pages.
   std::string tab_id_;

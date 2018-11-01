@@ -12,7 +12,7 @@
 <translation id="1165039591588034296">Galat</translation>
 <translation id="1175364870820465910">&amp;Cetak...</translation>
 <translation id="1177863135347784049">Sesuaikan</translation>
-<translation id="1181037720776840403">Buang</translation>
+<translation id="1181037720776840403">Hapus</translation>
 <translation id="1187722533808055681">Bangun saat diam</translation>
 <translation id="119944043368869598">Bersihkan semua</translation>
 <translation id="1218323606465324064">Sekarang mencetak <ph name="PAGE_NUMBER" /> halaman ke <ph name="PRINTER_NAME" /></translation>
@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Ketik pintasan</translation>
 <translation id="2509495747794740764">Jumlah skala harus berupa angka antara 10 dan 200.</translation>
 <translation id="2509857212037838238">Pasang <ph name="PLUGIN_NAME" /></translation>
+<translation id="253557089021624350">Penghitung keepalive</translation>
 <translation id="2550212893339833758">Memori yang di Tukar</translation>
 <translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -213,7 +214,7 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Terima untuk kelompok</translation>
 <translation id="4089192115462111328">Di Vivaldi</translation>
-<translation id="4090535558450035482">(Ekstensi ini di kelola dan tidak dapat di buang.)</translation>
+<translation id="4090535558450035482">(Ekstensi ini di kelola dan tidak dapat di hapus.)</translation>
 <translation id="4091434297613116013">Semua lembaran kertas</translation>
 <translation id="4096508467498758490">Jangan aktifkan semua ekstensi mode pengembang</translation>
 <translation id="4100839878934973028">Program lain di komputer anda menambahkan aplikasi yang dapat mengubah cara kerja Vivaldi.</translation>
@@ -366,6 +367,7 @@
 <translation id="6273677812470008672">Kualitas</translation>
 <translation id="6295855836753816081">Menyimpan...</translation>
 <translation id="6308937455967653460">Simpan tau&amp;tan sebagai...</translation>
+<translation id="6326855256003666642">Penghitung Keepalive</translation>
 <translation id="6348109281845364640">Galat untuk menyiapkan pencetak</translation>
 <translation id="6370021412472292592">Tidak dapat memuat manifest.</translation>
 <translation id="6398765197997659313">Keluar dari tampilan layar penuh</translation>

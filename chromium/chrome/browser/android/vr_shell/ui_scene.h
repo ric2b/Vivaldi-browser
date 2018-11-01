@@ -9,18 +9,17 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "chrome/browser/android/vr_shell/vr_math.h"
+#include "device/vr/vr_types.h"
 
 namespace base {
-class DictionaryValue;
 class ListValue;
+class TimeTicks;
 }
 
 namespace vr_shell {
 
 class Animation;
-struct ContentRectangle;
-struct ReversibleTransform;
+struct UiElement;
 
 class UiScene {
  public:
@@ -30,61 +29,51 @@ class UiScene {
     REMOVE_ELEMENT,
     ADD_ANIMATION,
     REMOVE_ANIMATION,
-    UPDATE_BACKGROUND,
+    CONFIGURE_SCENE,
   };
 
   UiScene();
   virtual ~UiScene();
 
-  void AddUiElement(std::unique_ptr<ContentRectangle>& element);
-
-  // Add a UI element according to a dictionary passed from the UI HTML.
-  void AddUiElementFromDict(const base::DictionaryValue& dict);
-
-  // Update an existing element with new properties.
-  void UpdateUiElementFromDict(const base::DictionaryValue& dict);
+  void AddUiElement(std::unique_ptr<UiElement> element);
 
   void RemoveUiElement(int element_id);
 
   // Add an animation to the scene, on element |element_id|.
-  void AddAnimation(int element_id, std::unique_ptr<Animation>& animation);
-
-  // Add an animation according to a dictionary passed from the UI HTML.
-  void AddAnimationFromDict(const base::DictionaryValue& dict,
-                            int64_t time_in_micro);
+  void AddAnimation(int element_id, std::unique_ptr<Animation> animation);
 
   // Remove |animation_id| from element |element_id|.
   void RemoveAnimation(int element_id, int animation_id);
 
-  void UpdateBackgroundFromDict(const base::DictionaryValue& dict);
-
   // Update the positions of all elements in the scene, according to active
-  // animations, desired screen tilt and time.  The units of time are
-  // arbitrary, but must match the unit used in animations.
-  void UpdateTransforms(float screen_tilt, int64_t time_in_micro);
+  // animations and time.  The units of time are arbitrary, but must match the
+  // unit used in animations.
+  void UpdateTransforms(const base::TimeTicks& current_time);
 
   // Handle a batch of commands passed from the UI HTML.
   void HandleCommands(std::unique_ptr<base::ListValue> commands,
-                      int64_t time_in_micro);
+                      const base::TimeTicks& current_time);
 
-  const std::vector<std::unique_ptr<ContentRectangle>>& GetUiElements() const;
+  const std::vector<std::unique_ptr<UiElement>>& GetUiElements() const;
 
-  ContentRectangle* GetUiElementById(int element_id);
+  UiElement* GetUiElementById(int element_id);
 
-  const Colorf& GetBackgroundColor();
-  float GetBackgroundDistance();
+  std::vector<const UiElement*> GetWorldElements() const;
+  std::vector<const UiElement*> GetHeadLockedElements() const;
+  bool HasVisibleHeadLockedElements() const;
+
+  const vr::Colorf& GetBackgroundColor() const;
+  float GetBackgroundDistance() const;
+  bool GetWebVrRenderingEnabled() const;
 
  private:
-  void ApplyRecursiveTransforms(const ContentRectangle& element,
-                                ReversibleTransform* transform,
-                                float* opacity);
-  void ApplyDictToElement(const base::DictionaryValue& dict,
-                          ContentRectangle* element);
+  void ApplyRecursiveTransforms(UiElement* element);
 
-  std::vector<std::unique_ptr<ContentRectangle>> ui_elements_;
-  ContentRectangle* content_element_ = nullptr;
-  Colorf background_color_ = {0.1f, 0.1f, 0.1f, 1.0f};
+  std::vector<std::unique_ptr<UiElement>> ui_elements_;
+  UiElement* content_element_ = nullptr;
+  vr::Colorf background_color_ = {0.1f, 0.1f, 0.1f, 1.0f};
   float background_distance_ = 10.0f;
+  bool webvr_rendering_enabled_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(UiScene);
 };

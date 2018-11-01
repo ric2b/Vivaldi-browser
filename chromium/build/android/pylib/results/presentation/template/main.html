@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <link rel="stylesheet" href="../../../../../../../default.css" type="text/css">
+    <link rel="stylesheet" href="{{server_url}}/{{bucket}}/css/default.css" type="text/css">
     <style>
       table, th, td {
         border: 1px solid black;
@@ -52,7 +52,7 @@
     <a onclick="reportIssues();"><b>Feedback</b></a>
   </body>
   <script>
-    loadPage();
+    showSuiteTableOnlyWithReplaceState();
     // Enable sorting for each column of tables.
     Array.prototype.slice.call(document.getElementsByTagName('th'))
         .forEach(function(head) {
@@ -61,5 +61,6 @@
                 function() { sortByColumn(head); });
         }
     );
+    setBrowserBackButtonLogic();
   </script>
 </html>

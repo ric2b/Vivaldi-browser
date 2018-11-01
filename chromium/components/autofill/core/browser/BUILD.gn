@@ -18,6 +18,8 @@ static_library("browser") {
     "autocomplete_history_manager.cc",
     "autocomplete_history_manager.h",
     "autofill-inl.h",
+    "autofill_address_util.cc",
+    "autofill_address_util.h",
     "autofill_client.h",
     "autofill_country.cc",
     "autofill_country.h",
@@ -109,6 +111,9 @@ static_library("browser") {
     "phone_number_i18n.cc",
     "phone_number_i18n.h",
     "popup_item_ids.h",
+    "region_combobox_model.cc",
+    "region_combobox_model.h",
+    "risk_data_loader.h",
     "server_field_types_util.cc",
     "server_field_types_util.h",
     "state_names.cc",
@@ -178,12 +183,19 @@ static_library("browser") {
     ]
   }
 
+  if (!is_android) {
+    sources += [
+      "ui/save_card_bubble_controller.h",
+    ]
+  }
+
   configs += [ "//build/config:precompiled_headers" ]
 
   public_deps = [
     "//components/autofill/core/browser/proto",
     "//components/autofill/core/common",
     "//components/resources",
+    "//skia",
   ]
   deps = [
     "//base",
@@ -206,11 +218,10 @@ static_library("browser") {
     "//components/webdata/common",
     "//google_apis",
     "//net",
-    "//skia",
     "//sql",
     "//third_party/fips181",
     "//third_party/icu",
-    "//third_party/libaddressinput:util",
+    "//third_party/libaddressinput",
     "//third_party/libphonenumber",
     "//third_party/re2",
     "//ui/base",
@@ -246,6 +257,13 @@ static_library("test_support") {
     "test_personal_data_manager.cc",
     "test_personal_data_manager.h",
   ]
+
+  if (!is_android) {
+    sources += [
+      "ui/mock_save_card_bubble_controller.cc",
+      "ui/mock_save_card_bubble_controller.h",
+    ]
+  }
 
   public_deps = [
     ":browser",
@@ -336,6 +354,7 @@ source_set("unit_tests") {
     "phone_field_unittest.cc",
     "phone_number_i18n_unittest.cc",
     "phone_number_unittest.cc",
+    "region_combobox_model_unittest.cc",
     "ui/card_unmask_prompt_controller_impl_unittest.cc",
     "validation_unittest.cc",
     "webdata/autocomplete_sync_bridge_unittest.cc",

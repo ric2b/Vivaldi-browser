@@ -20,17 +20,21 @@
 namespace {
 
 content::WebUIDataSource* CreatePhysicalWebHTMLSource() {
-  content::WebUIDataSource* source = content::WebUIDataSource::Create(
-      chrome::kChromeUIPhysicalWebHost);
+  content::WebUIDataSource* source =
+      content::WebUIDataSource::Create(chrome::kChromeUIPhysicalWebHost);
 
   source->AddLocalizedString(physical_web_ui::kTitle,
                              IDS_PHYSICAL_WEB_UI_TITLE);
+  source->AddLocalizedString(physical_web_ui::kEmptyMessage,
+                             IDS_PHYSICAL_WEB_UI_EMPTY_MESSAGE);
   source->SetJsonPath("strings.js");
   source->AddResourcePath(physical_web_ui::kPhysicalWebJS,
                           IDR_PHYSICAL_WEB_UI_JS);
   source->AddResourcePath(physical_web_ui::kPhysicalWebCSS,
                           IDR_PHYSICAL_WEB_UI_CSS);
   source->SetDefaultResource(IDR_PHYSICAL_WEB_UI_HTML);
+  source->AddResourcePath(physical_web_ui::kPhysicalWebLinkIcon,
+                          IDR_PHYSICAL_WEB_UI_LINK_ICON);
   return source;
 }
 
@@ -78,8 +82,7 @@ class PhysicalWebMessageHandler : public content::WebUIMessageHandler {
 
 }  // namespace
 
-PhysicalWebUI::PhysicalWebUI(content::WebUI* web_ui)
-    : WebUIController(web_ui) {
+PhysicalWebUI::PhysicalWebUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui),
                                 CreatePhysicalWebHTMLSource());
   web_ui->AddMessageHandler(base::MakeUnique<PhysicalWebMessageHandler>());

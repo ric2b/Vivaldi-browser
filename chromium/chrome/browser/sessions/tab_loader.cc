@@ -39,8 +39,14 @@ using content::NavigationController;
 using content::RenderWidgetHost;
 using content::WebContents;
 
+namespace {
+
+size_t g_max_loaded_tab_count_for_testing = 0;
+
 // Vivaldi specific timeout used when we start loading restored pinned tabs.
-static const int kVivaldiFirstPinnedTabLoadTimeoutMS = 1500;
+const int kVivaldiFirstPinnedTabLoadTimeoutMS = 1500;
+
+}  // namespace
 
 void TabLoader::Observe(int type,
                         const content::NotificationSource& source,
@@ -115,11 +121,17 @@ void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
   shared_tab_loader_->StartLoading(tabs);
 }
 
+// static
+void TabLoader::SetMaxLoadedTabCountForTest(size_t value) {
+  g_max_loaded_tab_count_for_testing = value;
+}
+
 TabLoader::TabLoader(base::TimeTicks restore_started)
     : memory_pressure_listener_(
           base::Bind(&TabLoader::OnMemoryPressure, base::Unretained(this))),
       force_load_delay_multiplier_(1),
       loading_enabled_(true),
+      started_to_load_count_(0),
       restore_started_(restore_started) {
   if (!vivaldi::IsVivaldiRunning()) {
   stats_collector_ = new SessionRestoreStatsCollector(
@@ -157,6 +169,7 @@ void TabLoader::StartLoading(const std::vector<RestoredTab>& tabs) {
       if (favicon_driver)
         favicon_driver->FetchFavicon(favicon_driver->GetActiveURL());
     } else {
+      ++started_to_load_count_;
       tabs_loading_.insert(&restored_tab.contents()->GetController());
     }
     RegisterForNotifications(&restored_tab.contents()->GetController());
@@ -207,6 +220,7 @@ void TabLoader::LoadNextTab() {
 
     NavigationController* controller = tabs_to_load_.front();
     DCHECK(controller);
+    ++started_to_load_count_;
     tabs_loading_.insert(controller);
     tabs_to_load_.pop_front();
     controller->LoadIfNecessary();
@@ -294,6 +308,9 @@ void TabLoader::HandleTabClosedOrLoaded(NavigationController* controller) {
 }
 
 bool TabLoader::ShouldStopLoadingTabs() const {
+  if (g_max_loaded_tab_count_for_testing != 0 &&
+      started_to_load_count_ >= g_max_loaded_tab_count_for_testing)
+    return true;
   if (base::FeatureList::IsEnabled(features::kMemoryCoordinator))
     return base::MemoryCoordinatorProxy::GetInstance()->GetCurrentMemoryState()
         != base::MemoryState::NORMAL;

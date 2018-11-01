@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
@@ -21,7 +20,8 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
-#include "content/public/test/test_browser_thread.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace em = enterprise_management;
@@ -31,8 +31,7 @@ namespace chromeos {
 class CrosSettingsTest : public testing::Test {
  protected:
   CrosSettingsTest()
-      : ui_thread_(content::BrowserThread::UI, &message_loop_),
-        local_state_(TestingBrowserProcess::GetGlobal()),
+      : local_state_(TestingBrowserProcess::GetGlobal()),
         settings_(DeviceSettingsService::Get()),
         weak_factory_(this) {}
 
@@ -90,8 +89,7 @@ class CrosSettingsTest : public testing::Test {
     return cs->FindEmailInList(kAccountsPrefUsers, username, NULL);
   }
 
-  base::MessageLoopForUI message_loop_;
-  content::TestBrowserThread ui_thread_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
 
   ScopedTestingLocalState local_state_;
   ScopedDeviceSettingsTestHelper device_settings_test_helper_;
@@ -133,7 +131,7 @@ TEST_F(CrosSettingsTest, SetWhitelist) {
 TEST_F(CrosSettingsTest, SetWhitelistWithListOps) {
   std::unique_ptr<base::ListValue> whitelist =
       base::MakeUnique<base::ListValue>();
-  base::StringValue hacky_user("h@xxor");
+  base::Value hacky_user("h@xxor");
   whitelist->Append(hacky_user.CreateDeepCopy());
   AddExpectation(kAccountsPrefAllowNewUser,
                  base::MakeUnique<base::Value>(false));
@@ -146,8 +144,8 @@ TEST_F(CrosSettingsTest, SetWhitelistWithListOps) {
 
 TEST_F(CrosSettingsTest, SetWhitelistWithListOps2) {
   base::ListValue whitelist;
-  base::StringValue hacky_user("h@xxor");
-  base::StringValue lamy_user("l@mer");
+  base::Value hacky_user("h@xxor");
+  base::Value lamy_user("l@mer");
   whitelist.Append(hacky_user.CreateDeepCopy());
   std::unique_ptr<base::ListValue> expected_list = whitelist.CreateDeepCopy();
   whitelist.Append(lamy_user.CreateDeepCopy());

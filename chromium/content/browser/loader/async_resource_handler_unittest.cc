@@ -101,7 +101,8 @@ class RecordingResourceMessageFilter : public ResourceMessageFilter {
             nullptr,
             nullptr,
             base::Bind(&RecordingResourceMessageFilter::GetContexts,
-                       base::Unretained(this))),
+                       base::Unretained(this)),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
         resource_context_(resource_context),
         request_context_(request_context) {
     InitializeForTest();
@@ -166,32 +167,31 @@ class AsyncResourceHandlerTest : public ::testing::Test,
         new RecordingResourceMessageFilter(resource_context_.get(), &context_);
     ResourceRequestInfoImpl* info = new ResourceRequestInfoImpl(
         filter_->requester_info_for_test(),
-        0,                                     // route_id
-        -1,                                    // frame_tree_node_id
-        0,                                     // origin_pid
-        0,                                     // request_id
-        0,                                     // render_frame_id
-        false,                                 // is_main_frame
-        false,                                 // parent_is_main_frame
-        RESOURCE_TYPE_IMAGE,                   // resource_type
-        ui::PAGE_TRANSITION_LINK,              // transition_type
-        false,                                 // should_replace_current_entry
-        false,                                 // is_download
-        false,                                 // is_stream
-        false,                                 // allow_download
-        false,                                 // has_user_gesture
-        false,                                 // enable load timing
-        false,                                 // enable upload progress
-        false,                                 // do_not_prompt_for_login
-        blink::WebReferrerPolicyDefault,       // referrer_policy
-        blink::WebPageVisibilityStateVisible,  // visibility_state
-        resource_context_.get(),               // context
-        false,                                 // report_raw_headers
-        true,                                  // is_async
-        PREVIEWS_OFF,                          // previews_state
-        std::string(),                         // original_headers
-        nullptr,                               // body
-        false);                                // initiated_in_secure_context
+        0,                                      // route_id
+        -1,                                     // frame_tree_node_id
+        0,                                      // origin_pid
+        0,                                      // request_id
+        0,                                      // render_frame_id
+        false,                                  // is_main_frame
+        false,                                  // parent_is_main_frame
+        RESOURCE_TYPE_IMAGE,                    // resource_type
+        ui::PAGE_TRANSITION_LINK,               // transition_type
+        false,                                  // should_replace_current_entry
+        false,                                  // is_download
+        false,                                  // is_stream
+        false,                                  // allow_download
+        false,                                  // has_user_gesture
+        false,                                  // enable load timing
+        false,                                  // enable upload progress
+        false,                                  // do_not_prompt_for_login
+        blink::kWebReferrerPolicyDefault,       // referrer_policy
+        blink::kWebPageVisibilityStateVisible,  // visibility_state
+        resource_context_.get(),                // context
+        false,                                  // report_raw_headers
+        true,                                   // is_async
+        PREVIEWS_OFF,                           // previews_state
+        nullptr,                                // body
+        false);                                 // initiated_in_secure_context
     info->AssociateWithRequest(request.get());
     std::unique_ptr<AsyncResourceHandler> handler =
         base::MakeUnique<AsyncResourceHandler>(request.get(), &rdh_);
@@ -224,7 +224,8 @@ class AsyncResourceHandlerTest : public ::testing::Test,
   void DidReceiveRedirect(ResourceLoader* loader,
                           const GURL& new_url,
                           ResourceResponse* response) override {}
-  void DidReceiveResponse(ResourceLoader* loader) override {}
+  void DidReceiveResponse(ResourceLoader* loader,
+                          ResourceResponse* response) override {}
   void DidFinishLoading(ResourceLoader* loader) override {
     loader_.reset();
     finish_waiter_->Quit();
@@ -264,36 +265,6 @@ TEST_F(AsyncResourceHandlerTest, OneChunkLengths) {
   ASSERT_EQ(ResourceMsg_RequestComplete::ID, messages[3]->type());
   ResourceMsg_RequestComplete::Param completion_params;
   ResourceMsg_RequestComplete::Read(messages[3].get(), &completion_params);
-  ResourceRequestCompletionStatus completion_status =
-      std::get<1>(completion_params);
-
-  EXPECT_EQ(TotalReceivedBytes(kDataSize),
-            completion_status.encoded_data_length);
-  EXPECT_EQ(kDataSize, completion_status.encoded_body_length);
-}
-
-TEST_F(AsyncResourceHandlerTest, InlinedChunkLengths) {
-  // TODO(ricea): Remove this Feature-enabling code once the feature is on by
-  // default.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kOptimizeLoadingIPCForSmallResources);
-
-  // Smaller than kInlinedLeadingChunkSize.
-  constexpr auto kDataSize = 8;
-  StartRequestAndWaitWithResponseDataSize(kDataSize);
-  const auto& messages = filter_->messages();
-  ASSERT_EQ(3u, messages.size());
-  ASSERT_EQ(ResourceMsg_InlinedDataChunkReceived::ID, messages[1]->type());
-  ResourceMsg_InlinedDataChunkReceived::Param params;
-  ResourceMsg_InlinedDataChunkReceived::Read(messages[1].get(), &params);
-
-  int encoded_data_length = std::get<2>(params);
-  EXPECT_EQ(kDataSize, encoded_data_length);
-
-  ASSERT_EQ(ResourceMsg_RequestComplete::ID, messages[2]->type());
-  ResourceMsg_RequestComplete::Param completion_params;
-  ResourceMsg_RequestComplete::Read(messages[2].get(), &completion_params);
   ResourceRequestCompletionStatus completion_status =
       std::get<1>(completion_params);
 

@@ -15,8 +15,10 @@ bool PasswordManagerClient::IsFillingEnabledForCurrentPage() const {
   return true;
 }
 
-bool PasswordManagerClient::IsHSTSActiveForHost(const GURL& origin) const {
-  return false;
+void PasswordManagerClient::PostHSTSQueryForHost(
+    const GURL& origin,
+    const HSTSCallback& callback) const {
+  callback.Run(false);
 }
 
 bool PasswordManagerClient::OnCredentialManagerUsed() {
@@ -46,7 +48,7 @@ bool PasswordManagerClient::DidLastPageLoadEncounterSSLErrors() const {
   return false;
 }
 
-bool PasswordManagerClient::IsOffTheRecord() const {
+bool PasswordManagerClient::IsIncognito() const {
   return false;
 }
 

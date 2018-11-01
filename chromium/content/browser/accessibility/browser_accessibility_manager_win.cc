@@ -87,8 +87,7 @@ void BrowserAccessibilityManagerWin::OnIAccessible2Used() {
   // enable basic web accessibility support. (Full screen reader support is
   // detected later when specific more advanced APIs are accessed.)
   BrowserAccessibilityStateImpl::GetInstance()->AddAccessibilityModeFlags(
-      ACCESSIBILITY_MODE_FLAG_NATIVE_APIS |
-      ACCESSIBILITY_MODE_FLAG_WEB_CONTENTS);
+      AccessibilityMode::kNativeAPIs | AccessibilityMode::kWebContents);
 }
 
 void BrowserAccessibilityManagerWin::UserIsReloading() {
@@ -232,6 +231,18 @@ void BrowserAccessibilityManagerWin::FireFocusEvent(
   }
 
   BrowserAccessibilityManager::FireFocusEvent(source, node);
+}
+
+gfx::Rect BrowserAccessibilityManagerWin::GetViewBounds() {
+  // We have to take the device scale factor into account on Windows.
+  BrowserAccessibilityDelegate* delegate = GetDelegateFromRootManager();
+  if (delegate) {
+    gfx::Rect bounds = delegate->AccessibilityGetViewBounds();
+    if (device_scale_factor() > 0.0 && device_scale_factor() != 1.0)
+      bounds = ScaleToEnclosingRect(bounds, device_scale_factor());
+    return bounds;
+  }
+  return gfx::Rect();
 }
 
 void BrowserAccessibilityManagerWin::OnNodeCreated(ui::AXTree* tree,

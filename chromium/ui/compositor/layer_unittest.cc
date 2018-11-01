@@ -93,24 +93,13 @@ class ColoredLayer : public Layer, public LayerDelegate {
   SkColor color_;
 };
 
-// Layer delegate for painting text with effects on canvas.
-class DrawStringLayerDelegate : public LayerDelegate {
+// Layer delegate for painting text with fade effect on canvas.
+class DrawFadedStringLayerDelegate : public LayerDelegate {
  public:
-  enum DrawFunction {
-    STRING_WITH_HALO,
-    STRING_FADED,
-  };
+  DrawFadedStringLayerDelegate(SkColor back_color, const gfx::Size& layer_size)
+      : background_color_(back_color), layer_size_(layer_size) {}
 
-  DrawStringLayerDelegate(
-      SkColor back_color, SkColor halo_color,
-      DrawFunction func, const gfx::Size& layer_size)
-      : background_color_(back_color),
-        halo_color_(halo_color),
-        func_(func),
-        layer_size_(layer_size) {
-  }
-
-  ~DrawStringLayerDelegate() override {}
+  ~DrawFadedStringLayerDelegate() override {}
 
   // Overridden from LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override {
@@ -118,18 +107,8 @@ class DrawStringLayerDelegate : public LayerDelegate {
     gfx::Rect bounds(layer_size_);
     recorder.canvas()->DrawColor(background_color_);
     const base::string16 text = base::ASCIIToUTF16("Tests!");
-    switch (func_) {
-      case STRING_WITH_HALO:
-        recorder.canvas()->DrawStringRectWithHalo(
-            text, font_list_, SK_ColorRED, halo_color_, bounds, 0);
-        break;
-      case STRING_FADED:
-        recorder.canvas()->DrawFadedString(
-            text, font_list_, SK_ColorRED, bounds, 0);
-        break;
-      default:
-        NOTREACHED();
-    }
+    recorder.canvas()->DrawFadedString(text, font_list_, SK_ColorRED, bounds,
+                                       0);
   }
 
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
@@ -138,12 +117,10 @@ class DrawStringLayerDelegate : public LayerDelegate {
 
  private:
   const SkColor background_color_;
-  const SkColor halo_color_;
-  const DrawFunction func_;
   const gfx::FontList font_list_;
   const gfx::Size layer_size_;
 
-  DISALLOW_COPY_AND_ASSIGN(DrawStringLayerDelegate);
+  DISALLOW_COPY_AND_ASSIGN(DrawFadedStringLayerDelegate);
 };
 
 class LayerWithRealCompositorTest : public testing::Test {
@@ -199,8 +176,9 @@ class LayerWithRealCompositorTest : public testing::Test {
     return layer;
   }
 
-  std::unique_ptr<Layer> CreateDrawStringLayer(
-      const gfx::Rect& bounds, DrawStringLayerDelegate* delegate) {
+  std::unique_ptr<Layer> CreateDrawFadedStringLayerDelegate(
+      const gfx::Rect& bounds,
+      DrawFadedStringLayerDelegate* delegate) {
     std::unique_ptr<Layer> layer(new Layer(LAYER_TEXTURED));
     layer->SetBounds(bounds);
     layer->set_delegate(delegate);
@@ -245,7 +223,7 @@ class LayerWithRealCompositorTest : public testing::Test {
   }
 
   void WaitForSwap() {
-    DrawWaiterForTest::WaitForCompositingEnded(GetCompositor());
+    ui::DrawWaiterForTest::WaitForCompositingEnded(GetCompositor());
   }
 
   void WaitForCommit() {
@@ -789,6 +767,19 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(kTransparent, clone->GetTargetColor());
   EXPECT_FALSE(clone->layer_inverted());
   EXPECT_FALSE(clone->fills_bounds_opaquely());
+
+  // A solid color layer with transparent color can be marked as opaque. The
+  // clone should retain this state.
+  layer.reset(CreateLayer(LAYER_SOLID_COLOR));
+  layer->SetColor(kTransparent);
+  layer->SetFillsBoundsOpaquely(true);
+
+  clone = layer->Clone();
+  EXPECT_TRUE(clone->GetTargetTransform().IsIdentity());
+  EXPECT_EQ(kTransparent, clone->background_color());
+  EXPECT_EQ(kTransparent, clone->GetTargetColor());
+  EXPECT_FALSE(clone->layer_inverted());
+  EXPECT_TRUE(clone->fills_bounds_opaquely());
 
   layer.reset(CreateLayer(LAYER_SOLID_COLOR));
   layer->SetVisible(true);
@@ -1451,48 +1442,12 @@ TEST_F(LayerWithRealCompositorTest, ModifyHierarchy) {
 // So we choose to check result only on Windows.
 // See https://codereview.chromium.org/1634103003/#msg41
 #if defined(OS_WIN)
-TEST_F(LayerWithRealCompositorTest, CanvasDrawStringRectWithHalo) {
-  gfx::Size size(50, 50);
-  GetCompositor()->SetScaleAndSize(1.0f, size);
-  DrawStringLayerDelegate delegate(SK_ColorBLUE, SK_ColorWHITE,
-                                   DrawStringLayerDelegate::STRING_WITH_HALO,
-                                   size);
-  std::unique_ptr<Layer> layer(
-      CreateDrawStringLayer(gfx::Rect(size), &delegate));
-  DrawTree(layer.get());
-
-  SkBitmap bitmap;
-  ReadPixels(&bitmap);
-  ASSERT_FALSE(bitmap.empty());
-
-  base::FilePath ref_img =
-      test_data_directory().AppendASCII("string_with_halo.png");
-  // WritePNGFile(bitmap, ref_img, true);
-
-  float percentage_pixels_large_error = 1.0f;
-  float percentage_pixels_small_error = 0.0f;
-  float average_error_allowed_in_bad_pixels = 1.f;
-  int large_error_allowed = 1;
-  int small_error_allowed = 0;
-
-  EXPECT_TRUE(MatchesPNGFile(bitmap, ref_img,
-                             cc::FuzzyPixelComparator(
-                                 true,
-                                 percentage_pixels_large_error,
-                                 percentage_pixels_small_error,
-                                 average_error_allowed_in_bad_pixels,
-                                 large_error_allowed,
-                                 small_error_allowed)));
-}
-
 TEST_F(LayerWithRealCompositorTest, CanvasDrawFadedString) {
   gfx::Size size(50, 50);
   GetCompositor()->SetScaleAndSize(1.0f, size);
-  DrawStringLayerDelegate delegate(SK_ColorBLUE, SK_ColorWHITE,
-                                   DrawStringLayerDelegate::STRING_FADED,
-                                   size);
+  DrawFadedStringLayerDelegate delegate(SK_ColorBLUE, size);
   std::unique_ptr<Layer> layer(
-      CreateDrawStringLayer(gfx::Rect(size), &delegate));
+      CreateDrawFadedStringLayerDelegate(gfx::Rect(size), &delegate));
   DrawTree(layer.get());
 
   SkBitmap bitmap;
@@ -2224,7 +2179,7 @@ TEST_F(LayerWithRealCompositorTest, CompositorAnimationObserverTest) {
   EXPECT_EQ(0u, animation_observer.animation_step_count());
 
   root->SetOpacity(0.5f);
-  WaitForSwap();
+  WaitForDraw();
   EXPECT_EQ(1u, animation_observer.animation_step_count());
 
   EXPECT_FALSE(animation_observer.shutdown());
@@ -2270,7 +2225,7 @@ TEST_F(LayerWithRealCompositorTest, ReportMetrics) {
   animation_sequence->SetAnimationMetricsReporter(&reporter);
   animator->StartAnimation(animation_sequence);
   while (!reporter.report_called())
-    WaitForSwap();
+    WaitForDraw();
   ResetCompositor();
   // Even though most of the time 100% smooth animations are expected, on the
   // test bots this cannot be guaranteed. Therefore simply check that some

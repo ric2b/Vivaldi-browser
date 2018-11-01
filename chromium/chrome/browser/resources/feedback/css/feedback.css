@@ -9,6 +9,8 @@ html {
 
 body {
   background-color: #fbfbfb;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   margin: 0;
   overflow: auto;
@@ -42,6 +44,7 @@ body {
 
 .content {
   color: #646464;
+  flex-grow: 1;
   font-size: 12px;
   margin: 20px;
 }
@@ -105,7 +108,7 @@ body {
 }
 
 .content #screenshot-image {
-  -webkit-margin-start: 150px;
+  -webkit-margin-end: 25px;
   display: block;
   height: 60px;
   margin-top: 40px;
@@ -113,7 +116,7 @@ body {
 }
 
 .content #screenshot-image:hover {
-  -webkit-margin-start: 80px;
+  -webkit-margin-end: 0;
   height: 125px;
   margin-top: 80px;
   z-index: 1;
@@ -129,6 +132,10 @@ body {
   width: 200px;
 }
 
+.content #screenshot-label {
+  flex: auto;
+}
+
 .content #privacy-note {
   color: #969696;
   font-size: 10px;
@@ -142,6 +149,7 @@ body {
   display: -webkit-flex;
   justify-content: flex-end;
   left: 20px;
+  position: absolute;
   right: 20px;
 }
 

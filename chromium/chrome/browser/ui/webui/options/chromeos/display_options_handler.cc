@@ -20,13 +20,13 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/display/display_preferences.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
@@ -43,11 +43,11 @@ namespace options {
 namespace {
 
 display::DisplayManager* GetDisplayManager() {
-  return ash::Shell::GetInstance()->display_manager();
+  return ash::Shell::Get()->display_manager();
 }
 
 ash::DisplayConfigurationController* GetDisplayConfigurationController() {
-  return ash::Shell::GetInstance()->display_configuration_controller();
+  return ash::Shell::Get()->display_configuration_controller();
 }
 
 int64_t GetDisplayIdFromValue(const base::Value* arg) {
@@ -196,13 +196,13 @@ base::DictionaryValue* ConvertBoundsToValue(const gfx::Rect& bounds) {
 DisplayOptionsHandler::DisplayOptionsHandler() {
   // TODO(mash) Support Chrome display settings in Mash. crbug.com/548429
   if (!ash_util::IsRunningInMash())
-    ash::Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
+    ash::Shell::Get()->window_tree_host_manager()->AddObserver(this);
 }
 
 DisplayOptionsHandler::~DisplayOptionsHandler() {
   // TODO(mash) Support Chrome display settings in Mash. crbug.com/548429
   if (!ash_util::IsRunningInMash())
-    ash::Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
+    ash::Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
 }
 
 void DisplayOptionsHandler::GetLocalizedValues(
@@ -407,10 +407,8 @@ void DisplayOptionsHandler::HandleMirroring(const base::ListValue* args) {
   bool is_mirroring = false;
   if (!args->GetBoolean(0, &is_mirroring))
     NOTREACHED();
-  content::RecordAction(
-      base::UserMetricsAction("Options_DisplayToggleMirroring"));
-  GetDisplayConfigurationController()->SetMirrorMode(is_mirroring,
-                                                     true /* user_action */);
+  base::RecordAction(base::UserMetricsAction("Options_DisplayToggleMirroring"));
+  GetDisplayConfigurationController()->SetMirrorMode(is_mirroring);
 }
 
 void DisplayOptionsHandler::HandleSetPrimary(const base::ListValue* args) {
@@ -419,9 +417,8 @@ void DisplayOptionsHandler::HandleSetPrimary(const base::ListValue* args) {
   if (display_id == display::kInvalidDisplayId)
     return;
 
-  content::RecordAction(base::UserMetricsAction("Options_DisplaySetPrimary"));
-  GetDisplayConfigurationController()->SetPrimaryDisplayId(
-      display_id, true /* user_action */);
+  base::RecordAction(base::UserMetricsAction("Options_DisplaySetPrimary"));
+  GetDisplayConfigurationController()->SetPrimaryDisplayId(display_id);
 }
 
 void DisplayOptionsHandler::HandleSetDisplayLayout(
@@ -429,7 +426,7 @@ void DisplayOptionsHandler::HandleSetDisplayLayout(
   const base::ListValue* layouts = nullptr;
   if (!args->GetList(0, &layouts))
     NOTREACHED();
-  content::RecordAction(base::UserMetricsAction("Options_DisplayRearrange"));
+  base::RecordAction(base::UserMetricsAction("Options_DisplayRearrange"));
 
   display::DisplayManager* display_manager = GetDisplayManager();
   display::DisplayLayoutBuilder builder(
@@ -437,7 +434,7 @@ void DisplayOptionsHandler::HandleSetDisplayLayout(
   builder.ClearPlacements();
   for (const auto& layout : *layouts) {
     const base::DictionaryValue* dictionary;
-    if (!layout->GetAsDictionary(&dictionary)) {
+    if (!layout.GetAsDictionary(&dictionary)) {
       LOG(ERROR) << "Invalid layout dictionary: " << *dictionary;
       continue;
     }
@@ -469,8 +466,7 @@ void DisplayOptionsHandler::HandleSetDisplayLayout(
   }
 
   VLOG(1) << "Updating display layout: " << layout->ToString();
-  GetDisplayConfigurationController()->SetDisplayLayout(std::move(layout),
-                                                        true /* user_action */);
+  GetDisplayConfigurationController()->SetDisplayLayout(std::move(layout));
 }
 
 void DisplayOptionsHandler::HandleSetDisplayMode(const base::ListValue* args) {
@@ -491,24 +487,24 @@ void DisplayOptionsHandler::HandleSetDisplayMode(const base::ListValue* args) {
   if (!mode)
     return;
 
-  content::RecordAction(
-      base::UserMetricsAction("Options_DisplaySetResolution"));
+  base::RecordAction(base::UserMetricsAction("Options_DisplaySetResolution"));
   display::DisplayManager* display_manager = GetDisplayManager();
   scoped_refptr<display::ManagedDisplayMode> current_mode =
       display_manager->GetActiveModeForDisplayId(display_id);
-  if (!display_manager->SetDisplayMode(display_id, mode)) {
-    LOG(ERROR) << "Unable to set display mode for: " << display_id
-               << " Mode: " << *mode_data;
+
+  if (mode->IsEquivalent(current_mode)) {
+    LOG(ERROR) << "New display mode matches current mode.";
     return;
   }
-  if (display::Display::IsInternalDisplayId(display_id))
-    return;
-  // For external displays, show a notification confirming the resolution
-  // change.
-  ash::Shell::GetInstance()
-      ->resolution_notification_controller()
-      ->PrepareNotification(display_id, current_mode, mode,
-                            base::Bind(&chromeos::StoreDisplayPrefs));
+
+  if (!ash::Shell::Get()
+           ->resolution_notification_controller()
+           ->PrepareNotificationAndSetDisplayMode(
+               display_id, current_mode, mode,
+               base::Bind(&chromeos::StoreDisplayPrefs))) {
+    LOG(ERROR) << "Unable to set display mode for: " << display_id
+               << " Mode: " << *mode_data;
+  }
 }
 
 void DisplayOptionsHandler::HandleSetRotation(const base::ListValue* args) {
@@ -533,8 +529,7 @@ void DisplayOptionsHandler::HandleSetRotation(const base::ListValue* args) {
   else if (rotation_value != 0)
     LOG(ERROR) << "Invalid rotation: " << rotation_value << " Falls back to 0";
 
-  content::RecordAction(
-      base::UserMetricsAction("Options_DisplaySetOrientation"));
+  base::RecordAction(base::UserMetricsAction("Options_DisplaySetOrientation"));
   GetDisplayConfigurationController()->SetDisplayRotation(
       display_id, new_rotation, display::Display::ROTATION_SOURCE_USER);
 }
@@ -563,8 +558,7 @@ void DisplayOptionsHandler::HandleSetColorProfile(const base::ListValue* args) {
     return;
   }
 
-  content::RecordAction(
-      base::UserMetricsAction("Options_DisplaySetColorProfile"));
+  base::RecordAction(base::UserMetricsAction("Options_DisplaySetColorProfile"));
   GetDisplayManager()->SetColorCalibrationProfile(
       display_id, static_cast<display::ColorCalibrationProfile>(profile_id));
 

@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/common/wm_shell.h"
+#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/user_action_tester.h"
@@ -26,8 +26,8 @@ const char kDesktopTaskSwitchUserAction[] = "Desktop_SwitchTask";
 
 // Test fixture for the DesktopTaskSwitchMetricsRecorder class. NOTE: This
 // fixture extends AshTestBase so that the UserMetricsRecorder instance required
-// by the test target can be obtained through Shell::GetInstance()->metrics()
-// and the test target is not the same instance as the one owned by the
+// by the test target can be obtained through Shell::Get()->metrics() and the
+// test target is not the same instance as the one owned by the
 // UserMetricsRecorder instance.
 class DesktopTaskSwitchMetricRecorderTest : public test::AshTestBase {
  public:
@@ -121,7 +121,7 @@ DesktopTaskSwitchMetricRecorderTest::CreateNonPositionableWindow() const {
 TEST_F(DesktopTaskSwitchMetricRecorderTest,
        ActivatePositionableWindowWhenNullWindowWasActivatedLast) {
   // TODO: investigate failure in mash, http://crbug.com/695628.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   std::unique_ptr<aura::Window> null_window;
@@ -141,7 +141,7 @@ TEST_F(
     DesktopTaskSwitchMetricRecorderTest,
     ActivatePositionableWindowWhenADifferentPositionableWindowWasActivatedLast) {
   // TODO: investigate failure in mash, http://crbug.com/695628.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   std::unique_ptr<aura::Window> positionable_window_1 =
@@ -176,7 +176,7 @@ TEST_F(
 TEST_F(DesktopTaskSwitchMetricRecorderTest,
        ActivatePositionableWindowWhenANonPositionableWindowWasActivatedLast) {
   // TODO: investigate failure in mash, http://crbug.com/695628.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   std::unique_ptr<aura::Window> non_positionable_window =
@@ -321,7 +321,7 @@ aura::Window* DesktopTaskSwitchMetricRecorderWithShellIntegrationTest::
 TEST_F(DesktopTaskSwitchMetricRecorderWithShellIntegrationTest,
        ActivatePositionableWindowWithInputEvent) {
   // TODO: investigate failure in mash, http://crbug.com/695628.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
   aura::Window* positionable_window =
       CreatePositionableWindowInShellWithBounds(gfx::Rect(0, 0, 10, 10));
@@ -341,8 +341,7 @@ TEST_F(DesktopTaskSwitchMetricRecorderWithShellIntegrationTest,
   aura::Window* positionable_window =
       CreatePositionableWindowInShellWithBounds(gfx::Rect(0, 0, 10, 10));
 
-  Shell::GetInstance()->activation_client()->ActivateWindow(
-      positionable_window);
+  Shell::Get()->activation_client()->ActivateWindow(positionable_window);
 
   EXPECT_EQ(0, GetActionCount());
 }

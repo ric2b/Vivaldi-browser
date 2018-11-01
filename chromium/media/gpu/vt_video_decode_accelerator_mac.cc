@@ -12,15 +12,18 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/version.h"
 #include "media/base/limits.h"
 #include "media/gpu/shared_memory_region.h"
@@ -39,6 +42,12 @@
 namespace media {
 
 namespace {
+
+// A sequence of ids for memory tracing.
+base::StaticAtomicSequenceNumber g_memory_dump_ids;
+
+// A sequence of shared memory ids for CVPixelBufferRefs.
+base::StaticAtomicSequenceNumber g_cv_pixel_buffer_ids;
 
 // Only H.264 with 4:2:0 chroma sampling is supported.
 const VideoCodecProfile kSupportedProfiles[] = {
@@ -209,6 +218,13 @@ bool InitializeVideoToolboxInternal() {
 
 // TODO(sandersd): Share this computation with the VAAPI decoder.
 int32_t ComputeReorderWindow(const H264SPS* sps) {
+  // When |pic_order_cnt_type| == 2, decode order always matches presentation
+  // order.
+  // TODO(sandersd): For |pic_order_cnt_type| == 1, analyze the delta cycle to
+  // find the minimum required reorder window.
+  if (sps->pic_order_cnt_type == 2)
+    return 0;
+
   // TODO(sandersd): Compute MaxDpbFrames.
   int32_t max_dpb_frames = 16;
 
@@ -289,11 +305,34 @@ VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
   callback_.decompressionOutputCallback = OutputThunk;
   callback_.decompressionOutputRefCon = this;
   weak_this_ = weak_this_factory_.GetWeakPtr();
+
+  memory_dump_id_ = g_memory_dump_ids.GetNext();
+  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+      this, "VTVideoDecodeAccelerator", gpu_task_runner_);
 }
 
 VTVideoDecodeAccelerator::~VTVideoDecodeAccelerator() {
   DVLOG(1) << __func__;
   DCHECK(gpu_task_runner_->BelongsToCurrentThread());
+
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
+}
+
+bool VTVideoDecodeAccelerator::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  for (const auto& it : picture_info_map_) {
+    int32_t picture_id = it.first;
+    PictureInfo* picture_info = it.second.get();
+    if (picture_info->gl_image) {
+      std::string dump_name =
+          base::StringPrintf("media/vt_video_decode_accelerator_%d/picture_%d",
+                             memory_dump_id_, picture_id);
+      picture_info->gl_image->OnMemoryDump(pmd, 0, dump_name);
+    }
+  }
+  return true;
 }
 
 bool VTVideoDecodeAccelerator::Initialize(const Config& config,
@@ -592,6 +631,7 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
 
           frame->has_slice = true;
           frame->is_idr = nalu.nal_unit_type == media::H264NALU::kIDRSlice;
+          frame->has_mmco5 = poc_.IsPendingMMCO5();
           frame->pic_order_cnt = pic_order_cnt;
           frame->reorder_window = ComputeReorderWindow(sps);
         }
@@ -604,9 +644,8 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
     }
   }
 
-  if (frame->is_idr) {
+  if (frame->is_idr)
     waiting_for_idr_ = false;
-  }
 
   // If no IDR has been seen yet, skip decoding. Note that Flash sends
   // configuration changes as a bitstream with only SPS/PPS; we don't print
@@ -941,9 +980,14 @@ bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
 
   const Task& task = task_queue_.front();
   switch (task.type) {
-    case TASK_FRAME:
-      if (reorder_queue_.size() < kMaxReorderQueueSize &&
-          (!task.frame->is_idr || reorder_queue_.empty())) {
+    case TASK_FRAME: {
+      bool reorder_queue_has_space =
+          reorder_queue_.size() < kMaxReorderQueueSize;
+      bool reorder_queue_flush_needed =
+          task.frame->is_idr || task.frame->has_mmco5;
+      bool reorder_queue_flush_done = reorder_queue_.empty();
+      if (reorder_queue_has_space &&
+          (!reorder_queue_flush_needed || reorder_queue_flush_done)) {
         DVLOG(2) << "Decode(" << task.frame->bitstream_id << ") complete";
         assigned_bitstream_ids_.erase(task.frame->bitstream_id);
         client_->NotifyEndOfBitstreamBuffer(task.frame->bitstream_id);
@@ -952,6 +996,7 @@ bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
         return true;
       }
       return false;
+    }
 
     case TASK_FLUSH:
       DCHECK_EQ(task.type, pending_flush_tasks_.front());
@@ -995,7 +1040,8 @@ bool VTVideoDecodeAccelerator::ProcessReorderQueue() {
   // the next frame.
   bool flushing =
       !task_queue_.empty() && (task_queue_.front().type != TASK_FRAME ||
-                               task_queue_.front().frame->is_idr);
+                               task_queue_.front().frame->is_idr ||
+                               task_queue_.front().frame->has_mmco5);
 
   size_t reorder_window = std::max(0, reorder_queue_.top()->reorder_window);
   DVLOG(3) << __func__ << " size=" << reorder_queue_.size()
@@ -1076,7 +1122,8 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
   scoped_refptr<gl::GLImageIOSurface> gl_image(
       new gl::GLImageIOSurface(frame.image_size, GL_BGRA_EXT));
   if (!gl_image->InitializeWithCVPixelBuffer(
-          frame.image.get(), gfx::GenericSharedMemoryId(),
+          frame.image.get(),
+          gfx::GenericSharedMemoryId(g_cv_pixel_buffer_ids.GetNext()),
           gfx::BufferFormat::YUV_420_BIPLANAR)) {
     NOTIFY_STATUS("Failed to initialize GLImageIOSurface", PLATFORM_FAILURE,
                   SFT_PLATFORM_ERROR);

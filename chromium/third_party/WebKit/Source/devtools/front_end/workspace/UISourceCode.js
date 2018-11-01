@@ -62,7 +62,7 @@ Workspace.UISourceCode = class extends Common.Object {
     this._decorations = null;
     /** @type {?Array.<!Workspace.Revision>} */
     this._history = null;
-    /** @type {?Array<!Workspace.UISourceCode.Message>} */
+    /** @type {?Set<!Workspace.UISourceCode.Message>} */
     this._messages = null;
     this._contentLoaded = false;
     /** @type {?string} */
@@ -143,10 +143,13 @@ Workspace.UISourceCode = class extends Common.Object {
 
   /**
    * @param {string} newName
-   * @param {function(boolean)} callback
+   * @return {!Promise<boolean>}
    */
-  rename(newName, callback) {
+  rename(newName) {
+    var fulfill;
+    var promise = new Promise(x => fulfill = x);
     this._project.rename(this, newName, innerCallback.bind(this));
+    return promise;
 
     /**
      * @param {boolean} success
@@ -161,7 +164,7 @@ Workspace.UISourceCode = class extends Common.Object {
             /** @type {string} */ (newName), /** @type {string} */ (newURL),
             /** @type {!Common.ResourceType} */ (newContentType));
       }
-      callback(success);
+      fulfill(success);
     }
   }
 
@@ -175,6 +178,7 @@ Workspace.UISourceCode = class extends Common.Object {
    * @param {!Common.ResourceType=} contentType
    */
   _updateName(name, url, contentType) {
+    var oldURL = this._url;
     this._url = this._url.substring(0, this._url.length - this._name.length) + name;
     this._name = name;
     if (url)
@@ -182,6 +186,8 @@ Workspace.UISourceCode = class extends Common.Object {
     if (contentType)
       this._contentType = contentType;
     this.dispatchEventToListeners(Workspace.UISourceCode.Events.TitleChanged, this);
+    this.project().workspace().dispatchEventToListeners(
+        Workspace.Workspace.Events.UISourceCodeRenamed, {oldURL: oldURL, uiSourceCode: this});
   }
 
   /**
@@ -525,10 +531,10 @@ Workspace.UISourceCode = class extends Common.Object {
   }
 
   /**
-   * @return {!Array<!Workspace.UISourceCode.Message>}
+   * @return {!Set<!Workspace.UISourceCode.Message>}
    */
   messages() {
-    return this._messages ? this._messages.slice() : [];
+    return this._messages ? new Set(this._messages) : new Set();
   }
 
   /**
@@ -540,20 +546,20 @@ Workspace.UISourceCode = class extends Common.Object {
    */
   addLineMessage(level, text, lineNumber, columnNumber) {
     return this.addMessage(
-        level, text, new Common.TextRange(lineNumber, columnNumber || 0, lineNumber, columnNumber || 0));
+        level, text, new TextUtils.TextRange(lineNumber, columnNumber || 0, lineNumber, columnNumber || 0));
   }
 
   /**
    * @param {!Workspace.UISourceCode.Message.Level} level
    * @param {string} text
-   * @param {!Common.TextRange} range
+   * @param {!TextUtils.TextRange} range
    * @return {!Workspace.UISourceCode.Message} message
    */
   addMessage(level, text, range) {
     var message = new Workspace.UISourceCode.Message(this, level, text, range);
     if (!this._messages)
-      this._messages = [];
-    this._messages.push(message);
+      this._messages = new Set();
+    this._messages.add(message);
     this.dispatchEventToListeners(Workspace.UISourceCode.Events.MessageAdded, message);
     return message;
   }
@@ -562,7 +568,7 @@ Workspace.UISourceCode = class extends Common.Object {
    * @param {!Workspace.UISourceCode.Message} message
    */
   removeMessage(message) {
-    if (this._messages && this._messages.remove(message))
+    if (this._messages && this._messages.delete(message))
       this.dispatchEventToListeners(Workspace.UISourceCode.Events.MessageRemoved, message);
   }
 
@@ -580,11 +586,11 @@ Workspace.UISourceCode = class extends Common.Object {
    * @param {?} data
    */
   addLineDecoration(lineNumber, type, data) {
-    this.addDecoration(Common.TextRange.createFromLocation(lineNumber, 0), type, data);
+    this.addDecoration(TextUtils.TextRange.createFromLocation(lineNumber, 0), type, data);
   }
 
   /**
-   * @param {!Common.TextRange} range
+   * @param {!TextUtils.TextRange} range
    * @param {string} type
    * @param {?} data
    */
@@ -804,7 +810,7 @@ Workspace.UISourceCode.Message = class {
    * @param {!Workspace.UISourceCode} uiSourceCode
    * @param {!Workspace.UISourceCode.Message.Level} level
    * @param {string} text
-   * @param {!Common.TextRange} range
+   * @param {!TextUtils.TextRange} range
    */
   constructor(uiSourceCode, level, text, range) {
     this._uiSourceCode = uiSourceCode;
@@ -835,7 +841,7 @@ Workspace.UISourceCode.Message = class {
   }
 
   /**
-   * @return {!Common.TextRange}
+   * @return {!TextUtils.TextRange}
    */
   range() {
     return this._range;
@@ -882,7 +888,7 @@ Workspace.UISourceCode.Message.Level = {
  */
 Workspace.UISourceCode.LineMarker = class {
   /**
-   * @param {!Common.TextRange} range
+   * @param {!TextUtils.TextRange} range
    * @param {string} type
    * @param {?} data
    */
@@ -893,7 +899,7 @@ Workspace.UISourceCode.LineMarker = class {
   }
 
   /**
-   * @return {!Common.TextRange}
+   * @return {!TextUtils.TextRange}
    */
   range() {
     return this._range;

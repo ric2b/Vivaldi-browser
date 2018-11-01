@@ -6,9 +6,11 @@ package org.chromium.chrome.test.util.browser.notifications;
 
 import android.app.Notification;
 
+import org.chromium.chrome.browser.notifications.ChannelDefinitions;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +23,8 @@ import javax.annotation.Nullable;
  */
 public class MockNotificationManagerProxy implements NotificationManagerProxy {
     private static final String KEY_SEPARATOR = ":";
+    private List<ChannelDefinitions.Channel> mChannels;
+    private List<ChannelDefinitions.ChannelGroup> mNotificationChannelGroups;
 
     /**
      * Holds a notification and the arguments passed to #notify and #cancel.
@@ -45,6 +49,8 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
     public MockNotificationManagerProxy() {
         mNotifications = new LinkedHashMap<>();
         mMutationCount = 0;
+        mChannels = new ArrayList<>();
+        mNotificationChannelGroups = new ArrayList<>();
     }
 
     /**
@@ -88,6 +94,41 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
     public void cancelAll() {
         mNotifications.clear();
         mMutationCount++;
+    }
+
+    @Override
+    public void createNotificationChannel(ChannelDefinitions.Channel channel) {
+        mChannels.add(channel);
+    }
+
+    public List<ChannelDefinitions.Channel> getChannels() {
+        return mChannels;
+    }
+
+    @Override
+    public void createNotificationChannelGroup(ChannelDefinitions.ChannelGroup channelGroup) {
+        mNotificationChannelGroups.add(channelGroup);
+    }
+
+    public List<ChannelDefinitions.ChannelGroup> getNotificationChannelGroups() {
+        return mNotificationChannelGroups;
+    }
+
+    @Override
+    public List<String> getNotificationChannelIds() {
+        List<String> channelIds = new ArrayList<>();
+        for (ChannelDefinitions.Channel channel : mChannels) {
+            channelIds.add(channel.mId);
+        }
+        return channelIds;
+    }
+
+    @Override
+    public void deleteNotificationChannel(@ChannelDefinitions.ChannelId String id) {
+        for (Iterator<ChannelDefinitions.Channel> it = mChannels.iterator(); it.hasNext();) {
+            ChannelDefinitions.Channel channel = it.next();
+            if (id.equals(channel.mId)) it.remove();
+        }
     }
 
     @Override

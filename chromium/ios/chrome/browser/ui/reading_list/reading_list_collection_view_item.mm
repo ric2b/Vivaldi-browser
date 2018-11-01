@@ -5,13 +5,16 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_item.h"
 
 #include "base/strings/sys_string_conversions.h"
+#include "base/time/time.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/favicon_view.h"
+#import "ios/chrome/browser/ui/favicon/favicon_view.h"
+#import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_item_accessibility_delegate.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/l10n/time_format.h"
 #import "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -22,125 +25,73 @@ namespace {
 NSString* kSuccessImageString = @"distillation_success";
 NSString* kFailureImageString = @"distillation_fail";
 
+// Height of the cell.
+const CGFloat kCellHeight = 72;
+
 // Distillation indicator constants.
 const CGFloat kDistillationIndicatorSize = 18;
 
 // Margin for the elements displayed in the cell.
 const CGFloat kMargin = 16;
+
+// Transparency of the distillation size and date.
+const CGFloat kInfoTextTransparency = 0.38;
 }  // namespace
-
-#pragma mark - ReadingListCell Private interface
-
-@protocol ReadingListCellDelegate<NSObject>
-
-- (void)readingListCellWillPrepareForReload:(ReadingListCell*)cell;
-
-@end
-
-@interface ReadingListCell ()
-
-@property(nonatomic, weak) id<ReadingListCellDelegate> delegate;
-// Status of the offline version. Updates the visual indicator when updated.
-@property(nonatomic, assign)
-    ReadingListEntry::DistillationState distillationState;
-
-@end
 
 #pragma mark - ReadingListCollectionViewItem
 
-@interface ReadingListCollectionViewItem ()<ReadingListCellDelegate> {
+@interface ReadingListCollectionViewItem () {
   GURL _url;
 }
-// Attributes provider used to retrieve favicons.
-@property(nonatomic, strong)
-    FaviconAttributesProvider* faviconAttributesProvider;
-// Attributes for favicon. Fetched in init, then retained for future updates.
-@property(nonatomic, strong) FaviconAttributes* attributes;
-// The cell that is displaying this item, if any. Used to reload favicon when
-// the cell is on screen. Backed by WeakNSObject.
-@property(nonatomic, weak) ReadingListCell* displayedCell;
+
+// Returns the accessibility custom actions associated with this item.
+- (NSArray<UIAccessibilityCustomAction*>*)customActions;
+
 @end
 
 @implementation ReadingListCollectionViewItem
-@synthesize faviconAttributesProvider = _faviconAttributesProvider;
 @synthesize attributes = _attributes;
-@synthesize text = _text;
-@synthesize detailText = _detailText;
+@synthesize title = _title;
+@synthesize subtitle = _subtitle;
 @synthesize url = _url;
 @synthesize faviconPageURL = _faviconPageURL;
-@synthesize displayedCell = _displayedCell;
 @synthesize distillationState = _distillationState;
+@synthesize distillationDate = _distillationDate;
+@synthesize distillationSize = _distillationSize;
+@synthesize accessibilityDelegate = _accessibilityDelegate;
 
 - (instancetype)initWithType:(NSInteger)type
-          attributesProvider:(FaviconAttributesProvider*)provider
                          url:(const GURL&)url
-           distillationState:(ReadingListEntry::DistillationState)state {
+           distillationState:(ReadingListUIDistillationStatus)state {
   self = [super initWithType:type];
   if (!self)
     return nil;
   self.cellClass = [ReadingListCell class];
-  _faviconAttributesProvider = provider;
   _url = url;
   _distillationState = state;
   return self;
-}
-
-- (void)setFaviconPageURL:(GURL)url {
-  _faviconPageURL = url;
-  // |self| owns |provider|, |provider| owns the block, so a week self reference
-  // is necessary.
-  __weak ReadingListCollectionViewItem* weakSelf = self;
-  [_faviconAttributesProvider
-      fetchFaviconAttributesForURL:url
-                        completion:^(FaviconAttributes* _Nonnull attributes) {
-                          ReadingListCollectionViewItem* strongSelf = weakSelf;
-                          if (!strongSelf) {
-                            return;
-                          }
-
-                          strongSelf.attributes = attributes;
-
-                          [strongSelf.displayedCell.faviconView
-                              configureWithAttributes:strongSelf.attributes];
-                        }];
-}
-
-#pragma mark - property
-
-- (void)setDistillationState:
-    (ReadingListEntry::DistillationState)distillationState {
-  self.displayedCell.distillationState = distillationState;
-  self.displayedCell.accessibilityLabel = [self accessibilityLabel];
-  _distillationState = distillationState;
 }
 
 #pragma mark - CollectionViewTextItem
 
 - (void)configureCell:(ReadingListCell*)cell {
   [super configureCell:cell];
-  if (self.attributes) {
-    [cell.faviconView configureWithAttributes:self.attributes];
-  }
-  cell.textLabel.text = self.text;
-  cell.detailTextLabel.text = self.detailText;
-  self.displayedCell = cell;
-  cell.delegate = self;
+  [cell.faviconView configureWithAttributes:self.attributes];
+  cell.titleLabel.text = self.title;
+  cell.subtitleLabel.text = self.subtitle;
   cell.distillationState = _distillationState;
+  cell.distillationSize = _distillationSize;
+  cell.distillationDate = _distillationDate;
   cell.isAccessibilityElement = YES;
   cell.accessibilityLabel = [self accessibilityLabel];
-}
-
-#pragma mark - ReadingListCellDelegate
-
-- (void)readingListCellWillPrepareForReload:(ReadingListCell*)cell {
-  self.displayedCell = nil;
+  cell.accessibilityCustomActions = [self customActions];
 }
 
 #pragma mark - Private
 
 - (NSString*)accessibilityLabel {
   NSString* accessibilityState = nil;
-  if (self.distillationState == ReadingListEntry::PROCESSED) {
+  if (self.distillationState == ReadingListUIDistillationStatusSuccess) {
     accessibilityState = l10n_util::GetNSString(
         IDS_IOS_READING_LIST_ACCESSIBILITY_STATE_DOWNLOADED);
   } else {
@@ -149,16 +100,112 @@ const CGFloat kMargin = 16;
   }
 
   return l10n_util::GetNSStringF(IDS_IOS_READING_LIST_ENTRY_ACCESSIBILITY_LABEL,
-                                 base::SysNSStringToUTF16(self.text),
+                                 base::SysNSStringToUTF16(self.title),
                                  base::SysNSStringToUTF16(accessibilityState),
-                                 base::SysNSStringToUTF16(self.detailText));
+                                 base::SysNSStringToUTF16(self.subtitle));
+}
+
+#pragma mark - AccessibilityCustomAction
+
+- (NSArray<UIAccessibilityCustomAction*>*)customActions {
+  UIAccessibilityCustomAction* deleteAction = [
+      [UIAccessibilityCustomAction alloc]
+      initWithName:l10n_util::GetNSString(IDS_IOS_READING_LIST_DELETE_BUTTON)
+            target:self
+          selector:@selector(deleteEntry)];
+  UIAccessibilityCustomAction* toogleReadStatus = nil;
+  if ([self.accessibilityDelegate isEntryRead:self]) {
+    toogleReadStatus = [[UIAccessibilityCustomAction alloc]
+        initWithName:l10n_util::GetNSString(
+                         IDS_IOS_READING_LIST_MARK_UNREAD_BUTTON)
+              target:self
+            selector:@selector(markUnread)];
+  } else {
+    toogleReadStatus = [[UIAccessibilityCustomAction alloc]
+        initWithName:l10n_util::GetNSString(
+                         IDS_IOS_READING_LIST_MARK_READ_BUTTON)
+              target:self
+            selector:@selector(markRead)];
+  }
+
+  UIAccessibilityCustomAction* openInNewTabAction =
+      [[UIAccessibilityCustomAction alloc]
+          initWithName:l10n_util::GetNSString(
+                           IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)
+                target:self
+              selector:@selector(openInNewTab)];
+  UIAccessibilityCustomAction* openInNewIncognitoTabAction =
+      [[UIAccessibilityCustomAction alloc]
+          initWithName:l10n_util::GetNSString(
+                           IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)
+                target:self
+              selector:@selector(openInNewIncognitoTab)];
+  UIAccessibilityCustomAction* copyURLAction =
+      [[UIAccessibilityCustomAction alloc]
+          initWithName:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_COPY)
+                target:self
+              selector:@selector(copyURL)];
+
+  NSMutableArray* customActions = [NSMutableArray
+      arrayWithObjects:deleteAction, toogleReadStatus, openInNewTabAction,
+                       openInNewIncognitoTabAction, copyURLAction, nil];
+
+  if (self.distillationState == ReadingListUIDistillationStatusSuccess) {
+    // Add the possibility to open offline version only if the entry is
+    // distilled.
+    UIAccessibilityCustomAction* openOfflineAction =
+        [[UIAccessibilityCustomAction alloc]
+            initWithName:l10n_util::GetNSString(
+                             IDS_IOS_READING_LIST_CONTENT_CONTEXT_OFFLINE)
+                  target:self
+                selector:@selector(openOffline)];
+
+    [customActions addObject:openOfflineAction];
+  }
+
+  return customActions;
+}
+
+- (BOOL)deleteEntry {
+  [self.accessibilityDelegate deleteEntry:self];
+  return YES;
+}
+
+- (BOOL)markRead {
+  [self.accessibilityDelegate markEntryRead:self];
+  return YES;
+}
+
+- (BOOL)markUnread {
+  [self.accessibilityDelegate markEntryUnread:self];
+  return YES;
+}
+
+- (BOOL)openInNewTab {
+  [self.accessibilityDelegate openEntryInNewTab:self];
+  return YES;
+}
+
+- (BOOL)openInNewIncognitoTab {
+  [self.accessibilityDelegate openEntryInNewIncognitoTab:self];
+  return YES;
+}
+
+- (BOOL)copyURL {
+  [self.accessibilityDelegate copyEntryURL:self];
+  return YES;
+}
+
+- (BOOL)openOffline {
+  [self.accessibilityDelegate openEntryOffline:self];
+  return YES;
 }
 
 #pragma mark - NSObject
 
 - (NSString*)description {
   return [NSString stringWithFormat:@"Reading List item \"%@\" for url %@",
-                                    self.text, self.detailText];
+                                    self.title, self.subtitle];
 }
 
 - (BOOL)isEqual:(id)other {
@@ -168,9 +215,11 @@ const CGFloat kMargin = 16;
     return NO;
   ReadingListCollectionViewItem* otherItem =
       static_cast<ReadingListCollectionViewItem*>(other);
-  return [self.text isEqualToString:otherItem.text] &&
-         [self.detailText isEqualToString:otherItem.detailText] &&
-         self.distillationState == otherItem.distillationState;
+  return [self.title isEqualToString:otherItem.title] &&
+         [self.subtitle isEqualToString:otherItem.subtitle] &&
+         self.distillationState == otherItem.distillationState &&
+         self.distillationSize == otherItem.distillationSize &&
+         self.distillationDate == otherItem.distillationDate;
 }
 
 @end
@@ -179,27 +228,62 @@ const CGFloat kMargin = 16;
 
 @implementation ReadingListCell {
   UIImageView* _downloadIndicator;
+  UILayoutGuide* _textGuide;
+
+  UILabel* _distillationSizeLabel;
+  UILabel* _distillationDateLabel;
+
+  // View containing |_distillationSizeLabel| and |_distillationDateLabel|.
+  UIView* _infoView;
+
+  // Whether |_infoView| is visible.
+  BOOL _showInfo;
 }
 @synthesize faviconView = _faviconView;
-@synthesize textLabel = _textLabel;
-@synthesize detailTextLabel = _detailTextLabel;
+@synthesize titleLabel = _titleLabel;
+@synthesize subtitleLabel = _subtitleLabel;
+@synthesize distillationDate = _distillationDate;
+@synthesize distillationSize = _distillationSize;
 @synthesize distillationState = _distillationState;
-@synthesize delegate = _delegate;
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
     MDFRobotoFontLoader* fontLoader = [MDFRobotoFontLoader sharedInstance];
     CGFloat faviconSize = kFaviconPreferredSize;
-    _textLabel = [[UILabel alloc] init];
-    _textLabel.font = [fontLoader mediumFontOfSize:16];
-    _textLabel.textColor = [[MDCPalette greyPalette] tint900];
-    _textLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _titleLabel = [[UILabel alloc] init];
+    _titleLabel.font = [fontLoader mediumFontOfSize:16];
+    _titleLabel.textColor = [[MDCPalette greyPalette] tint900];
+    _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _titleLabel.accessibilityIdentifier = @"Reading List Item title";
 
-    _detailTextLabel = [[UILabel alloc] init];
-    _detailTextLabel.font = [fontLoader mediumFontOfSize:14];
-    _detailTextLabel.textColor = [[MDCPalette greyPalette] tint500];
-    _detailTextLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _subtitleLabel = [[UILabel alloc] init];
+    _subtitleLabel.font = [fontLoader mediumFontOfSize:14];
+    _subtitleLabel.textColor = [[MDCPalette greyPalette] tint500];
+    _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _subtitleLabel.accessibilityIdentifier = @"Reading List Item subtitle";
+
+    _distillationDateLabel = [[UILabel alloc] init];
+    _distillationDateLabel.font = [fontLoader mediumFontOfSize:12];
+    [_distillationDateLabel
+        setContentHuggingPriority:UILayoutPriorityDefaultHigh
+                          forAxis:UILayoutConstraintAxisHorizontal];
+    _distillationDateLabel.textColor =
+        [UIColor colorWithWhite:0 alpha:kInfoTextTransparency];
+    _distillationDateLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _distillationDateLabel.accessibilityIdentifier =
+        @"Reading List Item distillation date";
+
+    _distillationSizeLabel = [[UILabel alloc] init];
+    _distillationSizeLabel.font = [fontLoader mediumFontOfSize:12];
+    [_distillationSizeLabel
+        setContentHuggingPriority:UILayoutPriorityDefaultHigh
+                          forAxis:UILayoutConstraintAxisHorizontal];
+    _distillationSizeLabel.textColor =
+        [UIColor colorWithWhite:0 alpha:kInfoTextTransparency];
+    _distillationSizeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _distillationSizeLabel.accessibilityIdentifier =
+        @"Reading List Item distillation size";
 
     _faviconView = [[FaviconViewNew alloc] init];
     CGFloat fontSize = floorf(faviconSize / 2);
@@ -208,31 +292,68 @@ const CGFloat kMargin = 16;
 
     _downloadIndicator = [[UIImageView alloc] init];
     [_downloadIndicator setTranslatesAutoresizingMaskIntoConstraints:NO];
+    _downloadIndicator.accessibilityIdentifier =
+        @"Reading List Item download indicator";
     [_faviconView addSubview:_downloadIndicator];
 
-    [self.contentView addSubview:_textLabel];
-    [self.contentView addSubview:_detailTextLabel];
     [self.contentView addSubview:_faviconView];
+    [self.contentView addSubview:_titleLabel];
+    [self.contentView addSubview:_subtitleLabel];
+
+    _infoView = [[UIView alloc] initWithFrame:CGRectZero];
+    [_infoView addSubview:_distillationDateLabel];
+    [_infoView addSubview:_distillationSizeLabel];
+    _infoView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    _textGuide = [[UILayoutGuide alloc] init];
+    [self.contentView addLayoutGuide:_textGuide];
 
     ApplyVisualConstraintsWithMetrics(
         @[
-          @"V:|-(margin)-[title][text]-(margin)-|",
+          @"H:|[date]-(>=margin)-[size]|",
+          @"V:[title][subtitle]",
           @"H:|-(margin)-[favicon]-(margin)-[title]-(>=margin)-|",
-          @"H:[favicon]-(margin)-[text]-(>=margin)-|"
+          @"H:[favicon]-(margin)-[subtitle]-(>=margin)-|",
+          @"V:|[date]|",
+          @"V:|[size]|",
         ],
         @{
-          @"title" : _textLabel,
-          @"text" : _detailTextLabel,
-          @"favicon" : _faviconView
+          @"favicon" : _faviconView,
+          @"title" : _titleLabel,
+          @"subtitle" : _subtitleLabel,
+          @"date" : _distillationDateLabel,
+          @"size" : _distillationSizeLabel,
         },
-        @{ @"margin" : @(kMargin) });
+        @{
+          @"margin" : @(kMargin),
+        });
+
+    // Sets the bottom of the text. Lower the priority so we can add the details
+    // later.
+    NSLayoutConstraint* bottomTextConstraint = [_textGuide.bottomAnchor
+        constraintEqualToAnchor:_subtitleLabel.bottomAnchor];
+    bottomTextConstraint.priority = UILayoutPriorityDefaultHigh;
+    NSLayoutConstraint* topTextConstraint =
+        [_textGuide.topAnchor constraintEqualToAnchor:_titleLabel.topAnchor];
 
     [NSLayoutConstraint activateConstraints:@[
+      // Height for the cell.
+      [self.contentView.heightAnchor constraintEqualToConstant:kCellHeight],
+
+      // Text constraints.
+      topTextConstraint,
+      bottomTextConstraint,
+
       // Favicons are always the same size.
       [_faviconView.widthAnchor constraintEqualToConstant:faviconSize],
       [_faviconView.heightAnchor constraintEqualToConstant:faviconSize],
+
+      // Center the content (favicon and text) vertically.
       [_faviconView.centerYAnchor
           constraintEqualToAnchor:self.contentView.centerYAnchor],
+      [_textGuide.centerYAnchor
+          constraintEqualToAnchor:self.contentView.centerYAnchor],
+
       // Place the download indicator in the bottom right corner of the favicon.
       [[_downloadIndicator centerXAnchor]
           constraintEqualToAnchor:_faviconView.trailingAnchor],
@@ -250,37 +371,94 @@ const CGFloat kMargin = 16;
 }
 
 - (void)setDistillationState:
-    (ReadingListEntry::DistillationState)distillationState {
+    (ReadingListUIDistillationStatus)distillationState {
   if (_distillationState == distillationState)
     return;
 
   _distillationState = distillationState;
   switch (distillationState) {
-    case ReadingListEntry::ERROR:
+    case ReadingListUIDistillationStatusFailure:
       [_downloadIndicator setImage:[UIImage imageNamed:kFailureImageString]];
       break;
 
-    case ReadingListEntry::PROCESSED:
+    case ReadingListUIDistillationStatusSuccess:
       [_downloadIndicator setImage:[UIImage imageNamed:kSuccessImageString]];
       break;
 
-    // Same behavior for all pre-download states.
-    case ReadingListEntry::WAITING:
-    case ReadingListEntry::WILL_RETRY:
-    case ReadingListEntry::PROCESSING:
+    case ReadingListUIDistillationStatusPending:
       [_downloadIndicator setImage:nil];
       break;
   }
 }
 
+- (void)setShowInfo:(BOOL)show {
+  if (_showInfo == show) {
+    return;
+  }
+  _showInfo = show;
+  if (!show) {
+    [_infoView removeFromSuperview];
+    return;
+  }
+  [self.contentView addSubview:_infoView];
+  ApplyVisualConstraintsWithMetrics(
+      @[
+        @"H:|-(margin)-[favicon]-(margin)-[detail]-(margin)-|",
+      ],
+      @{
+        @"favicon" : _faviconView,
+        @"detail" : _infoView,
+      },
+      @{
+        @"margin" : @(kMargin),
+      });
+  [NSLayoutConstraint activateConstraints:@[
+    [_infoView.topAnchor constraintEqualToAnchor:_subtitleLabel.bottomAnchor],
+    [_infoView.bottomAnchor constraintEqualToAnchor:_textGuide.bottomAnchor],
+  ]];
+}
+
+- (void)setDistillationSize:(int64_t)distillationSize {
+  [_distillationSizeLabel
+      setText:[NSByteCountFormatter
+                  stringFromByteCount:distillationSize
+                           countStyle:NSByteCountFormatterCountStyleFile]];
+  _distillationSize = distillationSize;
+  BOOL showInfo = _distillationSize != 0 && _distillationDate != 0;
+  [self setShowInfo:showInfo];
+}
+
+- (void)setDistillationDate:(int64_t)distillationDate {
+  int64_t now = (base::Time::Now() - base::Time::UnixEpoch()).InMicroseconds();
+  int64_t elapsed = now - distillationDate;
+  NSString* text;
+  if (elapsed < base::Time::kMicrosecondsPerMinute) {
+    // This will also catch items added in the future. In that case, show the
+    // "just now" string.
+    text = l10n_util::GetNSString(IDS_IOS_READING_LIST_JUST_NOW);
+  } else {
+    text = base::SysUTF16ToNSString(ui::TimeFormat::SimpleWithMonthAndYear(
+        ui::TimeFormat::FORMAT_ELAPSED, ui::TimeFormat::LENGTH_LONG,
+        base::TimeDelta::FromMicroseconds(elapsed), true));
+  }
+
+  [_distillationDateLabel setText:text];
+  _distillationDate = distillationDate;
+  BOOL showInfo = _distillationSize != 0 && _distillationDate != 0;
+  [self setShowInfo:showInfo];
+}
+
 #pragma mark - UICollectionViewCell
 
 - (void)prepareForReuse {
-  [self.delegate readingListCellWillPrepareForReload:self];
-  self.delegate = nil;
-  self.textLabel.text = nil;
-  self.detailTextLabel.text = nil;
-  self.distillationState = ReadingListEntry::WAITING;
+  self.titleLabel.text = nil;
+  self.subtitleLabel.text = nil;
+  self.distillationState = ReadingListUIDistillationStatusPending;
+  self.distillationDate = 0;
+  self.distillationSize = 0;
+  [self setShowInfo:NO];
+  [self.faviconView configureWithAttributes:nil];
+  self.accessibilityCustomActions = nil;
   [super prepareForReuse];
 }
 

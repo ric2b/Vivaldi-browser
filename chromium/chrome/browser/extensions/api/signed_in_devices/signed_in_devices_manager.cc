@@ -87,8 +87,8 @@ void SignedInDevicesChangeObserver::OnDeviceInfoChange() {
 }
 
 static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<SignedInDevicesManager> > g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+    BrowserContextKeyedAPIFactory<SignedInDevicesManager>>::DestructorAtExit
+    g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<SignedInDevicesManager>*
@@ -114,7 +114,9 @@ SignedInDevicesManager::SignedInDevicesManager(content::BrowserContext* context)
   extension_registry_observer_.Add(ExtensionRegistry::Get(profile_));
 }
 
-SignedInDevicesManager::~SignedInDevicesManager() {
+SignedInDevicesManager::~SignedInDevicesManager() = default;
+
+void SignedInDevicesManager::Shutdown() {
   if (profile_) {
     EventRouter* router = EventRouter::Get(profile_);
     if (router)

@@ -7,7 +7,6 @@ static_library("browser") {
     "ruleset_service.cc",
     "ruleset_service.h",
     "ruleset_service_delegate.h",
-    "subresource_filter_client.h",
     "subresource_filter_constants.cc",
     "subresource_filter_constants.h",
     "subresource_filter_features.cc",
@@ -34,6 +33,7 @@ static_library("test_support") {
     "//base/test:test_support",
     "//components/variations",
     "//testing/gtest",
+    "//third_party/protobuf:protobuf_lite",
   ]
 }
 
@@ -50,6 +50,7 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/prefs:test_support",
     "//components/subresource_filter/core/common:test_support",
+    "//components/subresource_filter/core/common/proto",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/protobuf:protobuf_lite",

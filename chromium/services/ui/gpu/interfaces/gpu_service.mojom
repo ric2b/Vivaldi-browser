@@ -4,7 +4,6 @@
 
 module ui.mojom;
 
-import "cc/ipc/display_compositor.mojom";
 import "gpu/ipc/common/gpu_info.mojom";
 import "gpu/ipc/common/memory_stats.mojom";
 import "gpu/ipc/common/surface_handle.mojom";
@@ -18,7 +17,11 @@ interface GpuService {
   EstablishGpuChannel(int32 client_id,
                       uint64 client_tracing_id,
                       bool is_gpu_host)
-      => (handle<message_pipe> channel_handle);
+      => (handle<message_pipe>? channel_handle);
+
+  // Tells the GPU process to close the channel identified by |client_id|.
+  // If no channel can be identified, do nothing.
+  CloseChannel(int32 client_id);
 
   [Sync]
   CreateGpuMemoryBuffer(gfx.mojom.GpuMemoryBufferId id,
@@ -34,4 +37,26 @@ interface GpuService {
                          gpu.mojom.SyncToken sync_token);
 
   GetVideoMemoryUsageStats() => (gpu.mojom.VideoMemoryUsageStats stats);
+
+  RequestCompleteGpuInfo() => (gpu.mojom.GpuInfo gpu_info);
+
+  // Notify GPU that a shader was loaded from disk.
+  LoadedShader(string data);
+
+  // Tells GPU to release the surface because it's being destroyed.
+  DestroyingVideoSurface(int32 surface_id) => ();
+
+  // Tells GPU to wake up the GPU because we're about to draw.
+  WakeUpGpu();
+
+  // Tells GPU that host has seen a GPU switch. This can happen when the display
+  // is reconfigured, for example.
+  GpuSwitched();
+
+  DestroyAllChannels();
+
+  Crash();
+  Hang();
+  ThrowJavaException();
+  Stop() => ();
 };

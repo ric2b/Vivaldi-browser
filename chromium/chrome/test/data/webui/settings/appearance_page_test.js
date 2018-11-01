@@ -15,6 +15,7 @@ var TestAppearanceBrowserProxy = function() {
     'openWallpaperManager',
     'useDefaultTheme',
     'useSystemTheme',
+    'validateStartupPage',
   ]);
 
   /** @private */
@@ -22,6 +23,9 @@ var TestAppearanceBrowserProxy = function() {
 
   /** @private */
   this.isSupervised_ = false;
+
+  /** @private */
+  this.isHomeUrlValid_ = true;
 };
 
 TestAppearanceBrowserProxy.prototype = {
@@ -69,6 +73,19 @@ TestAppearanceBrowserProxy.prototype = {
   setIsSupervised: function(isSupervised) {
     this.isSupervised_ = isSupervised;
   },
+
+  /** @override */
+  validateStartupPage: function(url) {
+    this.methodCalled('validateStartupPage', url);
+    return Promise.resolve(this.isHomeUrlValid_);
+  },
+
+  /**
+   * @param {boolean} isValid
+   */
+   setValidStartupPageResponse: function(isValid) {
+     this.isHomeUrlValid_ = isValid;
+   }
 };
 
 var appearancePage = null;
@@ -223,5 +240,53 @@ suite('AppearanceHandler', function() {
     }).then(function() {
       assertEquals('175%', getDefaultZoomText());
     });
+  });
+
+  test('show home button toggling', function() {
+    assertFalse(!!appearancePage.$$('.list-frame'));
+    appearancePage.set('prefs', {browser: {show_home_button: {value: true}}});
+
+    Polymer.dom.flush();
+
+    assertTrue(!!appearancePage.$$('.list-frame'));
+  });
+});
+
+suite('HomeUrlInput', function() {
+  var homeUrlInput;
+
+  setup(function() {
+    appearanceBrowserProxy = new TestAppearanceBrowserProxy();
+    settings.AppearanceBrowserProxyImpl.instance_ = appearanceBrowserProxy;
+    PolymerTest.clearBody();
+
+    homeUrlInput = document.createElement('home-url-input');
+    homeUrlInput.set(
+        'pref', {type: chrome.settingsPrivate.PrefType.URL, value: 'test'});
+
+    document.body.appendChild(homeUrlInput);
+    Polymer.dom.flush();
+  });
+
+  test('home button urls', function() {
+    assertFalse(homeUrlInput.invalid);
+    assertEquals(homeUrlInput.value, 'test');
+
+    homeUrlInput.value = '@@@';
+    appearanceBrowserProxy.setValidStartupPageResponse(false);
+    homeUrlInput.$.input.fire('input');
+
+    return appearanceBrowserProxy.whenCalled('validateStartupPage')
+        .then(function(url) {
+          assertEquals(homeUrlInput.value, url);
+          Polymer.dom.flush();
+          assertEquals(homeUrlInput.value, '@@@');  // Value hasn't changed.
+          assertTrue(homeUrlInput.invalid);
+
+          // Should reset to default value on change event.
+          homeUrlInput.$.input.fire('change');
+          Polymer.dom.flush();
+          assertEquals(homeUrlInput.value, 'test');
+        });
   });
 });

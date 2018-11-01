@@ -7,12 +7,25 @@
 
 #import <UIKit/UIKit.h>
 
+#include <memory>
+
 #import "ios/chrome/browser/content_suggestions/content_suggestions_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_source.h"
+
+namespace favicon {
+class LargeIconService;
+}
 
 namespace ntp_snippets {
 class ContentSuggestionsService;
 }
+
+namespace ntp_tiles {
+class MostVisitedSites;
+}
+
+@protocol ContentSuggestionsCommands;
+@class ContentSuggestionIdentifier;
 
 // Mediator for ContentSuggestions. Makes the interface between a
 // ntp_snippets::ContentSuggestionsService and the Objective-C services using
@@ -20,10 +33,24 @@ class ContentSuggestionsService;
 @interface ContentSuggestionsMediator : NSObject<ContentSuggestionsDataSource>
 
 // Initialize the mediator with the |contentService| to mediate.
-- (instancetype)initWithContentService:
-    (ntp_snippets::ContentSuggestionsService*)contentService
+- (nullable instancetype)
+initWithContentService:
+    (nonnull ntp_snippets::ContentSuggestionsService*)contentService
+      largeIconService:(nonnull favicon::LargeIconService*)largeIconService
+       mostVisitedSite:
+           (std::unique_ptr<ntp_tiles::MostVisitedSites>)mostVisitedSites
     NS_DESIGNATED_INITIALIZER;
-- (instancetype)init NS_UNAVAILABLE;
+
+- (nullable instancetype)init NS_UNAVAILABLE;
+
+// Command handler for the mediator.
+@property(nonatomic, weak, nullable) id<ContentSuggestionsCommands>
+    commandHandler;
+
+// Dismisses the suggestion from the content suggestions service. It doesn't
+// change the UI.
+- (void)dismissSuggestion:
+    (nonnull ContentSuggestionIdentifier*)suggestionIdentifier;
 
 @end
 

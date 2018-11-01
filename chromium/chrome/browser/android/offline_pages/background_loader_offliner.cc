@@ -14,13 +14,13 @@
 #include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace offline_pages {
 
 namespace {
-const long kOfflinePageDelayMs = 2000;
 
 class OfflinerData : public content::WebContentsUserData<OfflinerData> {
  public:
@@ -72,7 +72,6 @@ BackgroundLoaderOffliner::BackgroundLoaderOffliner(
       is_low_end_device_(base::SysInfo::IsLowEndDevice()),
       save_state_(NONE),
       page_load_state_(SUCCESS),
-      page_delay_ms_(kOfflinePageDelayMs),
       network_bytes_(0LL),
       weak_ptr_factory_(this) {
   DCHECK(offline_page_model_);
@@ -150,11 +149,8 @@ bool BackgroundLoaderOffliner::LoadAndSave(
     return false;
   }
 
-  if (!loader_)
-    ResetState();
-
-  // Invalidate ptrs for all delayed/saving tasks.
-  weak_ptr_factory_.InvalidateWeakPtrs();
+  ResetLoader();
+  AttachObservers();
 
   // Track copy of pending request.
   pending_request_.reset(new SavePageRequest(request));
@@ -169,12 +165,15 @@ bool BackgroundLoaderOffliner::LoadAndSave(
   // Load page attempt.
   loader_.get()->LoadPage(request.url());
 
+  snapshot_controller_ = SnapshotController::CreateForBackgroundOfflining(
+      base::ThreadTaskRunnerHandle::Get(), this);
+
   return true;
 }
 
 void BackgroundLoaderOffliner::Cancel(const CancelCallback& callback) {
   // TODO(chili): We are not able to cancel a pending
-  // OfflinePageModel::SavePage() operation. We will notify caller that
+  // OfflinePageModel::SaveSnapshot() operation. We will notify caller that
   // cancel completed once the SavePage operation returns.
   if (!pending_request_) {
     callback.Run(0LL);
@@ -193,26 +192,22 @@ void BackgroundLoaderOffliner::Cancel(const CancelCallback& callback) {
 }
 
 bool BackgroundLoaderOffliner::HandleTimeout(const SavePageRequest& request) {
-  // TODO(romax) Decide if we want to also take a snapshot on the last timeout
-  // for the background loader offliner.
+  // TODO(romax): Decide if we want to also take a snapshot on the last timeout
+  // for the background loader offliner. crbug.com/705090
   return false;
 }
 
-void BackgroundLoaderOffliner::DidStopLoading() {
+void BackgroundLoaderOffliner::DocumentAvailableInMainFrame() {
+  snapshot_controller_->DocumentAvailableInMainFrame();
+}
+
+void BackgroundLoaderOffliner::DocumentOnLoadCompletedInMainFrame() {
   if (!pending_request_.get()) {
     DVLOG(1) << "DidStopLoading called even though no pending request.";
     return;
   }
 
-  // Invalidate ptrs for any ongoing save operation.
-  weak_ptr_factory_.InvalidateWeakPtrs();
-
-  // Post SavePage task with 2 second delay.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&BackgroundLoaderOffliner::SavePage,
-                 weak_ptr_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMilliseconds(page_delay_ms_));
+  snapshot_controller_->DocumentOnLoadCompletedInMainFrame();
 }
 
 void BackgroundLoaderOffliner::RenderProcessGone(
@@ -253,50 +248,18 @@ void BackgroundLoaderOffliner::DidFinishNavigation(
     RecordErrorCauseUMA(pending_request_->client_id(),
                         navigation_handle->GetNetErrorCode());
     switch (navigation_handle->GetNetErrorCode()) {
-      case net::ERR_ACCESS_DENIED:
-      case net::ERR_ADDRESS_INVALID:
-      case net::ERR_ADDRESS_UNREACHABLE:
-      case net::ERR_CERT_COMMON_NAME_INVALID:
-      case net::ERR_CERT_AUTHORITY_INVALID:
-      case net::ERR_CERT_CONTAINS_ERRORS:
-      case net::ERR_CERT_INVALID:
-      case net::ERR_CONNECTION_FAILED:
-      case net::ERR_DISALLOWED_URL_SCHEME:
-      case net::ERR_DNS_SERVER_FAILED:
-      case net::ERR_FILE_NOT_FOUND:
-      case net::ERR_FILE_PATH_TOO_LONG:
-      case net::ERR_FILE_TOO_BIG:
-      case net::ERR_FILE_VIRUS_INFECTED:
-      case net::ERR_INVALID_HANDLE:
-      case net::ERR_INVALID_RESPONSE:
-      case net::ERR_INVALID_URL:
-      case net::ERR_MSG_TOO_BIG:
-      case net::ERR_NAME_NOT_RESOLVED:
-      case net::ERR_NAME_RESOLUTION_FAILED:
-      case net::ERR_SSL_PROTOCOL_ERROR:
-      case net::ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED:
-      case net::ERR_SSL_SERVER_CERT_BAD_FORMAT:
-      case net::ERR_UNKNOWN_URL_SCHEME:
-        page_load_state_ = NONRETRIABLE;
+      case net::ERR_INTERNET_DISCONNECTED:
+        page_load_state_ = DELAY_RETRY;
         break;
       default:
         page_load_state_ = RETRIABLE;
     }
   }
-
-  // If the document is not the same invalidate any pending save tasks.
-  //
-  // Downloads or 204/205 response codes do not commit (no new navigation)
-  // Same-Page (committed) navigations are:
-  // - reference fragment navigations
-  // - pushState/replaceState
-  // - same page history navigation
-  if (navigation_handle->HasCommitted() && !navigation_handle->IsSamePage())
-    weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
-void BackgroundLoaderOffliner::SetPageDelayForTest(long delay_ms) {
-  page_delay_ms_ = delay_ms;
+void BackgroundLoaderOffliner::SetSnapshotControllerForTest(
+    std::unique_ptr<SnapshotController> controller) {
+  snapshot_controller_ = std::move(controller);
 }
 
 void BackgroundLoaderOffliner::OnNetworkBytesChanged(int64_t bytes) {
@@ -306,7 +269,7 @@ void BackgroundLoaderOffliner::OnNetworkBytesChanged(int64_t bytes) {
   }
 }
 
-void BackgroundLoaderOffliner::SavePage() {
+void BackgroundLoaderOffliner::StartSnapshot() {
   if (!pending_request_.get()) {
     DVLOG(1) << "Pending request was cleared during delay.";
     return;
@@ -315,10 +278,22 @@ void BackgroundLoaderOffliner::SavePage() {
   SavePageRequest request(*pending_request_.get());
   // If there was an error navigating to page, return loading failed.
   if (page_load_state_ != SUCCESS) {
-    Offliner::RequestStatus status =
-        (page_load_state_ == RETRIABLE)
-            ? Offliner::RequestStatus::LOADING_FAILED
-            : Offliner::RequestStatus::LOADING_FAILED_NO_RETRY;
+    Offliner::RequestStatus status;
+    switch (page_load_state_) {
+      case RETRIABLE:
+        status = Offliner::RequestStatus::LOADING_FAILED;
+        break;
+      case NONRETRIABLE:
+        status = Offliner::RequestStatus::LOADING_FAILED_NO_RETRY;
+        break;
+      case DELAY_RETRY:
+        status = Offliner::RequestStatus::LOADING_FAILED_NO_NEXT;
+        break;
+      default:
+        // We should've already checked for Success before entering here.
+        NOTREACHED();
+        status = Offliner::RequestStatus::LOADING_FAILED;
+    }
     completion_callback_.Run(request, status);
     ResetState();
     return;
@@ -377,15 +352,19 @@ void BackgroundLoaderOffliner::OnPageSaved(SavePageResult save_result,
 
 void BackgroundLoaderOffliner::ResetState() {
   pending_request_.reset();
+  snapshot_controller_.reset();
   page_load_state_ = SUCCESS;
   network_bytes_ = 0LL;
-  // TODO(chili): Remove after RequestCoordinator can handle multiple offliners.
-  // We reset the loader and observer after completion so loaders
-  // will not be re-used across different requests/tries. This is a temporary
-  // solution while there exists assumptions about the number of offliners
-  // there are.
+  content::WebContentsObserver::Observe(nullptr);
+  loader_.reset();
+}
+
+void BackgroundLoaderOffliner::ResetLoader() {
   loader_.reset(
       new background_loader::BackgroundLoaderContents(browser_context_));
+}
+
+void BackgroundLoaderOffliner::AttachObservers() {
   content::WebContents* contents = loader_->web_contents();
   content::WebContentsObserver::Observe(contents);
   OfflinerData::AddToWebContents(contents, this);

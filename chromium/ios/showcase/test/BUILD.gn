@@ -5,11 +5,14 @@
 source_set("test") {
   testonly = true
   sources = [
+    "showcase_eg_utils.h",
+    "showcase_eg_utils.mm",
     "showcase_test_case.h",
     "showcase_test_case.mm",
   ]
   deps = [
     "//base",
+    "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey",
   ]
   public_deps = [

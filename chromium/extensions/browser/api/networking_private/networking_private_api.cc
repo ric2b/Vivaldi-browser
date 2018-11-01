@@ -9,7 +9,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/string_util.h"
 #include "components/onc/onc_constants.h"
+#include "extensions/browser/api/extensions_api_client.h"
+#include "extensions/browser/api/networking_private/networking_cast_private_delegate.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate_factory.h"
 #include "extensions/browser/extension_function_registry.h"
@@ -24,6 +28,20 @@ namespace {
 const int kDefaultNetworkListLimit = 1000;
 
 const char kPrivateOnlyError[] = "Requires networkingPrivate API access.";
+
+const char* const kPrivatePropertiesForSet[] = {
+    "Cellular.APN", "ProxySettings", "StaticIPConfig", "VPN.Host",
+    "VPN.IPsec",    "VPN.L2TP",      "VPN.OpenVPN",    "VPN.ThirdPartyVPN",
+};
+
+const char* const kPrivatePropertiesForGet[] = {
+    "Cellular.APN",  "Cellular.APNList", "Cellular.LastGoodAPN",
+    "Cellular.ESN",  "Cellular.ICCID",   "Cellular.IMEI",
+    "Cellular.IMSI", "Cellular.MDN",     "Cellular.MEID",
+    "Cellular.MIN",  "Ethernet.EAP",     "VPN.IPsec",
+    "VPN.L2TP",      "VPN.OpenVPN",      "WiFi.EAP",
+    "WiMax.EAP",
+};
 
 NetworkingPrivateDelegate* GetDelegate(
     content::BrowserContext* browser_context) {
@@ -40,6 +58,68 @@ bool HasPrivateNetworkingAccess(const Extension* extension,
       .is_available();
 }
 
+// Indicates which filter should be used - filter for properties allowed to
+// be returned by getProperties methods, or the filter for properties settable
+// by setProperties/createNetwork methods.
+enum class PropertiesType { GET, SET };
+
+// Filters out all properties that are not allowed for the extension in the
+// provided context.
+// Returns list of removed keys.
+std::vector<std::string> FilterProperties(base::DictionaryValue* properties,
+                                          PropertiesType type,
+                                          const Extension* extension,
+                                          Feature::Context context,
+                                          const GURL& source_url) {
+  if (HasPrivateNetworkingAccess(extension, context, source_url))
+    return std::vector<std::string>();
+
+  const char* const* filter = nullptr;
+  size_t filter_size = 0;
+  if (type == PropertiesType::GET) {
+    filter = kPrivatePropertiesForGet;
+    filter_size = arraysize(kPrivatePropertiesForGet);
+  } else {
+    filter = kPrivatePropertiesForSet;
+    filter_size = arraysize(kPrivatePropertiesForSet);
+  }
+
+  std::vector<std::string> removed_properties;
+  for (size_t i = 0; i < filter_size; ++i) {
+    base::Value property;
+    if (properties->Remove(filter[i], nullptr)) {
+      removed_properties.push_back(filter[i]);
+    }
+  }
+  return removed_properties;
+}
+
+bool CanChangeSharedConfig(const Extension* extension,
+                           Feature::Context context) {
+#if defined(OS_CHROMEOS)
+  return context == Feature::WEBUI_CONTEXT;
+#else
+  return true;
+#endif
+}
+
+std::unique_ptr<NetworkingCastPrivateDelegate::Credentials> AsCastCredentials(
+    api::networking_private::VerificationProperties& properties) {
+  return base::MakeUnique<NetworkingCastPrivateDelegate::Credentials>(
+      properties.certificate,
+      properties.intermediate_certificates
+          ? *properties.intermediate_certificates
+          : std::vector<std::string>(),
+      properties.signed_data, properties.device_ssid, properties.device_serial,
+      properties.device_bssid, properties.public_key, properties.nonce);
+}
+
+std::string InvalidPropertiesError(const std::vector<std::string>& properties) {
+  DCHECK(!properties.empty());
+  return "Error.PropertiesNotAllowed: [" + base::JoinString(properties, ", ") +
+         "]";
+}
+
 }  // namespace
 
 namespace private_api = api::networking_private;
@@ -47,12 +127,13 @@ namespace private_api = api::networking_private;
 namespace networking_private {
 
 // static
+const char kErrorAccessToSharedConfig[] = "Error.CannotChangeSharedConfig";
 const char kErrorInvalidNetworkGuid[] = "Error.InvalidNetworkGuid";
 const char kErrorInvalidNetworkOperation[] = "Error.InvalidNetworkOperation";
 const char kErrorNetworkUnavailable[] = "Error.NetworkUnavailable";
-const char kErrorEncryptionError[] = "Error.EncryptionError";
 const char kErrorNotReady[] = "Error.NotReady";
 const char kErrorNotSupported[] = "Error.NotSupported";
+const char kErrorPolicyControlled[] = "Error.PolicyControlled";
 const char kErrorSimLocked[] = "Error.SimLocked";
 
 }  // namespace networking_private
@@ -83,6 +164,8 @@ NetworkingPrivateGetPropertiesFunction::Run() {
 
 void NetworkingPrivateGetPropertiesFunction::Success(
     std::unique_ptr<base::DictionaryValue> result) {
+  FilterProperties(result.get(), PropertiesType::GET, extension(),
+                   source_context_type(), source_url());
   Respond(OneArgument(std::move(result)));
 }
 
@@ -118,6 +201,8 @@ NetworkingPrivateGetManagedPropertiesFunction::Run() {
 
 void NetworkingPrivateGetManagedPropertiesFunction::Success(
     std::unique_ptr<base::DictionaryValue> result) {
+  FilterProperties(result.get(), PropertiesType::GET, extension(),
+                   source_context_type(), source_url());
   Respond(OneArgument(std::move(result)));
 }
 
@@ -149,6 +234,8 @@ ExtensionFunction::ResponseAction NetworkingPrivateGetStateFunction::Run() {
 
 void NetworkingPrivateGetStateFunction::Success(
     std::unique_ptr<base::DictionaryValue> result) {
+  FilterProperties(result.get(), PropertiesType::GET, extension(),
+                   source_context_type(), source_url());
   Respond(OneArgument(std::move(result)));
 }
 
@@ -172,9 +259,16 @@ NetworkingPrivateSetPropertiesFunction::Run() {
   std::unique_ptr<base::DictionaryValue> properties_dict(
       params->properties.ToValue());
 
+  std::vector<std::string> not_allowed_properties =
+      FilterProperties(properties_dict.get(), PropertiesType::SET, extension(),
+                       source_context_type(), source_url());
+  if (!not_allowed_properties.empty())
+    return RespondNow(Error(InvalidPropertiesError(not_allowed_properties)));
+
   GetDelegate(browser_context())
       ->SetProperties(
           params->network_guid, std::move(properties_dict),
+          CanChangeSharedConfig(extension(), source_context_type()),
           base::Bind(&NetworkingPrivateSetPropertiesFunction::Success, this),
           base::Bind(&NetworkingPrivateSetPropertiesFunction::Failure, this));
   // Success() or Failure() might have been called synchronously at this point.
@@ -204,8 +298,19 @@ NetworkingPrivateCreateNetworkFunction::Run() {
       private_api::CreateNetwork::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
+  if (params->shared &&
+      !CanChangeSharedConfig(extension(), source_context_type())) {
+    return RespondNow(Error(networking_private::kErrorAccessToSharedConfig));
+  }
+
   std::unique_ptr<base::DictionaryValue> properties_dict(
       params->properties.ToValue());
+
+  std::vector<std::string> not_allowed_properties =
+      FilterProperties(properties_dict.get(), PropertiesType::SET, extension(),
+                       source_context_type(), source_url());
+  if (!not_allowed_properties.empty())
+    return RespondNow(Error(InvalidPropertiesError(not_allowed_properties)));
 
   GetDelegate(browser_context())
       ->CreateNetwork(
@@ -242,6 +347,7 @@ NetworkingPrivateForgetNetworkFunction::Run() {
   GetDelegate(browser_context())
       ->ForgetNetwork(
           params->network_guid,
+          CanChangeSharedConfig(extension(), source_context_type()),
           base::Bind(&NetworkingPrivateForgetNetworkFunction::Success, this),
           base::Bind(&NetworkingPrivateForgetNetworkFunction::Failure, this));
   // Success() or Failure() might have been called synchronously at this point.
@@ -370,7 +476,7 @@ NetworkingPrivateGetEnabledNetworkTypesFunction::Run() {
   for (base::ListValue::iterator iter = enabled_networks_onc_types->begin();
        iter != enabled_networks_onc_types->end(); ++iter) {
     std::string type;
-    if (!(*iter)->GetAsString(&type))
+    if (!iter->GetAsString(&type))
       NOTREACHED();
     if (type == ::onc::network_type::kEthernet) {
       enabled_networks_list->AppendString(
@@ -480,7 +586,8 @@ ExtensionFunction::ResponseAction NetworkingPrivateStartConnectFunction::Run() {
       ->StartConnect(
           params->network_guid,
           base::Bind(&NetworkingPrivateStartConnectFunction::Success, this),
-          base::Bind(&NetworkingPrivateStartConnectFunction::Failure, this));
+          base::Bind(&NetworkingPrivateStartConnectFunction::Failure, this,
+                     params->network_guid));
   // Success() or Failure() might have been called synchronously at this point.
   // In that case this function has already called Respond(). Return
   // AlreadyResponded() in that case.
@@ -491,7 +598,19 @@ void NetworkingPrivateStartConnectFunction::Success() {
   Respond(NoArguments());
 }
 
-void NetworkingPrivateStartConnectFunction::Failure(const std::string& error) {
+void NetworkingPrivateStartConnectFunction::Failure(const std::string& guid,
+                                                    const std::string& error) {
+  // TODO(stevenjb): Temporary workaround to show the configuration UI.
+  // Eventually the caller (e.g. Settings) should handle any failures and
+  // show its own configuration UI. crbug.com/380937.
+  if (source_context_type() == Feature::WEBUI_CONTEXT) {
+    const NetworkingPrivateDelegate::UIDelegate* ui_delegate =
+        GetDelegate(browser_context())->ui_delegate();
+    if (ui_delegate && ui_delegate->HandleConnectFailed(guid, error)) {
+      Success();
+      return;
+    }
+  }
   Respond(Error(error));
 }
 
@@ -537,6 +656,11 @@ NetworkingPrivateStartActivateFunction::
 
 ExtensionFunction::ResponseAction
 NetworkingPrivateStartActivateFunction::Run() {
+  if (!HasPrivateNetworkingAccess(extension(), source_context_type(),
+                                  source_url())) {
+    return RespondNow(Error(kPrivateOnlyError));
+  }
+
   std::unique_ptr<private_api::StartActivate::Params> params =
       private_api::StartActivate::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -582,13 +706,15 @@ NetworkingPrivateVerifyDestinationFunction::Run() {
       private_api::VerifyDestination::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  GetDelegate(browser_context())
-      ->VerifyDestination(
-          params->properties,
-          base::Bind(&NetworkingPrivateVerifyDestinationFunction::Success,
-                     this),
-          base::Bind(&NetworkingPrivateVerifyDestinationFunction::Failure,
-                     this));
+  NetworkingCastPrivateDelegate* delegate =
+      ExtensionsAPIClient::Get()->GetNetworkingCastPrivateDelegate();
+  if (!delegate)
+    return RespondNow(Error("Not supported."));
+
+  delegate->VerifyDestination(
+      AsCastCredentials(params->properties),
+      base::Bind(&NetworkingPrivateVerifyDestinationFunction::Success, this),
+      base::Bind(&NetworkingPrivateVerifyDestinationFunction::Failure, this));
   // Success() or Failure() might have been called synchronously at this point.
   // In that case this function has already called Respond(). Return
   // AlreadyResponded() in that case.
@@ -626,15 +752,17 @@ NetworkingPrivateVerifyAndEncryptCredentialsFunction::Run() {
       private_api::VerifyAndEncryptCredentials::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  GetDelegate(browser_context())
-      ->VerifyAndEncryptCredentials(
-          params->network_guid, params->properties,
-          base::Bind(
-              &NetworkingPrivateVerifyAndEncryptCredentialsFunction::Success,
-              this),
-          base::Bind(
-              &NetworkingPrivateVerifyAndEncryptCredentialsFunction::Failure,
-              this));
+  NetworkingCastPrivateDelegate* delegate =
+      ExtensionsAPIClient::Get()->GetNetworkingCastPrivateDelegate();
+  if (!delegate)
+    return RespondNow(Error("Not supported."));
+
+  delegate->VerifyAndEncryptCredentials(
+      params->network_guid, AsCastCredentials(params->properties),
+      base::Bind(&NetworkingPrivateVerifyAndEncryptCredentialsFunction::Success,
+                 this),
+      base::Bind(&NetworkingPrivateVerifyAndEncryptCredentialsFunction::Failure,
+                 this));
   // Success() or Failure() might have been called synchronously at this point.
   // In that case this function has already called Respond(). Return
   // AlreadyResponded() in that case.
@@ -673,13 +801,16 @@ NetworkingPrivateVerifyAndEncryptDataFunction::Run() {
       private_api::VerifyAndEncryptData::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  GetDelegate(browser_context())
-      ->VerifyAndEncryptData(
-          params->properties, params->data,
-          base::Bind(&NetworkingPrivateVerifyAndEncryptDataFunction::Success,
-                     this),
-          base::Bind(&NetworkingPrivateVerifyAndEncryptDataFunction::Failure,
-                     this));
+  NetworkingCastPrivateDelegate* delegate =
+      ExtensionsAPIClient::Get()->GetNetworkingCastPrivateDelegate();
+  if (!delegate)
+    return RespondNow(Error("Not supported."));
+
+  delegate->VerifyAndEncryptData(
+      params->data, AsCastCredentials(params->properties),
+      base::Bind(&NetworkingPrivateVerifyAndEncryptDataFunction::Success, this),
+      base::Bind(&NetworkingPrivateVerifyAndEncryptDataFunction::Failure,
+                 this));
   // Success() or Failure() might have been called synchronously at this point.
   // In that case this function has already called Respond(). Return
   // AlreadyResponded() in that case.
@@ -832,6 +963,11 @@ NetworkingPrivateUnlockCellularSimFunction::
 
 ExtensionFunction::ResponseAction
 NetworkingPrivateUnlockCellularSimFunction::Run() {
+  if (!HasPrivateNetworkingAccess(extension(), source_context_type(),
+                                  source_url())) {
+    return RespondNow(Error(kPrivateOnlyError));
+  }
+
   std::unique_ptr<private_api::UnlockCellularSim::Params> params =
       private_api::UnlockCellularSim::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -866,6 +1002,11 @@ NetworkingPrivateSetCellularSimStateFunction::
 
 ExtensionFunction::ResponseAction
 NetworkingPrivateSetCellularSimStateFunction::Run() {
+  if (!HasPrivateNetworkingAccess(extension(), source_context_type(),
+                                  source_url())) {
+    return RespondNow(Error(kPrivateOnlyError));
+  }
+
   std::unique_ptr<private_api::SetCellularSimState::Params> params =
       private_api::SetCellularSimState::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);

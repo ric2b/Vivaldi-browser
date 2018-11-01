@@ -344,7 +344,7 @@ the [chrome-perf swarming pool](https://chromium-swarm.appspot.com/botlist?c=id&
             `--isolated-script-test-chartjson-output=/b/s/w/ioFB73Qz/chartjson-output.json`
             flags to be a local path
         6.  Example with tmp as locally created dir:
-            `/usr/bin/python ../../testing/scripts/run_telemetry_benchmark_as_googletest.py ../../tools/perf/run_benchmark indexeddb_perf -v --upload-results --output-format=chartjson --browser=release --isolated-script-test-output=tmp/output.json --isolated-script-test-chartjson-output=tmp/chartjson-output.json`
+            `/usr/bin/python ../../testing/scripts/run_telemetry_benchmark_as_googletest.py ../../tools/perf/run_benchmark speedometer -v --upload-results --output-format=chartjson --browser=release --isolated-script-test-output=tmp/output.json --isolated-script-test-chartjson-output=tmp/chartjson-output.json`
     *   ssh into swarming bot and run test on that machine
         1.  NOTE: this should be a last resort since it will cause a fifth of
             the benchmarks to continuously fail on the waterfall
@@ -444,7 +444,7 @@ but please do **not** submit with NOTRY=true.
 ### Disabling Other Tests
 
 Non-telemetry tests are configured in [chromium.perf.json](https://code.google.com/p/chromium/codesearch#chromium/src/testing/buildbot/chromium.perf.json) **But do not manually edit this file.**
-Update tools/perf/generate_perf_json.py to disable the test and rerun script to
+Update tools/perf/generate_perf_data.py to disable the test and rerun script to
 generate the new chromium.perf.json file.
 You can TBR any of the per-file OWNERS, but please do **not** submit with
 NOTRY=true.

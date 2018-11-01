@@ -35,6 +35,8 @@
          create_default_gl_context)                          \
   GPU_OP(DECODE_ENCODE_SRGB_FOR_GENERATEMIPMAP,              \
          decode_encode_srgb_for_generatemipmap)              \
+  GPU_OP(DISABLE_ACCELERATED_VPX_DECODE,                     \
+         disable_accelerated_vpx_decode)                     \
   GPU_OP(DISABLE_ANGLE_INSTANCED_ARRAYS,                     \
          disable_angle_instanced_arrays)                     \
   GPU_OP(DISABLE_ASYNC_READPIXELS,                           \
@@ -63,6 +65,8 @@
          disable_framebuffer_cmaa)                           \
   GPU_OP(DISABLE_GL_RGB_FORMAT,                              \
          disable_gl_rgb_format)                              \
+  GPU_OP(DISABLE_LARGER_THAN_SCREEN_OVERLAYS,                \
+         disable_larger_than_screen_overlays)                \
   GPU_OP(DISABLE_MULTIMONITOR_MULTISAMPLING,                 \
          disable_multimonitor_multisampling)                 \
   GPU_OP(DISABLE_NV12_DXGI_VIDEO,                            \
@@ -205,10 +209,16 @@
          validate_multisample_buffer_allocation)             \
   GPU_OP(WAKE_UP_GPU_BEFORE_DRAWING,                         \
          wake_up_gpu_before_drawing)                         \
-  GPU_OP(USE_TESTING_GPU_DRIVER_WORKAROUND,                  \
+  GPU_OP(USE_GPU_DRIVER_WORKAROUND_FOR_TESTING,              \
          use_gpu_driver_workaround_for_testing)              \
+  GPU_OP(DISALLOW_LARGE_INSTANCED_DRAW,                      \
+         disallow_large_instanced_draw)                      \
+  GPU_OP(DISABLE_SOFTWARE_TO_ACCELERATED_CANVAS_UPGRADE,     \
+         disable_software_to_accelerated_canvas_upgrade)     \
   GPU_OP(DISABLE_NON_EMPTY_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES, \
          disable_non_empty_post_sub_buffers_for_onscreen_surfaces) \
+  GPU_OP(AVOID_STENCIL_BUFFERS,                              \
+         avoid_stencil_buffers)                              \
 // clang-format on
 
 namespace gpu {

@@ -117,29 +117,6 @@ TEST_F('CrElementsToolbarSearchFieldTest', 'All', function() {
  * @constructor
  * @extends {CrElementsBrowserTest}
  */
-function CrElementsSliderTest() {}
-
-CrElementsSliderTest.prototype = {
-  __proto__: CrElementsBrowserTest.prototype,
-
-  /** @override */
-  browsePreload: 'chrome://resources/cr_elements/cr_slider/cr_slider.html',
-
-  /** @override */
-  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
-    'cr_slider_tests.js',
-  ]),
-};
-
-TEST_F('CrElementsSliderTest', 'All', function() {
-  cr_slider.registerTests();
-  mocha.run();
-});
-
-/**
- * @constructor
- * @extends {CrElementsBrowserTest}
- */
 function CrElementsDrawerTest() {}
 
 CrElementsDrawerTest.prototype = {
@@ -183,6 +160,30 @@ TEST_F('CrElementsScrollableBehaviorTest', 'All', function() {
  * @constructor
  * @extends {CrElementsBrowserTest}
  */
+function CrElementsPolicyIndicatorTest() {}
+
+CrElementsPolicyIndicatorTest.prototype = {
+  __proto__: CrElementsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://resources/cr_elements/policy/cr_policy_indicator.html',
+
+  /** @override */
+  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    'cr_policy_strings.js',
+    'cr_policy_indicator_tests.js',
+  ]),
+};
+
+TEST_F('CrElementsPolicyIndicatorTest', 'All', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {CrElementsBrowserTest}
+ */
 function CrElementsPolicyIndicatorBehaviorTest() {}
 
 CrElementsPolicyIndicatorBehaviorTest.prototype = {
@@ -218,6 +219,7 @@ CrElementsPolicyPrefIndicatorTest.prototype = {
 
   /** @override */
   extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    'settings_private_test_constants.js',
     'cr_policy_strings.js',
     'cr_policy_pref_indicator_tests.js',
   ]),
@@ -226,6 +228,32 @@ CrElementsPolicyPrefIndicatorTest.prototype = {
 TEST_F('CrElementsPolicyPrefIndicatorTest', 'All', function() {
   mocha.run();
 });
+
+GEN('#if defined(OS_CHROMEOS)');
+/**
+ * @constructor
+ * @extends {CrElementsBrowserTest}
+ */
+function CrElementsPolicyNetworkIndicatorTest() {}
+
+CrElementsPolicyNetworkIndicatorTest.prototype = {
+  __proto__: CrElementsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://resources/cr_elements/policy/cr_policy_network_indicator.html',
+
+  /** @override */
+  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    'cr_policy_strings.js',
+    'cr_policy_network_indicator_tests.js',
+  ]),
+};
+
+TEST_F('CrElementsPolicyNetworkIndicatorTest', 'All', function() {
+  mocha.run();
+});
+GEN('#endif');
 
 /**
  * @constructor

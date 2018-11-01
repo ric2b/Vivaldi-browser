@@ -22,9 +22,14 @@
 #include "ios/web_view/internal/pref_names.h"
 #import "ios/web_view/internal/translate/cwv_translate_manager_impl.h"
 #include "ios/web_view/internal/translate/web_view_translate_accept_languages_factory.h"
+#include "ios/web_view/internal/translate/web_view_translate_ranker_factory.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 #import "ios/web_view/public/cwv_translate_delegate.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 DEFINE_WEB_STATE_USER_DATA_KEY(ios_web_view::WebViewTranslateClient);
 
@@ -34,6 +39,9 @@ WebViewTranslateClient::WebViewTranslateClient(web::WebState* web_state)
     : web::WebStateObserver(web_state),
       translate_manager_(base::MakeUnique<translate::TranslateManager>(
           this,
+          WebViewTranslateRankerFactory::GetForBrowserState(
+              WebViewBrowserState::FromBrowserState(
+                  web_state->GetBrowserState())),
           prefs::kAcceptLanguages)),
       translate_driver_(web_state,
                         web_state->GetNavigationManager(),
@@ -55,7 +63,7 @@ void WebViewTranslateClient::ShowTranslateUI(
     const std::string& target_language,
     translate::TranslateErrors::Type error_type,
     bool triggered_from_menu) {
-  if (!delegate_)
+  if (!delegate_.get())
     return;
 
   if (error_type != translate::TranslateErrors::NONE)

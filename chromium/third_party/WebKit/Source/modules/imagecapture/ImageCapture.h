@@ -5,6 +5,7 @@
 #ifndef ImageCapture_h
 #define ImageCapture_h
 
+#include <memory>
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
@@ -12,14 +13,19 @@
 #include "media/capture/mojo/image_capture.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
+#include "modules/mediastream/MediaTrackCapabilities.h"
+#include "modules/mediastream/MediaTrackConstraintSet.h"
+#include "modules/mediastream/MediaTrackSettings.h"
 #include "platform/AsyncMethodRunner.h"
-#include <memory>
 
 namespace blink {
 
 class ExceptionState;
 class MediaStreamTrack;
+class MediaTrackConstraints;
+class PhotoCapabilities;
 class PhotoSettings;
+class ScriptPromiseResolver;
 class WebImageCaptureFrameGrabber;
 
 // TODO(mcasas): Consideradding a LayoutTest checking that this class is not
@@ -32,47 +38,71 @@ class MODULES_EXPORT ImageCapture final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static ImageCapture* create(ExecutionContext*,
+  static ImageCapture* Create(ExecutionContext*,
                               MediaStreamTrack*,
                               ExceptionState&);
   ~ImageCapture() override;
 
   // EventTarget implementation.
-  const AtomicString& interfaceName() const override;
-  ExecutionContext* getExecutionContext() const override;
+  const AtomicString& InterfaceName() const override;
+  ExecutionContext* GetExecutionContext() const override;
 
   // ScriptWrappable implementation.
-  bool hasPendingActivity() const final;
+  bool HasPendingActivity() const final;
 
   // ContextLifecycleObserver
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
-  MediaStreamTrack* videoStreamTrack() const { return m_streamTrack.get(); }
+  MediaStreamTrack* videoStreamTrack() const { return stream_track_.Get(); }
 
-  ScriptPromise getPhotoCapabilities(ScriptState*, ExceptionState&);
+  ScriptPromise getPhotoCapabilities(ScriptState*);
 
-  ScriptPromise setOptions(ScriptState*, const PhotoSettings&, ExceptionState&);
+  ScriptPromise setOptions(ScriptState*,
+                           const PhotoSettings&,
+                           bool trigger_take_photo = false);
 
-  ScriptPromise takePhoto(ScriptState*, ExceptionState&);
+  ScriptPromise takePhoto(ScriptState*);
+  ScriptPromise takePhoto(ScriptState*, const PhotoSettings&);
 
-  ScriptPromise grabFrame(ScriptState*, ExceptionState&);
+  ScriptPromise grabFrame(ScriptState*);
+
+  MediaTrackCapabilities& GetMediaTrackCapabilities();
+  void SetMediaTrackConstraints(ScriptPromiseResolver*,
+                                const HeapVector<MediaTrackConstraintSet>&);
+  const MediaTrackConstraintSet& GetMediaTrackConstraints() const;
+  void ClearMediaTrackConstraints(ScriptPromiseResolver*);
+  void GetMediaTrackSettings(MediaTrackSettings&) const;
+
+  // TODO(mcasas): Remove this service method, https://crbug.com/338503.
+  bool HasNonImageCaptureConstraints(const MediaTrackConstraints&) const;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   ImageCapture(ExecutionContext*, MediaStreamTrack*);
 
-  void onCapabilities(ScriptPromiseResolver*,
-                      media::mojom::blink::PhotoCapabilitiesPtr);
-  void onSetOptions(ScriptPromiseResolver*, bool);
-  void onTakePhoto(ScriptPromiseResolver*, media::mojom::blink::BlobPtr);
-  void onServiceConnectionError();
+  void OnMojoPhotoCapabilities(ScriptPromiseResolver*,
+                               bool trigger_take_photo,
+                               media::mojom::blink::PhotoCapabilitiesPtr);
+  void OnMojoSetOptions(ScriptPromiseResolver*,
+                        bool trigger_take_photo,
+                        bool result);
+  void OnMojoTakePhoto(ScriptPromiseResolver*, media::mojom::blink::BlobPtr);
 
-  Member<MediaStreamTrack> m_streamTrack;
-  std::unique_ptr<WebImageCaptureFrameGrabber> m_frameGrabber;
-  media::mojom::blink::ImageCapturePtr m_service;
+  void UpdateMediaTrackCapabilities(media::mojom::blink::PhotoCapabilitiesPtr);
+  void OnServiceConnectionError();
 
-  HeapHashSet<Member<ScriptPromiseResolver>> m_serviceRequests;
+  Member<MediaStreamTrack> stream_track_;
+  std::unique_ptr<WebImageCaptureFrameGrabber> frame_grabber_;
+  media::mojom::blink::ImageCapturePtr service_;
+
+  MediaTrackCapabilities capabilities_;
+  MediaTrackSettings settings_;
+  MediaTrackConstraintSet current_constraints_;
+
+  Member<PhotoCapabilities> photo_capabilities_;
+
+  HeapHashSet<Member<ScriptPromiseResolver>> service_requests_;
 };
 
 }  // namespace blink

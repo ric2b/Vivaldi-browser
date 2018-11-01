@@ -12,34 +12,23 @@
 
 namespace blink {
 
-CompositingRecorder::CompositingRecorder(GraphicsContext& graphicsContext,
+CompositingRecorder::CompositingRecorder(GraphicsContext& graphics_context,
                                          const DisplayItemClient& client,
-                                         const SkBlendMode xferMode,
+                                         const SkBlendMode xfer_mode,
                                          const float opacity,
                                          const FloatRect* bounds,
-                                         ColorFilter colorFilter)
-    : m_client(client), m_graphicsContext(graphicsContext) {
-  beginCompositing(graphicsContext, m_client, xferMode, opacity, bounds,
-                   colorFilter);
+                                         ColorFilter color_filter)
+    : client_(client), graphics_context_(graphics_context) {
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return;
+  graphics_context.GetPaintController()
+      .CreateAndAppend<BeginCompositingDisplayItem>(client_, xfer_mode, opacity,
+                                                    bounds, color_filter);
 }
 
 CompositingRecorder::~CompositingRecorder() {
-  endCompositing(m_graphicsContext, m_client);
-}
-
-void CompositingRecorder::beginCompositing(GraphicsContext& graphicsContext,
-                                           const DisplayItemClient& client,
-                                           const SkBlendMode xferMode,
-                                           const float opacity,
-                                           const FloatRect* bounds,
-                                           ColorFilter colorFilter) {
-  graphicsContext.getPaintController()
-      .createAndAppend<BeginCompositingDisplayItem>(client, xferMode, opacity,
-                                                    bounds, colorFilter);
-}
-
-void CompositingRecorder::endCompositing(GraphicsContext& graphicsContext,
-                                         const DisplayItemClient& client) {
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return;
   // If the end of the current display list is of the form
   // [BeginCompositingDisplayItem] [DrawingDisplayItem], then fold the
   // BeginCompositingDisplayItem into a new DrawingDisplayItem that replaces
@@ -47,46 +36,50 @@ void CompositingRecorder::endCompositing(GraphicsContext& graphicsContext,
   // BeginCompositingDisplayItem represents a simple opacity/color that can be
   // merged into the opacity/color of the drawing. See crbug.com/628831 for more
   // details.
-  PaintController& paintController = graphicsContext.getPaintController();
-  const DisplayItem* lastDisplayItem = paintController.lastDisplayItem(0);
-  const DisplayItem* secondToLastDisplayItem =
-      paintController.lastDisplayItem(1);
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled() && lastDisplayItem &&
-      secondToLastDisplayItem && lastDisplayItem->drawsContent() &&
-      secondToLastDisplayItem->getType() == DisplayItem::kBeginCompositing) {
-    FloatRect cullRect(
-        ((DrawingDisplayItem*)lastDisplayItem)->GetPaintRecord()->cullRect());
-    const DisplayItemClient& displayItemClient = lastDisplayItem->client();
-    DisplayItem::Type displayItemType = lastDisplayItem->getType();
+  PaintController& paint_controller = graphics_context_.GetPaintController();
+  const DisplayItem* last_display_item = paint_controller.LastDisplayItem(0);
+  const DisplayItem* second_to_last_display_item =
+      paint_controller.LastDisplayItem(1);
+  // TODO(chrishtr): remove the call to LastDisplayItemIsSubsequenceEnd when
+  // https://codereview.chromium.org/2768143002 lands.
+  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled() && last_display_item &&
+      second_to_last_display_item && last_display_item->DrawsContent() &&
+      second_to_last_display_item->GetType() ==
+          DisplayItem::kBeginCompositing &&
+      !paint_controller.LastDisplayItemIsSubsequenceEnd()) {
+    FloatRect cull_rect(
+        ((DrawingDisplayItem*)last_display_item)->GetPaintRecord()->cullRect());
+    const DisplayItemClient& display_item_client = last_display_item->Client();
+    DisplayItem::Type display_item_type = last_display_item->GetType();
 
     // Re-record the last two DisplayItems into a new drawing. The new item
     // cannot be cached, because it is a mutation of the DisplayItem the client
     // thought it was painting.
-    paintController.beginSkippingCache();
+    paint_controller.BeginSkippingCache();
     {
 #if DCHECK_IS_ON()
       // In the recorder's scope we remove the last two display items which
       // are combined into a new drawing.
       DisableListModificationCheck disabler;
 #endif
-      DrawingRecorder newRecorder(graphicsContext, displayItemClient,
-                                  displayItemType, cullRect);
-      DCHECK(!DrawingRecorder::useCachedDrawingIfPossible(
-          graphicsContext, displayItemClient, displayItemType));
+      DrawingRecorder new_recorder(graphics_context_, display_item_client,
+                                   display_item_type, cull_rect);
+      DCHECK(!DrawingRecorder::UseCachedDrawingIfPossible(
+          graphics_context_, display_item_client, display_item_type));
 
-      secondToLastDisplayItem->replay(graphicsContext);
-      lastDisplayItem->replay(graphicsContext);
-      EndCompositingDisplayItem(client).replay(graphicsContext);
+      second_to_last_display_item->Replay(graphics_context_);
+      last_display_item->Replay(graphics_context_);
+      EndCompositingDisplayItem(client_).Replay(graphics_context_);
 
       // Remove the DrawingDisplayItem.
-      paintController.removeLastDisplayItem();
+      paint_controller.RemoveLastDisplayItem();
       // Remove the BeginCompositingDisplayItem.
-      paintController.removeLastDisplayItem();
+      paint_controller.RemoveLastDisplayItem();
     }
-    paintController.endSkippingCache();
+    paint_controller.EndSkippingCache();
   } else {
-    graphicsContext.getPaintController().endItem<EndCompositingDisplayItem>(
-        client);
+    graphics_context_.GetPaintController().EndItem<EndCompositingDisplayItem>(
+        client_);
   }
 }
 

@@ -26,25 +26,26 @@
 #include "modules/speech/SpeechGrammar.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/ExecutionContext.h"
 
 namespace blink {
 
-SpeechGrammar* SpeechGrammar::create() {
+SpeechGrammar* SpeechGrammar::Create() {
   return new SpeechGrammar;
 }
 
-SpeechGrammar* SpeechGrammar::create(const KURL& src, double weight) {
+SpeechGrammar* SpeechGrammar::Create(const KURL& src, double weight) {
   return new SpeechGrammar(src, weight);
 }
 
-void SpeechGrammar::setSrc(ScriptState* scriptState, const String& src) {
-  Document* document = toDocument(scriptState->getExecutionContext());
-  m_src = document->completeURL(src);
+void SpeechGrammar::setSrc(ScriptState* script_state, const String& src) {
+  Document* document = ToDocument(ExecutionContext::From(script_state));
+  src_ = document->CompleteURL(src);
 }
 
-SpeechGrammar::SpeechGrammar() : m_weight(1.0) {}
+SpeechGrammar::SpeechGrammar() : weight_(1.0) {}
 
 SpeechGrammar::SpeechGrammar(const KURL& src, double weight)
-    : m_src(src), m_weight(weight) {}
+    : src_(src), weight_(weight) {}
 
 }  // namespace blink

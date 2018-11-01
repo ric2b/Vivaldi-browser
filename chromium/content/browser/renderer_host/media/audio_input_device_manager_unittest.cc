@@ -21,7 +21,9 @@
 #include "content/public/common/media_stream_request.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/audio/audio_manager_base.h"
+#include "media/audio/audio_system_impl.h"
 #include "media/base/media_switches.h"
+#include "media/base/test_helpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -58,18 +60,23 @@ class MockAudioInputDeviceManagerListener
 
 class MAYBE_AudioInputDeviceManagerTest : public testing::Test {
  public:
-  MAYBE_AudioInputDeviceManagerTest() {}
+  MAYBE_AudioInputDeviceManagerTest() : audio_thread_("AudioSystemThread") {
+    audio_thread_.StartAndWaitForTesting();
+  }
 
  protected:
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kUseFakeDeviceForMediaStream);
-    audio_manager_ = media::AudioManager::CreateForTesting(
-        base::ThreadTaskRunnerHandle::Get());
+    // AudioInputDeviceManager accesses AudioSystem from IO thread, so it never
+    // runs on the same thread with it, even on Mac.
+    audio_manager_ =
+        media::AudioManager::CreateForTesting(audio_thread_.task_runner());
     // Flush the message loop to ensure proper initialization of AudioManager.
     base::RunLoop().RunUntilIdle();
 
-    manager_ = new AudioInputDeviceManager(audio_manager_.get());
+    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
+    manager_ = new AudioInputDeviceManager(audio_system_.get());
     audio_input_listener_.reset(new MockAudioInputDeviceManagerListener());
     manager_->RegisterListener(audio_input_listener_.get());
 
@@ -83,12 +90,29 @@ class MAYBE_AudioInputDeviceManagerTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void TearDown() override { manager_->UnregisterListener(); }
+  void TearDown() override {
+    manager_->UnregisterListener(audio_input_listener_.get());
+    audio_system_.reset();
+    audio_manager_.reset();
+    audio_thread_.Stop();
+  }
+
+  void WaitForOpenCompletion() {
+    media::WaitableMessageLoopEvent event;
+    audio_thread_.task_runner()->PostTaskAndReply(
+        FROM_HERE, base::Bind(&base::DoNothing), event.GetClosure());
+    // Runs the loop and waits for the |audio_thread_| to call event's
+    // closure.
+    event.RunAndWait();
+    base::RunLoop().RunUntilIdle();
+  }
 
   TestBrowserThreadBundle thread_bundle_;
+  base::Thread audio_thread_;
+  media::ScopedAudioManagerPtr audio_manager_;
+  std::unique_ptr<media::AudioSystem> audio_system_;
   scoped_refptr<AudioInputDeviceManager> manager_;
   std::unique_ptr<MockAudioInputDeviceManagerListener> audio_input_listener_;
-  media::ScopedAudioManagerPtr audio_manager_;
   StreamDeviceInfoArray devices_;
 
  private:
@@ -104,14 +128,14 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, OpenAndCloseDevice) {
   for (StreamDeviceInfoArray::const_iterator iter = devices_.begin();
        iter != devices_.end(); ++iter) {
     // Opens/closes the devices.
-    int session_id = manager_->Open(*iter);
+    int session_id = manager_->Open(iter->device);
 
     // Expected mock call with expected return value.
     EXPECT_CALL(*audio_input_listener_,
                 Opened(MEDIA_DEVICE_AUDIO_CAPTURE, session_id))
         .Times(1);
     // Waits for the callback.
-    base::RunLoop().RunUntilIdle();
+    WaitForOpenCompletion();
 
     manager_->Close(session_id);
     EXPECT_CALL(*audio_input_listener_,
@@ -136,7 +160,7 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, OpenMultipleDevices) {
   for (StreamDeviceInfoArray::const_iterator iter = devices_.begin();
        iter != devices_.end(); ++iter, ++index) {
     // Opens the devices.
-    session_id[index] = manager_->Open(*iter);
+    session_id[index] = manager_->Open(iter->device);
 
     // Expected mock call with expected returned value.
     EXPECT_CALL(*audio_input_listener_,
@@ -144,7 +168,7 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, OpenMultipleDevices) {
         .Times(1);
 
     // Waits for the callback.
-    base::RunLoop().RunUntilIdle();
+    WaitForOpenCompletion();
   }
 
   // Checks if the session_ids are unique.
@@ -173,10 +197,7 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, OpenNotExistingDevice) {
   MediaStreamType stream_type = MEDIA_DEVICE_AUDIO_CAPTURE;
   std::string device_name("device_doesnt_exist");
   std::string device_id("id_doesnt_exist");
-  int sample_rate(0);
-  int channel_config(0);
-  StreamDeviceInfo dummy_device(stream_type, device_name, device_id,
-                                sample_rate, channel_config, 2048);
+  MediaStreamDevice dummy_device(stream_type, device_id, device_name);
 
   int session_id = manager_->Open(dummy_device);
   EXPECT_CALL(*audio_input_listener_,
@@ -184,7 +205,7 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, OpenNotExistingDevice) {
       .Times(1);
 
   // Waits for the callback.
-  base::RunLoop().RunUntilIdle();
+  WaitForOpenCompletion();
 }
 
 // Opens default device twice.
@@ -194,8 +215,8 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, OpenDeviceTwice) {
   InSequence s;
 
   // Opens and closes the default device twice.
-  int first_session_id = manager_->Open(devices_.front());
-  int second_session_id = manager_->Open(devices_.front());
+  int first_session_id = manager_->Open(devices_.front().device);
+  int second_session_id = manager_->Open(devices_.front().device);
 
   // Expected mock calls with expected returned values.
   EXPECT_NE(first_session_id, second_session_id);
@@ -206,7 +227,7 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, OpenDeviceTwice) {
               Opened(MEDIA_DEVICE_AUDIO_CAPTURE, second_session_id))
       .Times(1);
   // Waits for the callback.
-  base::RunLoop().RunUntilIdle();
+  WaitForOpenCompletion();
 
   manager_->Close(first_session_id);
   manager_->Close(second_session_id);
@@ -235,11 +256,11 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, AccessAndCloseSession) {
        iter != devices_.end(); ++iter, ++index) {
     // Note that no DeviceStopped() notification for Event Handler as we have
     // stopped the device before calling close.
-    session_id[index] = manager_->Open(*iter);
+    session_id[index] = manager_->Open(iter->device);
     EXPECT_CALL(*audio_input_listener_,
                 Opened(MEDIA_DEVICE_AUDIO_CAPTURE, session_id[index]))
         .Times(1);
-    base::RunLoop().RunUntilIdle();
+    WaitForOpenCompletion();
 
     const StreamDeviceInfo* info = manager_->GetOpenedDeviceInfoById(
         session_id[index]);
@@ -259,11 +280,11 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, AccessInvalidSession) {
 
   // Opens the first device.
   StreamDeviceInfoArray::const_iterator iter = devices_.begin();
-  int session_id = manager_->Open(*iter);
+  int session_id = manager_->Open(iter->device);
   EXPECT_CALL(*audio_input_listener_,
               Opened(MEDIA_DEVICE_AUDIO_CAPTURE, session_id))
       .Times(1);
-  base::RunLoop().RunUntilIdle();
+  WaitForOpenCompletion();
 
   // Access a non-opened device.
   // This should fail and return an empty StreamDeviceInfo.

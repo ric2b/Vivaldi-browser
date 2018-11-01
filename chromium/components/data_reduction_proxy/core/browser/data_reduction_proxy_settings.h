@@ -17,7 +17,6 @@
 #include "base/threading/thread_checker.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service_observer.h"
-#include "components/data_reduction_proxy/core/common/data_savings_recorder.h"
 #include "components/prefs/pref_member.h"
 #include "url/gurl.h"
 
@@ -73,19 +72,13 @@ enum DataReductionSettingsEnabledAction {
 // Central point for configuring the data reduction proxy.
 // This object lives on the UI thread and all of its methods are expected to
 // be called from there.
-class DataReductionProxySettings : public DataReductionProxyServiceObserver,
-                                   public DataSavingsRecorder {
+class DataReductionProxySettings : public DataReductionProxyServiceObserver {
  public:
-  typedef base::Callback<bool(const std::string&, const std::string&)>
-      SyntheticFieldTrialRegistrationCallback;
+  using SyntheticFieldTrialRegistrationCallback =
+      base::Callback<bool(base::StringPiece, base::StringPiece)>;
 
   DataReductionProxySettings();
   virtual ~DataReductionProxySettings();
-
-  // DataSavingsRecorder implementation:
-  bool UpdateDataSavings(const std::string& data_usage_host,
-                         int64_t data_used,
-                         int64_t original_size) override;
 
   // Initializes the Data Reduction Proxy with the name of the preference that
   // controls enabling it, profile prefs and a |DataReductionProxyIOData|. The
@@ -96,8 +89,6 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver,
       PrefService* prefs,
       DataReductionProxyIOData* io_data,
       std::unique_ptr<DataReductionProxyService> data_reduction_proxy_service);
-
-  base::WeakPtr<DataReductionProxyCompressionStats> compression_stats();
 
   // Sets the |register_synthetic_field_trial_| callback and runs to register
   // the DataReductionProxyEnabled and the DataReductionProxyLoFiEnabled
@@ -145,6 +136,9 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver,
   // Returns the time in microseconds that the last update was made to the
   // daily original and received content lengths.
   int64_t GetDataReductionLastUpdateTime();
+
+  // Clears all data saving statistics.
+  void ClearDataSavingStatistics();
 
   // Returns the difference between the total original size of all HTTP content
   // received from the network and the actual size of the HTTP content received.

@@ -5,6 +5,7 @@
 #ifndef ServiceWorkerRegistrationNotifications_h
 #define ServiceWorkerRegistrationNotifications_h
 
+#include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "platform/Supplementable.h"
@@ -12,10 +13,9 @@
 #include "platform/heap/Handle.h"
 #include "platform/heap/HeapAllocator.h"
 #include "platform/heap/Visitor.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PassRefPtr.h"
 #include "public/platform/modules/notifications/WebNotificationManager.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include <memory>
 
 namespace blink {
 
@@ -47,7 +47,7 @@ class ServiceWorkerRegistrationNotifications final
                                         const GetNotificationOptions&);
 
   // ContextLifecycleObserver interface.
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -55,20 +55,20 @@ class ServiceWorkerRegistrationNotifications final
   ServiceWorkerRegistrationNotifications(ExecutionContext*,
                                          ServiceWorkerRegistration*);
 
-  static const char* supplementName();
-  static ServiceWorkerRegistrationNotifications& from(
+  static const char* SupplementName();
+  static ServiceWorkerRegistrationNotifications& From(
       ExecutionContext*,
       ServiceWorkerRegistration&);
 
-  void prepareShow(const WebNotificationData&,
+  void PrepareShow(const WebNotificationData&,
                    std::unique_ptr<WebNotificationShowCallbacks>);
-  void didLoadResources(PassRefPtr<SecurityOrigin>,
+  void DidLoadResources(PassRefPtr<SecurityOrigin>,
                         const WebNotificationData&,
                         std::unique_ptr<WebNotificationShowCallbacks>,
                         NotificationResourcesLoader*);
 
-  Member<ServiceWorkerRegistration> m_registration;
-  HeapHashSet<Member<NotificationResourcesLoader>> m_loaders;
+  Member<ServiceWorkerRegistration> registration_;
+  HeapHashSet<Member<NotificationResourcesLoader>> loaders_;
 };
 
 }  // namespace blink

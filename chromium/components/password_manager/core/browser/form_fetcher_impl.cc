@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
@@ -56,6 +57,18 @@ std::vector<const PasswordForm*> MakeWeakCopies(
   return result;
 }
 
+// Create a vector of unique_ptr<PasswordForm> from another such vector by
+// copying the pointed-to forms.
+std::vector<std::unique_ptr<PasswordForm>> MakeCopies(
+    const std::vector<std::unique_ptr<PasswordForm>>& source) {
+  std::vector<std::unique_ptr<PasswordForm>> result(source.size());
+  std::transform(source.begin(), source.end(), result.begin(),
+                 [](const std::unique_ptr<PasswordForm>& ptr) {
+                   return base::MakeUnique<PasswordForm>(*ptr);
+                 });
+  return result;
+}
+
 }  // namespace
 
 FormFetcherImpl::FormFetcherImpl(PasswordStore::FormDigest form_digest,
@@ -72,6 +85,11 @@ void FormFetcherImpl::AddConsumer(FormFetcher::Consumer* consumer) {
   consumers_.insert(consumer);
   if (state_ == State::NOT_WAITING)
     consumer->ProcessMatches(weak_non_federated_, filtered_count_);
+}
+
+void FormFetcherImpl::RemoveConsumer(FormFetcher::Consumer* consumer) {
+  size_t removed_consumers = consumers_.erase(consumer);
+  DCHECK_EQ(1u, removed_consumers);
 }
 
 FormFetcherImpl::State FormFetcherImpl::GetState() const {
@@ -91,10 +109,10 @@ const std::vector<const PasswordForm*>& FormFetcherImpl::GetFederatedMatches()
 void FormFetcherImpl::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<PasswordForm>> results) {
   DCHECK_EQ(State::WAITING, state_);
-  state_ = State::NOT_WAITING;
 
   if (need_to_refetch_) {
     // The received results are no longer up to date, need to re-request.
+    state_ = State::NOT_WAITING;
     Fetch();
     need_to_refetch_ = false;
     return;
@@ -110,9 +128,8 @@ void FormFetcherImpl::OnGetPasswordStoreResults(
 
   if (should_migrate_http_passwords_ && results.empty() &&
       form_digest_.origin.SchemeIs(url::kHttpsScheme)) {
-    http_migrator_ = base::MakeUnique<HttpPasswordMigrator>(
-        form_digest_.origin, HttpPasswordMigrator::MigrationMode::COPY,
-        client_->GetPasswordStore(), this);
+    http_migrator_ = base::MakeUnique<HttpPasswordStoreMigrator>(
+        form_digest_.origin, client_, this);
     return;
   }
 
@@ -166,8 +183,32 @@ void FormFetcherImpl::Fetch() {
 #endif
 }
 
+std::unique_ptr<FormFetcher> FormFetcherImpl::Clone() {
+  DCHECK_EQ(State::NOT_WAITING, state_);
+
+  // Create the copy without the "HTTPS migration" activated. If it was needed,
+  // then it was done by |this| already.
+  auto result = base::MakeUnique<FormFetcherImpl>(form_digest_, client_, false);
+
+  result->non_federated_ = MakeCopies(this->non_federated_);
+  result->federated_ = MakeCopies(this->federated_);
+  result->interactions_stats_ = this->interactions_stats_;
+
+  result->weak_non_federated_ = MakeWeakCopies(result->non_federated_);
+  result->weak_federated_ = MakeWeakCopies(result->federated_);
+
+  result->filtered_count_ = this->filtered_count_;
+  result->state_ = this->state_;
+  result->need_to_refetch_ = this->need_to_refetch_;
+
+  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
+  return std::move(result);
+}
+
 void FormFetcherImpl::ProcessPasswordStoreResults(
     std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+  DCHECK_EQ(State::WAITING, state_);
+  state_ = State::NOT_WAITING;
   federated_ = SplitFederatedMatches(&results);
   non_federated_ = std::move(results);
 

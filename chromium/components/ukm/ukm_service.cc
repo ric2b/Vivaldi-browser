@@ -14,8 +14,11 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -25,47 +28,26 @@
 #include "components/metrics/proto/ukm/source.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/ukm/metrics_reporting_scheduler.h"
 #include "components/ukm/persisted_logs_metrics_impl.h"
 #include "components/ukm/ukm_entry.h"
 #include "components/ukm/ukm_entry_builder.h"
 #include "components/ukm/ukm_pref_names.h"
+#include "components/ukm/ukm_rotation_scheduler.h"
 #include "components/ukm/ukm_source.h"
 
 namespace ukm {
 
 namespace {
 
-constexpr char kMimeType[] = "application/vnd.chrome.ukm";
-
 // The delay, in seconds, after starting recording before doing expensive
 // initialization work.
 constexpr int kInitializationDelaySeconds = 5;
 
-// The number of UKM logs that will be stored in PersistedLogs before logs
-// start being dropped.
-constexpr int kMinPersistedLogs = 8;
-
-// The number of bytes UKM logs that will be stored in PersistedLogs before
-// logs start being dropped.
-// This ensures that a reasonable amount of history will be stored even if there
-// is a long series of very small logs.
-constexpr int kMinPersistedBytes = 300000;
-
-// If an upload fails, and the transmission was over this byte count, then we
-// will discard the log, and not try to retransmit it.  We also don't persist
-// the log to the prefs for transmission during the next chrome session if this
-// limit is exceeded.
-constexpr size_t kMaxLogRetransmitSize = 100 * 1024;
-
-// Gets the UKM Server URL.
-std::string GetServerUrl() {
-  constexpr char kDefaultServerUrl[] = "https://clients4.google.com/ukm";
-  std::string server_url =
-      base::GetFieldTrialParamValueByFeature(kUkmFeature, "ServerUrl");
-  if (!server_url.empty())
-    return server_url;
-  return kDefaultServerUrl;
+// Gets the list of whitelisted Entries as string. Format is a comma seperated
+// list of Entry names (as strings).
+std::string GetWhitelistEntries() {
+  return base::GetFieldTrialParamValueByFeature(kUkmFeature,
+                                                "WhitelistEntries");
 }
 
 // Gets the maximum number of Sources we'll keep in memory before discarding any
@@ -126,6 +108,7 @@ enum class DroppedDataReason {
   NOT_DROPPED = 0,
   RECORDING_DISABLED = 1,
   MAX_HIT = 2,
+  NOT_WHITELISTED = 3,
   NUM_DROPPED_DATA_REASONS
 };
 
@@ -152,22 +135,15 @@ UkmService::UkmService(PrefService* pref_service,
       client_id_(0),
       session_id_(0),
       client_(client),
-      persisted_logs_(std::unique_ptr<ukm::PersistedLogsMetricsImpl>(
-                          new ukm::PersistedLogsMetricsImpl()),
-                      pref_service,
-                      prefs::kUkmPersistedLogs,
-                      kMinPersistedLogs,
-                      kMinPersistedBytes,
-                      kMaxLogRetransmitSize),
+      reporting_service_(client, pref_service),
       initialize_started_(false),
       initialize_complete_(false),
-      log_upload_in_progress_(false),
       self_ptr_factory_(this) {
   DCHECK(pref_service_);
   DCHECK(client_);
   DVLOG(1) << "UkmService::Constructor";
 
-  persisted_logs_.LoadPersistedUnsentLogs();
+  reporting_service_.Initialize();
 
   base::Closure rotate_callback =
       base::Bind(&UkmService::RotateLog, self_ptr_factory_.GetWeakPtr());
@@ -176,11 +152,13 @@ UkmService::UkmService(PrefService* pref_service,
   const base::Callback<base::TimeDelta(void)>& get_upload_interval_callback =
       base::Bind(&metrics::MetricsServiceClient::GetStandardUploadInterval,
                  base::Unretained(client_));
-  scheduler_.reset(new ukm::MetricsReportingScheduler(
-      rotate_callback, get_upload_interval_callback));
+  scheduler_.reset(new ukm::UkmRotationScheduler(rotate_callback,
+                                                 get_upload_interval_callback));
 
   for (auto& provider : metrics_providers_)
     provider->Init();
+
+  StoreWhitelistedEntries();
 }
 
 UkmService::~UkmService() {
@@ -210,6 +188,8 @@ void UkmService::DisableRecording() {
 void UkmService::EnableReporting() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "UkmService::EnableReporting";
+  if (reporting_service_.reporting_active())
+    return;
 
   for (auto& provider : metrics_providers_)
     provider->OnRecordingEnabled();
@@ -217,11 +197,14 @@ void UkmService::EnableReporting() {
   if (!initialize_started_)
     Initialize();
   scheduler_->Start();
+  reporting_service_.EnableReporting();
 }
 
 void UkmService::DisableReporting() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "UkmService::DisableReporting";
+
+  reporting_service_.DisableReporting();
 
   for (auto& provider : metrics_providers_)
     provider->OnRecordingDisabled();
@@ -264,14 +247,13 @@ void UkmService::Flush() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (initialize_complete_)
     BuildAndStoreLog();
-  persisted_logs_.PersistUnsentLogs();
+  reporting_service_.ukm_log_store()->PersistUnsentLogs();
 }
 
 void UkmService::Purge() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "UkmService::Purge";
-
-  persisted_logs_.Purge();
+  reporting_service_.ukm_log_store()->Purge();
   sources_.clear();
   entries_.clear();
 }
@@ -292,7 +274,7 @@ void UkmService::RegisterMetricsProvider(
 void UkmService::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterInt64Pref(prefs::kUkmClientId, 0);
   registry->RegisterIntegerPref(prefs::kUkmSessionId, 0);
-  registry->RegisterListPref(prefs::kUkmPersistedLogs);
+  UkmReportingService::RegisterPrefs(registry);
 }
 
 void UkmService::StartInitTask() {
@@ -313,11 +295,10 @@ void UkmService::FinishedInitTask() {
 
 void UkmService::RotateLog() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!log_upload_in_progress_);
   DVLOG(1) << "UkmService::RotateLog";
-  if (!persisted_logs_.has_unsent_logs())
+  if (!reporting_service_.ukm_log_store()->has_unsent_logs())
     BuildAndStoreLog();
-  StartScheduledUpload();
+  reporting_service_.Start();
 }
 
 void UkmService::BuildAndStoreLog() {
@@ -334,9 +315,9 @@ void UkmService::BuildAndStoreLog() {
   if (ShouldRecordSessionId())
     report.set_session_id(session_id_);
 
-  for (const auto& source : sources_) {
+  for (const auto& kv : sources_) {
     Source* proto_source = report.add_sources();
-    source->PopulateProto(proto_source);
+    kv.second->PopulateProto(proto_source);
     if (!ShouldRecordInitialUrl())
       proto_source->clear_initial_url();
   }
@@ -359,83 +340,7 @@ void UkmService::BuildAndStoreLog() {
 
   std::string serialized_log;
   report.SerializeToString(&serialized_log);
-  persisted_logs_.StoreLog(serialized_log);
-}
-
-void UkmService::StartScheduledUpload() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!log_upload_in_progress_);
-  if (!persisted_logs_.has_unsent_logs()) {
-    // No logs to send, so early out and schedule the next rotation.
-    scheduler_->UploadFinished(true, /* has_unsent_logs */ false);
-    return;
-  }
-  if (!persisted_logs_.has_staged_log())
-    persisted_logs_.StageNextLog();
-  // TODO(holte): Handle data usage on cellular, etc.
-  if (!log_uploader_) {
-    log_uploader_ = client_->CreateUploader(
-        GetServerUrl(), kMimeType, metrics::MetricsLogUploader::UKM,
-        base::Bind(&UkmService::OnLogUploadComplete,
-                   self_ptr_factory_.GetWeakPtr()));
-  }
-  log_upload_in_progress_ = true;
-
-  const std::string hash =
-      base::HexEncode(persisted_logs_.staged_log_hash().data(),
-                      persisted_logs_.staged_log_hash().size());
-  log_uploader_->UploadLog(persisted_logs_.staged_log(), hash);
-}
-
-void UkmService::OnLogUploadComplete(int response_code) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(log_upload_in_progress_);
-  DVLOG(1) << "UkmService::OnLogUploadComplete";
-  log_upload_in_progress_ = false;
-
-  UMA_HISTOGRAM_SPARSE_SLOWLY("UKM.Upload.ResponseCode", response_code);
-
-  bool upload_succeeded = response_code == 200;
-
-  // Provide boolean for error recovery (allow us to ignore response_code).
-  bool discard_log = false;
-  const size_t log_size_bytes = persisted_logs_.staged_log().length();
-  if (upload_succeeded) {
-    UMA_HISTOGRAM_COUNTS_10000("UKM.LogSize.OnSuccess", log_size_bytes / 1024);
-  } else if (response_code == 400) {
-    // Bad syntax.  Retransmission won't work.
-    discard_log = true;
-  }
-
-  if (upload_succeeded || discard_log) {
-    // TODO(holte): The if below is a temporary fix for a crash bug. We should
-    // revisit the logic and update it with a more correct fix. crbug.com/698819
-    if (persisted_logs_.has_staged_log())
-      persisted_logs_.DiscardStagedLog();
-    // Store the updated list to disk now that the removed log is uploaded.
-    persisted_logs_.PersistUnsentLogs();
-  }
-
-  // Error 400 indicates a problem with the log, not with the server, so
-  // don't consider that a sign that the server is in trouble.
-  bool server_is_healthy = upload_succeeded || response_code == 400;
-  scheduler_->UploadFinished(server_is_healthy,
-                             persisted_logs_.has_unsent_logs());
-}
-
-void UkmService::RecordSource(std::unique_ptr<UkmSource> source) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (!recording_enabled_) {
-    RecordDroppedSource(DroppedDataReason::RECORDING_DISABLED);
-    return;
-  }
-  if (sources_.size() >= GetMaxSources()) {
-    RecordDroppedSource(DroppedDataReason::MAX_HIT);
-    return;
-  }
-
-  sources_.push_back(std::move(source));
+  reporting_service_.ukm_log_store()->StoreLog(serialized_log);
 }
 
 // static
@@ -463,11 +368,8 @@ void UkmService::UpdateSourceURL(int32_t source_id, const GURL& url) {
   // Update the pre-existing source if there is any. This happens when the
   // initial URL is different from the committed URL for the same source, e.g.,
   // when there is redirection.
-  for (auto& source : sources_) {
-    if (source_id != source->id())
-      continue;
-
-    source->UpdateUrl(url);
+  if (base::ContainsKey(sources_, source_id)) {
+    sources_[source_id]->UpdateUrl(url);
     return;
   }
 
@@ -478,7 +380,7 @@ void UkmService::UpdateSourceURL(int32_t source_id, const GURL& url) {
   std::unique_ptr<UkmSource> source = base::MakeUnique<UkmSource>();
   source->set_id(source_id);
   source->set_url(url);
-  sources_.push_back(std::move(source));
+  sources_.insert(std::make_pair(source_id, std::move(source)));
 }
 
 void UkmService::AddEntry(std::unique_ptr<UkmEntry> entry) {
@@ -493,7 +395,22 @@ void UkmService::AddEntry(std::unique_ptr<UkmEntry> entry) {
     return;
   }
 
+  if (!whitelisted_entry_hashes_.empty() &&
+      !base::ContainsKey(whitelisted_entry_hashes_, entry->event_hash())) {
+    RecordDroppedEntry(DroppedDataReason::NOT_WHITELISTED);
+    return;
+  }
+
   entries_.push_back(std::move(entry));
+}
+
+void UkmService::StoreWhitelistedEntries() {
+  const auto entries =
+      base::SplitString(GetWhitelistEntries(), ",", base::TRIM_WHITESPACE,
+                        base::SPLIT_WANT_NONEMPTY);
+  for (const auto& entry_string : entries) {
+    whitelisted_entry_hashes_.insert(base::HashMetricName(entry_string));
+  }
 }
 
 }  // namespace ukm

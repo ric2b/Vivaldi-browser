@@ -10,7 +10,9 @@ SEQUENCE {
     [0] {
       INTEGER { 2 }
     }
+#-----BEGIN SERIAL-----
     INTEGER { `00fbb04c2eab109b0c` }
+#-----END SERIAL-----
     SEQUENCE {
       # sha1WithRSAEncryption
       OBJECT_IDENTIFIER { 1.2.840.113549.1.1.5 }
@@ -43,6 +45,7 @@ SEQUENCE {
       UTCTime { "140423205040Z" }
       UTCTime { "170422205040Z" }
     }
+#-----BEGIN SUBJECT-----
     SEQUENCE {
       SET {
         SEQUENCE {
@@ -66,6 +69,7 @@ SEQUENCE {
         }
       }
     }
+#-----END SUBJECT-----
     SEQUENCE {
       SEQUENCE {
         # rsaEncryption

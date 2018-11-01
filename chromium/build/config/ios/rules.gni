@@ -1146,13 +1146,16 @@ template("ios_framework_bundle") {
         ":$_link_target_name($default_toolchain)",
       ]
 
-      if (!defined(public_configs)) {
-        public_configs = []
-      }
-      public_configs += [ ":$_framework_public_config" ]
       if (_has_public_headers) {
+        if (!defined(public_configs)) {
+          public_configs = []
+        }
         public_configs += [ ":$_framework_headers_config" ]
       }
+      if (!defined(all_dependent_configs)) {
+        all_dependent_configs = []
+      }
+      all_dependent_configs += [ ":$_framework_public_config" ]
     }
 
     if (defined(invoker.bundle_deps)) {
@@ -1166,6 +1169,12 @@ template("ios_framework_bundle") {
       _compile_headers_map_target = _target_name + "_compile_headers_map"
       action(_compile_headers_map_target) {
         visibility = [ ":$_framework_headers_target" ]
+        forward_variables_from(invoker,
+                               [
+                                 "deps",
+                                 "public_deps",
+                                 "testonly",
+                               ])
         script = "//build/config/ios/write_framework_hmap.py"
         outputs = [
           _header_map_filename,
@@ -1211,6 +1220,7 @@ template("ios_framework_bundle") {
       }
 
       group(_framework_headers_target) {
+        forward_variables_from(invoker, [ "testonly" ])
         deps = [
           ":$_compile_headers_map_target",
           ":$_copy_public_headers_target",
@@ -1297,13 +1307,16 @@ template("ios_framework_bundle") {
       }
       public_deps += [ ":$_target_name" ]
 
-      if (!defined(public_configs)) {
-        public_configs = []
-      }
-      public_configs += [ ":$_framework_public_config" ]
       if (_has_public_headers) {
+        if (!defined(public_configs)) {
+          public_configs = []
+        }
         public_configs += [ ":$_framework_headers_config" ]
       }
+      if (!defined(all_dependent_configs)) {
+        all_dependent_configs = []
+      }
+      all_dependent_configs += [ ":$_framework_public_config" ]
     }
 
     bundle_data(_target_name + "+bundle") {

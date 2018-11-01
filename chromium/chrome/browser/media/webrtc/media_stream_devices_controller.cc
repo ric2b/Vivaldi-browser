@@ -15,9 +15,10 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/webrtc/media_permission.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permissions.h"
+#include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -173,56 +174,118 @@ class MediaPermissionRequestLogger : content::WebContentsObserver {
   RequestMap::key_type key_;
 };
 
+bool HasAvailableDevices(ContentSettingsType content_type,
+                         const std::string& device_id) {
+  const content::MediaStreamDevices* devices = nullptr;
+  if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) {
+    devices =
+        &MediaCaptureDevicesDispatcher::GetInstance()->GetAudioCaptureDevices();
+  } else if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) {
+    devices =
+        &MediaCaptureDevicesDispatcher::GetInstance()->GetVideoCaptureDevices();
+  } else {
+    NOTREACHED();
+  }
+
+  // TODO(tommi): It's kind of strange to have this here since if we fail this
+  // test, there'll be a UI shown that indicates to the user that access to
+  // non-existing audio/video devices has been denied.  The user won't have
+  // any way to change that but there will be a UI shown which indicates that
+  // access is blocked.
+  if (devices->empty())
+    return false;
+
+  // Note: we check device_id before dereferencing devices. If the requested
+  // device id is non-empty, then the corresponding device list must not be
+  // NULL.
+  if (!device_id.empty() && !devices->FindById(device_id))
+    return false;
+
+  return true;
+}
+
 }  // namespace
+
+// Stores whether a permission has been requested or blocked during the course
+// of a permission request, as well as the denial reason
+class MediaStreamDevicesController::MediaPermissionStatus {
+ public:
+  explicit MediaPermissionStatus(const content::MediaStreamRequest& request)
+      : audio_requested_(
+            ContentTypeIsRequested(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                                   request)),
+        video_requested_(
+            ContentTypeIsRequested(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                                   request)) {}
+
+  ~MediaPermissionStatus() {}
+
+  bool audio_requested() const { return audio_requested_; }
+  bool video_requested() const { return video_requested_; }
+
+  bool audio_blocked() const { return audio_blocked_; }
+  bool video_blocked() const { return video_blocked_; }
+
+  content::MediaStreamRequestResult denial_reason() const {
+    return denial_reason_;
+  }
+
+  void SetAudioBlocked(content::MediaStreamRequestResult denial_reason) {
+    DCHECK(audio_requested_);
+    audio_blocked_ = true;
+    denial_reason_ = denial_reason;
+  }
+
+  void SetVideoBlocked(content::MediaStreamRequestResult denial_reason) {
+    DCHECK(video_requested_);
+    video_blocked_ = true;
+    denial_reason_ = denial_reason;
+  }
+
+ private:
+  bool audio_requested_ = false;
+  bool video_requested_ = false;
+  bool audio_blocked_ = false;
+  bool video_blocked_ = false;
+
+  content::MediaStreamRequestResult denial_reason_ = content::MEDIA_DEVICE_OK;
+};
+
+// Implementation of PermissionPromptDelegate which actually shows a permission
+// prompt.
+class MediaStreamDevicesController::PermissionPromptDelegateImpl
+    : public internal::PermissionPromptDelegate {
+ public:
+  void ShowPrompt(
+      bool user_gesture,
+      content::WebContents* web_contents,
+      std::unique_ptr<MediaStreamDevicesController> controller) override {
+#if defined(OS_ANDROID)
+    PermissionUmaUtil::RecordPermissionPromptShown(
+        controller->GetPermissionRequestType(),
+        PermissionUtil::GetGestureType(user_gesture));
+    if (PermissionDialogDelegate::ShouldShowDialog(user_gesture)) {
+      PermissionDialogDelegate::CreateMediaStreamDialog(
+          web_contents, user_gesture, std::move(controller));
+    } else {
+      MediaStreamInfoBarDelegateAndroid::Create(web_contents, user_gesture,
+                                                std::move(controller));
+    }
+#else
+    PermissionRequestManager* permission_request_manager =
+        PermissionRequestManager::FromWebContents(web_contents);
+    if (permission_request_manager)
+      permission_request_manager->AddRequest(controller.release());
+#endif
+  }
+};
 
 // static
 void MediaStreamDevicesController::RequestPermissions(
-    content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
-  std::unique_ptr<MediaStreamDevicesController> controller(
-      new MediaStreamDevicesController(web_contents, request, callback));
-  if (!controller->IsAskingForAudio() && !controller->IsAskingForVideo()) {
-#if defined(OS_ANDROID)
-    // If either audio or video was previously allowed and Chrome no longer has
-    // the necessary permissions, show a infobar to attempt to address this
-    // mismatch.
-    std::vector<ContentSettingsType> content_settings_types;
-    if (controller->IsAllowedForAudio())
-      content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
-
-    if (controller->IsAllowedForVideo()) {
-      content_settings_types.push_back(
-          CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
-    }
-    if (!content_settings_types.empty() &&
-        PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfobar(
-            web_contents, content_settings_types)) {
-      PermissionUpdateInfoBarDelegate::Create(
-          web_contents, content_settings_types,
-          base::Bind(&OnPermissionConflictResolved, base::Passed(&controller)));
-    }
-#endif
-    return;
-  }
-
-#if defined(OS_ANDROID)
-  PermissionUmaUtil::RecordPermissionPromptShown(
-      controller->GetPermissionRequestType(),
-      PermissionUtil::GetGestureType(request.user_gesture));
-  if (PermissionDialogDelegate::ShouldShowDialog(request.user_gesture)) {
-    PermissionDialogDelegate::CreateMediaStreamDialog(
-        web_contents, request.user_gesture, std::move(controller));
-  } else {
-    MediaStreamInfoBarDelegateAndroid::Create(
-        web_contents, request.user_gesture, std::move(controller));
-  }
-#else
-  PermissionRequestManager* permission_request_manager =
-      PermissionRequestManager::FromWebContents(web_contents);
-  if (permission_request_manager)
-    permission_request_manager->AddRequest(controller.release());
-#endif
+  PermissionPromptDelegateImpl delegate;
+  RequestPermissionsWithDelegate(request, callback, &delegate);
 }
 
 // static
@@ -336,24 +399,84 @@ PermissionRequestType MediaStreamDevicesController::GetPermissionRequestType()
   return PermissionRequestType::MEDIA_STREAM;
 }
 
+// static
+void MediaStreamDevicesController::RequestPermissionsWithDelegate(
+    const content::MediaStreamRequest& request,
+    const content::MediaResponseCallback& callback,
+    internal::PermissionPromptDelegate* delegate) {
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(
+          content::RenderFrameHost::FromID(request.render_process_id,
+                                           request.render_frame_id));
+  if (request.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY) {
+    MediaPermissionRequestLogger::LogRequest(
+        web_contents, request.render_process_id, request.render_frame_id,
+        content::IsOriginSecure(request.security_origin));
+  }
+
+  MediaPermissionStatus initial_permission(request);
+  if (initial_permission.audio_requested() &&
+      !HasAvailableDevices(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                           request.requested_audio_device_id)) {
+    initial_permission.SetAudioBlocked(content::MEDIA_DEVICE_NO_HARDWARE);
+  }
+
+  if (initial_permission.video_requested() &&
+      !HasAvailableDevices(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                           request.requested_video_device_id)) {
+    initial_permission.SetVideoBlocked(content::MEDIA_DEVICE_NO_HARDWARE);
+  }
+
+  std::unique_ptr<MediaStreamDevicesController> controller(
+      new MediaStreamDevicesController(web_contents, request, callback,
+                                       initial_permission));
+  if (!controller->IsAskingForAudio() && !controller->IsAskingForVideo()) {
+#if defined(OS_ANDROID)
+    // If either audio or video was previously allowed and Chrome no longer has
+    // the necessary permissions, show a infobar to attempt to address this
+    // mismatch.
+    std::vector<ContentSettingsType> content_settings_types;
+    if (controller->IsAllowedForAudio())
+      content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
+
+    if (controller->IsAllowedForVideo()) {
+      content_settings_types.push_back(
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
+    }
+    if (!content_settings_types.empty() &&
+        PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfobar(
+            web_contents, content_settings_types)) {
+      PermissionUpdateInfoBarDelegate::Create(
+          web_contents, content_settings_types,
+          base::Bind(&OnPermissionConflictResolved, base::Passed(&controller)));
+    }
+#endif
+    return;
+  }
+
+  delegate->ShowPrompt(request.user_gesture, web_contents,
+                       std::move(controller));
+}
+
 MediaStreamDevicesController::MediaStreamDevicesController(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback)
+    const content::MediaResponseCallback& callback,
+    const MediaPermissionStatus& initial_permission)
     : web_contents_(web_contents), request_(request), callback_(callback) {
-  if (request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY) {
-    MediaPermissionRequestLogger::LogRequest(
-        web_contents, request.render_process_id, request.render_frame_id,
-        content::IsOriginSecure(request_.security_origin));
-  }
   profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
   content_settings_ = TabSpecificContentSettings::FromWebContents(web_contents);
 
-  content::MediaStreamRequestResult denial_reason = content::MEDIA_DEVICE_OK;
-  old_audio_setting_ = GetContentSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-                                         request_, &denial_reason);
-  old_video_setting_ = GetContentSetting(
-      CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, request_, &denial_reason);
+  content::MediaStreamRequestResult denial_reason =
+      initial_permission.denial_reason();
+  old_audio_setting_ =
+      GetContentSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, request,
+                        initial_permission.audio_requested(),
+                        initial_permission.audio_blocked(), &denial_reason);
+  old_video_setting_ =
+      GetContentSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, request,
+                        initial_permission.video_requested(),
+                        initial_permission.video_blocked(), &denial_reason);
 
   // If either setting is ask, we show the infobar.
   if (old_audio_setting_ == CONTENT_SETTING_ASK ||
@@ -591,32 +714,40 @@ void MediaStreamDevicesController::UpdateTabSpecificContentSettings(
 ContentSetting MediaStreamDevicesController::GetContentSetting(
     ContentSettingsType content_type,
     const content::MediaStreamRequest& request,
+    bool was_requested,
+    bool was_initially_blocked,
     content::MediaStreamRequestResult* denial_reason) const {
   DCHECK(content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||
          content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
+  DCHECK(!request_.security_origin.is_empty());
+  DCHECK(content::IsOriginSecure(request_.security_origin) ||
+         request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY);
+  if (!was_requested) {
+    // No denial reason set as it will have been previously set.
+    return CONTENT_SETTING_DEFAULT;
+  }
 
-  std::string requested_device_id;
-  if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC)
-    requested_device_id = request.requested_audio_device_id;
-  else if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA)
-    requested_device_id = request.requested_video_device_id;
+  if (was_initially_blocked) {
+    // No denial reason set as it will have been previously set.
+    return CONTENT_SETTING_BLOCK;
+  }
 
   if (!IsUserAcceptAllowed(content_type)) {
     *denial_reason = content::MEDIA_DEVICE_PERMISSION_DENIED;
     return CONTENT_SETTING_BLOCK;
   }
 
-  if (ContentTypeIsRequested(content_type, request)) {
-    DCHECK(content::IsOriginSecure(request_.security_origin) ||
-           request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY);
-    MediaPermission permission(content_type, request.security_origin,
-                               web_contents_->GetLastCommittedURL().GetOrigin(),
-                               profile_, web_contents_);
-    return permission.GetPermissionStatusWithDeviceRequired(requested_device_id,
-                                                            denial_reason);
+  PermissionResult result =
+      PermissionManager::Get(profile_)->GetPermissionStatus(
+          content_type, request.security_origin,
+          web_contents_->GetLastCommittedURL().GetOrigin());
+  if (result.content_setting == CONTENT_SETTING_BLOCK) {
+    *denial_reason = (result.source == PermissionStatusSource::KILL_SWITCH)
+                         ? content::MEDIA_DEVICE_KILL_SWITCH_ON
+                         : content::MEDIA_DEVICE_PERMISSION_DENIED;
   }
-  // Return the default content setting if the device is not requested.
-  return CONTENT_SETTING_DEFAULT;
+
+  return result.content_setting;
 }
 
 ContentSetting MediaStreamDevicesController::GetNewSetting(
@@ -626,14 +757,8 @@ ContentSetting MediaStreamDevicesController::GetNewSetting(
   DCHECK(user_decision == CONTENT_SETTING_ALLOW ||
          user_decision == CONTENT_SETTING_BLOCK);
   ContentSetting result = old_setting;
-  if (old_setting == CONTENT_SETTING_ASK) {
-    if (user_decision == CONTENT_SETTING_ALLOW &&
-        IsUserAcceptAllowed(content_type)) {
-      result = CONTENT_SETTING_ALLOW;
-    } else if (user_decision == CONTENT_SETTING_BLOCK) {
-      result = CONTENT_SETTING_BLOCK;
-    }
-  }
+  if (old_setting == CONTENT_SETTING_ASK)
+    result = user_decision;
   return result;
 }
 

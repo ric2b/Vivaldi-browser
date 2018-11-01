@@ -37,8 +37,6 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/test/test_utils.h"
-#include "services/preferences/public/cpp/pref_client_store.h"
-#include "services/preferences/public/interfaces/preferences.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/fake_ime_keyboard.h"
@@ -114,7 +112,7 @@ class PreferencesTest : public LoginManagerTest {
     EXPECT_EQ(prefs->GetInteger(prefs::kTouchpadSensitivity),
               input_settings_->current_touchpad_settings().GetSensitivity());
     EXPECT_EQ(prefs->GetBoolean(prefs::kTouchHudProjectionEnabled),
-              ash::Shell::GetInstance()->is_touch_hud_projection_enabled());
+              ash::Shell::Get()->is_touch_hud_projection_enabled());
     EXPECT_EQ(prefs->GetBoolean(prefs::kLanguageXkbAutoRepeatEnabled),
               keyboard_->auto_repeat_is_enabled_);
     input_method::AutoRepeatRate rate = keyboard_->last_auto_repeat_rate_;
@@ -281,45 +279,6 @@ IN_PROC_BROWSER_TEST_F(PreferencesTest, MultiProfiles) {
   user_manager->SwitchActiveUser(test_users_[0]);
   CheckSettingsCorrespondToPrefs(prefs1);
   CheckLocalStateCorrespondsToPrefs(prefs1);
-}
-
-IN_PROC_BROWSER_TEST_F(PreferencesServiceBrowserTest, Basic) {
-  constexpr int kInitialValue = 1;
-  PrefService* pref_service = browser()->profile()->GetPrefs();
-  pref_service->SetInteger(prefs::kMouseSensitivity, kInitialValue);
-
-  prefs::mojom::PreferencesServiceFactoryPtr factory_a;
-  connector()->BindInterface(prefs::mojom::kServiceName, &factory_a);
-  scoped_refptr<preferences::PrefClientStore> pref_store_a =
-      new preferences::PrefClientStore(std::move(factory_a));
-  pref_store_a->Subscribe({prefs::kMouseSensitivity});
-  WaitForPrefChange(pref_store_a.get(), prefs::kMouseSensitivity);
-
-  prefs::mojom::PreferencesServiceFactoryPtr factory_b;
-  connector()->BindInterface(prefs::mojom::kServiceName, &factory_b);
-  scoped_refptr<preferences::PrefClientStore> pref_store_b =
-      new preferences::PrefClientStore(std::move(factory_b));
-  pref_store_b->Subscribe({prefs::kMouseSensitivity});
-  WaitForPrefChange(pref_store_b.get(), prefs::kMouseSensitivity);
-
-  int value_a = 0;
-  ASSERT_TRUE(GetIntegerPrefValue(pref_store_a.get(), prefs::kMouseSensitivity,
-                                  &value_a));
-  EXPECT_EQ(kInitialValue, value_a);
-
-  int value_b = 0;
-  ASSERT_TRUE(GetIntegerPrefValue(pref_store_b.get(), prefs::kMouseSensitivity,
-                                  &value_b));
-  EXPECT_EQ(kInitialValue, value_b);
-
-  const int kTestValue = 42;
-  pref_store_a->SetValue(prefs::kMouseSensitivity,
-                         base::MakeUnique<base::Value>(kTestValue),
-                         WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
-  WaitForPrefChange(pref_store_b.get(), prefs::kMouseSensitivity);
-  ASSERT_TRUE(GetIntegerPrefValue(pref_store_b.get(), prefs::kMouseSensitivity,
-                                  &value_b));
-  EXPECT_EQ(kTestValue, value_b);
 }
 
 }  // namespace chromeos

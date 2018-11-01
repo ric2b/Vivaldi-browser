@@ -88,11 +88,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
   // Notifies the Web UI of a print preview request with |request_id|.
   void OnPrintPreviewRequest(int request_id);
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
-  // Notifies the Web UI to show the system dialog.
-  void OnShowSystemDialog();
-#endif  // ENABLE_BASIC_PRINTING
-
   // Notifies the Web UI about the page count of the request preview.
   void OnDidGetPreviewPageCount(
       const PrintHostMsg_DidGetPreviewPageCount_Params& params);
@@ -147,8 +142,7 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
   void OnSetOptionsFromDocument(
       const PrintHostMsg_SetOptionsFromDocument_Params& params);
 
-  // Allows tests to wait until the print preview dialog is loaded. Optionally
-  // also instructs the dialog to auto-cancel, which is used for testing only.
+  // Allows tests to wait until the print preview dialog is loaded.
   class TestingDelegate {
    public:
     virtual void DidGetPreviewPageCount(int page_count) = 0;

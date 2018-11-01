@@ -25,6 +25,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/painter.h"
+#include "ui/views/widget/widget.h"
 
 namespace {
 
@@ -64,8 +65,13 @@ MessageView::MessageView(MessageCenterController* controller,
                          const Notification& notification)
     : controller_(controller),
       notification_id_(notification.id()),
-      notifier_id_(notification.notifier_id()) {
+      notifier_id_(notification.notifier_id()),
+      slide_out_controller_(this, this) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
+
+  // Paint to a dedicated layer to make the layer non-opaque.
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
 
   // Create the opaque background that's above the view's shadow.
   background_view_ = new views::View();
@@ -85,7 +91,7 @@ MessageView::~MessageView() {
 void MessageView::UpdateWithNotification(const Notification& notification) {
   display_source_ = notification.display_source();
   accessible_name_ = CreateAccessibleName(notification);
-  set_slide_out_enabled(!notification.pinned());
+  slide_out_controller_.set_enabled(!notification.pinned());
 }
 
 // static
@@ -94,7 +100,9 @@ gfx::Insets MessageView::GetShadowInsets() {
       gfx::ShadowDetails::Get(kShadowElevation, kShadowCornerRadius).values);
 }
 
-void MessageView::CreateShadowBorder() {
+void MessageView::SetIsNested() {
+  is_nested_ = true;
+
   const auto& shadow =
       gfx::ShadowDetails::Get(kShadowElevation, kShadowCornerRadius);
   gfx::Insets ninebox_insets = gfx::ShadowValue::GetBlurRegion(shadow.values) +
@@ -145,18 +153,18 @@ bool MessageView::OnKeyReleased(const ui::KeyEvent& event) {
 }
 
 void MessageView::OnPaint(gfx::Canvas* canvas) {
-  SlideOutView::OnPaint(canvas);
+  views::View::OnPaint(canvas);
   views::Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
 }
 
 void MessageView::OnFocus() {
-  SlideOutView::OnFocus();
+  views::View::OnFocus();
   // We paint a focus indicator.
   SchedulePaint();
 }
 
 void MessageView::OnBlur() {
-  SlideOutView::OnBlur();
+  views::View::OnBlur();
   // We paint a focus indicator.
   SchedulePaint();
 }
@@ -199,11 +207,6 @@ void MessageView::OnGestureEvent(ui::GestureEvent* event) {
     }
   }
 
-  SlideOutView::OnGestureEvent(event);
-  // Do not return here by checking handled(). SlideOutView calls SetHandled()
-  // even though the scroll gesture doesn't make no (or little) effects on the
-  // slide-out behavior. See http://crbug.com/172991
-
   if (!event->IsScrollGestureEvent() && !event->IsFlingScrollEvent())
     return;
 
@@ -212,11 +215,17 @@ void MessageView::OnGestureEvent(ui::GestureEvent* event) {
   event->SetHandled();
 }
 
-void MessageView::OnCloseButtonPressed() {
+ui::Layer* MessageView::GetSlideOutLayer() {
+  return is_nested_ ? layer() : GetWidget()->GetLayer();
+}
+
+void MessageView::OnSlideChanged() {}
+
+void MessageView::OnSlideOut() {
   controller_->RemoveNotification(notification_id_, true);  // By user.
 }
 
-void MessageView::OnSlideOut() {
+void MessageView::OnCloseButtonPressed() {
   controller_->RemoveNotification(notification_id_, true);  // By user.
 }
 

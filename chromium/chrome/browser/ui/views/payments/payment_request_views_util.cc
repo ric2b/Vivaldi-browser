@@ -9,13 +9,18 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
+#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/payments/core/payment_options_provider.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
@@ -26,7 +31,8 @@
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/vector_icon_button.h"
+#include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/styled_label.h"
@@ -34,6 +40,8 @@
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/painter.h"
 #include "ui/views/view.h"
+
+namespace payments {
 
 namespace {
 
@@ -52,6 +60,44 @@ base::string16 GetAddressFromProfile(const autofill::AutofillProfile& profile,
   fields.push_back(autofill::ADDRESS_HOME_SORTING_CODE);
 
   return profile.ConstructInferredLabel(fields, fields.size(), locale);
+}
+
+std::unique_ptr<views::View> GetThreeLineLabel(AddressStyleType type,
+                                               const base::string16& s1,
+                                               const base::string16& s2,
+                                               const base::string16& s3) {
+  std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
+  std::unique_ptr<views::BoxLayout> layout =
+      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 0, 0, 0);
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
+  container->SetLayoutManager(layout.release());
+
+  if (!s1.empty()) {
+    std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(s1);
+    if (type == AddressStyleType::DETAILED) {
+      const gfx::FontList& font_list = label->font_list();
+      label->SetFontList(font_list.DeriveWithWeight(gfx::Font::Weight::BOLD));
+    }
+    label->set_id(static_cast<int>(DialogViewID::THREE_LINE_LABEL_LINE_1));
+    container->AddChildView(label.release());
+  }
+
+  if (!s2.empty()) {
+    std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(s2);
+    label->set_id(static_cast<int>(DialogViewID::THREE_LINE_LABEL_LINE_2));
+    container->AddChildView(label.release());
+  }
+
+  if (!s3.empty()) {
+    std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(s3);
+    label->set_id(static_cast<int>(DialogViewID::THREE_LINE_LABEL_LINE_3));
+    container->AddChildView(label.release());
+  }
+
+  // TODO(anthonyvd): add the error label
+
+  return container;
 }
 
 // Paints the gray horizontal line that doesn't span the entire width of the
@@ -81,12 +127,10 @@ class PaymentRequestRowBorderPainter : public views::Painter {
 
 }  // namespace
 
-namespace payments {
-
 std::unique_ptr<views::View> CreateSheetHeaderView(
     bool show_back_arrow,
     const base::string16& title,
-    views::VectorIconButtonDelegate* delegate) {
+    views::ButtonListener* listener) {
   std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
   views::GridLayout* layout = new views::GridLayout(container.get());
   container->SetLayoutManager(layout);
@@ -115,12 +159,13 @@ std::unique_ptr<views::View> CreateSheetHeaderView(
   if (!show_back_arrow) {
     layout->SkipColumns(1);
   } else {
-    views::VectorIconButton* back_arrow = new views::VectorIconButton(delegate);
-    back_arrow->SetIcon(ui::kBackArrowIcon);
+    views::ImageButton* back_arrow = views::CreateVectorImageButton(listener);
+    views::SetImageFromVectorIcon(back_arrow, ui::kBackArrowIcon);
     constexpr int kBackArrowSize = 16;
     back_arrow->SetSize(gfx::Size(kBackArrowSize, kBackArrowSize));
     back_arrow->set_tag(static_cast<int>(
         PaymentRequestCommonTags::BACK_BUTTON_TAG));
+    back_arrow->set_id(static_cast<int>(DialogViewID::BACK_BUTTON));
     layout->AddView(back_arrow);
   }
 
@@ -133,48 +178,58 @@ std::unique_ptr<views::View> CreateSheetHeaderView(
   return container;
 }
 
-std::unique_ptr<views::ImageView> CreateCardIconView(
-    const std::string& card_type) {
+std::unique_ptr<views::ImageView> CreateInstrumentIconView(
+    int icon_resource_id,
+    const base::string16& tooltip_text) {
   std::unique_ptr<views::ImageView> card_icon_view =
       base::MakeUnique<views::ImageView>();
   card_icon_view->set_can_process_events_within_subtree(false);
-  card_icon_view->SetImage(
-      ResourceBundle::GetSharedInstance()
-          .GetImageNamed(autofill::data_util::GetPaymentRequestData(card_type)
-                             .icon_resource_id)
-          .AsImageSkia());
-  card_icon_view->SetTooltipText(
-      autofill::CreditCard::TypeForDisplay(card_type));
+  card_icon_view->SetImage(ResourceBundle::GetSharedInstance()
+                               .GetImageNamed(icon_resource_id)
+                               .AsImageSkia());
+  card_icon_view->SetTooltipText(tooltip_text);
   card_icon_view->SetBorder(views::CreateRoundedRectBorder(
       1, 3, card_icon_view->GetNativeTheme()->GetSystemColor(
                 ui::NativeTheme::kColorId_UnfocusedBorderColor)));
   return card_icon_view;
 }
 
+std::unique_ptr<views::View> CreateProductLogoFooterView() {
+  std::unique_ptr<views::View> content_view = base::MakeUnique<views::View>();
+
+  views::BoxLayout* layout =
+      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
+  layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
+  content_view->SetLayoutManager(layout);
+
+  // Adds the Chrome logo image.
+  std::unique_ptr<views::ImageView> chrome_logo =
+      base::MakeUnique<views::ImageView>();
+  chrome_logo->set_can_process_events_within_subtree(false);
+  chrome_logo->SetImage(ResourceBundle::GetSharedInstance()
+                            .GetImageNamed(IDR_PRODUCT_LOGO_NAME_22)
+                            .AsImageSkia());
+  chrome_logo->SetTooltipText(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
+  content_view->AddChildView(chrome_logo.release());
+
+  return content_view;
+}
+
 std::unique_ptr<views::View> GetShippingAddressLabel(
     AddressStyleType type,
     const std::string& locale,
     const autofill::AutofillProfile& profile) {
-  base::string16 name_value =
+  base::string16 name =
       profile.GetInfo(autofill::AutofillType(autofill::NAME_FULL), locale);
 
-  // TODO(tmartino): Add bold styling for name in DETAILED style.
+  base::string16 address = GetAddressFromProfile(profile, locale);
 
-  base::string16 address_value = GetAddressFromProfile(profile, locale);
-
-  base::string16 phone_value = profile.GetInfo(
+  base::string16 phone = profile.GetInfo(
       autofill::AutofillType(autofill::PHONE_HOME_WHOLE_NUMBER), locale);
 
-  std::vector<base::string16> values;
-  if (!name_value.empty())
-    values.push_back(name_value);
-  if (!address_value.empty())
-    values.push_back(address_value);
-  if (!phone_value.empty())
-    values.push_back(phone_value);
-
-  return base::MakeUnique<views::StyledLabel>(
-      base::JoinString(values, base::ASCIIToUTF16("\n")), nullptr);
+  return GetThreeLineLabel(type, name, address, phone);
 }
 
 // TODO(anthonyvd): unit test the label layout.
@@ -182,59 +237,70 @@ std::unique_ptr<views::View> GetContactInfoLabel(
     AddressStyleType type,
     const std::string& locale,
     const autofill::AutofillProfile& profile,
-    bool show_payer_name,
-    bool show_payer_email,
-    bool show_payer_phone) {
-  std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
-  std::unique_ptr<views::BoxLayout> layout =
-      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 0, 0, 0);
-  layout->set_cross_axis_alignment(
-      views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
-  container->SetLayoutManager(layout.release());
+    const PaymentOptionsProvider& options) {
+  base::string16 name =
+      options.request_payer_name()
+          ? profile.GetInfo(autofill::AutofillType(autofill::NAME_FULL), locale)
+          : base::string16();
 
-  if (show_payer_name) {
-    base::string16 name =
-        profile.GetInfo(autofill::AutofillType(autofill::NAME_FULL), locale);
-    if (!name.empty()) {
-      std::unique_ptr<views::Label> label =
-          base::MakeUnique<views::Label>(name);
-      if (type == AddressStyleType::DETAILED) {
-        const gfx::FontList& font_list = label->font_list();
-        label->SetFontList(font_list.DeriveWithWeight(gfx::Font::Weight::BOLD));
-      }
-      container->AddChildView(label.release());
-    }
-  }
+  base::string16 phone =
+      options.request_payer_phone()
+          ? profile.GetInfo(
+                autofill::AutofillType(autofill::PHONE_HOME_WHOLE_NUMBER),
+                locale)
+          : base::string16();
 
-  if (show_payer_phone) {
-    base::string16 phone = profile.GetInfo(
-        autofill::AutofillType(autofill::PHONE_HOME_WHOLE_NUMBER), locale);
-    if (!phone.empty()) {
-      std::unique_ptr<views::Label> label =
-          base::MakeUnique<views::Label>(phone);
-      container->AddChildView(label.release());
-    }
-  }
+  base::string16 email =
+      options.request_payer_email()
+          ? profile.GetInfo(autofill::AutofillType(autofill::EMAIL_ADDRESS),
+                            locale)
+          : base::string16();
 
-  if (show_payer_email) {
-    base::string16 email = profile.GetInfo(
-        autofill::AutofillType(autofill::EMAIL_ADDRESS), locale);
-    if (!email.empty()) {
-      std::unique_ptr<views::Label> label =
-          base::MakeUnique<views::Label>(email);
-      container->AddChildView(label.release());
-    }
-  }
-
-  // TODO(anthonyvd): add the error label
-
-  return container;
+  return GetThreeLineLabel(type, name, phone, email);
 }
 
 std::unique_ptr<views::Border> CreatePaymentRequestRowBorder() {
   return views::CreateBorderPainter(
       base::MakeUnique<PaymentRequestRowBorderPainter>(),
       gfx::Insets());
+}
+
+std::unique_ptr<views::Label> CreateBoldLabel(const base::string16& text) {
+  std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(text);
+
+  label->SetFontList(
+      label->font_list().DeriveWithWeight(gfx::Font::Weight::BOLD));
+
+  return label;
+}
+
+std::unique_ptr<views::View> CreateShippingOptionLabel(
+    payments::mojom::PaymentShippingOption* shipping_option,
+    const base::string16& formatted_amount) {
+  std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
+
+  std::unique_ptr<views::BoxLayout> layout =
+      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 0, 0, 0);
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
+  container->SetLayoutManager(layout.release());
+
+  if (shipping_option) {
+    std::unique_ptr<views::Label> shipping_label =
+        base::MakeUnique<views::Label>(
+            base::ASCIIToUTF16(shipping_option->label));
+    shipping_label->set_id(
+        static_cast<int>(DialogViewID::SHIPPING_OPTION_DESCRIPTION));
+    container->AddChildView(shipping_label.release());
+
+    std::unique_ptr<views::Label> amount_label =
+        base::MakeUnique<views::Label>(formatted_amount);
+    amount_label->set_id(
+        static_cast<int>(DialogViewID::SHIPPING_OPTION_AMOUNT));
+    container->AddChildView(amount_label.release());
+  }
+
+  return container;
 }
 
 }  // namespace payments

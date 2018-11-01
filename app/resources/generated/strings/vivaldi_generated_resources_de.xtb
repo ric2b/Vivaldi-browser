@@ -108,6 +108,7 @@
 <translation id="2501797496290880632">Tastaturkürzel eingeben</translation>
 <translation id="2509495747794740764">Der Wert für die Skalierung muss zwischen 10 und 200 liegen.</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> installieren</translation>
+<translation id="253557089021624350">Keepalive-Zahl</translation>
 <translation id="2550212893339833758">Swap-Speicher</translation>
 <translation id="2580924999637585241">Gesamt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -361,6 +362,7 @@
 <translation id="6273677812470008672">Qualität</translation>
 <translation id="6295855836753816081">Wird gespeichert…</translation>
 <translation id="6308937455967653460">&amp;Link speichern unter...</translation>
+<translation id="6326855256003666642">Keepalive-Zahl</translation>
 <translation id="6348109281845364640">Fehler bei der Einrichtung des Druckers</translation>
 <translation id="6370021412472292592">Manifest konnte nicht geladen werden.</translation>
 <translation id="6398765197997659313">Vollbildmodus beenden</translation>

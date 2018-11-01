@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/metrics/histogram_macros.h"
 #include "base/win/windows_version.h"
 #include "gpu/ipc/service/child_window_surface_win.h"
 #include "gpu/ipc/service/direct_composition_surface_win.h"
@@ -40,6 +41,8 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
   DCHECK_NE(surface_handle, kNullSurfaceHandle);
 
   scoped_refptr<gl::GLSurface> surface;
+  MultiWindowSwapInterval multi_window_swap_interval =
+      kMultiWindowSwapIntervalDefault;
   if (gl::GetGLImplementation() == gl::kGLImplementationEGLGLES2) {
     std::unique_ptr<gfx::VSyncProvider> vsync_provider;
 
@@ -49,23 +52,32 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
       vsync_provider.reset(new gl::VSyncProviderWin(surface_handle));
 
     if (gl::GLSurfaceEGL::IsDirectCompositionSupported()) {
-      if (base::FeatureList::IsEnabled(switches::kDirectCompositionOverlays)) {
+      bool overlays_supported =
+          DirectCompositionSurfaceWin::AreOverlaysSupported();
+      UMA_HISTOGRAM_BOOLEAN("GPU.DirectComposition.OverlaysSupported",
+                            overlays_supported);
+      if (overlays_supported) {
         scoped_refptr<DirectCompositionSurfaceWin> egl_surface =
-            make_scoped_refptr(
-                new DirectCompositionSurfaceWin(delegate, surface_handle));
-        if (!egl_surface->Initialize(std::move(vsync_provider)))
+            make_scoped_refptr(new DirectCompositionSurfaceWin(
+                std::move(vsync_provider), delegate, surface_handle));
+        if (!egl_surface->Initialize())
           return nullptr;
         surface = egl_surface;
       } else {
-        scoped_refptr<ChildWindowSurfaceWin> egl_surface = make_scoped_refptr(
-            new ChildWindowSurfaceWin(delegate, surface_handle));
-        if (!egl_surface->Initialize(std::move(vsync_provider)))
+        scoped_refptr<ChildWindowSurfaceWin> egl_surface =
+            make_scoped_refptr(new ChildWindowSurfaceWin(
+                std::move(vsync_provider), delegate, surface_handle));
+        if (!egl_surface->Initialize())
           return nullptr;
         surface = egl_surface;
       }
     } else {
       surface = gl::init::CreateNativeViewGLSurfaceEGL(
           surface_handle, std::move(vsync_provider));
+      // This is unnecessary with DirectComposition because that doesn't block
+      // swaps, but instead blocks the first draw into a surface during the next
+      // frame.
+      multi_window_swap_interval = kMultiWindowSwapIntervalForceZero;
       if (!surface)
         return nullptr;
     }
@@ -75,8 +87,8 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
       return nullptr;
   }
 
-  return scoped_refptr<gl::GLSurface>(
-      new PassThroughImageTransportSurface(delegate, surface.get()));
+  return scoped_refptr<gl::GLSurface>(new PassThroughImageTransportSurface(
+      delegate, surface.get(), multi_window_swap_interval));
 }
 
 }  // namespace gpu

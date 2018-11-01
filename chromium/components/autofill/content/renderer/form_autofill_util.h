@@ -83,14 +83,12 @@ GURL StripAuthAndParams(const GURL& gurl);
 // successful.
 bool ExtractFormData(const blink::WebFormElement& form_element, FormData* data);
 
-// Helper function to check if there exist any form on |frame| where its action
+// Helper function to check if there exist any visible form on |frame| which
+// equals |form_element|. If |form_element| is null, checks if forms action
 // equals |action|. Returns true if so. For forms with empty or unspecified
-// actions, all form data are used for comparison. Form data comparison is
-// disabled on Mac and Android because the update prompt isn't implemented.
-// It may cause many false password updates.
-// TODO(kolos) Turn on all data comparing when the update prompt will be
-// implemented on Mac and Android.
+// actions, all form data are used for comparison.
 bool IsFormVisible(blink::WebFrame* frame,
+                   const blink::WebFormElement& form_element,
                    const GURL& action,
                    const GURL& origin,
                    const FormData& form_data);
@@ -131,13 +129,10 @@ bool IsAutofillableInputElement(const blink::WebInputElement* element);
 // {Text, Radiobutton, Checkbox, Select, TextArea}.
 bool IsAutofillableElement(const blink::WebFormControlElement& element);
 
-// True if this node takes up space in the layout, ie. this node or a descendant
-// has a non-empty bounding bounding client rect.
-//
-// TODO(esprehn): This isn't really about visibility, it's about the size.
-// We should remove this function and just call hasNonEmptyLayoutSize()
-// directly.
-bool IsWebNodeVisible(const blink::WebNode& node);
+// True if this node can take focus. If layout is blocked, then the function
+// checks if the element takes up space in the layout, ie. this element or a
+// descendant has a non-empty bounding bounding client rect.
+bool IsWebElementVisible(const blink::WebElement& element);
 
 // Returns the form's |name| attribute if non-empty; otherwise the form's |id|
 // attribute.

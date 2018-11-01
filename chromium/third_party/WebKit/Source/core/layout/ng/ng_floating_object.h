@@ -5,45 +5,53 @@
 #ifndef NGFloatingObject_h
 #define NGFloatingObject_h
 
+#include "core/layout/ng/geometry/ng_box_strut.h"
+#include "core/layout/ng/geometry/ng_logical_size.h"
 #include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_constraint_space.h"
-#include "core/layout/ng/ng_units.h"
+#include "core/layout/ng/ng_exclusion.h"
+#include "core/layout/ng/ng_physical_fragment.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ComputedStyleConstants.h"
-#include "platform/heap/Handle.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
-class NGPhysicalFragment;
-
 // Struct that keeps all information needed to position floats in LayoutNG.
-struct CORE_EXPORT NGFloatingObject
-    : public GarbageCollectedFinalized<NGFloatingObject> {
-  NGFloatingObject(const NGConstraintSpace* space,
-                   const NGConstraintSpace* parent_space,
-                   const ComputedStyle& style,
-                   const NGBoxStrut& margins,
-                   NGPhysicalFragment* fragment)
-      : space(space),
-        original_parent_space(parent_space),
-        margins(margins),
-        fragment(fragment) {
-    exclusion_type = NGExclusion::kFloatLeft;
-    if (style.floating() == EFloat::kRight)
-      exclusion_type = NGExclusion::kFloatRight;
-    clear_type = style.clear();
+struct CORE_EXPORT NGFloatingObject : public RefCounted<NGFloatingObject> {
+ public:
+  static RefPtr<NGFloatingObject> Create(const ComputedStyle& style,
+                                         NGWritingMode writing_mode,
+                                         NGLogicalSize available_size,
+                                         NGLogicalOffset origin_offset,
+                                         NGLogicalOffset from_offset,
+                                         NGBoxStrut margins,
+                                         NGPhysicalFragment* fragment) {
+    return AdoptRef(new NGFloatingObject(style, margins, available_size,
+                                         origin_offset, from_offset,
+                                         writing_mode, fragment));
   }
-
-  // Original constraint space of the float.
-  RefPtr<const NGConstraintSpace> space;
-
-  // Parent space is used so we can calculate the inline offset relative to
-  // the original parent of this float.
-  RefPtr<const NGConstraintSpace> original_parent_space;
 
   NGExclusion::Type exclusion_type;
   EClear clear_type;
   NGBoxStrut margins;
+  // Available size of the constraint space that will be used by
+  // NGLayoutOpportunityIterator to position this floating object.
+  NGLogicalSize available_size;
+
+  // To correctly position a float we need 2 offsets:
+  // - origin_offset which represents the layout point for this float.
+  // - from_offset which represents the point from where we need to calculate
+  //   the relative logical offset for this float.
+  // Layout details:
+  // At the time when this float is created only *inline* offsets are known.
+  // Block offset will be set when we are about to place this float, i.e. when
+  // we resolved MarginStrut, adjusted the offset to clearance line etc.
+  NGLogicalOffset origin_offset;
+  NGLogicalOffset from_offset;
+
+  // Writing mode of the float's constraint space.
+  NGWritingMode writing_mode;
 
   RefPtr<NGPhysicalFragment> fragment;
 
@@ -56,7 +64,33 @@ struct CORE_EXPORT NGFloatingObject
   // would be attached.
   LayoutUnit left_offset;
 
-  DEFINE_INLINE_TRACE() {
+  bool IsLeft() const { return exclusion_type == NGExclusion::kFloatLeft; }
+
+  bool IsRight() const { return exclusion_type == NGExclusion::kFloatRight; }
+
+  String ToString() const {
+    return String::Format("Type: '%d' Fragment: '%s'", exclusion_type,
+                          fragment->ToString().Ascii().Data());
+  }
+
+ private:
+  NGFloatingObject(const ComputedStyle& style,
+                   const NGBoxStrut& margins,
+                   const NGLogicalSize& available_size,
+                   const NGLogicalOffset& origin_offset,
+                   const NGLogicalOffset& from_offset,
+                   NGWritingMode writing_mode,
+                   NGPhysicalFragment* fragment)
+      : margins(margins),
+        available_size(available_size),
+        origin_offset(origin_offset),
+        from_offset(from_offset),
+        writing_mode(writing_mode),
+        fragment(fragment) {
+    exclusion_type = NGExclusion::kFloatLeft;
+    if (style.Floating() == EFloat::kRight)
+      exclusion_type = NGExclusion::kFloatRight;
+    clear_type = style.Clear();
   }
 };
 

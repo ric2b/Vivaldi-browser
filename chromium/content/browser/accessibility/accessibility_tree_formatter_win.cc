@@ -56,36 +56,37 @@ AccessibilityTreeFormatterWin::~AccessibilityTreeFormatterWin() {
 }
 
 const char* const ALL_ATTRIBUTES[] = {
-  "name",
-  "value",
-  "states",
-  "attributes",
-  "text_attributes",
-  "role_name",
-  "ia2_hypertext",
-  "currentValue",
-  "minimumValue",
-  "maximumValue",
-  "description",
-  "default_action",
-  "keyboard_shortcut",
-  "location",
-  "size",
-  "index_in_parent",
-  "n_relations",
-  "group_level",
-  "similar_items_in_group",
-  "position_in_group",
-  "table_rows",
-  "table_columns",
-  "row_index",
-  "column_index",
-  "n_characters",
-  "caret_offset",
-  "n_selections",
-  "selection_start",
-  "selection_end",
-  "localized_extended_role",
+    "name",
+    "value",
+    "states",
+    "attributes",
+    "text_attributes",
+    "role_name",
+    "ia2_hypertext",
+    "currentValue",
+    "minimumValue",
+    "maximumValue",
+    "description",
+    "default_action",
+    "keyboard_shortcut",
+    "location",
+    "size",
+    "index_in_parent",
+    "n_relations",
+    "group_level",
+    "similar_items_in_group",
+    "position_in_group",
+    "table_rows",
+    "table_columns",
+    "row_index",
+    "column_index",
+    "n_characters",
+    "caret_offset",
+    "n_selections",
+    "selection_start",
+    "selection_end",
+    "localized_extended_role",
+    "inner_html",
 };
 
 namespace {
@@ -334,6 +335,12 @@ void AccessibilityTreeFormatterWin::AddProperties(
         temp_bstr.Length()));
   }
   temp_bstr.Reset();
+
+  if (SUCCEEDED(ax_object->get_innerHTML(temp_bstr.Receive()))) {
+    dict->SetString("inner_html",
+                    base::string16(temp_bstr, temp_bstr.Length()));
+  }
+  temp_bstr.Reset();
 }
 
 base::string16 AccessibilityTreeFormatterWin::ToString(
@@ -397,7 +404,7 @@ base::string16 AccessibilityTreeFormatterWin::ToString(
              it != list_value->end();
              ++it) {
           base::string16 string_value;
-          if ((*it)->GetAsString(&string_value))
+          if (it->GetAsString(&string_value))
             WriteAttribute(false, string_value, &line);
         }
         break;

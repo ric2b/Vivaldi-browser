@@ -27,6 +27,7 @@
 #include "content/common/cursors/webcursor.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/common/edit_command.h"
+#include "content/common/features.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/common/screen_info.h"
@@ -84,7 +85,6 @@ struct WebPoint;
 }  // namespace blink
 
 namespace cc {
-class CompositorFrameSink;
 class SwapPromise;
 }
 
@@ -237,10 +237,12 @@ class CONTENT_EXPORT RenderWidget
                            const gfx::Vector2dF& elastic_overscroll_delta,
                            float page_scale,
                            float top_controls_delta) override;
+  void RecordWheelAndTouchScrollingCount(bool has_scrolled_by_wheel,
+                                         bool has_scrolled_by_touch) override;
   void BeginMainFrame(double frame_time_sec) override;
-  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
-      const cc::FrameSinkId& frame_sink_id,
-      bool fallback) override;
+  void RequestNewCompositorFrameSink(
+      bool fallback,
+      const CompositorFrameSinkCallback& callback) override;
   void DidCommitAndDrawCompositorFrame() override;
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
@@ -282,30 +284,30 @@ class CONTENT_EXPORT RenderWidget
                       const gfx::Rect& window_screen_rect) override;
 
   // blink::WebWidgetClient
-  blink::WebLayerTreeView* initializeLayerTreeView() override;
-  void didMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
-  void didChangeCursor(const blink::WebCursorInfo&) override;
-  void closeWidgetSoon() override;
-  void show(blink::WebNavigationPolicy) override;
-  blink::WebRect windowRect() override;
-  blink::WebRect viewRect() override;
-  void setToolTipText(const blink::WebString& text,
+  blink::WebLayerTreeView* InitializeLayerTreeView() override;
+  void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
+  void DidChangeCursor(const blink::WebCursorInfo&) override;
+  void CloseWidgetSoon() override;
+  void Show(blink::WebNavigationPolicy) override;
+  blink::WebRect WindowRect() override;
+  blink::WebRect ViewRect() override;
+  void SetToolTipText(const blink::WebString& text,
                       blink::WebTextDirection hint) override;
-  void setWindowRect(const blink::WebRect&) override;
-  blink::WebScreenInfo screenInfo() override;
-  void didHandleGestureEvent(const blink::WebGestureEvent& event,
+  void SetWindowRect(const blink::WebRect&) override;
+  blink::WebScreenInfo GetScreenInfo() override;
+  void DidHandleGestureEvent(const blink::WebGestureEvent& event,
                              bool event_cancelled) override;
-  void didOverscroll(const blink::WebFloatSize& overscrollDelta,
+  void DidOverscroll(const blink::WebFloatSize& overscrollDelta,
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& position,
                      const blink::WebFloatSize& velocity) override;
-  void showVirtualKeyboardOnElementFocus() override;
-  void convertViewportToWindow(blink::WebRect* rect) override;
-  void convertWindowToViewport(blink::WebFloatRect* rect) override;
-  bool requestPointerLock() override;
-  void requestPointerUnlock() override;
-  bool isPointerLocked() override;
-  void startDragging(blink::WebReferrerPolicy policy,
+  void ShowVirtualKeyboardOnElementFocus() override;
+  void ConvertViewportToWindow(blink::WebRect* rect) override;
+  void ConvertWindowToViewport(blink::WebFloatRect* rect) override;
+  bool RequestPointerLock() override;
+  void RequestPointerUnlock() override;
+  bool IsPointerLocked() override;
+  void StartDragging(blink::WebReferrerPolicy policy,
                      const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
                      const blink::WebImage& image,
@@ -320,7 +322,7 @@ class CONTENT_EXPORT RenderWidget
   // tap may be needed.
   // Performs various checks on the given WebNode to apply heuristics to
   // determine if triggering is appropriate.
-  void showUnhandledTapUIIfNeeded(const blink::WebPoint& tapped_position,
+  void ShowUnhandledTapUIIfNeeded(const blink::WebPoint& tapped_position,
                                   const blink::WebNode& tapped_node,
                                   bool page_changed) override;
 #endif
@@ -368,9 +370,6 @@ class CONTENT_EXPORT RenderWidget
       RenderWidgetScreenMetricsEmulator* emulator);
 
   gfx::Rect AdjustValidationMessageAnchor(const gfx::Rect& anchor);
-
-  void ScheduleComposite();
-  void ScheduleCompositeWithForcedRedraw();
 
   // Checks if the selection bounds have been changed. If they are changed,
   // the new value will be sent to the browser process.
@@ -467,7 +466,7 @@ class CONTENT_EXPORT RenderWidget
 
   // Used to force the size of a window when running layout tests.
   void SetWindowRectSynchronously(const gfx::Rect& new_window_rect);
-#if defined(USE_EXTERNAL_POPUP_MENU)
+#if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
   void SetExternalPopupOriginAdjustmentsForEmulation(
       ExternalPopupMenu* popup,
       RenderWidgetScreenMetricsEmulator* emulator);
@@ -547,8 +546,14 @@ class CONTENT_EXPORT RenderWidget
 #endif
 
   // Called by the browser process to update the cursor and composition
-  // information.
-  void OnRequestCompositionUpdate(bool immediate_request, bool monitor_request);
+  // information by sending InputHostMsg_ImeCompositionRangeChanged. If
+  // |immediate_request| is true, an IPC is sent back with current state.
+  // When |monitor_update| is true, then RenderWidget will send the updates
+  // in each compositor frame when there are changes. Outside of compositor
+  // frame updates, a change in text selection might also lead to an update for
+  // composition info (when in monitor mode).
+  void OnRequestCompositionUpdates(bool immediate_request,
+                                   bool monitor_updates);
 
   // Notify the compositor about a change in viewport size. This should be
   // used only with auto resize mode WebWidgets, as normal WebWidgets should
@@ -616,10 +621,10 @@ class CONTENT_EXPORT RenderWidget
   void SetPendingWindowRect(const blink::WebRect& r);
 
   // Check whether the WebWidget has any touch event handlers registered.
-  void hasTouchEventHandlers(bool has_handlers) override;
+  void HasTouchEventHandlers(bool has_handlers) override;
 
   // Tell the browser about the actions permitted for a new touch point.
-  void setTouchAction(blink::WebTouchAction touch_action) override;
+  void SetTouchAction(blink::WebTouchAction touch_action) override;
 
   // Sends an ACK to the browser process during the next compositor frame.
   void OnWaitNextFrameForTests(int routing_id);

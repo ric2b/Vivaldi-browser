@@ -12,9 +12,9 @@
       <div class="title">$i18n{editSiteTitle}</div>
       <div class="body">
         <paper-input always-float-label label="$i18n{addSite}"
-            placeholder="$i18n{addSiteExceptionPlaceholder}"
-            value="{{origin_}}" on-input="validate_" on-keypress="onKeypress_"
-            autofocus>
+            placeholder="$i18n{addSiteExceptionPlaceholder}" value="{{origin_}}"
+            on-input="validate_" error-message="$i18n{notValidWebAddress}"
+            invalid="[[invalid_]]" autofocus>
         </paper-input>
       </div>
       <div class="button-container">
@@ -22,7 +22,9 @@
           <paper-button class="cancel-button" on-tap="onCancelTap_"
               id="cancel">$i18n{cancel}</paper-button>
           <paper-button id="actionButton" class="action-button"
-              on-tap="onActionButtonTap_">$i18n{edit}</paper-button>
+              on-tap="onActionButtonTap_" disabled="[[invalid_]]">
+            $i18n{edit}
+          </paper-button>
         </div>
       </div>
     </dialog>

@@ -31,13 +31,13 @@
 #ifndef MediaStreamCenter_h
 #define MediaStreamCenter_h
 
+#include <memory>
 #include "platform/PlatformExport.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebMediaStreamCenterClient.h"
-#include "wtf/Allocator.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/text/WTFString.h"
-#include <memory>
 
 namespace blink {
 
@@ -55,28 +55,30 @@ class PLATFORM_EXPORT MediaStreamCenter final
  public:
   ~MediaStreamCenter() override;
 
-  static MediaStreamCenter& instance();
+  static MediaStreamCenter& Instance();
 
-  void didCreateMediaStreamTrack(MediaStreamComponent*);
-  void didSetMediaStreamTrackEnabled(MediaStreamComponent*);
-  void didSetContentHint(MediaStreamComponent*);
-  bool didStopMediaStreamTrack(MediaStreamComponent*);
-  std::unique_ptr<AudioSourceProvider> createWebAudioSourceFromMediaStreamTrack(
+  void DidCreateMediaStreamTrack(MediaStreamComponent*);
+  void DidCloneMediaStreamTrack(MediaStreamComponent* original,
+                                MediaStreamComponent* clone);
+  void DidSetMediaStreamTrackEnabled(MediaStreamComponent*);
+  void DidSetContentHint(MediaStreamComponent*);
+  bool DidStopMediaStreamTrack(MediaStreamComponent*);
+  std::unique_ptr<AudioSourceProvider> CreateWebAudioSourceFromMediaStreamTrack(
       MediaStreamComponent*);
 
-  void didCreateMediaStream(MediaStreamDescriptor*);
-  void didCreateMediaStreamAndTracks(MediaStreamDescriptor*);
-  bool didAddMediaStreamTrack(MediaStreamDescriptor*, MediaStreamComponent*);
-  bool didRemoveMediaStreamTrack(MediaStreamDescriptor*, MediaStreamComponent*);
-  void didStopLocalMediaStream(MediaStreamDescriptor*);
+  void DidCreateMediaStream(MediaStreamDescriptor*);
+  void DidCreateMediaStreamAndTracks(MediaStreamDescriptor*);
+  bool DidAddMediaStreamTrack(MediaStreamDescriptor*, MediaStreamComponent*);
+  bool DidRemoveMediaStreamTrack(MediaStreamDescriptor*, MediaStreamComponent*);
+  void DidStopLocalMediaStream(MediaStreamDescriptor*);
 
   // blink::WebMediaStreamCenterClient
-  void stopLocalMediaStream(const WebMediaStream&) override;
+  void StopLocalMediaStream(const WebMediaStream&) override;
 
  private:
   MediaStreamCenter();
 
-  std::unique_ptr<WebMediaStreamCenter> m_private;
+  std::unique_ptr<WebMediaStreamCenter> private_;
 };
 
 }  // namespace blink

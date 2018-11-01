@@ -17,14 +17,13 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "cc/base/cc_export.h"
 #include "cc/base/synced_property.h"
-#include "cc/debug/micro_benchmark_controller_impl.h"
+#include "cc/benchmarks/micro_benchmark_controller_impl.h"
+#include "cc/cc_export.h"
 #include "cc/input/browser_controls_offset_manager_client.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/layers/layer_collections.h"
-#include "cc/layers/render_pass_sink.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame_sink_client.h"
 #include "cc/output/context_cache_controller.h"
@@ -36,6 +35,8 @@
 #include "cc/scheduler/commit_earlyout_reason.h"
 #include "cc/scheduler/draw_result.h"
 #include "cc/scheduler/video_frame_controller.h"
+#include "cc/surfaces/local_surface_id.h"
+#include "cc/surfaces/surface_id.h"
 #include "cc/tiles/decoded_image_tracker.h"
 #include "cc/tiles/image_decode_cache.h"
 #include "cc/tiles/tile_manager.h"
@@ -152,7 +153,8 @@ class CC_EXPORT LayerTreeHostImpl
   ~LayerTreeHostImpl() override;
 
   // InputHandler implementation
-  void BindToClient(InputHandlerClient* client) override;
+  void BindToClient(InputHandlerClient* client,
+                    bool wheel_scroll_latching_enabled) override;
   InputHandler::ScrollStatus ScrollBegin(
       ScrollState* scroll_state,
       InputHandler::ScrollInputType type) override;
@@ -200,6 +202,7 @@ class CC_EXPORT LayerTreeHostImpl
   bool GetScrollOffsetForLayer(int layer_id,
                                gfx::ScrollOffset* offset) override;
   bool ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) override;
+  bool ScrollingShouldSwitchtoMainThread() override;
 
   // BrowserControlsOffsetManagerClient implementation.
   float TopControlsHeight() const override;
@@ -215,11 +218,12 @@ class CC_EXPORT LayerTreeHostImpl
     resourceless_software_draw_ = true;
   }
 
-  struct CC_EXPORT FrameData : public RenderPassSink {
+  struct CC_EXPORT FrameData {
     FrameData();
-    ~FrameData() override;
+    ~FrameData();
     void AsValueInto(base::trace_event::TracedValue* value) const;
 
+    std::vector<SurfaceId> embedded_surfaces;
     std::vector<gfx::Rect> occluding_screen_space_rects;
     std::vector<gfx::Rect> non_occluding_screen_space_rects;
     RenderPassList render_passes;
@@ -227,9 +231,7 @@ class CC_EXPORT LayerTreeHostImpl
     LayerImplList will_draw_layers;
     bool has_no_damage;
     bool may_contain_video;
-
-    // RenderPassSink implementation.
-    void AppendRenderPass(std::unique_ptr<RenderPass> render_pass) override;
+    BeginFrameAck begin_frame_ack;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(FrameData);
@@ -257,15 +259,6 @@ class CC_EXPORT LayerTreeHostImpl
   // virtual for testing.
   virtual void InvalidateContentOnImplSide();
 
-  void SetTreeLayerFilterMutated(ElementId element_id,
-                                 LayerTreeImpl* tree,
-                                 const FilterOperations& filters);
-  void SetTreeLayerOpacityMutated(ElementId element_id,
-                                  LayerTreeImpl* tree,
-                                  float opacity);
-  void SetTreeLayerTransformMutated(ElementId element_id,
-                                    LayerTreeImpl* tree,
-                                    const gfx::Transform& transform);
   void SetTreeLayerScrollOffsetMutated(ElementId element_id,
                                        LayerTreeImpl* tree,
                                        const gfx::ScrollOffset& scroll_offset);
@@ -354,7 +347,7 @@ class CC_EXPORT LayerTreeHostImpl
   std::unique_ptr<EvictionTilePriorityQueue> BuildEvictionQueue(
       TreePriority tree_priority) override;
   void SetIsLikelyToRequireADraw(bool is_likely_to_require_a_draw) override;
-  gfx::ColorSpace GetTileColorSpace() const override;
+  gfx::ColorSpace GetRasterColorSpace() const override;
   void RequestImplSideInvalidation() override;
 
   // ScrollbarAnimationControllerClient implementation.
@@ -603,6 +596,12 @@ class CC_EXPORT LayerTreeHostImpl
 
   LayerImpl* ViewportMainScrollLayer();
 
+  void QueueImageDecode(sk_sp<const SkImage> image,
+                        const base::Callback<void(bool)>& embedder_callback);
+  std::vector<base::Closure> TakeCompletedImageDecodeCallbacks();
+
+  void ClearImageCacheOnNavigation();
+
  protected:
   LayerTreeHostImpl(
       const LayerTreeSettings& settings,
@@ -702,6 +701,18 @@ class CC_EXPORT LayerTreeHostImpl
                                    base::TimeDelta delayed_by);
 
   void SetContextVisibility(bool is_visible);
+  void ImageDecodeFinished(const base::Callback<void(bool)>& embedder_callback,
+                           bool decode_succeeded);
+
+  // This function keeps track of sources of scrolls that are handled in the
+  // compositor side. The information gets shared by the main thread as part of
+  // the begin_main_frame_state. Finally Use counters are updated in the main
+  // thread side to keep track of the frequency of scrolling with different
+  // sources per page load. TODO(crbug.com/691886): Use GRC API to plumb the
+  // scroll source info for Use Counters.
+  void UpdateScrollSourceInfo(bool is_wheel_scroll);
+
+  bool IsScrolledBy(LayerImpl* child, ScrollNode* ancestor);
 
   using UIResourceMap = std::unordered_map<UIResourceId, UIResourceData>;
   UIResourceMap ui_resource_map_;
@@ -712,6 +723,8 @@ class CC_EXPORT LayerTreeHostImpl
   std::set<UIResourceId> evicted_ui_resources_;
 
   CompositorFrameSink* compositor_frame_sink_;
+
+  LocalSurfaceId local_surface_id_;
 
   // The following scoped variables must not outlive the
   // |compositor_frame_sink_|.
@@ -842,6 +855,22 @@ class CC_EXPORT LayerTreeHostImpl
 
   std::unique_ptr<PendingTreeDurationHistogramTimer>
       pending_tree_duration_timer_;
+
+  // The id of the scroll node to which scroll animations must latch.
+  // This gets reset at ScrollAnimatedBegin, and updated the first time that a
+  // scroll animation is created in ScrollAnimated.
+  int scroll_animating_latched_node_id_;
+
+  // These callbacks are stored here to be transfered to the main thread when we
+  // begin main frame. These callbacks must only be called on the main thread.
+  std::vector<base::Closure> completed_image_decode_callbacks_;
+
+  // These are used to transfer usage of touch and wheel scrolls to the main
+  // thread.
+  bool has_scrolled_by_wheel_;
+  bool has_scrolled_by_touch_;
+
+  bool touchpad_and_wheel_scroll_latching_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHostImpl);
 };

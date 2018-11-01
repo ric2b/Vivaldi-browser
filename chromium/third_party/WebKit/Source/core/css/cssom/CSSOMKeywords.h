@@ -6,7 +6,7 @@
 #define CSSOMKeywords_h
 
 #include "core/CSSPropertyNames.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -16,7 +16,7 @@ class CSSOMKeywords {
   STATIC_ONLY(CSSOMKeywords);
 
  public:
-  static bool validKeywordForProperty(CSSPropertyID, const CSSKeywordValue&);
+  static bool ValidKeywordForProperty(CSSPropertyID, const CSSKeywordValue&);
 };
 
 }  // namespace blink

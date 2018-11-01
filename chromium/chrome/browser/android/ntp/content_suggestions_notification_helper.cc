@@ -32,6 +32,10 @@ namespace {
 
 bool IsDisabledForProfile(Profile* profile) {
   PrefService* prefs = profile->GetPrefs();
+  if (!prefs->GetBoolean(prefs::kContentSuggestionsNotificationsEnabled)) {
+    return true;
+  }
+
   int current =
       prefs->GetInteger(prefs::kContentSuggestionsConsecutiveIgnoredPrefName);
   int limit = variations::GetVariationParamByFeatureAsInt(
@@ -104,6 +108,20 @@ bool ContentSuggestionsNotificationHelper::IsDisabledForProfile(
 // static
 bool ContentSuggestionsNotificationHelper::Register(JNIEnv* env) {
   return RegisterNativesImpl(env);
+}
+
+static void RecordNotificationOptOut(JNIEnv* env,
+                                     const JavaParamRef<jclass>& class_object,
+                                     jint reason) {
+  RecordContentSuggestionsNotificationOptOut(
+      static_cast<ContentSuggestionsNotificationOptOut>(reason));
+}
+
+static void RecordNotificationAction(JNIEnv* env,
+                                     const JavaParamRef<jclass>& class_object,
+                                     jint action) {
+  RecordContentSuggestionsNotificationAction(
+      static_cast<ContentSuggestionsNotificationAction>(action));
 }
 
 static void ReceiveFlushedMetrics(JNIEnv* env,

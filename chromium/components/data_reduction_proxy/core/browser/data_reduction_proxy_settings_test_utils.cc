@@ -62,9 +62,9 @@ void DataReductionProxySettingsTestBase::SetUp() {
                                  prefs::kDailyHttpReceivedContentLength);
   for (int64_t i = 0; i < kNumDaysInHistory; i++) {
     original_update->Insert(
-        0, base::MakeUnique<base::StringValue>(base::Int64ToString(2 * i)));
+        0, base::MakeUnique<base::Value>(base::Int64ToString(2 * i)));
     received_update->Insert(
-        0, base::MakeUnique<base::StringValue>(base::Int64ToString(i)));
+        0, base::MakeUnique<base::Value>(base::Int64ToString(i)));
   }
   last_update_time_ = base::Time::Now().LocalMidnight();
   pref_service->SetInt64(prefs::kDailyHttpContentLengthLastUpdateDate,
@@ -124,7 +124,7 @@ void DataReductionProxySettingsTestBase::CheckOnPrefChange(
   if (managed) {
     test_context_->pref_service()->SetManagedPref(
         test_context_->GetDataReductionProxyEnabledPrefName(),
-        new base::Value(enabled));
+        base::MakeUnique<base::Value>(enabled));
   } else {
     test_context_->SetDataReductionProxyEnabled(enabled);
   }
@@ -140,10 +140,9 @@ void DataReductionProxySettingsTestBase::InitDataReductionProxy(
       test_context_->CreateDataReductionProxyService(settings_.get()));
   settings_->data_reduction_proxy_service()->SetIOData(
       test_context_->io_data()->GetWeakPtr());
-  settings_->SetCallbackToRegisterSyntheticFieldTrial(
-      base::Bind(&DataReductionProxySettingsTestBase::
-                 SyntheticFieldTrialRegistrationCallback,
-                 base::Unretained(this)));
+  settings_->SetCallbackToRegisterSyntheticFieldTrial(base::Bind(
+      &DataReductionProxySettingsTestBase::OnSyntheticFieldTrialRegistration,
+      base::Unretained(this)));
 
   test_context_->RunUntilIdle();
 }
@@ -152,6 +151,13 @@ void DataReductionProxySettingsTestBase::CheckDataReductionProxySyntheticTrial(
     bool enabled) {
   EXPECT_EQ(enabled ? "Enabled" : "Disabled",
       synthetic_field_trials_["SyntheticDataReductionProxySetting"]);
+}
+
+bool DataReductionProxySettingsTestBase::OnSyntheticFieldTrialRegistration(
+    base::StringPiece trial_name,
+    base::StringPiece group_name) {
+  synthetic_field_trials_[trial_name.as_string()] = group_name.as_string();
+  return true;
 }
 
 }  // namespace data_reduction_proxy

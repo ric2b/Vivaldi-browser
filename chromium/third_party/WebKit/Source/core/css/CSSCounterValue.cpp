@@ -5,37 +5,41 @@
 #include "core/css/CSSCounterValue.h"
 
 #include "core/css/CSSMarkup.h"
-#include "wtf/text/StringBuilder.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
-String CSSCounterValue::customCSSText() const {
+namespace cssvalue {
+
+String CSSCounterValue::CustomCSSText() const {
   StringBuilder result;
-  if (separator().isEmpty())
-    result.append("counter(");
+  if (Separator().IsEmpty())
+    result.Append("counter(");
   else
-    result.append("counters(");
+    result.Append("counters(");
 
-  result.append(identifier());
-  if (!separator().isEmpty()) {
-    result.append(", ");
-    result.append(m_separator->cssText());
+  result.Append(Identifier());
+  if (!Separator().IsEmpty()) {
+    result.Append(", ");
+    result.Append(separator_->CssText());
   }
-  bool isDefaultListStyle = listStyle() == CSSValueDecimal;
-  if (!isDefaultListStyle) {
-    result.append(", ");
-    result.append(m_listStyle->cssText());
+  bool is_default_list_style = ListStyle() == CSSValueDecimal;
+  if (!is_default_list_style) {
+    result.Append(", ");
+    result.Append(list_style_->CssText());
   }
-  result.append(')');
+  result.Append(')');
 
-  return result.toString();
+  return result.ToString();
 }
 
 DEFINE_TRACE_AFTER_DISPATCH(CSSCounterValue) {
-  visitor->trace(m_identifier);
-  visitor->trace(m_listStyle);
-  visitor->trace(m_separator);
-  CSSValue::traceAfterDispatch(visitor);
+  visitor->Trace(identifier_);
+  visitor->Trace(list_style_);
+  visitor->Trace(separator_);
+  CSSValue::TraceAfterDispatch(visitor);
 }
+
+}  // namespace cssvalue
 
 }  // namespace blink

@@ -18,12 +18,14 @@ class WorkerInternals final : public GarbageCollectedFinalized<WorkerInternals>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static WorkerInternals* create() { return new WorkerInternals(); }
+  static WorkerInternals* Create() { return new WorkerInternals(); }
   virtual ~WorkerInternals();
 
   OriginTrialsTest* originTrialsTest() const;
   void countFeature(ScriptState*, uint32_t feature);
   void countDeprecation(ScriptState*, uint32_t feature);
+
+  void collectGarbage(ScriptState*);
 
   DEFINE_INLINE_TRACE() {}
 

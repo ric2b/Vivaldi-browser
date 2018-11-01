@@ -18,6 +18,15 @@ WebStateDelegate::~WebStateDelegate() {
   DCHECK(attached_states_.empty());
 }
 
+WebState* WebStateDelegate::CreateNewWebState(WebState* source,
+                                              const GURL& url,
+                                              const GURL& opener_url,
+                                              bool initiated_by_user) {
+  return nullptr;
+}
+
+void WebStateDelegate::CloseWebState(WebState* source) {}
+
 WebState* WebStateDelegate::OpenURLFromWebState(
     WebState*,
     const WebState::OpenURLParams&) {

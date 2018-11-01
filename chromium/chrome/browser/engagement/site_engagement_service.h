@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -15,6 +16,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/browser/engagement/site_engagement_details.mojom.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
 #include "chrome/browser/engagement/site_engagement_observer.h"
 #include "components/history/core/browser/history_service_observer.h"
@@ -24,6 +26,11 @@
 
 namespace base {
 class Clock;
+}
+
+namespace banners {
+FORWARD_DECLARE_TEST(AppBannerManagerBrowserTest,
+                     CheckOnLoadWithoutSufficientEngagement);
 }
 
 namespace content {
@@ -105,11 +112,23 @@ class SiteEngagementService : public KeyedService,
   explicit SiteEngagementService(Profile* profile);
   ~SiteEngagementService() override;
 
+  // KeyedService support:
+  void Shutdown() override;
+
   // Returns the engagement level of |url|.
   blink::mojom::EngagementLevel GetEngagementLevel(const GURL& url) const;
 
+  // Returns an array of engagement score details for all origins which have
+  // a score, whether due to direct engagement, or other factors that cause
+  // an engagement bonus to be applied.
+  std::vector<mojom::SiteEngagementDetails> GetAllDetails() const;
+
   // Returns a map of all stored origins and their engagement scores.
+  // TODO(703848): Migrate important sites impl off this and remove it
   std::map<GURL, double> GetScoreMap() const;
+
+  // Update the engagement score of |url| for a notification interaction.
+  void HandleNotificationInteraction(const GURL& url);
 
   // Returns whether the engagement service has enough data to make meaningful
   // decisions. Clients should avoid using engagement in their heuristic until
@@ -120,8 +139,10 @@ class SiteEngagementService : public KeyedService,
   bool IsEngagementAtLeast(const GURL& url,
                            blink::mojom::EngagementLevel level) const;
 
-  // Resets the engagement score |url| to |score|, clearing daily limits.
-  void ResetScoreForURL(const GURL& url, double score);
+  // Resets the base engagement for |url| to |score|, clearing daily limits. Any
+  // bonus engagement that |url| has acquired is not affected by this method, so
+  // the result of GetScore(|url|) may not be the same as |score|.
+  void ResetBaseScoreForURL(const GURL& url, double score);
 
   // Update the last time |url| was opened from an installed shortcut to be
   // clock_->Now().
@@ -130,6 +151,9 @@ class SiteEngagementService : public KeyedService,
   void HelperCreated(SiteEngagementService::Helper* helper);
   void HelperDeleted(SiteEngagementService::Helper* helper);
 
+  // Returns the site engagement details for the specified |url|.
+  mojom::SiteEngagementDetails GetDetails(const GURL& url) const;
+
   // Overridden from SiteEngagementScoreProvider.
   double GetScore(const GURL& url) const override;
   double GetTotalEngagementPoints() const override;
@@ -137,6 +161,7 @@ class SiteEngagementService : public KeyedService,
  private:
   friend class SiteEngagementObserver;
   friend class SiteEngagementServiceAndroid;
+  friend class SiteEngagementServiceTest;
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, CheckHistograms);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, CleanupEngagementScores);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest,
@@ -149,8 +174,11 @@ class SiteEngagementService : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, GetMedianEngagement);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, GetTotalNavigationPoints);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, GetTotalUserInputPoints);
+  FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest,
+                           GetTotalNotificationPoints);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, RestrictedToHTTPAndHTTPS);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, LastShortcutLaunch);
+  FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, NotificationPermission);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest,
                            CleanupOriginsOnHistoryDeletion);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, IsBootstrapped);
@@ -161,6 +189,8 @@ class SiteEngagementService : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest,
                            IncognitoEngagementService);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, GetScoreFromSettings);
+  FRIEND_TEST_ALL_PREFIXES(banners::AppBannerManagerBrowserTest,
+                           CheckOnLoadWithoutSufficientEngagement);
   FRIEND_TEST_ALL_PREFIXES(AppBannerSettingsHelperTest, SiteEngagementTrigger);
 
 #if defined(OS_ANDROID)

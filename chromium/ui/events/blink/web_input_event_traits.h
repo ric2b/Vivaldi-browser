@@ -6,7 +6,7 @@
 #define UI_EVENTS_BLINK_WEB_INPUT_EVENT_TRAITS_H_
 
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "ui/events/latency_info.h"
+#include "ui/latency/latency_info.h"
 
 namespace blink {
 class WebGestureEvent;
@@ -28,7 +28,8 @@ class WebInputEventTraits {
   static std::string ToString(const blink::WebInputEvent& event);
   static size_t GetSize(blink::WebInputEvent::Type type);
   static WebScopedInputEvent Clone(const blink::WebInputEvent& event);
-  static bool ShouldBlockEventStream(const blink::WebInputEvent& event);
+  static bool ShouldBlockEventStream(const blink::WebInputEvent& event,
+                                     bool raf_aligned_touch_enabled);
 
   static bool CanCauseScroll(const blink::WebMouseWheelEvent& event);
 

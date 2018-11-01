@@ -23,9 +23,9 @@
 #include "ui/display/screen.h"
 
 #if defined(USE_ASH)
-#include "ash/common/ash_switches.h"
-#include "ash/common/wm/window_positioner.h"  // nogncheck
+#include "ash/ash_switches.h"
 #include "ash/shell.h"  // nogncheck
+#include "ash/wm/window_positioner.h"  // nogncheck
 #include "chrome/browser/ui/ash/ash_util.h"  // nogncheck
 #endif
 
@@ -80,17 +80,6 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
       wp_pref->GetInteger("work_area_right", &work_area_right);
       if (*show_state == ui::SHOW_STATE_DEFAULT && maximized)
         *show_state = ui::SHOW_STATE_MAXIMIZED;
-#if defined(USE_ASH)
-      // TODO(afakhry): Remove Docked Windows in M58.
-      if (ash::switches::DockedWindowsEnabled()) {
-        bool docked = false;
-        wp_pref->GetBoolean("docked", &docked);
-        if (*show_state == ui::SHOW_STATE_DEFAULT && docked &&
-            !browser_->is_type_tabbed()) {
-          *show_state = ui::SHOW_STATE_DOCKED;
-        }
-      }
-#endif  // USE_ASH
     }
     work_area->SetRect(work_area_left, work_area_top,
                       std::max(0, work_area_right - work_area_left),
@@ -161,7 +150,7 @@ class DefaultTargetDisplayProvider : public WindowSizer::TargetDisplayProvider {
 #if defined(USE_ASH)
     // Use the target display on ash.
     if (ash_util::ShouldOpenAshOnStartup()) {
-      aura::Window* target = ash::Shell::GetTargetRootWindow();
+      aura::Window* target = ash::Shell::GetRootWindowForNewWindows();
       return screen->GetDisplayNearestWindow(target);
     }
 #endif

@@ -5,15 +5,15 @@
 #ifndef CaseMappingHarfBuzzBufferFiller_h
 #define CaseMappingHarfBuzzBufferFiller_h
 
-#include "wtf/Allocator.h"
-#include "wtf/text/AtomicString.h"
-#include "wtf/text/Unicode.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/text/AtomicString.h"
+#include "platform/wtf/text/Unicode.h"
 
 #include <hb.h>
 
 namespace blink {
 
-enum class CaseMapIntend { KeepSameCase, UpperCase, LowerCase };
+enum class CaseMapIntend { kKeepSameCase, kUpperCase, kLowerCase };
 
 class CaseMappingHarfBuzzBufferFiller {
   STACK_ALLOCATED()
@@ -21,20 +21,20 @@ class CaseMappingHarfBuzzBufferFiller {
  public:
   CaseMappingHarfBuzzBufferFiller(CaseMapIntend,
                                   AtomicString locale,
-                                  hb_buffer_t* harfBuzzBuffer,
+                                  hb_buffer_t* harf_buzz_buffer,
                                   const UChar* buffer,
-                                  unsigned bufferLength,
-                                  unsigned startIndex,
-                                  unsigned numCharacters);
+                                  unsigned buffer_length,
+                                  unsigned start_index,
+                                  unsigned num_characters);
 
  private:
-  void fillSlowCase(CaseMapIntend,
+  void FillSlowCase(CaseMapIntend,
                     AtomicString locale,
                     const UChar* buffer,
-                    unsigned bufferLength,
-                    unsigned startIndex,
-                    unsigned numCharacters);
-  hb_buffer_t* m_harfBuzzBuffer;
+                    unsigned buffer_length,
+                    unsigned start_index,
+                    unsigned num_characters);
+  hb_buffer_t* harf_buzz_buffer_;
 };
 
 }  // namespace blink

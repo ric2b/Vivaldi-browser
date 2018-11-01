@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -19,7 +20,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/model/string_ordinal.h"
-#include "content/public/browser/user_metrics.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -32,10 +32,8 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/canvas_image_source.h"
-
-#if defined(OS_CHROMEOS)
+#include "ui/gfx/skia_util.h"
 #include "chrome/browser/chromeos/extensions/gfx_utils.h"
-#endif
 
 using extensions::Extension;
 
@@ -83,20 +81,17 @@ class RoundedCornersImageSource : public gfx::CanvasImageSource {
 
     canvas->DrawImageInt(icon_, 0, 0);
 
-    std::unique_ptr<gfx::Canvas> masking_canvas(
-        new gfx::Canvas(gfx::Size(icon_.width(), icon_.height()), 1.0f, false));
-    DCHECK(masking_canvas);
-
-    cc::PaintFlags opaque_flags;
-    opaque_flags.setAntiAlias(true);
-    opaque_flags.setColor(SK_ColorWHITE);
-    masking_canvas->DrawRoundRect(gfx::Rect(icon_.width(), icon_.height()),
-                                  kRoundingRadius, opaque_flags);
-
     cc::PaintFlags masking_flags;
     masking_flags.setBlendMode(SkBlendMode::kDstIn);
-    canvas->DrawImageInt(gfx::ImageSkia(masking_canvas->ExtractImageRep()), 0,
-                         0, masking_flags);
+    canvas->SaveLayerWithFlags(masking_flags);
+
+    cc::PaintFlags mask_flags;
+    mask_flags.setAntiAlias(true);
+    mask_flags.setColor(SK_ColorWHITE);
+    canvas->DrawRoundRect(gfx::Rect(icon_.width(), icon_.height()),
+                          kRoundingRadius, mask_flags);
+
+    canvas->Restore();
   }
 
   gfx::ImageSkia icon_;
@@ -117,8 +112,7 @@ ExtensionAppItem::ExtensionAppItem(
       extension_enable_flow_controller_(NULL),
       extension_name_(extension_name),
       installing_icon_(CreateDisabledIcon(installing_icon)),
-      is_platform_app_(is_platform_app),
-      has_overlay_(false) {
+      is_platform_app_(is_platform_app) {
   Reload();
   if (sync_item && sync_item->item_ordinal.IsValid())
     UpdateFromSync(sync_item);
@@ -127,24 +121,6 @@ ExtensionAppItem::ExtensionAppItem(
 }
 
 ExtensionAppItem::~ExtensionAppItem() {
-}
-
-bool ExtensionAppItem::NeedsOverlay() const {
-#if defined(OS_CHROMEOS)
-  // The overlay is disabled completely in ChromeOS.
-  return false;
-#endif
-
-  extensions::LaunchType launch_type = GetExtension()
-      ? extensions::GetLaunchType(extensions::ExtensionPrefs::Get(profile()),
-                                  GetExtension())
-      : extensions::LAUNCH_TYPE_WINDOW;
-
-  // The overlay icon is disabled for hosted apps in windowed mode with
-  // bookmark apps enabled.
-  return !is_platform_app_ && extension_id() != extension_misc::kChromeAppId &&
-         (!extensions::util::IsNewBookmarkAppsEnabled() ||
-          launch_type != extensions::LAUNCH_TYPE_WINDOW);
 }
 
 void ExtensionAppItem::Reload() {
@@ -169,9 +145,7 @@ void ExtensionAppItem::UpdateIcon() {
     icon = icon_->image_skia();
     const bool enabled = extensions::util::IsAppLaunchable(extension_id(),
                                                            profile());
-#if defined(OS_CHROMEOS)
     extensions::util::MaybeApplyChromeBadge(profile(), id(), &icon);
-#endif
 
     if (!enabled)
       icon = CreateDisabledIcon(icon);
@@ -179,11 +153,6 @@ void ExtensionAppItem::UpdateIcon() {
     if (GetExtension()->from_bookmark())
       icon = gfx::ImageSkia(new RoundedCornersImageSource(icon), icon.size());
   }
-  // Paint the shortcut overlay if necessary.
-  has_overlay_ = NeedsOverlay();
-  if (has_overlay_)
-    icon = gfx::ImageSkia(new ShortcutOverlayImageSource(icon), icon.size());
-
   SetIcon(icon);
 }
 
@@ -281,7 +250,7 @@ void ExtensionAppItem::Activate(int event_flags) {
   if (RunExtensionEnableFlow())
     return;
 
-  content::RecordAction(base::UserMetricsAction("AppList_ClickOnApp"));
+  base::RecordAction(base::UserMetricsAction("AppList_ClickOnApp"));
   extensions::RecordAppListMainLaunch(extension);
   GetController()->ActivateApp(profile(),
                                extension,
@@ -296,11 +265,6 @@ ui::MenuModel* ExtensionAppItem::GetContextMenuModel() {
                                                             GetController()));
   context_menu_->set_is_platform_app(is_platform_app_);
   return context_menu_->GetMenuModel();
-}
-
-void ExtensionAppItem::OnExtensionPreferenceChanged() {
-  if (has_overlay_ != NeedsOverlay())
-    UpdateIcon();
 }
 
 // static

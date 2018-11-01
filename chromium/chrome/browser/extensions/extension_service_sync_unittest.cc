@@ -45,6 +45,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/test_management_policy.h"
 #include "extensions/common/constants.h"
@@ -1692,7 +1693,7 @@ class ExtensionServiceTestSupervised
         supervised_users::kApprovedExtensions, extension_id);
     syncer::SyncData sync_data =
         SupervisedUserSettingsService::CreateSyncDataForSetting(
-            key, base::StringValue(version));
+            key, base::Value(version));
 
     SyncChangeList list(1, SyncChange(FROM_HERE, type, sync_data));
 

@@ -2,12 +2,27 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
+
 bundle_data("resources") {
   sources = [
     "resources/signin_confirmation_more.png",
     "resources/signin_confirmation_more@2x.png",
     "resources/signin_confirmation_more@3x.png",
   ]
+  if (is_chrome_branded) {
+    sources += [
+      "resources/signin_promo_logo_chrome_color.png",
+      "resources/signin_promo_logo_chrome_color@2x.png",
+      "resources/signin_promo_logo_chrome_color@3x.png",
+    ]
+  } else {
+    sources += [
+      "resources/signin_promo_logo_chromium_color.png",
+      "resources/signin_promo_logo_chromium_color@2x.png",
+      "resources/signin_promo_logo_chromium_color@3x.png",
+    ]
+  }
   outputs = [
     "{{bundle_resources_dir}}/{{source_file_part}}",
   ]
@@ -36,6 +51,8 @@ source_set("authentication") {
     "signin_interaction_controller.mm",
   ]
   deps = [
+    ":authentication_arc",
+    ":authentication_ui",
     ":resources",
     "//base",
     "//components/google/core/browser",
@@ -61,8 +78,6 @@ source_set("authentication") {
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/settings/cells",
-    "//ios/chrome/browser/ui/settings/utils",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common",
     "//ios/public/provider/chrome/browser",
@@ -81,16 +96,70 @@ source_set("authentication") {
   ]
 }
 
+source_set("authentication_arc") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "resized_avatar_cache.h",
+    "resized_avatar_cache.mm",
+    "signin_promo_view_mediator.h",
+    "signin_promo_view_mediator.mm",
+  ]
+  deps = [
+    ":authentication_ui",
+    "//base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/signin",
+    "//ios/chrome/browser/ui",
+    "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/signin",
+    "//ios/third_party/material_components_ios",
+    "//ui/base",
+  ]
+  libs = [ "UIKit.framework" ]
+}
+
+source_set("authentication_ui") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "account_control_item.h",
+    "account_control_item.mm",
+    "signin_promo_item.h",
+    "signin_promo_item.mm",
+    "signin_promo_view.h",
+    "signin_promo_view.mm",
+    "signin_promo_view_configurator.h",
+    "signin_promo_view_configurator.mm",
+    "signin_promo_view_consumer.h",
+  ]
+  deps = [
+    "//base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/collection_view/cells",
+    "//ios/chrome/browser/ui/colors",
+    "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/signin",
+    "//ui/base",
+  ]
+  libs = [ "UIKit.framework" ]
+}
+
 source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
+    "account_control_item_unittest.mm",
     "authentication_flow_unittest.mm",
     "re_signin_infobar_delegate_unittest.mm",
     "signed_in_accounts_view_controller_unittest.mm",
+    "signin_promo_item_unittest.mm",
+    "signin_promo_view_mediator_unittest.mm",
+    "signin_promo_view_unittest.mm",
   ]
   deps = [
     ":authentication",
+    ":authentication_arc",
+    ":authentication_ui",
     "//base",
     "//base/test:test_support",
     "//components/pref_registry",
@@ -101,9 +170,11 @@ source_set("unit_tests") {
     "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/signin:test_support",
+    "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
+    "//ios/third_party/material_components_ios",
     "//ios/web:test_support",
     "//testing/gtest",
     "//third_party/ocmock",

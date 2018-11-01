@@ -87,7 +87,7 @@ IN_PROC_BROWSER_TEST_F(ChromeFindRequestManagerTest, FindInPDF) {
 
   blink::WebFindOptions options;
   Find("result", options);
-  options.findNext = true;
+  options.find_next = true;
   Find("result", options);
   Find("result", options);
   delegate()->WaitForFinalReply();

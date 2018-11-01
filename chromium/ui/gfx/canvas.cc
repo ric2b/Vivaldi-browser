@@ -29,25 +29,10 @@
 
 namespace gfx {
 
-namespace {
-
-sk_sp<cc::PaintSurface> CreateSurface(const Size& size, bool is_opaque) {
-  // SkSurface cannot be zero-sized, but clients of Canvas sometimes request
-  // that (and then later resize).
-  int width = std::max(size.width(), 1);
-  int height = std::max(size.height(), 1);
-  SkAlphaType alpha = is_opaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
-  SkImageInfo info = SkImageInfo::MakeN32(width, height, alpha);
-  return cc::PaintSurface::MakeRaster(info);
-}
-
-}  // namespace
-
 Canvas::Canvas(const Size& size, float image_scale, bool is_opaque)
     : image_scale_(image_scale) {
   Size pixel_size = ScaleToCeiledSize(size, image_scale);
-  surface_ = CreateSurface(pixel_size, is_opaque);
-  canvas_ = surface_->getCanvas();
+  canvas_ = CreateOwnedCanvas(pixel_size, is_opaque);
 
 #if !defined(USE_CAIRO)
   // skia::PlatformCanvas instances are initialized to 0 by Cairo, but
@@ -61,9 +46,7 @@ Canvas::Canvas(const Size& size, float image_scale, bool is_opaque)
 }
 
 Canvas::Canvas()
-    : image_scale_(1.f),
-      surface_(CreateSurface({0, 0}, false)),
-      canvas_(surface_->getCanvas()) {}
+    : image_scale_(1.f), canvas_(CreateOwnedCanvas({0, 0}, false)) {}
 
 Canvas::Canvas(cc::PaintCanvas* canvas, float image_scale)
     : image_scale_(image_scale), canvas_(canvas) {
@@ -78,8 +61,7 @@ void Canvas::RecreateBackingCanvas(const Size& size,
                                    bool is_opaque) {
   image_scale_ = image_scale;
   Size pixel_size = ScaleToFlooredSize(size, image_scale);
-  surface_ = CreateSurface(pixel_size, is_opaque);
-  canvas_ = surface_->getCanvas();
+  canvas_ = CreateOwnedCanvas(pixel_size, is_opaque);
 
   SkScalar scale_scalar = SkFloatToScalar(image_scale);
   canvas_->scale(scale_scalar, scale_scalar);
@@ -122,19 +104,14 @@ int Canvas::DefaultCanvasTextAlignment() {
 }
 
 ImageSkiaRep Canvas::ExtractImageRep() const {
-  // Make a bitmap to return, and a canvas to draw into it. We don't just want
-  // to call extractSubset or the copy constructor, since we want an actual copy
-  // of the bitmap.
-  const SkISize size = canvas_->getBaseLayerSize();
-  SkBitmap result;
-  result.allocN32Pixels(size.width(), size.height());
-
-  canvas_->readPixels(&result, 0, 0);
-  return ImageSkiaRep(result, image_scale_);
-}
-
-void Canvas::DrawDashedRect(const Rect& rect, SkColor color) {
-  DrawDashedRect(RectF(rect), color);
+  DCHECK(bitmap_);
+  SkBitmap bitmap_copy;
+  // copyTo() will perform a deep copy, which is what we want.
+  bool result = bitmap_->copyTo(&bitmap_copy);
+  // This should succeed since the destination bitmap is empty to begin with.
+  // The only failure is an allocation failure, which we want to DCHECK anyway.
+  DCHECK(result);
+  return ImageSkiaRep(bitmap_copy, image_scale_);
 }
 
 void Canvas::DrawDashedRect(const RectF& rect, SkColor color) {
@@ -198,6 +175,10 @@ void Canvas::SaveLayerAlpha(uint8_t alpha, const Rect& layer_bounds) {
   canvas_->saveLayerAlpha(&bounds, alpha);
 }
 
+void Canvas::SaveLayerWithFlags(const cc::PaintFlags& flags) {
+  canvas_->saveLayer(nullptr /* bounds */, &flags);
+}
+
 void Canvas::Restore() {
   canvas_->restore();
 }
@@ -256,16 +237,8 @@ void Canvas::FillRect(const Rect& rect, SkColor color, SkBlendMode mode) {
   DrawRect(rect, flags);
 }
 
-void Canvas::DrawRect(const Rect& rect, SkColor color) {
-  DrawRect(RectF(rect), color);
-}
-
 void Canvas::DrawRect(const RectF& rect, SkColor color) {
   DrawRect(rect, color, SkBlendMode::kSrcOver);
-}
-
-void Canvas::DrawRect(const Rect& rect, SkColor color, SkBlendMode mode) {
-  DrawRect(RectF(rect), color, mode);
 }
 
 void Canvas::DrawRect(const RectF& rect, SkColor color, SkBlendMode mode) {
@@ -504,19 +477,9 @@ void Canvas::TileImageInt(const ImageSkia& image,
                           int dest_x,
                           int dest_y,
                           int w,
-                          int h) {
-  TileImageInt(image, src_x, src_y, 1.0f, 1.0f, dest_x, dest_y, w, h);
-}
-
-void Canvas::TileImageInt(const ImageSkia& image,
-                          int src_x,
-                          int src_y,
-                          float tile_scale_x,
-                          float tile_scale_y,
-                          int dest_x,
-                          int dest_y,
-                          int w,
-                          int h) {
+                          int h,
+                          float tile_scale,
+                          cc::PaintFlags* flags) {
   SkRect dest_rect = { SkIntToScalar(dest_x),
                        SkIntToScalar(dest_y),
                        SkIntToScalar(dest_x + w),
@@ -524,10 +487,13 @@ void Canvas::TileImageInt(const ImageSkia& image,
   if (!IntersectsClipRect(dest_rect))
     return;
 
-  cc::PaintFlags flags;
-  if (InitPaintFlagsForTiling(image, src_x, src_y, tile_scale_x, tile_scale_y,
-                              dest_x, dest_y, &flags))
-    canvas_->drawRect(dest_rect, flags);
+  cc::PaintFlags paint_flags;
+  if (!flags)
+    flags = &paint_flags;
+
+  if (InitPaintFlagsForTiling(image, src_x, src_y, tile_scale, tile_scale,
+                              dest_x, dest_y, flags))
+    canvas_->drawRect(dest_rect, *flags);
 }
 
 bool Canvas::InitPaintFlagsForTiling(const ImageSkia& image,
@@ -550,7 +516,6 @@ bool Canvas::InitPaintFlagsForTiling(const ImageSkia& image,
 
   flags->setShader(CreateImageRepShader(image_rep, SkShader::kRepeat_TileMode,
                                         shader_scale));
-  flags->setBlendMode(SkBlendMode::kSrcOver);
   return true;
 }
 
@@ -558,10 +523,16 @@ void Canvas::Transform(const gfx::Transform& transform) {
   canvas_->concat(transform.matrix());
 }
 
-SkBitmap Canvas::ToBitmap() {
-  SkBitmap bitmap;
-  bitmap.setInfo(canvas_->imageInfo());
-  canvas_->readPixels(&bitmap, 0, 0);
+SkBitmap Canvas::GetBitmap() const {
+  DCHECK(bitmap_);
+  SkBitmap bitmap = bitmap_.value();
+  // When the bitmap is copied, it shares the underlying pixelref, but doesn't
+  // initialize pixels unless they are locked. Hence, ensure that the returned
+  // bitmap keeps the pixelref alive by locking it. Note that the dtor of
+  // SkBitmap will unlock the pixelrefs, so this won't leak. Also note that
+  // moving SkBitmap retains the same lock as the source, so the caller
+  // will receive a locked-pixels bitmap.
+  bitmap.lockPixels();
   return bitmap;
 }
 
@@ -617,6 +588,23 @@ void Canvas::DrawImageIntHelper(const ImageSkiaRep& image_rep,
 
   // The rect will be filled by the bitmap.
   canvas_->drawRect(dest_rect, flags);
+}
+
+cc::PaintCanvas* Canvas::CreateOwnedCanvas(const Size& size, bool is_opaque) {
+  // SkBitmap cannot be zero-sized, but clients of Canvas sometimes request
+  // that (and then later resize).
+  int width = std::max(size.width(), 1);
+  int height = std::max(size.height(), 1);
+  SkAlphaType alpha = is_opaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
+  SkImageInfo info = SkImageInfo::MakeN32(width, height, alpha);
+
+  bitmap_.emplace();
+  bitmap_->allocPixels(info);
+  // Ensure that the bitmap is zeroed, since the code expects that.
+  memset(bitmap_->getPixels(), 0, bitmap_->getSafeSize());
+
+  owned_canvas_ = cc::SkiaPaintCanvas(bitmap_.value());
+  return &owned_canvas_.value();
 }
 
 }  // namespace gfx

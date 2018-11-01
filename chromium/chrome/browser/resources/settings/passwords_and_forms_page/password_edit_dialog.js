@@ -82,20 +82,20 @@ Polymer({
   },
 
   /**
-   * Handler for tapping the 'cancel' button. Should just dismiss the dialog.
+   * Handler for tapping the 'done' button. Should just dismiss the dialog.
    * @private
    */
-  onCancelButtonTap_: function() {
+  onActionButtonTap_: function() {
     this.close();
   },
 
   /**
-   * Handler for tapping the save button.
+   * @param {!Event} event
    * @private
    */
-  onSaveButtonTap_: function() {
-    // TODO(hcarmona): what to save?
-    this.close();
-  },
+  onReadonlyInputTap_: function(event) {
+    /** @type {!PaperInputElement} */ (Polymer.dom(event).localTarget)
+        .inputElement.select();
+  }
 });
 })();

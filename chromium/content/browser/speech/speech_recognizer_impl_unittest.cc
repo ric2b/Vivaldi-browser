@@ -72,7 +72,8 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
         media::AudioParameters::UnavailableDeviceParams());
     audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
     recognizer_ = new SpeechRecognizerImpl(
-        this, audio_system_.get(), kTestingSessionId, false, false, sr_engine);
+        this, audio_system_.get(), audio_manager_.get(), kTestingSessionId,
+        false, false, sr_engine);
 
     int audio_packet_length_bytes =
         (SpeechRecognizerImpl::kAudioSampleRate *
@@ -91,6 +92,7 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
 
   ~SpeechRecognizerImplTest() override {
     // Deleting |audio_manager_| on audio thread.
+    audio_system_.reset();
     audio_manager_.reset();
     audio_thread_.Stop();
   }

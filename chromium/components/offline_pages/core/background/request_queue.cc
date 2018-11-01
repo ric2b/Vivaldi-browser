@@ -31,10 +31,6 @@ void GetRequestsDone(const RequestQueue::GetRequestsCallback& callback,
                      std::vector<std::unique_ptr<SavePageRequest>> requests) {
   GetRequestsResult result =
       success ? GetRequestsResult::SUCCESS : GetRequestsResult::STORE_FAILURE;
-  // TODO(fgorski): Filter out expired requests based on policy.
-  // This may trigger the purging if necessary.
-  // Also this may be turned into a method on the request queue or add a policy
-  // parameter in the process.
   callback.Run(result, std::move(requests));
 }
 
@@ -78,8 +74,6 @@ void RequestQueue::GetRequests(const GetRequestsCallback& callback) {
 
 void RequestQueue::AddRequest(const SavePageRequest& request,
                               const AddRequestCallback& callback) {
-  // TODO(fgorski): check that request makes sense.
-  // TODO(fgorski): check that request does not violate policy.
   std::unique_ptr<AddRequestTask> task(new AddRequestTask(
       store_.get(), request, base::Bind(&AddRequestDone, callback, request)));
   task_queue_.AddTask(std::move(task));
@@ -128,11 +122,13 @@ void RequestQueue::PickNextRequest(
     PickRequestTask::RequestNotPickedCallback not_picked_callback,
     PickRequestTask::RequestCountCallback request_count_callback,
     DeviceConditions& conditions,
-    std::set<int64_t>& disabled_requests) {
+    std::set<int64_t>& disabled_requests,
+    std::deque<int64_t>& prioritized_requests) {
   // Using the PickerContext, create a picker task.
-  std::unique_ptr<Task> task(new PickRequestTask(
-      store_.get(), policy, picked_callback, not_picked_callback,
-      request_count_callback, conditions, disabled_requests));
+  std::unique_ptr<Task> task(
+      new PickRequestTask(store_.get(), policy, picked_callback,
+                          not_picked_callback, request_count_callback,
+                          conditions, disabled_requests, prioritized_requests));
 
   // Queue up the picking task, it will call one of the callbacks when it
   // completes.

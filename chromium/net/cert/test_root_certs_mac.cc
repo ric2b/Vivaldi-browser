@@ -9,49 +9,25 @@
 #include "base/logging.h"
 #include "net/cert/x509_certificate.h"
 
+#if defined(OS_IOS)
+#include "net/cert/x509_util_ios.h"
+#else
+#include "net/cert/x509_util_mac.h"
+#endif
+
 namespace net {
 
-namespace {
-
-typedef OSStatus (*SecTrustSetAnchorCertificatesOnlyFuncPtr)(SecTrustRef,
-                                                             Boolean);
-
-Boolean OurSecCertificateEqual(const void* value1, const void* value2) {
-  if (CFGetTypeID(value1) != SecCertificateGetTypeID() ||
-      CFGetTypeID(value2) != SecCertificateGetTypeID())
-    return CFEqual(value1, value2);
-  return X509Certificate::IsSameOSCert(
-      reinterpret_cast<SecCertificateRef>(const_cast<void*>(value1)),
-      reinterpret_cast<SecCertificateRef>(const_cast<void*>(value2)));
-}
-
-const void* RetainWrapper(CFAllocatorRef unused, const void* value) {
-  return CFRetain(value);
-}
-
-void ReleaseWrapper(CFAllocatorRef unused, const void* value) {
-  CFRelease(value);
-}
-
-// CFEqual prior to 10.6 only performed pointer checks on SecCertificateRefs,
-// rather than checking if they were the same (logical) certificate, so a
-// custom structure is used for the array callbacks.
-const CFArrayCallBacks kCertArrayCallbacks = {
-  0,  // version
-  RetainWrapper,
-  ReleaseWrapper,
-  CFCopyDescription,
-  OurSecCertificateEqual,
-};
-
-}  // namespace
-
 bool TestRootCerts::Add(X509Certificate* certificate) {
+  base::ScopedCFTypeRef<SecCertificateRef> os_cert(
+      x509_util::CreateSecCertificateFromX509Certificate(certificate));
+  if (!os_cert)
+    return false;
+
   if (CFArrayContainsValue(temporary_roots_,
                            CFRangeMake(0, CFArrayGetCount(temporary_roots_)),
-                           certificate->os_cert_handle()))
+                           os_cert.get()))
     return true;
-  CFArrayAppendValue(temporary_roots_, certificate->os_cert_handle());
+  CFArrayAppendValue(temporary_roots_, os_cert.get());
   return true;
 }
 
@@ -80,8 +56,8 @@ void TestRootCerts::SetAllowSystemTrust(bool allow_system_trust) {
 TestRootCerts::~TestRootCerts() {}
 
 void TestRootCerts::Init() {
-  temporary_roots_.reset(CFArrayCreateMutable(kCFAllocatorDefault, 0,
-                                              &kCertArrayCallbacks));
+  temporary_roots_.reset(
+      CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks));
   allow_system_trust_ = true;
 }
 

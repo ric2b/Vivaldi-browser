@@ -27,7 +27,7 @@
 #ifndef XPathUtil_h
 #define XPathUtil_h
 
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -36,14 +36,14 @@ class Node;
 namespace XPath {
 
 // @return whether the given node is the root node
-bool isRootDomNode(Node*);
+bool IsRootDomNode(Node*);
 
 // @return the 'string-value' of the given node as specified by
 // http://www.w3.org/TR/xpath
-String stringValue(Node*);
+String StringValue(Node*);
 
 // @return whether the given node is a valid context node
-bool isValidContextNode(Node*);
+bool IsValidContextNode(Node*);
 
 }  // namespace XPath
 

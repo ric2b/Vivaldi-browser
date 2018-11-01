@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "net/base/request_priority.h"
 #include "net/quic/core/quic_packets.h"
+#include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/mock_random.h"
 #include "net/spdy/spdy_framer.h"
@@ -83,20 +84,27 @@ class QuicTestPacketMaker {
       QuicPacketNumber ack_least_unacked,
       QuicPacketNumber stop_least_unacked,
       bool send_feedback);
+  std::unique_ptr<QuicReceivedPacket> MakeAckPacket(
+      QuicPacketNumber packet_number,
+      QuicPacketNumber largest_received,
+      QuicPacketNumber ack_least_unacked,
+      QuicPacketNumber stop_least_unacked,
+      bool send_feedback,
+      QuicTime::Delta ack_delay_time);
   std::unique_ptr<QuicReceivedPacket> MakeDataPacket(
       QuicPacketNumber packet_number,
       QuicStreamId stream_id,
       bool should_include_version,
       bool fin,
       QuicStreamOffset offset,
-      base::StringPiece data);
+      QuicStringPiece data);
   std::unique_ptr<QuicReceivedPacket> MakeForceHolDataPacket(
       QuicPacketNumber packet_number,
       QuicStreamId stream_id,
       bool should_include_version,
       bool fin,
       QuicStreamOffset* offset,
-      base::StringPiece data);
+      QuicStringPiece data);
   std::unique_ptr<QuicReceivedPacket> MakeMultipleDataFramesPacket(
       QuicPacketNumber packet_number,
       QuicStreamId stream_id,
@@ -112,7 +120,7 @@ class QuicTestPacketMaker {
       QuicPacketNumber least_unacked,
       bool fin,
       QuicStreamOffset offset,
-      base::StringPiece data);
+      QuicStringPiece data);
 
   std::unique_ptr<QuicReceivedPacket>
   MakeRequestHeadersAndMultipleDataFramesPacket(
@@ -146,6 +154,18 @@ class QuicTestPacketMaker {
       SpdyHeaderBlock headers,
       size_t* spdy_headers_frame_length,
       QuicStreamOffset* offset);
+
+  // Saves the serialized QUIC stream data in |stream_data|.
+  std::unique_ptr<QuicReceivedPacket> MakeRequestHeadersPacketAndSaveData(
+      QuicPacketNumber packet_number,
+      QuicStreamId stream_id,
+      bool should_include_version,
+      bool fin,
+      SpdyPriority priority,
+      SpdyHeaderBlock headers,
+      size_t* spdy_headers_frame_length,
+      QuicStreamOffset* offset,
+      std::string* stream_data);
 
   // Convenience method for calling MakeRequestHeadersPacket with nullptr for
   // |spdy_headers_frame_length|.
@@ -205,6 +225,16 @@ class QuicTestPacketMaker {
       size_t value,
       bool should_include_version,
       QuicStreamOffset* offset);
+
+  // Same as above, but also saves the serialized QUIC stream data in
+  // |stream_data|.
+  std::unique_ptr<QuicReceivedPacket> MakeSettingsPacketAndSaveData(
+      QuicPacketNumber packet_number,
+      SpdySettingsIds id,
+      size_t value,
+      bool should_include_version,
+      QuicStreamOffset* offset,
+      std::string* stream_data);
 
   SpdyHeaderBlock GetRequestHeaders(const std::string& method,
                                     const std::string& scheme,

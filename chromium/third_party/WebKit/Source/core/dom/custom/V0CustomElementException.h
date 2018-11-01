@@ -31,9 +31,9 @@
 #ifndef V0CustomElementException_h
 #define V0CustomElementException_h
 
-#include "wtf/Allocator.h"
-#include "wtf/text/AtomicString.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/text/AtomicString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -44,22 +44,22 @@ class V0CustomElementException {
 
  public:
   enum Reason {
-    CannotRegisterFromExtension,
-    ConstructorPropertyNotConfigurable,
-    ContextDestroyedCheckingPrototype,
-    ContextDestroyedCreatingCallbacks,
-    ContextDestroyedRegisteringDefinition,
-    ExtendsIsInvalidName,
-    ExtendsIsCustomElementName,
-    InvalidName,
-    PrototypeInUse,
-    TypeAlreadyRegistered
+    kCannotRegisterFromExtension,
+    kConstructorPropertyNotConfigurable,
+    kContextDestroyedCheckingPrototype,
+    kContextDestroyedCreatingCallbacks,
+    kContextDestroyedRegisteringDefinition,
+    kExtendsIsInvalidName,
+    kExtendsIsCustomElementName,
+    kInvalidName,
+    kPrototypeInUse,
+    kTypeAlreadyRegistered
   };
 
-  static void throwException(Reason, const AtomicString& type, ExceptionState&);
+  static void ThrowException(Reason, const AtomicString& type, ExceptionState&);
 
  private:
-  static String preamble(const AtomicString& type);
+  static String Preamble(const AtomicString& type);
 };
 
 }  // namespace blink

@@ -7,7 +7,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "services/service_manager/public/c/main.h"
-#include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -31,11 +30,9 @@ class Target : public service_manager::Service {
                                           &service);
     service->SetTargetIdentity(context()->identity());
   }
-
-  bool OnConnect(const service_manager::ServiceInfo& remote_info,
-                 service_manager::InterfaceRegistry* registry) override {
-    return false;
-  }
+  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle interface_pipe) override {}
 
   DISALLOW_COPY_AND_ASSIGN(Target);
 };

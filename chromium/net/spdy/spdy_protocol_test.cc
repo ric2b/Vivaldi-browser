@@ -14,8 +14,6 @@
 #include "net/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using std::string;
-
 namespace net {
 
 std::ostream& operator<<(std::ostream& os,
@@ -79,31 +77,31 @@ TEST(SpdyProtocolTest, Http2WeightToSpdy3Priority) {
 
 TEST(SpdyProtocolTest, IsValidHTTP2FrameStreamId) {
   // Stream-specific frames must have non-zero stream ids
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, DATA));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, DATA));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, HEADERS));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, HEADERS));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, PRIORITY));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, PRIORITY));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, RST_STREAM));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, RST_STREAM));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, CONTINUATION));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, CONTINUATION));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, PUSH_PROMISE));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, PUSH_PROMISE));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::DATA));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::DATA));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::HEADERS));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::HEADERS));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::PRIORITY));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::PRIORITY));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::RST_STREAM));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::RST_STREAM));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::CONTINUATION));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::CONTINUATION));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::PUSH_PROMISE));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::PUSH_PROMISE));
 
   // Connection-level frames must have zero stream ids
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(1, GOAWAY));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, GOAWAY));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(1, SETTINGS));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, SETTINGS));
-  EXPECT_FALSE(IsValidHTTP2FrameStreamId(1, PING));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, PING));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::GOAWAY));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::GOAWAY));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::SETTINGS));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::SETTINGS));
+  EXPECT_FALSE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::PING));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::PING));
 
   // Frames that are neither stream-specific nor connection-level
   // should not have their stream id declared invalid
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, WINDOW_UPDATE));
-  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, WINDOW_UPDATE));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(1, SpdyFrameType::WINDOW_UPDATE));
+  EXPECT_TRUE(IsValidHTTP2FrameStreamId(0, SpdyFrameType::WINDOW_UPDATE));
 }
 
 TEST(SpdyProtocolTest, ParseSettingsId) {
@@ -128,7 +126,7 @@ TEST(SpdyProtocolTest, SettingsIdToString) {
   struct {
     SpdySettingsIds setting_id;
     bool expected_bool;
-    const string expected_string;
+    const SpdyString expected_string;
   } test_cases[] = {
       {static_cast<SpdySettingsIds>(0), false, "SETTINGS_UNKNOWN"},
       {SETTINGS_HEADER_TABLE_SIZE, true, "SETTINGS_HEADER_TABLE_SIZE"},
@@ -220,8 +218,9 @@ TEST(SpdyStreamPrecedenceTest, Equals) {
 }
 
 TEST(SpdyDataIRTest, Construct) {
-  // Confirm that it makes a string of zero length from a StringPiece(nullptr).
-  base::StringPiece s1;
+  // Confirm that it makes a string of zero length from a
+  // SpdyStringPiece(nullptr).
+  SpdyStringPiece s1;
   SpdyDataIR d1(1, s1);
   EXPECT_EQ(d1.data_len(), 0ul);
   EXPECT_NE(d1.data(), nullptr);
@@ -229,30 +228,30 @@ TEST(SpdyDataIRTest, Construct) {
   // Confirms makes a copy of char array.
   const char s2[] = "something";
   SpdyDataIR d2(2, s2);
-  EXPECT_EQ(base::StringPiece(d2.data(), d2.data_len()), s2);
-  EXPECT_NE(base::StringPiece(d1.data(), d1.data_len()), s2);
+  EXPECT_EQ(SpdyStringPiece(d2.data(), d2.data_len()), s2);
+  EXPECT_NE(SpdyStringPiece(d1.data(), d1.data_len()), s2);
 
   // Confirm copies a const string.
-  const string foo = "foo";
+  const SpdyString foo = "foo";
   SpdyDataIR d3(3, foo);
   EXPECT_EQ(foo, d3.data());
 
   // Confirm copies a non-const string.
-  string bar = "bar";
+  SpdyString bar = "bar";
   SpdyDataIR d4(4, bar);
   EXPECT_EQ("bar", bar);
-  EXPECT_EQ("bar", base::StringPiece(d4.data(), d4.data_len()));
+  EXPECT_EQ("bar", SpdyStringPiece(d4.data(), d4.data_len()));
 
   // Confirm moves an rvalue reference. Note that the test string "baz" is too
   // short to trigger the move optimization, and instead a copy occurs.
-  string baz = "the quick brown fox";
+  SpdyString baz = "the quick brown fox";
   SpdyDataIR d5(5, std::move(baz));
   EXPECT_EQ("", baz);
-  EXPECT_EQ(base::StringPiece(d5.data(), d5.data_len()), "the quick brown fox");
+  EXPECT_EQ(SpdyStringPiece(d5.data(), d5.data_len()), "the quick brown fox");
 
   // Confirms makes a copy of string literal.
   SpdyDataIR d7(7, "something else");
-  EXPECT_EQ(base::StringPiece(d7.data(), d7.data_len()), "something else");
+  EXPECT_EQ(SpdyStringPiece(d7.data(), d7.data_len()), "something else");
 }
 
 }  // namespace test

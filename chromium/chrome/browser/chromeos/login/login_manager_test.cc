@@ -96,7 +96,7 @@ void LoginManagerTest::SetUp() {
 void LoginManagerTest::TearDownOnMainThread() {
   MixinBasedBrowserTest::TearDownOnMainThread();
   if (LoginDisplayHost::default_host())
-    LoginDisplayHost::default_host()->Finalize();
+    LoginDisplayHost::default_host()->Finalize(base::OnceClosure());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
 }
@@ -156,7 +156,7 @@ void LoginManagerTest::SetUpOnMainThread() {
 
 void LoginManagerTest::RegisterUser(const std::string& user_id) {
   ListPrefUpdate users_pref(g_browser_process->local_state(), "LoggedInUsers");
-  users_pref->AppendIfNotPresent(base::MakeUnique<base::StringValue>(user_id));
+  users_pref->AppendIfNotPresent(base::MakeUnique<base::Value>(user_id));
 }
 
 void LoginManagerTest::SetExpectedCredentials(const UserContext& user_context) {

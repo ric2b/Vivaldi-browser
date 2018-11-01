@@ -14,7 +14,7 @@
 #include "base/memory/memory_coordinator_client.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/memory_dump_provider.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/resources/resource_format.h"
 #include "cc/tiles/image_decode_cache.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -103,7 +103,8 @@ class CC_EXPORT GpuImageDecodeCache
 
   explicit GpuImageDecodeCache(ContextProvider* context,
                                ResourceFormat decode_format,
-                               size_t max_gpu_image_bytes);
+                               size_t max_working_set_bytes,
+                               size_t max_cache_bytes);
   ~GpuImageDecodeCache() override;
 
   // ImageDecodeCache overrides.
@@ -123,6 +124,7 @@ class CC_EXPORT GpuImageDecodeCache
   void ReduceCacheUsage() override;
   void SetShouldAggressivelyFreeResources(
       bool aggressively_free_resources) override;
+  void ClearCache() override;
 
   // MemoryDumpProvider overrides.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -142,8 +144,9 @@ class CC_EXPORT GpuImageDecodeCache
   void OnImageUploadTaskCompleted(const DrawImage& image);
 
   // For testing only.
-  void SetCachedBytesLimitForTesting(size_t limit) {
+  void SetAllByteLimitsForTesting(size_t limit) {
     cached_bytes_limit_ = limit;
+    max_working_set_bytes_ = limit;
   }
   size_t GetBytesUsedForTesting() const { return bytes_used_; }
   size_t GetNumCacheEntriesForTesting() const {
@@ -230,10 +233,12 @@ class CC_EXPORT GpuImageDecodeCache
   struct ImageData : public base::RefCounted<ImageData> {
     ImageData(DecodedDataMode mode,
               size_t size,
+              const gfx::ColorSpace& target_color_space,
               const SkImage::DeferredTextureImageUsageParams& upload_params);
 
     const DecodedDataMode mode;
     const size_t size;
+    gfx::ColorSpace target_color_space;
     bool is_at_raster = false;
     SkImage::DeferredTextureImageUsageParams upload_params;
 
@@ -263,7 +268,23 @@ class CC_EXPORT GpuImageDecodeCache
 
   // Uniquely identifies (without collisions) a specific DrawImage for use in
   // the |in_use_cache_|.
-  using InUseCacheKey = uint64_t;
+  struct InUseCacheKeyHash;
+  struct InUseCacheKey {
+    static InUseCacheKey FromDrawImage(const DrawImage& draw_image);
+    bool operator==(const InUseCacheKey& other) const;
+
+   private:
+    friend struct GpuImageDecodeCache::InUseCacheKeyHash;
+    explicit InUseCacheKey(const DrawImage& draw_image);
+
+    uint32_t image_id;
+    int mip_level;
+    SkFilterQuality filter_quality;
+    gfx::ColorSpace target_color_space;
+  };
+  struct InUseCacheKeyHash {
+    size_t operator()(const InUseCacheKey&) const;
+  };
 
   // All private functions should only be called while holding |lock_|. Some
   // functions also require the |context_| lock. These are indicated by
@@ -292,10 +313,11 @@ class CC_EXPORT GpuImageDecodeCache
   // to ref-count or to orphaned status.
   void OwnershipChanged(const DrawImage& draw_image, ImageData* image_data);
 
-  // Ensures that the cache can hold an element of |required_size|, freeing
-  // unreferenced cache entries if necessary to make room.
+  // Ensures that the working set can hold an element of |required_size|,
+  // freeing unreferenced cache entries to make room.
   bool EnsureCapacity(size_t required_size);
-  bool CanFitSize(size_t size) const;
+  bool CanFitInWorkingSet(size_t size) const;
+  bool CanFitInCache(size_t size) const;
   bool ExceedsPreferredCount() const;
 
   void DecodeImageIfNecessary(const DrawImage& draw_image,
@@ -334,11 +356,13 @@ class CC_EXPORT GpuImageDecodeCache
 
   // |in_use_cache_| represents the in-use (short-lived) cache. Entries are
   // cleaned up as soon as their ref count reaches zero.
-  using InUseCache = std::unordered_map<InUseCacheKey, InUseCacheEntry>;
+  using InUseCache =
+      std::unordered_map<InUseCacheKey, InUseCacheEntry, InUseCacheKeyHash>;
   InUseCache in_use_cache_;
 
-  const size_t normal_max_gpu_image_bytes_;
-  size_t cached_bytes_limit_ = normal_max_gpu_image_bytes_;
+  size_t max_working_set_bytes_;
+  const size_t normal_max_cache_bytes_;
+  size_t cached_bytes_limit_ = normal_max_cache_bytes_;
   size_t bytes_used_ = 0;
   base::MemoryState memory_state_ = base::MemoryState::NORMAL;
 

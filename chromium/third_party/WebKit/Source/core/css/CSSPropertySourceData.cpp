@@ -30,9 +30,9 @@
 
 #include "core/css/CSSPropertySourceData.h"
 
-#include "wtf/StaticConstructors.h"
-#include "wtf/text/StringBuilder.h"
-#include "wtf/text/StringHash.h"
+#include "platform/wtf/StaticConstructors.h"
+#include "platform/wtf/text/StringBuilder.h"
+#include "platform/wtf/text/StringHash.h"
 
 namespace blink {
 
@@ -49,13 +49,13 @@ CSSPropertySourceData::CSSPropertySourceData(const String& name,
                                              const String& value,
                                              bool important,
                                              bool disabled,
-                                             bool parsedOk,
+                                             bool parsed_ok,
                                              const SourceRange& range)
     : name(name),
       value(value),
       important(important),
       disabled(disabled),
-      parsedOk(parsedOk),
+      parsed_ok(parsed_ok),
       range(range) {}
 
 CSSPropertySourceData::CSSPropertySourceData(const CSSPropertySourceData& other)
@@ -63,7 +63,7 @@ CSSPropertySourceData::CSSPropertySourceData(const CSSPropertySourceData& other)
       value(other.value),
       important(other.important),
       disabled(other.disabled),
-      parsedOk(other.parsedOk),
+      parsed_ok(other.parsed_ok),
       range(other.range) {}
 
 }  // namespace blink

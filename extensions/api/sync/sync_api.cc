@@ -12,9 +12,9 @@
 
 #include "base/lazy_instance.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/sync/base/model_type.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
-#include "sync/vivaldi_sync_model_factory.h"
 #include "sync/vivaldi_syncmanager.h"
 #include "sync/vivaldi_syncmanager_factory.h"
 
@@ -23,20 +23,16 @@ using vivaldi::VivaldiSyncManager;
 
 namespace extensions {
 
-using vivaldi::sync::SyncParamItem;
-
-typedef std::vector<vivaldi::sync::SyncParamItem> SyncParamItemVector;
-
 SyncEventRouter::SyncEventRouter(Profile* profile)
     : browser_context_(profile),
-      model_(SyncModelFactory::GetForProfile(profile)),
-      client_(VivaldiSyncManagerFactory::GetForProfileVivaldi(profile)) {
-  model_->AddObserver(this);
+      manager_(VivaldiSyncManagerFactory::GetForProfileVivaldi(profile)
+                   ->AsWeakPtr()) {
+  manager_->AddVivaldiObserver(this);
 }
 
 SyncEventRouter::~SyncEventRouter() {
-  if (model_) {
-    model_->RemoveObserver(this);
+  if (manager_) {
+    manager_->RemoveVivaldiObserver(this);
   }
 }
 
@@ -52,23 +48,62 @@ void SyncEventRouter::DispatchEvent(
   }
 }
 
-void SyncEventRouter::SyncOnMessage(const std::string& param1,
-                                    const std::string& param2) {
-  DispatchEvent(vivaldi::sync::OnChanged::kEventName,
-                vivaldi::sync::OnChanged::Create(param1, param2));
+void SyncEventRouter::OnAccessTokenRequested() {
+  DispatchEvent(vivaldi::sync::OnAccessTokenRequested::kEventName,
+                vivaldi::sync::OnAccessTokenRequested::Create());
 }
 
-void SyncEventRouter::SyncModelBeingDeleted(VivaldiSyncModel* model) {
-  model_ = NULL;
+void SyncEventRouter::OnEncryptionPasswordRequested() {
+  DispatchEvent(vivaldi::sync::OnEncryptionPasswordRequested::kEventName,
+                vivaldi::sync::OnEncryptionPasswordRequested::Create());
+}
+
+void SyncEventRouter::OnSyncConfigured() {
+  DispatchEvent(vivaldi::sync::OnSyncConfigured::kEventName,
+                vivaldi::sync::OnSyncConfigured::Create());
+}
+
+void SyncEventRouter::OnLoginDone() {
+  DispatchEvent(vivaldi::sync::OnLoginDone::kEventName,
+                vivaldi::sync::OnLoginDone::Create());
+}
+
+void SyncEventRouter::OnSyncEngineInitFailed() {
+  DispatchEvent(vivaldi::sync::OnSyncEngineInitFailed::kEventName,
+                vivaldi::sync::OnSyncEngineInitFailed::Create());
+}
+
+void SyncEventRouter::OnBeginSyncing() {
+  DispatchEvent(vivaldi::sync::OnBeginSyncing::kEventName,
+                vivaldi::sync::OnBeginSyncing::Create());
+}
+
+void SyncEventRouter::OnEndSyncing() {
+  DispatchEvent(vivaldi::sync::OnEndSyncing::kEventName,
+                vivaldi::sync::OnEndSyncing::Create());
+}
+
+void SyncEventRouter::OnDeletingSyncManager() {
+  manager_->RemoveVivaldiObserver(this);
+  manager_ = nullptr;
 }
 
 SyncAPI::SyncAPI(content::BrowserContext* context) : browser_context_(context) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
-  event_router->RegisterObserver(this, vivaldi::sync::OnChanged::kEventName);
+  event_router->RegisterObserver(this,
+                                 vivaldi::sync::OnSyncConfigured::kEventName);
+  event_router->RegisterObserver(this, vivaldi::sync::OnLoginDone::kEventName);
+  event_router->RegisterObserver(this,
+                                 vivaldi::sync::OnBeginSyncing::kEventName);
+  event_router->RegisterObserver(this, vivaldi::sync::OnEndSyncing::kEventName);
+  event_router->RegisterObserver(
+      this, vivaldi::sync::OnSyncEngineInitFailed::kEventName);
+  event_router->RegisterObserver(
+      this, vivaldi::sync::OnAccessTokenRequested::kEventName);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<SyncAPI> > g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<SyncAPI> >::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<SyncAPI>* SyncAPI::GetFactoryInstance() {
@@ -88,56 +123,168 @@ void SyncAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-SyncSendFunction::SyncSendFunction() {}
-
-SyncSendFunction::~SyncSendFunction() {}
-
-bool SyncSendFunction::RunAsync() {
-  std::unique_ptr<vivaldi::sync::Send::Params> params(
-      vivaldi::sync::Send::Params::Create(*args_));
+bool SyncLoginCompleteFunction::RunAsync() {
+  std::unique_ptr<vivaldi::sync::LoginComplete::Params> params(
+      vivaldi::sync::LoginComplete::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  std::string string_value = params->event_name;
-
-  SyncParamItemVector& syncParms = params->event_arg_list;
-
-  std::unique_ptr<base::DictionaryValue> syncParmsValues(
-      new base::DictionaryValue);
-  DCHECK(syncParmsValues.get());
-
-  for (SyncParamItemVector::const_iterator it = syncParms.begin();
-       it != syncParms.end(); it++) {
-    CHECK(!it->key.empty());
-    syncParmsValues->SetString(it->key, it->value);
-  }
-
-  std::string result_value = "Success";
-  bool success = true;
   Profile* profile = GetProfile();
-
-  VivaldiSyncManager* syncmanager =
+  VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
-  CHECK(syncmanager);
+  DCHECK(sync_manager);
 
-  if (string_value == "vivaldiCompleteLogin") {
-    syncmanager->HandleLoggedInMessage(*syncParmsValues.get());
-  } else if (string_value == "vivaldiRefreshToken") {
-    syncmanager->HandleRefreshToken(*syncParmsValues.get());
-  } else if (string_value == "vivaldiLogout") {
-    syncmanager->HandleLogOutMessage(*syncParmsValues.get());
-  } else if (string_value == "vivaldiPollSync") {
-    syncmanager->HandlePollServerMessage(*syncParmsValues.get());
-  } else if (string_value == "vivaldiConfigurePolling") {
-    syncmanager->HandleConfigurePollingMessage(*syncParmsValues.get());
-  } else {
-    result_value = "Failed";
-    success = false;
-  }
+  sync_manager->SetToken(true, params->login_details.username,
+                         params->login_details.password, params->token.token,
+                         params->token.expire, params->token.account_id);
 
-  results_ = vivaldi::sync::Send::Results::Create(result_value);
+  SendResponse(true);
+  return true;
+}
+
+bool SyncRefreshTokenFunction::RunAsync() {
+  std::unique_ptr<vivaldi::sync::RefreshToken::Params> params(
+      vivaldi::sync::RefreshToken::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  sync_manager->SetToken(false, std::string(), std::string(),
+                         params->token.token, params->token.expire,
+                         params->token.account_id);
+
+  SendResponse(true);
+  return true;
+}
+
+bool SyncIsFirstSetupFunction::RunAsync() {
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  results_ = vivaldi::sync::IsFirstSetup::Results::Create(
+      !sync_manager->IsFirstSetupComplete());
+
+  SendResponse(true);
+  return true;
+}
+
+bool SyncSetEncryptionPasswordFunction::RunAsync() {
+  std::unique_ptr<vivaldi::sync::SetEncryptionPassword::Params> params(
+      vivaldi::sync::SetEncryptionPassword::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  bool success = sync_manager->SetEncryptionPassword(params->password);
+
+  if (!success)
+    results_ = vivaldi::sync::SetEncryptionPassword::Results::Create(
+        success, sync_manager->IsPassphraseRequired());
+  else
+    results_ =
+        vivaldi::sync::SetEncryptionPassword::Results::Create(success, false);
 
   SendResponse(success);
+  return true;
+}
+
+bool SyncSetTypesFunction::RunAsync() {
+  std::unique_ptr<vivaldi::sync::SetTypes::Params> params(
+      vivaldi::sync::SetTypes::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  syncer::ModelTypeSet chosen_types;
+  for (const auto& type : params->types) {
+    if (type.enabled)
+      chosen_types.Put(syncer::ModelTypeFromString(type.name));
+  }
+
+  sync_manager->ConfigureTypes(params->sync_everything, chosen_types);
+
+  SendResponse(true);
+  return true;
+}
+
+bool SyncGetTypesFunction::RunAsync() {
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  PrefService* pref_service = GetProfile()->GetPrefs();
+  syncer::SyncPrefs sync_prefs(pref_service);
+
+  syncer::ModelTypeSet chosen_types = sync_manager->GetPreferredDataTypes();
+  syncer::ModelTypeNameMap model_type_map =
+      syncer::GetUserSelectableTypeNameMap();
+  std::vector<vivaldi::sync::SyncDataType> data_types;
+  for (const auto& model_type : model_type_map) {
+    vivaldi::sync::SyncDataType data_type;
+    data_type.name.assign(model_type.second);
+    data_type.enabled = chosen_types.Has(model_type.first);
+    data_types.push_back(std::move(data_type));
+  }
+
+  results_ = vivaldi::sync::GetTypes::Results::Create(
+      sync_prefs.HasKeepEverythingSynced(), std::move(data_types));
+
+  SendResponse(true);
+  return true;
+}
+
+bool SyncClearDataFunction::RunAsync() {
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  sync_manager->ClearSyncData(
+      base::Bind(&SyncClearDataFunction::ReportClearDataDone, this));
+
+  return true;
+}
+
+void SyncClearDataFunction::ReportClearDataDone() {
+  SendResponse(true);
+}
+
+bool SyncLogoutFunction::RunAsync() {
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  sync_manager->Logout();
+
+  SendResponse(true);
+  return true;
+}
+
+bool SyncPollServerFunction::RunAsync() {
+  Profile* profile = GetProfile();
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(profile);
+  DCHECK(sync_manager);
+
+  sync_manager->PollServer();
+
+  SendResponse(true);
   return true;
 }
 

@@ -5,15 +5,15 @@
 #ifndef CompositorFloatAnimationCurve_h
 #define CompositorFloatAnimationCurve_h
 
+#include <memory>
 #include "platform/PlatformExport.h"
 #include "platform/animation/CompositorAnimationCurve.h"
 #include "platform/animation/CompositorFloatKeyframe.h"
 #include "platform/animation/TimingFunction.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/PtrUtil.h"
-#include "wtf/Vector.h"
-#include <memory>
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Vector.h"
 
 namespace cc {
 class KeyframedFloatAnimationCurve;
@@ -31,34 +31,34 @@ class PLATFORM_EXPORT CompositorFloatAnimationCurve
   WTF_MAKE_NONCOPYABLE(CompositorFloatAnimationCurve);
 
  public:
-  static std::unique_ptr<CompositorFloatAnimationCurve> create() {
-    return WTF::wrapUnique(new CompositorFloatAnimationCurve());
+  static std::unique_ptr<CompositorFloatAnimationCurve> Create() {
+    return WTF::WrapUnique(new CompositorFloatAnimationCurve());
   }
 
   ~CompositorFloatAnimationCurve() override;
 
-  void addKeyframe(const CompositorFloatKeyframe&);
-  void setTimingFunction(const TimingFunction&);
-  void setScaledDuration(double);
-  float getValue(double time) const;
+  void AddKeyframe(const CompositorFloatKeyframe&);
+  void SetTimingFunction(const TimingFunction&);
+  void SetScaledDuration(double);
+  float GetValue(double time) const;
 
   // CompositorAnimationCurve implementation.
-  std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const override;
+  std::unique_ptr<cc::AnimationCurve> CloneToAnimationCurve() const override;
 
-  static std::unique_ptr<CompositorFloatAnimationCurve> createForTesting(
+  static std::unique_ptr<CompositorFloatAnimationCurve> CreateForTesting(
       std::unique_ptr<cc::KeyframedFloatAnimationCurve>);
 
   using Keyframes = Vector<std::unique_ptr<CompositorFloatKeyframe>>;
-  Keyframes keyframesForTesting() const;
+  Keyframes KeyframesForTesting() const;
 
-  PassRefPtr<TimingFunction> getTimingFunctionForTesting() const;
+  PassRefPtr<TimingFunction> GetTimingFunctionForTesting() const;
 
  private:
   CompositorFloatAnimationCurve();
   CompositorFloatAnimationCurve(
       std::unique_ptr<cc::KeyframedFloatAnimationCurve>);
 
-  std::unique_ptr<cc::KeyframedFloatAnimationCurve> m_curve;
+  std::unique_ptr<cc::KeyframedFloatAnimationCurve> curve_;
 };
 
 }  // namespace blink

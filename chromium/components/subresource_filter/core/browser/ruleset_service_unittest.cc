@@ -27,6 +27,7 @@
 #include "build/build_config.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/subresource_filter/core/browser/ruleset_service_delegate.h"
+#include "components/subresource_filter/core/common/proto/rules.pb.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -145,8 +146,7 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
  public:
   SubresourceFilteringRulesetServiceTest()
       : task_runner_(new base::TestSimpleTaskRunner),
-        task_runner_handle_(task_runner_),
-        mock_delegate_(nullptr) {}
+        task_runner_handle_(task_runner_) {}
 
  protected:
   void SetUp() override {
@@ -172,15 +172,14 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
   }
 
   void ResetRulesetService() {
+    mock_delegate_ = base::MakeUnique<MockRulesetServiceDelegate>();
     service_ = base::MakeUnique<RulesetService>(
-        &pref_service_, task_runner_,
-        base::WrapUnique(mock_delegate_ = new MockRulesetServiceDelegate),
-        base_dir());
+        &pref_service_, task_runner_, mock_delegate_.get(), base_dir());
   }
 
   void ClearRulesetService() {
-    mock_delegate_ = nullptr;
     service_.reset();
+    mock_delegate_.reset();
   }
 
   // Creates a new file with the given license |contents| at a unique temporary
@@ -269,7 +268,7 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
 
   PrefService* prefs() { return &pref_service_; }
   RulesetService* service() { return service_.get(); }
-  MockRulesetServiceDelegate* mock_delegate() { return mock_delegate_; }
+  MockRulesetServiceDelegate* mock_delegate() { return mock_delegate_.get(); }
 
   virtual base::FilePath effective_temp_dir() const {
     return scoped_temp_dir_.GetPath();
@@ -295,8 +294,8 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
   TestRulesetPair test_ruleset_2_;
   TestRulesetPair test_ruleset_3_;
 
+  std::unique_ptr<MockRulesetServiceDelegate> mock_delegate_;
   std::unique_ptr<RulesetService> service_;
-  MockRulesetServiceDelegate* mock_delegate_;  // Weak, owned by |service_|.
 
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilteringRulesetServiceTest);
 };
@@ -661,13 +660,13 @@ TEST_F(SubresourceFilteringRulesetServiceTest,
   base::HistogramTester histogram_tester;
   mock_delegate()->SimulateStartupCompleted();
 
-  // URL patterns longer than 255 characters are not supported.
-  const std::string kTooLongSuffix(1000, 'a');
+  // The default field values are considered unsupported.
+  proto::UrlRule unfilled_rule;
+
   TestRulesetPair ruleset_with_unsupported_rule;
   ASSERT_NO_FATAL_FAILURE(
-      test_ruleset_creator()
-          ->CreateUnindexedRulesetToDisallowURLsWithPathSuffix(
-              kTooLongSuffix, &ruleset_with_unsupported_rule.unindexed));
+      test_ruleset_creator()->CreateUnindexedRulesetWithRules(
+          {unfilled_rule}, &ruleset_with_unsupported_rule.unindexed));
   IndexAndStoreAndPublishUpdatedRuleset(ruleset_with_unsupported_rule,
                                         kTestContentVersion1);
   RunUntilIdle();

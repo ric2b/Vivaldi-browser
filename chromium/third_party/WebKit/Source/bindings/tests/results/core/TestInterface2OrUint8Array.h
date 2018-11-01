@@ -14,11 +14,13 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/NativeValueTraits.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8Uint8Array.h"
 #include "core/CoreExport.h"
 #include "core/dom/FlexibleArrayBufferView.h"
+#include "core/dom/NotShared.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -37,9 +39,9 @@ class CORE_EXPORT TestInterface2OrUint8Array final {
   static TestInterface2OrUint8Array fromTestInterface2(TestInterface2*);
 
   bool isUint8Array() const { return m_type == SpecificTypeUint8Array; }
-  DOMUint8Array* getAsUint8Array() const;
-  void setUint8Array(DOMUint8Array*);
-  static TestInterface2OrUint8Array fromUint8Array(DOMUint8Array*);
+  NotShared<DOMUint8Array> getAsUint8Array() const;
+  void setUint8Array(NotShared<DOMUint8Array>);
+  static TestInterface2OrUint8Array fromUint8Array(NotShared<DOMUint8Array>);
 
   TestInterface2OrUint8Array(const TestInterface2OrUint8Array&);
   ~TestInterface2OrUint8Array();
@@ -68,18 +70,23 @@ class V8TestInterface2OrUint8Array final {
 CORE_EXPORT v8::Local<v8::Value> ToV8(const TestInterface2OrUint8Array&, v8::Local<v8::Object>, v8::Isolate*);
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, TestInterface2OrUint8Array& impl) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, TestInterface2OrUint8Array& impl) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
 template <class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, TestInterface2OrUint8Array& impl, v8::Local<v8::Object> creationContext) {
-  v8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
+inline void V8SetReturnValue(const CallbackInfo& callbackInfo, TestInterface2OrUint8Array& impl, v8::Local<v8::Object> creationContext) {
+  V8SetReturnValue(callbackInfo, ToV8(impl, creationContext, callbackInfo.GetIsolate()));
 }
 
 template <>
-struct NativeValueTraits<TestInterface2OrUint8Array> {
-  CORE_EXPORT static TestInterface2OrUint8Array nativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+struct NativeValueTraits<TestInterface2OrUint8Array> : public NativeValueTraitsBase<TestInterface2OrUint8Array> {
+  CORE_EXPORT static TestInterface2OrUint8Array NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+};
+
+template <>
+struct V8TypeOf<TestInterface2OrUint8Array> {
+  typedef V8TestInterface2OrUint8Array Type;
 };
 
 }  // namespace blink

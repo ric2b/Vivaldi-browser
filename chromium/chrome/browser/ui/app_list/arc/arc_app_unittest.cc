@@ -39,9 +39,11 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/arc/arc_util.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
@@ -89,27 +91,35 @@ void WaitForIconReady(ArcAppListPrefs* prefs,
   // Process pending tasks. This performs multiple thread hops, so we need
   // to run it continuously until it is resolved.
   do {
-    content::BrowserThread::GetBlockingPool()->FlushForTesting();
-    base::RunLoop().RunUntilIdle();
+    content::RunAllBlockingPoolTasksUntilIdle();
   } while (!base::PathExists(icon_path));
 }
 
 enum class ArcState {
   // By default, ARC is non-persistent and Play Store is unmanaged.
   ARC_PLAY_STORE_UNMANAGED,
+  // ARC is persistent and Play Store is unmanaged
+  ARC_PERSISTENT_PLAY_STORE_UNMANAGED,
   // ARC is non-persistent and Play Store is managed and enabled.
   ARC_PLAY_STORE_MANAGED_AND_ENABLED,
   // ARC is non-persistent and Play Store is managed and disabled.
   ARC_PLAY_STORE_MANAGED_AND_DISABLED,
+  // ARC is persistent and Play Store is managed and enabled.
+  ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_ENABLED,
+  // ARC is persistent and Play Store is managed and disabled.
+  ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED,
 };
 
 constexpr ArcState kManagedArcStates[] = {
     ArcState::ARC_PLAY_STORE_MANAGED_AND_ENABLED,
     ArcState::ARC_PLAY_STORE_MANAGED_AND_DISABLED,
+    ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_ENABLED,
+    ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED,
 };
 
 constexpr ArcState kUnmanagedArcStates[] = {
     ArcState::ARC_PLAY_STORE_UNMANAGED,
+    ArcState::ARC_PERSISTENT_PLAY_STORE_UNMANAGED,
 };
 
 }  // namespace
@@ -124,6 +134,16 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
   }
 
   void SetUp() override {
+    switch (GetParam()) {
+      case ArcState::ARC_PERSISTENT_PLAY_STORE_UNMANAGED:
+      case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_ENABLED:
+      case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED:
+        arc::SetArcAlwaysStartForTesting();
+        break;
+      default:
+        break;
+    }
+
     extensions::ExtensionServiceTestBase::SetUp();
     InitializeExtensionService(ExtensionServiceInitParams());
     service_->Init();
@@ -363,10 +383,12 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
   void AddPackage(const arc::mojom::ArcPackageInfo& package) {
     arc_test_.AddPackage(package);
+    app_instance()->SendPackageAdded(package);
   }
 
   void RemovePackage(const arc::mojom::ArcPackageInfo& package) {
     arc_test_.RemovePackage(package);
+    app_instance()->SendPackageUninstalled(package.package_name);
   }
 
   AppListControllerDelegate* controller() { return controller_.get(); }
@@ -413,12 +435,29 @@ class ArcDefaulAppTest : public ArcAppModelBuilderTest {
   // ArcAppModelBuilderTest:
   void OnBeforeArcTestSetup() override {
     ArcDefaultAppList::UseTestAppsDirectory();
+    arc_test()->set_wait_default_apps(IsWaitDefaultAppsNeeded());
     arc::ArcPackageSyncableServiceFactory::GetInstance()->SetTestingFactory(
         profile_.get(), nullptr);
   }
 
+  // Returns true if test needs to wait for default apps on setup.
+  virtual bool IsWaitDefaultAppsNeeded() const { return true; }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(ArcDefaulAppTest);
+};
+
+class ArcAppLauncherForDefaulAppTest : public ArcDefaulAppTest {
+ public:
+  ArcAppLauncherForDefaulAppTest() = default;
+  ~ArcAppLauncherForDefaulAppTest() override = default;
+
+ protected:
+  // ArcDefaulAppTest:
+  bool IsWaitDefaultAppsNeeded() const override { return false; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ArcAppLauncherForDefaulAppTest);
 };
 
 class ArcPlayStoreAppTest : public ArcDefaulAppTest {
@@ -465,8 +504,10 @@ class ArcDefaulAppForManagedUserTest : public ArcPlayStoreAppTest {
   bool IsEnabledByPolicy() const {
     switch (GetParam()) {
       case ArcState::ARC_PLAY_STORE_MANAGED_AND_ENABLED:
+      case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_ENABLED:
         return true;
       case ArcState::ARC_PLAY_STORE_MANAGED_AND_DISABLED:
+      case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED:
         return false;
       default:
         NOTREACHED();
@@ -480,7 +521,7 @@ class ArcDefaulAppForManagedUserTest : public ArcPlayStoreAppTest {
         policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile());
     connector->OverrideIsManagedForTesting(true);
     profile()->GetTestingPrefService()->SetManagedPref(
-        prefs::kArcEnabled, new base::Value(IsEnabledByPolicy()));
+        prefs::kArcEnabled, base::MakeUnique<base::Value>(IsEnabledByPolicy()));
 
     ArcPlayStoreAppTest::OnBeforeArcTestSetup();
   }
@@ -518,11 +559,9 @@ TEST_P(ArcAppModelBuilderTest, ArcPackagePref) {
   package.sync = true;
 
   RemovePackage(package);
-  app_instance()->SendPackageUninstalled(package.package_name);
   ValidateHavePackages(fake_packages());
 
   AddPackage(package);
-  app_instance()->SendPackageAdded(package);
   ValidateHavePackages(fake_packages());
 }
 
@@ -541,11 +580,40 @@ TEST_P(ArcAppModelBuilderTest, RefreshAllFillsContent) {
   ValidateHaveApps(fake_apps());
 }
 
-TEST_P(ArcAppModelBuilderTest, InstallShortcut) {
+TEST_P(ArcAppModelBuilderTest, InstallUninstallShortcut) {
   ValidateHaveApps(std::vector<arc::mojom::AppInfo>());
 
-  app_instance()->SendInstallShortcuts(fake_shortcuts());
-  ValidateHaveShortcuts(fake_shortcuts());
+  std::vector<arc::mojom::ShortcutInfo> shortcuts = fake_shortcuts();
+  ASSERT_GE(shortcuts.size(), 2U);
+
+  // Adding package is required to safely call SendPackageUninstalled.
+  arc::mojom::ArcPackageInfo package;
+  package.package_name = shortcuts[1].package_name;
+  package.package_version = 1;
+  package.sync = true;
+  AddPackage(package);
+
+  app_instance()->SendInstallShortcuts(shortcuts);
+  ValidateHaveShortcuts(shortcuts);
+
+  // Uninstall first shortcut and validate it was removed.
+  const std::string package_name = shortcuts[0].package_name;
+  const std::string intent_uri = shortcuts[0].intent_uri;
+  shortcuts.erase(shortcuts.begin());
+  app_instance()->SendUninstallShortcut(package_name, intent_uri);
+  ValidateHaveShortcuts(shortcuts);
+
+  // Requests to uninstall non-existing shortcuts should be just ignored.
+  EXPECT_NE(package_name, shortcuts[0].package_name);
+  EXPECT_NE(intent_uri, shortcuts[0].intent_uri);
+  app_instance()->SendUninstallShortcut(package_name, shortcuts[0].intent_uri);
+  app_instance()->SendUninstallShortcut(shortcuts[0].package_name, intent_uri);
+  ValidateHaveShortcuts(shortcuts);
+
+  // Removing package should also remove associated shortcuts.
+  app_instance()->SendPackageUninstalled(shortcuts[0].package_name);
+  shortcuts.erase(shortcuts.begin());
+  ValidateHaveShortcuts(shortcuts);
 }
 
 TEST_P(ArcAppModelBuilderTest, RefreshAllPreservesShortcut) {
@@ -780,8 +848,7 @@ TEST_P(ArcAppModelBuilderTest, RequestIcons) {
 
       // This does not result in an icon being loaded, so WaitForIconReady
       // cannot be used.
-      content::BrowserThread::GetBlockingPool()->FlushForTesting();
-      base::RunLoop().RunUntilIdle();
+      content::RunAllBlockingPoolTasksUntilIdle();
     }
   }
 
@@ -939,8 +1006,7 @@ TEST_P(ArcAppModelBuilderTest, RemoveAppCleanUpFolder) {
   // Process pending tasks. This performs multiple thread hops, so we need
   // to run it continuously until it is resolved.
   do {
-    content::BrowserThread::GetBlockingPool()->FlushForTesting();
-    base::RunLoop().RunUntilIdle();
+    content::RunAllBlockingPoolTasksUntilIdle();
   } while (base::PathExists(app_path));
   EXPECT_FALSE(base::PathExists(app_path));
 }
@@ -1049,6 +1115,10 @@ TEST_P(ArcPlayStoreAppTest, PlayStore) {
   ASSERT_TRUE(app_info);
   EXPECT_TRUE(app_info->ready);
 
+  // TODO(victorhsieh): Opt-out on Persistent ARC is special.  Skip until
+  // implemented.
+  if (arc::ShouldArcAlwaysStart())
+    return;
   arc::SetArcPlayStoreEnabledForProfile(profile(), false);
 
   app_info = prefs->GetApp(arc::kPlayStoreAppId);
@@ -1070,8 +1140,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
   app_instance()->RefreshAppList();
   app_instance()->SendRefreshAppList(std::vector<arc::mojom::AppInfo>(
       fake_apps().begin(), fake_apps().begin() + 1));
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   // Store number of requests generated during the App List item creation. Same
   // request will not be re-sent without clearing the request record in
@@ -1086,8 +1155,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
       ";S.org.chromium.arc.shelf_group_id=arc_test_shelf_group;end";
   app_instance()->SendInstallShortcuts(shortcuts);
   const std::string shortcut_id = ArcAppTest::GetAppId(shortcuts[0]);
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   const std::string id_shortcut_exist =
       arc::ArcAppShelfId("arc_test_shelf_group", app_id).ToString();
@@ -1102,8 +1170,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
   icon_loader.FetchImage(id_shortcut_exist);
   EXPECT_EQ(1UL, delegate.update_image_cnt());
   EXPECT_EQ(id_shortcut_exist, delegate.app_id());
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
   const size_t shortcut_request_cnt =
       app_instance()->shortcut_icon_requests().size();
   EXPECT_NE(0U, shortcut_request_cnt);
@@ -1118,8 +1185,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
   MaybeRemoveIconRequestRecord(app_id);
   icon_loader.FetchImage(id_shortcut_absent);
   EXPECT_EQ(2UL, delegate.update_image_cnt());
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
   EXPECT_TRUE(app_instance()->icon_requests().size() >
               initial_icon_request_count);
   EXPECT_EQ(shortcut_request_cnt,
@@ -1143,8 +1209,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderWithBadIcon) {
   app_instance()->RefreshAppList();
   app_instance()->SendRefreshAppList(std::vector<arc::mojom::AppInfo>(
       fake_apps().begin(), fake_apps().begin() + 1));
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   // Store number of requests generated during the App List item creation. Same
   // request will not be re-sent without clearing the request record in
@@ -1156,8 +1221,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderWithBadIcon) {
   ArcAppIconLoader icon_loader(profile(), app_list::kListIconSize, &delegate);
   icon_loader.FetchImage(app_id);
 
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
   // Although icon file is still missing, expect no new request sent to ARC as
   // them are recorded in IconRequestRecord in ArcAppListPrefs.
   EXPECT_EQ(app_instance()->icon_requests().size(), initial_icon_request_count);
@@ -1246,11 +1310,11 @@ TEST_P(ArcAppModelBuilderTest, AppLauncher) {
   const std::string id2 = ArcAppTest::GetAppId(app2);
   const std::string id3 = ArcAppTest::GetAppId(app3);
 
-  ArcAppLauncher launcher1(profile(), id1, true);
+  ArcAppLauncher launcher1(profile(), id1, true, false);
   EXPECT_FALSE(launcher1.app_launched());
   EXPECT_TRUE(prefs->HasObserver(&launcher1));
 
-  ArcAppLauncher launcher3(profile(), id3, true);
+  ArcAppLauncher launcher3(profile(), id3, true, false);
   EXPECT_FALSE(launcher1.app_launched());
   EXPECT_TRUE(prefs->HasObserver(&launcher1));
   EXPECT_FALSE(launcher3.app_launched());
@@ -1269,7 +1333,7 @@ TEST_P(ArcAppModelBuilderTest, AppLauncher) {
   EXPECT_FALSE(prefs->HasObserver(&launcher1));
   EXPECT_TRUE(prefs->HasObserver(&launcher3));
 
-  ArcAppLauncher launcher2(profile(), id2, true);
+  ArcAppLauncher launcher2(profile(), id2, true, false);
   EXPECT_TRUE(launcher2.app_launched());
   EXPECT_FALSE(prefs->HasObserver(&launcher2));
   ASSERT_EQ(2u, app_instance()->launch_requests().size());
@@ -1299,7 +1363,7 @@ TEST_P(ArcAppModelBuilderTest, NonLaunchableApp) {
   EXPECT_TRUE(prefs->IsRegistered(app_id));
 }
 
-TEST_P(ArcAppModelBuilderTest, ArcAppsOnPackageUpdated) {
+TEST_P(ArcAppModelBuilderTest, ArcAppsAndShortcutsOnPackageChange) {
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
   ASSERT_NE(nullptr, prefs);
 
@@ -1307,13 +1371,27 @@ TEST_P(ArcAppModelBuilderTest, ArcAppsOnPackageUpdated) {
   ASSERT_GE(3u, apps.size());
   apps[0].package_name = apps[2].package_name;
   apps[1].package_name = apps[2].package_name;
+
+  std::vector<arc::mojom::ShortcutInfo> shortcuts = fake_shortcuts();
+  for (auto& shortcut : shortcuts)
+    shortcut.package_name = apps[0].package_name;
+
   // Second app should be preserved after update.
   std::vector<arc::mojom::AppInfo> apps1(apps.begin(), apps.begin() + 2);
   std::vector<arc::mojom::AppInfo> apps2(apps.begin() + 1, apps.begin() + 3);
 
+  // Adding package is required to safely call SendPackageUninstalled.
+  arc::mojom::ArcPackageInfo package;
+  package.package_name = apps[0].package_name;
+  package.package_version = 1;
+  package.sync = true;
+  AddPackage(package);
+
   app_instance()->RefreshAppList();
   app_instance()->SendRefreshAppList(apps1);
-  ValidateHaveApps(apps1);
+  app_instance()->SendInstallShortcuts(shortcuts);
+
+  ValidateHaveAppsAndShortcuts(apps1, shortcuts);
 
   const std::string app_id = ArcAppTest::GetAppId(apps[1]);
   const base::Time now_time = base::Time::Now();
@@ -1324,12 +1402,16 @@ TEST_P(ArcAppModelBuilderTest, ArcAppsOnPackageUpdated) {
   EXPECT_EQ(now_time, app_info_before->last_launch_time);
 
   app_instance()->SendPackageAppListRefreshed(apps[0].package_name, apps2);
-  ValidateHaveApps(apps2);
+  ValidateHaveAppsAndShortcuts(apps2, shortcuts);
 
   std::unique_ptr<ArcAppListPrefs::AppInfo> app_info_after =
       prefs->GetApp(app_id);
   ASSERT_TRUE(app_info_after);
   EXPECT_EQ(now_time, app_info_after->last_launch_time);
+
+  RemovePackage(package);
+  ValidateHaveAppsAndShortcuts(std::vector<arc::mojom::AppInfo>(),
+                               std::vector<arc::mojom::ShortcutInfo>());
 }
 
 TEST_P(ArcDefaulAppTest, DefaultApps) {
@@ -1378,6 +1460,10 @@ TEST_P(ArcDefaulAppTest, DefaultApps) {
   ValidateHaveApps(all_apps);
 
   // OptOut and default apps should exist minus first.
+  // TODO(victorhsieh): Opt-out on Persistent ARC is special.  Skip until
+  // implemented.
+  if (arc::ShouldArcAlwaysStart())
+    return;
   arc::SetArcPlayStoreEnabledForProfile(profile(), false);
   all_apps = fake_default_apps();
   all_apps.erase(all_apps.begin());
@@ -1394,7 +1480,6 @@ TEST_P(ArcDefaulAppTest, DefaultApps) {
   // Prefs are changed.
   prefs = ArcAppListPrefs::Get(profile_.get());
   ASSERT_NE(nullptr, prefs);
-
   ValidateHaveApps(all_apps);
 
   // Install deleted default app again.
@@ -1409,6 +1494,37 @@ TEST_P(ArcDefaulAppTest, DefaultApps) {
     const std::string app_id = ArcAppTest::GetAppId(default_app);
     EXPECT_EQ(oem_states[app_id], prefs->IsOem(app_id));
   }
+}
+
+TEST_P(ArcAppLauncherForDefaulAppTest, AppLauncherForDefaultApps) {
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
+  ASSERT_NE(nullptr, prefs);
+
+  ASSERT_GE(fake_default_apps().size(), 2U);
+  const arc::mojom::AppInfo& app1 = fake_default_apps()[0];
+  const arc::mojom::AppInfo& app2 = fake_default_apps()[1];
+  const std::string id1 = ArcAppTest::GetAppId(app1);
+  const std::string id2 = ArcAppTest::GetAppId(app2);
+
+  // Launch when app is registered and ready.
+  ArcAppLauncher launcher1(profile(), id1, true, false);
+  // Launch when app is registered.
+  ArcAppLauncher launcher2(profile(), id2, true, true);
+
+  EXPECT_FALSE(launcher1.app_launched());
+  EXPECT_FALSE(launcher2.app_launched());
+
+  arc_test()->WaitForDefaultApps();
+
+  // Only second app is expected to be launched.
+  EXPECT_FALSE(launcher1.app_launched());
+  EXPECT_TRUE(launcher2.app_launched());
+
+  app_instance()->RefreshAppList();
+  app_instance()->SendRefreshAppList(fake_default_apps());
+  // Default apps are ready now and it is expected that first app was launched
+  // now.
+  EXPECT_TRUE(launcher1.app_launched());
 }
 
 TEST_P(ArcDefaulAppTest, DefaultAppsNotAvailable) {
@@ -1498,6 +1614,9 @@ INSTANTIATE_TEST_CASE_P(,
                         ::testing::ValuesIn(kUnmanagedArcStates));
 INSTANTIATE_TEST_CASE_P(,
                         ArcDefaulAppTest,
+                        ::testing::ValuesIn(kUnmanagedArcStates));
+INSTANTIATE_TEST_CASE_P(,
+                        ArcAppLauncherForDefaulAppTest,
                         ::testing::ValuesIn(kUnmanagedArcStates));
 INSTANTIATE_TEST_CASE_P(,
                         ArcDefaulAppForManagedUserTest,

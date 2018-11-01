@@ -32,15 +32,18 @@ TEST(PluginFinderTest, JsonSyntax) {
     EXPECT_TRUE(plugin->GetString("name", &dummy_str));
     if (plugin->HasKey("help_url"))
       EXPECT_TRUE(plugin->GetString("help_url", &dummy_str));
-    if (plugin->HasKey("displayurl"))
-      EXPECT_TRUE(plugin->GetBoolean("displayurl", &dummy_bool));
+    bool display_url = false;
+    if (plugin->HasKey("displayurl")) {
+      EXPECT_TRUE(plugin->GetBoolean("displayurl", &display_url));
+      EXPECT_TRUE(display_url);
+    }
     if (plugin->HasKey("requires_authorization"))
       EXPECT_TRUE(plugin->GetBoolean("requires_authorization", &dummy_bool));
     const base::ListValue* mime_types = NULL;
     if (plugin->GetList("mime_types", &mime_types)) {
       for (base::ListValue::const_iterator mime_type_it = mime_types->begin();
            mime_type_it != mime_types->end(); ++mime_type_it) {
-        EXPECT_TRUE((*mime_type_it)->GetAsString(&dummy_str));
+        EXPECT_TRUE(mime_type_it->GetAsString(&dummy_str));
       }
     }
 
@@ -48,7 +51,7 @@ TEST(PluginFinderTest, JsonSyntax) {
     if (plugin->GetList("matching_mime_types", &matching_mime_types)) {
       for (base::ListValue::const_iterator it = matching_mime_types->begin();
            it != matching_mime_types->end(); ++it) {
-        EXPECT_TRUE((*it)->GetAsString(&dummy_str));
+        EXPECT_TRUE(it->GetAsString(&dummy_str));
       }
     }
 
@@ -58,8 +61,8 @@ TEST(PluginFinderTest, JsonSyntax) {
 
     for (base::ListValue::const_iterator it = versions->begin();
          it != versions->end(); ++it) {
-      base::DictionaryValue* version_dict = NULL;
-      ASSERT_TRUE((*it)->GetAsDictionary(&version_dict));
+      const base::DictionaryValue* version_dict = NULL;
+      ASSERT_TRUE(it->GetAsDictionary(&version_dict));
       EXPECT_TRUE(version_dict->GetString("version", &dummy_str));
       std::string status_str;
       EXPECT_TRUE(version_dict->GetString("status", &status_str));

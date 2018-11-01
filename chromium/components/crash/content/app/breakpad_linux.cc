@@ -143,7 +143,7 @@ class MicrodumpInfo {
 void SetMinidumpSanitizationFields(MinidumpDescriptor* minidump_descriptor,
                                    const SanitizationInfo& sanitization_info);
 
-base::LazyInstance<MicrodumpInfo> g_microdump_info =
+base::LazyInstance<MicrodumpInfo>::DestructorAtExit g_microdump_info =
     LAZY_INSTANCE_INITIALIZER;
 
 #endif
@@ -980,9 +980,7 @@ void MicrodumpInfo::Initialize(const std::string& process_type,
                            true,  // Install handlers.
                            -1);   // Server file descriptor. -1 for in-process.
 
-  if (process_type != kWebViewSingleProcessType &&
-      process_type != kBrowserProcessType &&
-      !process_type.empty()) {
+  if (!is_browser_process) {
     g_signal_code_pipe_fd =
         GetCrashReporterClient()->GetAndroidCrashSignalFD();
     if (g_signal_code_pipe_fd != -1)
@@ -1953,7 +1951,14 @@ void InitCrashReporter(const std::string& process_type) {
   if (parsed_command_line.HasSwitch(switches::kDisableBreakpad))
     return;
 
-  if (process_type.empty()) {
+  bool is_browser_process =
+#if defined(OS_ANDROID)
+      process_type == kWebViewSingleProcessType ||
+      process_type == kBrowserProcessType ||
+#endif
+      process_type.empty();
+
+  if (is_browser_process) {
     bool enable_breakpad = GetCrashReporterClient()->GetCollectStatsConsent() ||
                            GetCrashReporterClient()->IsRunningUnattended();
     enable_breakpad &=

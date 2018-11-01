@@ -9,6 +9,9 @@
 #include <utility>
 #include <vector>
 
+#include "app/vivaldi_apptools.h"
+#include "base/guid.h"
+#include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
@@ -17,6 +20,7 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -25,8 +29,11 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
+#include "components/version_info/version_info.h"
+#include "content/public/browser/download_manager.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -44,6 +51,8 @@ bool IsValidUserId(const std::string& user_id) {
 }  // anonymous namespace
 
 namespace extensions {
+
+const char kBaseFileMappingUrl[] = "chrome://vivaldi-data/local-image/";
 
 VivaldiUtilitiesEventRouter::VivaldiUtilitiesEventRouter(Profile* profile)
     : browser_context_(profile) {}
@@ -76,8 +85,8 @@ void VivaldiUtilitiesAPI::Shutdown() {
   extensions::AppWindowRegistry::Get(browser_context_)->RemoveObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>*
@@ -332,6 +341,154 @@ bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunAsync() {
       VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
 
   api->MapAppWindowIdToWindowId(params->app_window_id, params->window_id);
+
+  SendResponse(true);
+  return true;
+}
+
+bool UtilitiesPauseAllDownloadsFunction::RunAsync() {
+  content::DownloadManager* manager =
+      content::BrowserContext::GetDownloadManager(GetProfile());
+  content::DownloadManager::DownloadVector items;
+  manager->GetAllDownloads(&items);
+  for (auto* item : items) {
+    if (item->GetState() == content::DownloadItem::DownloadState::IN_PROGRESS) {
+      item->Cancel(false);
+    }
+  }
+  SendResponse(true);
+  return true;
+}
+
+bool UtilitiesCreateUrlMappingFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::CreateUrlMapping::Params>
+    params(vivaldi::utilities::CreateUrlMapping::Params::Create(
+      *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiDataSourcesAPI* api =
+    VivaldiDataSourcesAPI::GetFactoryInstance()->Get(GetProfile());
+
+  // PathExists() triggers IO restriction.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  std::string file = params->local_path;
+  std::string guid = base::GenerateGUID();
+  base::FilePath path = base::FilePath::FromUTF8Unsafe(file);
+  if (!base::PathExists(path)) {
+    error_ = "File does not exists: " + file;
+    return false;
+  }
+  if (!api->AddMapping(guid, path)) {
+    error_ = "Mapping for file failed: " + file;
+    return false;
+  }
+  std::string retval = kBaseFileMappingUrl + guid;
+  results_ = vivaldi::utilities::CreateUrlMapping::Results::Create(retval);
+  SendResponse(true);
+  return true;
+}
+
+bool UtilitiesRemoveUrlMappingFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::RemoveUrlMapping::Params>
+    params(vivaldi::utilities::RemoveUrlMapping::Params::Create(
+      *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiDataSourcesAPI* api =
+    VivaldiDataSourcesAPI::GetFactoryInstance()->Get(GetProfile());
+
+  // Extract the ID from the given url first.
+  GURL url(params->url);
+  std::string id = url.ExtractFileName();
+
+  bool success = api->RemoveMapping(id);
+
+  results_ = vivaldi::utilities::RemoveUrlMapping::Results::Create(success);
+  SendResponse(true);
+  return true;
+}
+
+namespace {
+// Converts file extensions to a ui::SelectFileDialog::FileTypeInfo.
+ui::SelectFileDialog::FileTypeInfo ConvertExtensionsToFileTypeInfo(
+    const std::vector<vivaldi::utilities::FileExtension>&
+        extensions) {
+  ui::SelectFileDialog::FileTypeInfo file_type_info;
+
+  for (const auto& item : extensions) {
+    base::FilePath::StringType allowed_extension =
+      base::FilePath::FromUTF8Unsafe(item.ext).value();
+
+    // FileTypeInfo takes a nested vector like [["htm", "html"], ["txt"]] to
+    // group equivalent extensions, but we don't use this feature here.
+    std::vector<base::FilePath::StringType> inner_vector;
+    inner_vector.push_back(allowed_extension);
+    file_type_info.extensions.push_back(inner_vector);
+  }
+  return file_type_info;
+}
+}
+
+UtilitiesSelectFileFunction::UtilitiesSelectFileFunction() {
+}
+UtilitiesSelectFileFunction::~UtilitiesSelectFileFunction() {
+}
+
+bool UtilitiesSelectFileFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::SelectFile::Params>
+    params(vivaldi::utilities::SelectFile::Params::Create(
+      *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::string16 title;
+
+  if (params->title.get()) {
+    title = base::UTF8ToUTF16(*params->title.get());
+  }
+
+  ui::SelectFileDialog::FileTypeInfo file_type_info;
+
+  if (params->accepts.get()) {
+    file_type_info = ConvertExtensionsToFileTypeInfo(*params->accepts.get());
+  }
+  file_type_info.include_all_files = true;
+
+  AddRef();
+
+  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
+
+  select_file_dialog_ = ui::SelectFileDialog::Create(this, nullptr);
+
+  gfx::NativeWindow window =
+    web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
+    : NULL;
+
+  select_file_dialog_->SelectFile(
+      ui::SelectFileDialog::SELECT_OPEN_FILE, title,
+      base::FilePath(), &file_type_info, 0, base::FilePath::StringType(),
+      window, nullptr);
+
+  return true;
+}
+
+void UtilitiesSelectFileFunction::FileSelected(const base::FilePath& path,
+                                               int index,
+                                               void* params) {
+  results_ =
+      vivaldi::utilities::SelectFile::Results::Create(path.AsUTF8Unsafe());
+  SendResponse(true);
+  Release();
+}
+
+void UtilitiesSelectFileFunction::FileSelectionCanceled(void* params) {
+  error_ = "File selection aborted.";
+  SendResponse(false);
+  Release();
+}
+
+bool UtilitiesGetVersionFunction::RunAsync() {
+  results_ = vivaldi::utilities::GetVersion::Results::Create(
+      ::vivaldi::GetVivaldiVersionString(), version_info::GetVersionNumber());
 
   SendResponse(true);
   return true;

@@ -475,10 +475,8 @@ bool SparseControl::OpenChild() {
   if (!child_)
     return ContinueWithoutChild(key);
 
-  EntryImpl* child = static_cast<EntryImpl*>(child_);
-  if (!(CHILD_ENTRY & child->GetEntryFlags()) ||
-      child->GetDataSize(kSparseIndex) <
-          static_cast<int>(sizeof(child_data_)))
+  if (!(CHILD_ENTRY & child_->GetEntryFlags()) ||
+      child_->GetDataSize(kSparseIndex) < static_cast<int>(sizeof(child_data_)))
     return KillChildAndContinue(key, false);
 
   scoped_refptr<net::WrappedIOBuffer> buf(
@@ -513,7 +511,6 @@ void SparseControl::CloseChild() {
                              CompletionCallback(), false);
   if (rv != sizeof(child_data_))
     DLOG(ERROR) << "Failed to save child data";
-  child_->Release();
   child_ = NULL;
 }
 
@@ -526,7 +523,6 @@ std::string SparseControl::GenerateChildKey() {
 bool SparseControl::KillChildAndContinue(const std::string& key, bool fatal) {
   SetChildBit(false);
   child_->DoomImpl();
-  child_->Release();
   child_ = NULL;
   if (fatal) {
     result_ = net::ERR_CACHE_READ_FAILURE;
@@ -668,9 +664,7 @@ int SparseControl::PartialBlockLength(int block_index) const {
 }
 
 void SparseControl::InitChildData() {
-  // We know the real type of child_.
-  EntryImpl* child = static_cast<EntryImpl*>(child_);
-  child->SetEntryFlags(CHILD_ENTRY);
+  child_->SetEntryFlags(CHILD_ENTRY);
 
   memset(&child_data_, 0, sizeof(child_data_));
   child_data_.header = sparse_header_;
@@ -898,15 +892,14 @@ void SparseControl::DoUserCallback() {
 }
 
 void SparseControl::DoAbortCallbacks() {
-  for (size_t i = 0; i < abort_callbacks_.size(); i++) {
+  std::vector<CompletionCallback> abort_callbacks;
+  abort_callbacks.swap(abort_callbacks_);
+
+  for (CompletionCallback& callback : abort_callbacks) {
     // Releasing all references to entry_ may result in the destruction of this
     // object so we should not be touching it after the last Release().
-    CompletionCallback cb = abort_callbacks_[i];
-    if (i == abort_callbacks_.size() - 1)
-      abort_callbacks_.clear();
-
-    entry_->Release();  // Don't touch object after this line.
-    cb.Run(net::OK);
+    entry_->Release();
+    callback.Run(net::OK);
   }
 }
 

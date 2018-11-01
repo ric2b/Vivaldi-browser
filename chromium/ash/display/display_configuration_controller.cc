@@ -65,9 +65,8 @@ DisplayConfigurationController::~DisplayConfigurationController() {
 }
 
 void DisplayConfigurationController::SetDisplayLayout(
-    std::unique_ptr<display::DisplayLayout> layout,
-    bool user_action) {
-  if (user_action && display_animator_) {
+    std::unique_ptr<display::DisplayLayout> layout) {
+  if (display_animator_) {
     display_animator_->StartFadeOutAnimation(
         base::Bind(&DisplayConfigurationController::SetDisplayLayoutImpl,
                    weak_ptr_factory_.GetWeakPtr(), base::Passed(&layout)));
@@ -76,14 +75,11 @@ void DisplayConfigurationController::SetDisplayLayout(
   }
 }
 
-void DisplayConfigurationController::SetMirrorMode(bool mirror,
-                                                   bool user_action) {
+void DisplayConfigurationController::SetMirrorMode(bool mirror) {
   if (display_manager_->num_connected_displays() > 2) {
-    if (user_action) {
-      ShowDisplayErrorNotification(
-          l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_MIRRORING_NOT_SUPPORTED),
-          false);
-    }
+    ShowDisplayErrorNotification(
+        l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_MIRRORING_NOT_SUPPORTED),
+        false);
     return;
   }
   if (display_manager_->num_connected_displays() <= 1 ||
@@ -91,7 +87,7 @@ void DisplayConfigurationController::SetMirrorMode(bool mirror,
     return;
   }
   SetThrottleTimeout(kCycleDisplayThrottleTimeoutMs);
-  if (user_action && display_animator_) {
+  if (display_animator_) {
     display_animator_->StartFadeOutAnimation(
         base::Bind(&DisplayConfigurationController::SetMirrorModeImpl,
                    weak_ptr_factory_.GetWeakPtr(), mirror));
@@ -104,20 +100,26 @@ void DisplayConfigurationController::SetDisplayRotation(
     int64_t display_id,
     display::Display::Rotation rotation,
     display::Display::RotationSource source) {
-  ash::ScreenRotationAnimator screen_rotation_animator(display_id);
-  if (screen_rotation_animator.CanAnimate())
-    screen_rotation_animator.Rotate(rotation, source);
-  else
+  if (display_manager_->GetDisplayInfo(display_id).GetActiveRotation() ==
+      rotation)
+    return;
+
+  if (display_manager_->IsDisplayIdValid(display_id)) {
+    ScreenRotationAnimator* screen_rotation_animator =
+        GetScreenRotationAnimatorForDisplay(display_id);
+    screen_rotation_animator->Rotate(rotation, source);
+  } else {
+    DCHECK(!rotation_animator_map_.count(display_id));
     display_manager_->SetDisplayRotation(display_id, rotation, source);
+  }
 }
 
-void DisplayConfigurationController::SetPrimaryDisplayId(int64_t display_id,
-                                                         bool user_action) {
+void DisplayConfigurationController::SetPrimaryDisplayId(int64_t display_id) {
   if (display_manager_->GetNumDisplays() <= 1 || IsLimited())
     return;
 
   SetThrottleTimeout(kSetPrimaryDisplayThrottleTimeoutMs);
-  if (user_action && display_animator_) {
+  if (display_animator_) {
     display_animator_->StartFadeOutAnimation(
         base::Bind(&DisplayConfigurationController::SetPrimaryDisplayIdImpl,
                    weak_ptr_factory_.GetWeakPtr(), display_id));
@@ -129,6 +131,16 @@ void DisplayConfigurationController::SetPrimaryDisplayId(int64_t display_id,
 void DisplayConfigurationController::OnDisplayConfigurationChanged() {
   // TODO(oshima): Stop all animations.
   SetThrottleTimeout(kAfterDisplayChangeThrottleTimeoutMs);
+}
+
+void DisplayConfigurationController::OnScreenRotationAnimationFinished(
+    ScreenRotationAnimator* screen_rotation_animator) {
+  const int64_t display_id = screen_rotation_animator->display_id();
+
+  DCHECK(rotation_animator_map_.count(display_id));
+
+  screen_rotation_animator->RemoveScreenRotationAnimatorObserver(this);
+  rotation_animator_map_.erase(screen_rotation_animator->display_id());
 }
 
 // Protected
@@ -168,6 +180,21 @@ void DisplayConfigurationController::SetPrimaryDisplayIdImpl(
   window_tree_host_manager_->SetPrimaryDisplayId(display_id);
   if (display_animator_)
     display_animator_->StartFadeInAnimation();
+}
+
+ScreenRotationAnimator*
+DisplayConfigurationController::GetScreenRotationAnimatorForDisplay(
+    int64_t display_id) {
+  auto iter = rotation_animator_map_.find(display_id);
+  if (iter != rotation_animator_map_.end())
+    return iter->second.get();
+
+  auto animator = base::MakeUnique<ScreenRotationAnimator>(display_id);
+  animator->AddScreenRotationAnimatorObserver(this);
+  ScreenRotationAnimator* result = animator.get();
+  rotation_animator_map_.insert(
+      std::make_pair(display_id, std::move(animator)));
+  return result;
 }
 
 }  // namespace ash

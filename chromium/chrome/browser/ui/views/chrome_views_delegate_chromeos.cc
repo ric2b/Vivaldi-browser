@@ -4,10 +4,9 @@
 
 #include "chrome/browser/ui/views/chrome_views_delegate.h"
 
-#include "ash/common/accelerators/accelerator_controller.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
+#include "ash/accelerators/accelerator_controller.h"
 #include "ash/shell.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
@@ -21,7 +20,7 @@ namespace {
 void ProcessAcceleratorNow(const ui::Accelerator& accelerator) {
   // TODO(afakhry): See if we need here to send the accelerator to the
   // FocusManager of the active window in a follow-up CL.
-  ash::WmShell::Get()->accelerator_controller()->Process(accelerator);
+  ash::Shell::Get()->accelerator_controller()->Process(accelerator);
 }
 
 }  // namespace
@@ -36,7 +35,7 @@ ChromeViewsDelegate::ProcessAcceleratorWhileMenuShowing(
     return views::ViewsDelegate::ProcessMenuAcceleratorResult::LEAVE_MENU_OPEN;
 
   ash::AcceleratorController* accelerator_controller =
-      ash::WmShell::Get()->accelerator_controller();
+      ash::Shell::Get()->accelerator_controller();
 
   accelerator_controller->accelerator_history()->StoreCurrentAccelerator(
       accelerator);
@@ -53,7 +52,7 @@ ChromeViewsDelegate::ProcessAcceleratorWhileMenuShowing(
 
 views::NonClientFrameView* ChromeViewsDelegate::CreateDefaultNonClientFrameView(
     views::Widget* widget) {
-  return ash::Shell::GetInstance()->CreateDefaultNonClientFrameView(widget);
+  return ash::Shell::Get()->CreateDefaultNonClientFrameView(widget);
 }
 
 void ChromeViewsDelegate::AdjustSavedWindowPlacementChromeOS(

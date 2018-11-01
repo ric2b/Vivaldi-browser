@@ -6,10 +6,10 @@
 #define NotificationManager_h
 
 #include "core/dom/ExecutionContext.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/modules/notifications/notification_service.mojom-blink.h"
 #include "public/platform/modules/permissions/permission.mojom-blink.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -29,31 +29,31 @@ class NotificationManager final
   WTF_MAKE_NONCOPYABLE(NotificationManager);
 
  public:
-  static NotificationManager* from(ExecutionContext*);
-  static const char* supplementName();
+  static NotificationManager* From(ExecutionContext*);
+  static const char* SupplementName();
 
   ~NotificationManager();
 
   // Returns the notification permission status of the current origin. This
   // method is synchronous to support the Notification.permission getter.
-  mojom::blink::PermissionStatus permissionStatus(ExecutionContext*);
+  mojom::blink::PermissionStatus GetPermissionStatus(ExecutionContext*);
 
-  ScriptPromise requestPermission(
+  ScriptPromise RequestPermission(
       ScriptState*,
-      NotificationPermissionCallback* deprecatedCallback);
+      NotificationPermissionCallback* deprecated_callback);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   NotificationManager();
 
-  void onPermissionRequestComplete(ScriptPromiseResolver*,
+  void OnPermissionRequestComplete(ScriptPromiseResolver*,
                                    NotificationPermissionCallback*,
                                    mojom::blink::PermissionStatus);
-  void onPermissionServiceConnectionError();
+  void OnPermissionServiceConnectionError();
 
-  mojom::blink::NotificationServicePtr m_notificationService;
-  mojom::blink::PermissionServicePtr m_permissionService;
+  mojom::blink::NotificationServicePtr notification_service_;
+  mojom::blink::PermissionServicePtr permission_service_;
 };
 
 }  // namespace blink

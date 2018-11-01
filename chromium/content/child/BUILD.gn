@@ -66,8 +66,6 @@ target(link_target_type, "child") {
     "child_process_sandbox_support_impl_shm_linux.cc",
     "child_resource_message_filter.cc",
     "child_resource_message_filter.h",
-    "child_shared_bitmap_manager.cc",
-    "child_shared_bitmap_manager.h",
     "child_thread_impl.cc",
     "child_thread_impl.h",
     "content_child_helpers.cc",
@@ -216,6 +214,7 @@ target(link_target_type, "child") {
 
   public_deps = [
     "//gpu/ipc/client:client",
+    "//ipc",
     "//services/service_manager/public/interfaces:interfaces_blink",
   ]
 
@@ -234,13 +233,15 @@ target(link_target_type, "child") {
     "//content/public/common:common_sources",
     "//crypto:platform",
     "//gpu/command_buffer/client",
-    "//ipc",
     "//media",
+    "//media/blink",
     "//mojo/common",
     "//mojo/edk/system",
     "//net",
+    "//services/device/public/cpp:device_features",
     "//services/device/public/cpp/power_monitor",
     "//services/device/public/interfaces:constants",
+    "//services/resource_coordinator/public/cpp",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
     "//services/service_manager/runner/common",
@@ -251,6 +252,7 @@ target(link_target_type, "child") {
     "//third_party/WebKit/public:image_resources",
     "//third_party/WebKit/public:resources",
     "//third_party/ced",
+    "//third_party/zlib:compression_utils",
     "//ui/base",
     "//ui/events/gestures/blink",
     "//ui/gfx",

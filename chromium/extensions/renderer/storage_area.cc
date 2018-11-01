@@ -180,9 +180,7 @@ void StorageArea::HandleFunctionCall(const std::string& method_name,
                                      gin::Arguments* arguments) {
   v8::Isolate* isolate = arguments->isolate();
   v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Object> holder;
-  CHECK(arguments->GetHolder(&holder));
-  v8::Local<v8::Context> context = holder->CreationContext();
+  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
 
   std::vector<v8::Local<v8::Value>> argument_list;
   if (arguments->Length() > 0) {
@@ -204,9 +202,9 @@ void StorageArea::HandleFunctionCall(const std::string& method_name,
   }
 
   converted_arguments->Insert(0u, base::MakeUnique<base::Value>(name_));
-  request_handler_->StartRequest(context, "storage." + method_name,
-                                 std::move(converted_arguments), callback,
-                                 v8::Local<v8::Function>());
+  request_handler_->StartRequest(
+      context, "storage." + method_name, std::move(converted_arguments),
+      callback, v8::Local<v8::Function>(), binding::RequestThread::UI);
 }
 
 }  // namespace extensions

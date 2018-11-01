@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -22,7 +23,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "chrome/installer/util/work_item_list.h"
 
@@ -294,8 +294,7 @@ class ShellUtil {
   // Returns true if |chrome_exe| is registered in HKLM with |suffix|.
   // Note: This only checks one deterministic key in HKLM for |chrome_exe| and
   // doesn't otherwise validate a full Chrome install in HKLM.
-  static bool QuickIsChromeRegisteredInHKLM(BrowserDistribution* dist,
-                                            const base::FilePath& chrome_exe,
+  static bool QuickIsChromeRegisteredInHKLM(const base::FilePath& chrome_exe,
                                             const base::string16& suffix);
 
   // Returns true if the current Windows version supports the presence of
@@ -358,7 +357,6 @@ class ShellUtil {
   // method looks in both and gives precedence to values in HKCU as per the msdn
   // standard: http://goo.gl/xjczJ.
   static void GetRegisteredBrowsers(
-      BrowserDistribution* dist,
       std::map<base::string16, base::string16>* browsers);
 
   // Returns the suffix this user's Chrome install is registered with.
@@ -378,23 +376,13 @@ class ShellUtil {
   //
   // |chrome_exe| The path to the currently installed (or running) chrome.exe.
   static base::string16 GetCurrentInstallationSuffix(
-      BrowserDistribution* dist,
       const base::FilePath& chrome_exe);
 
-  // Returns the application name of the program under |dist|.
-  // This application name will be suffixed as is appropriate for the current
-  // install.
-  // This is the name that is registered with Default Programs on Windows and
-  // that should thus be used to "make chrome default" and such.
-  static base::string16 GetApplicationName(BrowserDistribution* dist,
-                                           const base::FilePath& chrome_exe);
-
-  // Returns the AppUserModelId for |dist|. This identifier is unconditionally
-  // suffixed with a unique id for this user on user-level installs (in contrast
-  // to other registration entries which are suffixed as described in
+  // Returns the AppUserModelId. This identifier is unconditionally suffixed
+  // with a unique id for this user on user-level installs (in contrast to other
+  // registration entries which are suffixed as described in
   // GetCurrentInstallationSuffix() above).
-  static base::string16 GetBrowserModelId(BrowserDistribution* dist,
-                                          bool is_per_user_install);
+  static base::string16 GetBrowserModelId(bool is_per_user_install);
 
   // Returns an AppUserModelId composed of each member of |components| separated
   // by dots.
@@ -645,8 +633,9 @@ class ShellUtil {
 
   // This method converts all the RegistryEntries from the given list to
   // Set/CreateRegWorkItems and runs them using WorkItemList.
-  static bool AddRegistryEntries(HKEY root,
-                                 const ScopedVector<RegistryEntry>& entries);
+  static bool AddRegistryEntries(
+      HKEY root,
+      const std::vector<std::unique_ptr<RegistryEntry>>& entries);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ShellUtil);

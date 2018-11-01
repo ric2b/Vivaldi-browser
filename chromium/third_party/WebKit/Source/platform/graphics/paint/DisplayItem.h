@@ -8,13 +8,13 @@
 #include "platform/PlatformExport.h"
 #include "platform/graphics/ContiguousContainer.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
-#include "wtf/Allocator.h"
-#include "wtf/Assertions.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/Noncopyable.h"
 
 #ifndef NDEBUG
-#include "wtf/text/StringBuilder.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/StringBuilder.h"
+#include "platform/wtf/text/WTFString.h"
 #endif
 
 class SkPictureGpuAnalyzer;
@@ -85,9 +85,7 @@ class PLATFORM_EXPORT DisplayItem {
     kPopupContainerBorder,
     kPopupListBoxBackground,
     kPopupListBoxRow,
-    kPrintedContentBackground,
     kPrintedContentDestinationLocations,
-    kPrintedContentLineBoundary,
     kPrintedContentPDFURLRect,
     kResizer,
     kSVGClip,
@@ -106,10 +104,6 @@ class PLATFORM_EXPORT DisplayItem {
     kScrollbarTrackBackground,
     kScrollbarCompositedScrollbar,
     kSelectionTint,
-    kTableCellBackgroundFromColumnGroup,
-    kTableCellBackgroundFromColumn,
-    kTableCellBackgroundFromSection,
-    kTableCellBackgroundFromRow,
     // Table collapsed borders can be painted together (e.g., left & top) but
     // there are at most 4 phases of collapsed border painting for a single
     // cell. To disambiguate these phases of collapsed border painting, a mask
@@ -119,10 +113,6 @@ class PLATFORM_EXPORT DisplayItem {
     kTableCollapsedBorderBase =
         (((kTableCollapsedBorderUnalignedBase - 1) >> 4) + 1) << 4,
     kTableCollapsedBorderLast = kTableCollapsedBorderBase + 0x0f,
-    kTableSectionBoxShadowInset,
-    kTableSectionBoxShadowNormal,
-    kTableRowBoxShadowInset,
-    kTableRowBoxShadowNormal,
     kVideoBitmap,
     kWebPlugin,
     kWebFont,
@@ -153,13 +143,11 @@ class PLATFORM_EXPORT DisplayItem {
     kClipLayerForeground,
     kClipLayerParent,
     kClipLayerOverflowControls,
-    kClipNodeImage,
     kClipPopupListBoxFrame,
     kClipScrollbarsToBoxBounds,
     kClipSelectionImage,
     kPageWidgetDelegateClip,
-    kClipPrintedPage,
-    kClipLast = kClipPrintedPage,
+    kClipLast = kPageWidgetDelegateClip,
 
     kEndClipFirst,
     kEndClipLast = kEndClipFirst + kClipLast - kClipFirst,
@@ -194,10 +182,6 @@ class PLATFORM_EXPORT DisplayItem {
     kEndTransform,
     kBeginClipPath,
     kEndClipPath,
-
-    kSubsequence,
-    kEndSubsequence,
-
     kUninitializedType,
     kTypeLast = kUninitializedType
   };
@@ -209,26 +193,26 @@ class PLATFORM_EXPORT DisplayItem {
   // Bits or'ed onto TableCollapsedBorderBase to generate a real table collapsed
   // border type.
   enum TableCollapsedBorderSides {
-    TableCollapsedBorderTop = 1 << 0,
-    TableCollapsedBorderRight = 1 << 1,
-    TableCollapsedBorderBottom = 1 << 2,
-    TableCollapsedBorderLeft = 1 << 3,
+    kTableCollapsedBorderTop = 1 << 0,
+    kTableCollapsedBorderRight = 1 << 1,
+    kTableCollapsedBorderBottom = 1 << 2,
+    kTableCollapsedBorderLeft = 1 << 3,
   };
 
-  DisplayItem(const DisplayItemClient& client, Type type, size_t derivedSize)
-      : m_client(&client),
-        m_type(type),
-        m_derivedSize(derivedSize),
-        m_skippedCache(false)
+  DisplayItem(const DisplayItemClient& client, Type type, size_t derived_size)
+      : client_(&client),
+        type_(type),
+        derived_size_(derived_size),
+        skipped_cache_(false)
 #ifndef NDEBUG
         ,
-        m_clientDebugString(client.debugName())
+        client_debug_string_(client.DebugName())
 #endif
   {
     // derivedSize must fit in m_derivedSize.
     // If it doesn't, enlarge m_derivedSize and fix this assert.
-    SECURITY_DCHECK(derivedSize < (1 << 8));
-    SECURITY_DCHECK(derivedSize >= sizeof(*this));
+    SECURITY_DCHECK(derived_size < (1 << 8));
+    SECURITY_DCHECK(derived_size >= sizeof(*this));
   }
 
   virtual ~DisplayItem() {}
@@ -243,52 +227,52 @@ class PLATFORM_EXPORT DisplayItem {
     const Type type;
   };
 
-  Id getId() const { return Id(*m_client, m_type); }
+  Id GetId() const { return Id(*client_, type_); }
 
-  virtual void replay(GraphicsContext&) const {}
+  virtual void Replay(GraphicsContext&) const {}
 
-  const DisplayItemClient& client() const {
-    ASSERT(m_client);
-    return *m_client;
+  const DisplayItemClient& Client() const {
+    DCHECK(client_);
+    return *client_;
   }
-  Type getType() const { return m_type; }
+  Type GetType() const { return type_; }
 
   // Size of this object in memory, used to move it with memcpy.
   // This is not sizeof(*this), because it needs to account for the size of
   // the derived class (i.e. runtime type). Derived classes are expected to
   // supply this to the DisplayItem constructor.
-  size_t derivedSize() const { return m_derivedSize; }
+  size_t DerivedSize() const { return derived_size_; }
 
   // For PaintController only. Painters should use DisplayItemCacheSkipper
   // instead.
-  void setSkippedCache() { m_skippedCache = true; }
-  bool skippedCache() const { return m_skippedCache; }
+  void SetSkippedCache() { skipped_cache_ = true; }
+  bool SkippedCache() const { return skipped_cache_; }
 
   // TODO(wkorman): Only DrawingDisplayItem needs the visual rect argument.
   // Consider refactoring class hierarchy to make this more explicit.
-  virtual void appendToWebDisplayItemList(const IntRect&,
+  virtual void AppendToWebDisplayItemList(const IntRect&,
                                           WebDisplayItemList*) const {}
 
 // See comments of enum Type for usage of the following macros.
 #define DEFINE_CATEGORY_METHODS(Category)                           \
-  static bool is##Category##Type(Type type) {                       \
+  static bool Is##Category##Type(Type type) {                       \
     return type >= k##Category##First && type <= k##Category##Last; \
   }                                                                 \
-  bool is##Category() const { return is##Category##Type(getType()); }
+  bool Is##Category() const { return Is##Category##Type(GetType()); }
 
 #define DEFINE_CONVERSION_METHODS(Category1, category1, Category2, category2) \
-  static Type category1##TypeTo##Category2##Type(Type type) {                 \
+  static Type Category1##TypeTo##Category2##Type(Type type) {                 \
     static_assert(k##Category1##Last - k##Category1##First ==                 \
                       k##Category2##Last - k##Category2##First,               \
                   "Categories " #Category1 " and " #Category2                 \
                   " should have same number of enum values. See comments of " \
                   "DisplayItem::Type");                                       \
-    ASSERT(is##Category1##Type(type));                                        \
+    DCHECK(Is##Category1##Type(type));                                        \
     return static_cast<Type>(type - k##Category1##First +                     \
                              k##Category2##First);                            \
   }                                                                           \
   static Type category2##TypeTo##Category1##Type(Type type) {                 \
-    ASSERT(is##Category2##Type(type));                                        \
+    DCHECK(Is##Category2##Type(type));                                        \
     return static_cast<Type>(type - k##Category2##First +                     \
                              k##Category1##First);                            \
   }
@@ -299,7 +283,7 @@ class PLATFORM_EXPORT DisplayItem {
   DEFINE_CONVERSION_METHODS(Category, category, End##Category, end##Category)
 
 #define DEFINE_PAINT_PHASE_CONVERSION_METHOD(Category)                   \
-  static Type paintPhaseTo##Category##Type(int paintPhase) {             \
+  static Type PaintPhaseTo##Category##Type(int paintPhase) {             \
     static_assert(                                                       \
         k##Category##PaintPhaseLast - k##Category##PaintPhaseFirst ==    \
             k##PaintPhaseMax,                                            \
@@ -326,45 +310,41 @@ class PLATFORM_EXPORT DisplayItem {
 
   DEFINE_PAIRED_CATEGORY_METHODS(Transform3D, transform3D)
 
-  static bool isCacheableType(Type type) {
-    return isDrawingType(type) || type == kSubsequence;
-  }
-  bool isCacheable() const {
-    return !skippedCache() && isCacheableType(m_type);
-  }
+  static bool IsCacheableType(Type type) { return IsDrawingType(type); }
+  bool IsCacheable() const { return !SkippedCache() && IsCacheableType(type_); }
 
-  virtual bool isBegin() const { return false; }
-  virtual bool isEnd() const { return false; }
+  virtual bool IsBegin() const { return false; }
+  virtual bool IsEnd() const { return false; }
 
 #if DCHECK_IS_ON()
-  virtual bool isEndAndPairedWith(DisplayItem::Type otherType) const {
+  virtual bool IsEndAndPairedWith(DisplayItem::Type other_type) const {
     return false;
   }
 #endif
 
-  virtual bool equals(const DisplayItem& other) const {
-    return m_client == other.m_client && m_type == other.m_type &&
-           m_derivedSize == other.m_derivedSize &&
-           m_skippedCache == other.m_skippedCache;
+  virtual bool Equals(const DisplayItem& other) const {
+    return client_ == other.client_ && type_ == other.type_ &&
+           derived_size_ == other.derived_size_ &&
+           skipped_cache_ == other.skipped_cache_;
   }
 
   // True if the client is non-null. Because m_client is const, this should
   // never be false except when we explicitly create a tombstone/"dead display
   // item" as part of moving an item from one list to another (see:
   // DisplayItemList::appendByMoving).
-  bool hasValidClient() const { return m_client; }
+  bool HasValidClient() const { return client_; }
 
-  virtual bool drawsContent() const { return false; }
+  virtual bool DrawsContent() const { return false; }
 
   // Override to implement specific analysis strategies.
-  virtual void analyzeForGpuRasterization(SkPictureGpuAnalyzer&) const {}
+  virtual void AnalyzeForGpuRasterization(SkPictureGpuAnalyzer&) const {}
 
 #ifndef NDEBUG
-  static WTF::String typeAsDebugString(DisplayItem::Type);
-  const WTF::String clientDebugString() const { return m_clientDebugString; }
-  void setClientDebugString(const WTF::String& s) { m_clientDebugString = s; }
-  WTF::String asDebugString() const;
-  virtual void dumpPropertiesAsDebugString(WTF::StringBuilder&) const;
+  static WTF::String TypeAsDebugString(DisplayItem::Type);
+  const WTF::String ClientDebugString() const { return client_debug_string_; }
+  void SetClientDebugString(const WTF::String& s) { client_debug_string_ = s; }
+  WTF::String AsDebugString() const;
+  virtual void DumpPropertiesAsDebugString(WTF::StringBuilder&) const;
 #endif
 
  private:
@@ -375,20 +355,20 @@ class PLATFORM_EXPORT DisplayItem {
   friend class ContiguousContainer;
 
   DisplayItem()
-      : m_client(nullptr),
-        m_type(kUninitializedType),
-        m_derivedSize(sizeof(*this)),
-        m_skippedCache(false) {}
+      : client_(nullptr),
+        type_(kUninitializedType),
+        derived_size_(sizeof(*this)),
+        skipped_cache_(false) {}
 
-  const DisplayItemClient* m_client;
+  const DisplayItemClient* client_;
   static_assert(kTypeLast < (1 << 16),
                 "DisplayItem::Type should fit in 16 bits");
-  const Type m_type : 16;
-  const unsigned m_derivedSize : 8;  // size of the actual derived class
-  unsigned m_skippedCache : 1;
+  const Type type_ : 16;
+  const unsigned derived_size_ : 8;  // size of the actual derived class
+  unsigned skipped_cache_ : 1;
 
 #ifndef NDEBUG
-  WTF::String m_clientDebugString;
+  WTF::String client_debug_string_;
 #endif
 };
 
@@ -404,26 +384,26 @@ class PLATFORM_EXPORT PairedBeginDisplayItem : public DisplayItem {
  protected:
   PairedBeginDisplayItem(const DisplayItemClient& client,
                          Type type,
-                         size_t derivedSize)
-      : DisplayItem(client, type, derivedSize) {}
+                         size_t derived_size)
+      : DisplayItem(client, type, derived_size) {}
 
  private:
-  bool isBegin() const final { return true; }
+  bool IsBegin() const final { return true; }
 };
 
 class PLATFORM_EXPORT PairedEndDisplayItem : public DisplayItem {
  protected:
   PairedEndDisplayItem(const DisplayItemClient& client,
                        Type type,
-                       size_t derivedSize)
-      : DisplayItem(client, type, derivedSize) {}
+                       size_t derived_size)
+      : DisplayItem(client, type, derived_size) {}
 
 #if DCHECK_IS_ON()
-  bool isEndAndPairedWith(DisplayItem::Type otherType) const override = 0;
+  bool IsEndAndPairedWith(DisplayItem::Type other_type) const override = 0;
 #endif
 
  private:
-  bool isEnd() const final { return true; }
+  bool IsEnd() const final { return true; }
 };
 
 }  // namespace blink

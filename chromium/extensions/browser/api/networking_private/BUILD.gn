@@ -6,23 +6,23 @@ import("//build/config/features.gni")
 
 source_set("networking_private") {
   sources = [
+    "networking_cast_private_delegate.cc",
+    "networking_cast_private_delegate.h",
     "networking_private_api.cc",
     "networking_private_api.h",
-    "networking_private_chromeos.cc",
-    "networking_private_chromeos.h",
     "networking_private_delegate.cc",
     "networking_private_delegate.h",
     "networking_private_delegate_factory.cc",
     "networking_private_delegate_factory.h",
     "networking_private_delegate_observer.h",
     "networking_private_event_router.h",
-    "networking_private_event_router_chromeos.cc",
     "networking_private_event_router_factory.cc",
     "networking_private_event_router_factory.h",
   ]
 
   deps = [
     "//extensions/common/api",
+    "//net",
   ]
 
   if (!is_chromeos && is_linux) {
@@ -43,5 +43,12 @@ source_set("networking_private") {
       "networking_private_service_client.h",
     ]
     deps += [ "//components/wifi" ]
+  } else if (is_chromeos) {
+    sources += [
+      "networking_private_chromeos.cc",
+      "networking_private_chromeos.h",
+      "networking_private_event_router_chromeos.cc",
+    ]
+    deps += [ "//chromeos" ]
   }
 }

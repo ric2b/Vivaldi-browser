@@ -1,6 +1,14 @@
 include_rules = [
+  "-components/payments/content/android",
+  "-components/payments/content/utility",
   "+components/autofill",
-  "+content/public/browser",
+  "+components/data_use_measurement",
+  "+components/link_header_util",
+  "+components/strings",
+  "+content/public",
   "+mojo/public/cpp",
+  "+net",
+  "+third_party/libphonenumber",
   "+third_party/re2",
+  "+ui/base",
 ]

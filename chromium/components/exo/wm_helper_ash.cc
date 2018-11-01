@@ -4,11 +4,12 @@
 
 #include "components/exo/wm_helper_ash.h"
 
-#include "ash/common/accessibility_delegate.h"
-#include "ash/common/system/tray/system_tray_notifier.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm_shell.h"
+#include "ash/accessibility_delegate.h"
+#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/system/tray/system_tray_notifier.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/memory/singleton.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/display/manager/display_manager.h"
@@ -21,13 +22,19 @@ namespace exo {
 // WMHelperAsh, public:
 
 WMHelperAsh::WMHelperAsh() {
-  ash::WmShell::Get()->AddShellObserver(this);
-  ash::Shell::GetInstance()->activation_client()->AddObserver(this);
+  ash::Shell::Get()->AddShellObserver(this);
+  ash::Shell::Get()->activation_client()->AddObserver(this);
+  // TODO(crbug.com/631103): Mushrome doesn't have a cursor manager yet.
+  if (ash::ShellPort::Get()->GetAshConfig() != ash::Config::MUS)
+    ash::Shell::Get()->cursor_manager()->AddObserver(this);
+  ash::ShellPort::Get()->AddDisplayObserver(this);
   aura::client::FocusClient* focus_client =
       aura::client::GetFocusClient(ash::Shell::GetPrimaryRootWindow());
   focus_client->AddObserver(this);
-  ui::DeviceDataManager::GetInstance()->AddObserver(this);
-  ash::WmShell::Get()->system_tray_notifier()->AddAccessibilityObserver(this);
+  // TODO(crbug.com/709225): Mushrome doesn't have a DeviceDataManager.
+  if (ash::ShellPort::Get()->GetAshConfig() != ash::Config::MUS)
+    ui::DeviceDataManager::GetInstance()->AddObserver(this);
+  ash::Shell::Get()->system_tray_notifier()->AddAccessibilityObserver(this);
 }
 
 WMHelperAsh::~WMHelperAsh() {
@@ -36,11 +43,16 @@ WMHelperAsh::~WMHelperAsh() {
   aura::client::FocusClient* focus_client =
       aura::client::GetFocusClient(ash::Shell::GetPrimaryRootWindow());
   focus_client->RemoveObserver(this);
-  ash::Shell::GetInstance()->activation_client()->RemoveObserver(this);
-  ash::WmShell::Get()->RemoveShellObserver(this);
-  ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
-  ash::WmShell::Get()->system_tray_notifier()->RemoveAccessibilityObserver(
-      this);
+  ash::ShellPort::Get()->RemoveDisplayObserver(this);
+  // TODO(crbug.com/631103): Mushrome doesn't have a cursor manager yet.
+  if (ash::ShellPort::Get()->GetAshConfig() != ash::Config::MUS)
+    ash::Shell::Get()->cursor_manager()->RemoveObserver(this);
+  ash::Shell::Get()->activation_client()->RemoveObserver(this);
+  ash::Shell::Get()->RemoveShellObserver(this);
+  // TODO(crbug.com/709225): Mushrome doesn't have a DeviceDataManager.
+  if (ash::ShellPort::Get()->GetAshConfig() != ash::Config::MUS)
+    ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
+  ash::Shell::Get()->system_tray_notifier()->RemoveAccessibilityObserver(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,17 +60,18 @@ WMHelperAsh::~WMHelperAsh() {
 
 const display::ManagedDisplayInfo WMHelperAsh::GetDisplayInfo(
     int64_t display_id) const {
-  return ash::Shell::GetInstance()->display_manager()->GetDisplayInfo(
-      display_id);
+  return ash::Shell::Get()->display_manager()->GetDisplayInfo(display_id);
 }
 
 aura::Window* WMHelperAsh::GetContainer(int container_id) {
+  // TODO(domlaskowski): Use target root window once multi-display support lands
+  // in ARC. See crbug.com/718627.
   return ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                   container_id);
 }
 
 aura::Window* WMHelperAsh::GetActiveWindow() const {
-  return ash::Shell::GetInstance()->activation_client()->GetActiveWindow();
+  return ash::Shell::Get()->activation_client()->GetActiveWindow();
 }
 
 aura::Window* WMHelperAsh::GetFocusedWindow() const {
@@ -68,43 +81,44 @@ aura::Window* WMHelperAsh::GetFocusedWindow() const {
 }
 
 ui::CursorSetType WMHelperAsh::GetCursorSet() const {
-  return ash::Shell::GetInstance()->cursor_manager()->GetCursorSet();
+  // TODO(crbug.com/631103): Mushrome doesn't have a cursor manager yet.
+  if (ash::ShellPort::Get()->GetAshConfig() == ash::Config::MUS)
+    return ui::CURSOR_SET_NORMAL;
+  return ash::Shell::Get()->cursor_manager()->GetCursorSet();
 }
 
 void WMHelperAsh::AddPreTargetHandler(ui::EventHandler* handler) {
-  ash::Shell::GetInstance()->AddPreTargetHandler(handler);
+  ash::Shell::Get()->AddPreTargetHandler(handler);
 }
 
 void WMHelperAsh::PrependPreTargetHandler(ui::EventHandler* handler) {
-  ash::Shell::GetInstance()->PrependPreTargetHandler(handler);
+  ash::Shell::Get()->PrependPreTargetHandler(handler);
 }
 
 void WMHelperAsh::RemovePreTargetHandler(ui::EventHandler* handler) {
-  ash::Shell::GetInstance()->RemovePreTargetHandler(handler);
+  ash::Shell::Get()->RemovePreTargetHandler(handler);
 }
 
 void WMHelperAsh::AddPostTargetHandler(ui::EventHandler* handler) {
-  ash::Shell::GetInstance()->AddPostTargetHandler(handler);
+  ash::Shell::Get()->AddPostTargetHandler(handler);
 }
 
 void WMHelperAsh::RemovePostTargetHandler(ui::EventHandler* handler) {
-  ash::Shell::GetInstance()->RemovePostTargetHandler(handler);
+  ash::Shell::Get()->RemovePostTargetHandler(handler);
 }
 
 bool WMHelperAsh::IsMaximizeModeWindowManagerEnabled() const {
-  return ash::WmShell::Get()
+  return ash::Shell::Get()
       ->maximize_mode_controller()
       ->IsMaximizeModeWindowManagerEnabled();
 }
 
 bool WMHelperAsh::IsSpokenFeedbackEnabled() const {
-  return ash::WmShell::Get()
-      ->accessibility_delegate()
-      ->IsSpokenFeedbackEnabled();
+  return ash::Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled();
 }
 
 void WMHelperAsh::PlayEarcon(int sound_key) const {
-  return ash::WmShell::Get()->accessibility_delegate()->PlayEarcon(sound_key);
+  return ash::Shell::Get()->accessibility_delegate()->PlayEarcon(sound_key);
 }
 
 void WMHelperAsh::OnWindowActivated(
@@ -142,6 +156,10 @@ void WMHelperAsh::OnMaximizeModeEnding() {
 
 void WMHelperAsh::OnMaximizeModeEnded() {
   NotifyMaximizeModeEnded();
+}
+
+void WMHelperAsh::OnDisplayConfigurationChanged() {
+  NotifyDisplayConfigurationChanged();
 }
 
 void WMHelperAsh::OnKeyboardDeviceConfigurationChanged() {

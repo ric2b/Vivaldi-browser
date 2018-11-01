@@ -11,7 +11,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/process/process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -42,6 +41,10 @@
 class ProfileSyncServiceHarness;
 class P2PInvalidationForwarder;
 class P2PSyncRefresher;
+
+namespace arc {
+class SyncArcPackageHelper;
+}  // namespace arc
 
 namespace base {
 class CommandLine;
@@ -126,11 +129,11 @@ class SyncTest : public InProcessBrowserTest {
   void SetUpCommandLine(base::CommandLine* cl) override;
 
   // Used to get the number of sync clients used by a test.
-  int num_clients() WARN_UNUSED_RESULT { return num_clients_; }
+  int num_clients() { return num_clients_; }
 
   // Returns a pointer to a particular sync profile. Callee owns the object
   // and manages its lifetime.
-  Profile* GetProfile(int index) WARN_UNUSED_RESULT;
+  Profile* GetProfile(int index);
 
   // Returns a list of all profiles including the verifier if available. Callee
   // owns the objects and manages its lifetime.
@@ -138,17 +141,22 @@ class SyncTest : public InProcessBrowserTest {
 
   // Returns a pointer to a particular browser. Callee owns the object
   // and manages its lifetime.
-  Browser* GetBrowser(int index) WARN_UNUSED_RESULT;
+  Browser* GetBrowser(int index);
+
+  // Adds a new browser belonging to the profile at |profile_index|, and appends
+  // it to the list of browsers. Creates a copy of the Profile pointer in
+  // position |profile_index| and appends it to the list of profiles. This is
+  // done so that the profile associated with the new browser can be found at
+  // the same index as it. Tests typically use browser indexes and profile
+  // indexes interchangeably; this allows them to do so freely.
+  Browser* AddBrowser(int profile_index);
 
   // Returns a pointer to a particular sync client. Callee owns the object
   // and manages its lifetime.
-  ProfileSyncServiceHarness* GetClient(int index) WARN_UNUSED_RESULT;
+  ProfileSyncServiceHarness* GetClient(int index);
 
-  // Returns a reference to the collection of sync clients. Callee owns the
-  // object and manages its lifetime.
-  std::vector<ProfileSyncServiceHarness*>& clients() WARN_UNUSED_RESULT {
-    return clients_.get();
-  }
+  // Returns a list of the collection of sync clients.
+  std::vector<ProfileSyncServiceHarness*> GetSyncClients();
 
   // Returns a ProfileSyncService at the given index.
   browser_sync::ProfileSyncService* GetSyncService(int index);
@@ -158,10 +166,10 @@ class SyncTest : public InProcessBrowserTest {
 
   // Returns a pointer to the sync profile that is used to verify changes to
   // individual sync profiles. Callee owns the object and manages its lifetime.
-  Profile* verifier() WARN_UNUSED_RESULT;
+  Profile* verifier();
 
   // Used to determine whether the verifier profile should be updated or not.
-  bool use_verifier() WARN_UNUSED_RESULT { return use_verifier_; }
+  bool use_verifier() { return use_verifier_; }
 
   // After calling this method, changes made to a profile will no longer be
   // reflected in the verifier profile. Note: Not all datatypes use this.
@@ -173,6 +181,9 @@ class SyncTest : public InProcessBrowserTest {
 
   // Initializes sync clients and profiles if required and syncs each of them.
   virtual bool SetupSync() WARN_UNUSED_RESULT;
+
+  // Initialize, and clear data for given client.
+  bool SetupAndClearClient(size_t index);
 
   // Sets whether or not the sync clients in this test should respond to
   // notifications of their own commits.  Real sync clients do not do this, but
@@ -242,6 +253,8 @@ class SyncTest : public InProcessBrowserTest {
 
   // Triggers a sync for the given |model_types| for the Profile at |index|.
   void TriggerSyncForModelTypes(int index, syncer::ModelTypeSet model_types);
+
+  arc::SyncArcPackageHelper* sync_arc_helper();
 
  protected:
   // Add custom switches needed for running the test.
@@ -372,6 +385,9 @@ class SyncTest : public InProcessBrowserTest {
   // value of |server_type_|.
   void InitializeInvalidations(int index);
 
+  // Clear server data, and restart sync.
+  bool ClearServerData(ProfileSyncServiceHarness* harness);
+
   // Python sync test server, started on demand.
   syncer::LocalSyncTestServer sync_server_;
 
@@ -406,21 +422,23 @@ class SyncTest : public InProcessBrowserTest {
 
   // Collection of pointers to the browser objects used by a test. One browser
   // instance is created for each sync profile. Browser object lifetime is
-  // managed by BrowserList, so we don't use a ScopedVector here.
+  // managed by BrowserList, so we don't use a std::vector<std::unique_ptr<>>
+  // here.
   std::vector<Browser*> browsers_;
 
   // Collection of sync clients used by a test. A sync client is associated with
   // a sync profile, and implements methods that sync the contents of the
   // profile with the server.
-  ScopedVector<ProfileSyncServiceHarness> clients_;
+  std::vector<std::unique_ptr<ProfileSyncServiceHarness>> clients_;
 
   // A set of objects to listen for commit activity and broadcast notifications
   // of this activity to its peer sync clients.
-  ScopedVector<P2PInvalidationForwarder> invalidation_forwarders_;
+  std::vector<std::unique_ptr<P2PInvalidationForwarder>>
+      invalidation_forwarders_;
 
   // A set of objects to listen for commit activity and broadcast refresh
   // notifications of this activity to its peer sync clients.
-  ScopedVector<P2PSyncRefresher> sync_refreshers_;
+  std::vector<std::unique_ptr<P2PSyncRefresher>> sync_refreshers_;
 
   // Collection of pointers to FakeServerInvalidation objects for each profile.
   std::vector<fake_server::FakeServerInvalidationService*>
@@ -434,10 +452,6 @@ class SyncTest : public InProcessBrowserTest {
   // Indicates whether changes to a profile should also change the verifier
   // profile or not.
   bool use_verifier_;
-
-  // Indicates whether or not notifications were explicitly enabled/disabled.
-  // Defaults to true.
-  bool notifications_enabled_;
 
   // Indicates the need to create Gaia user account at runtime. This can only be
   // set if tests are run against external servers with support for user

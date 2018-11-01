@@ -5,59 +5,267 @@
 #include "content/browser/background_fetch/background_fetch_job_controller.h"
 
 #include <string>
-#include <vector>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "content/browser/background_fetch/background_fetch_constants.h"
+#include "content/browser/background_fetch/background_fetch_data_manager.h"
+#include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_manager.h"
-#include "content/public/browser/storage_partition.h"
+#include "net/url_request/url_request_context_getter.h"
 
 namespace content {
 
+// Internal functionality of the BackgroundFetchJobController that lives on the
+// UI thread, where all interaction with the download manager must happen.
+class BackgroundFetchJobController::Core : public DownloadItem::Observer {
+ public:
+  Core(const base::WeakPtr<BackgroundFetchJobController>& io_parent,
+       BrowserContext* browser_context,
+       scoped_refptr<net::URLRequestContextGetter> request_context)
+      : io_parent_(io_parent),
+        browser_context_(browser_context),
+        request_context_(std::move(request_context)),
+        weak_ptr_factory_(this) {}
+
+  ~Core() final {
+    for (const auto& pair : downloads_)
+      pair.first->RemoveObserver(this);
+  }
+
+  // Returns a weak pointer that can be used to talk to |this|.
+  base::WeakPtr<Core> GetWeakPtr() { return weak_ptr_factory_.GetWeakPtr(); }
+
+  // Starts fetching the |request| with the download manager.
+  void StartRequest(scoped_refptr<BackgroundFetchRequestInfo> request) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    DCHECK(request_context_);
+    DCHECK(request);
+
+    DownloadManager* download_manager =
+        BrowserContext::GetDownloadManager(browser_context_);
+    DCHECK(download_manager);
+
+    const ServiceWorkerFetchRequest& fetch_request = request->fetch_request();
+
+    std::unique_ptr<DownloadUrlParameters> download_parameters(
+        base::MakeUnique<DownloadUrlParameters>(fetch_request.url,
+                                                request_context_.get()));
+
+    // TODO(peter): The |download_parameters| should be populated with all the
+    // properties set in the |fetch_request| structure.
+
+    download_parameters->set_callback(base::Bind(&Core::DidStartRequest,
+                                                 weak_ptr_factory_.GetWeakPtr(),
+                                                 std::move(request)));
+
+    download_manager->DownloadUrl(std::move(download_parameters));
+  }
+
+  // DownloadItem::Observer overrides:
+  void OnDownloadUpdated(DownloadItem* download_item) override {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+    auto iter = downloads_.find(download_item);
+    DCHECK(iter != downloads_.end());
+
+    scoped_refptr<BackgroundFetchRequestInfo> request = iter->second;
+
+    switch (download_item->GetState()) {
+      case DownloadItem::DownloadState::COMPLETE:
+        request->PopulateResponseFromDownloadItem(download_item);
+        download_item->RemoveObserver(this);
+
+        // Inform the host about |host| having completed.
+        BrowserThread::PostTask(
+            BrowserThread::IO, FROM_HERE,
+            base::Bind(&BackgroundFetchJobController::DidCompleteRequest,
+                       io_parent_, std::move(request)));
+
+        // Clear the local state for the |request|, it no longer is our concern.
+        downloads_.erase(iter);
+        break;
+      case DownloadItem::DownloadState::CANCELLED:
+        // TODO(harkness): Consider how we want to handle cancelled downloads.
+        break;
+      case DownloadItem::DownloadState::INTERRUPTED:
+        // TODO(harkness): Just update the notification that it is paused.
+        break;
+      case DownloadItem::DownloadState::IN_PROGRESS:
+        // TODO(harkness): If the download was previously paused, this should
+        // now unpause the notification.
+        break;
+      case DownloadItem::DownloadState::MAX_DOWNLOAD_STATE:
+        NOTREACHED();
+        break;
+    }
+  }
+
+  void OnDownloadDestroyed(DownloadItem* download_item) override {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    DCHECK_EQ(downloads_.count(download_item), 1u);
+    downloads_.erase(download_item);
+
+    download_item->RemoveObserver(this);
+  }
+
+ private:
+  // Called when the download manager has started the given |request|. The
+  // |download_item| continues to be owned by the download system. The
+  // |interrupt_reason| will indicate when a request could not be started.
+  void DidStartRequest(scoped_refptr<BackgroundFetchRequestInfo> request,
+                       DownloadItem* download_item,
+                       DownloadInterruptReason interrupt_reason) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    DCHECK_EQ(interrupt_reason, DOWNLOAD_INTERRUPT_REASON_NONE);
+    DCHECK(download_item);
+
+    request->PopulateDownloadState(download_item, interrupt_reason);
+
+    // TODO(peter): The above two DCHECKs are assumptions our implementation
+    // currently makes, but are not fit for production. We need to handle such
+    // failures gracefully.
+
+    // Register for updates on the download's progress.
+    download_item->AddObserver(this);
+
+    // Inform the host about the |request| having started.
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&BackgroundFetchJobController::DidStartRequest, io_parent_,
+                   request, download_item->GetGuid()));
+
+    // Associate the |download_item| with the |request| so that we can retrieve
+    // it's information when further updates happen.
+    downloads_.insert(std::make_pair(download_item, std::move(request)));
+  }
+
+  // Weak reference to the BackgroundFetchJobController instance that owns us.
+  base::WeakPtr<BackgroundFetchJobController> io_parent_;
+
+  // The BrowserContext that owns the JobController, and thereby us.
+  BrowserContext* browser_context_;
+
+  // The URL request context to use when issuing the requests.
+  scoped_refptr<net::URLRequestContextGetter> request_context_;
+
+  // Map from DownloadItem* to the request info for the in-progress downloads.
+  std::unordered_map<DownloadItem*, scoped_refptr<BackgroundFetchRequestInfo>>
+      downloads_;
+
+  base::WeakPtrFactory<Core> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(Core);
+};
+
 BackgroundFetchJobController::BackgroundFetchJobController(
+    const BackgroundFetchRegistrationId& registration_id,
+    const BackgroundFetchOptions& options,
+    BackgroundFetchDataManager* data_manager,
     BrowserContext* browser_context,
-    StoragePartition* storage_partition)
-    : browser_context_(browser_context),
-      storage_partition_(storage_partition) {}
+    scoped_refptr<net::URLRequestContextGetter> request_context,
+    CompletedCallback completed_callback)
+    : registration_id_(registration_id),
+      options_(options),
+      data_manager_(data_manager),
+      completed_callback_(std::move(completed_callback)),
+      weak_ptr_factory_(this) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  // Create the core, containing the internal functionality that will have to
+  // be run on the UI thread. It will respond to this class with a weak pointer.
+  ui_core_.reset(new Core(weak_ptr_factory_.GetWeakPtr(), browser_context,
+                          std::move(request_context)));
+
+  // Get a WeakPtr over which we can talk to the |ui_core_|.
+  ui_core_ptr_ = ui_core_->GetWeakPtr();
+}
 
 BackgroundFetchJobController::~BackgroundFetchJobController() = default;
 
-void BackgroundFetchJobController::ProcessJob(
-    const std::string& job_guid,
-    BackgroundFetchJobData* job_data) {
+void BackgroundFetchJobController::Start(
+    std::vector<scoped_refptr<BackgroundFetchRequestInfo>> initial_requests) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(job_data);
-  const BackgroundFetchRequestInfo& fetch_request =
-      job_data->GetNextBackgroundFetchRequestInfo();
-  ProcessRequest(job_guid, fetch_request);
+  DCHECK_LE(initial_requests.size(), kMaximumBackgroundFetchParallelRequests);
+  DCHECK_EQ(state_, State::INITIALIZED);
 
-  // Currently this only supports jobs of size 1.
-  // TODO(crbug.com/692544)
-  DCHECK(!job_data->HasRequestsRemaining());
+  state_ = State::FETCHING;
 
-  // TODO(harkness): Save the BackgroundFetchJobData so that when the download
-  // completes we can notify the DataManager.
+  for (const auto& request : initial_requests)
+    StartRequest(request);
 }
 
-void BackgroundFetchJobController::ProcessRequest(
-    const std::string& job_guid,
-    const BackgroundFetchRequestInfo& fetch_request) {
-  // First add the new request to the internal map tracking in-progress
-  // requests.
-  fetch_map_[job_guid] = fetch_request;
+void BackgroundFetchJobController::StartRequest(
+    scoped_refptr<BackgroundFetchRequestInfo> request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_EQ(state_, State::FETCHING);
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&Core::StartRequest, ui_core_ptr_, std::move(request)));
+}
 
-  // TODO(harkness): Check if the download is already in progress or completed.
+void BackgroundFetchJobController::DidStartRequest(
+    scoped_refptr<BackgroundFetchRequestInfo> request,
+    const std::string& download_guid) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  data_manager_->MarkRequestAsStarted(registration_id_, request.get(),
+                                      download_guid);
+}
 
-  // Send the fetch request to the DownloadManager.
-  std::unique_ptr<DownloadUrlParameters> params(
-      base::MakeUnique<DownloadUrlParameters>(
-          fetch_request.url(), storage_partition_->GetURLRequestContext()));
-  // TODO(harkness): Currently this is the only place the browser_context is
-  // used. Evaluate whether we can just pass in the download manager explicitly.
-  BrowserContext::GetDownloadManager(browser_context_)
-      ->DownloadUrl(std::move(params));
+void BackgroundFetchJobController::DidCompleteRequest(
+    scoped_refptr<BackgroundFetchRequestInfo> request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  // The DataManager must acknowledge that it stored the data and that there are
+  // no more pending requests to avoid marking this job as completed too early.
+  pending_completed_file_acknowledgements_++;
+
+  data_manager_->MarkRequestAsCompleteAndGetNextRequest(
+      registration_id_, request.get(),
+      base::BindOnce(&BackgroundFetchJobController::DidGetNextRequest,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void BackgroundFetchJobController::DidGetNextRequest(
+    scoped_refptr<BackgroundFetchRequestInfo> request) {
+  DCHECK_LE(pending_completed_file_acknowledgements_, 1);
+  pending_completed_file_acknowledgements_--;
+
+  // If a |request| has been given, start downloading the file and bail.
+  if (request) {
+    StartRequest(std::move(request));
+    return;
+  }
+
+  // If there are outstanding completed file acknowlegements, bail as well.
+  if (pending_completed_file_acknowledgements_ > 0)
+    return;
+
+  state_ = State::COMPLETED;
+
+  // Otherwise the job this controller is responsible for has completed.
+  std::move(completed_callback_).Run(this);
+}
+
+void BackgroundFetchJobController::UpdateUI(const std::string& title) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  // TODO(harkness): Update the user interface with |title|.
+}
+
+void BackgroundFetchJobController::Abort() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  // TODO(harkness): Abort all in-progress downloads.
+
+  state_ = State::ABORTED;
+
+  // Inform the owner of the controller about the job having completed.
+  std::move(completed_callback_).Run(this);
 }
 
 }  // namespace content

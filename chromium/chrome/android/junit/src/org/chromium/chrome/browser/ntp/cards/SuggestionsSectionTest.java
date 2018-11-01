@@ -40,12 +40,12 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.DisableHistogramsRule;
-import org.chromium.chrome.browser.EnableFeatures;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.UpdateLayoutParamsCallback;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
+import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetricsReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
@@ -67,9 +67,6 @@ import java.util.TreeSet;
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class SuggestionsSectionTest {
-    @Rule
-    public EnableFeatures.Processor mEnableFeatureProcessor = new EnableFeatures.Processor();
-
     @Rule
     public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
 
@@ -187,7 +184,7 @@ public class SuggestionsSectionTest {
         verifyNoMoreInteractions(mParent);
 
         // We clear existing suggestions when the status is not AVAILABLE, and show the status card.
-        section.setStatus(CategoryStatus.SIGNED_OUT);
+        section.setStatus(CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
         verify(mParent).onItemRangeRemoved(section, 1, suggestionCount);
         verify(mParent).onItemRangeInserted(section, 1, 1);
 
@@ -238,8 +235,10 @@ public class SuggestionsSectionTest {
         List<SnippetArticle> snippets = createDummySuggestions(suggestionCount,
                 TEST_CATEGORY_ID);
 
-        SuggestionsCategoryInfo info =
-                new CategoryInfoBuilder(TEST_CATEGORY_ID).withFetchAction().showIfEmpty().build();
+        SuggestionsCategoryInfo info = new CategoryInfoBuilder(TEST_CATEGORY_ID)
+                                               .withAction(ContentSuggestionsAdditionalAction.FETCH)
+                                               .showIfEmpty()
+                                               .build();
         SuggestionsSection section = createSection(info);
         section.setStatus(CategoryStatus.AVAILABLE);
         reset(mParent);
@@ -342,33 +341,36 @@ public class SuggestionsSectionTest {
 
     @Test
     @Feature({"Ntp"})
-    public void testViewAllActionPriority() {
+    public void testViewAllAction() {
         // When all the actions are enabled, ViewAll always has the priority and is shown.
 
         // Spy so that VerifyAction can check methods being called.
-        SuggestionsCategoryInfo info = spy(new CategoryInfoBuilder(TEST_CATEGORY_ID)
-                                                   .withFetchAction()
-                                                   .withViewAllAction()
-                                                   .showIfEmpty()
-                                                   .build());
+        SuggestionsCategoryInfo info =
+                spy(new CategoryInfoBuilder(TEST_CATEGORY_ID)
+                                .withAction(ContentSuggestionsAdditionalAction.VIEW_ALL)
+                                .showIfEmpty()
+                                .build());
         SuggestionsSection section = createSection(info);
 
         assertTrue(section.getActionItemForTesting().isVisible());
-        verifyAction(section, ActionItem.ACTION_VIEW_ALL);
+        verifyAction(section, ContentSuggestionsAdditionalAction.VIEW_ALL);
     }
 
     @Test
     @Feature({"Ntp"})
-    public void testFetchActionPriority() {
+    public void testFetchAction() {
         // When only FetchMore is shown when enabled.
 
         // Spy so that VerifyAction can check methods being called.
-        SuggestionsCategoryInfo info = spy(
-                new CategoryInfoBuilder(TEST_CATEGORY_ID).withFetchAction().showIfEmpty().build());
+        SuggestionsCategoryInfo info =
+                spy(new CategoryInfoBuilder(TEST_CATEGORY_ID)
+                                .withAction(ContentSuggestionsAdditionalAction.FETCH)
+                                .showIfEmpty()
+                                .build());
         SuggestionsSection section = createSection(info);
 
         assertTrue(section.getActionItemForTesting().isVisible());
-        verifyAction(section, ActionItem.ACTION_FETCH);
+        verifyAction(section, ContentSuggestionsAdditionalAction.FETCH);
     }
 
     @Test
@@ -382,22 +384,25 @@ public class SuggestionsSectionTest {
         SuggestionsSection section = createSection(info);
 
         assertFalse(section.getActionItemForTesting().isVisible());
-        verifyAction(section, ActionItem.ACTION_NONE);
+        verifyAction(section, ContentSuggestionsAdditionalAction.NONE);
     }
 
     @Test
     @Feature({"Ntp"})
     public void testFetchMoreProgressDisplay() {
         final int suggestionCount = 3;
-        SuggestionsCategoryInfo info = spy(
-                new CategoryInfoBuilder(TEST_CATEGORY_ID).withFetchAction().showIfEmpty().build());
+        SuggestionsCategoryInfo info =
+                spy(new CategoryInfoBuilder(TEST_CATEGORY_ID)
+                                .withAction(ContentSuggestionsAdditionalAction.FETCH)
+                                .showIfEmpty()
+                                .build());
         SuggestionsSection section = createSection(info);
         section.setSuggestions(createDummySuggestions(suggestionCount, TEST_CATEGORY_ID),
                 CategoryStatus.AVAILABLE, /* replaceExisting = */ true);
         assertFalse(section.getProgressItemForTesting().isVisible());
 
         // Tap the button
-        verifyAction(section, ActionItem.ACTION_FETCH);
+        verifyAction(section, ContentSuggestionsAdditionalAction.FETCH);
         assertTrue(section.getProgressItemForTesting().isVisible());
 
         // Simulate receiving suggestions.
@@ -721,9 +726,9 @@ public class SuggestionsSectionTest {
         return set;
     }
 
-    private SuggestionsSection createSectionWithFetchAction(boolean hasReloadAction) {
+    private SuggestionsSection createSectionWithFetchAction(boolean hasFetchAction) {
         CategoryInfoBuilder builder = new CategoryInfoBuilder(TEST_CATEGORY_ID).showIfEmpty();
-        if (hasReloadAction) builder.withFetchAction();
+        if (hasFetchAction) builder.withAction(ContentSuggestionsAdditionalAction.FETCH);
         return createSection(builder.build());
     }
 
@@ -738,7 +743,8 @@ public class SuggestionsSectionTest {
         return new OfflinePageItem(url, offlineId, "", "", "", 0, 0, 0, 0);
     }
 
-    private static void verifyAction(SuggestionsSection section, @ActionItem.Action int action) {
+    private static void verifyAction(
+            SuggestionsSection section, @ContentSuggestionsAdditionalAction int action) {
         SuggestionsSource suggestionsSource = mock(SuggestionsSource.class);
         SuggestionsUiDelegate manager = mock(SuggestionsUiDelegate.class);
         SuggestionsNavigationDelegate navDelegate = mock(SuggestionsNavigationDelegate.class);
@@ -746,14 +752,15 @@ public class SuggestionsSectionTest {
         when(manager.getNavigationDelegate()).thenReturn(navDelegate);
         when(manager.getMetricsReporter()).thenReturn(mock(SuggestionsMetricsReporter.class));
 
-        if (action != ActionItem.ACTION_NONE) {
+        if (action != ContentSuggestionsAdditionalAction.NONE) {
             section.getActionItemForTesting().performAction(manager);
         }
 
         verify(section.getCategoryInfo(),
-                (action == ActionItem.ACTION_VIEW_ALL ? times(1) : never()))
+                (action == ContentSuggestionsAdditionalAction.VIEW_ALL ? times(1) : never()))
                 .performViewAllAction(navDelegate);
-        verify(suggestionsSource, (action == ActionItem.ACTION_FETCH ? times(1) : never()))
+        verify(suggestionsSource,
+                (action == ContentSuggestionsAdditionalAction.FETCH ? times(1) : never()))
                 .fetchSuggestions(anyInt(), any(String[].class));
     }
 

@@ -5,14 +5,14 @@
 #ifndef BluetoothRemoteGATTService_h
 #define BluetoothRemoteGATTService_h
 
+#include <memory>
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/modules/v8/StringOrUnsignedLong.h"
 #include "modules/bluetooth/BluetoothDevice.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/modules/bluetooth/web_bluetooth.mojom-blink.h"
-#include "wtf/text/WTFString.h"
-#include <memory>
 
 namespace blink {
 
@@ -34,17 +34,17 @@ class BluetoothRemoteGATTService final
 
  public:
   BluetoothRemoteGATTService(mojom::blink::WebBluetoothRemoteGATTServicePtr,
-                             bool isPrimary,
-                             const String& deviceInstanceId,
+                             bool is_primary,
+                             const String& device_instance_id,
                              BluetoothDevice*);
 
   // Interface required by garbage collection.
   DECLARE_VIRTUAL_TRACE();
 
   // IDL exposed interface:
-  String uuid() { return m_service->uuid; }
-  bool isPrimary() { return m_isPrimary; }
-  BluetoothDevice* device() { return m_device; }
+  String uuid() { return service_->uuid; }
+  bool isPrimary() { return is_primary_; }
+  BluetoothDevice* device() { return device_; }
   ScriptPromise getCharacteristic(ScriptState*,
                                   const StringOrUnsignedLong& characteristic,
                                   ExceptionState&);
@@ -55,23 +55,23 @@ class BluetoothRemoteGATTService final
 
  private:
   void GetCharacteristicsCallback(
-      const String& serviceInstanceId,
-      const String& requestedCharacteristicUUID,
+      const String& service_instance_id,
+      const String& requested_characteristic_uuid,
       mojom::blink::WebBluetoothGATTQueryQuantity,
       ScriptPromiseResolver*,
       mojom::blink::WebBluetoothResult,
       Optional<Vector<mojom::blink::WebBluetoothRemoteGATTCharacteristicPtr>>
           characteristics);
 
-  ScriptPromise getCharacteristicsImpl(
+  ScriptPromise GetCharacteristicsImpl(
       ScriptState*,
       mojom::blink::WebBluetoothGATTQueryQuantity,
-      const String& characteristicUUID = String());
+      const String& characteristic_uuid = String());
 
-  mojom::blink::WebBluetoothRemoteGATTServicePtr m_service;
-  const bool m_isPrimary;
-  const String m_deviceInstanceId;
-  Member<BluetoothDevice> m_device;
+  mojom::blink::WebBluetoothRemoteGATTServicePtr service_;
+  const bool is_primary_;
+  const String device_instance_id_;
+  Member<BluetoothDevice> device_;
 };
 
 }  // namespace blink

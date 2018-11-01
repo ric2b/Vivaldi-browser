@@ -46,7 +46,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   base::ListValue quick_unlock_whitelist_default;
   quick_unlock_whitelist_default.AppendString(kQuickUnlockWhitelistOptionPin);
   registry->RegisterListPref(prefs::kQuickUnlockModeWhitelist,
-                             quick_unlock_whitelist_default.DeepCopy());
+                             quick_unlock_whitelist_default.CreateDeepCopy());
   registry->RegisterIntegerPref(
       prefs::kQuickUnlockTimeout,
       static_cast<int>(PasswordConfirmationFrequency::DAY));
@@ -68,8 +68,8 @@ bool IsPinEnabled(PrefService* pref_service) {
   // Check if policy allows PIN.
   const base::ListValue* quick_unlock_whitelist =
       pref_service->GetList(prefs::kQuickUnlockModeWhitelist);
-  base::StringValue all_value(kQuickUnlockWhitelistOptionAll);
-  base::StringValue pin_value(kQuickUnlockWhitelistOptionPin);
+  base::Value all_value(kQuickUnlockWhitelistOptionAll);
+  base::Value pin_value(kQuickUnlockWhitelistOptionPin);
   if (quick_unlock_whitelist->Find(all_value) ==
           quick_unlock_whitelist->end() &&
       quick_unlock_whitelist->Find(pin_value) ==

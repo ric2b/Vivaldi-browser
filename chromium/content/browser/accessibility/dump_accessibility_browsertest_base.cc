@@ -252,21 +252,17 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
       shell()->web_contents());
 
   if (enable_accessibility_after_navigating_ &&
-      web_contents->GetAccessibilityMode() == AccessibilityModeOff) {
+      web_contents->GetAccessibilityMode().is_mode_off()) {
     // Load the url, then enable accessibility.
     NavigateToURL(shell(), url);
     AccessibilityNotificationWaiter accessibility_waiter(
-        web_contents,
-        ACCESSIBILITY_MODE_COMPLETE,
-        ui::AX_EVENT_NONE);
+        web_contents, kAccessibilityModeComplete, ui::AX_EVENT_NONE);
     accessibility_waiter.WaitForNotification();
   } else {
     // Enable accessibility, then load the test html and wait for the
     // "load complete" AX event.
     AccessibilityNotificationWaiter accessibility_waiter(
-        web_contents,
-        ACCESSIBILITY_MODE_COMPLETE,
-        ui::AX_EVENT_LOAD_COMPLETE);
+        web_contents, kAccessibilityModeComplete, ui::AX_EVENT_LOAD_COMPLETE);
     NavigateToURL(shell(), url);
     accessibility_waiter.WaitForNotification();
   }
@@ -389,8 +385,9 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kGenerateAccessibilityTestExpectations)) {
       base::ThreadRestrictions::ScopedAllowIO allow_io_to_write_expected_file;
-      CHECK(base::WriteFile(
-          expected_file, actual_contents.c_str(), actual_contents.size()));
+      CHECK(base::WriteFile(expected_file, actual_contents.c_str(),
+                            actual_contents.size()) ==
+            static_cast<int>(actual_contents.size()));
       LOG(INFO) << "Wrote expectations to: "
                 << expected_file.LossyDisplayName();
     }

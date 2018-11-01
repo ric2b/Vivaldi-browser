@@ -30,6 +30,10 @@
 #import "testing/gtest_mac.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @interface SyncSettingsCollectionViewController (ExposedForTesting)
 - (int)titleIdForSyncableDataType:(SyncSetupService::SyncableDatatype)datatype;
 - (void)onSyncStateChanged;
@@ -184,7 +188,7 @@ class SyncSettingsCollectionViewControllerTest
         .WillRepeatedly(Return(syncer::UserSelectableTypes()));
   }
 
-  CollectionViewController* NewController() override {
+  CollectionViewController* InstantiateController() override {
     return [[SyncSettingsCollectionViewController alloc]
           initWithBrowserState:chrome_browser_state_.get()
         allowSwitchSyncAccount:YES];
@@ -230,8 +234,6 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestModel) {
   EXPECT_EQ(1, NumberOfItemsInSection(0));
   int expected_number_of_items =
       SyncSetupService::kNumberOfSyncableDatatypes + 1;
-  if (!experimental_flags::IsReadingListEnabled())
-    expected_number_of_items--;
   EXPECT_EQ(expected_number_of_items, NumberOfItemsInSection(1));
   EXPECT_EQ(2, NumberOfItemsInSection(2));
 
@@ -252,11 +254,6 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestModel) {
   for (int i = 0; i < SyncSetupService::kNumberOfSyncableDatatypes; i++) {
     SyncSetupService::SyncableDatatype dataType =
         static_cast<SyncSetupService::SyncableDatatype>(i);
-    if (!experimental_flags::IsReadingListEnabled() &&
-        dataType == SyncSetupService::kSyncReadingList) {
-      // Display Reading List only if it is enabled.
-      continue;
-    }
     SyncSwitchItem* syncDataTypeItem = GetCollectionViewItem(1, item++);
     EXPECT_NSEQ(syncDataTypeItem.text,
                 l10n_util::GetNSString(

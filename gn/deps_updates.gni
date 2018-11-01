@@ -1,9 +1,9 @@
-import("//build/buildflag_header.gni")
+#import("//build/buildflag_header.gni")
 import("//build/config/chrome_build.gni")
-import("//build/config/compiler/compiler.gni")
+#import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
-import("//build/config/ui.gni")
-import("//build/config/locales.gni")
+#import("//build/config/ui.gni")
+#import("//build/config/locales.gni")
 
 import("//vivaldi/app/deps_updates.gni")
 import("//vivaldi/base/deps_updates.gni")
@@ -16,6 +16,10 @@ import("//vivaldi/notes/deps_updates.gni")
 import("//vivaldi/sync/deps_updates.gni")
 import("//vivaldi/third_party/deps_updates.gni")
 import("//vivaldi/vivapp/deps_updates.gni")
+
+post_process_target("//chrome/browser:test_support_ui") {
+  deps += [ "//chrome/common" ]
+}
 
 post_process_target("//content/common:common") {
   deps += [ "//components/version_info:generate_version_info" ]
@@ -34,7 +38,7 @@ post_process_target("//third_party/WebKit/public:all_blink") {
     "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
     "//third_party/WebKit/Source/platform:blink_platform_unittests",
     "//third_party/WebKit/Source/web:webkit_unit_tests",
-    "//third_party/WebKit/Source/wtf:wtf_unittests",
+    "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
   ]
 }
 

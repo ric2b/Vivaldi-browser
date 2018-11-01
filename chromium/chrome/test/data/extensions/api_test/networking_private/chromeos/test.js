@@ -178,6 +178,26 @@ var availableTests = [
             }));
       }));
   },
+  function createNetworkForPolicyControlledNetwork() {
+    chrome.networkingPrivate.getProperties('stub_wifi2', callbackPass(function(
+        properties) {
+      // Sanity check to verify there is a policy defined config for the network
+      // config that will be set up in this test.
+      chrome.test.assertEq('UserPolicy', properties.Source);
+      chrome.test.assertEq('WiFi', properties.Type);
+      chrome.test.assertEq('WPA-PSK', properties.WiFi.Security);
+      chrome.test.assertEq('wifi2_PSK', properties.WiFi.SSID);
+
+      chrome.networkingPrivate.createNetwork(false /* shared */, {
+        Type: 'WiFi',
+        WiFi: {
+          SSID: 'wifi2_PSK',
+          Passphrase: 'Fake password',
+          Security: 'WPA-PSK'
+        }
+      }, callbackFail('NetworkAlreadyConfigured'));
+    }));
+  },
   function forgetNetwork() {
     var kNumNetworks = 2;
     var kTestNetworkGuid = 'stub_wifi1_guid';
@@ -206,6 +226,20 @@ var availableTests = [
                     }));
               }));
         }));
+  },
+  function forgetPolicyControlledNetwork() {
+    chrome.networkingPrivate.getProperties('stub_wifi2', callbackPass(function(
+        properties) {
+      // Sanity check to verify there is a policy defined config for the network
+      // config that will be set up in this test.
+      chrome.test.assertEq('UserPolicy', properties.Source);
+      chrome.test.assertEq('WiFi', properties.Type);
+      chrome.test.assertEq('WPA-PSK', properties.WiFi.Security);
+      chrome.test.assertEq('wifi2_PSK', properties.WiFi.SSID);
+
+      chrome.networkingPrivate.forgetNetwork(
+          'stub_wifi2', callbackFail('Error.PolicyControlled'));
+    }));
   },
   function getNetworks() {
     // Test 'type' and 'configured'.
@@ -502,6 +536,13 @@ var availableTests = [
               Country: 'us',
               Name: 'Cellular1_Provider'
             },
+            ESN: "test_esn",
+            ICCID: "test_iccid",
+            IMEI: "test_imei",
+            MDN: "test_mdn",
+            MEID: "test_meid",
+            MIN: "test_min",
+            ModelID:"test_model_id",
             NetworkTechnology: 'GSM',
             RoamingState: 'Home',
             SIMLockStatus: {LockEnabled: true, LockType: '', RetriesLeft: 3}

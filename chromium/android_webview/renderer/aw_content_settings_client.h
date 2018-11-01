@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "third_party/WebKit/public/web/WebContentSettingsClient.h"
+#include "third_party/WebKit/public/platform/WebContentSettingsClient.h"
 
 namespace android_webview {
 
@@ -24,10 +24,9 @@ class AwContentSettingsClient : public content::RenderFrameObserver,
   void OnDestruct() override;
 
   // blink::WebContentSettingsClient implementation.
-  bool allowRunningInsecureContent(
-      bool enabled_per_settings,
-      const blink::WebSecurityOrigin& origin,
-      const blink::WebURL& url) override;
+  bool AllowRunningInsecureContent(bool enabled_per_settings,
+                                   const blink::WebSecurityOrigin& origin,
+                                   const blink::WebURL& url) override;
 
   DISALLOW_COPY_AND_ASSIGN(AwContentSettingsClient);
 };

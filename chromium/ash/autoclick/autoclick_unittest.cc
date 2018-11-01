@@ -3,8 +3,9 @@
 // found in the LICENSE file.
 
 #include "ash/autoclick/autoclick_controller.h"
-#include "ash/common/wm_shell.h"
+#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -63,7 +64,7 @@ class AutoclickTest : public test::AshTestBase {
 
   void SetUp() override {
     test::AshTestBase::SetUp();
-    Shell::GetInstance()->AddPreTargetHandler(&mouse_event_capturer_);
+    Shell::Get()->AddPreTargetHandler(&mouse_event_capturer_);
     GetAutoclickController()->SetAutoclickDelay(base::TimeDelta());
 
     // Move mouse to deterministic location at the start of each test.
@@ -71,13 +72,13 @@ class AutoclickTest : public test::AshTestBase {
 
     // Make sure the display is initialized so we don't fail the test due to any
     // input events caused from creating the display.
-    if (!WmShell::Get()->IsRunningInMash())
-      Shell::GetInstance()->display_manager()->UpdateDisplays();
+    if (Shell::GetAshConfig() != Config::MASH)
+      Shell::Get()->display_manager()->UpdateDisplays();
     RunAllPendingInMessageLoop();
   }
 
   void TearDown() override {
-    Shell::GetInstance()->RemovePreTargetHandler(&mouse_event_capturer_);
+    Shell::Get()->RemovePreTargetHandler(&mouse_event_capturer_);
     test::AshTestBase::TearDown();
   }
 
@@ -94,7 +95,7 @@ class AutoclickTest : public test::AshTestBase {
   }
 
   AutoclickController* GetAutoclickController() {
-    return Shell::GetInstance()->autoclick_controller();
+    return Shell::Get()->autoclick_controller();
   }
 
  private:

@@ -15,8 +15,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/values.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -31,6 +31,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/bindings_policy.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
@@ -66,17 +67,17 @@ const char kActive[] = "active";
 void InitializeOverridesList(base::ListValue* list) {
   base::ListValue migrated;
   std::set<std::string> seen_entries;
-  for (const auto& val : *list) {
+  for (auto& val : *list) {
     std::unique_ptr<base::DictionaryValue> new_dict(
         new base::DictionaryValue());
     std::string entry_name;
     base::DictionaryValue* existing_dict = nullptr;
-    if (val->GetAsDictionary(&existing_dict)) {
+    if (val.GetAsDictionary(&existing_dict)) {
       bool success = existing_dict->GetString(kEntry, &entry_name);
       if (!success)  // See comment about CHECK(success) in ForEachOverrideList.
         continue;
       new_dict->Swap(existing_dict);
-    } else if (val->GetAsString(&entry_name)) {
+    } else if (val.GetAsString(&entry_name)) {
       new_dict->SetString(kEntry, entry_name);
       new_dict->SetBoolean(kActive, true);
     } else {
@@ -97,10 +98,10 @@ void InitializeOverridesList(base::ListValue* list) {
 // marks it as active.
 void AddOverridesToList(base::ListValue* list,
                         const std::string& override) {
-  for (const auto& val : *list) {
+  for (auto& val : *list) {
     base::DictionaryValue* dict = nullptr;
     std::string entry;
-    if (!val->GetAsDictionary(&dict) || !dict->GetString(kEntry, &entry)) {
+    if (!val.GetAsDictionary(&dict) || !dict->GetString(kEntry, &entry)) {
       NOTREACHED();
       continue;
     }
@@ -122,10 +123,10 @@ void AddOverridesToList(base::ListValue* list,
 void ValidateOverridesList(const extensions::ExtensionSet* all_extensions,
                            base::ListValue* list) {
   base::ListValue migrated;
-  for (const auto& val : *list) {
+  for (auto& val : *list) {
     base::DictionaryValue* dict = nullptr;
     std::string entry;
-    if (!val->GetAsDictionary(&dict) || !dict->GetString(kEntry, &entry)) {
+    if (!val.GetAsDictionary(&dict) || !dict->GetString(kEntry, &entry)) {
       NOTREACHED();
       continue;
     }
@@ -160,8 +161,9 @@ void UnregisterAndReplaceOverrideForWebContents(const std::string& page,
   // Don't use Reload() since |url| isn't the same as the internal URL that
   // NavigationController has.
   web_contents->GetController().LoadURL(
-      url, content::Referrer::SanitizeForRequest(
-               url, content::Referrer(url, blink::WebReferrerPolicyDefault)),
+      url,
+      content::Referrer::SanitizeForRequest(
+          url, content::Referrer(url, blink::kWebReferrerPolicyDefault)),
       ui::PAGE_TRANSITION_RELOAD, std::string());
 }
 
@@ -175,20 +177,19 @@ enum UpdateBehavior {
 bool UpdateOverridesList(base::ListValue* overrides_list,
                          const std::string& override_url,
                          UpdateBehavior behavior) {
-  base::ListValue::iterator iter =
-      std::find_if(overrides_list->begin(), overrides_list->end(),
-                   [&override_url](const std::unique_ptr<base::Value>& value) {
-                     std::string entry;
-                     const base::DictionaryValue* dict = nullptr;
-                     return value->GetAsDictionary(&dict) &&
-                            dict->GetString(kEntry, &entry) &&
-                            entry == override_url;
-                   });
+  base::ListValue::iterator iter = std::find_if(
+      overrides_list->begin(), overrides_list->end(),
+      [&override_url](const base::Value& value) {
+        std::string entry;
+        const base::DictionaryValue* dict = nullptr;
+        return value.GetAsDictionary(&dict) &&
+               dict->GetString(kEntry, &entry) && entry == override_url;
+      });
   if (iter != overrides_list->end()) {
     switch (behavior) {
       case UPDATE_DEACTIVATE: {
         base::DictionaryValue* dict = nullptr;
-        bool success = (*iter)->GetAsDictionary(&dict);
+        bool success = iter->GetAsDictionary(&dict);
         // See comment about CHECK(success) in ForEachOverrideList.
         if (success) {
           dict->SetBoolean(kActive, false);
@@ -426,7 +427,7 @@ bool ExtensionWebUI::HandleChromeURLOverrideReverse(
     for (base::ListValue::const_iterator list_iter = url_list->begin();
          list_iter != url_list->end(); ++list_iter) {
       const base::DictionaryValue* dict = nullptr;
-      if (!(*list_iter)->GetAsDictionary(&dict))
+      if (!list_iter->GetAsDictionary(&dict))
         continue;
       std::string override;
       if (!dict->GetString(kEntry, &override))
@@ -470,12 +471,14 @@ void ExtensionWebUI::RegisterOrActivateChromeURLOverrides(
   DictionaryPrefUpdate update(prefs, kExtensionURLOverrides);
   base::DictionaryValue* all_overrides = update.Get();
   for (const auto& page_override_pair : overrides) {
-    base::ListValue* page_overrides = nullptr;
-    if (!all_overrides->GetList(page_override_pair.first, &page_overrides)) {
-      page_overrides = new base::ListValue();
-      all_overrides->Set(page_override_pair.first, page_overrides);
+    base::ListValue* page_overrides_weak = nullptr;
+    if (!all_overrides->GetList(page_override_pair.first,
+                                &page_overrides_weak)) {
+      auto page_overrides = base::MakeUnique<base::ListValue>();
+      page_overrides_weak = page_overrides.get();
+      all_overrides->Set(page_override_pair.first, std::move(page_overrides));
     }
-    AddOverridesToList(page_overrides, page_override_pair.second.spec());
+    AddOverridesToList(page_overrides_weak, page_override_pair.second.spec());
   }
 }
 

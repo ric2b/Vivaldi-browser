@@ -29,33 +29,35 @@
 #include "core/CoreExport.h"
 #include "platform/loader/fetch/ResourceClient.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/Forward.h"
+#include "platform/weborigin/ReferrerPolicy.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 class CSSStyleSheetResource;
 
 class CORE_EXPORT StyleSheetResourceClient : public ResourceClient {
  public:
-  static bool isExpectedType(ResourceClient* client) {
-    return client->getResourceClientType() == StyleSheetType;
+  static bool IsExpectedType(ResourceClient* client) {
+    return client->GetResourceClientType() == kStyleSheetType;
   }
-  ResourceClientType getResourceClientType() const final {
-    return StyleSheetType;
+  ResourceClientType GetResourceClientType() const final {
+    return kStyleSheetType;
   }
-  virtual void setCSSStyleSheet(const String& /* href */,
+  virtual void SetCSSStyleSheet(const String& /* href */,
                                 const KURL& /* baseURL */,
+                                ReferrerPolicy,
                                 const String& /* charset */,
                                 const CSSStyleSheetResource*) {}
-  virtual void setXSLStyleSheet(const String& /* href */,
+  virtual void SetXSLStyleSheet(const String& /* href */,
                                 const KURL& /* baseURL */,
                                 const String& /* sheet */) {}
 
   // This gets called on the very first appendData call for the
   // CSSStyleSheetResource. Note this is not called for StyleSheetResources
   // other than CSSStyleSheetResources.
-  virtual void didAppendFirstData(const CSSStyleSheetResource*) {}
+  virtual void DidAppendFirstData(const CSSStyleSheetResource*) {}
 
-  DEFINE_INLINE_TRACE() { ResourceClient::trace(visitor); }
+  DEFINE_INLINE_TRACE() { ResourceClient::Trace(visitor); }
 };
 
 }  // namespace blink

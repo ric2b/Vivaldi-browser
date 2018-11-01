@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/renderer/safe_browsing/threat_dom_details.h"
+#include "components/safe_browsing/renderer/threat_dom_details.h"
 
 #include <memory>
 
@@ -16,14 +16,14 @@
 #include "net/base/escape.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
-#include "ui/native_theme/native_theme_switches.h"
+#include "ui/native_theme/native_theme_features.h"
 
 namespace {
 
 std::unique_ptr<base::test::ScopedFeatureList> SetupTagAndAttributeFeature() {
   std::map<std::string, std::string> feature_params;
   feature_params[std::string(safe_browsing::kTagAndAttributeParamName)] =
-      "div,foo,div,baz";
+      "div,foo,div,baz,div,attr2,div,attr3,div,longattr4,div,attr5,div,attr6";
   variations::AssociateVariationParams(
       safe_browsing::kThreatDomDetailsTagAndAttributeFeature.name, "Group",
       feature_params);
@@ -49,16 +49,17 @@ using ThreatDOMDetailsTest = ChromeRenderViewTest;
 using testing::ElementsAre;
 
 TEST_F(ThreatDOMDetailsTest, Everything) {
-  blink::WebRuntimeFeatures::enableOverlayScrollbars(
+  blink::WebRuntimeFeatures::EnableOverlayScrollbars(
       ui::IsOverlayScrollbarEnabled());
   // Configure a field trial to collect divs with attribute foo.
   std::unique_ptr<base::test::ScopedFeatureList> feature_list =
       SetupTagAndAttributeFeature();
   std::unique_ptr<safe_browsing::ThreatDOMDetails> details(
       safe_browsing::ThreatDOMDetails::Create(view_->GetMainRenderFrame()));
-  // Lower kMaxNodes for the test. Loading 500 subframes in a
+  // Lower kMaxNodes and kMaxAttributes for the test. Loading 500 subframes in a
   // debug build takes a while.
-  details->kMaxNodes = 50;
+  safe_browsing::ThreatDOMDetails::kMaxNodes = 50;
+  safe_browsing::ThreatDOMDetails::kMaxAttributes = 5;
 
   const char urlprefix[] = "data:text/html;charset=utf-8,";
 
@@ -138,7 +139,7 @@ TEST_F(ThreatDOMDetailsTest, Everything) {
                                "\"></iframe>";
     GURL iframe1_url(urlprefix + iframe1_html);
     std::string html =
-        "<html><head><div foo=1><img foo=1><div bar=1><div baz=1></div>"
+        "<html><head><div foo=1 foo2=2><img foo=1><div bar=1><div baz=1></div>"
         "<iframe src=\"" +
         net::EscapeForHTML(iframe1_url.spec()) +
         "\"></iframe></div></div></head></html>";
@@ -160,6 +161,7 @@ TEST_F(ThreatDOMDetailsTest, Everything) {
     EXPECT_EQ(1, param.node_id);
     EXPECT_EQ(0, param.parent_node_id);
     EXPECT_THAT(param.child_node_ids, ElementsAre(2, 3));
+    EXPECT_THAT(param.attributes, ElementsAre(std::make_pair("foo", "1")));
 
     param = params[1];
     EXPECT_TRUE(param.url.is_empty());
@@ -169,6 +171,7 @@ TEST_F(ThreatDOMDetailsTest, Everything) {
     EXPECT_EQ(2, param.node_id);
     EXPECT_EQ(1, param.parent_node_id);
     EXPECT_TRUE(param.child_node_ids.empty());
+    EXPECT_THAT(param.attributes, ElementsAre(std::make_pair("baz", "1")));
 
     param = params[2];
     EXPECT_EQ(iframe1_url, param.url);
@@ -178,6 +181,7 @@ TEST_F(ThreatDOMDetailsTest, Everything) {
     EXPECT_EQ(3, param.node_id);
     EXPECT_EQ(1, param.parent_node_id);
     EXPECT_TRUE(param.child_node_ids.empty());
+    EXPECT_TRUE(param.attributes.empty());
 
     param = params[3];
     EXPECT_EQ(url, param.url);
@@ -238,5 +242,39 @@ TEST_F(ThreatDOMDetailsTest, Everything) {
       EXPECT_EQ(0, param.parent_node_id);
       EXPECT_TRUE(param.child_node_ids.empty());
     }
+  }
+
+  {
+    // Check the limit on the number of attributes collected and their lengths.
+    safe_browsing::ThreatDOMDetails::kMaxAttributeStringLength = 5;
+    std::string html =
+        "<html><head><div foo=1 attr2=2 attr3=3 longattr4=4 attr5=longvalue5 "
+        "attr6=6></div></head></html>";
+    LoadHTML(html.c_str());
+    std::vector<SafeBrowsingHostMsg_ThreatDOMDetails_Node> params;
+    details->ExtractResources(&params);
+
+    GURL url = GURL(urlprefix + html);
+    ASSERT_EQ(2u, params.size());
+    auto& param = params[0];
+    EXPECT_TRUE(param.url.is_empty());
+    EXPECT_EQ(url, param.parent);
+    EXPECT_EQ("DIV", param.tag_name);
+    EXPECT_TRUE(param.children.empty());
+    EXPECT_EQ(1, param.node_id);
+    EXPECT_EQ(0, param.parent_node_id);
+    EXPECT_TRUE(param.child_node_ids.empty());
+    EXPECT_THAT(
+        param.attributes,
+        ElementsAre(std::make_pair("foo", "1"), std::make_pair("attr2", "2"),
+                    std::make_pair("attr3", "3"),
+                    std::make_pair("longattr4", "4"),
+                    std::make_pair("attr5", "lo...")));
+
+    param = params[1];
+    EXPECT_EQ(url, param.url);
+    EXPECT_EQ(0, param.node_id);
+    EXPECT_EQ(0, param.parent_node_id);
+    EXPECT_TRUE(param.child_node_ids.empty());
   }
 }

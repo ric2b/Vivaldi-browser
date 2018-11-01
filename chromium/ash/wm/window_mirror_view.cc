@@ -4,10 +4,10 @@
 
 #include "ash/wm/window_mirror_view.h"
 
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_window.h"
-#include "ash/common/wm_window_property.h"
+#include "ash/wm/widget_finder.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
+#include "ash/wm_window.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
@@ -105,16 +105,17 @@ ui::Layer* WindowMirrorView::GetMirrorLayer() {
 }
 
 gfx::Rect WindowMirrorView::GetClientAreaBounds() const {
-  int insets = target_->GetIntProperty(WmWindowProperty::TOP_VIEW_INSET);
+  int insets = target_->aura_window()->GetProperty(aura::client::kTopViewInset);
   if (insets > 0) {
     gfx::Rect bounds(target_->GetBounds().size());
     bounds.Inset(0, insets, 0, 0);
     return bounds;
   }
   // The target window may not have a widget in unit tests.
-  if (!target_->GetInternalWidget())
+  views::Widget* widget = GetInternalWidgetForWindow(target_->aura_window());
+  if (!widget)
     return gfx::Rect();
-  views::View* client_view = target_->GetInternalWidget()->client_view();
+  views::View* client_view = widget->client_view();
   return client_view->ConvertRectToWidget(client_view->GetLocalBounds());
 }
 

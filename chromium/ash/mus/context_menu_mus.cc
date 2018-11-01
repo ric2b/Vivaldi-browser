@@ -4,12 +4,12 @@
 
 #include "ash/mus/context_menu_mus.h"
 
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wallpaper/wallpaper_controller.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
-#include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/shelf/wm_shelf.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/wallpaper/wallpaper_controller.h"
+#include "ash/wallpaper/wallpaper_delegate.h"
 
 namespace ash {
 
@@ -35,7 +35,7 @@ bool ContextMenuMus::IsCommandIdChecked(int command_id) const {
 
 bool ContextMenuMus::IsCommandIdEnabled(int command_id) const {
   if (command_id == MENU_CHANGE_WALLPAPER)
-    return WmShell::Get()->wallpaper_delegate()->CanOpenSetWallpaperPage();
+    return Shell::Get()->wallpaper_delegate()->CanOpenSetWallpaperPage();
   return true;
 }
 
@@ -46,7 +46,7 @@ void ContextMenuMus::ExecuteCommand(int command_id, int event_flags) {
                                        ? SHELF_AUTO_HIDE_BEHAVIOR_NEVER
                                        : SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   } else if (command_id == MENU_CHANGE_WALLPAPER) {
-    WmShell::Get()->wallpaper_controller()->OpenSetWallpaperPage();
+    Shell::Get()->wallpaper_controller()->OpenSetWallpaperPage();
   }
 }
 

@@ -6,19 +6,10 @@
 #define CC_PAINT_PAINT_RECORD_H_
 
 #include "third_party/skia/include/core/SkPicture.h"
-#include "third_party/skia/include/utils/SkPictureUtils.h"
 
 namespace cc {
 
 using PaintRecord = SkPicture;
-
-inline const SkPicture* ToSkPicture(const PaintRecord* record) {
-  return record;
-}
-
-inline SkPicture* ToSkPicture(PaintRecord* record) {
-  return record;
-}
 
 inline sk_sp<SkPicture> ToSkPicture(sk_sp<PaintRecord> record) {
   return record;

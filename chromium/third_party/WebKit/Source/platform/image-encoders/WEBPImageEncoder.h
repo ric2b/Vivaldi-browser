@@ -31,8 +31,8 @@
 #ifndef WEBPImageEncoder_h
 #define WEBPImageEncoder_h
 
-#include "wtf/Allocator.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -43,12 +43,12 @@ class WEBPImageEncoder {
 
  public:
   // Encode the input data with a compression quality in [0-100].
-  static bool encode(const ImageDataBuffer&,
+  static bool Encode(const ImageDataBuffer&,
                      int quality,
                      Vector<unsigned char>*);
 
   // For callers: provide a reasonable compression quality default.
-  enum Quality { DefaultCompressionQuality = 80 };
+  enum Quality { kDefaultCompressionQuality = 80 };
 };
 
 }  // namespace blink

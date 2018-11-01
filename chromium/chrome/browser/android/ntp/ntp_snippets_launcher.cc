@@ -4,7 +4,6 @@
 
 #include "chrome/browser/android/ntp/ntp_snippets_launcher.h"
 
-#include "base/android/context_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/SnippetsLauncher_jni.h"
 
@@ -12,7 +11,7 @@ using content::BrowserThread;
 
 namespace {
 
-base::LazyInstance<NTPSnippetsLauncher> g_snippets_launcher =
+base::LazyInstance<NTPSnippetsLauncher>::DestructorAtExit g_snippets_launcher =
     LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
@@ -40,12 +39,18 @@ bool NTPSnippetsLauncher::Unschedule() {
   return Java_SnippetsLauncher_unschedule(env, java_launcher_);
 }
 
+bool NTPSnippetsLauncher::IsOnUnmeteredConnection() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_SnippetsLauncher_isOnUnmeteredConnection(env, java_launcher_);
+}
+
 NTPSnippetsLauncher::NTPSnippetsLauncher() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  java_launcher_.Reset(Java_SnippetsLauncher_create(
-      env, base::android::GetApplicationContext()));
+  java_launcher_.Reset(Java_SnippetsLauncher_create(env));
 }
 
 NTPSnippetsLauncher::~NTPSnippetsLauncher() {

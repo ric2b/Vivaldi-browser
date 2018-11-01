@@ -5,7 +5,9 @@
 #ifndef CC_DEBUG_LAYER_TREE_DEBUG_STATE_H_
 #define CC_DEBUG_LAYER_TREE_DEBUG_STATE_H_
 
-#include "cc/base/cc_export.h"
+#include <bitset>
+
+#include "cc/debug/debug_export.h"
 
 namespace cc {
 
@@ -13,14 +15,22 @@ namespace proto {
 class LayerTreeDebugState;
 }  // namespace proto
 
-class CC_EXPORT LayerTreeDebugState {
+enum DebugBorderType {
+  RENDERPASS = 0,
+  SURFACE,
+  LAYER,
+  LAST_DEBUG_BORDER_TYPE = LAYER
+};
+using DebugBorderTypes = std::bitset<LAST_DEBUG_BORDER_TYPE + 1>;
+
+class CC_DEBUG_EXPORT LayerTreeDebugState {
  public:
   LayerTreeDebugState();
   LayerTreeDebugState(const LayerTreeDebugState& other);
   ~LayerTreeDebugState();
 
   bool show_fps_counter;
-  bool show_debug_borders;
+  DebugBorderTypes show_debug_borders;
 
   bool show_paint_rects;
   bool show_property_changed_rects;

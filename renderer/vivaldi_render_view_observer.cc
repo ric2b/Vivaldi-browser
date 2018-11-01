@@ -53,15 +53,15 @@ bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
 
 // Inserts text into input fields.
 void VivaldiRenderViewObserver::OnInsertText(const base::string16& text) {
-  WebLocalFrame* frame = render_view()->GetWebView()->focusedFrame();
+  WebLocalFrame* frame = render_view()->GetWebView()->FocusedFrame();
   unsigned length = text.length();
   // We do not want any selection.
-  frame->setMarkedText(blink::WebString::fromUTF16(text), length, length);
-  frame->unmarkText();                         // Or marked text.
+  frame->SetMarkedText(blink::WebString::FromUTF16(text), length, length);
+  frame->UnmarkText();                         // Or marked text.
 }
 
 void VivaldiRenderViewObserver::OnPinchZoom(float scale, int x, int y) {
-  render_view()->GetWebView()->vivaldiSetPinchZoom(scale, x, y);
+  render_view()->GetWebView()->SetPinchZoom(scale, x, y);
 }
 
 void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
@@ -70,17 +70,17 @@ void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
   bool editable = false;
   std::string role = "";
 
-  if (!node.isNull() && node.isElementNode()) {
+  if (!node.IsNull() && node.IsElementNode()) {
     blink::WebElement element =
-        const_cast<blink::WebNode&>(node).to<blink::WebElement>();
-    tagname = element.tagName().utf8();
-    if (element.hasAttribute("type")) {
-      type = element.getAttribute("type").utf8();
+        const_cast<blink::WebNode&>(node).To<blink::WebElement>();
+    tagname = element.TagName().Utf8();
+    if (element.HasAttribute("type")) {
+      type = element.GetAttribute("type").Utf8();
     }
-    editable = element.isEditable();
+    editable = element.IsEditable();
 
-    if (element.hasAttribute("role")) {
-      role = element.getAttribute("role").utf8();
+    if (element.HasAttribute("role")) {
+      role = element.GetAttribute("role").Utf8();
     }
   }
   Send(new VivaldiMsg_DidUpdateFocusedElementInfo(routing_id(), tagname, type,
@@ -132,12 +132,12 @@ void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
     VivaldiViewMsg_RequestThumbnailForFrame_Params params) {
   base::SharedMemoryHandle shared_memory_handle;
   if (!render_view()->GetWebView() ||
-      !render_view()->GetWebView()->mainFrame()) {
+      !render_view()->GetWebView()->MainFrame()) {
     Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
         routing_id(), shared_memory_handle, gfx::Size(), params.callback_id,
         false));
   }
-  blink::WebFrame* main_frame = render_view()->GetWebView()->mainFrame();
+  blink::WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
   bool capture_full_page = params.full_page;
   gfx::Size size = params.size;
   SkBitmap bitmap;

@@ -25,7 +25,6 @@
 #include "components/sync_sessions/synced_window_delegate.h"
 #include "components/sync_sessions/synced_window_delegates_getter.h"
 #include "components/sync_sessions/tab_node_pool.h"
-#include "components/variations/variations_associated_data.h"
 
 using sessions::SerializedNavigationEntry;
 using syncer::DeviceInfo;
@@ -106,7 +105,7 @@ void AppendDeletionsForTabNodes(const std::set<int>& tab_node_ids,
 
 // Ensure that the tab id is not invalid.
 bool ShouldSyncTabId(SessionID::id_type tab_id) {
-  if (tab_id == TabNodePool::kInvalidTabID)
+  if (tab_id == kInvalidTabID)
     return false;
   return true;
 }
@@ -119,7 +118,7 @@ SessionsSyncManager::SessionsSyncManager(
     sync_sessions::SyncSessionsClient* sessions_client,
     syncer::SyncPrefs* sync_prefs,
     LocalDeviceInfoProvider* local_device,
-    std::unique_ptr<LocalSessionEventRouter> router,
+    LocalSessionEventRouter* router,
     const base::Closure& sessions_updated_callback,
     const base::Closure& datatype_refresh_callback)
     : sessions_client_(sessions_client),
@@ -391,7 +390,6 @@ void SessionsSyncManager::AssociateTab(SyncedTabDelegate* const tab_delegate,
 
   // Update the tracker's session representation.
   SetSessionTabFromDelegate(*tab_delegate, base::Time::Now(), session_tab);
-  SetVariationIds(session_tab);
   session_tracker_.GetSession(current_machine_tag())->modified_time =
       base::Time::Now();
 
@@ -512,13 +510,13 @@ syncer::SyncDataList SessionsSyncManager::GetAllSyncData(
   header_entity.mutable_session()->set_session_tag(current_machine_tag());
   sync_pb::SessionHeader* header_specifics =
       header_entity.mutable_session()->mutable_header();
-  header_specifics->MergeFrom(session->ToSessionHeader());
+  header_specifics->MergeFrom(session->ToSessionHeaderProto());
   syncer::SyncData data = syncer::SyncData::CreateLocalData(
       current_machine_tag(), current_session_name_, header_entity);
   list.push_back(data);
 
   for (auto& win_iter : session->windows) {
-    for (auto& tab : win_iter.second->tabs) {
+    for (auto& tab : win_iter.second->wrapped_window.tabs) {
       // TODO(zea): replace with with the correct tab node id once there's a
       // sync specific wrapper for SessionTab. This method is only used in
       // tests though, so it's fine for now. crbug.com/662597
@@ -681,7 +679,7 @@ bool SessionsSyncManager::InitFromSyncModel(
           syncer::SyncChange tombstone(TombstoneTab(specifics));
           if (tombstone.IsValid())
             new_changes->push_back(tombstone);
-        } else if (specifics.tab().tab_id() == TabNodePool::kInvalidTabID) {
+        } else if (specifics.tab().tab_id() == kInvalidTabID) {
           LOG(WARNING) << "Found tab node with invalid tab id.";
           syncer::SyncChange tombstone(TombstoneTab(specifics));
           if (tombstone.IsValid())
@@ -867,14 +865,15 @@ void SessionsSyncManager::BuildSyncedSessionFromSpecifics(
     const std::string& session_tag,
     const sync_pb::SessionWindow& specifics,
     base::Time mtime,
-    sessions::SessionWindow* session_window) {
+    SyncedSessionWindow* synced_session_window) {
+  sessions::SessionWindow* session_window =
+      &synced_session_window->wrapped_window;
   if (specifics.has_window_id())
     session_window->window_id.set_id(specifics.window_id());
   if (specifics.has_selected_tab_index())
     session_window->selected_tab_index = specifics.selected_tab_index();
+  synced_session_window->window_type = specifics.browser_type();
   if (specifics.has_browser_type()) {
-    // TODO(skuhne): Sync data writes |BrowserType| not
-    // |SessionWindow::WindowType|. This should get changed.
     if (specifics.browser_type() ==
         sync_pb::SessionWindow_BrowserType_TYPE_TABBED) {
       session_window->type = sessions::SessionWindow::TYPE_TABBED;
@@ -1092,18 +1091,6 @@ void SessionsSyncManager::SetSessionTabFromDelegate(
     }
   }
   session_tab->session_storage_persistent_id.clear();
-}
-
-// static
-void SessionsSyncManager::SetVariationIds(sessions::SessionTab* session_tab) {
-  base::FieldTrial::ActiveGroups active_groups;
-  base::FieldTrialList::GetActiveFieldTrialGroups(&active_groups);
-  for (const base::FieldTrial::ActiveGroup& group : active_groups) {
-    const variations::VariationID id = variations::GetGoogleVariationID(
-        variations::CHROME_SYNC_SERVICE, group.trial_name, group.group_name);
-    if (id != variations::EMPTY_ID)
-      session_tab->variation_ids.push_back(id);
-  }
 }
 
 FaviconCache* SessionsSyncManager::GetFaviconCache() {

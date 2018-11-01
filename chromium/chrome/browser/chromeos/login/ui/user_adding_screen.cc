@@ -4,8 +4,8 @@
 
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 
-#include "ash/common/system/tray/system_tray.h"
 #include "ash/shell.h"
+#include "ash/system/tray/system_tray.h"
 #include "base/bind.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
@@ -64,7 +64,7 @@ void UserAddingScreenImpl::Cancel() {
   CHECK(IsRunning());
 
   // Make sure that system tray is enabled after this flow.
-  ash::Shell::GetInstance()->GetPrimarySystemTray()->SetEnabled(true);
+  ash::Shell::Get()->GetPrimarySystemTray()->SetEnabled(true);
   display_host_->CancelUserAdding();
 
   // Reset wallpaper if cancel adding user from multiple user sign in page.

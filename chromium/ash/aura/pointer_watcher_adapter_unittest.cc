@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/common/wm_shell.h"
+#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
@@ -29,9 +29,11 @@ enum TestPointerCaptureEvents {
 class TestPointerWatcher : public views::PointerWatcher {
  public:
   explicit TestPointerWatcher(views::PointerWatcherEventTypes events) {
-    WmShell::Get()->AddPointerWatcher(this, events);
+    ShellPort::Get()->AddPointerWatcher(this, events);
   }
-  ~TestPointerWatcher() override { WmShell::Get()->RemovePointerWatcher(this); }
+  ~TestPointerWatcher() override {
+    ShellPort::Get()->RemovePointerWatcher(this);
+  }
 
   void ClearCounts() {
     pointer_event_count_ = capture_changed_count_ = mouse_wheel_event_count_ =

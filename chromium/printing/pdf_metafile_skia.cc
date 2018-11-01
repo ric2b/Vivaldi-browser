@@ -200,14 +200,14 @@ bool PdfMetafileSkia::FinishDocument() {
   }
 
   for (const Page& page : data_->pages_) {
-    cc::PaintCanvas* canvas(
+    cc::SkiaPaintCanvas canvas(
         doc->beginPage(page.size_.width(), page.size_.height()));
-    canvas->drawPicture(page.content_);
+    canvas.drawPicture(page.content_);
     doc->endPage();
   }
   doc->close();
 
-  data_->pdf_data_.reset(stream.detachAsStream());
+  data_->pdf_data_ = stream.detachAsStream();
   return true;
 }
 

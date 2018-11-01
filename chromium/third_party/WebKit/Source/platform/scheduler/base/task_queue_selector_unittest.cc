@@ -120,7 +120,7 @@ class TaskQueueSelectorTest : public testing::Test {
  protected:
   void SetUp() final {
     virtual_time_domain_ = base::WrapUnique<VirtualTimeDomain>(
-        new VirtualTimeDomain(nullptr, base::TimeTicks()));
+        new VirtualTimeDomain(base::TimeTicks()));
     for (size_t i = 0; i < kTaskQueueCount; i++) {
       scoped_refptr<TaskQueueImpl> task_queue =
           make_scoped_refptr(new TaskQueueImpl(
@@ -527,7 +527,8 @@ TEST_P(ChooseOldestWithPriorityTest, RoundRobinTest) {
       TaskQueue::NORMAL_PRIORITY, &chose_delayed_over_immediate,
       &chosen_work_queue));
   EXPECT_EQ(chosen_work_queue->task_queue(), task_queues_[0].get());
-  EXPECT_STREQ(chosen_work_queue->name(), GetParam().expected_work_queue_name);
+  EXPECT_STREQ(chosen_work_queue->GetName(),
+               GetParam().expected_work_queue_name);
   EXPECT_EQ(chose_delayed_over_immediate,
             GetParam().expected_did_starve_immediate_queue);
 }

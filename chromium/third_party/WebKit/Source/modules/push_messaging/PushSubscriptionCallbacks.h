@@ -6,8 +6,8 @@
 #define PushSubscriptionCallbacks_h
 
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Noncopyable.h"
 #include "public/platform/modules/push_messaging/WebPushProvider.h"
-#include "wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -29,12 +29,12 @@ class PushSubscriptionCallbacks final : public WebPushSubscriptionCallbacks {
   ~PushSubscriptionCallbacks() override;
 
   // WebPushSubscriptionCallbacks interface.
-  void onSuccess(std::unique_ptr<WebPushSubscription>) override;
-  void onError(const WebPushError&) override;
+  void OnSuccess(std::unique_ptr<WebPushSubscription>) override;
+  void OnError(const WebPushError&) override;
 
  private:
-  Persistent<ScriptPromiseResolver> m_resolver;
-  Persistent<ServiceWorkerRegistration> m_serviceWorkerRegistration;
+  Persistent<ScriptPromiseResolver> resolver_;
+  Persistent<ServiceWorkerRegistration> service_worker_registration_;
 };
 
 }  // namespace blink

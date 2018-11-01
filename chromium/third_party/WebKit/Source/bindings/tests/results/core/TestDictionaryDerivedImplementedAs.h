@@ -16,8 +16,8 @@
 #include "bindings/tests/idls/core/TestDictionary.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -38,21 +38,21 @@ class CORE_EXPORT TestDictionaryDerivedImplementedAs : public TestDictionary {
   void setDerivedStringMemberWithDefault(String);
 
   bool hasRequiredLongMember() const;
-  int requiredLongMember() const;
-  void setRequiredLongMember(int);
+  int32_t requiredLongMember() const;
+  void setRequiredLongMember(int32_t);
 
   bool hasStringOrDoubleSequenceMember() const;
   const HeapVector<StringOrDouble>& stringOrDoubleSequenceMember() const;
   void setStringOrDoubleSequenceMember(const HeapVector<StringOrDouble>&);
 
-  v8::Local<v8::Value> toV8Impl(v8::Local<v8::Object>, v8::Isolate*) const override;
+  v8::Local<v8::Value> ToV8Impl(v8::Local<v8::Object>, v8::Isolate*) const override;
   DECLARE_VIRTUAL_TRACE();
 
  private:
   String m_derivedStringMember;
   String m_derivedStringMemberWithDefault;
   bool m_hasRequiredLongMember = false;
-  int m_requiredLongMember;
+  int32_t m_requiredLongMember;
   bool m_hasStringOrDoubleSequenceMember = false;
   HeapVector<StringOrDouble> m_stringOrDoubleSequenceMember;
 

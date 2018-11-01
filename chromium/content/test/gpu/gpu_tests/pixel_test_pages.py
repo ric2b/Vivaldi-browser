@@ -55,6 +55,12 @@ def DefaultPages(base_name):
       revision=7),
 
     PixelTestPage(
+      'pixel_canvas2d_untagged.html',
+      base_name + '_Canvas2DUntagged',
+      test_rect=[0, 0, 257, 257],
+      revision=0),
+
+    PixelTestPage(
       'pixel_css3d.html',
       base_name + '_CSS3DBlueBox',
       test_rect=[0, 0, 300, 300],
@@ -130,6 +136,18 @@ def DefaultPages(base_name):
       base_name + '_SolidColorBackground',
       test_rect=[500, 500, 100, 100],
       revision=1),
+
+    PixelTestPage(
+      'pixel_video_mp4.html',
+      base_name + '_Video_MP4',
+      test_rect=[0, 0, 300, 300],
+      revision=2),
+
+    PixelTestPage(
+      'pixel_video_vp9.html',
+      base_name + '_Video_VP9',
+      test_rect=[0, 0, 300, 300],
+      revision=2),
   ]
 
 
@@ -294,84 +312,84 @@ def ExperimentalCanvasFeaturesPages(base_name):
       'pixel_offscreenCanvas_transferToImageBitmap_main.html',
       base_name + '_OffscreenCanvasTransferToImageBitmap',
       test_rect=[0, 0, 300, 300],
-      revision=1,
+      revision=2,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_transferToImageBitmap_worker.html',
       base_name + '_OffscreenCanvasTransferToImageBitmapWorker',
       test_rect=[0, 0, 300, 300],
-      revision=1,
+      revision=2,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_main.html',
       base_name + '_OffscreenCanvasWebGLDefault',
-      test_rect=[0, 0, 350, 350],
-      revision=1,
+      test_rect=[0, 0, 360, 200],
+      revision=4,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_worker.html',
       base_name + '_OffscreenCanvasWebGLDefaultWorker',
-      test_rect=[0, 0, 350, 350],
-      revision=1,
+      test_rect=[0, 0, 360, 200],
+      revision=4,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_main.html',
       base_name + '_OffscreenCanvasWebGLSoftwareCompositing',
-      test_rect=[0, 0, 350, 350],
-      revision=2,
+      test_rect=[0, 0, 360, 200],
+      revision=5,
       browser_args=browser_args + ['--disable-gpu-compositing']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_worker.html',
       base_name + '_OffscreenCanvasWebGLSoftwareCompositingWorker',
-      test_rect=[0, 0, 350, 350],
-      revision=2,
+      test_rect=[0, 0, 360, 200],
+      revision=5,
       browser_args=browser_args + ['--disable-gpu-compositing']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasAccelerated2D',
-      test_rect=[0, 0, 300, 300],
-      revision=3,
+      test_rect=[0, 0, 360, 200],
+      revision=6,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasAccelerated2DWorker',
-      test_rect=[0, 0, 300, 300],
-      revision=3,
+      test_rect=[0, 0, 360, 200],
+      revision=6,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2D',
-      test_rect=[0, 0, 300, 300],
-      revision=2,
+      test_rect=[0, 0, 360, 200],
+      revision=5,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DWorker',
-      test_rect=[0, 0, 300, 300],
-      revision=2,
+      test_rect=[0, 0, 360, 200],
+      revision=5,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositing',
-      test_rect=[0, 0, 300, 300],
-      revision=4,
+      test_rect=[0, 0, 360, 200],
+      revision=7,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
-      test_rect=[0, 0, 300, 300],
-      revision=4,
+      test_rect=[0, 0, 360, 200],
+      revision=7,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
 
     PixelTestPage(
@@ -474,4 +492,22 @@ def MacSpecificPages(base_name):
       revision=4,
       tolerance=10,
       browser_args=['--disable-mac-overlays']),
+  ]
+
+def DirectCompositionPages(base_name):
+  browser_args = ['--enable-direct-composition-layers']
+  return [
+    PixelTestPage(
+      'pixel_video_mp4.html',
+      base_name + '_DirectComposition_Video_MP4',
+      test_rect=[0, 0, 300, 300],
+      revision=1,
+      browser_args=browser_args),
+
+    PixelTestPage(
+      'pixel_video_vp9.html',
+      base_name + '_DirectComposition_Video_VP9',
+      test_rect=[0, 0, 300, 300],
+      revision=1,
+      browser_args=browser_args),
   ]

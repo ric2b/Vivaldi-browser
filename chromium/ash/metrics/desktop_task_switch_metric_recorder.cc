@@ -4,8 +4,8 @@
 
 #include "ash/metrics/desktop_task_switch_metric_recorder.h"
 
-#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
 #include "ash/wm/window_util.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -13,11 +13,11 @@ namespace ash {
 
 DesktopTaskSwitchMetricRecorder::DesktopTaskSwitchMetricRecorder()
     : last_active_task_window_(nullptr) {
-  Shell::GetInstance()->activation_client()->AddObserver(this);
+  Shell::Get()->activation_client()->AddObserver(this);
 }
 
 DesktopTaskSwitchMetricRecorder::~DesktopTaskSwitchMetricRecorder() {
-  Shell::GetInstance()->activation_client()->RemoveObserver(this);
+  Shell::Get()->activation_client()->RemoveObserver(this);
 }
 
 void DesktopTaskSwitchMetricRecorder::OnWindowActivated(
@@ -28,7 +28,7 @@ void DesktopTaskSwitchMetricRecorder::OnWindowActivated(
     if (last_active_task_window_ != gained_active &&
         reason == aura::client::ActivationChangeObserver::ActivationReason::
                       INPUT_EVENT) {
-      WmShell::Get()->RecordUserMetricsAction(UMA_DESKTOP_SWITCH_TASK);
+      ShellPort::Get()->RecordUserMetricsAction(UMA_DESKTOP_SWITCH_TASK);
     }
     last_active_task_window_ = gained_active;
   }

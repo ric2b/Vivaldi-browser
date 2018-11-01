@@ -13,7 +13,6 @@
 #include "mojo/public/c/system/functions.h"
 #include "mojo/public/c/system/message_pipe.h"
 #include "mojo/public/c/system/platform_handle.h"
-#include "mojo/public/c/system/wait_set.h"
 
 using mojo::edk::internal::g_core;
 
@@ -28,32 +27,35 @@ MojoResult MojoCloseImpl(MojoHandle handle) {
   return g_core->Close(handle);
 }
 
-MojoResult MojoWaitImpl(MojoHandle handle,
-                        MojoHandleSignals signals,
-                        MojoDeadline deadline,
-                        MojoHandleSignalsState* signals_state) {
-  return g_core->Wait(handle, signals, deadline, signals_state);
+MojoResult MojoQueryHandleSignalsStateImpl(
+    MojoHandle handle,
+    MojoHandleSignalsState* signals_state) {
+  return g_core->QueryHandleSignalsState(handle, signals_state);
 }
 
-MojoResult MojoWaitManyImpl(const MojoHandle* handles,
-                            const MojoHandleSignals* signals,
-                            uint32_t num_handles,
-                            MojoDeadline deadline,
-                            uint32_t* result_index,
-                            MojoHandleSignalsState* signals_states) {
-  return g_core->WaitMany(handles, signals, num_handles, deadline, result_index,
-                          signals_states);
+MojoResult MojoCreateWatcherImpl(MojoWatcherCallback callback,
+                                 MojoHandle* watcher_handle) {
+  return g_core->CreateWatcher(callback, watcher_handle);
 }
 
-MojoResult MojoWatchImpl(MojoHandle handle,
+MojoResult MojoArmWatcherImpl(MojoHandle watcher_handle,
+                              uint32_t* num_ready_contexts,
+                              uintptr_t* ready_contexts,
+                              MojoResult* ready_results,
+                              MojoHandleSignalsState* ready_signals_states) {
+  return g_core->ArmWatcher(watcher_handle, num_ready_contexts, ready_contexts,
+                            ready_results, ready_signals_states);
+}
+
+MojoResult MojoWatchImpl(MojoHandle watcher_handle,
+                         MojoHandle handle,
                          MojoHandleSignals signals,
-                         MojoWatchCallback callback,
                          uintptr_t context) {
-  return g_core->Watch(handle, signals, callback, context);
+  return g_core->Watch(watcher_handle, handle, signals, context);
 }
 
-MojoResult MojoCancelWatchImpl(MojoHandle handle, uintptr_t context) {
-  return g_core->CancelWatch(handle, context);
+MojoResult MojoCancelWatchImpl(MojoHandle watcher_handle, uintptr_t context) {
+  return g_core->CancelWatch(watcher_handle, context);
 }
 
 MojoResult MojoAllocMessageImpl(uint32_t num_bytes,
@@ -70,30 +72,6 @@ MojoResult MojoFreeMessageImpl(MojoMessageHandle message) {
 
 MojoResult MojoGetMessageBufferImpl(MojoMessageHandle message, void** buffer) {
   return g_core->GetMessageBuffer(message, buffer);
-}
-
-MojoResult MojoCreateWaitSetImpl(MojoHandle* wait_set_handle) {
-  return g_core->CreateWaitSet(wait_set_handle);
-}
-
-MojoResult MojoAddHandleImpl(MojoHandle wait_set_handle,
-                             MojoHandle handle,
-                             MojoHandleSignals signals) {
-  return g_core->AddHandle(wait_set_handle, handle, signals);
-}
-
-MojoResult MojoRemoveHandleImpl(MojoHandle wait_set_handle, MojoHandle handle) {
-  return g_core->RemoveHandle(wait_set_handle, handle);
-}
-
-MojoResult MojoGetReadyHandlesImpl(
-    MojoHandle wait_set_handle,
-    uint32_t* count,
-    MojoHandle* handles,
-    MojoResult* results,
-    struct MojoHandleSignalsState* signals_states) {
-  return g_core->GetReadyHandles(wait_set_handle, count, handles, results,
-                                 signals_states);
 }
 
 MojoResult MojoCreateMessagePipeImpl(
@@ -267,8 +245,7 @@ MojoSystemThunks MakeSystemThunks() {
   MojoSystemThunks system_thunks = {sizeof(MojoSystemThunks),
                                     MojoGetTimeTicksNowImpl,
                                     MojoCloseImpl,
-                                    MojoWaitImpl,
-                                    MojoWaitManyImpl,
+                                    MojoQueryHandleSignalsStateImpl,
                                     MojoCreateMessagePipeImpl,
                                     MojoWriteMessageImpl,
                                     MojoReadMessageImpl,
@@ -283,12 +260,10 @@ MojoSystemThunks MakeSystemThunks() {
                                     MojoDuplicateBufferHandleImpl,
                                     MojoMapBufferImpl,
                                     MojoUnmapBufferImpl,
-                                    MojoCreateWaitSetImpl,
-                                    MojoAddHandleImpl,
-                                    MojoRemoveHandleImpl,
-                                    MojoGetReadyHandlesImpl,
+                                    MojoCreateWatcherImpl,
                                     MojoWatchImpl,
                                     MojoCancelWatchImpl,
+                                    MojoArmWatcherImpl,
                                     MojoFuseMessagePipesImpl,
                                     MojoWriteMessageNewImpl,
                                     MojoReadMessageNewImpl,

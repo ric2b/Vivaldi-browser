@@ -5,7 +5,6 @@
 #include "net/spdy/hpack/hpack_encoder.h"
 
 #include <map>
-#include <string>
 
 #include "base/rand_util.h"
 #include "net/base/arena.h"
@@ -15,8 +14,6 @@
 
 namespace net {
 
-using base::StringPiece;
-using std::string;
 using testing::ElementsAre;
 
 namespace test {
@@ -46,10 +43,10 @@ class HpackEncoderPeer {
   const HpackHuffmanTable& huffman_table() const {
     return encoder_->huffman_table_;
   }
-  void EmitString(StringPiece str) { encoder_->EmitString(str); }
-  void TakeString(string* out) { encoder_->output_stream_.TakeString(out); }
-  static void CookieToCrumbs(StringPiece cookie,
-                             std::vector<StringPiece>* out) {
+  void EmitString(SpdyStringPiece str) { encoder_->EmitString(str); }
+  void TakeString(SpdyString* out) { encoder_->output_stream_.TakeString(out); }
+  static void CookieToCrumbs(SpdyStringPiece cookie,
+                             std::vector<SpdyStringPiece>* out) {
     Representations tmp;
     HpackEncoder::CookieToCrumbs(std::make_pair("", cookie), &tmp);
 
@@ -58,8 +55,8 @@ class HpackEncoderPeer {
       out->push_back(tmp[i].second);
     }
   }
-  static void DecomposeRepresentation(StringPiece value,
-                                      std::vector<StringPiece>* out) {
+  static void DecomposeRepresentation(SpdyStringPiece value,
+                                      std::vector<SpdyStringPiece>* out) {
     Representations tmp;
     HpackEncoder::DecomposeRepresentation(std::make_pair("foobar", value),
                                           &tmp);
@@ -74,7 +71,7 @@ class HpackEncoderPeer {
   // non-incremental encoding path.
   static bool EncodeHeaderSet(HpackEncoder* encoder,
                               const SpdyHeaderBlock& header_set,
-                              string* output,
+                              SpdyString* output,
                               bool use_incremental) {
     if (use_incremental) {
       return EncodeIncremental(encoder, header_set, output);
@@ -85,13 +82,13 @@ class HpackEncoderPeer {
 
   static bool EncodeIncremental(HpackEncoder* encoder,
                                 const SpdyHeaderBlock& header_set,
-                                string* output) {
+                                SpdyString* output) {
     std::unique_ptr<HpackEncoder::ProgressiveEncoder> encoderator =
         encoder->EncodeHeaderSet(header_set);
-    string output_buffer;
+    SpdyString output_buffer;
     encoderator->Next(base::RandInt(0, 15), &output_buffer);
     while (encoderator->HasNext()) {
-      string second_buffer;
+      SpdyString second_buffer;
       encoderator->Next(base::RandInt(0, 15), &second_buffer);
       output_buffer.append(second_buffer);
     }
@@ -135,36 +132,37 @@ class HpackEncoderTest : public ::testing::TestWithParam<bool> {
     peer_.table()->SetMaxSize(peer_.table()->size());
   }
 
-  void SaveHeaders(StringPiece name, StringPiece value) {
-    StringPiece n(headers_storage_.Memdup(name.data(), name.size()),
-                  name.size());
-    StringPiece v(headers_storage_.Memdup(value.data(), value.size()),
-                  value.size());
-    headers_observed_.push_back(make_pair(n, v));
+  void SaveHeaders(SpdyStringPiece name, SpdyStringPiece value) {
+    SpdyStringPiece n(headers_storage_.Memdup(name.data(), name.size()),
+                      name.size());
+    SpdyStringPiece v(headers_storage_.Memdup(value.data(), value.size()),
+                      value.size());
+    headers_observed_.push_back(std::make_pair(n, v));
   }
 
   void ExpectIndex(size_t index) {
     expected_.AppendPrefix(kIndexedOpcode);
     expected_.AppendUint32(index);
   }
-  void ExpectIndexedLiteral(const HpackEntry* key_entry, StringPiece value) {
+  void ExpectIndexedLiteral(const HpackEntry* key_entry,
+                            SpdyStringPiece value) {
     expected_.AppendPrefix(kLiteralIncrementalIndexOpcode);
     expected_.AppendUint32(IndexOf(key_entry));
     ExpectString(&expected_, value);
   }
-  void ExpectIndexedLiteral(StringPiece name, StringPiece value) {
+  void ExpectIndexedLiteral(SpdyStringPiece name, SpdyStringPiece value) {
     expected_.AppendPrefix(kLiteralIncrementalIndexOpcode);
     expected_.AppendUint32(0);
     ExpectString(&expected_, name);
     ExpectString(&expected_, value);
   }
-  void ExpectNonIndexedLiteral(StringPiece name, StringPiece value) {
+  void ExpectNonIndexedLiteral(SpdyStringPiece name, SpdyStringPiece value) {
     expected_.AppendPrefix(kLiteralNoIndexOpcode);
     expected_.AppendUint32(0);
     ExpectString(&expected_, name);
     ExpectString(&expected_, value);
   }
-  void ExpectString(HpackOutputStream* stream, StringPiece str) {
+  void ExpectString(HpackOutputStream* stream, SpdyStringPiece str) {
     const HpackHuffmanTable& huffman_table = peer_.huffman_table();
     size_t encoded_size = peer_.compression_enabled()
                               ? huffman_table.EncodedSize(str)
@@ -184,7 +182,7 @@ class HpackEncoderTest : public ::testing::TestWithParam<bool> {
     expected_.AppendUint32(size);
   }
   void CompareWithExpectedEncoding(const SpdyHeaderBlock& header_set) {
-    string expected_out, actual_out;
+    SpdyString expected_out, actual_out;
     expected_.TakeString(&expected_out);
     EXPECT_TRUE(test::HpackEncoderPeer::EncodeHeaderSet(
         &encoder_, header_set, &actual_out, use_incremental_));
@@ -204,7 +202,7 @@ class HpackEncoderTest : public ::testing::TestWithParam<bool> {
   const HpackEntry* cookie_c_;
 
   UnsafeArena headers_storage_;
-  std::vector<std::pair<StringPiece, StringPiece>> headers_observed_;
+  std::vector<std::pair<SpdyStringPiece, SpdyStringPiece>> headers_observed_;
 
   HpackOutputStream expected_;
   bool use_incremental_;
@@ -213,9 +211,10 @@ class HpackEncoderTest : public ::testing::TestWithParam<bool> {
 INSTANTIATE_TEST_CASE_P(HpackEncoderTests, HpackEncoderTest, ::testing::Bool());
 
 TEST_P(HpackEncoderTest, SingleDynamicIndex) {
-  encoder_.SetHeaderListener([this](StringPiece name, StringPiece value) {
-    this->SaveHeaders(name, value);
-  });
+  encoder_.SetHeaderListener(
+      [this](SpdyStringPiece name, SpdyStringPiece value) {
+        this->SaveHeaders(name, value);
+      });
 
   ExpectIndex(IndexOf(key_2_));
 
@@ -319,16 +318,17 @@ TEST_P(HpackEncoderTest, StringsDynamicallySelectHuffmanCoding) {
   expected_.AppendUint32(6);
   expected_.AppendBytes("@@@@@@");
 
-  string expected_out, actual_out;
+  SpdyString expected_out, actual_out;
   expected_.TakeString(&expected_out);
   peer_.TakeString(&actual_out);
   EXPECT_EQ(expected_out, actual_out);
 }
 
 TEST_P(HpackEncoderTest, EncodingWithoutCompression) {
-  encoder_.SetHeaderListener([this](StringPiece name, StringPiece value) {
-    this->SaveHeaders(name, value);
-  });
+  encoder_.SetHeaderListener(
+      [this](SpdyStringPiece name, SpdyStringPiece value) {
+        this->SaveHeaders(name, value);
+      });
   encoder_.DisableCompression();
 
   ExpectNonIndexedLiteral(":path", "/index.html");
@@ -350,9 +350,10 @@ TEST_P(HpackEncoderTest, EncodingWithoutCompression) {
 }
 
 TEST_P(HpackEncoderTest, MultipleEncodingPasses) {
-  encoder_.SetHeaderListener([this](StringPiece name, StringPiece value) {
-    this->SaveHeaders(name, value);
-  });
+  encoder_.SetHeaderListener(
+      [this](SpdyStringPiece name, SpdyStringPiece value) {
+        this->SaveHeaders(name, value);
+      });
 
   // Pass 1.
   {
@@ -446,7 +447,7 @@ TEST_P(HpackEncoderTest, PseudoHeadersFirst) {
 
 TEST_P(HpackEncoderTest, CookieToCrumbs) {
   test::HpackEncoderPeer peer(NULL);
-  std::vector<StringPiece> out;
+  std::vector<SpdyStringPiece> out;
 
   // Leading and trailing whitespace is consumed. A space after ';' is consumed.
   // All other spaces remain. ';' at beginning and end of string produce empty
@@ -480,7 +481,7 @@ TEST_P(HpackEncoderTest, CookieToCrumbs) {
 
 TEST_P(HpackEncoderTest, DecomposeRepresentation) {
   test::HpackEncoderPeer peer(NULL);
-  std::vector<StringPiece> out;
+  std::vector<SpdyStringPiece> out;
 
   peer.DecomposeRepresentation("", &out);
   EXPECT_THAT(out, ElementsAre(""));
@@ -488,16 +489,16 @@ TEST_P(HpackEncoderTest, DecomposeRepresentation) {
   peer.DecomposeRepresentation("foobar", &out);
   EXPECT_THAT(out, ElementsAre("foobar"));
 
-  peer.DecomposeRepresentation(StringPiece("foo\0bar", 7), &out);
+  peer.DecomposeRepresentation(SpdyStringPiece("foo\0bar", 7), &out);
   EXPECT_THAT(out, ElementsAre("foo", "bar"));
 
-  peer.DecomposeRepresentation(StringPiece("\0foo\0bar", 8), &out);
+  peer.DecomposeRepresentation(SpdyStringPiece("\0foo\0bar", 8), &out);
   EXPECT_THAT(out, ElementsAre("", "foo", "bar"));
 
-  peer.DecomposeRepresentation(StringPiece("foo\0bar\0", 8), &out);
+  peer.DecomposeRepresentation(SpdyStringPiece("foo\0bar\0", 8), &out);
   EXPECT_THAT(out, ElementsAre("foo", "bar", ""));
 
-  peer.DecomposeRepresentation(StringPiece("\0foo\0bar\0", 9), &out);
+  peer.DecomposeRepresentation(SpdyStringPiece("\0foo\0bar\0", 9), &out);
   EXPECT_THAT(out, ElementsAre("", "foo", "bar", ""));
 }
 
@@ -506,7 +507,7 @@ TEST_P(HpackEncoderTest, DecomposeRepresentation) {
 TEST_P(HpackEncoderTest, CrumbleNullByteDelimitedValue) {
   SpdyHeaderBlock headers;
   // A header field to be crumbled: "spam: foo\0bar".
-  headers["spam"] = string("foo\0bar", 7);
+  headers["spam"] = SpdyString("foo\0bar", 7);
 
   ExpectIndexedLiteral("spam", "foo");
   expected_.AppendPrefix(kLiteralIncrementalIndexOpcode);

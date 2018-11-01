@@ -1079,7 +1079,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetBooleanv(
   unsigned int buffer_size = 0;
   typedef cmds::GetBooleanv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLboolean* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1109,7 +1109,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetBufferParameteri64v(
   unsigned int buffer_size = 0;
   typedef cmds::GetBufferParameteri64v::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint64* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1139,7 +1139,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetBufferParameteriv(
   unsigned int buffer_size = 0;
   typedef cmds::GetBufferParameteriv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1186,7 +1186,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetFloatv(
   unsigned int buffer_size = 0;
   typedef cmds::GetFloatv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLfloat* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1219,7 +1219,7 @@ GLES2DecoderPassthroughImpl::HandleGetFramebufferAttachmentParameteriv(
   unsigned int buffer_size = 0;
   typedef cmds::GetFramebufferAttachmentParameteriv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1248,7 +1248,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetInteger64v(
   unsigned int buffer_size = 0;
   typedef cmds::GetInteger64v::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint64* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1277,7 +1277,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetIntegeri_v(
   unsigned int buffer_size = 0;
   typedef cmds::GetIntegeri_v::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.data_shm_id, c.data_shm_offset, &buffer_size);
+      c.data_shm_id, c.data_shm_offset, sizeof(Result), &buffer_size);
   GLint* data = result ? result->GetData() : NULL;
   if (data == NULL) {
     return error::kOutOfBounds;
@@ -1306,7 +1306,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetInteger64i_v(
   unsigned int buffer_size = 0;
   typedef cmds::GetInteger64i_v::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.data_shm_id, c.data_shm_offset, &buffer_size);
+      c.data_shm_id, c.data_shm_offset, sizeof(Result), &buffer_size);
   GLint64* data = result ? result->GetData() : NULL;
   if (data == NULL) {
     return error::kOutOfBounds;
@@ -1334,7 +1334,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetIntegerv(
   unsigned int buffer_size = 0;
   typedef cmds::GetIntegerv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1363,7 +1363,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetProgramiv(
   unsigned int buffer_size = 0;
   typedef cmds::GetProgramiv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1393,7 +1393,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetRenderbufferParameteriv(
   unsigned int buffer_size = 0;
   typedef cmds::GetRenderbufferParameteriv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1424,7 +1424,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetSamplerParameterfv(
   unsigned int buffer_size = 0;
   typedef cmds::GetSamplerParameterfv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLfloat* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1455,7 +1455,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetSamplerParameteriv(
   unsigned int buffer_size = 0;
   typedef cmds::GetSamplerParameteriv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1485,7 +1485,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetShaderiv(
   unsigned int buffer_size = 0;
   typedef cmds::GetShaderiv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1514,7 +1514,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetSynciv(
   unsigned int buffer_size = 0;
   typedef cmds::GetSynciv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.values_shm_id, c.values_shm_offset, &buffer_size);
+      c.values_shm_id, c.values_shm_offset, sizeof(Result), &buffer_size);
   GLint* values = result ? result->GetData() : NULL;
   if (values == NULL) {
     return error::kOutOfBounds;
@@ -1543,7 +1543,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetTexParameterfv(
   unsigned int buffer_size = 0;
   typedef cmds::GetTexParameterfv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLfloat* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1573,7 +1573,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetTexParameteriv(
   unsigned int buffer_size = 0;
   typedef cmds::GetTexParameteriv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1603,7 +1603,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetVertexAttribfv(
   unsigned int buffer_size = 0;
   typedef cmds::GetVertexAttribfv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLfloat* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1633,7 +1633,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetVertexAttribiv(
   unsigned int buffer_size = 0;
   typedef cmds::GetVertexAttribiv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1663,7 +1663,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetVertexAttribIiv(
   unsigned int buffer_size = 0;
   typedef cmds::GetVertexAttribIiv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -1693,7 +1693,7 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetVertexAttribIuiv(
   unsigned int buffer_size = 0;
   typedef cmds::GetVertexAttribIuiv::Result Result;
   Result* result = GetSharedMemoryAndSizeAs<Result*>(
-      c.params_shm_id, c.params_shm_offset, &buffer_size);
+      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
   GLuint* params = result ? result->GetData() : NULL;
   if (params == NULL) {
     return error::kOutOfBounds;
@@ -3832,10 +3832,10 @@ error::Error GLES2DecoderPassthroughImpl::HandleCopyTextureCHROMIUM(
     const volatile void* cmd_data) {
   const volatile gles2::cmds::CopyTextureCHROMIUM& c =
       *static_cast<const volatile gles2::cmds::CopyTextureCHROMIUM*>(cmd_data);
-  GLenum source_id = static_cast<GLenum>(c.source_id);
+  GLuint source_id = static_cast<GLuint>(c.source_id);
   GLint source_level = static_cast<GLint>(c.source_level);
   GLenum dest_target = static_cast<GLenum>(c.dest_target);
-  GLenum dest_id = static_cast<GLenum>(c.dest_id);
+  GLuint dest_id = static_cast<GLuint>(c.dest_id);
   GLint dest_level = static_cast<GLint>(c.dest_level);
   GLint internalformat = static_cast<GLint>(c.internalformat);
   GLenum dest_type = static_cast<GLenum>(c.dest_type);
@@ -3860,10 +3860,10 @@ error::Error GLES2DecoderPassthroughImpl::HandleCopySubTextureCHROMIUM(
   const volatile gles2::cmds::CopySubTextureCHROMIUM& c =
       *static_cast<const volatile gles2::cmds::CopySubTextureCHROMIUM*>(
           cmd_data);
-  GLenum source_id = static_cast<GLenum>(c.source_id);
+  GLuint source_id = static_cast<GLuint>(c.source_id);
   GLint source_level = static_cast<GLint>(c.source_level);
   GLenum dest_target = static_cast<GLenum>(c.dest_target);
-  GLenum dest_id = static_cast<GLenum>(c.dest_id);
+  GLuint dest_id = static_cast<GLuint>(c.dest_id);
   GLint dest_level = static_cast<GLint>(c.dest_level);
   GLint xoffset = static_cast<GLint>(c.xoffset);
   GLint yoffset = static_cast<GLint>(c.yoffset);
@@ -3892,8 +3892,8 @@ error::Error GLES2DecoderPassthroughImpl::HandleCompressedCopyTextureCHROMIUM(
   const volatile gles2::cmds::CompressedCopyTextureCHROMIUM& c =
       *static_cast<const volatile gles2::cmds::CompressedCopyTextureCHROMIUM*>(
           cmd_data);
-  GLenum source_id = static_cast<GLenum>(c.source_id);
-  GLenum dest_id = static_cast<GLenum>(c.dest_id);
+  GLuint source_id = static_cast<GLuint>(c.source_id);
+  GLuint dest_id = static_cast<GLuint>(c.dest_id);
   error::Error error = DoCompressedCopyTextureCHROMIUM(source_id, dest_id);
   if (error != error::kNoError) {
     return error;
@@ -4379,6 +4379,20 @@ error::Error GLES2DecoderPassthroughImpl::HandleSetDrawRectangleCHROMIUM(
   GLint width = static_cast<GLint>(c.width);
   GLint height = static_cast<GLint>(c.height);
   error::Error error = DoSetDrawRectangleCHROMIUM(x, y, width, height);
+  if (error != error::kNoError) {
+    return error;
+  }
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::HandleSetEnableDCLayersCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::SetEnableDCLayersCHROMIUM& c =
+      *static_cast<const volatile gles2::cmds::SetEnableDCLayersCHROMIUM*>(
+          cmd_data);
+  GLboolean enabled = static_cast<GLboolean>(c.enabled);
+  error::Error error = DoSetEnableDCLayersCHROMIUM(enabled);
   if (error != error::kNoError) {
     return error;
   }

@@ -5,15 +5,15 @@
 #include "core/css/CSSUnsetValue.h"
 
 #include "core/css/CSSValuePool.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
-CSSUnsetValue* CSSUnsetValue::create() {
-  return cssValuePool().unsetValue();
+CSSUnsetValue* CSSUnsetValue::Create() {
+  return CssValuePool().UnsetValue();
 }
 
-String CSSUnsetValue::customCSSText() const {
+String CSSUnsetValue::CustomCSSText() const {
   return "unset";
 }
 

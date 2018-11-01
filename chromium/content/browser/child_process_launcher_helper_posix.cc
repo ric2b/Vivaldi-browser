@@ -16,7 +16,8 @@
 #include "content/public/common/content_switches.h"
 #include "mojo/edk/embedder/platform_handle.h"
 #include "services/catalog/public/cpp/manifest_parsing_util.h"
-#include "services/service_manager/public/cpp/shared_file_util.h"
+#include "services/service_manager/embedder/shared_file_util.h"
+#include "services/service_manager/embedder/switches.h"
 
 namespace content {
 namespace internal {
@@ -139,6 +140,10 @@ void SetFilesToShareForServicePosix(const std::string& service_name,
 
   DCHECK(GetRequiredFilesByServiceMap().count(service_name) == 0);
   GetRequiredFilesByServiceMap()[service_name] = std::move(required_files);
+}
+
+void ResetFilesToShareForTestingPosix() {
+  GetRequiredFilesByServiceMap().clear();
 }
 
 }  // namespace internal

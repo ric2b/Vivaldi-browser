@@ -6,12 +6,18 @@ package org.chromium.chrome.test;
 
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_PHONE;
 
+import android.os.Build;
+import android.support.v7.widget.RecyclerView;
+
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
-import org.chromium.chrome.browser.widget.BottomSheet;
-import org.chromium.chrome.browser.widget.BottomSheet.BottomSheetContent;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContentController;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
 
 /**
@@ -19,9 +25,13 @@ import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
  */
 @CommandLineFlags.Add({"enable-features=ChromeHome"})
 @Restriction(RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
+@MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP_MR1)
 public abstract class BottomSheetTestCaseBase extends ChromeTabbedActivityTestBase {
     /** A handle to the bottom sheet. */
     protected BottomSheet mBottomSheet;
+
+    /** A handle to the {@link BottomSheetContentController}. */
+    protected BottomSheetContentController mBottomSheetContentController;
 
     private boolean mOldChromeHomeFlagValue;
     @Override
@@ -42,10 +52,14 @@ public abstract class BottomSheetTestCaseBase extends ChromeTabbedActivityTestBa
                         BottomSheet.SHEET_STATE_FULL, /* animate = */ false);
             }
         });
+        // The default BottomSheetContent is SuggestionsBottomSheetContent, whose content view is a
+        // RecyclerView.
         RecyclerViewTestUtils.waitForStableRecyclerView(
-                getBottomSheetContent().getScrollingContentView());
+                ((RecyclerView) getBottomSheetContent().getContentView().findViewById(
+                        R.id.recycler_view)));
 
         mBottomSheet = getActivity().getBottomSheet();
+        mBottomSheetContentController = getActivity().getBottomSheetContentController();
     }
 
     @Override
@@ -88,5 +102,18 @@ public abstract class BottomSheetTestCaseBase extends ChromeTabbedActivityTestBa
 
     protected BottomSheetContent getBottomSheetContent() {
         return getActivity().getBottomSheet().getCurrentSheetContent();
+    }
+
+    /**
+     * @param itemId The id of the MenuItem corresponding to the {@link BottomSheetContent} to
+     *               select.
+     */
+    protected void selectBottomSheetContent(final int itemId) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mBottomSheetContentController.selectItemForTests(itemId);
+            }
+        });
     }
 }

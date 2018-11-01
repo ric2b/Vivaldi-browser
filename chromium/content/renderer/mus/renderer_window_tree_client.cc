@@ -6,8 +6,14 @@
 
 #include <map>
 
+#include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "services/ui/public/cpp/window_compositor_frame_sink.h"
+#include "cc/base/switches.h"
+#include "content/renderer/gpu/render_widget_compositor.h"
+#include "content/renderer/render_frame_impl.h"
+#include "content/renderer/render_view_impl.h"
+#include "content/renderer/render_widget.h"
+#include "services/ui/public/cpp/client_compositor_frame_sink.h"
 
 namespace content {
 
@@ -41,54 +47,89 @@ void RendererWindowTreeClient::Destroy(int routing_id) {
     client->DestroySelf();
 }
 
-RendererWindowTreeClient::RendererWindowTreeClient(int routing_id)
-    : routing_id_(routing_id), binding_(this) {}
-
-RendererWindowTreeClient::~RendererWindowTreeClient() {
-  g_connections.Get().erase(routing_id_);
-}
-
 void RendererWindowTreeClient::Bind(
     ui::mojom::WindowTreeClientRequest request) {
   binding_.Bind(std::move(request));
 }
 
-std::unique_ptr<cc::CompositorFrameSink>
-RendererWindowTreeClient::CreateCompositorFrameSink(
-    const cc::FrameSinkId& frame_sink_id,
+void RendererWindowTreeClient::RequestCompositorFrameSink(
     scoped_refptr<cc::ContextProvider> context_provider,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
-  std::unique_ptr<ui::WindowCompositorFrameSinkBinding> frame_sink_binding;
-  auto frame_sink = ui::WindowCompositorFrameSink::Create(
-      frame_sink_id, std::move(context_provider), gpu_memory_buffer_manager,
-      &frame_sink_binding);
-  if (tree_) {
-    tree_->AttachCompositorFrameSink(
-        root_window_id_, frame_sink_binding->TakeFrameSinkRequest(),
-        mojo::MakeProxy(frame_sink_binding->TakeFrameSinkClient()));
-  } else {
-    pending_frame_sink_ = std::move(frame_sink_binding);
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+    const CompositorFrameSinkCallback& callback) {
+  DCHECK(pending_compositor_frame_sink_callback_.is_null());
+  if (frame_sink_id_.is_valid()) {
+    RequestCompositorFrameSinkInternal(std::move(context_provider),
+                                       gpu_memory_buffer_manager, callback);
+    return;
   }
-  return std::move(frame_sink);
+
+  pending_context_provider_ = std::move(context_provider);
+  pending_gpu_memory_buffer_manager_ = gpu_memory_buffer_manager;
+  pending_compositor_frame_sink_callback_ = callback;
+}
+
+RendererWindowTreeClient::RendererWindowTreeClient(int routing_id)
+    : routing_id_(routing_id), binding_(this) {
+  enable_surface_synchronization_ =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          cc::switches::kEnableSurfaceSynchronization);
+}
+
+RendererWindowTreeClient::~RendererWindowTreeClient() {
+  g_connections.Get().erase(routing_id_);
+}
+
+void RendererWindowTreeClient::RequestCompositorFrameSinkInternal(
+    scoped_refptr<cc::ContextProvider> context_provider,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+    const CompositorFrameSinkCallback& callback) {
+  std::unique_ptr<ui::ClientCompositorFrameSinkBinding> frame_sink_binding;
+  auto frame_sink = ui::ClientCompositorFrameSink::Create(
+      frame_sink_id_, std::move(context_provider), gpu_memory_buffer_manager,
+      &frame_sink_binding);
+  tree_->AttachCompositorFrameSink(
+      root_window_id_, frame_sink_binding->TakeFrameSinkRequest(),
+      mojo::MakeProxy(frame_sink_binding->TakeFrameSinkClient()));
+  callback.Run(std::move(frame_sink));
+}
+
+RenderWidget* RendererWindowTreeClient::GetRenderWidgetFromRoutingId(
+    int routing_id) {
+  RenderFrameImpl* render_frame = RenderFrameImpl::FromRoutingID(routing_id);
+  RenderViewImpl* render_view = RenderViewImpl::FromRoutingID(routing_id);
+  if (!render_frame && !render_view)
+    return nullptr;
+  return render_frame ? render_frame->GetRenderWidget()
+                      : render_view->GetWidget();
 }
 
 void RendererWindowTreeClient::DestroySelf() {
   delete this;
 }
 
-void RendererWindowTreeClient::OnEmbed(ui::ClientSpecificId client_id,
-                                       ui::mojom::WindowDataPtr root,
-                                       ui::mojom::WindowTreePtr tree,
-                                       int64_t display_id,
-                                       ui::Id focused_window_id,
-                                       bool drawn) {
+void RendererWindowTreeClient::OnEmbed(
+    ui::ClientSpecificId client_id,
+    ui::mojom::WindowDataPtr root,
+    ui::mojom::WindowTreePtr tree,
+    int64_t display_id,
+    ui::Id focused_window_id,
+    bool drawn,
+    const cc::FrameSinkId& frame_sink_id,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+  frame_sink_id_ = frame_sink_id;
   root_window_id_ = root->window_id;
   tree_ = std::move(tree);
-  if (pending_frame_sink_) {
-    tree_->AttachCompositorFrameSink(
-        root_window_id_, pending_frame_sink_->TakeFrameSinkRequest(),
-        mojo::MakeProxy(pending_frame_sink_->TakeFrameSinkClient()));
-    pending_frame_sink_ = nullptr;
+  if (!pending_compositor_frame_sink_callback_.is_null()) {
+    RequestCompositorFrameSinkInternal(std::move(pending_context_provider_),
+                                       pending_gpu_memory_buffer_manager_,
+                                       pending_compositor_frame_sink_callback_);
+    pending_context_provider_ = nullptr;
+    pending_gpu_memory_buffer_manager_ = nullptr;
+    pending_compositor_frame_sink_callback_.Reset();
+  }
+  if (local_surface_id) {
+    // TODO(fsamuel): Update the RenderWidgetCompositor's LocalSurfaceId.
+    current_local_surface_id_ = *local_surface_id;
   }
 }
 
@@ -104,17 +145,38 @@ void RendererWindowTreeClient::OnUnembed(ui::Id window_id) {
 void RendererWindowTreeClient::OnCaptureChanged(ui::Id new_capture_window_id,
                                                 ui::Id old_capture_window_id) {}
 
-void RendererWindowTreeClient::OnTopLevelCreated(uint32_t change_id,
-                                                 ui::mojom::WindowDataPtr data,
-                                                 int64_t display_id,
-                                                 bool drawn) {
+void RendererWindowTreeClient::OnFrameSinkIdAllocated(
+    ui::Id window_id,
+    const cc::FrameSinkId& frame_sink_id) {
+  // TODO(fsamuel): OOPIF's |frame_sink_id| is ready. The OOPIF can now be
+  // embedded by the parent.
+}
+
+void RendererWindowTreeClient::OnTopLevelCreated(
+    uint32_t change_id,
+    ui::mojom::WindowDataPtr data,
+    int64_t display_id,
+    bool drawn,
+    const cc::FrameSinkId& frame_sink_id,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   NOTREACHED();
 }
 
 void RendererWindowTreeClient::OnWindowBoundsChanged(
     ui::Id window_id,
     const gfx::Rect& old_bounds,
-    const gfx::Rect& new_bounds) {}
+    const gfx::Rect& new_bounds,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+  if (!enable_surface_synchronization_ || !local_surface_id)
+    return;
+  current_local_surface_id_ = *local_surface_id;
+  RenderWidget* widget = GetRenderWidgetFromRoutingId(routing_id_);
+  if (!widget)
+    return;
+  // TODO(fsamuel): This isn't quite correct. The resize arrives from the
+  // browser and so it might not synchronize with the LocalSurfaceId.
+  widget->compositor()->SetLocalSurfaceId(*local_surface_id);
+}
 
 void RendererWindowTreeClient::OnClientAreaChanged(
     uint32_t window_id,
@@ -182,7 +244,7 @@ void RendererWindowTreeClient::OnWindowFocused(ui::Id focused_window_id) {}
 
 void RendererWindowTreeClient::OnWindowPredefinedCursorChanged(
     ui::Id window_id,
-    ui::mojom::Cursor cursor) {}
+    ui::mojom::CursorType cursor) {}
 
 void RendererWindowTreeClient::OnWindowSurfaceChanged(
     ui::Id window_id,

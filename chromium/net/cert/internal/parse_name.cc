@@ -12,6 +12,10 @@
 #include "base/sys_byteorder.h"
 #include "base/third_party/icu/icu_utf.h"
 
+#if !defined(OS_NACL)
+#include "net/base/net_string_util.h"
+#endif
+
 namespace net {
 
 namespace {
@@ -134,6 +138,12 @@ der::Input TypeStateOrProvinceNameOid() {
   return der::Input(oid);
 }
 
+der::Input TypeStreetAddressOid() {
+  // street (streetAddress): 2.5.4.9 (RFC 4519)
+  static const uint8_t oid[] = {0x55, 0x04, 0x09};
+  return der::Input(oid);
+}
+
 der::Input TypeOrganizationNameOid() {
   // id-at-organizationName: 2.5.4.10 (RFC 5280)
   static const uint8_t oid[] = {0x55, 0x04, 0x0a};
@@ -176,6 +186,52 @@ der::Input TypeGenerationQualifierOid() {
   return der::Input(oid);
 }
 
+der::Input TypeDomainComponentOid() {
+  // dc (domainComponent): 0.9.2342.19200300.100.1.25 (RFC 4519)
+  static const uint8_t oid[] = {0x09, 0x92, 0x26, 0x89, 0x93,
+                                0xF2, 0x2C, 0x64, 0x01, 0x19};
+  return der::Input(oid);
+}
+
+bool X509NameAttribute::ValueAsString(std::string* out) const {
+  switch (value_tag) {
+    case der::kTeletexString:
+#if !defined(OS_NACL)
+      return ConvertToUtf8(value.AsString(), kCharsetLatin1, out);
+#else
+// For nacl, just fall through to treating like IA5String (ascii).
+// (The nacl build does not include net_string_util and its deps, and a test of
+// adding them increased nacl build size by 100KB.)
+// TODO(mattm): Remove this behavioral difference.
+#endif
+    case der::kIA5String:
+      for (char c : value.AsStringPiece()) {
+        if (static_cast<uint8_t>(c) > 127)
+          return false;
+      }
+      *out = value.AsString();
+      return true;
+    case der::kPrintableString:
+      for (char c : value.AsStringPiece()) {
+        if (!(base::IsAsciiAlpha(c) || c == ' ' || (c >= '\'' && c <= ':') ||
+              c == '=' || c == '?')) {
+          return false;
+        }
+      }
+      *out = value.AsString();
+      return true;
+    case der::kUtf8String:
+      *out = value.AsString();
+      return true;
+    case der::kUniversalString:
+      return ConvertUniversalStringValue(value, out);
+    case der::kBmpString:
+      return ConvertBmpStringValue(value, out);
+    default:
+      return false;
+  }
+}
+
 bool X509NameAttribute::ValueAsStringUnsafe(std::string* out) const {
   switch (value_tag) {
     case der::kIA5String:
@@ -197,6 +253,7 @@ bool X509NameAttribute::ValueAsStringUnsafe(std::string* out) const {
 bool X509NameAttribute::AsRFC2253String(std::string* out) const {
   std::string type_string;
   std::string value_string;
+  // TODO(mattm): Add streetAddress and domainComponent here?
   if (type == TypeCommonNameOid()) {
     type_string = "CN";
   } else if (type == TypeSurnameOid()) {

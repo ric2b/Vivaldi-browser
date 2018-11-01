@@ -6,17 +6,16 @@
 
 #include <string>
 
-#include "base/strings/string_piece.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
 #include "net/quic/core/crypto/crypto_utils.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_session.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_logging.h"
 
 using std::string;
-using base::StringPiece;
 
 namespace net {
 
@@ -53,7 +52,8 @@ void QuicCryptoStream::OnError(CryptoFramer* framer) {
 
 void QuicCryptoStream::OnHandshakeMessage(
     const CryptoHandshakeMessage& message) {
-  QUIC_DVLOG(1) << ENDPOINT << "Received " << message.DebugString();
+  QUIC_DVLOG(1) << ENDPOINT << "Received "
+                << message.DebugString(session()->perspective());
   session()->OnCryptoHandshakeMessageReceived(message);
 }
 
@@ -64,8 +64,8 @@ void QuicCryptoStream::OnDataAvailable() {
       // No more data to read.
       break;
     }
-    StringPiece data(static_cast<char*>(iov.iov_base), iov.iov_len);
-    if (!crypto_framer_.ProcessInput(data)) {
+    QuicStringPiece data(static_cast<char*>(iov.iov_base), iov.iov_len);
+    if (!crypto_framer_.ProcessInput(data, session()->perspective())) {
       CloseConnectionWithDetails(crypto_framer_.error(),
                                  crypto_framer_.error_detail());
       return;
@@ -73,6 +73,7 @@ void QuicCryptoStream::OnDataAvailable() {
     sequencer()->MarkConsumed(iov.iov_len);
     if (handshake_confirmed_ && crypto_framer_.InputBytesRemaining() == 0 &&
         FLAGS_quic_reloadable_flag_quic_release_crypto_stream_buffer) {
+      QUIC_FLAG_COUNT(quic_reloadable_flag_quic_release_crypto_stream_buffer);
       // If the handshake is complete and the current message has been fully
       // processed then no more handshake messages are likely to arrive soon
       // so release the memory in the stream sequencer.
@@ -83,15 +84,17 @@ void QuicCryptoStream::OnDataAvailable() {
 
 void QuicCryptoStream::SendHandshakeMessage(
     const CryptoHandshakeMessage& message) {
-  QUIC_DVLOG(1) << ENDPOINT << "Sending " << message.DebugString();
+  QUIC_DVLOG(1) << ENDPOINT << "Sending "
+                << message.DebugString(session()->perspective());
   session()->connection()->NeuterUnencryptedPackets();
   session()->OnCryptoHandshakeMessageSent(message);
-  const QuicData& data = message.GetSerialized();
-  WriteOrBufferData(StringPiece(data.data(), data.length()), false, nullptr);
+  const QuicData& data = message.GetSerialized(session()->perspective());
+  WriteOrBufferData(QuicStringPiece(data.data(), data.length()), false,
+                    nullptr);
 }
 
-bool QuicCryptoStream::ExportKeyingMaterial(StringPiece label,
-                                            StringPiece context,
+bool QuicCryptoStream::ExportKeyingMaterial(QuicStringPiece label,
+                                            QuicStringPiece context,
                                             size_t result_len,
                                             string* result) const {
   if (!handshake_confirmed()) {

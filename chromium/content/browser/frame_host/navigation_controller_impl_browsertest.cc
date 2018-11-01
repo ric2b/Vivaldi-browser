@@ -507,21 +507,25 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationController& controller =
       shell()->web_contents()->GetController();
 
-  EXPECT_TRUE(NavigateToURL(shell(), GURL("data:text/html,page1")));
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("/simple_page.html")));
   EXPECT_EQ(1, controller.GetEntryCount());
   EXPECT_EQ(1, RendererHistoryLength(shell()));
 
-  EXPECT_TRUE(RendererLocationReplace(shell(), GURL("data:text/html,page1a")));
+  EXPECT_TRUE(RendererLocationReplace(
+      shell(), embedded_test_server()->GetURL("/title1.html")));
   EXPECT_EQ(1, controller.GetEntryCount());
   EXPECT_EQ(1, RendererHistoryLength(shell()));
 
   // Now create two more entries and go back, to test replacing an entry without
   // pruning the forward history.
-  EXPECT_TRUE(NavigateToURL(shell(), GURL("data:text/html,page2")));
+  EXPECT_TRUE(
+      NavigateToURL(shell(), embedded_test_server()->GetURL("/title2.html")));
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(2, RendererHistoryLength(shell()));
 
-  EXPECT_TRUE(NavigateToURL(shell(), GURL("data:text/html,page3")));
+  EXPECT_TRUE(
+      NavigateToURL(shell(), embedded_test_server()->GetURL("/title3.html")));
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(3, RendererHistoryLength(shell()));
 
@@ -531,7 +535,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_TRUE(controller.CanGoForward());
 
-  EXPECT_TRUE(RendererLocationReplace(shell(), GURL("data:text/html,page1b")));
+  EXPECT_TRUE(RendererLocationReplace(
+      shell(), embedded_test_server()->GetURL("/simple_page.html?page1b")));
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(3, RendererHistoryLength(shell()));
   EXPECT_TRUE(controller.CanGoForward());
@@ -644,7 +649,7 @@ class FrameNavigateParamsCapturer : public WebContentsObserver {
     navigation_types_.push_back(
         static_cast<NavigationHandleImpl*>(navigation_handle)
             ->navigation_type());
-    is_in_pages_.push_back(navigation_handle->IsSamePage());
+    is_in_pages_.push_back(navigation_handle->IsSameDocument());
     if (!navigations_remaining_ &&
         (!web_contents()->IsLoading() || !wait_for_load_))
       message_loop_runner_->Quit();
@@ -5988,11 +5993,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   EXPECT_EQ(1U, nav_entry->root_node()->children.size());
 
-  NavigationEntryImpl::TreeNode* tree_node =
-      nav_entry->root_node()->children[0];
-  EXPECT_EQ(1U, tree_node->children.size());
+  EXPECT_EQ(1U, nav_entry->root_node()->children[0]->children.size());
 
-  tree_node = tree_node->children[0];
+  const auto& tree_node = nav_entry->root_node()->children[0]->children[0];
   EXPECT_EQ(0U, tree_node->children.size());
   EXPECT_EQ("foo-frame-name", tree_node->frame_entry->frame_unique_name());
 
@@ -6008,7 +6011,6 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = web_contents->GetFrameTree()->root();
-  NavigationEntryImpl::TreeNode* tree_node = nullptr;
 
   GURL start_url(embedded_test_server()->GetURL("/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), start_url));
@@ -6020,7 +6022,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(ExecuteScript(root, kAddNamedFrameScript));
   EXPECT_EQ(1U, root->child_count());
   EXPECT_EQ(1U, nav_entry->root_node()->children.size());
-  tree_node = nav_entry->root_node()->children[0];
+  auto* tree_node = nav_entry->root_node()->children[0].get();
 
   EXPECT_TRUE(ExecuteScript(root, kRemoveFrameScript));
   EXPECT_EQ(0U, root->child_count());
@@ -6032,7 +6034,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(ExecuteScript(root, kAddNamedFrameScript));
   EXPECT_EQ(1U, root->child_count());
   EXPECT_EQ(1U, nav_entry->root_node()->children.size());
-  EXPECT_EQ(tree_node, nav_entry->root_node()->children[0]);
+  EXPECT_EQ(tree_node, nav_entry->root_node()->children[0].get());
 
   EXPECT_TRUE(ExecuteScript(root, kRemoveFrameScript));
   EXPECT_EQ(0U, root->child_count());
@@ -6048,13 +6050,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = web_contents->GetFrameTree()->root();
 
-  // Navigate to a simple page and then perform an in-page navigation.
+  // Navigate to a simple page and then perform a fragment change navigation.
   GURL start_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), start_url));
 
-  GURL same_page_url(
+  GURL fragment_change_url(
       embedded_test_server()->GetURL("a.com", "/title1.html#foo"));
-  EXPECT_TRUE(NavigateToURL(shell(), same_page_url));
+  EXPECT_TRUE(NavigateToURL(shell(), fragment_change_url));
   EXPECT_EQ(2, web_contents->GetController().GetEntryCount());
 
   // Replace the URL of the current NavigationEntry with one that will cause
@@ -6082,8 +6084,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // classified as SAME_PAGE) was leaving the FrameNavigationEntry with the
   // same document sequence number as the previous entry but updates the URL.
   // Doing a back session history navigation now will cause the browser to
-  // consider it as in-page because of this matching document sequence number
-  // and lead to a mismatch of origin and URL in the renderer process.
+  // consider it as same document because of this matching document sequence
+  // number and lead to a mismatch of origin and URL in the renderer process.
   {
     TestNavigationObserver observer(web_contents);
     web_contents->GetController().GoBack();
@@ -6151,26 +6153,27 @@ class GoBackAndCommitFilter : public BrowserMessageFilter {
 };
 
 // Test which simulates a race condition between a cross-origin, same-process
-// navigation and a same page session history navigation. When such a race
+// navigation and a same document session history navigation. When such a race
 // occurs, the renderer will commit the cross-origin navigation, updating its
 // version of the current document sequence number, and will send an IPC to the
 // browser process. The session history navigation comes after the commit for
 // the cross-origin navigation and updates the URL, but not the origin of the
 // document. This results in mismatch between the two and causes the renderer
 // process to be killed. See https://crbug.com/630103.
-IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
-                       RaceCrossOriginNavigationAndSamePageHistoryNavigation) {
+IN_PROC_BROWSER_TEST_F(
+    NavigationControllerBrowserTest,
+    RaceCrossOriginNavigationAndSameDocumentHistoryNavigation) {
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = web_contents->GetFrameTree()->root();
 
-  // Navigate to a simple page and then perform an in-page navigation.
+  // Navigate to a simple page and then perform a same document navigation.
   GURL start_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), start_url));
 
-  GURL same_page_url(
+  GURL same_document_url(
       embedded_test_server()->GetURL("a.com", "/title1.html#foo"));
-  EXPECT_TRUE(NavigateToURL(shell(), same_page_url));
+  EXPECT_TRUE(NavigateToURL(shell(), same_document_url));
   EXPECT_EQ(2, web_contents->GetController().GetEntryCount());
 
   // Create a GoBackAndCommitFilter, which will delay the commit IPC for a
@@ -6214,7 +6217,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScriptAndExtractString(
         web_contents, "domAutomationController.send(document.origin)",
         &origin));
-    EXPECT_EQ(same_page_url.GetOrigin().spec(), origin + "/");
+    EXPECT_EQ(same_document_url.GetOrigin().spec(), origin + "/");
   } else {
     // Wait for the back navigation to commit as well.
     history_commit_observer.Wait();
@@ -6280,18 +6283,23 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                        InPageNavigationDoesNotClearFavicon) {
   // Load a page and fake a favicon for it.
   NavigationController& controller = shell()->web_contents()->GetController();
-  ASSERT_TRUE(NavigateToURL(shell(), GURL("data:text/html,page1")));
+  ASSERT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("/simple_page.html")));
   content::NavigationEntry* entry = controller.GetLastCommittedEntry();
   ASSERT_TRUE(entry);
   content::FaviconStatus& favicon_status = entry->GetFavicon();
   favicon_status.valid = true;
 
-  ASSERT_TRUE(RendererLocationReplace(shell(), GURL("data:text/html,page1#")));
+  ASSERT_TRUE(RendererLocationReplace(
+      shell(), embedded_test_server()->GetURL(
+                   "/simple_page.html#same-document-navigation")));
   entry = controller.GetLastCommittedEntry();
   content::FaviconStatus& favicon_status2 = entry->GetFavicon();
   EXPECT_TRUE(favicon_status2.valid);
 
-  ASSERT_TRUE(RendererLocationReplace(shell(), GURL("data:text/html,page2")));
+  ASSERT_TRUE(RendererLocationReplace(
+      shell(),
+      embedded_test_server()->GetURL("/simple_page.html?new-navigation")));
   entry = controller.GetLastCommittedEntry();
   content::FaviconStatus& favicon_status3 = entry->GetFavicon();
   EXPECT_FALSE(favicon_status3.valid);
@@ -6666,7 +6674,7 @@ class NavigationHandleCommitObserver : public WebContentsObserver {
     if (handle->GetURL() != url_)
       return;
     has_committed_ = true;
-    was_same_page_ = handle->IsSamePage();
+    was_same_page_ = handle->IsSameDocument();
     was_renderer_initiated_ = handle->IsRendererInitiated();
   }
 
@@ -6676,10 +6684,10 @@ class NavigationHandleCommitObserver : public WebContentsObserver {
   bool was_renderer_initiated_;
 };
 
-// Test that a same-page navigation does not lead to the deletion of the
-// NavigationHandle for an ongoing different page navigation.
+// Test that a same document navigation does not lead to the deletion of the
+// NavigationHandle for an ongoing different document navigation.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
-                       SamePageNavigationDoesntDeleteNavigationHandle) {
+                       SameDocumentNavigationDoesntDeleteNavigationHandle) {
   const GURL kURL1 = embedded_test_server()->GetURL("/title1.html");
   const GURL kPushStateURL =
       embedded_test_server()->GetURL("/title1.html#fragment");
@@ -6749,10 +6757,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
 }
 
-// Tests that a same-page browser-initiated navigation is properly reported by
-// the NavigationHandle.
+// Tests that a same document browser-initiated navigation is properly reported
+// by the NavigationHandle.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
-                       SamePageBrowserInitiated) {
+                       SameDocumentBrowserInitiated) {
   const GURL kURL = embedded_test_server()->GetURL("/title1.html");
   const GURL kFragmentURL =
       embedded_test_server()->GetURL("/title1.html#fragment");
@@ -6794,6 +6802,51 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   entry = controller.GetLastCommittedEntry();
   EXPECT_EQ(kURL, entry->GetURL());
   EXPECT_EQ(1, controller.GetEntryCount());
+}
+
+// Tests that stopping a load clears the pending navigation entry.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, StopDuringLoad) {
+  // Load an initial page since the behavior differs for the first entry.
+  GURL start_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+  TestNavigationObserver same_tab_observer(shell()->web_contents(), 1);
+  GURL slow_url = embedded_test_server()->GetURL("/slow?60");
+  shell()->LoadURL(slow_url);
+  shell()->web_contents()->Stop();
+
+  // For non-PlzNavigate case, this happens asynchronously.
+  if (!IsBrowserSideNavigationEnabled())
+    same_tab_observer.Wait();
+
+  const NavigationController& controller =
+      shell()->web_contents()->GetController();
+  ASSERT_EQ(controller.GetPendingEntry(), nullptr);
+}
+
+// Verify that session history navigations (back/forward) correctly hit the
+// cache instead of going to the server. The test loads a page with no-cache
+// header, stops the server, and goes back expecting successful navigation.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       HistoryNavigationUsesCache) {
+  GURL no_cache_url(embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_no_cache_header.html"));
+  GURL regular_url(embedded_test_server()->GetURL("/title2.html"));
+
+  NavigationController& controller = shell()->web_contents()->GetController();
+
+  EXPECT_TRUE(NavigateToURL(shell(), no_cache_url));
+  EXPECT_TRUE(NavigateToURL(shell(), regular_url));
+  EXPECT_EQ(2, controller.GetEntryCount());
+
+  EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
+
+  TestNavigationObserver back_observer(shell()->web_contents());
+  controller.GoBack();
+  back_observer.Wait();
+
+  EXPECT_TRUE(back_observer.last_navigation_succeeded());
 }
 
 }  // namespace content

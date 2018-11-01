@@ -19,7 +19,7 @@
 #include "base/macros.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
-#include "components/image_fetcher/image_fetcher_delegate.h"
+#include "components/image_fetcher/core/image_fetcher_delegate.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
@@ -39,8 +39,8 @@ class Image;
 }  // namespace gfx
 
 namespace image_fetcher {
-class ImageDecoder;
 class ImageFetcher;
+struct RequestMetadata;
 }  // namespace image_fetcher
 
 namespace ntp_snippets {
@@ -60,7 +60,6 @@ class CachedImageFetcher : public image_fetcher::ImageFetcherDelegate {
   // |pref_service| and |database| need to outlive the created image fetcher
   // instance.
   CachedImageFetcher(std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher,
-                     std::unique_ptr<image_fetcher::ImageDecoder> image_decoder,
                      PrefService* pref_service,
                      RemoteSuggestionsDatabase* database);
   ~CachedImageFetcher() override;
@@ -78,7 +77,8 @@ class CachedImageFetcher : public image_fetcher::ImageFetcherDelegate {
 
   void OnImageDecodingDone(const ImageFetchedCallback& callback,
                            const std::string& id_within_category,
-                           const gfx::Image& image);
+                           const gfx::Image& image,
+                           const image_fetcher::RequestMetadata& metadata);
   void OnImageFetchedFromDatabase(
       const ImageFetchedCallback& callback,
       const ContentSuggestion::ID& suggestion_id,
@@ -94,7 +94,6 @@ class CachedImageFetcher : public image_fetcher::ImageFetcherDelegate {
                              const ImageFetchedCallback& callback);
 
   std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
-  std::unique_ptr<image_fetcher::ImageDecoder> image_decoder_;
   RemoteSuggestionsDatabase* database_;
   // Request throttler for limiting requests to thumbnail images.
   RequestThrottler thumbnail_requests_throttler_;
@@ -118,9 +117,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
       PrefService* pref_service,
       const std::string& application_language_code,
       CategoryRanker* category_ranker,
+      RemoteSuggestionsScheduler* scheduler,
       std::unique_ptr<RemoteSuggestionsFetcher> suggestions_fetcher,
       std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher,
-      std::unique_ptr<image_fetcher::ImageDecoder> image_decoder,
       std::unique_ptr<RemoteSuggestionsDatabase> database,
       std::unique_ptr<RemoteSuggestionsStatusService> status_service);
 
@@ -137,20 +136,16 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // false, some calls may trigger DCHECKs.
   bool initialized() const { return ready() || state_ == State::DISABLED; }
 
-  // Set the scheduler to be notified whenever the provider becomes active /
-  // in-active and whenever history is deleted. The initial change is also
-  // notified (switching from an initial undecided status). If the scheduler is
-  // set after the first change, it is called back immediately.
-  void SetRemoteSuggestionsScheduler(RemoteSuggestionsScheduler* scheduler);
-
   // RemoteSuggestionsProvider implementation.
-  void RefetchInTheBackground(
-      std::unique_ptr<FetchStatusCallback> callback) override;
+  void RefetchInTheBackground(const FetchStatusCallback& callback) override;
 
   // TODO(fhorschig): Remove this getter when there is an interface for the
   // fetcher that allows better mocks.
   const RemoteSuggestionsFetcher* suggestions_fetcher_for_debugging()
       const override;
+
+  GURL GetUrlWithFavicon(
+      const ContentSuggestion::ID& suggestion_id) const override;
 
   // ContentSuggestionsProvider implementation.
   CategoryStatus GetCategoryStatus(Category category) override;
@@ -300,7 +295,7 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // the fetch finished, the provided |callback| will be triggered with the
   // status of the fetch.
   void FetchSuggestions(bool interactive_request,
-                        std::unique_ptr<FetchStatusCallback> callback);
+                        const FetchStatusCallback& callback);
 
   // Returns the URL of the image of a suggestion if it is among the current or
   // among the archived suggestions in the matching category. Returns an empty
@@ -319,7 +314,7 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
 
   // Callback for regular fetch requests with the RemoteSuggestionsFetcher.
   void OnFetchFinished(
-      std::unique_ptr<FetchStatusCallback> callback,
+      const FetchStatusCallback& callback,
       bool interactive_request,
       Status status,
       RemoteSuggestionsFetcher::OptionalFetchedCategories fetched_categories);
@@ -432,6 +427,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // Ranker that orders the categories. Not owned.
   CategoryRanker* category_ranker_;
 
+  // Scheduler to inform about scheduling-related events. Not owned.
+  RemoteSuggestionsScheduler* remote_suggestions_scheduler_;
+
   // The suggestions fetcher.
   std::unique_ptr<RemoteSuggestionsFetcher> suggestions_fetcher_;
 
@@ -452,9 +450,7 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
 
   // The parameters for the fetch to perform later.
   bool fetch_when_ready_interactive_;
-  std::unique_ptr<FetchStatusCallback> fetch_when_ready_callback_;
-
-  RemoteSuggestionsScheduler* remote_suggestions_scheduler_;
+  FetchStatusCallback fetch_when_ready_callback_;
 
   // Set to true if ClearHistoryDependentState is called while the service isn't
   // ready. The nuke will be executed once the service finishes initialization

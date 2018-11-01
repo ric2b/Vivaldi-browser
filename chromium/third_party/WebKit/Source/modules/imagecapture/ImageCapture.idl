@@ -11,12 +11,12 @@
     DependentLifetime,
     MeasureAs=ImageCaptureConstructor,
     RaisesException=Constructor,
-    OriginTrialEnabled=ImageCapture,
+    RuntimeEnabled=ImageCapture,
 ] interface ImageCapture {
-    readonly attribute MediaStreamTrack videoStreamTrack;
+    [ImplementedAs=videoStreamTrack] readonly attribute MediaStreamTrack track;
 
-    [CallWith=ScriptState, RaisesException] Promise<PhotoCapabilities> getPhotoCapabilities();
-    [CallWith=ScriptState, RaisesException] Promise<void> setOptions(PhotoSettings photoSettings);
-    [CallWith=ScriptState, RaisesException] Promise<Blob> takePhoto();
-    [CallWith=ScriptState, RaisesException] Promise<ImageBitmap> grabFrame();
+    [CallWith=ScriptState] Promise<PhotoCapabilities> getPhotoCapabilities();
+    [CallWith=ScriptState] Promise<void> setOptions(PhotoSettings photoSettings);
+    [CallWith=ScriptState] Promise<Blob> takePhoto(optional PhotoSettings photoSettings);
+    [CallWith=ScriptState] Promise<ImageBitmap> grabFrame();
 };

@@ -7,8 +7,8 @@
 
 #include "core/CoreExport.h"
 #include "core/animation/EffectModel.h"
-#include "wtf/Allocator.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -24,17 +24,17 @@ class CORE_EXPORT EffectInput {
 
  public:
   // TODO(alancutter): Replace Element* parameter with Document&.
-  static EffectModel* convert(Element*,
+  static EffectModel* Convert(Element*,
                               const DictionarySequenceOrDictionary&,
                               ExecutionContext*,
                               ExceptionState&);
 
  private:
-  static EffectModel* convertArrayForm(Element&,
+  static EffectModel* ConvertArrayForm(Element&,
                                        const Vector<Dictionary>& keyframes,
                                        ExecutionContext*,
                                        ExceptionState&);
-  static EffectModel* convertObjectForm(Element&,
+  static EffectModel* ConvertObjectForm(Element&,
                                         const Dictionary& keyframe,
                                         ExecutionContext*,
                                         ExceptionState&);

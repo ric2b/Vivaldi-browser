@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Rozciągnięta.</translation>
 <translation id="1025074108959230262">Tryb przylegania wyłączony</translation>
 <translation id="1031961866430398710">następnie</translation>
+<translation id="1038643060055067718">Wiersze</translation>
 <translation id="1038795173450935438">Aby przejść do następnego elementu na stronie, naciśnij Wyszukaj + strzałkę w prawo. Aby przejść do poprzedniego elementu, naciśnij Wyszukaj + strzałkę w lewo. Aby przejść do następnego wiersza, naciśnij Wyszukaj + strzałkę w dół. Aby przejść do poprzedniego wiersza, naciśnij Wyszukaj + strzałkę w górę. Jeśli chcesz kliknąć zaznaczony element, naciśnij Wyszukaj + spację.</translation>
 <translation id="1044777062731150180">Bez nagłówków</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,8 @@
 <translation id="2110480898214777136">Zawijaj od początku do końca lub od końca do początku w obrębie strony, w oknie dialogowym lub innym kontenerze</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">klawisz dostępu:<ph name="KEY" /></translation>
-<translation id="2155457205053847599">Zmień bieżącą tabelę 6-punktowego pisma Braille'a, wybierając opcję z listy poniżej.</translation>
+<translation id="2138345533858834403">Symuluje wyjście odświeżanego monitora brajlowskiego
+        w panelu ChromeVox u góry ekranu.</translation>
 <translation id="2169714232367507776">Kliknij bieżący element</translation>
 <translation id="2179452035581866348">ChromeVox przekazuje ważne informacje dodatkowe za pomocą dźwięków. Gdy poznasz ich znaczenie, możesz przy ich użyciu szybciej się poruszać. Gdy już zyskasz więcej pewności, możesz wyłączyć wyczerpujące opisy głosowe i uzyskiwać ważne informacje o stronie na podstawie samych dźwięków. Oto kompletna lista dźwięków i ich znaczeń.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{nawias okrągły zamykający}few{# nawiasy okrągłe zamykające}many{# nawiasów okrągłych zamykających}other{# close parens}}</translation>
@@ -124,6 +126,7 @@
 <translation id="2344193891939537199">Element wyboru daty i godziny</translation>
 <translation id="2347456970887948350">Link</translation>
 <translation id="2359897517538099099">Nie jesteś w trybie tabeli.</translation>
+<translation id="2381733276052567791">Włącz lub wyłącz mowę</translation>
 <translation id="2390264819538553347">Aby kontynuować, naciśnij Enter. Aby się cofnąć, naciśnij Backspace.</translation>
 <translation id="241124561063364910">, a następnie naciśnij</translation>
 <translation id="2416512023405990736">Niezaznaczone pole</translation>
@@ -166,6 +169,7 @@
 <translation id="2800204403141299078">Nie ma więcej różnych elementów.</translation>
 <translation id="2800780099804980316">Brak poprzedniego nagłówka poziomu 1.</translation>
 <translation id="280499067616661124">ChromeVox – znajdź na stronie</translation>
+<translation id="2808001342598757276">Włącz ekran</translation>
 <translation id="2811019999044652585">Aby przejść do innego elementu ekranu, np. paska narzędzi lub obszaru powiadomień, naciśnij Ctrl + Dalej. W Chromebooku klawisz Dalej znajduje się tuż nad cyfrą 2.</translation>
 <translation id="2811204574343810641">Wiersz</translation>
 <translation id="2816654101880605877">Brak następnego suwaka.</translation>
@@ -185,11 +189,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{tabulator}few{# tabulatory}many{# tabulatorów}other{# tabs}}</translation>
 <translation id="2972078295414139404">Brak poprzedniego klikniętego linku.</translation>
 <translation id="2972205263822847197">Wskazówka do elementu</translation>
-<translation id="2978549349327282388">Kolumny:</translation>
 <translation id="2998131015536248178">Poprzedni znak</translation>
 <translation id="2999559350546931576">Obniż tonację.</translation>
 <translation id="2999945368667127852">Brak widżetu następnego pliku multimedialnego.</translation>
 <translation id="3012414509011670858">Brak poprzedniej sekcji.</translation>
+<translation id="3014130421870723208">@ed 8pt</translation>
 <translation id="3030432017085518523">Przycisk opcji elementu menu</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}few{# apostrofy}many{# apostrofów}other{# apostrophes}}</translation>
 <translation id="3040901448410802366">Wskaźnik postępu</translation>
@@ -212,6 +216,7 @@
 <translation id="3138767756593758860">Pokaż listę punktów orientacyjnych</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">Następny wiersz</translation>
+<translation id="3153024374267644603">Włącz mowę</translation>
 <translation id="3155083529632865074">Brak poprzedniego przycisku.</translation>
 <translation id="3163593631834463955">Pusty nagłówek kolumny</translation>
 <translation id="316542773973815724">Nawigacja</translation>
@@ -224,6 +229,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="3229375994964697375">Kliknięty link</translation>
 <translation id="3232388865800379423">Przycisk wyskakującego okienka</translation>
 <translation id="3241052487511142956">Poprzedni kliknięty link</translation>
+<translation id="3241638166094654466">Komórki w każdym wierszu:</translation>
 <translation id="3286390186030710347">Suwak</translation>
 <translation id="3299925995433437805">Brak następnego klikniętego linku.</translation>
 <translation id="3307886118343381874">Przejdź na koniec tabeli.</translation>
@@ -380,6 +386,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="4376316291247992553">Wyświetl grafikę w systemie brajlowskim</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">zresetuj</translation>
+<translation id="4457472090507035117">Wybierz bieżący głos:</translation>
 <translation id="4471074325120394300">Brak linków.</translation>
 <translation id="4476183483923481720">nowy wiersz</translation>
 <translation id="4482330759234983253">Poprzednia tabela</translation>
@@ -453,7 +460,6 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">Brak poprzedniego pola formularza.</translation>
 <translation id="5111640677200759579">Nagłówek kolumny</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">Brak poprzedniego linku.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="517143700877085897">, nie wybrano</translation>
@@ -564,10 +570,10 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="5968607524793740041">Pokaż menu kontekstowe</translation>
 <translation id="5983179082906765664">Zwiększ dokładność nawigacji.</translation>
 <translation id="5999630716831179808">Głosy</translation>
-<translation id="6000417740266304866">Zmień bieżącą tabelę 8-punktowego pisma Braille'a, wybierając opcję z listy poniżej.</translation>
 <translation id="6006050241733874051">Formularz</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{ukośnik wsteczny}few{# ukośniki wsteczne}many{# ukośników wstecznych}other{# backslashes}}</translation>
 <translation id="6037602951055904232">Przesuń do przodu</translation>
+<translation id="6044160928851315051">Wygaś ekran</translation>
 <translation id="6082768461603900813">Podstawowa nawigacja</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Koniec komórki.</translation>
@@ -606,7 +612,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="6444046323172968959">Okno dialogowe alertu</translation>
 <translation id="6459511626086141404">Płaska mapa klawiszy</translation>
 <translation id="6468049171101508116">Następny przycisk</translation>
-<translation id="6491972999578897419">Zmień bieżący głos, wybierając opcję z listy poniżej.</translation>
 <translation id="6493991254603208962">Zmniejsz jasność</translation>
 <translation id="6508059270146105198">Przenieś wyświetlacz brajlowski na dół strony</translation>
 <translation id="6536864053412760904">Token MathML</translation>
@@ -658,6 +663,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">odczytywanie słów</translation>
 <translation id="713824876195128146">Następny cytat blokowy</translation>
+<translation id="7143034430156387447">Przełącz między pismem brajlowskim 6- i 8-punktowym</translation>
 <translation id="7161771961008409533">Przycisk wyskakującego okienka</translation>
 <translation id="7165714724802225287">Bieżący styl wyświetlania to Przeplatany.</translation>
 <translation id="7167657087543110">odczytywanie znaków</translation>
@@ -668,6 +674,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="7217912842225915592">+ <ph name="NUM" /></translation>
 <translation id="7221740160534240920">wiersz</translation>
 <translation id="7226216518520804442">lst</translation>
+<translation id="7229749224609077523">Wybierz tabelę sześciopunktowego pisma Braille'a:</translation>
 <translation id="72393384879519786">Nagłówek</translation>
 <translation id="7241683698754534149">Otwórz długi opis na nowej karcie</translation>
 <translation id="7248671827512403053">Aplikacja</translation>
@@ -741,6 +748,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="7974390230414479278">Element menu</translation>
 <translation id="8007540374018858731">h3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{cudzysłów}few{# cudzysłowy}many{# cudzysłówów}other{# quotes}}</translation>
+<translation id="8017588669690167134">Wyłącz mowę</translation>
 <translation id="8033827949643255796">wybrano</translation>
 <translation id="8035962149453661158">maksymalnie: <ph name="X" /></translation>
 <translation id="8042761080832772327">Edytowanie tekstu, wpisanie zapytania</translation>
@@ -759,7 +767,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="820417203470636242">Pusta komórka.</translation>
 <translation id="8215202828671303819">Wybór wielokrotny</translation>
 <translation id="8224171046658870249">Przełączono na ChromeVox Next</translation>
-<translation id="8259358278692921574">Wiersze:</translation>
 <translation id="8276439074553447000">Przejdź do poprzedniego elementu, który można zaznaczyć</translation>
 <translation id="8278417001922463147">Nie ma poprzedniego artykułu.</translation>
 <translation id="8283603667300770666">Następne pole formularza</translation>
@@ -797,7 +804,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="8638532244051952400">Podawaj współrzędne bieżących komórek</translation>
 <translation id="8650576015643545550">Brak poprzedniej listy.</translation>
 <translation id="8651481478098336970">wycisz</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">Pokaż listę linków</translation>
 <translation id="8664519043722036194">sek.</translation>
 <translation id="867187640362843212">Nagłówek 5</translation>
@@ -817,6 +823,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="8856538297388979332">Aby przejrzeć polecenia, naciśnij w górę lub w dół. Aby aktywować, naciśnij Enter</translation>
 <translation id="8864099967139188018">Brak następnego nagłówka poziomu 6.</translation>
 <translation id="8882002077197914455">Nagłówek wiersza</translation>
+<translation id="8883850400338911892">ed url 8pt</translation>
 <translation id="8896347895970027998">Włącz lub wyłącz ChromeVox.</translation>
 <translation id="8898516272131543774">Włącz/wyłącz odczytywanie interpunkcji</translation>
 <translation id="8900148057318340779">Przedrostek</translation>
@@ -830,6 +837,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="9027462562263121875">Brak tabel.</translation>
 <translation id="9040132695316389094">Nagłówek 1</translation>
 <translation id="9043969572162476692"><ph name="NUM" />%</translation>
+<translation id="9061884144798498064">Wybierz tabelę ośmiopunktowego pisma Braille'a:</translation>
 <translation id="9065283790526219006">+wyskakujące okienko</translation>
 <translation id="9077213568694924680">usunięto zaznaczenie</translation>
 <translation id="9082874451376019682">Brak poprzedniego suwaka.</translation>

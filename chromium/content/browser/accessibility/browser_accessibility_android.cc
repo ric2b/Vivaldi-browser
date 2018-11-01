@@ -14,6 +14,7 @@
 #include "content/common/accessibility_messages.h"
 #include "content/public/common/content_client.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/platform/ax_android_constants.h"
 
 namespace {
 
@@ -213,7 +214,8 @@ bool BrowserAccessibilityAndroid::IsFocusable() const {
   // only mark it as focusable if the element has an explicit name.
   // Otherwise mark it as not focusable to avoid the user landing on
   // empty container elements in the tree.
-  if (IsIframe() || (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && GetParent()))
+  if (IsIframe() ||
+      (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && PlatformGetParent()))
     return HasStringAttribute(ui::AX_ATTR_NAME);
 
   return HasState(ui::AX_STATE_FOCUSABLE);
@@ -225,7 +227,7 @@ bool BrowserAccessibilityAndroid::IsFocused() const {
 
 bool BrowserAccessibilityAndroid::IsHeading() const {
   BrowserAccessibilityAndroid* parent =
-      static_cast<BrowserAccessibilityAndroid*>(GetParent());
+      static_cast<BrowserAccessibilityAndroid*>(PlatformGetParent());
   if (parent && parent->IsHeading())
     return true;
 
@@ -330,69 +332,69 @@ const char* BrowserAccessibilityAndroid::GetClassName() const {
     case ui::AX_ROLE_SEARCH_BOX:
     case ui::AX_ROLE_SPIN_BUTTON:
     case ui::AX_ROLE_TEXT_FIELD:
-      class_name = "android.widget.EditText";
+      class_name = ui::kAXEditTextClassname;
       break;
     case ui::AX_ROLE_SLIDER:
-      class_name = "android.widget.SeekBar";
+      class_name = ui::kAXSeekBarClassname;
       break;
     case ui::AX_ROLE_COLOR_WELL:
     case ui::AX_ROLE_COMBO_BOX:
     case ui::AX_ROLE_DATE:
     case ui::AX_ROLE_POP_UP_BUTTON:
     case ui::AX_ROLE_INPUT_TIME:
-      class_name = "android.widget.Spinner";
+      class_name = ui::kAXSpinnerClassname;
       break;
     case ui::AX_ROLE_BUTTON:
     case ui::AX_ROLE_MENU_BUTTON:
-      class_name = "android.widget.Button";
+      class_name = ui::kAXButtonClassname;
       break;
     case ui::AX_ROLE_CHECK_BOX:
     case ui::AX_ROLE_SWITCH:
-      class_name = "android.widget.CheckBox";
+      class_name = ui::kAXCheckBoxClassname;
       break;
     case ui::AX_ROLE_RADIO_BUTTON:
-      class_name = "android.widget.RadioButton";
+      class_name = ui::kAXRadioButtonClassname;
       break;
     case ui::AX_ROLE_TOGGLE_BUTTON:
-      class_name = "android.widget.ToggleButton";
+      class_name = ui::kAXToggleButtonClassname;
       break;
     case ui::AX_ROLE_CANVAS:
     case ui::AX_ROLE_IMAGE:
     case ui::AX_ROLE_SVG_ROOT:
-      class_name = "android.widget.Image";
+      class_name = ui::kAXImageClassname;
       break;
     case ui::AX_ROLE_METER:
     case ui::AX_ROLE_PROGRESS_INDICATOR:
-      class_name = "android.widget.ProgressBar";
+      class_name = ui::kAXProgressBarClassname;
       break;
     case ui::AX_ROLE_TAB_LIST:
-      class_name = "android.widget.TabWidget";
+      class_name = ui::kAXTabWidgetClassname;
       break;
     case ui::AX_ROLE_GRID:
     case ui::AX_ROLE_TABLE:
-      class_name = "android.widget.GridView";
+      class_name = ui::kAXGridViewClassname;
       break;
     case ui::AX_ROLE_LIST:
     case ui::AX_ROLE_LIST_BOX:
     case ui::AX_ROLE_DESCRIPTION_LIST:
-      class_name = "android.widget.ListView";
+      class_name = ui::kAXListViewClassname;
       break;
     case ui::AX_ROLE_DIALOG:
-      class_name = "android.app.Dialog";
+      class_name = ui::kAXDialogClassname;
       break;
     case ui::AX_ROLE_ROOT_WEB_AREA:
-      if (GetParent() == nullptr)
-        class_name = "android.webkit.WebView";
+      if (PlatformGetParent() == nullptr)
+        class_name = ui::kAXWebViewClassname;
       else
-        class_name = "android.view.View";
+        class_name = ui::kAXViewClassname;
       break;
     case ui::AX_ROLE_MENU_ITEM:
     case ui::AX_ROLE_MENU_ITEM_CHECK_BOX:
     case ui::AX_ROLE_MENU_ITEM_RADIO:
-      class_name = "android.view.MenuItem";
+      class_name = ui::kAXMenuItemClassname;
       break;
     default:
-      class_name = "android.view.View";
+      class_name = ui::kAXViewClassname;
       break;
   }
 
@@ -526,6 +528,9 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
       break;
     case ui::AX_ROLE_ALERT:
       message_id = IDS_AX_ROLE_ALERT;
+      break;
+    case ui::AX_ROLE_ANCHOR:
+      // No role description.
       break;
     case ui::AX_ROLE_ANNOTATION:
       // No role description.
@@ -1044,19 +1049,19 @@ bool BrowserAccessibilityAndroid::Scroll(int direction) const {
   // Figure out the bounding box of the visible portion of this scrollable
   // view so we know how much to scroll by.
   gfx::Rect bounds;
-  if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && !GetParent()) {
+  if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && !PlatformGetParent()) {
     // If this is the root web area, use the bounds of the view to determine
     // how big one page is.
     if (!manager()->delegate())
       return false;
     bounds = manager()->delegate()->AccessibilityGetViewBounds();
-  } else if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && GetParent()) {
+  } else if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && PlatformGetParent()) {
     // If this is a web area inside of an iframe, try to use the bounds of
     // the containing element.
-    BrowserAccessibility* parent = GetParent();
+    BrowserAccessibility* parent = PlatformGetParent();
     while (parent && (parent->GetPageBoundsRect().width() == 0 ||
                       parent->GetPageBoundsRect().height() == 0)) {
-      parent = parent->GetParent();
+      parent = parent->PlatformGetParent();
     }
     if (parent)
       bounds = parent->GetPageBoundsRect();

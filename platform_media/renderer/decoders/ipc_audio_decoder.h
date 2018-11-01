@@ -7,7 +7,6 @@
 #ifndef MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
 #define MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
 
-#include "base/lazy_instance.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"

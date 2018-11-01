@@ -14,8 +14,29 @@
 #include "base/time/time.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "media/base/video_frame.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace content {
+
+struct CONTENT_EXPORT VideoTrackAdapterSettings {
+  VideoTrackAdapterSettings();
+  VideoTrackAdapterSettings(
+      int max_width,
+      int max_height,
+      double min_aspect_ratio,
+      double max_aspect_ratio,
+      double max_frame_rate,
+      const base::Optional<gfx::Size>& expected_native_resolution);
+  VideoTrackAdapterSettings(const VideoTrackAdapterSettings& other);
+  VideoTrackAdapterSettings& operator=(const VideoTrackAdapterSettings& other);
+  int max_width;
+  int max_height;
+  double min_aspect_ratio;
+  double max_aspect_ratio;
+  double max_frame_rate;
+  // If supplied, this can be used to detect frames from a rotated device.
+  base::Optional<gfx::Size> expected_native_size;
+};
 
 // VideoTrackAdapter is a helper class used by MediaStreamVideoSource used for
 // adapting the video resolution from a source implementation to the resolution
@@ -42,10 +63,7 @@ class VideoTrackAdapter
   // passing frames and inform of the result via |on_muted_state_callback|.
   void AddTrack(const MediaStreamVideoTrack* track,
                 VideoCaptureDeliverFrameCB frame_callback,
-                int max_width, int max_height,
-                double min_aspect_ratio,
-                double max_aspect_ratio,
-                double max_frame_rate);
+                const VideoTrackAdapterSettings& settings);
   void RemoveTrack(const MediaStreamVideoTrack* track);
 
   // Delivers |frame| to all tracks that have registered a callback.
@@ -65,17 +83,20 @@ class VideoTrackAdapter
                             const OnMutedCallback& on_muted_callback);
   void StopFrameMonitoring();
 
+  static void CalculateTargetSize(bool is_rotated,
+                                  const gfx::Size& input_size,
+                                  const gfx::Size& max_frame_size,
+                                  double min_aspect_ratio,
+                                  double max_aspect_ratio,
+                                  gfx::Size* desired_size);
+
  private:
   virtual ~VideoTrackAdapter();
   friend class base::RefCountedThreadSafe<VideoTrackAdapter>;
 
-  void AddTrackOnIO(
-      const MediaStreamVideoTrack* track,
-      VideoCaptureDeliverFrameCB frame_callback,
-      const gfx::Size& max_frame_size,
-      double min_aspect_ratio,
-      double max_aspect_ratio,
-      double max_frame_rate);
+  void AddTrackOnIO(const MediaStreamVideoTrack* track,
+                    VideoCaptureDeliverFrameCB frame_callback,
+                    const VideoTrackAdapterSettings& settings);
   void RemoveTrackOnIO(const MediaStreamVideoTrack* track);
 
   void StartFrameMonitoringOnIO(

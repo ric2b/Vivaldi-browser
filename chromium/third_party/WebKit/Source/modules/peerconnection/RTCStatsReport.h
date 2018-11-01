@@ -8,9 +8,9 @@
 #include "bindings/core/v8/Maplike.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/GarbageCollected.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebCString.h"
 #include "public/platform/WebRTCStats.h"
-#include "wtf/text/WTFString.h"
 
 #include <map>
 
@@ -25,11 +25,13 @@ class RTCStatsReport final : public GarbageCollectedFinalized<RTCStatsReport>,
  public:
   RTCStatsReport(std::unique_ptr<WebRTCStatsReport>);
 
+  size_t size() const { return report_->Size(); }
+
   // Maplike<String, v8::Local<v8::Value>>
-  PairIterable<String, v8::Local<v8::Value>>::IterationSource* startIteration(
+  PairIterable<String, v8::Local<v8::Value>>::IterationSource* StartIteration(
       ScriptState*,
       ExceptionState&) override;
-  bool getMapEntry(ScriptState*,
+  bool GetMapEntry(ScriptState*,
                    const String& key,
                    v8::Local<v8::Value>&,
                    ExceptionState&) override;
@@ -37,7 +39,7 @@ class RTCStatsReport final : public GarbageCollectedFinalized<RTCStatsReport>,
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 
  private:
-  std::unique_ptr<WebRTCStatsReport> m_report;
+  std::unique_ptr<WebRTCStatsReport> report_;
 };
 
 }  // namespace blink

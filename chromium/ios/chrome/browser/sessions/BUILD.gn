@@ -13,6 +13,7 @@ source_set("sessions") {
     "ios_chrome_tab_restore_service_factory.h",
   ]
   deps = [
+    ":serialisation",
     "//base",
     "//components/keyed_service/ios",
     "//components/sessions",
@@ -26,19 +27,30 @@ source_set("sessions") {
   public_deps = [
     ":sessions_non_arc",
   ]
+  allow_circular_includes_from = [ ":sessions_non_arc" ]
+}
+
+source_set("serialisation") {
+  sources = [
+    "NSCoder+Compatibility.h",
+    "NSCoder+Compatibility.mm",
+    "session_service_ios.h",
+    "session_service_ios.mm",
+    "session_util.h",
+    "session_util.mm",
+    "session_window_ios.h",
+    "session_window_ios.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/web",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("sessions_non_arc") {
   visibility = [ ":sessions" ]
   sources = [
-    "NSCoder+Compatibility.h",
-    "NSCoder+Compatibility.mm",
-    "session_service.h",
-    "session_service.mm",
-    "session_util.h",
-    "session_util.mm",
-    "session_window.h",
-    "session_window.mm",
     "tab_restore_service_delegate_impl_ios.h",
     "tab_restore_service_delegate_impl_ios.mm",
     "tab_restore_service_delegate_impl_ios_factory.h",
@@ -51,6 +63,7 @@ source_set("sessions_non_arc") {
     "//components/sessions",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/web_state_list",
     "//ios/web",
     "//net",
   ]
@@ -58,26 +71,31 @@ source_set("sessions_non_arc") {
 }
 
 source_set("test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "test_session_service.h",
     "test_session_service.mm",
   ]
   deps = [
-    ":sessions",
+    ":serialisation",
+    "//base",
   ]
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "session_service_unittest.mm",
-    "session_window_unittest.mm",
+    "session_service_ios_unittest.mm",
+    "session_window_ios_unittest.mm",
   ]
   deps = [
     ":resources_unit_tests",
+    ":serialisation",
     ":sessions",
     "//base",
+    "//base/test:test_support",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/web",
@@ -85,6 +103,7 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/ocmock",
   ]
+  libs = [ "Foundation.framework" ]
 }
 
 bundle_data("resources_unit_tests") {
@@ -92,6 +111,8 @@ bundle_data("resources_unit_tests") {
   testonly = true
   sources = [
     "//ios/chrome/test/data/sessions/corrupted.plist",
+    "//ios/chrome/test/data/sessions/session_m57.plist",
+    "//ios/chrome/test/data/sessions/session_m58.plist",
   ]
   outputs = [
     "{{bundle_resources_dir}}/ios/chrome/test/data/sessions/{{source_file_part}}",

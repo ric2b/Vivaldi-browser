@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/common/shell_observer.h"
+#include "ash/shell_observer.h"
 #include "ash/wm/session_state_animator.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -112,7 +112,7 @@ class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
   // Called when ScreenLocker is ready to close, but not yet destroyed.
   // Can be used to display "hiding" animations on unlock.
   // |callback| will be called when all animations are done.
-  void OnLockScreenHide(base::Closure& callback);
+  void OnLockScreenHide(base::Closure callback);
 
   // Sets up the callback that should be called once lock animation is finished.
   // Callback is guaranteed to be called once and then discarded.
@@ -122,7 +122,6 @@ class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
   void OnHostCloseRequested(const aura::WindowTreeHost* host) override;
 
   // ShellObserver overrides:
-  void OnLoginStateChanged(LoginStatus status) override;
   void OnAppTerminating() override;
   void OnLockStateChanged(bool locked) override;
 
@@ -198,9 +197,6 @@ class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
       SessionStateAnimator::AnimationSequence* animation_sequence);
 
   std::unique_ptr<SessionStateAnimator> animator_;
-
-  // The current login status, or original login status from before we locked.
-  LoginStatus login_status_;
 
   // Current lock status.
   bool system_is_locked_;

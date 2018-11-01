@@ -5,17 +5,16 @@
 #ifndef NGFragmentBuilder_h
 #define NGFragmentBuilder_h
 
+#include "core/layout/ng/inline/ng_physical_text_fragment.h"
 #include "core/layout/ng/ng_break_token.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_floating_object.h"
 #include "core/layout/ng/ng_physical_fragment.h"
-#include "core/layout/ng/ng_units.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
 class NGLayoutResult;
-class NGPhysicalTextFragment;
 
 class CORE_EXPORT NGFragmentBuilder final {
   DISALLOW_NEW();
@@ -28,23 +27,24 @@ class CORE_EXPORT NGFragmentBuilder final {
   NGFragmentBuilder& SetWritingMode(NGWritingMode);
   NGFragmentBuilder& SetDirection(TextDirection);
 
-  NGFragmentBuilder& SetInlineSize(LayoutUnit);
+  NGFragmentBuilder& SetSize(const NGLogicalSize&);
   NGFragmentBuilder& SetBlockSize(LayoutUnit);
   NGLogicalSize Size() const { return size_; }
 
-  NGFragmentBuilder& SetInlineOverflow(LayoutUnit);
+  NGFragmentBuilder& SetOverflowSize(const NGLogicalSize&);
   NGFragmentBuilder& SetBlockOverflow(LayoutUnit);
 
   NGFragmentBuilder& AddChild(RefPtr<NGLayoutResult>, const NGLogicalOffset&);
   NGFragmentBuilder& AddChild(RefPtr<NGPhysicalFragment>,
                               const NGLogicalOffset&);
 
-  NGFragmentBuilder& AddFloatingObject(NGFloatingObject*,
+  NGFragmentBuilder& AddFloatingObject(RefPtr<NGFloatingObject>,
                                        const NGLogicalOffset&);
 
   NGFragmentBuilder& SetBfcOffset(const NGLogicalOffset& offset);
 
-  NGFragmentBuilder& AddUnpositionedFloat(NGFloatingObject* floating_object);
+  NGFragmentBuilder& AddUnpositionedFloat(
+      RefPtr<NGFloatingObject> floating_object);
 
   // Builder has non-trivial out-of-flow descendant methods.
   // These methods are building blocks for implementation of
@@ -64,7 +64,7 @@ class CORE_EXPORT NGFragmentBuilder final {
   //     builder->AddChild(fragment)
   // end
   //
-  // builder->SetInlineSize/SetBlockSize
+  // builder->SetSize
   //
   // Part 2: Out-of-flow layout part positions out-of-flow descendants.
   //
@@ -99,22 +99,27 @@ class CORE_EXPORT NGFragmentBuilder final {
 
   // Creates the fragment. Can only be called once.
   RefPtr<NGLayoutResult> ToBoxFragment();
-  RefPtr<NGPhysicalTextFragment> ToTextFragment(unsigned index,
-                                                unsigned start_offset,
-                                                unsigned end_offset);
+
+  Vector<RefPtr<NGPhysicalFragment>>& MutableChildren() { return children_; }
+
+  Vector<NGLogicalOffset>& MutableOffsets() { return offsets_; }
 
   // Mutable list of floats that need to be positioned.
-  Vector<Persistent<NGFloatingObject>>& MutableUnpositionedFloats() {
+  Vector<RefPtr<NGFloatingObject>>& MutableUnpositionedFloats() {
     return unpositioned_floats_;
   }
 
   // List of floats that need to be positioned.
-  const Vector<Persistent<NGFloatingObject>>& UnpositionedFloats() const {
+  const Vector<RefPtr<NGFloatingObject>>& UnpositionedFloats() const {
     return unpositioned_floats_;
   }
 
   const WTF::Optional<NGLogicalOffset>& BfcOffset() const {
     return bfc_offset_;
+  }
+
+  const Vector<RefPtr<NGPhysicalFragment>>& Children() const {
+    return children_;
   }
 
   bool DidBreak() const { return did_break_; }
@@ -154,6 +159,7 @@ class CORE_EXPORT NGFragmentBuilder final {
   LayoutUnit used_block_size_;
 
   Vector<RefPtr<NGBreakToken>> child_break_tokens_;
+  RefPtr<NGBreakToken> last_inline_break_token_;
 
   WeakBoxList out_of_flow_descendant_candidates_;
   Vector<OutOfFlowPlacement> out_of_flow_candidate_placements_;
@@ -163,10 +169,10 @@ class CORE_EXPORT NGFragmentBuilder final {
 
   // Floats that need to be positioned by the next in-flow fragment that can
   // determine its block position in space.
-  Vector<Persistent<NGFloatingObject>> unpositioned_floats_;
+  Vector<RefPtr<NGFloatingObject>> unpositioned_floats_;
 
   Vector<NGLogicalOffset> floating_object_offsets_;
-  Vector<Persistent<NGFloatingObject>> positioned_floats_;
+  Vector<RefPtr<NGFloatingObject>> positioned_floats_;
 
   WTF::Optional<NGLogicalOffset> bfc_offset_;
   NGMarginStrut end_margin_strut_;

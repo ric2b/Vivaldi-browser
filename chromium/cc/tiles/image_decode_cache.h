@@ -6,8 +6,8 @@
 #define CC_TILES_IMAGE_DECODE_CACHE_H_
 
 #include "base/memory/ref_counted.h"
-#include "cc/playback/decoded_draw_image.h"
-#include "cc/playback/draw_image.h"
+#include "cc/paint/draw_image.h"
+#include "cc/tiles/decoded_draw_image.h"
 #include "cc/tiles/tile_priority.h"
 
 namespace cc {
@@ -93,6 +93,9 @@ class CC_EXPORT ImageDecodeCache {
   // retaining cached resources longer than needed.
   virtual void SetShouldAggressivelyFreeResources(
       bool aggressively_free_resources) = 0;
+
+  // Clears all elements from the cache.
+  virtual void ClearCache() = 0;
 };
 
 }  // namespace cc

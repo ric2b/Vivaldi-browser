@@ -156,6 +156,7 @@ component("browser") {
     "fileapi/timed_task_helper.h",
     "fileapi/transient_file_util.cc",
     "fileapi/transient_file_util.h",
+    "fileapi/watcher_manager.h",
     "quota/client_usage_tracker.cc",
     "quota/client_usage_tracker.h",
     "quota/quota_callbacks.h",
@@ -223,18 +224,66 @@ executable("dump_file_system") {
 
 test("storage_unittests") {
   sources = [
-    # Do NOT add storage/ tests here until this target is added to the build
-    # bots. http://crbug.com/653751
-
-    # If the sources list is empty, the win_clang builder fails.
-    # This file will be removed when the real tests are moved over from
-    # content_unittests to this target.
-    "crbug653751_unittest.cc",
+    # This target is in the process of being populated. See
+    # http://crbug.com/653751
+    "blob/blob_data_builder_unittest.cc",
+    "blob/blob_flattener_unittest.cc",
+    "blob/blob_memory_controller_unittest.cc",
+    "blob/blob_reader_unittest.cc",
+    "blob/blob_slice_unittest.cc",
+    "blob/blob_storage_context_unittest.cc",
+    "blob/blob_storage_registry_unittest.cc",
+    "blob/blob_transport_request_builder_unittest.cc",
+    "blob/blob_url_request_job_unittest.cc",
+    "database/database_quota_client_unittest.cc",
+    "database/database_util_unittest.cc",
+    "database/databases_table_unittest.cc",
+    "fileapi/external_mount_points_unittest.cc",
+    "fileapi/file_system_url_unittest.cc",
+    "fileapi/file_system_usage_cache_unittest.cc",
+    "fileapi/isolated_context_unittest.cc",
+    "fileapi/local_file_stream_reader_unittest.cc",
+    "fileapi/local_file_stream_writer_unittest.cc",
+    "fileapi/native_file_util_unittest.cc",
+    "fileapi/quota/quota_backend_impl_unittest.cc",
+    "fileapi/quota/quota_reservation_manager_unittest.cc",
+    "fileapi/sandbox_isolated_origin_database_unittest.cc",
+    "fileapi/sandbox_prioritized_origin_database_unittest.cc",
+    "fileapi/timed_task_helper_unittest.cc",
   ]
 
   deps = [
+    ":browser",
+    ":test_support",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//net:test_support",
+    "//sql:test_support",
+    "//testing/gtest",
+    "//third_party/leveldatabase",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "test/async_file_test_helper.cc",
+    "test/async_file_test_helper.h",
+    "test/mock_special_storage_policy.cc",
+    "test/mock_special_storage_policy.h",
+    "test/test_file_system_backend.cc",
+    "test/test_file_system_backend.h",
+    "test/test_file_system_context.cc",
+    "test/test_file_system_context.h",
+    "test/test_file_system_options.cc",
+    "test/test_file_system_options.h",
+  ]
+
+  deps = [
+    ":browser",
+    "//base/test:test_support",
+    "//net:test_support",
     "//testing/gtest",
   ]
 }

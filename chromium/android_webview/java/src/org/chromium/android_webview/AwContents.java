@@ -47,7 +47,7 @@ import android.webkit.ValueCallback;
 
 import org.chromium.android_webview.permission.AwGeolocationCallback;
 import org.chromium.android_webview.permission.AwPermissionRequest;
-import org.chromium.android_webview.renderer_priority.RendererPriority.RendererPriorityEnum;
+import org.chromium.android_webview.renderer_priority.RendererPriority;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -60,7 +60,6 @@ import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content.browser.AppWebMessagePort;
-import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.content.browser.SmartClipProvider;
@@ -73,7 +72,9 @@ import org.chromium.content_public.browser.NavigationHistory;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.navigation_controller.LoadURLType;
 import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
+import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.content_public.common.Referrer;
+import org.chromium.device.gamepad.GamepadList;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.PageTransition;
@@ -274,7 +275,6 @@ public class AwContents implements SmartClipProvider {
     private WebContents mWebContents;
     private NavigationController mNavigationController;
     private final AwContentsClient mContentsClient;
-    private final AwContentViewClient mContentViewClient;
     private AwWebContentsObserver mWebContentsObserver;
     private final AwContentsClientBridge mContentsClientBridge;
     private final AwWebContentsDelegateAdapter mWebContentsDelegate;
@@ -767,7 +767,6 @@ public class AwContents implements SmartClipProvider {
         mAwViewMethods = new AwViewMethodsImpl();
         mFullScreenTransitionsState = new FullScreenTransitionsState(
                 mContainerView, mInternalAccessAdapter, mAwViewMethods);
-        mContentViewClient = new AwContentViewClient(contentsClient, settings, this);
         mLayoutSizer = dependencyFactory.createLayoutSizer();
         mSettings = settings;
         mLayoutSizer.setDelegate(new AwLayoutSizerDelegate());
@@ -814,17 +813,15 @@ public class AwContents implements SmartClipProvider {
         onContainerViewChanged();
     }
 
-    private void initializeContentViewCore(ContentViewCore contentViewCore,
-            Context context, ViewAndroidDelegate viewDelegate,
-            InternalAccessDelegate internalDispatcher, WebContents webContents,
-            GestureStateListener gestureStateListener, ContentViewClient contentViewClient,
+    private void initializeContentViewCore(ContentViewCore contentViewCore, Context context,
+            ViewAndroidDelegate viewDelegate, InternalAccessDelegate internalDispatcher,
+            WebContents webContents, GestureStateListener gestureStateListener,
             WindowAndroid windowAndroid) {
         contentViewCore.initialize(viewDelegate, internalDispatcher, webContents, windowAndroid);
         contentViewCore.setActionModeCallback(
                 new AwActionModeCallback(mContext, this,
                         contentViewCore.getActionModeCallbackHelper()));
         contentViewCore.addGestureStateListener(gestureStateListener);
-        contentViewCore.setContentViewClient(contentViewClient);
     }
 
     boolean isFullScreen() {
@@ -1064,7 +1061,7 @@ public class AwContents implements SmartClipProvider {
                 mContainerView, mContentsClient, mContentViewCore.getRenderCoordinates());
         initializeContentViewCore(mContentViewCore, mContext, mViewAndroidDelegate,
                 mInternalAccessAdapter, webContents, new AwGestureStateListener(),
-                mContentViewClient, mWindowAndroid.getWindowAndroid());
+                mWindowAndroid.getWindowAndroid());
         nativeSetJavaPeers(mNativeAwContents, this, mWebContentsDelegate, mContentsClientBridge,
                 mIoThreadClient, mInterceptNavigationDelegate);
         mWebContents = mContentViewCore.getWebContents();
@@ -1535,11 +1532,11 @@ public class AwContents implements SmartClipProvider {
     }
 
     private static String fixupBase(String url) {
-        return TextUtils.isEmpty(url) ? "about:blank" : url;
+        return TextUtils.isEmpty(url) ? ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL : url;
     }
 
     private static String fixupHistory(String url) {
-        return TextUtils.isEmpty(url) ? "about:blank" : url;
+        return TextUtils.isEmpty(url) ? ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL : url;
     }
 
     private static boolean isBase64Encoded(String encoding) {
@@ -2365,9 +2362,7 @@ public class AwContents implements SmartClipProvider {
     void startProcessTextIntent(Intent intent) {
         // on Android M, WebView is not able to replace the text with the processed text.
         // So set the readonly flag for M.
-        // TODO(hush): remove the part about VERSION.CODENAME equality with N, after N release.
-        // crbug.com/543272
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M && !Build.VERSION.CODENAME.equals("N")) {
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
             intent.putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true);
         }
 
@@ -2701,7 +2696,7 @@ public class AwContents implements SmartClipProvider {
         return mIsPopupWindow;
     }
 
-    @RendererPriorityEnum
+    @RendererPriority
     public int getRendererRequestedPriority() {
         return nativeGetRendererRequestedPriority(mNativeAwContents);
     }
@@ -2711,7 +2706,7 @@ public class AwContents implements SmartClipProvider {
     }
 
     public void setRendererPriorityPolicy(
-            @RendererPriorityEnum int rendererRequestedPriority, boolean waivedWhenNotVisible) {
+            @RendererPriority int rendererRequestedPriority, boolean waivedWhenNotVisible) {
         nativeSetRendererPriorityPolicy(
                 mNativeAwContents, rendererRequestedPriority, waivedWhenNotVisible);
     }
@@ -3017,10 +3012,9 @@ public class AwContents implements SmartClipProvider {
 
     @Override
     public void extractSmartClipData(int x, int y, int width, int height) {
-        float dpi = mContentViewCore.getRenderCoordinates().getDeviceScaleFactor();
         if (!isDestroyedOrNoOperation(WARN)) {
             mWebContents.requestSmartClipExtract(
-                    (int) (x / dpi), (int) (y / dpi), (int) (width / dpi), (int) (height / dpi));
+                    x, y, width, height, mContentViewCore.getRenderCoordinates());
         }
     }
 
@@ -3159,6 +3153,16 @@ public class AwContents implements SmartClipProvider {
             if (isDpadEvent(event)) {
                 mSettings.setSpatialNavigationEnabled(true);
             }
+
+            // Following check is dup'ed from |ContentViewCore.dispatchKeyEvent| to avoid
+            // embedder-specific customization, which is necessary only for WebView.
+            if (GamepadList.dispatchKeyEvent(event)) return true;
+
+            // This check reflects Chrome's behavior and is a workaround for http://b/7697782.
+            if (mContentsClient.hasWebViewClient()
+                    && mContentsClient.shouldOverrideKeyEvent(event)) {
+                return mInternalAccessAdapter.super_dispatchKeyEvent(event);
+            }
             return mContentViewCore.dispatchKeyEvent(event);
         }
 
@@ -3184,7 +3188,7 @@ public class AwContents implements SmartClipProvider {
             }
 
             mScrollOffsetManager.setProcessingTouchEvent(true);
-            boolean rv = mContentViewCore.onTouchEvent(event);
+            boolean rv = mWebContents.getEventForwarder().onTouchEvent(event);
             mScrollOffsetManager.setProcessingTouchEvent(false);
 
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {

@@ -6,19 +6,17 @@
 
 namespace extensions {
 
-TestContentUtilityClient::TestContentUtilityClient() {
-}
+TestContentUtilityClient::TestContentUtilityClient() = default;
 
-TestContentUtilityClient::~TestContentUtilityClient() {
-}
+TestContentUtilityClient::~TestContentUtilityClient() = default;
 
 void TestContentUtilityClient::UtilityThreadStarted() {
-  UtilityHandler::UtilityThreadStarted();
+  utility_handler::UtilityThreadStarted();
 }
 
-bool TestContentUtilityClient::OnMessageReceived(const IPC::Message& message) {
-  return utility_handler_.OnMessageReceived(message);
+void TestContentUtilityClient::ExposeInterfacesToBrowser(
+    service_manager::InterfaceRegistry* registry) {
+  utility_handler::ExposeInterfacesToBrowser(registry, false);
 }
-
 
 }  // namespace extensions

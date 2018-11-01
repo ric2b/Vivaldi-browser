@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/indexed_db/indexed_db.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_callbacks.h"
@@ -139,10 +140,8 @@ TEST_F(IndexedDBDatabaseTest, ForcedClose) {
 
   const int64_t transaction_id = 123;
   const std::vector<int64_t> scope;
-  database->CreateTransaction(transaction_id,
-                              request->connection(),
-                              scope,
-                              blink::WebIDBTransactionModeReadOnly);
+  database->CreateTransaction(transaction_id, request->connection(), scope,
+                              blink::kWebIDBTransactionModeReadOnly);
 
   request->connection()->ForceClose();
 
@@ -152,7 +151,11 @@ TEST_F(IndexedDBDatabaseTest, ForcedClose) {
 
 class MockCallbacks : public IndexedDBCallbacks {
  public:
-  MockCallbacks() : IndexedDBCallbacks(nullptr, url::Origin(), nullptr) {}
+  MockCallbacks()
+      : IndexedDBCallbacks(nullptr,
+                           url::Origin(),
+                           nullptr,
+                           base::ThreadTaskRunnerHandle::Get()) {}
 
   void OnBlocked(int64_t existing_version) override { blocked_called_ = true; }
   void OnSuccess(int64_t result) override { success_called_ = true; }
@@ -301,7 +304,7 @@ class IndexedDBDatabaseOperationTest : public testing::Test {
                                                         db_, callbacks_);
     transaction_ = connection_->CreateTransaction(
         transaction_id, std::set<int64_t>() /*scope*/,
-        blink::WebIDBTransactionModeVersionChange,
+        blink::kWebIDBTransactionModeVersionChange,
         new IndexedDBFakeBackingStore::FakeTransaction(commit_success_));
     db_->TransactionCreated(transaction_);
 
@@ -421,7 +424,7 @@ TEST_F(IndexedDBDatabaseOperationTest, CreatePutDelete) {
   scoped_refptr<MockIndexedDBCallbacks> request(
       new MockIndexedDBCallbacks(false));
   db_->Put(transaction_, store_id, &value, &handles, std::move(key),
-           blink::WebIDBPutModeAddOnly, request, index_keys);
+           blink::kWebIDBPutModeAddOnly, request, index_keys);
 
   // Deletion is asynchronous.
   db_->DeleteObjectStore(transaction_, store_id);

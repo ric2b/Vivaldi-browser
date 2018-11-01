@@ -398,7 +398,7 @@ void RegistryTestHarness::InstallStringListPolicy(
        element != policy_value->end();
        ++element) {
     std::string element_value;
-    if (!(*element)->GetAsString(&element_value))
+    if (!element->GetAsString(&element_value))
       continue;
     std::string name(base::IntToString(index++));
     key.WriteValue(UTF8ToUTF16(name).c_str(),
@@ -812,7 +812,7 @@ TEST_F(PolicyLoaderWinTest, HKLMOverHKCU) {
   PolicyBundle expected;
   expected.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
       .Set(test_keys::kKeyString, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-           POLICY_SOURCE_PLATFORM, base::MakeUnique<base::StringValue>("hklm"),
+           POLICY_SOURCE_PLATFORM, base::MakeUnique<base::Value>("hklm"),
            nullptr);
   EXPECT_TRUE(Matches(expected));
 }
@@ -865,17 +865,17 @@ TEST_F(PolicyLoaderWinTest, Merge3rdPartyPolicies) {
   PolicyMap& expected_policy = expected.Get(ns);
   expected_policy.Set(
       "a", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE, POLICY_SOURCE_PLATFORM,
-      base::MakeUnique<base::StringValue>(kMachineMandatory), nullptr);
-  expected_policy.Set(
-      "b", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_PLATFORM,
-      base::MakeUnique<base::StringValue>(kUserMandatory), nullptr);
+      base::MakeUnique<base::Value>(kMachineMandatory), nullptr);
+  expected_policy.Set("b", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                      POLICY_SOURCE_PLATFORM,
+                      base::MakeUnique<base::Value>(kUserMandatory), nullptr);
   expected_policy.Set("c", POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
                       POLICY_SOURCE_PLATFORM,
-                      base::MakeUnique<base::StringValue>(kMachineRecommended),
+                      base::MakeUnique<base::Value>(kMachineRecommended),
                       nullptr);
-  expected_policy.Set(
-      "d", POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER, POLICY_SOURCE_PLATFORM,
-      base::MakeUnique<base::StringValue>(kUserRecommended), nullptr);
+  expected_policy.Set("d", POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
+                      POLICY_SOURCE_PLATFORM,
+                      base::MakeUnique<base::Value>(kUserRecommended), nullptr);
   EXPECT_TRUE(Matches(expected));
 }
 
@@ -902,7 +902,7 @@ TEST_F(PolicyLoaderWinTest, LoadStringEncodedValues) {
       "}"));
 
   base::DictionaryValue policy;
-  policy.Set("null", base::Value::CreateNullValue());
+  policy.Set("null", base::MakeUnique<base::Value>());
   policy.SetBoolean("bool", true);
   policy.SetInteger("int", -123);
   policy.SetDouble("double", 456.78e9);

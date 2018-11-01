@@ -34,13 +34,16 @@
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/fileapi/file_system_messages.h"
 #include "content/common/fileapi/webblob_messages.h"
+#include "content/common/frame_messages.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
@@ -48,6 +51,7 @@
 #include "content/public/browser/browser_plugin_guest_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/histogram_fetcher.h"
+#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
@@ -85,7 +89,7 @@
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/events/latency_info.h"
+#include "ui/latency/latency_info.h"
 #include "ui/resources/grit/webui_resources.h"
 
 #if defined(USE_AURA)
@@ -125,6 +129,7 @@ class InterstitialObserver : public content::WebContentsObserver {
 // Specifying a prototype so that we can add the WARN_UNUSED_RESULT attribute.
 bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
                          const std::string& original_script,
+                         bool user_gesture,
                          std::unique_ptr<base::Value>* result)
     WARN_UNUSED_RESULT;
 
@@ -133,6 +138,7 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
 // evaluation of the script in |result|.  Returns true on success.
 bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
                          const std::string& original_script,
+                         bool user_gesture,
                          std::unique_ptr<base::Value>* result) {
   // TODO(jcampan): we should make the domAutomationController not require an
   //                automation id.
@@ -141,8 +147,12 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
   // TODO(lukasza): Only get messages from the specific |render_frame_host|.
   DOMMessageQueue dom_message_queue(
       WebContents::FromRenderFrameHost(render_frame_host));
-  render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
-      base::UTF8ToUTF16(script));
+  if (user_gesture) {
+    render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
+        base::UTF8ToUTF16(script));
+  } else {
+    render_frame_host->ExecuteJavaScriptForTests(base::UTF8ToUTF16(script));
+  }
   std::string json;
   if (!dom_message_queue.WaitForMessage(&json)) {
     DLOG(ERROR) << "Cannot communicate with DOMMessageQueue.";
@@ -209,17 +219,17 @@ void BuildSimpleWebKeyEvent(blink::WebInputEvent::Type type,
                             ui::DomCode code,
                             ui::KeyboardCode key_code,
                             NativeWebKeyboardEvent* event) {
-  event->domKey = key;
-  event->domCode = static_cast<int>(code);
-  event->nativeKeyCode = ui::KeycodeConverter::DomCodeToNativeKeycode(code);
-  event->windowsKeyCode = key_code;
-  event->isSystemKey = false;
+  event->dom_key = key;
+  event->dom_code = static_cast<int>(code);
+  event->native_key_code = ui::KeycodeConverter::DomCodeToNativeKeycode(code);
+  event->windows_key_code = key_code;
+  event->is_system_key = false;
   event->skip_in_browser = true;
 
-  if (type == blink::WebInputEvent::Char ||
-      type == blink::WebInputEvent::RawKeyDown) {
+  if (type == blink::WebInputEvent::kChar ||
+      type == blink::WebInputEvent::kRawKeyDown) {
     event->text[0] = key_code;
-    event->unmodifiedText[0] = key_code;
+    event->unmodified_text[0] = key_code;
   }
 }
 
@@ -528,19 +538,18 @@ void SimulateMouseClickAt(WebContents* web_contents,
                           blink::WebMouseEvent::Button button,
                           const gfx::Point& point) {
   blink::WebMouseEvent mouse_event(
-      blink::WebInputEvent::MouseDown, modifiers,
+      blink::WebInputEvent::kMouseDown, modifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   mouse_event.button = button;
-  mouse_event.x = point.x();
-  mouse_event.y = point.y();
-  // Mac needs globalX/globalY for events to plugins.
+  mouse_event.SetPositionInWidget(point.x(), point.y());
+  // Mac needs positionInScreen for events to plugins.
   gfx::Rect offset = web_contents->GetContainerBounds();
-  mouse_event.globalX = point.x() + offset.x();
-  mouse_event.globalY = point.y() + offset.y();
-  mouse_event.clickCount = 1;
+  mouse_event.SetPositionInScreen(point.x() + offset.x(),
+                                  point.y() + offset.y());
+  mouse_event.click_count = 1;
   web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
       mouse_event);
-  mouse_event.setType(blink::WebInputEvent::MouseUp);
+  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
   web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
       mouse_event);
 }
@@ -549,10 +558,9 @@ void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         const gfx::Point& point) {
   blink::WebMouseEvent mouse_event(
-      type, blink::WebInputEvent::NoModifiers,
+      type, blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  mouse_event.x = point.x();
-  mouse_event.y = point.y();
+  mouse_event.SetPositionInWidget(point.x(), point.y());
   web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
       mouse_event);
 }
@@ -561,13 +569,12 @@ void SimulateMouseWheelEvent(WebContents* web_contents,
                              const gfx::Point& point,
                              const gfx::Vector2d& delta) {
   blink::WebMouseWheelEvent wheel_event(
-      blink::WebInputEvent::MouseWheel, blink::WebInputEvent::NoModifiers,
+      blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
 
-  wheel_event.x = point.x();
-  wheel_event.y = point.y();
-  wheel_event.deltaX = delta.x();
-  wheel_event.deltaY = delta.y();
+  wheel_event.SetPositionInWidget(point.x(), point.y());
+  wheel_event.delta_x = delta.x();
+  wheel_event.delta_y = delta.y();
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
   widget_host->ForwardWheelEvent(wheel_event);
@@ -580,32 +587,32 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
       web_contents->GetRenderViewHost()->GetWidget());
 
   blink::WebGestureEvent scroll_begin(
-      blink::WebGestureEvent::GestureScrollBegin,
-      blink::WebInputEvent::NoModifiers,
+      blink::WebGestureEvent::kGestureScrollBegin,
+      blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  scroll_begin.sourceDevice = blink::WebGestureDeviceTouchpad;
+  scroll_begin.source_device = blink::kWebGestureDeviceTouchpad;
   scroll_begin.x = point.x();
   scroll_begin.y = point.y();
   widget_host->ForwardGestureEvent(scroll_begin);
 
   blink::WebGestureEvent scroll_update(
-      blink::WebGestureEvent::GestureScrollUpdate,
-      blink::WebInputEvent::NoModifiers,
+      blink::WebGestureEvent::kGestureScrollUpdate,
+      blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  scroll_update.sourceDevice = blink::WebGestureDeviceTouchpad;
+  scroll_update.source_device = blink::kWebGestureDeviceTouchpad;
   scroll_update.x = point.x();
   scroll_update.y = point.y();
-  scroll_update.data.scrollUpdate.deltaX = delta.x();
-  scroll_update.data.scrollUpdate.deltaY = delta.y();
-  scroll_update.data.scrollUpdate.velocityX = 0;
-  scroll_update.data.scrollUpdate.velocityY = 0;
+  scroll_update.data.scroll_update.delta_x = delta.x();
+  scroll_update.data.scroll_update.delta_y = delta.y();
+  scroll_update.data.scroll_update.velocity_x = 0;
+  scroll_update.data.scroll_update.velocity_y = 0;
   widget_host->ForwardGestureEvent(scroll_update);
 
   blink::WebGestureEvent scroll_end(
-      blink::WebGestureEvent::GestureScrollEnd,
-      blink::WebInputEvent::NoModifiers,
+      blink::WebGestureEvent::kGestureScrollEnd,
+      blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  scroll_end.sourceDevice = blink::WebGestureDeviceTouchpad;
+  scroll_end.source_device = blink::kWebGestureDeviceTouchpad;
   scroll_end.x = point.x() + delta.x();
   scroll_end.y = point.y() + delta.y();
   widget_host->ForwardGestureEvent(scroll_end);
@@ -618,41 +625,41 @@ void SimulateGestureFlingSequence(WebContents* web_contents,
       web_contents->GetRenderViewHost()->GetWidget());
 
   blink::WebGestureEvent scroll_begin(
-      blink::WebGestureEvent::GestureScrollBegin,
-      blink::WebInputEvent::NoModifiers,
+      blink::WebGestureEvent::kGestureScrollBegin,
+      blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  scroll_begin.sourceDevice = blink::WebGestureDeviceTouchpad;
+  scroll_begin.source_device = blink::kWebGestureDeviceTouchpad;
   scroll_begin.x = point.x();
   scroll_begin.y = point.y();
   widget_host->ForwardGestureEvent(scroll_begin);
 
   blink::WebGestureEvent scroll_end(
-      blink::WebGestureEvent::GestureScrollEnd,
-      blink::WebInputEvent::NoModifiers,
+      blink::WebGestureEvent::kGestureScrollEnd,
+      blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  scroll_end.sourceDevice = blink::WebGestureDeviceTouchpad;
+  scroll_end.source_device = blink::kWebGestureDeviceTouchpad;
   scroll_end.x = point.x();
   scroll_end.y = point.y();
   widget_host->ForwardGestureEvent(scroll_end);
 
   blink::WebGestureEvent fling_start(
-      blink::WebGestureEvent::GestureFlingStart,
-      blink::WebInputEvent::NoModifiers,
+      blink::WebGestureEvent::kGestureFlingStart,
+      blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  fling_start.sourceDevice = blink::WebGestureDeviceTouchpad;
+  fling_start.source_device = blink::kWebGestureDeviceTouchpad;
   fling_start.x = point.x();
   fling_start.y = point.y();
-  fling_start.data.flingStart.targetViewport = false;
-  fling_start.data.flingStart.velocityX = velocity.x();
-  fling_start.data.flingStart.velocityY = velocity.y();
+  fling_start.data.fling_start.target_viewport = false;
+  fling_start.data.fling_start.velocity_x = velocity.x();
+  fling_start.data.fling_start.velocity_y = velocity.y();
   widget_host->ForwardGestureEvent(fling_start);
 }
 
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point) {
   blink::WebGestureEvent tap(
-      blink::WebGestureEvent::GestureTap, blink::WebInputEvent::ControlKey,
+      blink::WebGestureEvent::kGestureTap, 0,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  tap.sourceDevice = blink::WebGestureDeviceTouchpad;
+  tap.source_device = blink::kWebGestureDeviceTouchpad;
   tap.x = point.x();
   tap.y = point.y();
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
@@ -664,9 +671,9 @@ void SimulateTapWithModifiersAt(WebContents* web_contents,
                                 unsigned modifiers,
                                 const gfx::Point& point) {
   blink::WebGestureEvent tap(
-      blink::WebGestureEvent::GestureTap, modifiers,
+      blink::WebGestureEvent::kGestureTap, modifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-  tap.sourceDevice = blink::WebGestureDeviceTouchpad;
+  tap.source_device = blink::kWebGestureDeviceTouchpad;
   tap.x = point.x();
   tap.y = point.y();
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
@@ -676,7 +683,9 @@ void SimulateTapWithModifiersAt(WebContents* web_contents,
 
 #if defined(USE_AURA)
 void SimulateTouchPressAt(WebContents* web_contents, const gfx::Point& point) {
-  ui::TouchEvent touch(ui::ET_TOUCH_PRESSED, point, 0, base::TimeTicks());
+  ui::TouchEvent touch(
+      ui::ET_TOUCH_PRESSED, point, base::TimeTicks(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   static_cast<RenderWidgetHostViewAura*>(
       web_contents->GetRenderWidgetHostView())
       ->OnTouchEvent(&touch);
@@ -696,66 +705,66 @@ void SimulateKeyPress(WebContents* web_contents,
   // The order of these key down events shouldn't matter for our simulation.
   // For our simulation we can use either the left keys or the right keys.
   if (control) {
-    modifiers |= blink::WebInputEvent::ControlKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::RawKeyDown,
+    modifiers |= blink::WebInputEvent::kControlKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
                       ui::DomKey::CONTROL, ui::DomCode::CONTROL_LEFT,
                       ui::VKEY_CONTROL, modifiers);
   }
 
   if (shift) {
-    modifiers |= blink::WebInputEvent::ShiftKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::RawKeyDown,
+    modifiers |= blink::WebInputEvent::kShiftKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
                       ui::DomKey::SHIFT, ui::DomCode::SHIFT_LEFT,
                       ui::VKEY_SHIFT, modifiers);
   }
 
   if (alt) {
-    modifiers |= blink::WebInputEvent::AltKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::RawKeyDown,
+    modifiers |= blink::WebInputEvent::kAltKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
                       ui::DomKey::ALT, ui::DomCode::ALT_LEFT, ui::VKEY_MENU,
                       modifiers);
   }
 
   if (command) {
-    modifiers |= blink::WebInputEvent::MetaKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::RawKeyDown,
+    modifiers |= blink::WebInputEvent::kMetaKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
                       ui::DomKey::META, ui::DomCode::META_LEFT,
                       ui::VKEY_COMMAND, modifiers);
   }
-  InjectRawKeyEvent(web_contents, blink::WebInputEvent::RawKeyDown, key, code,
+  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown, key, code,
                     key_code, modifiers);
 
-  InjectRawKeyEvent(web_contents, blink::WebInputEvent::Char, key, code,
+  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kChar, key, code,
                     key_code, modifiers);
 
-  InjectRawKeyEvent(web_contents, blink::WebInputEvent::KeyUp, key, code,
+  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp, key, code,
                     key_code, modifiers);
 
   // The order of these key releases shouldn't matter for our simulation.
   if (control) {
-    modifiers &= ~blink::WebInputEvent::ControlKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::KeyUp,
+    modifiers &= ~blink::WebInputEvent::kControlKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
                       ui::DomKey::CONTROL, ui::DomCode::CONTROL_LEFT,
                       ui::VKEY_CONTROL, modifiers);
   }
 
   if (shift) {
-    modifiers &= ~blink::WebInputEvent::ShiftKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::KeyUp,
+    modifiers &= ~blink::WebInputEvent::kShiftKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
                       ui::DomKey::SHIFT, ui::DomCode::SHIFT_LEFT,
                       ui::VKEY_SHIFT, modifiers);
   }
 
   if (alt) {
-    modifiers &= ~blink::WebInputEvent::AltKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::KeyUp,
+    modifiers &= ~blink::WebInputEvent::kAltKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
                       ui::DomKey::ALT, ui::DomCode::ALT_LEFT, ui::VKEY_MENU,
                       modifiers);
   }
 
   if (command) {
-    modifiers &= ~blink::WebInputEvent::MetaKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::KeyUp,
+    modifiers &= ~blink::WebInputEvent::kMetaKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
                       ui::DomKey::META, ui::DomCode::META_LEFT,
                       ui::VKEY_COMMAND, modifiers);
   }
@@ -786,14 +795,22 @@ bool ExecuteScript(const ToRenderFrameHost& adapter,
                    const std::string& script) {
   std::string new_script =
       script + ";window.domAutomationController.send(0);";
-  return ExecuteScriptHelper(adapter.render_frame_host(), new_script, NULL);
+  return ExecuteScriptHelper(adapter.render_frame_host(), new_script, true,
+                             nullptr);
+}
+
+bool ExecuteScriptWithoutUserGesture(const ToRenderFrameHost& adapter,
+                                     const std::string& script) {
+  std::string new_script = script + ";window.domAutomationController.send(0);";
+  return ExecuteScriptHelper(adapter.render_frame_host(), new_script, false,
+                             nullptr);
 }
 
 bool ExecuteScriptAndExtractDouble(const ToRenderFrameHost& adapter,
                                    const std::string& script, double* result) {
   DCHECK(result);
   std::unique_ptr<base::Value> value;
-  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, &value) ||
+  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, true, &value) ||
       !value.get()) {
     return false;
   }
@@ -805,7 +822,7 @@ bool ExecuteScriptAndExtractInt(const ToRenderFrameHost& adapter,
                                 const std::string& script, int* result) {
   DCHECK(result);
   std::unique_ptr<base::Value> value;
-  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, &value) ||
+  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, true, &value) ||
       !value.get()) {
     return false;
   }
@@ -817,7 +834,7 @@ bool ExecuteScriptAndExtractBool(const ToRenderFrameHost& adapter,
                                  const std::string& script, bool* result) {
   DCHECK(result);
   std::unique_ptr<base::Value> value;
-  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, &value) ||
+  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, true, &value) ||
       !value.get()) {
     return false;
   }
@@ -846,12 +863,56 @@ bool ExecuteScriptAndExtractString(const ToRenderFrameHost& adapter,
                                    std::string* result) {
   DCHECK(result);
   std::unique_ptr<base::Value> value;
-  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, &value) ||
+  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, true, &value) ||
       !value.get()) {
     return false;
   }
 
   return value->GetAsString(result);
+}
+
+bool ExecuteScriptWithoutUserGestureAndExtractDouble(
+    const ToRenderFrameHost& adapter,
+    const std::string& script,
+    double* result) {
+  DCHECK(result);
+  std::unique_ptr<base::Value> value;
+  return ExecuteScriptHelper(adapter.render_frame_host(), script, false,
+                             &value) &&
+         value && value->GetAsDouble(result);
+}
+
+bool ExecuteScriptWithoutUserGestureAndExtractInt(
+    const ToRenderFrameHost& adapter,
+    const std::string& script,
+    int* result) {
+  DCHECK(result);
+  std::unique_ptr<base::Value> value;
+  return ExecuteScriptHelper(adapter.render_frame_host(), script, false,
+                             &value) &&
+         value && value->GetAsInteger(result);
+}
+
+bool ExecuteScriptWithoutUserGestureAndExtractBool(
+    const ToRenderFrameHost& adapter,
+    const std::string& script,
+    bool* result) {
+  DCHECK(result);
+  std::unique_ptr<base::Value> value;
+  return ExecuteScriptHelper(adapter.render_frame_host(), script, false,
+                             &value) &&
+         value && value->GetAsBoolean(result);
+}
+
+bool ExecuteScriptWithoutUserGestureAndExtractString(
+    const ToRenderFrameHost& adapter,
+    const std::string& script,
+    std::string* result) {
+  DCHECK(result);
+  std::unique_ptr<base::Value> value;
+  return ExecuteScriptHelper(adapter.render_frame_host(), script, false,
+                             &value) &&
+         value && value->GetAsString(result);
 }
 
 namespace {
@@ -1038,7 +1099,7 @@ bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
 void EnableAccessibilityForWebContents(WebContents* web_contents) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
-  web_contents_impl->SetAccessibilityMode(ACCESSIBILITY_MODE_COMPLETE);
+  web_contents_impl->SetAccessibilityMode(kAccessibilityModeComplete);
 }
 
 void WaitForAccessibilityFocusChange() {
@@ -1132,16 +1193,63 @@ RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents) {
   return static_cast<WebContentsImpl*>(web_contents)->GetMouseLockWidget();
 }
 
+bool IsInnerInterstitialPageConnected(InterstitialPage* interstitial_page) {
+  InterstitialPageImpl* impl =
+      static_cast<InterstitialPageImpl*>(interstitial_page);
+
+  RenderWidgetHostViewBase* rwhvb =
+      static_cast<RenderWidgetHostViewBase*>(impl->GetView());
+  EXPECT_TRUE(rwhvb->IsRenderWidgetHostViewChildFrame());
+  RenderWidgetHostViewChildFrame* rwhvcf =
+      static_cast<RenderWidgetHostViewChildFrame*>(rwhvb);
+
+  CrossProcessFrameConnector* frame_connector =
+      rwhvcf->FrameConnectorForTesting();
+
+  WebContentsImpl* inner_web_contents =
+      static_cast<WebContentsImpl*>(impl->GetWebContents());
+  FrameTreeNode* outer_node = FrameTreeNode::GloballyFindByID(
+      inner_web_contents->GetOuterDelegateFrameTreeNodeId());
+
+  return outer_node->current_frame_host()->GetView() ==
+         frame_connector->GetParentRenderWidgetHostView();
+}
+
+std::vector<RenderWidgetHostView*> GetInputEventRouterRenderWidgetHostViews(
+    WebContents* web_contents) {
+  return static_cast<WebContentsImpl*>(web_contents)
+      ->GetInputEventRouter()
+      ->GetRenderWidgetHostViewsForTests();
+}
+
+RenderWidgetHost* GetFocusedRenderWidgetHost(WebContents* web_contents) {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents);
+  return web_contents_impl->GetFocusedRenderWidgetHost(
+      web_contents_impl->GetMainFrame()->GetRenderWidgetHost());
+}
+
+void RouteMouseEvent(WebContents* web_contents, blink::WebMouseEvent* event) {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents);
+  web_contents_impl->GetInputEventRouter()->RouteMouseEvent(
+      static_cast<RenderWidgetHostViewBase*>(
+          web_contents_impl->GetMainFrame()->GetView()),
+      event, ui::LatencyInfo());
+}
+
 #if defined(USE_AURA)
 void SendRoutedTouchTapSequence(content::WebContents* web_contents,
                                 gfx::Point point) {
   RenderWidgetHostViewAura* rwhva = static_cast<RenderWidgetHostViewAura*>(
       web_contents->GetRenderWidgetHostView());
-  ui::TouchEvent touch_start(ui::ET_TOUCH_PRESSED, point, 0,
-                             base::TimeTicks::Now());
+  ui::TouchEvent touch_start(
+      ui::ET_TOUCH_PRESSED, point, base::TimeTicks::Now(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   rwhva->OnTouchEvent(&touch_start);
-  ui::TouchEvent touch_end(ui::ET_TOUCH_RELEASED, point, 0,
-                           base::TimeTicks::Now());
+  ui::TouchEvent touch_end(
+      ui::ET_TOUCH_RELEASED, point, base::TimeTicks::Now(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   rwhva->OnTouchEvent(&touch_end);
 }
 
@@ -1165,26 +1273,61 @@ void SendRoutedGestureTapSequence(content::WebContents* web_contents,
   rwhva->OnGestureEvent(&gesture_tap);
 }
 
-// TODO(wjmaclean): The next two functions are a modified version of
-// SurfaceHitTestReadyNotifier that (1) works for BrowserPlugin-based guests,
-// and (2) links outside of content-browsertests. At some point in time we
-// should probably merge these.
+#endif
+
 namespace {
 
-bool ContainsSurfaceId(const cc::SurfaceId& container_surface_id,
-                       RenderWidgetHostViewChildFrame* target_view) {
+class SurfaceHitTestReadyNotifier {
+ public:
+  SurfaceHitTestReadyNotifier(RenderWidgetHostViewBase* target_view);
+  ~SurfaceHitTestReadyNotifier() {}
+
+  void WaitForSurfaceReady(RenderWidgetHostViewBase* root_container);
+
+ private:
+  bool ContainsSurfaceId(const cc::SurfaceId& container_surface_id);
+
+  cc::SurfaceManager* surface_manager_;
+  RenderWidgetHostViewBase* target_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(SurfaceHitTestReadyNotifier);
+};
+
+SurfaceHitTestReadyNotifier::SurfaceHitTestReadyNotifier(
+    RenderWidgetHostViewBase* target_view)
+    : target_view_(target_view) {
+  surface_manager_ = GetSurfaceManager();
+}
+
+void SurfaceHitTestReadyNotifier::WaitForSurfaceReady(
+    RenderWidgetHostViewBase* root_view) {
+  cc::SurfaceId root_surface_id = root_view->SurfaceIdForTesting();
+  while (!ContainsSurfaceId(root_surface_id)) {
+    // TODO(kenrb): Need a better way to do this. Needs investigation on
+    // whether we can add a callback through RenderWidgetHostViewBaseObserver
+    // from OnSwapCompositorFrame and avoid this busy waiting. A callback on
+    // every compositor frame might be generally undesirable for performance,
+    // however.
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+}
+
+bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
+    const cc::SurfaceId& container_surface_id) {
   if (!container_surface_id.is_valid())
     return false;
 
   cc::Surface* container_surface =
-      GetSurfaceManager()->GetSurfaceForId(container_surface_id);
+      surface_manager_->GetSurfaceForId(container_surface_id);
   if (!container_surface || !container_surface->active_referenced_surfaces())
     return false;
 
   for (const cc::SurfaceId& id :
        *container_surface->active_referenced_surfaces()) {
-    if (id == target_view->SurfaceIdForTesting() ||
-        ContainsSurfaceId(id, target_view))
+    if (id == target_view_->SurfaceIdForTesting() || ContainsSurfaceId(id))
       return true;
   }
   return false;
@@ -1192,26 +1335,39 @@ bool ContainsSurfaceId(const cc::SurfaceId& container_surface_id,
 
 }  // namespace
 
+#if defined(USE_AURA)
 void WaitForGuestSurfaceReady(content::WebContents* guest_web_contents) {
   RenderWidgetHostViewChildFrame* child_view =
       static_cast<RenderWidgetHostViewChildFrame*>(
           guest_web_contents->GetRenderWidgetHostView());
 
-  cc::SurfaceId root_surface_id =
-      static_cast<RenderWidgetHostViewAura*>(
-          static_cast<content::WebContentsImpl*>(guest_web_contents)
-              ->GetOuterWebContents()
-              ->GetRenderWidgetHostView())
-          ->SurfaceIdForTesting();
+  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
+      static_cast<content::WebContentsImpl*>(guest_web_contents)
+          ->GetOuterWebContents()
+          ->GetRenderWidgetHostView());
 
-  while (!ContainsSurfaceId(root_surface_id, child_view)) {
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
+  SurfaceHitTestReadyNotifier notifier(child_view);
+  notifier.WaitForSurfaceReady(root_view);
 }
+
 #endif
+
+void WaitForChildFrameSurfaceReady(content::RenderFrameHost* child_frame) {
+  RenderWidgetHostViewBase* child_view =
+      static_cast<RenderFrameHostImpl*>(child_frame)
+          ->GetRenderWidgetHost()
+          ->GetView();
+  if (!child_view || !child_view->IsRenderWidgetHostViewChildFrame())
+    return;
+
+  RenderWidgetHostViewBase* root_view =
+      static_cast<RenderWidgetHostViewChildFrame*>(child_view)
+          ->FrameConnectorForTesting()
+          ->GetRootRenderWidgetHostViewForTesting();
+
+  SurfaceHitTestReadyNotifier notifier(child_view);
+  notifier.WaitForSurfaceReady(root_view);
+}
 
 TitleWatcher::TitleWatcher(WebContents* web_contents,
                            const base::string16& expected_title)
@@ -1318,6 +1474,7 @@ void DOMMessageQueue::Observe(int type,
 }
 
 void DOMMessageQueue::RenderProcessGone(base::TerminationStatus status) {
+  VLOG(0) << "DOMMessageQueue::RenderProcessGone " << status;
   switch (status) {
     case base::TERMINATION_STATUS_NORMAL_TERMINATION:
     case base::TERMINATION_STATUS_STILL_RUNNING:
@@ -1380,12 +1537,12 @@ WebContentsAddedObserver::WebContentsAddedObserver()
           base::Bind(&WebContentsAddedObserver::WebContentsCreated,
                      base::Unretained(this))),
       web_contents_(NULL) {
-  WebContentsImpl::FriendZone::AddCreatedCallbackForTesting(
+  WebContentsImpl::FriendWrapper::AddCreatedCallbackForTesting(
       web_contents_created_callback_);
 }
 
 WebContentsAddedObserver::~WebContentsAddedObserver() {
-  WebContentsImpl::FriendZone::RemoveCreatedCallbackForTesting(
+  WebContentsImpl::FriendWrapper::RemoveCreatedCallbackForTesting(
       web_contents_created_callback_);
 }
 
@@ -1422,41 +1579,15 @@ bool RequestFrame(WebContents* web_contents) {
       ->ScheduleComposite();
 }
 
-FrameWatcher::FrameWatcher() : MessageFilter(), frames_to_wait_(0) {}
+FrameWatcher::FrameWatcher() = default;
 
-FrameWatcher::~FrameWatcher() {
-}
+FrameWatcher::FrameWatcher(WebContents* web_contents)
+    : WebContentsObserver(web_contents) {}
 
-void FrameWatcher::ReceivedFrameSwap(cc::CompositorFrameMetadata metadata) {
-  --frames_to_wait_;
-  last_metadata_ = std::move(metadata);
-  if (frames_to_wait_ == 0)
-    quit_.Run();
-}
-
-bool FrameWatcher::OnMessageReceived(const IPC::Message& message) {
-  if (message.type() == ViewHostMsg_SwapCompositorFrame::ID) {
-    ViewHostMsg_SwapCompositorFrame::Param param;
-    if (!ViewHostMsg_SwapCompositorFrame::Read(&message, &param))
-      return false;
-    cc::CompositorFrame frame(std::move(std::get<1>(param)));
-
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&FrameWatcher::ReceivedFrameSwap, this,
-                   base::Passed(std::move(frame.metadata))));
-  }
-  return false;
-}
-
-void FrameWatcher::AttachTo(WebContents* web_contents) {
-  DCHECK(web_contents);
-  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
-      web_contents->GetRenderViewHost()->GetWidget());
-  widget_host->GetProcess()->GetChannel()->AddFilter(this);
-}
+FrameWatcher::~FrameWatcher() = default;
 
 void FrameWatcher::WaitFrames(int frames_to_wait) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (frames_to_wait <= 0)
     return;
   base::RunLoop run_loop;
@@ -1466,7 +1597,15 @@ void FrameWatcher::WaitFrames(int frames_to_wait) {
 }
 
 const cc::CompositorFrameMetadata& FrameWatcher::LastMetadata() {
-  return last_metadata_;
+  return RenderWidgetHostImpl::From(
+             web_contents()->GetRenderViewHost()->GetWidget())
+      ->last_frame_metadata();
+}
+
+void FrameWatcher::DidReceiveCompositorFrame() {
+  --frames_to_wait_;
+  if (frames_to_wait_ == 0)
+    quit_.Run();
 }
 
 MainThreadFrameObserver::MainThreadFrameObserver(

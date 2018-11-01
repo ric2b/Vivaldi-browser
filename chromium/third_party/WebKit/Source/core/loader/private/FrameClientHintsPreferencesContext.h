@@ -8,7 +8,7 @@
 #include "core/frame/Frame.h"
 #include "platform/heap/Persistent.h"
 #include "platform/loader/fetch/ClientHintsPreferences.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -19,12 +19,12 @@ class FrameClientHintsPreferencesContext final
  public:
   explicit FrameClientHintsPreferencesContext(Frame*);
 
-  void countClientHintsDPR() override;
-  void countClientHintsResourceWidth() override;
-  void countClientHintsViewportWidth() override;
+  void CountClientHintsDPR() override;
+  void CountClientHintsResourceWidth() override;
+  void CountClientHintsViewportWidth() override;
 
  private:
-  Member<Frame> m_frame;
+  Member<Frame> frame_;
 };
 
 }  // namespace blink

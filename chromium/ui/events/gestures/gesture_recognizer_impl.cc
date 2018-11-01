@@ -36,18 +36,19 @@ void TransferConsumer(
   }
 }
 
-bool RemoveConsumerFromMap(GestureConsumer* consumer,
-                           GestureRecognizerImpl::TouchIdToConsumerMap* map) {
-  bool consumer_removed = false;
+// Generic function to remove every entry from a map having the given value.
+template <class Key, class T, class Value>
+bool RemoveValueFromMap(std::map<Key, T>* map, const Value& value) {
+  bool removed = false;
   for (auto i = map->begin(); i != map->end();) {
-    if (i->second == consumer) {
+    if (i->second == value) {
       map->erase(i++);
-      consumer_removed = true;
+      removed = true;
     } else {
       ++i;
     }
   }
-  return consumer_removed;
+  return removed;
 }
 
 }  // namespace
@@ -201,9 +202,11 @@ GestureRecognizerImpl::GetEventPerPointForConsumer(GestureConsumer* consumer,
   if (pointer_state.GetPointerCount() == 0)
     return cancelling_touches;
   for (size_t i = 0; i < pointer_state.GetPointerCount(); ++i) {
-    std::unique_ptr<TouchEvent> touch_event(new TouchEvent(
-        type, gfx::Point(), EF_IS_SYNTHESIZED, pointer_state.GetPointerId(i),
-        EventTimeForNow(), 0.0f, 0.0f, 0.0f, 0.0f));
+    std::unique_ptr<TouchEvent> touch_event(
+        new TouchEvent(type, gfx::Point(), EventTimeForNow(),
+                       PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH,
+                                      pointer_state.GetPointerId(i)),
+                       EF_IS_SYNTHESIZED, 0.0f));
     gfx::PointF point(pointer_state.GetX(i), pointer_state.GetY(i));
     touch_event->set_location_f(point);
     touch_event->set_root_location_f(point);
@@ -242,6 +245,8 @@ GestureProviderAura* GestureRecognizerImpl::GetGestureProviderForConsumer(
 
 void GestureRecognizerImpl::SetupTargets(const TouchEvent& event,
                                          GestureConsumer* target) {
+  event_to_gesture_provider_[event.unique_event_id()] =
+      GetGestureProviderForConsumer(target);
   if (event.type() == ui::ET_TOUCH_RELEASED ||
       event.type() == ui::ET_TOUCH_CANCELLED) {
     touch_id_target_.erase(event.pointer_details().id);
@@ -278,8 +283,18 @@ GestureRecognizer::Gestures GestureRecognizerImpl::AckTouchEvent(
     uint32_t unique_event_id,
     ui::EventResult result,
     GestureConsumer* consumer) {
-  GestureProviderAura* gesture_provider =
-      GetGestureProviderForConsumer(consumer);
+  GestureProviderAura* gesture_provider = nullptr;
+
+  // Check if we have already processed this event before dispatch and have a
+  // consumer associated with it.
+  auto event_to_gesture_provider_iterator =
+      event_to_gesture_provider_.find(unique_event_id);
+  if (event_to_gesture_provider_iterator != event_to_gesture_provider_.end()) {
+    gesture_provider = event_to_gesture_provider_iterator->second;
+    event_to_gesture_provider_.erase(event_to_gesture_provider_iterator);
+  } else {
+    gesture_provider = GetGestureProviderForConsumer(consumer);
+  }
   gesture_provider->OnTouchEventAck(unique_event_id, result != ER_UNHANDLED);
   return gesture_provider->GetAndResetPendingGestures();
 }
@@ -288,12 +303,17 @@ bool GestureRecognizerImpl::CleanupStateForConsumer(
     GestureConsumer* consumer) {
   bool state_cleaned_up = false;
 
-  if (consumer_gesture_provider_.count(consumer)) {
+  auto consumer_gesture_provider_it = consumer_gesture_provider_.find(consumer);
+  if (consumer_gesture_provider_it != consumer_gesture_provider_.end()) {
+    // Remove gesture provider associated with the consumer from
+    // |event_to_gesture_provider_| map.
+    RemoveValueFromMap(&event_to_gesture_provider_,
+                       consumer_gesture_provider_it->second.get());
     state_cleaned_up = true;
-    consumer_gesture_provider_.erase(consumer);
+    consumer_gesture_provider_.erase(consumer_gesture_provider_it);
   }
 
-  state_cleaned_up |= RemoveConsumerFromMap(consumer, &touch_id_target_);
+  state_cleaned_up |= RemoveValueFromMap(&touch_id_target_, consumer);
   return state_cleaned_up;
 }
 

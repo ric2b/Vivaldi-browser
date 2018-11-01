@@ -11,7 +11,6 @@
 #include <memory>
 #include <set>
 
-#include "apps/app_load_service.h"
 #include "apps/switches.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -26,7 +25,6 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -38,6 +36,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
+#include "chrome/browser/apps/app_load_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -72,7 +71,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/util.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -250,8 +248,8 @@ class ProfileLaunchObserver : public content::NotificationObserver {
   DISALLOW_COPY_AND_ASSIGN(ProfileLaunchObserver);
 };
 
-base::LazyInstance<ProfileLaunchObserver> profile_launch_observer =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<ProfileLaunchObserver>::DestructorAtExit
+    profile_launch_observer = LAZY_INSTANCE_INITIALIZER;
 
 // Dumps the current set of the browser process's histograms to |output_file|.
 // The file is overwritten if it exists. This function should only be called in
@@ -975,8 +973,7 @@ Profile* GetStartupProfile(const base::FilePath& user_data_dir,
   auto* storage = &profile_manager->GetProfileAttributesStorage();
   ProfileAttributesEntry* entry;
   bool has_entry = storage->GetProfileAttributesWithPath(profile_path, &entry);
-  if (has_entry && (!switches::IsNewProfileManagement() ||
-                    !entry->IsSigninRequired() || !profile)) {
+  if (has_entry && (!entry->IsSigninRequired() || !profile)) {
     return profile;
   }
 

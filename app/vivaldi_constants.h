@@ -25,12 +25,14 @@ extern const char kVivaldiReservedApiError[];
 
 extern const char kVivaldiUIScheme[];
 
+extern const char kVivaldiUIDataHost[];
+extern const char kVivaldiUIDataURL[];
+
 extern const char kVivaldiVersion[];
 
 extern const char kWindowExtDataKey[];
 
 extern const wchar_t kUpdateNotifierAutorunName[];
-extern const wchar_t kQuitAllUpdateNotifiersEventName[];
 
 }  // namespace vivaldi
 

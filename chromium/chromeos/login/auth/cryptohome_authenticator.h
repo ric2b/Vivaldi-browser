@@ -14,6 +14,7 @@
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
 #include "chromeos/chromeos_export.h"
+#include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/login/auth/auth_attempt_state.h"
 #include "chromeos/login/auth/auth_attempt_state_resolver.h"
 #include "chromeos/login/auth/authenticator.h"
@@ -89,6 +90,11 @@ class CHROMEOS_EXPORT CryptohomeAuthenticator
     KIOSK_ACCOUNT_LOGIN = 22,         // Logged into a kiosk account.
     REMOVED_DATA_AFTER_FAILURE = 23,  // Successfully removed the user's
                                       // cryptohome after a login failure.
+    FAILED_OLD_ENCRYPTION = 24,       // Login failed, cryptohome is encrypted
+                                      // in old format.
+    FAILED_PREVIOUS_MIGRATION_INCOMPLETE = 25,  // Login failed, cryptohome is
+                                                // partially encrypted in old
+                                                // format.
   };
 
   CryptohomeAuthenticator(scoped_refptr<base::TaskRunner> task_runner,
@@ -162,6 +168,7 @@ class CHROMEOS_EXPORT CryptohomeAuthenticator
 
   void OnOffTheRecordAuthSuccess();
   void OnPasswordChangeDetected();
+  void OnOldEncryptionDetected(bool has_incomplete_migration);
 
  protected:
   ~CryptohomeAuthenticator() override;
@@ -232,6 +239,9 @@ class CHROMEOS_EXPORT CryptohomeAuthenticator
 
   // Handles completion of the ownership check and continues login.
   void OnOwnershipChecked(bool is_owner);
+
+  // Handles completion of cryptohome unmount.
+  void OnUnmount(DBusMethodCallStatus call_status, bool success);
 
   // Signal login completion status for cases when a new user is added via
   // an external authentication provider (i.e. GAIA extension).

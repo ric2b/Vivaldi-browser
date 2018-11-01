@@ -1,7 +1,6 @@
-<link rel="import" href="chrome://resources/cr_elements/cr_slider/cr_slider.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
@@ -9,6 +8,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
 <link rel="import" href="display_layout.html">
 <link rel="import" href="display_overscan_dialog.html">
+<link rel="import" href="../controls/settings_slider.html">
 <link rel="import" href="../settings_shared_css.html">
 <link rel="import" href="../settings_vars_css.html">
 
@@ -44,11 +44,6 @@
        margin-top: 10px;
      }
 
-     .info-text {
-       color: var(--paper-grey-500);
-       margin-top: 5px;
-     }
-
      .settings-box > paper-button:first-child {
        -webkit-padding-start: 0
      }
@@ -57,6 +52,9 @@
        text-transform: uppercase;
      }
 
+     #controlsDiv > .settings-box:first-of-type {
+       border-top: none;
+     } 
     </style>
     <div class="settings-box first layout vertical self-stretch">
       <div class="title-text layout self-start">
@@ -81,57 +79,94 @@
     </div>
     <div hidden="[[hasMultipleDisplays_(displays)]]"
         class="settings-box line-only"></div>
-    <div class="settings-box layout vertical first">
+
+    <div id="controlsDiv" class="settings-box layout vertical first">
       <h2>[[selectedDisplay.name]]</h2>
-      <div class="settings-box embedded first two-line"
-          hidden$="[[!showMirror_(displays)]]">
-        <div class="start">
-          <div id="displayMirrorCheckboxLabel">$i18n{displayMirror}</div>
-          <div class="secondary">[[getDisplayMirrorText_(displays)]]</div>
+
+      <template is="dom-if" if="[[showMirror_(unifiedDesktopMode_, displays)]]"
+          restamp>
+        <div class="settings-box embedded two-line">
+          <div class="start">
+            <div id="displayMirrorCheckboxLabel">$i18n{displayMirror}</div>
+            <div class="secondary">[[getDisplayMirrorText_(displays)]]</div>
+          </div>
+          <paper-toggle-button checked="[[isMirrored_(displays)]]"
+              on-tap="onMirroredTap_"
+              aria-labelledby="displayMirrorCheckboxLabel">
+          </paper-toggle-button>
         </div>
-        <paper-toggle-button checked="[[isMirrored_(displays)]]"
-            on-tap="onMirroredTap_"
-            aria-labelledby="displayMirrorCheckboxLabel">
-      </div>
-      <div class="settings-box embedded"
-          hidden$="[[!showDisplaySelectMenu_(displays, selectedDisplay)]]">
-        <div class="start">$i18n{displayScreenTitle}</div>
-        <div class="md-select-wrapper">
-          <select class="md-select" on-change="updatePrimaryDisplay_"
-              value="[[getDisplaySelectMenuIndex_(
-                  selectedDisplay, primaryDisplayId)]]">
-            <option value="0">$i18n{displayScreenPrimary}</option>
-            <option value="1">$i18n{displayScreenExtended}</option>
-          </select>
-          <span class="md-select-underline"></span>
+      </template>
+
+      <template is="dom-if" if="[[showUnifiedDesktop_(unifiedDesktopAvailable_,
+          unifiedDesktopMode_, displays)]]" restamp>
+        <div class="settings-box embedded two-line">
+          <div class="start">
+            <div id="displayUnifiedDesktopCheckboxLabel">
+              $i18n{displayUnfiedDesktop}
+            </div>
+            <div class="secondary">
+              [[getUnifiedDesktopText_(unifiedDesktopMode_)]]
+            </div>
+          </div>
+          <paper-toggle-button checked="[[unifiedDesktopMode_]]"
+              on-tap="onUnifiedDesktopTap_"
+              aria-labelledby="displayUnifiedDesktopCheckboxLabel">
+          </paper-toggle-button>
         </div>
-      </div>
+      </template>
+
+      <template is="dom-if" restamp
+          if="[[showDisplaySelectMenu_(displays, selectedDisplay)]]">
+        <div class="settings-box embedded">
+          <div id="displayScreenTitle" class="start">
+            $i18n{displayScreenTitle}
+          </div>
+          <div class="md-select-wrapper">
+            <select class="md-select" on-change="updatePrimaryDisplay_"
+                aria-labelledby="displayScreenTitle"
+                value="[[getDisplaySelectMenuIndex_(
+                    selectedDisplay, primaryDisplayId)]]">
+              <option value="0">$i18n{displayScreenPrimary}</option>
+              <option value="1">$i18n{displayScreenExtended}</option>
+            </select>
+            <span class="md-select-underline"></span>
+          </div>
+        </div>
+      </template>
+
       <div class="settings-box embedded two-line">
         <div class="start textarea layout vertical">
           <div>$i18n{displayResolutionTitle}</div>
           <div class="secondary layout self-start">
-            [[getResolutionText_(selectedDisplay, selectedModeIndex_)]]
+            [[getResolutionText_(selectedDisplay, selectedModePref_.value)]]
           </div>
         </div>
-        <cr-slider disabled="[[!enableSetResolution_(selectedDisplay)]]"
-            tick-values="[[modeValues_]]" value="{{selectedModeIndex_}}"
+        <settings-slider disabled="[[!enableSetResolution_(selectedDisplay)]]"
+            tick-values="[[modeValues_]]" pref="{{selectedModePref_}}"
             on-change="onSelectedModeChange_">
-        </cr-slider>
+        </settings-slider>
       </div>
-      <div class="settings-box embedded">
-        <div class="start textarea">$i18n{displayOrientation}</div>
-        <div class="md-select-wrapper">
-          <select class="md-select" value="[[selectedDisplay.rotation]]"
-              on-change="onOrientationChange_">
-            <option value="0">$i18n{displayOrientationStandard}</option>
-            <option value="90">90</option>
-            <option value="180">180</option>
-            <option value="270">270</option>
-          </select>
-          <span class="md-select-underline"></span>
+
+      <template is="dom-if" if="[[!unifiedDesktopMode_]]" restamp>
+        <div class="settings-box embedded">
+          <div id="displayOrientation" class="start textarea">
+            $i18n{displayOrientation}
+          </div>
+          <div class="md-select-wrapper">
+            <select class="md-select" value="[[selectedDisplay.rotation]]"
+                aria-labelledby="displayOrientation"
+                on-change="onOrientationChange_">
+              <option value="0">$i18n{displayOrientationStandard}</option>
+              <option value="90">90</option>
+              <option value="180">180</option>
+              <option value="270">270</option>
+            </select>
+            <span class="md-select-underline"></span>
+          </div>
         </div>
-      </div>
-      <div class="settings-box embedded two-line"
+      </template>
+
+      <div id="overscan" class="settings-box embedded two-line"
           on-tap="onOverscanTap_" hidden$="[[selectedDisplay.isInternal]]"
           actionable>
         <div class="start">
@@ -146,7 +181,8 @@
       </div>
 
       <settings-display-overscan-dialog id="displayOverscan"
-          display-id="{{overscanDisplayId}}">
+          display-id="{{overscanDisplayId}}"
+          on-close="onCloseOverscanDialog_">
       </settings-display-overscan-dialog>
 
       <div class="settings-box embedded two-line"

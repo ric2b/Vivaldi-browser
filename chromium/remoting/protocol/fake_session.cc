@@ -34,16 +34,14 @@ void FakeSession::SimulateConnection(FakeSession* peer) {
   peer->event_handler_->OnSessionStateChange(AUTHENTICATING);
 
   // Initialize transport and authenticator on the client.
-  authenticator_.reset(new FakeAuthenticator(FakeAuthenticator::CLIENT, 0,
-                                             FakeAuthenticator::ACCEPT, false));
+  authenticator_.reset(new FakeAuthenticator(FakeAuthenticator::ACCEPT));
   authenticator_->set_auth_key(kTestAuthKey);
   transport_->Start(authenticator_.get(),
                     base::Bind(&FakeSession::SendTransportInfo,
                                weak_factory_.GetWeakPtr()));
 
   // Initialize transport and authenticator on the host.
-  peer->authenticator_.reset(new FakeAuthenticator(
-      FakeAuthenticator::HOST, 0, FakeAuthenticator::ACCEPT, false));
+  peer->authenticator_.reset(new FakeAuthenticator(FakeAuthenticator::ACCEPT));
   peer->authenticator_->set_auth_key(kTestAuthKey);
   peer->transport_->Start(peer->authenticator_.get(),
                           base::Bind(&FakeSession::SendTransportInfo, peer_));
@@ -77,11 +75,18 @@ void FakeSession::Close(ErrorCode error) {
   error_ = error;
   event_handler_->OnSessionStateChange(CLOSED);
 
-  FakeSession* peer = peer_.get();
+  base::WeakPtr<FakeSession> peer = peer_;
   if (peer) {
     peer->peer_.reset();
     peer_.reset();
-    peer->Close(error);
+
+    if (signaling_delay_.is_zero()) {
+      peer->Close(error);
+    } else {
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, base::Bind(&FakeSession::Close, peer, error),
+          signaling_delay_);
+    }
   }
 }
 

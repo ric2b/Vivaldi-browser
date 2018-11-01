@@ -31,6 +31,7 @@
 
 #include "core/layout/LayoutSliderThumb.h"
 
+#include "core/html/forms/SliderThumbElement.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/style/ComputedStyle.h"
 
@@ -39,19 +40,17 @@ namespace blink {
 LayoutSliderThumb::LayoutSliderThumb(SliderThumbElement* element)
     : LayoutBlockFlow(element) {}
 
-void LayoutSliderThumb::updateAppearance(const ComputedStyle& parentStyle) {
-  if (parentStyle.appearance() == SliderVerticalPart)
-    mutableStyleRef().setAppearance(SliderThumbVerticalPart);
-  else if (parentStyle.appearance() == SliderHorizontalPart)
-    mutableStyleRef().setAppearance(SliderThumbHorizontalPart);
-  else if (parentStyle.appearance() == MediaSliderPart)
-    mutableStyleRef().setAppearance(MediaSliderThumbPart);
-  else if (parentStyle.appearance() == MediaVolumeSliderPart)
-    mutableStyleRef().setAppearance(MediaVolumeSliderThumbPart);
-  else if (parentStyle.appearance() == MediaFullscreenVolumeSliderPart)
-    mutableStyleRef().setAppearance(MediaFullscreenVolumeSliderThumbPart);
-  if (styleRef().hasAppearance())
-    LayoutTheme::theme().adjustSliderThumbSize(mutableStyleRef());
+void LayoutSliderThumb::UpdateAppearance(const ComputedStyle& parent_style) {
+  if (parent_style.Appearance() == kSliderVerticalPart)
+    MutableStyleRef().SetAppearance(kSliderThumbVerticalPart);
+  else if (parent_style.Appearance() == kSliderHorizontalPart)
+    MutableStyleRef().SetAppearance(kSliderThumbHorizontalPart);
+  else if (parent_style.Appearance() == kMediaSliderPart)
+    MutableStyleRef().SetAppearance(kMediaSliderThumbPart);
+  else if (parent_style.Appearance() == kMediaVolumeSliderPart)
+    MutableStyleRef().SetAppearance(kMediaVolumeSliderThumbPart);
+  if (StyleRef().HasAppearance())
+    LayoutTheme::GetTheme().AdjustSliderThumbSize(MutableStyleRef());
 }
 
 }  // namespace blink

@@ -14,7 +14,10 @@
 #include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
+#import "ios/chrome/browser/tabs/tab_helper_util.h"
+#import "ios/chrome/browser/tabs/tab_private.h"
 #include "ios/chrome/browser/ui/preload_controller_delegate.h"
 #include "ios/chrome/browser/ui/prerender_final_status.h"
 #import "ios/web/public/web_state/ui/crw_native_content.h"
@@ -24,6 +27,10 @@
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "ui/base/page_transition_types.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 // ID of the URLFetcher responsible for prefetches.
 const int kPreloadControllerURLFetcherID = 1;
@@ -98,10 +105,61 @@ class PrefetchDelegate : public net::URLFetcherDelegate {
   }
 
  private:
-  PreloadController* owner_;  // weak
+  __weak PreloadController* owner_;
 };
 
-@implementation PreloadController
+@implementation PreloadController {
+  ios::ChromeBrowserState* browserState_;  // Weak.
+
+  // The WebState used for prerendering.
+  std::unique_ptr<web::WebState> webState_;
+
+  // The URL that is prerendered in |webState_|.  This can be different from
+  // the value returned by WebState last committed navigation item, for example
+  // in cases where there was a redirect.
+  //
+  // When choosing whether or not to use a prerendered Tab,
+  // BrowserViewController compares the URL being loaded by the omnibox with the
+  // URL of the prerendered Tab.  Comparing against the Tab's currently URL
+  // could return false negatives in cases of redirect, hence the need to store
+  // the originally prerendered URL.
+  GURL prerenderedURL_;
+
+  // The URL that is scheduled to be prerendered, its associated transition and
+  // referrer. |scheduledTransition_| and |scheduledReferrer_| are not valid
+  // when |scheduledURL_| is empty.
+  GURL scheduledURL_;
+  ui::PageTransition scheduledTransition_;
+  web::Referrer scheduledReferrer_;
+
+  // The most-recently prefetched URL, or nil if there have been no prefetched
+  // URLs.
+  GURL prefetchedURL_;
+
+  // The URLFetcher and associated delegate used to prefetch URLs. The delegate
+  // simply forwards callbacks from URLFetcher back to the PrerenderController.
+  std::unique_ptr<PrefetchDelegate> prefetcherDelegate_;
+  std::unique_ptr<net::URLFetcher> prefetcher_;
+
+  // Bridge to listen to pref changes.
+  std::unique_ptr<PrefObserverBridge> observerBridge_;
+  // Registrar for pref changes notifications.
+  PrefChangeRegistrar prefChangeRegistrar_;
+  // Observer for the WWAN setting.  Contains a valid object only if the
+  // instant setting is set to wifi-only.
+  std::unique_ptr<ConnectionTypeObserverBridge> connectionTypeObserverBridge_;
+
+  // Whether or not the preference is enabled.
+  BOOL enabled_;
+  // Whether or not prerendering is only when on wifi.
+  BOOL wifiOnly_;
+  // Whether or not the current connection is using WWAN.
+  BOOL usingWWAN_;
+
+  // Number of successful prerenders (i.e. the user viewed the prerendered page)
+  // during the lifetime of this controller.
+  int successfulPrerendersPerSessionCount_;
+}
 
 @synthesize prerenderedURL = prerenderedURL_;
 @synthesize prefetchedURL = prefetchedURL_;
@@ -148,7 +206,6 @@ class PrefetchDelegate : public net::URLFetcherDelegate {
                        successfulPrerendersPerSessionCount_);
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   [self cancelPrerender];
-  [super dealloc];
 }
 
 - (void)prerenderURL:(const GURL&)url
@@ -215,16 +272,21 @@ class PrefetchDelegate : public net::URLFetcherDelegate {
   [self destroyPreviewContentsForReason:reason];
 }
 
-- (Tab*)releasePrerenderContents {
+- (std::unique_ptr<web::WebState>)releasePrerenderContents {
   successfulPrerendersPerSessionCount_++;
   UMA_HISTOGRAM_ENUMERATION(kPrerenderFinalStatusHistogramName,
                             PRERENDER_FINAL_STATUS_USED,
                             PRERENDER_FINAL_STATUS_MAX);
   [self removeScheduledPrerenderRequests];
   prerenderedURL_ = GURL();
-  [[tab_ webController] setNativeProvider:nil];
-  [tab_ setDelegate:nil];
-  return [tab_.release() autorelease];
+
+  if (webState_) {
+    Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
+    [[tab webController] setNativeProvider:nil];
+    [tab setDelegate:nil];
+  }
+
+  return std::move(webState_);
 }
 
 - (void)connectionTypeChanged:(net::NetworkChangeNotifier::ConnectionType)type {
@@ -272,7 +334,10 @@ class PrefetchDelegate : public net::URLFetcherDelegate {
 
 // Delegate the call to the original native provider.
 - (BOOL)hasControllerForURL:(const GURL&)url {
-  return [[tab_ webController].nativeProvider hasControllerForURL:url];
+  if (!webState_)
+    return NO;
+  Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
+  return [[tab webController].nativeProvider hasControllerForURL:url];
 }
 
 // Override the CRWNativeContentProvider methods to cancel any prerenders that
@@ -323,24 +388,30 @@ class PrefetchDelegate : public net::URLFetcherDelegate {
     return;
   }
 
-  Tab* tab = [Tab
-      newPreloadingTabWithBrowserState:browserState_
-                                   url:prerenderedURL_
-                              referrer:scheduledReferrer_
-                            transition:scheduledTransition_
-                              provider:self
-                                opener:nil
-                      desktopUserAgent:[delegate_ shouldUseDesktopUserAgent]
-                         configuration:^(Tab* tab) {
-                           [tab setIsPrerenderTab:YES];
-                           [tab setDelegate:self];
-                         }];
+  web::WebState::CreateParams createParams(browserState_);
+  webState_ = web::WebState::Create(createParams);
+  AttachTabHelpers(webState_.get());
 
-  // Create and set up the prerender.
-  tab_.reset([tab retain]);
+  Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
+  DCHECK(tab);
+
+  [[tab webController] setNativeProvider:self];
+  webState_->SetWebUsageEnabled(true);
+  [tab setIsPrerenderTab:YES];
+  [tab setDelegate:self];
+
+  web::NavigationManager::WebLoadParams loadParams(prerenderedURL_);
+  loadParams.referrer = scheduledReferrer_;
+  loadParams.transition_type = scheduledTransition_;
+  if ([delegate_ shouldUseDesktopUserAgent]) {
+    loadParams.user_agent_override_option =
+        web::NavigationManager::UserAgentOverrideOption::DESKTOP;
+  }
+  webState_->GetNavigationManager()->LoadURLWithParams(loadParams);
 
   // Trigger the page to start loading.
-  [tab_ view];
+  // TODO(crbug.com/705819): Remove this call.
+  [tab view];
 }
 
 - (const GURL)urlToPrefetchURL:(const GURL&)url {
@@ -379,15 +450,16 @@ class PrefetchDelegate : public net::URLFetcherDelegate {
 }
 
 - (void)destroyPreviewContentsForReason:(PrerenderFinalStatus)reason {
-  if (!tab_.get())
+  if (!webState_)
     return;
 
   UMA_HISTOGRAM_ENUMERATION(kPrerenderFinalStatusHistogramName, reason,
                             PRERENDER_FINAL_STATUS_MAX);
-  [[tab_ webController] setNativeProvider:nil];
-  [tab_ setDelegate:nil];
-  [tab_ close];
-  tab_.reset();
+
+  Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
+  [[tab webController] setNativeProvider:nil];
+  webState_.reset();
+
   prerenderedURL_ = GURL();
 }
 

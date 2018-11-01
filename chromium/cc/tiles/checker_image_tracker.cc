@@ -5,6 +5,7 @@
 #include "cc/tiles/checker_image_tracker.h"
 
 #include "base/bind.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 
 namespace cc {
@@ -39,24 +40,27 @@ void CheckerImageTracker::FilterImagesForCheckeringForTile(
     std::vector<DrawImage>* images,
     ImageIdFlatSet* checkered_images,
     WhichTree tree) {
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "CheckerImageTracker::FilterImagesForCheckeringForTile", "tree",
+               tree);
   DCHECK(checkered_images->empty());
 
-  auto images_to_checker = std::remove_if(
-      images->begin(), images->end(),
-      [this, tree, &checkered_images](const DrawImage& draw_image) {
-        const sk_sp<const SkImage>& image = draw_image.image();
-        DCHECK(image->isLazyGenerated());
-        if (ShouldCheckerImage(image, tree)) {
-          ScheduleImageDecodeIfNecessary(image);
-          checkered_images->insert(image->uniqueID());
-          return true;
-        }
-        return false;
-      });
-  images->erase(images_to_checker, images->end());
+  base::EraseIf(*images,
+                [this, tree, &checkered_images](const DrawImage& draw_image) {
+                  const sk_sp<const SkImage>& image = draw_image.image();
+                  DCHECK(image->isLazyGenerated());
+                  if (ShouldCheckerImage(image, tree)) {
+                    ScheduleImageDecodeIfNecessary(image);
+                    checkered_images->insert(image->uniqueID());
+                    return true;
+                  }
+                  return false;
+                });
 }
 
 const ImageIdFlatSet& CheckerImageTracker::TakeImagesToInvalidateOnSyncTree() {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "CheckerImageTracker::TakeImagesToInvalidateOnSyncTree");
   DCHECK_EQ(invalidated_images_on_current_sync_tree_.size(), 0u)
       << "Sync tree can not be invalidated more than once";
 
@@ -66,6 +70,8 @@ const ImageIdFlatSet& CheckerImageTracker::TakeImagesToInvalidateOnSyncTree() {
 }
 
 void CheckerImageTracker::DidActivateSyncTree() {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "CheckerImageTracker::DidActivateSyncTree");
   for (auto image_id : invalidated_images_on_current_sync_tree_) {
     auto it = image_id_to_decode_request_id_.find(image_id);
     image_controller_->UnlockImageDecode(it->second);
@@ -79,6 +85,8 @@ void CheckerImageTracker::DidFinishImageDecode(
     ImageId image_id,
     ImageController::ImageDecodeRequestId request_id,
     ImageController::ImageDecodeResult result) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "CheckerImageTracker::DidFinishImageDecode");
   TRACE_EVENT_ASYNC_END0("cc", "CheckerImageTracker::DeferImageDecode",
                          image_id);
 
@@ -131,6 +139,8 @@ bool CheckerImageTracker::ShouldCheckerImage(const sk_sp<const SkImage>& image,
 
 void CheckerImageTracker::ScheduleImageDecodeIfNecessary(
     const sk_sp<const SkImage>& image) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "CheckerImageTracker::ScheduleImageDecodeIfNecessary");
   ImageId image_id = image->uniqueID();
 
   // If the image has already been decoded, or a decode request is pending, we

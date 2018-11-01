@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-#include "content/common/accessibility_mode_enums.h"
+#include "content/common/accessibility_mode.h"
 #include "content/common/ax_content_node_data.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -55,6 +55,9 @@ class BlinkAXTreeSource
 
   // Walks up the ancestor chain to see if this is a descendant of the root.
   bool IsInTree(blink::WebAXObject node) const;
+
+  AccessibilityMode accessibility_mode() { return accessibility_mode_; }
+  void SetAccessibilityMode(AccessibilityMode new_mode);
 
   // Set the id of the node to fetch image data for. Normally the content
   // of images is not part of the accessibility tree, but one node at a

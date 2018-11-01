@@ -25,7 +25,7 @@
 #define MediaQueryResult_h
 
 #include "core/css/MediaQueryExp.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -34,15 +34,15 @@ class MediaQueryResult {
 
  public:
   MediaQueryResult(const MediaQueryExp& expr, bool result)
-      : m_expression(expr), m_result(result) {}
+      : expression_(expr), result_(result) {}
 
-  const MediaQueryExp& expression() const { return m_expression; }
+  const MediaQueryExp& Expression() const { return expression_; }
 
-  bool result() const { return m_result; }
+  bool Result() const { return result_; }
 
  private:
-  const MediaQueryExp m_expression;
-  bool m_result;
+  const MediaQueryExp expression_;
+  bool result_;
 };
 
 }  // namespace blink

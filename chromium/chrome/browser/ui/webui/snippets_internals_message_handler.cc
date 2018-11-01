@@ -19,6 +19,7 @@
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/android/chrome_feature_list.h"
@@ -56,8 +57,45 @@ std::unique_ptr<base::DictionaryValue> PrepareSuggestion(
   entry->SetString("snippetText", suggestion.snippet_text());
   entry->SetString("publishDate",
                    TimeFormatShortDateAndTime(suggestion.publish_date()));
+  entry->SetString("fetchDate",
+                   TimeFormatShortDateAndTime(suggestion.fetch_date()));
   entry->SetString("publisherName", suggestion.publisher_name());
   entry->SetString("id", "content-suggestion-" + base::IntToString(index));
+  entry->SetDouble("score", suggestion.score());
+
+  if (suggestion.download_suggestion_extra()) {
+    const auto& extra = *suggestion.download_suggestion_extra();
+    auto value = base::MakeUnique<base::DictionaryValue>();
+    value->SetString("downloadGUID", extra.download_guid);
+    value->SetString("targetFilePath",
+                     extra.target_file_path.LossyDisplayName());
+    value->SetString("mimeType", extra.mime_type);
+    value->SetString(
+        "offlinePageID",
+        base::StringPrintf("0x%016llx", static_cast<long long unsigned int>(
+                                            extra.offline_page_id)));
+    value->SetBoolean("isDownloadAsset", extra.is_download_asset);
+    entry->Set("downloadSuggestionExtra", std::move(value));
+  }
+
+  if (suggestion.recent_tab_suggestion_extra()) {
+    const auto& extra = *suggestion.recent_tab_suggestion_extra();
+    auto value = base::MakeUnique<base::DictionaryValue>();
+    value->SetInteger("tabID", extra.tab_id);
+    value->SetString(
+        "offlinePageID",
+        base::StringPrintf("0x%016llx", static_cast<long long unsigned int>(
+                                            extra.offline_page_id)));
+    entry->Set("recentTabSuggestionExtra", std::move(value));
+  }
+
+  if (suggestion.notification_extra()) {
+    const auto& extra = *suggestion.notification_extra();
+    auto value = base::MakeUnique<base::DictionaryValue>();
+    value->SetString("deadline", TimeFormatShortDateAndTime(extra.deadline));
+    entry->Set("notificationExtra", std::move(value));
+  }
+
   return entry;
 }
 
@@ -75,8 +113,6 @@ std::string GetCategoryStatusName(CategoryStatus status) {
       return "ALL_SUGGESTIONS_EXPLICITLY_DISABLED";
     case CategoryStatus::CATEGORY_EXPLICITLY_DISABLED:
       return "CATEGORY_EXPLICITLY_DISABLED";
-    case CategoryStatus::SIGNED_OUT:
-      return "SIGNED_OUT";
     case CategoryStatus::LOADING_ERROR:
       return "LOADING_ERROR";
   }
@@ -278,7 +314,8 @@ void SnippetsInternalsMessageHandler::ClearClassification(
 void SnippetsInternalsMessageHandler::FetchRemoteSuggestionsInTheBackground(
     const base::ListValue* args) {
   DCHECK_EQ(0u, args->GetSize());
-  remote_suggestions_provider_->RefetchInTheBackground(nullptr);
+  remote_suggestions_provider_->RefetchInTheBackground(
+      RemoteSuggestionsProvider::FetchStatusCallback());
 }
 
 void SnippetsInternalsMessageHandler::SendAllContent() {
@@ -317,7 +354,7 @@ void SnippetsInternalsMessageHandler::SendAllContent() {
     SendString("switch-fetch-url", fetcher->fetch_url().spec());
     web_ui()->CallJavascriptFunctionUnsafe(
         "chrome.SnippetsInternals.receiveJson",
-        base::StringValue(fetcher->last_json()));
+        base::Value(fetcher->last_json()));
   }
 
   SendContentSuggestions();
@@ -326,8 +363,8 @@ void SnippetsInternalsMessageHandler::SendAllContent() {
 void SnippetsInternalsMessageHandler::SendClassification() {
   web_ui()->CallJavascriptFunctionUnsafe(
       "chrome.SnippetsInternals.receiveClassification",
-      base::StringValue(content_suggestions_service_->user_classifier()
-                            ->GetUserClassDescriptionForDebugging()),
+      base::Value(content_suggestions_service_->user_classifier()
+                      ->GetUserClassDescriptionForDebugging()),
       base::Value(
           content_suggestions_service_->user_classifier()->GetEstimatedAvgTime(
               UserClassifier::Metric::NTP_OPENED)),
@@ -346,7 +383,7 @@ void SnippetsInternalsMessageHandler::
   web_ui()->CallJavascriptFunctionUnsafe(
       "chrome.SnippetsInternals."
       "receiveLastRemoteSuggestionsBackgroundFetchTime",
-      base::StringValue(base::TimeFormatShortDateAndTime(time)));
+      base::Value(base::TimeFormatShortDateAndTime(time)));
 }
 
 void SnippetsInternalsMessageHandler::SendContentSuggestions() {
@@ -408,8 +445,8 @@ void SnippetsInternalsMessageHandler::SendBoolean(const std::string& name,
 
 void SnippetsInternalsMessageHandler::SendString(const std::string& name,
                                                  const std::string& value) {
-  base::StringValue string_name(name);
-  base::StringValue string_value(value);
+  base::Value string_name(name);
+  base::Value string_value(value);
 
   web_ui()->CallJavascriptFunctionUnsafe(
       "chrome.SnippetsInternals.receiveProperty", string_name, string_value);

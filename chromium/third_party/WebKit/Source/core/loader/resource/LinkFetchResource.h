@@ -10,14 +10,14 @@
 
 namespace blink {
 
-class FetchRequest;
+class FetchParameters;
 class ResourceFetcher;
 
 class LinkFetchResource final : public Resource {
  public:
   using ClientType = ResourceClient;
 
-  static Resource* fetch(Resource::Type, FetchRequest&, ResourceFetcher*);
+  static Resource* Fetch(Resource::Type, FetchParameters&, ResourceFetcher*);
   ~LinkFetchResource() override;
 
  private:
@@ -25,10 +25,10 @@ class LinkFetchResource final : public Resource {
    public:
     explicit LinkResourceFactory(Resource::Type type) : ResourceFactory(type) {}
 
-    Resource* create(const ResourceRequest& request,
+    Resource* Create(const ResourceRequest& request,
                      const ResourceLoaderOptions& options,
                      const String& charset) const override {
-      return new LinkFetchResource(request, type(), options);
+      return new LinkFetchResource(request, GetType(), options);
     }
   };
   LinkFetchResource(const ResourceRequest&, Type, const ResourceLoaderOptions&);

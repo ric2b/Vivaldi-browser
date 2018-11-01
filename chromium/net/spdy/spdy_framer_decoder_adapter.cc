@@ -5,20 +5,19 @@
 #include "net/spdy/spdy_framer_decoder_adapter.h"
 
 #include <memory>
-#include <string>
 #include <utility>
 
 #include "base/format_macros.h"
 #include "base/logging.h"
-#include "base/strings/stringprintf.h"
 #include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
+#include "net/spdy/platform/api/spdy_string_utils.h"
 
 #if defined(COMPILER_GCC)
-#define PRETTY_THIS base::StringPrintf("%s@%p ", __PRETTY_FUNCTION__, this)
+#define PRETTY_THIS SpdyStringPrintf("%s@%p ", __PRETTY_FUNCTION__, this)
 #elif defined(COMPILER_MSVC)
-#define PRETTY_THIS base::StringPrintf("%s@%p ", __FUNCSIG__, this)
+#define PRETTY_THIS SpdyStringPrintf("%s@%p ", __FUNCSIG__, this)
 #else
-#define PRETTY_THIS base::StringPrintf("%s@%p ", __func__, this)
+#define PRETTY_THIS SpdyStringPrintf("%s@%p ", __func__, this)
 #endif
 
 namespace net {
@@ -139,10 +138,6 @@ bool SpdyFramerVisitorAdapter::OnGoAwayFrameData(const char* goaway_data,
   return visitor_->OnGoAwayFrameData(goaway_data, len);
 }
 
-void SpdyFramerVisitorAdapter::OnBlocked(SpdyStreamId stream_id) {
-  visitor_->OnBlocked(stream_id);
-}
-
 void SpdyFramerVisitorAdapter::OnPushPromise(SpdyStreamId stream_id,
                                              SpdyStreamId promised_stream_id,
                                              bool end) {
@@ -163,7 +158,7 @@ void SpdyFramerVisitorAdapter::OnPriority(SpdyStreamId stream_id,
 
 void SpdyFramerVisitorAdapter::OnAltSvc(
     SpdyStreamId stream_id,
-    base::StringPiece origin,
+    SpdyStringPiece origin,
     const SpdyAltSvcWireFormat::AlternativeServiceVector& altsvc_vector) {
   visitor_->OnAltSvc(stream_id, origin, altsvc_vector);
 }
@@ -194,6 +189,10 @@ class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
     visitor_adapter_.reset(new SpdyFramerVisitorAdapter(visitor, outer_));
     SpdyFramerDecoderAdapter::set_visitor(visitor_adapter_.get());
     framer_.set_visitor(visitor_adapter_.get());
+  }
+
+  void set_extension_visitor(ExtensionVisitorInterface* visitor) override {
+    framer_.set_extension_visitor(visitor);
   }
 
   // Passes the call on to the base adapter class and wrapped SpdyFramer.

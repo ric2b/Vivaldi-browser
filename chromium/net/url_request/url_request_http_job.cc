@@ -55,6 +55,7 @@
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_retry_info.h"
 #include "net/proxy/proxy_service.h"
+#include "net/reporting/reporting_service.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config_service.h"
@@ -75,12 +76,6 @@
 static const char kAvailDictionaryHeader[] = "Avail-Dictionary";
 
 namespace {
-
-const char kDeflate[] = "deflate";
-const char kGZip[] = "gzip";
-const char kSdch[] = "sdch";
-const char kXGZip[] = "x-gzip";
-const char kBrotli[] = "br";
 
 // True if the request method is "safe" (per section 4.2.1 of RFC 7231).
 bool IsMethodSafe(const std::string& method) {
@@ -368,6 +363,7 @@ void URLRequestHttpJob::NotifyHeadersComplete() {
   ProcessStrictTransportSecurityHeader();
   ProcessPublicKeyPinsHeader();
   ProcessExpectCTHeader();
+  ProcessReportToHeader();
 
   // Handle the server notification of a new SDCH dictionary.
   SdchManager* sdch_manager(request()->context()->sdch_manager());
@@ -857,6 +853,28 @@ void URLRequestHttpJob::ProcessExpectCTHeader() {
   }
 }
 
+void URLRequestHttpJob::ProcessReportToHeader() {
+  DCHECK(response_info_);
+
+  ReportingService* service = request_->context()->reporting_service();
+  if (!service)
+    return;
+
+  // Only accept Report-To headers on HTTPS connections that have no
+  // certificate errors.
+  // TODO(juliatuttle): Do we need to check cert status?
+  const SSLInfo& ssl_info = response_info_->ssl_info;
+  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status))
+    return;
+
+  HttpResponseHeaders* headers = GetResponseHeaders();
+  std::string value;
+  if (!headers->GetNormalizedHeader("Report-To", &value))
+    return;
+
+  service->ProcessHeader(request_info_.url.GetOrigin(), value);
+}
+
 void URLRequestHttpJob::OnStartCompleted(int result) {
   TRACE_EVENT0(kNetTracingCategory, "URLRequestHttpJob::OnStartCompleted");
   RecordTimer();
@@ -1064,21 +1082,30 @@ std::unique_ptr<SourceStream> URLRequestHttpJob::SetUpSourceStream() {
   std::vector<SourceStream::SourceType> types;
   size_t iter = 0;
   while (headers->EnumerateHeader(&iter, "Content-Encoding", &type)) {
-    if (base::LowerCaseEqualsASCII(type, kBrotli)) {
-      types.push_back(SourceStream::TYPE_BROTLI);
-    } else if (base::LowerCaseEqualsASCII(type, kDeflate)) {
-      types.push_back(SourceStream::TYPE_DEFLATE);
-    } else if (base::LowerCaseEqualsASCII(type, kGZip) ||
-               base::LowerCaseEqualsASCII(type, kXGZip)) {
-      types.push_back(SourceStream::TYPE_GZIP);
-    } else if (base::LowerCaseEqualsASCII(type, kSdch)) {
+    SourceStream::SourceType source_type =
+        FilterSourceStream::ParseEncodingType(type);
+    if (source_type == SourceStream::TYPE_SDCH &&
+        !request()->context()->sdch_manager()) {
       // If SDCH support is not configured, pass through raw response.
-      if (!request()->context()->sdch_manager())
-        return upstream;
-      types.push_back(SourceStream::TYPE_SDCH);
-    } else {
-      // Unknown encoding type. Pass through raw response body.
       return upstream;
+    }
+    switch (source_type) {
+      case SourceStream::TYPE_BROTLI:
+      case SourceStream::TYPE_DEFLATE:
+      case SourceStream::TYPE_GZIP:
+      case SourceStream::TYPE_SDCH:
+        types.push_back(source_type);
+        break;
+      case SourceStream::TYPE_NONE:
+        // Identity encoding type. Pass through raw response body.
+        return upstream;
+      default:
+        // Unknown encoding type. Pass through raw response body.
+        // Despite of reporting to UMA, request will not be canceled; though
+        // it is expected that user will see malformed / garbage response.
+        FilterSourceStream::ReportContentDecodingFailed(
+            FilterSourceStream::TYPE_UNKNOWN);
+        return upstream;
     }
   }
 
@@ -1119,6 +1146,8 @@ std::unique_ptr<SourceStream> URLRequestHttpJob::SetUpSourceStream() {
         break;
       case SourceStream::TYPE_NONE:
       case SourceStream::TYPE_INVALID:
+      case SourceStream::TYPE_REJECTED:
+      case SourceStream::TYPE_UNKNOWN:
       case SourceStream::TYPE_MAX:
         NOTREACHED();
         return nullptr;

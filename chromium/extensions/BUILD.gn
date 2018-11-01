@@ -18,7 +18,6 @@ group("extensions_resources") {
 
 grit("extensions_resources_grd") {
   source = "extensions_resources.grd"
-  use_qualified_include = true
   outputs = [
     "grit/extensions_resources.h",
     "extensions_resources.pak",
@@ -27,10 +26,6 @@ grit("extensions_resources_grd") {
 
 grit("extensions_browser_resources") {
   source = "browser/resources/extensions_browser_resources.grd"
-
-  # TODO(thakis): Enable, https://crbug.com/401588
-  #use_qualified_include = true
-
   outputs = [
     "grit/extensions_browser_resources.h",
     "grit/extensions_browser_resources_map.cc",
@@ -46,7 +41,6 @@ grit("extensions_browser_resources") {
 
 grit("extensions_renderer_resources") {
   source = "renderer/resources/extensions_renderer_resources.grd"
-  use_qualified_include = true
   outputs = [
     "grit/extensions_renderer_resources.h",
     "extensions_renderer_resources.pak",
@@ -58,10 +52,13 @@ grit("extensions_renderer_resources") {
 
   deps = [
     "//chrome/browser/media/router:mojo_bindings__generator",
+    "//chrome/browser/media/router:mojo_bindings_common__generator",
     "//device/serial:serial_mojo__generator",
     "//extensions/common:mojo__generator",
     "//extensions/common/api:mojom__generator",
     "//mojo/common:common_custom_types__generator",
+    "//net/interfaces:interfaces__generator",
+    "//url/mojo:url_mojom_gurl__generator",
     "//url/mojo:url_mojom_origin__generator",
   ]
 }
@@ -91,6 +88,8 @@ static_library("test_support") {
     "browser/guest_view/mime_handler_view/test_mime_handler_view_guest.h",
     "browser/mock_extension_system.cc",
     "browser/mock_extension_system.h",
+    "browser/mock_external_provider.cc",
+    "browser/mock_external_provider.h",
     "browser/scoped_ignore_content_verifier_for_test.cc",
     "browser/scoped_ignore_content_verifier_for_test.h",
     "browser/test_extension_registry_observer.cc",
@@ -121,6 +120,8 @@ static_library("test_support") {
     "test/extension_test_notification_observer.h",
     "test/result_catcher.cc",
     "test/result_catcher.h",
+    "test/test_content_browser_client.cc",
+    "test/test_content_browser_client.h",
     "test/test_content_utility_client.cc",
     "test/test_content_utility_client.h",
     "test/test_extensions_client.cc",

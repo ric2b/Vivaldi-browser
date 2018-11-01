@@ -11,11 +11,11 @@ import android.content.Intent;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
-
-import com.google.protobuf.nano.MessageNano;
-import com.google.vr.vrcore.proto.nano.Nfc.NfcParams;
+import android.view.View;
+import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.browser.infobar.InfoBarLayout;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
@@ -24,10 +24,15 @@ import java.nio.ByteOrder;
 import java.util.concurrent.Callable;
 
 /**
- * Class containing static functions that are useful for VR instrumentation
- * testing.
+ * Class containing static functions and constants that are useful for VR
+ * instrumentation testing.
  */
 public class VrUtils {
+    public static final int POLL_CHECK_INTERVAL_SHORT_MS = 50;
+    public static final int POLL_CHECK_INTERVAL_LONG_MS = 100;
+    public static final int POLL_TIMEOUT_SHORT_MS = 1000;
+    public static final int POLL_TIMEOUT_LONG_MS = 10000;
+
     private static final String DETECTION_ACTIVITY =
             ".nfc.ViewerDetectionActivity";
     // TODO(bsheedy): Use constants from VrCore if ever exposed
@@ -36,7 +41,9 @@ public class VrUtils {
     private static final String VERSION_KEY =  "google.vr/ver";
     private static final String DATA_KEY =     "google.vr/data";
     private static final ByteOrder BYTE_ORDER = ByteOrder.BIG_ENDIAN;
-    private static final int VIEWER_ID = 3;
+    // Hard coded viewer ID (0x03) instead of using NfcParams and converting
+    // to a byte array because NfcParams were removed from the GVR SDK
+    private static final byte[] PROTO_BYTES = new byte[] {(byte) 0x08, (byte) 0x03};
     private static final int VERSION = 123;
     private static final int RESERVED = 456;
 
@@ -47,7 +54,7 @@ public class VrUtils {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                VrShellDelegate.enterVRIfNecessary();
+                VrShellDelegate.enterVrIfNecessary();
             }
         });
     }
@@ -60,7 +67,7 @@ public class VrUtils {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                vrDelegate.shutdownVR(false /* isPausing */, false /* showTransition */);
+                vrDelegate.shutdownVr(false /* isPausing */, false /* showTransition */);
             }
         });
     }
@@ -79,18 +86,11 @@ public class VrUtils {
      */
     public static Intent makeNfcIntent() {
         Intent nfcIntent = new Intent(NfcAdapter.ACTION_NDEF_DISCOVERED);
-        NfcParams nfcParams = new NfcParams();
-        nfcParams.setViewerId(VIEWER_ID);
-        byte[] protoBytes = MessageNano.toByteArray(nfcParams);
-        NdefMessage[] messages = new NdefMessage[] {
-                new NdefMessage(new NdefRecord[] {
-                        NdefRecord.createMime(
-                                RESERVED_KEY, intToByteArray(RESERVED)),
-                        NdefRecord.createMime(
-                                VERSION_KEY, intToByteArray(VERSION)),
-                        NdefRecord.createMime(DATA_KEY, protoBytes),
-                        NdefRecord.createApplicationRecord(
-                                APPLICATION_RECORD_STRING)})};
+        NdefMessage[] messages = new NdefMessage[] {new NdefMessage(
+                new NdefRecord[] {NdefRecord.createMime(RESERVED_KEY, intToByteArray(RESERVED)),
+                        NdefRecord.createMime(VERSION_KEY, intToByteArray(VERSION)),
+                        NdefRecord.createMime(DATA_KEY, PROTO_BYTES),
+                        NdefRecord.createApplicationRecord(APPLICATION_RECORD_STRING)})};
         nfcIntent.putExtra(NfcAdapter.EXTRA_NDEF_MESSAGES, messages);
         nfcIntent.setComponent(new ComponentName(APPLICATION_RECORD_STRING,
                   APPLICATION_RECORD_STRING + ".nfc.ViewerDetectionActivity"));
@@ -113,15 +113,37 @@ public class VrUtils {
     /**
      * Waits until the given VrShellDelegate's isInVR() returns true. Should
      * only be used when VR Shell support is expected.
+     * @param timeout How long to wait before giving up, in milliseconds
      */
-    public static void waitForVrSupported() {
+    public static void waitForVrSupported(final int timeout) {
         // If VR Shell is supported, mInVr should eventually go to true
         // Relatively long timeout because sometimes GVR takes a while to enter VR
         CriteriaHelper.pollUiThread(Criteria.equals(true, new Callable<Boolean>() {
             @Override
             public Boolean call() {
-                return VrShellDelegate.isInVR();
+                return VrShellDelegate.isInVr();
             }
-        }), 10000, 50);
+        }), timeout, POLL_CHECK_INTERVAL_SHORT_MS);
+    }
+
+    /**
+     * Determines whether an InfoBar prompting the user to install/update VR
+     * Services is present.
+     * @param parentView The View to start the search in
+     * @return Whether the InfoBar is present
+     */
+    public static boolean isUpdateInstallInfoBarPresent(View parentView) {
+        // InfoBarContainer will be present regardless of whether an InfoBar
+        // is actually there, but InfoBarLayout is only present if one is
+        // currently showing.
+        if (parentView instanceof InfoBarLayout) {
+            return true;
+        } else if (parentView instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) parentView;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (isUpdateInstallInfoBarPresent(group.getChildAt(i))) return true;
+            }
+        }
+        return false;
     }
 }

@@ -624,9 +624,7 @@ DynamicallyInitializedMidiManagerWin::PortManager::HandleMidiInCallback(
           base::Unretained(manager), index, data,
           manager->port_manager()->CalculateInEventTime(index, param2)));
     }
-    manager->PostTask(base::Bind(
-        &DynamicallyInitializedMidiManagerWin::PortManager::RestoreInBuffer,
-        base::Unretained(manager->port_manager()), index));
+    manager->port_manager()->RestoreInBuffer(index);
   }
 }
 

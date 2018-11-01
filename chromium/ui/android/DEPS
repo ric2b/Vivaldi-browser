@@ -10,8 +10,11 @@ include_rules = [
   "+jni",
   "+skia/ext",
   "+third_party/skia",
+  "+ui/base/layout.h",
   "+ui/base/resource/resource_bundle.h",
   "+ui/base/ui_base_paths.h",
   "+ui/display",
+  "+ui/events/android/motion_event_android.h",
+  "+ui/events/base_event_utils.h",
   "+ui/gfx",
 ]

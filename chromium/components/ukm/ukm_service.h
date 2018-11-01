@@ -16,8 +16,8 @@
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "components/metrics/metrics_provider.h"
-#include "components/metrics/metrics_reporting_scheduler.h"
-#include "components/metrics/persisted_logs.h"
+#include "components/metrics/metrics_rotation_scheduler.h"
+#include "components/ukm/ukm_reporting_service.h"
 #include "url/gurl.h"
 
 class PluginInfoMessageFilter;
@@ -29,8 +29,15 @@ namespace autofill {
 class AutofillMetrics;
 }  // namespace autofill
 
+namespace translate {
+class TranslateRankerImpl;
+}
+
+namespace payments {
+class JourneyLogger;
+}  // namespace payments
+
 namespace metrics {
-class MetricsLogUploader;
 class MetricsServiceClient;
 }
 
@@ -100,7 +107,8 @@ class UkmService {
   using AddEntryCallback = base::Callback<void(std::unique_ptr<UkmEntry>)>;
 
  protected:
-  const std::vector<std::unique_ptr<UkmSource>>& sources_for_testing() const {
+  const std::map<int32_t, std::unique_ptr<UkmSource>>& sources_for_testing()
+      const {
     return sources_;
   }
 
@@ -110,14 +118,17 @@ class UkmService {
 
  private:
   friend autofill::AutofillMetrics;
+  friend payments::JourneyLogger;
   friend PluginInfoMessageFilter;
   friend UkmPageLoadMetricsObserver;
-  FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, AddEntryOnlyWithNonEmptyMetrics);
+  friend translate::TranslateRankerImpl;
+  FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, AddEntryWithEmptyMetrics);
   FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, EntryBuilderAndSerialization);
   FRIEND_TEST_ALL_PREFIXES(UkmServiceTest,
                            LogsUploadedOnlyWhenHavingSourcesOrEntries);
   FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, MetricsProviderTest);
   FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, PersistAndPurge);
+  FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, WhitelistEntryTest);
 
   // Get a new UkmEntryBuilder object for the specified source ID and event,
   // which can get metrics added to.
@@ -127,11 +138,6 @@ class UkmService {
   // process.
   std::unique_ptr<UkmEntryBuilder> GetEntryBuilder(int32_t source_id,
                                                    const char* event_name);
-
-  // Adds a new source of UKM metrics, which will be stored until periodically
-  // serialized for upload, and then deleted. This method is deprecated. Please
-  // use GetEntryBuilder and UpdateSourceURL above.
-  void RecordSource(std::unique_ptr<UkmSource> source);
 
   // Starts metrics client initialization.
   void StartInitTask();
@@ -156,6 +162,9 @@ class UkmService {
   // Add an entry to the UkmEntry list.
   void AddEntry(std::unique_ptr<UkmEntry> entry);
 
+  // Cache the list of whitelisted entries from the field trial parameter.
+  void StoreWhitelistedEntries();
+
   // A weak pointer to the PrefService used to read and write preferences.
   PrefService* pref_service_;
 
@@ -175,26 +184,24 @@ class UkmService {
   // Registered metrics providers.
   std::vector<std::unique_ptr<metrics::MetricsProvider>> metrics_providers_;
 
-  // Logs that have not yet been sent.
-  metrics::PersistedLogs persisted_logs_;
+  // Log reporting service.
+  ukm::UkmReportingService reporting_service_;
 
   // The scheduler for determining when uploads should happen.
-  std::unique_ptr<metrics::MetricsReportingScheduler> scheduler_;
+  std::unique_ptr<metrics::MetricsRotationScheduler> scheduler_;
 
   base::ThreadChecker thread_checker_;
 
-  // Instance of the helper class for uploading logs.
-  std::unique_ptr<metrics::MetricsLogUploader> log_uploader_;
-
   bool initialize_started_;
   bool initialize_complete_;
-  bool log_upload_in_progress_;
 
   // Contains newly added sources and entries of UKM metrics which periodically
   // get serialized and cleared by BuildAndStoreLog().
-  // TODO(zhenw): update sources to a map keyed by source ID.
-  std::vector<std::unique_ptr<UkmSource>> sources_;
+  std::map<int32_t, std::unique_ptr<UkmSource>> sources_;
   std::vector<std::unique_ptr<UkmEntry>> entries_;
+
+  // Whitelisted Entry hashes, only the ones in this set will be recorded.
+  std::set<uint64_t> whitelisted_entry_hashes_;
 
   // Weak pointers factory used to post task on different threads. All weak
   // pointers managed by this factory have the same lifetime as UkmService.

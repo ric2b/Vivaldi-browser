@@ -29,7 +29,7 @@ TestInterfaces::TestInterfaces()
     : test_runner_(new TestRunner(this)),
       delegate_(nullptr),
       main_view_(nullptr) {
-  blink::setLayoutTestMode(true);
+  blink::SetLayoutTestMode(true);
   // NOTE: please don't put feature specific enable flags here,
   // instead add them to RuntimeEnabledFeatures.json5
 
@@ -51,7 +51,10 @@ void TestInterfaces::SetMainView(blink::WebView* web_view) {
 }
 
 void TestInterfaces::SetDelegate(WebTestDelegate* delegate) {
-  gamepad_controller_ = GamepadController::Create(delegate);
+  if (delegate)
+    gamepad_controller_ = GamepadController::Create(delegate);
+  else
+    gamepad_controller_ = nullptr;
   test_runner_->SetDelegate(delegate);
   delegate_ = delegate;
 }
@@ -65,7 +68,7 @@ void TestInterfaces::BindTo(blink::WebFrame* frame) {
 void TestInterfaces::ResetTestHelperControllers() {
   if (gamepad_controller_)
     gamepad_controller_->Reset();
-  blink::WebCache::clear();
+  blink::WebCache::Clear();
 
   for (WebViewTestProxyBase* web_view_test_proxy_base : window_list_)
     web_view_test_proxy_base->Reset();
@@ -74,6 +77,10 @@ void TestInterfaces::ResetTestHelperControllers() {
 void TestInterfaces::ResetAll() {
   ResetTestHelperControllers();
   test_runner_->Reset();
+}
+
+bool TestInterfaces::TestIsRunning() {
+  return test_runner_->TestIsRunning();
 }
 
 void TestInterfaces::SetTestIsRunning(bool running) {
@@ -117,7 +124,8 @@ void TestInterfaces::ConfigureForTestWithURL(const blink::WebURL& test_url,
   }
   if (spec.find("/external/wpt/") != std::string::npos ||
       spec.find("/external/csswg-test/") != std::string::npos ||
-      spec.find("://web-platform.test") != std::string::npos)
+      spec.find("://web-platform.test") != std::string::npos ||
+      spec.find("/harness-tests/wpt/") != std::string::npos)
     test_runner_->set_is_web_platform_tests_mode();
 }
 

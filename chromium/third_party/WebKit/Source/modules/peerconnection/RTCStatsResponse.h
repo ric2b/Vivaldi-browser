@@ -29,9 +29,9 @@
 #include "modules/peerconnection/RTCLegacyStatsReport.h"
 #include "platform/heap/Handle.h"
 #include "platform/peerconnection/RTCStatsResponseBase.h"
-#include "wtf/HashMap.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -40,22 +40,22 @@ class RTCStatsResponse final : public RTCStatsResponseBase,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static RTCStatsResponse* create();
+  static RTCStatsResponse* Create();
 
   const HeapVector<Member<RTCLegacyStatsReport>>& result() const {
-    return m_result;
+    return result_;
   }
   RTCLegacyStatsReport* namedItem(const AtomicString& name);
 
-  void addStats(const WebRTCLegacyStats&) override;
+  void AddStats(const WebRTCLegacyStats&) override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   RTCStatsResponse();
 
-  HeapVector<Member<RTCLegacyStatsReport>> m_result;
-  HashMap<String, int> m_idmap;
+  HeapVector<Member<RTCLegacyStatsReport>> result_;
+  HashMap<String, int> idmap_;
 };
 
 }  // namespace blink

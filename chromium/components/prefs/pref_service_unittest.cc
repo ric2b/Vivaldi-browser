@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/mock_pref_change_callback.h"
@@ -38,7 +39,7 @@ TEST(PrefServiceTest, NoObserverFire) {
   registrar.Add(pref_name, obs.GetCallback());
 
   // This should fire the checks in MockPrefChangeCallback::OnPreferenceChanged.
-  const base::StringValue expected_value(new_pref_value);
+  const base::Value expected_value(new_pref_value);
   obs.Expect(pref_name, &expected_value);
   prefs.SetString(pref_name, new_pref_value);
   Mock::VerifyAndClearExpectations(&obs);
@@ -50,7 +51,7 @@ TEST(PrefServiceTest, NoObserverFire) {
   Mock::VerifyAndClearExpectations(&obs);
 
   // Clearing the pref should cause the pref to fire.
-  const base::StringValue expected_default_value((std::string()));
+  const base::Value expected_default_value((std::string()));
   obs.Expect(pref_name, &expected_default_value);
   prefs.ClearPref(pref_name);
   Mock::VerifyAndClearExpectations(&obs);
@@ -84,11 +85,11 @@ TEST(PrefServiceTest, Observers) {
 
   TestingPrefServiceSimple prefs;
   prefs.SetUserPref(pref_name,
-                    new base::StringValue("http://www.cnn.com"));
+                    base::MakeUnique<base::Value>("http://www.cnn.com"));
   prefs.registry()->RegisterStringPref(pref_name, std::string());
 
   const char new_pref_value[] = "http://www.google.com/";
-  const base::StringValue expected_new_pref_value(new_pref_value);
+  const base::Value expected_new_pref_value(new_pref_value);
   MockPrefChangeCallback obs(&prefs);
   PrefChangeRegistrar registrar;
   registrar.Init(&prefs);
@@ -104,7 +105,7 @@ TEST(PrefServiceTest, Observers) {
 
   // Now try adding a second pref observer.
   const char new_pref_value2[] = "http://www.youtube.com/";
-  const base::StringValue expected_new_pref_value2(new_pref_value2);
+  const base::Value expected_new_pref_value2(new_pref_value2);
   MockPrefChangeCallback obs2(&prefs);
   obs.Expect(pref_name, &expected_new_pref_value2);
   obs2.Expect(pref_name, &expected_new_pref_value2);
@@ -115,12 +116,12 @@ TEST(PrefServiceTest, Observers) {
   Mock::VerifyAndClearExpectations(&obs2);
 
   // Set a recommended value.
-  const base::StringValue recommended_pref_value("http://www.gmail.com/");
+  const base::Value recommended_pref_value("http://www.gmail.com/");
   obs.Expect(pref_name, &expected_new_pref_value2);
   obs2.Expect(pref_name, &expected_new_pref_value2);
   // This should fire the checks in obs and obs2 but with an unchanged value
   // as the recommended value is being overridden by the user-set value.
-  prefs.SetRecommendedPref(pref_name, recommended_pref_value.DeepCopy());
+  prefs.SetRecommendedPref(pref_name, recommended_pref_value.CreateDeepCopy());
   Mock::VerifyAndClearExpectations(&obs);
   Mock::VerifyAndClearExpectations(&obs2);
 
@@ -142,8 +143,7 @@ TEST(PrefServiceTest, GetValueChangedType) {
   prefs.registry()->RegisterIntegerPref(kPrefName, kTestValue);
 
   // Check falling back to a recommended value.
-  prefs.SetUserPref(kPrefName,
-                    new base::StringValue("not an integer"));
+  prefs.SetUserPref(kPrefName, base::MakeUnique<base::Value>("not an integer"));
   const PrefService::Preference* pref = prefs.FindPreference(kPrefName);
   ASSERT_TRUE(pref);
   const base::Value* value = pref->GetValue();
@@ -178,7 +178,7 @@ TEST(PrefServiceTest, GetValueAndGetRecommendedValue) {
   ASSERT_FALSE(value);
 
   // Set a user-set value.
-  prefs.SetUserPref(kPrefName, new base::Value(kUserValue));
+  prefs.SetUserPref(kPrefName, base::MakeUnique<base::Value>(kUserValue));
 
   // Check that GetValue() returns the user-set value.
   value = pref->GetValue();
@@ -193,7 +193,8 @@ TEST(PrefServiceTest, GetValueAndGetRecommendedValue) {
   ASSERT_FALSE(value);
 
   // Set a recommended value.
-  prefs.SetRecommendedPref(kPrefName, new base::Value(kRecommendedValue));
+  prefs.SetRecommendedPref(kPrefName,
+                           base::MakeUnique<base::Value>(kRecommendedValue));
 
   // Check that GetValue() returns the user-set value.
   value = pref->GetValue();
@@ -314,8 +315,9 @@ TEST(PrefServiceTest, WriteablePrefStoreFlags) {
 
   for (size_t i = 0; i < arraysize(kRegistrationToWriteFlags); ++i) {
     RegistrationToWriteFlags entry = kRegistrationToWriteFlags[i];
-    registry->RegisterDictionaryPref(
-        entry.pref_name, new base::DictionaryValue(), entry.registration_flags);
+    registry->RegisterDictionaryPref(entry.pref_name,
+                                     base::MakeUnique<base::DictionaryValue>(),
+                                     entry.registration_flags);
 
     SCOPED_TRACE("Currently testing pref with name: " +
                  std::string(entry.pref_name));
@@ -332,7 +334,8 @@ TEST(PrefServiceTest, WriteablePrefStoreFlags) {
     EXPECT_TRUE(flag_checker->last_write_flags_set());
     EXPECT_EQ(entry.write_flags, flag_checker->GetLastFlagsAndClear());
 
-    prefs->SetUserPrefValue(entry.pref_name, new base::DictionaryValue());
+    prefs->SetUserPrefValue(entry.pref_name,
+                            base::MakeUnique<base::DictionaryValue>());
     EXPECT_TRUE(flag_checker->last_write_flags_set());
     EXPECT_EQ(entry.write_flags, flag_checker->GetLastFlagsAndClear());
   }
@@ -354,7 +357,7 @@ const char PrefServiceSetValueTest::kValue[] = "value";
 
 TEST_F(PrefServiceSetValueTest, SetStringValue) {
   const char default_string[] = "default";
-  const base::StringValue default_value(default_string);
+  const base::Value default_value(default_string);
   prefs_.registry()->RegisterStringPref(kName, default_string);
 
   PrefChangeRegistrar registrar;
@@ -370,7 +373,7 @@ TEST_F(PrefServiceSetValueTest, SetStringValue) {
   prefs_.Set(kName, default_value);
   Mock::VerifyAndClearExpectations(&observer_);
 
-  base::StringValue new_value(kValue);
+  base::Value new_value(kValue);
   observer_.Expect(kName, &new_value);
   prefs_.Set(kName, new_value);
   Mock::VerifyAndClearExpectations(&observer_);

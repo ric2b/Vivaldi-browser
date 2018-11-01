@@ -63,6 +63,7 @@ class ResourcePrefetchCommonTest : public testing::Test {
         profile_.get(), PrefetchOrigin::EXTERNAL));
     EXPECT_FALSE(config.IsPrefetchingEnabledForOrigin(
         profile_.get(), PrefetchOrigin::NAVIGATION));
+    EXPECT_GT(config.min_resource_hits_to_trigger_prefetch, 1U);
   }
 
   void TestIsDefaultExtraConfig(const ResourcePrefetchPredictorConfig& config) {
@@ -71,6 +72,9 @@ class ResourcePrefetchCommonTest : public testing::Test {
     EXPECT_FALSE(config.IsMoreResourcesEnabledForTest());
     EXPECT_FALSE(config.IsSmallDBEnabledForTest());
     EXPECT_FALSE(config.is_url_learning_enabled);
+    EXPECT_FALSE(config.is_manifests_enabled);
+    EXPECT_FALSE(config.is_origin_learning_enabled);
+    EXPECT_GT(config.min_resource_hits_to_trigger_prefetch, 1U);
   }
 
  protected:
@@ -144,6 +148,31 @@ TEST_F(ResourcePrefetchCommonTest, EnableUrlLearning) {
   EXPECT_TRUE(IsSpeculativeResourcePrefetchingEnabled(profile_.get(), &config));
   TestIsPrefetchLearning(config);
   EXPECT_TRUE(config.is_url_learning_enabled);
+}
+
+TEST_F(ResourcePrefetchCommonTest, EnableManifests) {
+  variations::testing::VariationParamsManager params_manager(
+      "dummy-trial",
+      {{kModeParamName, kLearningMode}, {kEnableManifestsParamName, "true"}},
+      {kSpeculativeResourcePrefetchingFeatureName});
+
+  ResourcePrefetchPredictorConfig config;
+  EXPECT_TRUE(IsSpeculativeResourcePrefetchingEnabled(profile_.get(), &config));
+  TestIsPrefetchLearning(config);
+  EXPECT_TRUE(config.is_manifests_enabled);
+}
+
+TEST_F(ResourcePrefetchCommonTest, EnableOriginLearning) {
+  variations::testing::VariationParamsManager params_manager(
+      "dummy-trial",
+      {{kModeParamName, kLearningMode},
+       {kEnableOriginLearningParamName, "true"}},
+      {kSpeculativeResourcePrefetchingFeatureName});
+
+  ResourcePrefetchPredictorConfig config;
+  EXPECT_TRUE(IsSpeculativeResourcePrefetchingEnabled(profile_.get(), &config));
+  TestIsPrefetchLearning(config);
+  EXPECT_TRUE(config.is_origin_learning_enabled);
 }
 
 // Verifies whether prefetching is disabled according to the network type. But

@@ -61,6 +61,7 @@ void ValidateRenderFrameId(int render_process_id,
 
 AudioRendererHost::AudioRendererHost(int render_process_id,
                                      media::AudioManager* audio_manager,
+                                     media::AudioSystem* audio_system,
                                      AudioMirroringManager* mirroring_manager,
                                      MediaStreamManager* media_stream_manager,
                                      const std::string& salt)
@@ -71,7 +72,7 @@ AudioRendererHost::AudioRendererHost(int render_process_id,
       media_stream_manager_(media_stream_manager),
       salt_(salt),
       validate_render_frame_id_function_(&ValidateRenderFrameId),
-      authorization_handler_(audio_manager_,
+      authorization_handler_(audio_system,
                              media_stream_manager,
                              render_process_id_,
                              salt) {
@@ -106,7 +107,7 @@ void AudioRendererHost::OnDestruct() const {
 void AudioRendererHost::OnStreamCreated(
     int stream_id,
     base::SharedMemory* shared_memory,
-    base::CancelableSyncSocket* foreign_socket) {
+    std::unique_ptr<base::CancelableSyncSocket> foreign_socket) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (!PeerHandle()) {
@@ -310,7 +311,7 @@ void AudioRendererHost::OnCreateStream(int stream_id,
   media_internals->SetWebContentsTitleForAudioLogEntry(
       stream_id, render_process_id_, render_frame_id, audio_log.get());
   delegates_.push_back(
-      base::WrapUnique<AudioOutputDelegate>(new AudioOutputDelegateImpl(
+      base::WrapUnique<media::AudioOutputDelegate>(new AudioOutputDelegateImpl(
           this, audio_manager_, std::move(audio_log), mirroring_manager_,
           media_observer, stream_id, render_frame_id, render_process_id_,
           params, device_unique_id)));
@@ -319,7 +320,7 @@ void AudioRendererHost::OnCreateStream(int stream_id,
 void AudioRendererHost::OnPlayStream(int stream_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  AudioOutputDelegate* delegate = LookupById(stream_id);
+  media::AudioOutputDelegate* delegate = LookupById(stream_id);
   if (!delegate) {
     SendErrorMessage(stream_id);
     return;
@@ -331,7 +332,7 @@ void AudioRendererHost::OnPlayStream(int stream_id) {
 void AudioRendererHost::OnPauseStream(int stream_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  AudioOutputDelegate* delegate = LookupById(stream_id);
+  media::AudioOutputDelegate* delegate = LookupById(stream_id);
   if (!delegate) {
     SendErrorMessage(stream_id);
     return;
@@ -343,7 +344,7 @@ void AudioRendererHost::OnPauseStream(int stream_id) {
 void AudioRendererHost::OnSetVolume(int stream_id, double volume) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  AudioOutputDelegate* delegate = LookupById(stream_id);
+  media::AudioOutputDelegate* delegate = LookupById(stream_id);
   if (!delegate) {
     SendErrorMessage(stream_id);
     return;
@@ -380,12 +381,12 @@ AudioRendererHost::LookupIteratorById(int stream_id) {
 
   return std::find_if(
       delegates_.begin(), delegates_.end(),
-      [stream_id](const std::unique_ptr<AudioOutputDelegate>& d) {
+      [stream_id](const std::unique_ptr<media::AudioOutputDelegate>& d) {
         return d->GetStreamId() == stream_id;
       });
 }
 
-AudioOutputDelegate* AudioRendererHost::LookupById(int stream_id) {
+media::AudioOutputDelegate* AudioRendererHost::LookupById(int stream_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   auto i = LookupIteratorById(stream_id);

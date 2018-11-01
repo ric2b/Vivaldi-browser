@@ -62,23 +62,27 @@
     "channel": "stable",
     "extension_types": ["platform_app"]
   },
-  "app.window.ime": [
-    {
-       "channel": "stable",
-       "extension_types": ["extension"],
-       "platforms": ["chromeos"],
-       "whitelist": [
-         "06BE211D5F014BAB34BC22D9DDA09C63A81D828E",
-         "F94EE6AB36D6C6588670B2B01EB65212D9C64E33",
-         "B9EF10DDFEA11EF77873CC5009809E5037FC4C7A"   // http://crbug.com/435380
-       ]
-    }
-  ],
+  "app.window.ime": {
+     "channel": "stable",
+     "extension_types": ["extension"],
+     "platforms": ["chromeos"],
+     "whitelist": [
+       "06BE211D5F014BAB34BC22D9DDA09C63A81D828E",
+       "F94EE6AB36D6C6588670B2B01EB65212D9C64E33",
+       "B9EF10DDFEA11EF77873CC5009809E5037FC4C7A"   // http://crbug.com/435380
+     ]
+  },
   "appview": {
     "channel": "stable",
     "extension_types": ["platform_app"]
   },
   "audio": [
+    {
+      "channel": "stable",
+      "extension_types": ["platform_app"],
+      "platforms": ["chromeos"],
+      "session_types": ["kiosk"]
+    },
     {
       "channel": "dev",
       "extension_types": ["platform_app"]
@@ -233,7 +237,11 @@
         "496B6890097EB6E19809ADEADD095A8721FBB2E0",  // FIDO U2F APIs
         "AD8ED80B705E1818AAD4684F9FF62B43D6D79620",  // FIDO U2F APIs (dev)
         "E24F1786D842E91E74C27929B0B3715A4689A473",  // CryptoToken
-        "A28C9619C4C41306FA5236FB4D94DA812F504DE8"   // CryptoToken (dev)
+        "A28C9619C4C41306FA5236FB4D94DA812F504DE8",  // CryptoToken (dev)
+        "D7CD4B3956B1F6E970E4AFCBCD4094B1EF4D07B9",  // http://crbug.com/710541
+        "D4EFCCC0CC612380762758BB96C7997224BD6395",  // http://crbug.com/710541
+        "4839A26B29CD1BD021B2E126EF6D28C9CB84018B",  // http://crbug.com/710541
+        "8F44FBB4474CCDF23450B166C9E83E85BD03AE24"   // http://crbug.com/710541
       ]
     }
   ],
@@ -298,7 +306,7 @@
     "extension_types": ["extension", "platform_app"]
   },
   "networking.onc": [{
-    "channel": "dev",
+    "channel": "stable",
     "extension_types": ["platform_app"],
     "platforms": ["chromeos"],
     "session_types": ["kiosk.autolaunched"]
@@ -456,20 +464,18 @@
       "whitelist": ["B44D08FD98F1523ED5837D78D0A606EA9D6206E5"]  // Web Store
     }
   ],
-  "u2fDevices": [
-    {
-      "channel": "stable",
-      "extension_types": ["extension", "platform_app"],
-      "whitelist": [
-        "496B6890097EB6E19809ADEADD095A8721FBB2E0",  // FIDO U2F APIs
-        "AD8ED80B705E1818AAD4684F9FF62B43D6D79620",  // FIDO U2F APIs (dev)
-        "E24F1786D842E91E74C27929B0B3715A4689A473",  // CryptoToken
-        "A28C9619C4C41306FA5236FB4D94DA812F504DE8",  // CryptoToken (dev)
-        "6F9E349A0561C78A0D3F41496FE521C5151C7F71",  // Security Key
-        "C06709A259378015404ED20F75C7D08547E0F10B"   // Security Key (dev)
-      ]
-    }
-  ],
+  "u2fDevices": {
+    "channel": "stable",
+    "extension_types": ["extension", "platform_app"],
+    "whitelist": [
+      "496B6890097EB6E19809ADEADD095A8721FBB2E0",  // FIDO U2F APIs
+      "AD8ED80B705E1818AAD4684F9FF62B43D6D79620",  // FIDO U2F APIs (dev)
+      "E24F1786D842E91E74C27929B0B3715A4689A473",  // CryptoToken
+      "A28C9619C4C41306FA5236FB4D94DA812F504DE8",  // CryptoToken (dev)
+      "6F9E349A0561C78A0D3F41496FE521C5151C7F71",  // Security Key
+      "C06709A259378015404ED20F75C7D08547E0F10B"   // Security Key (dev)
+    ]
+  },
   "unlimitedStorage": {
     "channel": "stable",
     "extension_types": [
@@ -504,7 +510,11 @@
         "496B6890097EB6E19809ADEADD095A8721FBB2E0",  // FIDO U2F APIs
         "AD8ED80B705E1818AAD4684F9FF62B43D6D79620",  // FIDO U2F APIs (dev)
         "E24F1786D842E91E74C27929B0B3715A4689A473",  // CryptoToken
-        "A28C9619C4C41306FA5236FB4D94DA812F504DE8"   // CryptoToken (dev)
+        "A28C9619C4C41306FA5236FB4D94DA812F504DE8",  // CryptoToken (dev)
+        "D7CD4B3956B1F6E970E4AFCBCD4094B1EF4D07B9",  // http://crbug.com/710541
+        "D4EFCCC0CC612380762758BB96C7997224BD6395",  // http://crbug.com/710541
+        "4839A26B29CD1BD021B2E126EF6D28C9CB84018B",  // http://crbug.com/710541
+        "8F44FBB4474CCDF23450B166C9E83E85BD03AE24"   // http://crbug.com/710541
       ]
     }
   ],

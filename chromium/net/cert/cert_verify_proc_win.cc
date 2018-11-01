@@ -369,8 +369,12 @@ void GetCertChainInfo(PCCERT_CHAIN_CONTEXT chain_context,
     // Add the root certificate, if present, as it was not added above.
     if (has_root_ca)
       verified_chain.push_back(element[num_elements]->pCertContext);
-    verify_result->verified_cert =
-          X509Certificate::CreateFromHandle(verified_cert, verified_chain);
+    scoped_refptr<X509Certificate> verified_cert_with_chain =
+        X509Certificate::CreateFromHandle(verified_cert, verified_chain);
+    if (verified_cert_with_chain)
+      verify_result->verified_cert = std::move(verified_cert_with_chain);
+    else
+      verify_result->cert_status |= CERT_STATUS_INVALID;
   }
 }
 
@@ -662,7 +666,7 @@ class RevocationInjector {
   void SetCRLSet(CRLSet* crl_set) { thread_local_crlset.Set(crl_set); }
 
  private:
-  friend struct base::DefaultLazyInstanceTraits<RevocationInjector>;
+  friend struct base::LazyInstanceTraitsBase<RevocationInjector>;
 
   RevocationInjector() {
     const CRYPT_OID_FUNC_ENTRY kInterceptFunction[] = {

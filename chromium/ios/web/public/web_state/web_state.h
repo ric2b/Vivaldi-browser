@@ -43,6 +43,7 @@ namespace web {
 
 class BrowserState;
 class NavigationManager;
+class SessionCertificatePolicyCache;
 class WebInterstitial;
 class WebStateDelegate;
 class WebStateObserver;
@@ -57,7 +58,13 @@ class WebState : public base::SupportsUserData {
     explicit CreateParams(web::BrowserState* browser_state);
     ~CreateParams();
 
+    // The corresponding BrowserState for the new WebState.
     web::BrowserState* browser_state;
+
+    // Whether the WebState is created as the result of a window.open or by
+    // clicking a link with a blank target.  Used to determine whether the
+    // WebState is allowed to be closed via window.close().
+    bool created_with_opener;
   };
 
   // Parameters for the OpenURL() method.
@@ -85,9 +92,12 @@ class WebState : public base::SupportsUserData {
 
   // Creates a new WebState.
   static std::unique_ptr<WebState> Create(const CreateParams& params);
-  // Creates a new WebState from a serialized NavigationManager.
-  static std::unique_ptr<WebState> Create(const CreateParams& params,
-                                          CRWSessionStorage* session_storage);
+
+  // Creates a new WebState from a serialized representation of the session.
+  // |session_storage| must not be nil.
+  static std::unique_ptr<WebState> CreateWithStorageSession(
+      const CreateParams& params,
+      CRWSessionStorage* session_storage);
 
   ~WebState() override {}
 
@@ -100,8 +110,9 @@ class WebState : public base::SupportsUserData {
   virtual bool IsWebUsageEnabled() const = 0;
   virtual void SetWebUsageEnabled(bool enabled) = 0;
 
-  // Whether or not dialogs (JavaScript dialogs, HTTP auths and window.open)
-  // calls should be suppressed. Default is false.
+  // Whether or not dialogs (JavaScript, geolocation) and window open requests
+  // should be suppressed. Default is false. When dialog is suppressed
+  // |WebStateObserver::DidSuppressDialog| will be called.
   virtual bool ShouldSuppressDialogs() const = 0;
   virtual void SetShouldSuppressDialogs(bool should_suppress) = 0;
 
@@ -124,6 +135,12 @@ class WebState : public base::SupportsUserData {
   // null.
   virtual const NavigationManager* GetNavigationManager() const = 0;
   virtual NavigationManager* GetNavigationManager() = 0;
+
+  // Gets the SessionCertificatePolicyCache for this WebState.  Can never return
+  // null.
+  virtual const SessionCertificatePolicyCache*
+  GetSessionCertificatePolicyCache() const = 0;
+  virtual SessionCertificatePolicyCache* GetSessionCertificatePolicyCache() = 0;
 
   // Creates a serializable representation of the session. The returned value
   // is autoreleased.
@@ -229,6 +246,10 @@ class WebState : public base::SupportsUserData {
 
   // Returns Mojo interface registry for this WebState.
   virtual service_manager::InterfaceRegistry* GetMojoInterfaceRegistry() = 0;
+
+  // Returns whether this WebState was created with an opener.  See
+  // CreateParams::created_with_opener for more details.
+  virtual bool HasOpener() const = 0;
 
  protected:
   friend class WebStateObserver;

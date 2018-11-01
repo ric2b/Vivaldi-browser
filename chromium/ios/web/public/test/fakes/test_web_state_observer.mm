@@ -8,6 +8,7 @@
 #include "ios/web/public/web_state/navigation_context.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "ios/web/web_state/navigation_context_impl.h"
+#include "net/http/http_response_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace web {
@@ -68,26 +69,40 @@ void TestWebStateObserver::DidFinishNavigation(NavigationContext* context) {
   did_finish_navigation_info_ =
       base::MakeUnique<web::TestDidFinishNavigationInfo>();
   did_finish_navigation_info_->web_state = web_state();
-  if (context->IsSamePage()) {
+  if (context->IsSameDocument()) {
     ASSERT_FALSE(context->IsErrorPage());
     did_finish_navigation_info_->context =
-        NavigationContextImpl::CreateSamePageNavigationContext(
+        NavigationContextImpl::CreateSameDocumentNavigationContext(
             context->GetWebState(), context->GetUrl());
   } else if (context->IsErrorPage()) {
-    ASSERT_FALSE(context->IsSamePage());
+    ASSERT_FALSE(context->IsSameDocument());
     did_finish_navigation_info_->context =
         NavigationContextImpl::CreateErrorPageNavigationContext(
-            context->GetWebState(), context->GetUrl());
+            context->GetWebState(), context->GetUrl(),
+            context->GetResponseHeaders());
   } else {
     did_finish_navigation_info_->context =
-        NavigationContextImpl::CreateNavigationContext(context->GetWebState(),
-                                                       context->GetUrl());
+        NavigationContextImpl::CreateNavigationContext(
+            context->GetWebState(), context->GetUrl(),
+            context->GetResponseHeaders());
   }
 }
 
 void TestWebStateObserver::TitleWasSet() {
   title_was_set_info_ = base::MakeUnique<web::TestTitleWasSetInfo>();
   title_was_set_info_->web_state = web_state();
+}
+
+void TestWebStateObserver::DidChangeVisibleSecurityState() {
+  did_change_visible_security_state_info_ =
+      base::MakeUnique<web::TestDidChangeVisibleSecurityStateInfo>();
+  did_change_visible_security_state_info_->web_state = web_state();
+}
+
+void TestWebStateObserver::DidSuppressDialog() {
+  did_suppress_dialog_info_ =
+      base::MakeUnique<web::TestDidSuppressDialogInfo>();
+  did_suppress_dialog_info_->web_state = web_state();
 }
 
 void TestWebStateObserver::DocumentSubmitted(const std::string& form_name,

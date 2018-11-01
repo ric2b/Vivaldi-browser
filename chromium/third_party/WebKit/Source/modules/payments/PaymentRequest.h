@@ -13,24 +13,24 @@
 #include "core/events/EventTarget.h"
 #include "modules/ModulesExport.h"
 #include "modules/payments/PaymentCompleter.h"
-#include "modules/payments/PaymentDetails.h"
 #include "modules/payments/PaymentMethodData.h"
 #include "modules/payments/PaymentOptions.h"
 #include "modules/payments/PaymentUpdater.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Compiler.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/RefPtr.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Compiler.h"
+#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 class ExceptionState;
 class ExecutionContext;
 class PaymentAddress;
+class PaymentDetailsInit;
 class ScriptPromiseResolver;
 class ScriptState;
 
@@ -46,13 +46,13 @@ class MODULES_EXPORT PaymentRequest final
   WTF_MAKE_NONCOPYABLE(PaymentRequest);
 
  public:
-  static PaymentRequest* create(ExecutionContext*,
+  static PaymentRequest* Create(ExecutionContext*,
                                 const HeapVector<PaymentMethodData>&,
-                                const PaymentDetails&,
+                                const PaymentDetailsInit&,
                                 ExceptionState&);
-  static PaymentRequest* create(ExecutionContext*,
+  static PaymentRequest* Create(ExecutionContext*,
                                 const HeapVector<PaymentMethodData>&,
-                                const PaymentDetails&,
+                                const PaymentDetailsInit&,
                                 const PaymentOptions&,
                                 ExceptionState&);
 
@@ -61,9 +61,9 @@ class MODULES_EXPORT PaymentRequest final
   ScriptPromise show(ScriptState*);
   ScriptPromise abort(ScriptState*);
 
-  PaymentAddress* getShippingAddress() const { return m_shippingAddress.get(); }
-  const String& shippingOption() const { return m_shippingOption; }
-  const String& shippingType() const { return m_shippingType; }
+  PaymentAddress* getShippingAddress() const { return shipping_address_.Get(); }
+  const String& shippingOption() const { return shipping_option_; }
+  const String& shippingType() const { return shipping_type_; }
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shippingaddresschange);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shippingoptionchange);
@@ -71,60 +71,60 @@ class MODULES_EXPORT PaymentRequest final
   ScriptPromise canMakePayment(ScriptState*);
 
   // ScriptWrappable:
-  bool hasPendingActivity() const override;
+  bool HasPendingActivity() const override;
 
   // EventTargetWithInlineData:
-  const AtomicString& interfaceName() const override;
-  ExecutionContext* getExecutionContext() const override;
+  const AtomicString& InterfaceName() const override;
+  ExecutionContext* GetExecutionContext() const override;
 
   // PaymentCompleter:
-  ScriptPromise complete(ScriptState*, PaymentComplete result) override;
+  ScriptPromise Complete(ScriptState*, PaymentComplete result) override;
 
   // PaymentUpdater:
-  void onUpdatePaymentDetails(const ScriptValue& detailsScriptValue) override;
-  void onUpdatePaymentDetailsFailure(const String& error) override;
+  void OnUpdatePaymentDetails(const ScriptValue& details_script_value) override;
+  void OnUpdatePaymentDetailsFailure(const String& error) override;
 
   DECLARE_TRACE();
 
-  void onCompleteTimeoutForTesting();
+  void OnCompleteTimeoutForTesting();
 
  private:
   PaymentRequest(ExecutionContext*,
                  const HeapVector<PaymentMethodData>&,
-                 const PaymentDetails&,
+                 const PaymentDetailsInit&,
                  const PaymentOptions&,
                  ExceptionState&);
 
   // LifecycleObserver:
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
   // payments::mojom::blink::PaymentRequestClient:
   void OnShippingAddressChange(
       payments::mojom::blink::PaymentAddressPtr) override;
-  void OnShippingOptionChange(const String& shippingOptionId) override;
+  void OnShippingOptionChange(const String& shipping_option_id) override;
   void OnPaymentResponse(payments::mojom::blink::PaymentResponsePtr) override;
   void OnError(payments::mojom::blink::PaymentErrorReason) override;
   void OnComplete() override;
-  void OnAbort(bool abortedSuccessfully) override;
+  void OnAbort(bool aborted_successfully) override;
   void OnCanMakePayment(
       payments::mojom::blink::CanMakePaymentQueryResult) override;
 
-  void onCompleteTimeout(TimerBase*);
+  void OnCompleteTimeout(TimerBase*);
 
   // Clears the promise resolvers and closes the Mojo connection.
-  void clearResolversAndCloseMojoConnection();
+  void ClearResolversAndCloseMojoConnection();
 
-  PaymentOptions m_options;
-  Member<PaymentAddress> m_shippingAddress;
-  String m_shippingOption;
-  String m_shippingType;
-  Member<ScriptPromiseResolver> m_showResolver;
-  Member<ScriptPromiseResolver> m_completeResolver;
-  Member<ScriptPromiseResolver> m_abortResolver;
-  Member<ScriptPromiseResolver> m_canMakePaymentResolver;
-  payments::mojom::blink::PaymentRequestPtr m_paymentProvider;
-  mojo::Binding<payments::mojom::blink::PaymentRequestClient> m_clientBinding;
-  TaskRunnerTimer<PaymentRequest> m_completeTimer;
+  PaymentOptions options_;
+  Member<PaymentAddress> shipping_address_;
+  String shipping_option_;
+  String shipping_type_;
+  Member<ScriptPromiseResolver> show_resolver_;
+  Member<ScriptPromiseResolver> complete_resolver_;
+  Member<ScriptPromiseResolver> abort_resolver_;
+  Member<ScriptPromiseResolver> can_make_payment_resolver_;
+  payments::mojom::blink::PaymentRequestPtr payment_provider_;
+  mojo::Binding<payments::mojom::blink::PaymentRequestClient> client_binding_;
+  TaskRunnerTimer<PaymentRequest> complete_timer_;
 };
 
 }  // namespace blink

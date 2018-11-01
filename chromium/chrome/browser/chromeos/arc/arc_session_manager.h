@@ -42,8 +42,14 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   //   so that this service is not yet initialized, or Chrome is being shut
   //   down so that this is destroyed.
   // STOPPED: ARC session is not running, or being terminated.
-  // SHOWING_TERMS_OF_SERVICE: "Terms Of Service" page is shown on ARC support
-  //   Chrome app.
+  // NEGOTIATING_TERMS_OF_SERVICE: Negotiating Google Play Store "Terms of
+  //   Service" with a user. There are several ways for the negotiation,
+  //   including opt-in flow, which shows "Terms of Service" page on ARC
+  //   support app, and OOBE flow, which shows "Terms of Service" page as a
+  //   part of Chrome OOBE flow.
+  //   If user does not accept the Terms of Service, disables Google Play
+  //   Store, which triggers RequestDisable() and the state will be set to
+  //   STOPPED, then.
   // CHECKING_ANDROID_MANAGEMENT: Checking Android management status. Note that
   //   the status is checked for each ARC session starting, but this is the
   //   state only for the first boot case (= opt-in case). The second time and
@@ -60,9 +66,9 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // ...(any)... -> STOPPED: on error.
   //
   // In the first boot case:
-  //   STOPPED -> SHOWING_TERMS_OF_SERVICE: when arc.enabled preference is set.
-  //   SHOWING_TERMS_OF_SERVICE -> CHECKING_ANDROID_MANAGEMENT: when a user
-  //     agree with "Terms Of Service"
+  //   STOPPED -> NEGOTIATING_TERMS_OF_SERVICE: On request to enable.
+  //   NEGOTIATING_TERMS_OF_SERVICE -> CHECKING_ANDROID_MANAGEMENT: when a user
+  //     accepts "Terms Of Service"
   //   CHECKING_ANDROID_MANAGEMENT -> ACTIVE: when the auth token is
   //     successfully fetched.
   //
@@ -75,7 +81,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   enum class State {
     NOT_INITIALIZED,
     STOPPED,
-    SHOWING_TERMS_OF_SERVICE,
+    NEGOTIATING_TERMS_OF_SERVICE,
     CHECKING_ANDROID_MANAGEMENT,
     REMOVING_DATA_DIR,
     ACTIVE,
@@ -167,6 +173,13 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // If it is already requested to disable, no-op.
   void RequestDisable();
 
+  // Requests to remove the ARC data.
+  // If ARC is stopped, triggers to remove the data. Otherwise, queues to
+  // remove the data after ARC stops.
+  // A log statement with the removal reason must be added prior to calling
+  // this.
+  void RequestArcDataRemoval();
+
   // Called from the Chrome OS metrics provider to record Arc.State
   // periodically.
   void RecordArcState();
@@ -183,11 +196,6 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // This is a special method to support enterprise device lost case.
   // This can be called only when ARC is running.
   void StopAndEnableArc();
-
-  // Removes the data if ARC is stopped. Otherwise, queue to remove the data
-  // on ARC is stopped. A log statement with the removal reason must be added
-  // prior to calling RemoveArcData().
-  void RemoveArcData();
 
   ArcSupportHost* support_host() { return support_host_.get(); }
 
@@ -232,27 +240,38 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // twice. This method can be called to bypass that check when restarting.
   void RequestEnableImpl();
 
-  // Negotiates the terms of service to user.
-  void StartTermsOfServiceNegotiation();
+  // Negotiates the terms of service to user, if necessary.
+  // Otherwise, move to StartAndroidManagementCheck().
+  void MaybeStartTermsOfServiceNegotiation();
   void OnTermsOfServiceNegotiated(bool accepted);
 
-  // Returns whether ARC is managed and all ARC related OptIn preferences are
-  // managed too.
-  bool AreArcAllOptInPreferencesManaged() const;
+  // Returns true if Terms of Service negotiation is needed. Otherwise false.
+  // TODO(crbug.com/698418): Write unittest for this utility after extracting
+  //   ToS related code from ArcSessionManager into a dedicated class.
+  bool IsArcTermsOfServiceNegotiationNeeded() const;
 
   void SetState(State state);
   void ShutdownSession();
-  void OnAndroidManagementPassed();
-  void OnArcDataRemoved(bool success);
   void OnArcSignInTimeout();
 
-  void StartArcAndroidManagementCheck();
-  void MaybeReenableArc();
+  // Starts Android management check. This is for first boot case (= Opt-in
+  // or OOBE flow case). In secondary or later ARC enabling, the check should
+  // run in background.
+  void StartAndroidManagementCheck();
 
   // Called when the Android management check is done in opt-in flow or
-  // re-auth flow.
+  // OOBE flow.
   void OnAndroidManagementChecked(
       policy::AndroidManagementClient::Result result);
+
+  // Starts Android management check in background (in parallel with starting
+  // ARC). This is for secondary or later ARC enabling.
+  // The reason running them in parallel is for performance. The secondary or
+  // later ARC enabling is typically on "logging into Chrome" for the user who
+  // already opted in to use Google Play Store. In such a case, network is
+  // typically not yet ready. Thus, if we block ARC boot, it delays several
+  // seconds, which is not very user friendly.
+  void StartBackgroundAndroidManagementCheck();
 
   // Called when the background Android management check is done. It is
   // triggered when the second or later ARC boot timing.
@@ -272,6 +291,19 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   // ArcSessionRunner::Observer:
   void OnSessionStopped(ArcStopReason reason, bool restarting) override;
+
+  // Starts to remove ARC data, if it is requested via RequestArcDataRemoval().
+  // On completion, OnArcDataRemoved() is called.
+  // If not requested, just skipping the data removal, and moves to
+  // MaybeReenableArc() directly.
+  void MaybeStartArcDataRemoval();
+  void OnArcDataRemoved(bool success);
+
+  // On ARC session stopped and/or data removal completion, this is called
+  // so that, if necessary, ARC session is restarted.
+  // TODO(hidehiko): This can be removed after the racy state machine
+  // is fixed.
+  void MaybeReenableArc();
 
   std::unique_ptr<ArcSessionRunner> arc_session_runner_;
 

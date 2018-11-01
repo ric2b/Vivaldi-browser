@@ -114,6 +114,11 @@ struct PrefsMapping kPrefsValues[] {
     {vivaldiprefs::kHideMouseCursorInFullscreen, booleanPreftype},
 #endif  // USE_AURA
 
+    // This is not stored in prefs but set on startup if the platform supports
+    // the API needed to expose the desktop wallpaper as the protocol
+    // chrome://vivaldi-data/desktop-image
+    {vivaldiprefs::kVivaldiHasDesktopWallpaperProtocol, booleanPreftype},
+
 #if defined(OS_MACOSX)
     {vivaldiprefs::kAppleKeyboardUIMode, numberPreftype},
     {vivaldiprefs::kAppleMiniaturizeOnDoubleClick, booleanPreftype},

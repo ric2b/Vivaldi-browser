@@ -7,14 +7,14 @@ import("//v8/gni/v8.gni")
 
 # This is depended upon from the browser DLL on Windows, where V8 is not used,
 # but features are enabled. This cannot depend on V8.
-source_set("gin_features") {
+component("gin_features") {
   sources = [
-    "gin_export.h",
     "gin_features.cc",
+    "gin_features_export.h",
     "public/gin_features.h",
   ]
 
-  defines = [ "GIN_IMPLEMENTATION" ]
+  defines = [ "GIN_FEATURES_IMPLEMENTATION" ]
 
   deps = [
     "//base",
@@ -159,6 +159,7 @@ source_set("gin_test") {
 
 test("gin_unittests") {
   sources = [
+    "arguments_unittest.cc",
     "converter_unittest.cc",
     "interceptor_unittest.cc",
     "modules/module_registry_unittest.cc",

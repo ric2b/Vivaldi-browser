@@ -140,7 +140,7 @@ void CrosSettings::SetDouble(const std::string& path, double in_value) {
 void CrosSettings::SetString(const std::string& path,
                              const std::string& in_value) {
   DCHECK(CalledOnValidThread());
-  base::StringValue value(in_value);
+  base::Value value(in_value);
   Set(path, value);
 }
 
@@ -245,7 +245,7 @@ bool CrosSettings::FindEmailInList(const std::string& path,
        entry != list->end();
        ++entry) {
     std::string entry_string;
-    if (!(*entry)->GetAsString(&entry_string)) {
+    if (!entry->GetAsString(&entry_string)) {
       NOTREACHED();
       continue;
     }

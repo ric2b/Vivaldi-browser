@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #import "base/mac/bind_objc_block.h"
+#include "base/mac/foundation_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browsing_data/core/pref_names.h"
@@ -24,7 +25,7 @@
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_menu_view_controller.h"
+#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -50,7 +51,12 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using chrome_test_util::ButtonWithAccessibilityLabelId;
+using chrome_test_util::NavigationBarDoneButton;
 
 namespace {
 
@@ -60,15 +66,8 @@ const char kUrl[] = "http://foo/browsing";
 const char kUrlWithSetCookie[] = "http://foo/set_cookie";
 const char kResponse[] = "bar";
 const char kResponseWithSetCookie[] = "bar with set cookie";
-const char kNoCookieText[] = "No cookies";
-const char kCookie[] = "a=b";
-const char kJavaScriptGetCookies[] =
-    "var c = document.cookie ? document.cookie.split(/;\\s*/) : [];"
-    "if (!c.length) {"
-    "  document.documentElement.innerHTML = 'No cookies!';"
-    "} else {"
-    "  document.documentElement.innerHTML = 'OK: ' + c.join(',');"
-    "}";
+NSString* const kCookieName = @"name";
+NSString* const kCookieValue = @"value";
 
 enum MetricsServiceType {
   kMetrics,
@@ -102,10 +101,6 @@ id<GREYMatcher> ClearBrowsingDataButton() {
 // Matcher for the clear browsing data action sheet item.
 id<GREYMatcher> ConfirmClearBrowsingDataButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_CONFIRM_CLEAR_BUTTON);
-}
-// Matcher for the done button in the navigation bar.
-id<GREYMatcher> NavigationDoneButton() {
-  return ButtonWithAccessibilityLabelId(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
 }
 // Matcher for the Settings button in the tools menu.
 id<GREYMatcher> SettingsButton() {
@@ -167,31 +162,8 @@ id<GREYMatcher> TranslateSettingsButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_TRANSLATE_SETTING);
 }
 // Matcher for the save button in the save password bar.
-id<GREYMatcher> savePasswordButton() {
+id<GREYMatcher> SavePasswordButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_PASSWORD_MANAGER_SAVE_BUTTON);
-}
-
-// Asserts that there is no cookie in current web state.
-void AssertNoCookieExists() {
-  NSError* error = nil;
-  chrome_test_util::ExecuteJavaScript(
-      base::SysUTF8ToNSString(kJavaScriptGetCookies), &error);
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kNoCookieText)]
-      assertWithMatcher:grey_notNil()];
-}
-
-// Asserts |cookie| exists in current web state.
-void AssertCookieExists(const char cookie[]) {
-  NSError* error = nil;
-  chrome_test_util::ExecuteJavaScript(
-      base::SysUTF8ToNSString(kJavaScriptGetCookies), &error);
-  NSString* const expectedCookieText =
-      [NSString stringWithFormat:@"OK: %@", base::SysUTF8ToNSString(cookie)];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                   base::SysNSStringToUTF8(expectedCookieText))]
-      assertWithMatcher:grey_notNil()];
 }
 
 // Run as a task to check if a certificate has been added to the ChannelIDStore.
@@ -220,7 +192,7 @@ void SetCertificate() {
   scoped_refptr<net::URLRequestContextGetter> getter =
       browserState->GetRequestContext();
   web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindBlock(^{
+      web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
         net::ChannelIDService* channel_id_service =
             getter->GetURLRequestContext()->channel_id_service();
         net::ChannelIDStore* channel_id_store =
@@ -238,7 +210,6 @@ void SetCertificate() {
                            base::Bind(&CheckCertificate, getter, semaphore));
 
   dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-  dispatch_release(semaphore);
 }
 
 // Fetching channel id is expected to complete immediately in this test, so a
@@ -256,7 +227,7 @@ bool IsCertificateCleared() {
   scoped_refptr<net::URLRequestContextGetter> getter =
       browserState->GetRequestContext();
   web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindBlock(^{
+      web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
         net::ChannelIDService* channel_id_service =
             getter->GetURLRequestContext()->channel_id_service();
         std::unique_ptr<crypto::ECPrivateKey> dummy_key;
@@ -265,7 +236,6 @@ bool IsCertificateCleared() {
         dispatch_semaphore_signal(semaphore);
       }));
   dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-  dispatch_release(semaphore);
   return result == net::ERR_FILE_NOT_FOUND;
 }
 
@@ -309,9 +279,7 @@ bool IsCertificateCleared() {
                                    grey_accessibilityTrait(
                                        UIAccessibilityTraitButton),
                                    nil)] performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)]
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -328,7 +296,7 @@ bool IsCertificateCleared() {
 // Exits Settings by clicking on the Done button.
 - (void)dismissSettings {
   // Dismiss the settings.
-  [[EarlGrey selectElementWithMatcher:NavigationDoneButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 
   // Wait for UI components to finish loading.
@@ -479,7 +447,7 @@ bool IsCertificateCleared() {
   // Login to page and click to save password and check that its saved.
   [ChromeEarlGrey loadURL:URL];
   chrome_test_util::TapWebViewElementWithId("Login");
-  [[EarlGrey selectElementWithMatcher:savePasswordButton()]
+  [[EarlGrey selectElementWithMatcher:SavePasswordButton()]
       performAction:grey_tap()];
 }
 
@@ -492,6 +460,17 @@ bool IsCertificateCleared() {
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:PasswordsButton()]
       performAction:grey_tap()];
+}
+
+- (void)setMetricsReportingEnabled:(BOOL)reportingEnabled
+                          wifiOnly:(BOOL)wifiOnly {
+  chrome_test_util::SetBooleanLocalStatePref(
+      metrics::prefs::kMetricsReportingEnabled, reportingEnabled);
+  chrome_test_util::SetBooleanLocalStatePref(prefs::kMetricsReportingWifiOnly,
+                                             wifiOnly);
+  // Breakpad uses dispatch_async to update its state. Wait to get to a
+  // consistent state.
+  chrome_test_util::WaitForBreakpadQueue();
 }
 
 // Checks for a given service that it is both recording and uploading, where
@@ -589,19 +568,13 @@ bool IsCertificateCleared() {
   //  - Services record data and upload data.
 
   // kMetricsReportingEnabled OFF and kMetricsReportingWifiOnly OFF
-  chrome_test_util::SetBooleanLocalStatePref(
-      metrics::prefs::kMetricsReportingEnabled, NO);
-  chrome_test_util::SetBooleanLocalStatePref(prefs::kMetricsReportingWifiOnly,
-                                             NO);
+  [self setMetricsReportingEnabled:NO wifiOnly:NO];
   // Service should be completely disabled.
   // I.e. no recording of data, and no uploading of what's been recorded.
   [self assertMetricsServiceDisabled:serviceType];
 
   // kMetricsReportingEnabled OFF and kMetricsReportingWifiOnly ON
-  chrome_test_util::SetBooleanLocalStatePref(
-      metrics::prefs::kMetricsReportingEnabled, NO);
-  chrome_test_util::SetBooleanLocalStatePref(prefs::kMetricsReportingWifiOnly,
-                                             YES);
+  [self setMetricsReportingEnabled:NO wifiOnly:YES];
   // If kMetricsReportingEnabled is OFF, any service should remain completely
   // disabled, i.e. no uploading even if kMetricsReportingWifiOnly is ON.
   [self assertMetricsServiceDisabled:serviceType];
@@ -615,32 +588,24 @@ bool IsCertificateCleared() {
   // the services, turning on and off according to the rules laid out above.
 
   // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly ON.
-  chrome_test_util::SetBooleanLocalStatePref(
-      metrics::prefs::kMetricsReportingEnabled, YES);
-  chrome_test_util::SetBooleanLocalStatePref(prefs::kMetricsReportingWifiOnly,
-                                             YES);
+  [self setMetricsReportingEnabled:YES wifiOnly:YES];
   // Service should be enabled.
   [self assertMetricsServiceEnabled:serviceType];
 
   // Set the network to use a cellular network, which should disable uploading
   // when the wifi-only flag is set.
   chrome_test_util::SetWWANStateTo(YES);
+  chrome_test_util::WaitForBreakpadQueue();
   [self assertMetricsServiceEnabledButNotUploading:serviceType];
 
   // Turn off cellular network usage, which should enable uploading.
   chrome_test_util::SetWWANStateTo(NO);
+  chrome_test_util::WaitForBreakpadQueue();
   [self assertMetricsServiceEnabled:serviceType];
 
   // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly OFF
-  chrome_test_util::SetBooleanLocalStatePref(
-      metrics::prefs::kMetricsReportingEnabled, YES);
-  chrome_test_util::SetBooleanLocalStatePref(prefs::kMetricsReportingWifiOnly,
-                                             NO);
-  // Service should be always enabled regardless of network settings.
-  chrome_test_util::SetWWANStateTo(YES);
+  [self setMetricsReportingEnabled:YES wifiOnly:NO];
   [self assertMetricsServiceEnabled:serviceType];
-  chrome_test_util::SetWWANStateTo(NO);
-  [self assertMetricsServiceDisabled:serviceType];
 #else
   // Development build.  Do not allow any recording or uploading of data.
   // Specifically, the kMetricsReportingEnabled preference is completely
@@ -650,18 +615,12 @@ bool IsCertificateCleared() {
   // services remain disabled.
 
   // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly ON
-  chrome_test_util::SetBooleanLocalStatePref(
-      metrics::prefs::kMetricsReportingEnabled, YES);
-  chrome_test_util::SetBooleanLocalStatePref(prefs::kMetricsReportingWifiOnly,
-                                             YES);
+  [self setMetricsReportingEnabled:YES wifiOnly:YES];
   // Service should remain disabled.
   [self assertMetricsServiceDisabled:serviceType];
 
   // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly OFF
-  chrome_test_util::SetBooleanLocalStatePref(
-      metrics::prefs::kMetricsReportingEnabled, YES);
-  chrome_test_util::SetBooleanLocalStatePref(prefs::kMetricsReportingWifiOnly,
-                                             NO);
+  [self setMetricsReportingEnabled:YES wifiOnly:NO];
   // Service should remain disabled.
   [self assertMetricsServiceDisabled:serviceType];
 #endif
@@ -677,8 +636,12 @@ bool IsCertificateCleared() {
   // Creates a map of canned responses and set up the test HTML server.
   std::map<GURL, std::pair<std::string, std::string>> response;
 
+  NSString* cookieForURL =
+      [NSString stringWithFormat:@"%@=%@", kCookieName, kCookieValue];
+
   response[web::test::HttpServer::MakeUrl(kUrlWithSetCookie)] =
-      std::pair<std::string, std::string>(kCookie, kResponseWithSetCookie);
+      std::pair<std::string, std::string>(base::SysNSStringToUTF8(cookieForURL),
+                                          kResponseWithSetCookie);
   response[web::test::HttpServer::MakeUrl(kUrl)] =
       std::pair<std::string, std::string>("", kResponse);
 
@@ -689,7 +652,9 @@ bool IsCertificateCleared() {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
                                           kResponse)]
       assertWithMatcher:grey_notNil()];
-  AssertNoCookieExists();
+
+  NSDictionary* cookies = [ChromeEarlGrey cookies];
+  GREYAssertEqual(0U, cookies.count, @"No cookie should be found.");
 
   // Visit |kUrlWithSetCookie| to set a cookie and then load |kUrl| to check it
   // is still set.
@@ -702,12 +667,16 @@ bool IsCertificateCleared() {
                                           kResponse)]
       assertWithMatcher:grey_notNil()];
 
-  AssertCookieExists(kCookie);
+  cookies = [ChromeEarlGrey cookies];
+  GREYAssertEqualObjects(kCookieValue, cookies[kCookieName],
+                         @"Failed to set cookie.");
+  GREYAssertEqual(1U, cookies.count, @"Only one cookie should be found.");
 
-  // Restore the Clear Browsing Data checkmarks prefs to their default state in
-  // Teardown.
+  // Restore the Clear Browsing Data checkmarks prefs to their default state
+  // in Teardown.
+  __weak SettingsTestCase* weakSelf = self;
   [self setTearDownHandler:^{
-    [self restoreClearBrowsingDataCheckmarksToDefault];
+    [weakSelf restoreClearBrowsingDataCheckmarksToDefault];
   }];
 
   // Clear all cookies.
@@ -718,7 +687,10 @@ bool IsCertificateCleared() {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
                                           kResponse)]
       assertWithMatcher:grey_notNil()];
-  AssertNoCookieExists();
+
+  cookies = [ChromeEarlGrey cookies];
+  GREYAssertEqual(0U, cookies.count, @"No cookie should be found.");
+
   chrome_test_util::CloseAllTabs();
 }
 
@@ -732,8 +704,9 @@ bool IsCertificateCleared() {
       password_manager::prefs::kPasswordManagerSavingEnabled);
 
   [self enablePasswordManagement];
+  __weak SettingsTestCase* weakSelf = self;
   [self setTearDownHandler:^{
-    [self passwordsTearDown:defaultPasswordManagerSavingPref];
+    [weakSelf passwordsTearDown:defaultPasswordManagerSavingPref];
   }];
 
   // Clear passwords and check that none are saved.
@@ -787,8 +760,9 @@ bool IsCertificateCleared() {
   SetCertificate();
   // Restore the Clear Browsing Data checkmarks prefs to their default state in
   // Teardown.
+  __weak SettingsTestCase* weakSelf = self;
   [self setTearDownHandler:^{
-    [self restoreClearBrowsingDataCheckmarksToDefault];
+    [weakSelf restoreClearBrowsingDataCheckmarksToDefault];
   }];
   GREYAssertFalse(IsCertificateCleared(), @"Failed to set certificate.");
   [self clearCookiesAndSiteData];
@@ -808,7 +782,7 @@ bool IsCertificateCleared() {
       selectElementWithMatcher:grey_accessibilityID(kSettingsCollectionViewId)]
       assertWithMatcher:grey_notNil()];
 
-  [[EarlGrey selectElementWithMatcher:NavigationDoneButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
   chrome_test_util::CloseAllIncognitoTabs();
 }
@@ -819,9 +793,7 @@ bool IsCertificateCleared() {
   [[EarlGrey selectElementWithMatcher:SettingsButton()]
       performAction:grey_tap()];
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)]
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -982,8 +954,9 @@ bool IsCertificateCleared() {
       password_manager::prefs::kPasswordManagerSavingEnabled);
 
   [self enablePasswordManagement];
+  __weak SettingsTestCase* weakSelf = self;
   [self setTearDownHandler:^{
-    [self passwordsTearDown:defaultPasswordManagerSavingPref];
+    [weakSelf passwordsTearDown:defaultPasswordManagerSavingPref];
   }];
 
   [self loadFormAndLogin];
@@ -1003,9 +976,7 @@ bool IsCertificateCleared() {
                                        UIAccessibilityTraitButton),
                                    nil)] performAction:grey_tap()];
 
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)]
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 }
 

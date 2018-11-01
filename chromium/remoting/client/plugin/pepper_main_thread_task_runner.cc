@@ -5,6 +5,7 @@
 #include "remoting/client/plugin/pepper_main_thread_task_runner.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
@@ -16,8 +17,9 @@ namespace remoting {
 namespace {
 
 void RunAndDestroy(void* task_ptr, int32_t) {
-  std::unique_ptr<base::Closure> task(static_cast<base::Closure*>(task_ptr));
-  task->Run();
+  std::unique_ptr<base::OnceClosure> task(
+      static_cast<base::OnceClosure*>(task_ptr));
+  std::move(*task).Run();
 }
 
 }  // namespace
@@ -30,10 +32,10 @@ PepperMainThreadTaskRunner::PepperMainThreadTaskRunner()
 
 bool PepperMainThreadTaskRunner::PostDelayedTask(
     const tracked_objects::Location& from_here,
-    const base::Closure& task,
+    base::OnceClosure task,
     base::TimeDelta delay) {
-  auto task_ptr = base::MakeUnique<base::Closure>(
-      base::Bind(&PepperMainThreadTaskRunner::RunTask, weak_ptr_, task));
+  auto task_ptr = base::MakeUnique<base::OnceClosure>(base::Bind(
+      &PepperMainThreadTaskRunner::RunTask, weak_ptr_, base::Passed(&task)));
   core_->CallOnMainThread(
       delay.InMillisecondsRoundedUp(),
       pp::CompletionCallback(&RunAndDestroy, task_ptr.release()));
@@ -42,9 +44,9 @@ bool PepperMainThreadTaskRunner::PostDelayedTask(
 
 bool PepperMainThreadTaskRunner::PostNonNestableDelayedTask(
     const tracked_objects::Location& from_here,
-    const base::Closure& task,
+    base::OnceClosure task,
     base::TimeDelta delay) {
-  return PostDelayedTask(from_here, task, delay);
+  return PostDelayedTask(from_here, std::move(task), delay);
 }
 
 bool PepperMainThreadTaskRunner::RunsTasksOnCurrentThread() const {
@@ -53,8 +55,8 @@ bool PepperMainThreadTaskRunner::RunsTasksOnCurrentThread() const {
 
 PepperMainThreadTaskRunner::~PepperMainThreadTaskRunner() {}
 
-void PepperMainThreadTaskRunner::RunTask(const base::Closure& task) {
-  task.Run();
+void PepperMainThreadTaskRunner::RunTask(base::OnceClosure task) {
+  std::move(task).Run();
 }
 
 }  // namespace remoting

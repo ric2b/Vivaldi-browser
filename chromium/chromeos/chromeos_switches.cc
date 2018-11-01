@@ -57,6 +57,10 @@ const char kAppAutoLaunched[] = "app-auto-launched";
 // Path for app's OEM manifest file.
 const char kAppOemManifestFile[] = "app-mode-oem-manifest";
 
+// Always starts ARC after login screen without Play Store in almost all cases.
+// Secondary profile is an exception where ARC will not start.
+const char kArcAlwaysStart[] = "arc-always-start";
+
 // Signals ARC support status on this device. This can take one of the
 // following three values.
 // - none: ARC is not installed on this device. (default)
@@ -161,6 +165,9 @@ const char kDisableDemoMode[] = "disable-demo-mode";
 // If this switch is set, the device cannot be remotely disabled by its owner.
 const char kDisableDeviceDisabling[] = "disable-device-disabling";
 
+// Disable encryption migration for user's cryptohome to run latest Arc.
+const char kDisableEncryptionMigration[] = "disable-encryption-migration";
+
 // Disables notification when device is in end of life status.
 const char kDisableEolNotification[] = "disable-eol-notification";
 
@@ -225,9 +232,6 @@ const char kEafePath[] = "eafe-path";
 // EAFE URL to use for Easy bootstrapping.
 const char kEafeUrl[] = "eafe-url";
 
-// Enables AD functionality.
-const char kEnableAd[] = "enable-ad";
-
 // Enables the Android Wallpapers App as the default app on Chrome OS.
 const char kEnableAndroidWallpapersApp[] = "enable-android-wallpapers-app";
 
@@ -246,6 +250,9 @@ const char kEnableConsumerKiosk[] = "enable-consumer-kiosk";
 
 // Enables Data Saver prompt on cellular networks.
 const char kEnableDataSaverPrompt[] = "enable-datasaver-prompt";
+
+// Enables encryption migration for user's cryptohome to run latest Arc.
+const char kEnableEncryptionMigration[] = "enable-encryption-migration";
 
 // Shows additional checkboxes in Settings to enable Chrome OS accessibility
 // features that haven't launched yet.
@@ -299,6 +306,13 @@ const char kEnableTouchSupportForScreenMagnifier[] =
 // Enables the chromecast support for video player app.
 const char kEnableVideoPlayerChromecastSupport[] =
     "enable-video-player-chromecast-support";
+
+// Enables the VoiceInteraction support.
+const char kEnableVoiceInteraction[] = "enable-voice-interaction";
+
+// Enables zip archiver.
+const char kEnableZipArchiverOnFileManager[] =
+    "enable-zip-archiver-on-file-manager";
 
 // Disables ARC for managed accounts.
 const char kEnterpriseDisableArc[] = "enterprise-disable-arc";
@@ -453,6 +467,9 @@ const char kWakeOnWifiPacket[] = "wake-on-wifi-packet";
 
 // Force system compositor mode when set.
 const char kForceSystemCompositorMode[] = "force-system-compositor-mode";
+
+// Enables testing for encryption migration UI.
+const char kTestEncryptionMigrationUI[] = "test-encryption-migration-ui";
 
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);

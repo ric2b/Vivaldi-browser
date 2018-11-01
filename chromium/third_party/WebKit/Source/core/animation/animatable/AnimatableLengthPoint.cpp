@@ -32,24 +32,10 @@
 
 namespace blink {
 
-bool AnimatableLengthPoint::usesDefaultInterpolationWith(
-    const AnimatableValue* value) const {
-  const AnimatableLengthPoint* other = toAnimatableLengthPoint(value);
-  return this->x()->isUnknown() || other->x()->isUnknown();
-}
-
-PassRefPtr<AnimatableValue> AnimatableLengthPoint::interpolateTo(
-    const AnimatableValue* value,
-    double fraction) const {
-  const AnimatableLengthPoint* lengthPoint = toAnimatableLengthPoint(value);
-  return AnimatableLengthPoint::create(
-      AnimatableValue::interpolate(this->x(), lengthPoint->x(), fraction),
-      AnimatableValue::interpolate(this->y(), lengthPoint->y(), fraction));
-}
-
-bool AnimatableLengthPoint::equalTo(const AnimatableValue* value) const {
-  const AnimatableLengthPoint* lengthPoint = toAnimatableLengthPoint(value);
-  return x()->equals(lengthPoint->x()) && y()->equals(lengthPoint->y());
+bool AnimatableLengthPoint::EqualTo(const AnimatableValue* value) const {
+  const AnimatableLengthPoint* length_point = ToAnimatableLengthPoint(value);
+  return x_->Equals(length_point->x_.Get()) &&
+         y_->Equals(length_point->y_.Get());
 }
 
 }  // namespace blink

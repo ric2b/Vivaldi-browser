@@ -130,14 +130,22 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
     if not full_path.startswith(self.server.top_level):
       self._DoUnknown()
-    elif path == '/doc.css':
-      self._DoCSS('doc.css')
+    elif path in ('/base.css', '/doc.css', '/prettify.css'):
+      self._DoCSS(path[1:])
     elif not os.path.exists(full_path):
       self._DoNotFound()
     elif path.lower().endswith('.md'):
       self._DoMD(path)
     elif os.path.exists(full_path + '/README.md'):
       self._DoMD(path + '/README.md')
+    elif path.lower().endswith('.png'):
+      self._DoImage(full_path, 'image/png')
+    elif path.lower().endswith('.jpg'):
+      self._DoImage(full_path, 'image/jpeg')
+    elif os.path.isdir(full_path):
+      self._DoDirListing(full_path)
+    elif os.path.exists(full_path):
+      self._DoRawSourceFile(full_path)
     else:
       self._DoUnknown()
 
@@ -147,7 +155,9 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         'markdown.extensions.fenced_code',
         'markdown.extensions.tables',
         'markdown.extensions.toc',
+        'gitiles_autolink',
         'gitiles_ext_blocks',
+        'gitiles_smart_quotes',
     ]
     extension_configs = {
         'markdown.extensions.toc': {
@@ -159,6 +169,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
     md = markdown.Markdown(extensions=extensions,
                            extension_configs=extension_configs,
+                           tab_length=2,
                            output_format='html4')
 
     has_a_single_h1 = (len([line for line in contents.splitlines()
@@ -172,10 +183,37 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     try:
       self._WriteHeader('text/html')
       self._WriteTemplate('header.html')
+      self.wfile.write('<div class="doc">')
       self.wfile.write(md_fragment)
+      self.wfile.write('</div>')
       self._WriteTemplate('footer.html')
     except:
       raise
+
+  def _DoRawSourceFile(self, full_path):
+      self._WriteHeader('text/html')
+      self._WriteTemplate('header.html')
+
+      self.wfile.write('<table class="FileContents">')
+      with open(full_path) as fp:
+          # Escape html over the entire file at once.
+          data = fp.read().replace(
+              '&', '&amp;').replace(
+              '<', '&lt;').replace(
+              '>', '&gt;').replace(
+              '"', '&quot;')
+          for i, line in enumerate(data.splitlines()):
+              self.wfile.write(
+                  ('<tr class="u-pre u-monospace FileContents-line">'
+                   '<td class="u-lineNum u-noSelect FileContents-lineNum">'
+                   '<a name="%(num)s" '
+                   'onclick="window.location.hash=%(quot)s#%(num)s%(quot)s">'
+                   '%(num)s</a></td>'
+                   '<td class="FileContents-lineContents">%(line)s</td></tr>')
+                  % {'num': i, 'quot': "'", 'line': line})
+      self.wfile.write('</table>')
+
+      self._WriteTemplate('footer.html')
 
   def _DoCSS(self, template):
     self._WriteHeader('text/css')
@@ -186,9 +224,48 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     self.wfile.write('<html><body>%s not found</body></html>' % self.path)
 
   def _DoUnknown(self):
-    self._WriteHeader('text/html')
+    self._WriteHeader('text/html', status_code=501)
     self.wfile.write('<html><body>I do not know how to serve %s.</body>'
                        '</html>' % self.path)
+
+  def _DoDirListing(self, full_path):
+    self._WriteHeader('text/html')
+    self._WriteTemplate('header.html')
+    self.wfile.write('<div class="doc">')
+
+    self.wfile.write('<div class="Breadcrumbs">\n')
+    self.wfile.write('<a class="Breadcrumbs-crumb">%s</a>\n' % self.path)
+    self.wfile.write('</div>\n')
+
+    for _, dirs, files in os.walk(full_path):
+      for f in sorted(files):
+        if f.startswith('.'):
+          continue
+        if f.endswith('.md'):
+          bold = ('<b>', '</b>')
+        else:
+          bold = ('', '')
+        self.wfile.write('<a href="%s/%s">%s%s%s</a><br/>\n' %
+                         (self.path.rstrip('/'), f, bold[0], f, bold[1]))
+
+      self.wfile.write('<br/>\n')
+
+      for d in sorted(dirs):
+        if d.startswith('.'):
+          continue
+        self.wfile.write('<a href="%s/%s">%s/</a><br/>\n' %
+                         (self.path.rstrip('/'), d, d))
+
+      break
+
+    self.wfile.write('</div>')
+    self._WriteTemplate('footer.html')
+
+  def _DoImage(self, full_path, mime_type):
+    self._WriteHeader(mime_type)
+    with open(full_path) as f:
+      self.wfile.write(f.read())
+      f.close()
 
   def _Read(self, relpath, relative_to=None):
     if relative_to is None:

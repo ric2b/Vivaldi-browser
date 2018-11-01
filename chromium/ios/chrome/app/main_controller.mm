@@ -29,7 +29,6 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/reading_list/core/reading_list_switches.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/web_resource/web_resource_pref_names.h"
@@ -166,9 +165,6 @@ NSString* const kStartupAttemptReset = @"StartupAttempReset";
 
 // Constants for deferring memory debugging tools startup.
 NSString* const kMemoryDebuggingToolsStartup = @"MemoryDebuggingToolsStartup";
-
-// Constants for deferring memory monitoring startup.
-NSString* const kMemoryMonitoring = @"MemoryMonitoring";
 
 // Constants for deferred check if it is necessary to send pings to
 // Chrome distribution related services.
@@ -479,7 +475,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 // Asynchronously schedule the init of the memoryDebuggerManager.
 - (void)scheduleMemoryDebuggingTools;
 // Asynchronously kick off regular free memory checks.
-- (void)scheduleFreeMemoryMonitoring;
+- (void)startFreeMemoryMonitoring;
 // Asynchronously schedules the notification of the AuthenticationService.
 - (void)scheduleAuthenticationServiceNotification;
 // Asynchronously schedules the reset of the failed startup attempt counter.
@@ -703,11 +699,9 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   _spotlightManager.reset([[SpotlightManager
       spotlightManagerWithBrowserState:_mainBrowserState] retain]);
 
-  if (reading_list::switches::IsReadingListEnabled()) {
-    ShareExtensionService* service =
-        ShareExtensionServiceFactory::GetForBrowserState(_mainBrowserState);
-    service->Initialize();
-  }
+  ShareExtensionService* service =
+      ShareExtensionServiceFactory::GetForBrowserState(_mainBrowserState);
+  service->Initialize();
 
   // Before bringing up the UI, make sure the launch mode is correct, and
   // check for previous crashes.
@@ -1166,17 +1160,9 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   }
 }
 
-- (void)scheduleFreeMemoryMonitoring {
-  // TODO(crbug.com/649338): See if this method cannot call PostBlockingPoolTask
-  // directly instead of enqueueing a block.
-  [[DeferredInitializationRunner sharedInstance]
-      enqueueBlockNamed:kMemoryMonitoring
-                  block:^{
-                    web::WebThread::PostBlockingPoolTask(
-                        FROM_HERE,
-                        base::Bind(
-                            &ios_internal::AsynchronousFreeMemoryMonitor));
-                  }];
+- (void)startFreeMemoryMonitoring {
+  web::WebThread::PostBlockingPoolTask(
+      FROM_HERE, base::Bind(&ios_internal::AsynchronousFreeMemoryMonitor));
 }
 
 - (void)scheduleLowPriorityStartupTasks {
@@ -1193,7 +1179,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   [self scheduleSpotlightResync];
   [self scheduleDeleteDownloadsDirectory];
   [self scheduleStartupAttemptReset];
-  [self scheduleFreeMemoryMonitoring];
+  [self startFreeMemoryMonitoring];
   [self scheduleAppDistributionPings];
   [self scheduleCheckNativeApps];
 }
@@ -1534,6 +1520,9 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
       break;
     case IDC_SHOW_ADD_ACCOUNT:
       [self showAddAccount];
+      break;
+    case IDC_SHOW_AUTOFILL_SETTINGS:
+      [self showAutofillSettings];
       break;
     default:
       // Unknown commands get dropped with a warning.
@@ -2027,6 +2016,18 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
                  completion:nil];
 }
 
+- (void)showAutofillSettings {
+  if (_settingsNavigationController)
+    return;
+  _settingsNavigationController.reset([SettingsNavigationController
+      newAutofillController:_mainBrowserState
+                   delegate:self]);
+  [[self topPresentedViewController]
+      presentViewController:_settingsNavigationController
+                   animated:YES
+                 completion:nil];
+}
+
 - (void)showReportAnIssue {
   if (_settingsNavigationController)
     return;
@@ -2112,8 +2113,9 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
       break;
     case AUTHENTICATION_OPERATION_SIGNIN:
       [_signinInteractionController
-          signInWithCompletion:completion
-                viewController:self.mainViewController];
+          signInWithViewController:self.mainViewController
+                          identity:nil
+                        completion:completion];
       break;
   }
 }
@@ -2613,7 +2615,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   callbackCounter->IncrementCount();
   [self removeBrowsingDataFromBrowserState:_mainBrowserState
                                       mask:removeAllMask
-                                timePeriod:browsing_data::ALL_TIME
+                                timePeriod:browsing_data::TimePeriod::ALL_TIME
                          completionHandler:decrementCallbackCounterCount];
 }
 

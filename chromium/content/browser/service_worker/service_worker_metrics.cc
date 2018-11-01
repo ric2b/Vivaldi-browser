@@ -72,16 +72,18 @@ std::string EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_FETCH_WAITUNTIL";
     case ServiceWorkerMetrics::EventType::FOREIGN_FETCH_WAITUNTIL:
       return "_FOREIGN_FETCH_WAITUNTIL";
-    case ServiceWorkerMetrics::EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
-      return "_NAVIGATION_HINT_LINK_MOUSE_DOWN";
-    case ServiceWorkerMetrics::EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
-      return "_NAVIGATION_HINT_LINK_TAP_UNCONFIRMED";
-    case ServiceWorkerMetrics::EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
-      return "_NAVIGATION_HINT_LINK_TAP_DOWN";
     case ServiceWorkerMetrics::EventType::EXTERNAL_REQUEST:
       return "_EXTERNAL_REQUEST";
     case ServiceWorkerMetrics::EventType::PAYMENT_REQUEST:
       return "_PAYMENT_REQUEST";
+    case ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_ABORT:
+      return "_BACKGROUND_FETCH_ABORT";
+    case ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_CLICK:
+      return "_BACKGROUND_FETCH_CLICK";
+    case ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_FAIL:
+      return "_BACKGROUND_FETCH_FAIL";
+    case ServiceWorkerMetrics::EventType::BACKGROUND_FETCHED:
+      return "_BACKGROUND_FETCHED";
     case ServiceWorkerMetrics::EventType::NUM_TYPES:
       NOTREACHED() << static_cast<int>(event_type);
   }
@@ -211,14 +213,6 @@ void RecordURLMetricOnUI(const GURL& url) {
       "ServiceWorker.ControlledPageUrl", url);
 }
 
-// Returns true when the event is for a navigation hint.
-bool IsNavigationHintEvent(ServiceWorkerMetrics::EventType event_type) {
-  using EventType = ServiceWorkerMetrics::EventType;
-  return event_type == EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN ||
-         event_type == EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED ||
-         event_type == EventType::NAVIGATION_HINT_LINK_TAP_DOWN;
-}
-
 enum EventHandledRatioType {
   EVENT_HANDLED_NONE,
   EVENT_HANDLED_SOME,
@@ -230,20 +224,12 @@ enum EventHandledRatioType {
 
 using ScopedEventRecorder = ServiceWorkerMetrics::ScopedEventRecorder;
 
-ScopedEventRecorder::ScopedEventRecorder(
-    ServiceWorkerMetrics::EventType start_worker_purpose)
-    : start_worker_purpose_(start_worker_purpose) {}
+ScopedEventRecorder::ScopedEventRecorder() {}
 
 ScopedEventRecorder::~ScopedEventRecorder() {
   for (const auto& ev : event_stats_) {
     RecordEventHandledRatio(ev.first, ev.second.handled_events,
                             ev.second.fired_events);
-  }
-  if (IsNavigationHintEvent(start_worker_purpose_)) {
-    RecordNavigationHintPrecision(
-        start_worker_purpose_,
-        event_stats_[EventType::FETCH_MAIN_FRAME].fired_events != 0 ||
-            event_stats_[EventType::FETCH_SUB_FRAME].fired_events != 0);
   }
 }
 
@@ -287,34 +273,6 @@ void ScopedEventRecorder::RecordEventHandledRatio(
   }
 }
 
-void ScopedEventRecorder::RecordNavigationHintPrecision(
-    ServiceWorkerMetrics::EventType start_worker_purpose,
-    bool frame_fetch_event_fired) {
-  DCHECK(IsNavigationHintEvent(start_worker_purpose));
-  UMA_HISTOGRAM_BOOLEAN("ServiceWorker.NavigationHintPrecision",
-                        frame_fetch_event_fired);
-  switch (start_worker_purpose) {
-    case EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
-      UMA_HISTOGRAM_BOOLEAN(
-          "ServiceWorker.NavigationHintPrecision.LINK_MOUSE_DOWN",
-          frame_fetch_event_fired);
-      break;
-    case EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
-      UMA_HISTOGRAM_BOOLEAN(
-          "ServiceWorker.NavigationHintPrecision.LINK_TAP_UNCONFIRMED",
-          frame_fetch_event_fired);
-      break;
-    case EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
-      UMA_HISTOGRAM_BOOLEAN(
-          "ServiceWorker.NavigationHintPrecision.LINK_TAP_DOWN",
-          frame_fetch_event_fired);
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
-}
-
 const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
   switch (event_type) {
     case EventType::ACTIVATE:
@@ -347,16 +305,18 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Fetch WaitUntil";
     case EventType::FOREIGN_FETCH_WAITUNTIL:
       return "Foreign Fetch WaitUntil";
-    case EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
-      return "Navigation Hint Link Mouse Down";
-    case EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
-      return "Navigation Hint Link Tap Unconfirmed";
-    case EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
-      return "Navigation Hint Link Tap Down";
     case EventType::EXTERNAL_REQUEST:
       return "External Request";
     case EventType::PAYMENT_REQUEST:
       return "Payment Request";
+    case EventType::BACKGROUND_FETCH_ABORT:
+      return "Background Fetch Abort";
+    case EventType::BACKGROUND_FETCH_CLICK:
+      return "Background Fetch Click";
+    case EventType::BACKGROUND_FETCH_FAIL:
+      return "Background Fetch Fail";
+    case EventType::BACKGROUND_FETCHED:
+      return "Background Fetched";
     case EventType::NUM_TYPES:
       break;
   }
@@ -687,10 +647,22 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.PaymentRequestEvent.Time",
                                  time);
       break;
-    // Those navigation hints should not be sent as request events.
-    case EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
-    case EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
-    case EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
+    case EventType::BACKGROUND_FETCH_ABORT:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundFetchAbortEvent.Time",
+                                 time);
+      break;
+    case EventType::BACKGROUND_FETCH_CLICK:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundFetchClickEvent.Time",
+                                 time);
+      break;
+    case EventType::BACKGROUND_FETCH_FAIL:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundFetchFailEvent.Time",
+                                 time);
+      break;
+    case EventType::BACKGROUND_FETCHED:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundFetchedEvent.Time",
+                                 time);
+      break;
 
     case EventType::UNKNOWN:
     case EventType::NUM_TYPES:
@@ -729,11 +701,11 @@ void ServiceWorkerMetrics::RecordStatusZeroResponseError(
   if (is_main_resource) {
     UMA_HISTOGRAM_ENUMERATION(
         "ServiceWorker.URLRequestJob.MainResource.StatusZeroError", error,
-        blink::WebServiceWorkerResponseErrorLast + 1);
+        blink::kWebServiceWorkerResponseErrorLast + 1);
   } else {
     UMA_HISTOGRAM_ENUMERATION(
         "ServiceWorker.URLRequestJob.Subresource.StatusZeroError", error,
-        blink::WebServiceWorkerResponseErrorLast + 1);
+        blink::kWebServiceWorkerResponseErrorLast + 1);
   }
 }
 
@@ -976,6 +948,21 @@ void ServiceWorkerMetrics::RecordContextRequestHandlerStatus(
           value, max);
     }
   }
+}
+
+void ServiceWorkerMetrics::RecordRuntime(base::TimeDelta time) {
+  // Start at 1 second since we expect service worker to last at least this
+  // long: the update timer and idle timeout timer run on the order of seconds.
+  constexpr base::TimeDelta kMin = base::TimeDelta::FromSeconds(1);
+  // End at 1 day since service workers can conceivably run as long as the the
+  // browser is open; we have to cap somewhere.
+  constexpr base::TimeDelta kMax = base::TimeDelta::FromDays(1);
+  // Set the bucket count to 50 since that is the recommended value for all
+  // histograms.
+  const int kBucketCount = 50;
+
+  UMA_HISTOGRAM_CUSTOM_TIMES("ServiceWorker.Runtime", time, kMin, kMax,
+                             kBucketCount);
 }
 
 }  // namespace content

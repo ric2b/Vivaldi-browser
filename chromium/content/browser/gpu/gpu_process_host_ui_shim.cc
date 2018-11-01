@@ -14,6 +14,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/browser/compositor/gpu_process_transport_factory.h"
+#include "content/browser/field_trial_recorder.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
@@ -21,10 +22,17 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
-#include "content/common/gpu_host_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "gpu/ipc/common/memory_stats.h"
+#include "services/resource_coordinator/memory/coordinator/coordinator_impl.h"
 #include "ui/gfx/swap_result.h"
+
+#if defined(OS_ANDROID)
+#include "content/public/browser/android/java_interfaces.h"
+#include "media/mojo/interfaces/android_overlay.mojom.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#endif
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/gpu_platform_support_host.h"
@@ -35,27 +43,16 @@ namespace content {
 
 namespace {
 
-// One of the linux specific headers defines this as a macro.
-#ifdef DestroyAll
-#undef DestroyAll
-#endif
-
-base::LazyInstance<IDMap<GpuProcessHostUIShim*>> g_hosts_by_id =
+base::LazyInstance<IDMap<GpuProcessHostUIShim*>>::Leaky g_hosts_by_id =
     LAZY_INSTANCE_INITIALIZER;
 
-void SendOnIOThreadTask(int host_id, IPC::Message* msg) {
-  GpuProcessHost* host = GpuProcessHost::FromID(host_id);
-  if (host)
-    host->Send(msg);
-  else
-    delete msg;
+#if defined(OS_ANDROID)
+template <typename Interface>
+void BindJavaInterface(mojo::InterfaceRequest<Interface> request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  content::GetGlobalJavaInterfaces()->GetInterface(std::move(request));
 }
-
-void StopGpuProcessOnIO(int host_id) {
-  GpuProcessHost* host = GpuProcessHost::FromID(host_id);
-  if (host)
-    host->StopGpuProcess();
-}
+#endif
 
 }  // namespace
 
@@ -99,116 +96,48 @@ void GpuProcessHostUIShim::Destroy(int host_id, const std::string& message) {
 }
 
 // static
-void GpuProcessHostUIShim::DestroyAll() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  while (!g_hosts_by_id.Pointer()->IsEmpty()) {
-    IDMap<GpuProcessHostUIShim*>::iterator it(g_hosts_by_id.Pointer());
-    delete it.GetCurrentValue();
-  }
-}
-
-// static
 GpuProcessHostUIShim* GpuProcessHostUIShim::FromID(int host_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return g_hosts_by_id.Pointer()->Lookup(host_id);
 }
 
-// static
-GpuProcessHostUIShim* GpuProcessHostUIShim::GetOneInstance() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (g_hosts_by_id.Pointer()->IsEmpty())
-    return NULL;
-  IDMap<GpuProcessHostUIShim*>::iterator it(g_hosts_by_id.Pointer());
-  return it.GetCurrentValue();
-}
-
-bool GpuProcessHostUIShim::Send(IPC::Message* msg) {
-  DCHECK(CalledOnValidThread());
-  return BrowserThread::PostTask(BrowserThread::IO,
-                                 FROM_HERE,
-                                 base::Bind(&SendOnIOThreadTask,
-                                            host_id_,
-                                            msg));
-}
-
-bool GpuProcessHostUIShim::OnMessageReceived(const IPC::Message& message) {
+void GpuProcessHostUIShim::OnMessageReceived(const IPC::Message& message) {
   DCHECK(CalledOnValidThread());
 
 #if defined(USE_OZONE)
   if (ui::OzonePlatform::GetInstance()
           ->GetGpuPlatformSupportHost()
           ->OnMessageReceived(message))
-    return true;
+    return;
 #endif
 
-  if (message.routing_id() != MSG_ROUTING_CONTROL)
-    return false;
-
-  return OnControlMessageReceived(message);
+  if (message.routing_id() == MSG_ROUTING_CONTROL) {
+    NOTREACHED() << "Invalid message with type = " << message.type();
+  }
 }
-
-void GpuProcessHostUIShim::StopGpuProcess(const base::Closure& callback) {
-  close_callback_ = callback;
-
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE, base::Bind(&StopGpuProcessOnIO, host_id_));
-}
-
-void GpuProcessHostUIShim::SimulateRemoveAllContext() {
-  Send(new GpuMsg_Clean());
-}
-
-void GpuProcessHostUIShim::SimulateCrash() {
-  Send(new GpuMsg_Crash());
-}
-
-void GpuProcessHostUIShim::SimulateHang() {
-  Send(new GpuMsg_Hang());
-}
-
-#if defined(OS_ANDROID)
-void GpuProcessHostUIShim::SimulateJavaCrash() {
-  Send(new GpuMsg_JavaCrash());
-}
-#endif
 
 GpuProcessHostUIShim::~GpuProcessHostUIShim() {
   DCHECK(CalledOnValidThread());
-  if (!close_callback_.is_null())
-    base::ResetAndReturn(&close_callback_).Run();
   g_hosts_by_id.Pointer()->Remove(host_id_);
 }
 
-bool GpuProcessHostUIShim::OnControlMessageReceived(
-    const IPC::Message& message) {
-  DCHECK(CalledOnValidThread());
+// static
+void GpuProcessHostUIShim::RegisterUIThreadMojoInterfaces(
+    service_manager::BinderRegistry* registry) {
+  auto task_runner = BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);
 
-  IPC_BEGIN_MESSAGE_MAP(GpuProcessHostUIShim, message)
-    IPC_MESSAGE_HANDLER(GpuHostMsg_OnLogMessage, OnLogMessage)
-    IPC_MESSAGE_HANDLER(GpuHostMsg_GraphicsInfoCollected,
-                        OnGraphicsInfoCollected)
-
-    IPC_MESSAGE_UNHANDLED_ERROR()
-  IPC_END_MESSAGE_MAP()
-
-  return true;
-}
-
-void GpuProcessHostUIShim::OnLogMessage(
-    int level,
-    const std::string& header,
-    const std::string& message) {
-  GpuDataManagerImpl::GetInstance()->AddLogMessage(
-      level, header, message);
-}
-
-void GpuProcessHostUIShim::OnGraphicsInfoCollected(
-    const gpu::GPUInfo& gpu_info) {
-  // OnGraphicsInfoCollected is sent back after the GPU process successfully
-  // initializes GL.
-  TRACE_EVENT0("test_gpu", "OnGraphicsInfoCollected");
-
-  GpuDataManagerImpl::GetInstance()->UpdateGpuInfo(gpu_info);
+  registry->AddInterface(base::Bind(&FieldTrialRecorder::Create), task_runner);
+  registry->AddInterface(
+      base::Bind(
+          &memory_instrumentation::CoordinatorImpl::BindCoordinatorRequest,
+          base::Unretained(
+              memory_instrumentation::CoordinatorImpl::GetInstance())),
+      task_runner);
+#if defined(OS_ANDROID)
+  registry->AddInterface(
+      base::Bind(&BindJavaInterface<media::mojom::AndroidOverlayProvider>),
+      task_runner);
+#endif
 }
 
 }  // namespace content

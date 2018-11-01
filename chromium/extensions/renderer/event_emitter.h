@@ -16,19 +16,17 @@ class Arguments;
 }
 
 namespace extensions {
+class APIEventListeners;
+class EventFilteringInfo;
 
 // A gin::Wrappable Event object. One is expected to be created per event, per
 // context. Note: this object *does not* clear any events, so it must be
 // destroyed with the context to avoid leaking.
 class EventEmitter final : public gin::Wrappable<EventEmitter> {
  public:
-  using Listeners = std::vector<v8::Global<v8::Function>>;
-  using ListenersChangedMethod =
-      base::Callback<void(binding::EventListenersChanged,
-                          v8::Local<v8::Context>)>;
-
-  EventEmitter(const binding::RunJSFunction& run_js,
-               const ListenersChangedMethod& listeners_changed);
+  EventEmitter(bool supports_filters,
+               std::unique_ptr<APIEventListeners> listeners,
+               const binding::RunJSFunction& run_js);
   ~EventEmitter() override;
 
   static gin::WrapperInfo kWrapperInfo;
@@ -38,9 +36,14 @@ class EventEmitter final : public gin::Wrappable<EventEmitter> {
       v8::Isolate* isolate) final;
 
   void Fire(v8::Local<v8::Context> context,
-            std::vector<v8::Local<v8::Value>>* args);
+            std::vector<v8::Local<v8::Value>>* args,
+            const EventFilteringInfo* filter);
 
-  Listeners* listeners() { return &listeners_; }
+  // Removes all listeners and marks this object as invalid so that no more
+  // are added.
+  void Invalidate(v8::Local<v8::Context> context);
+
+  size_t GetNumListeners() const;
 
  private:
   // Bound methods for the Event JS object.
@@ -50,11 +53,16 @@ class EventEmitter final : public gin::Wrappable<EventEmitter> {
   bool HasListeners();
   void Dispatch(gin::Arguments* arguments);
 
-  Listeners listeners_;
+  // Whether or not this object is still valid; false upon context release.
+  // When invalid, no listeners can be added or removed.
+  bool valid_ = true;
+
+  // Whether the event supports filters.
+  bool supports_filters_ = false;
+
+  std::unique_ptr<APIEventListeners> listeners_;
 
   binding::RunJSFunction run_js_;
-
-  ListenersChangedMethod listeners_changed_;
 
   DISALLOW_COPY_AND_ASSIGN(EventEmitter);
 };

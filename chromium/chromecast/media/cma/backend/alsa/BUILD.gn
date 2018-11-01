@@ -34,6 +34,8 @@ shared_library("libcast_media_1.0_audio") {
 
 source_set("alsa_cma_backend") {
   sources = [
+    "alsa_volume_control.cc",
+    "alsa_volume_control.h",
     "alsa_wrapper.cc",
     "alsa_wrapper.h",
     "audio_decoder_alsa.cc",
@@ -42,19 +44,23 @@ source_set("alsa_cma_backend") {
     "filter_group.h",
     "media_pipeline_backend_alsa.cc",
     "media_pipeline_backend_alsa.h",
+    "post_processing_pipeline.cc",
+    "post_processing_pipeline.h",
+    "post_processing_pipeline_parser.cc",
+    "post_processing_pipeline_parser.h",
     "stream_mixer_alsa.cc",
     "stream_mixer_alsa.h",
     "stream_mixer_alsa_input.cc",
     "stream_mixer_alsa_input.h",
     "stream_mixer_alsa_input_impl.cc",
     "stream_mixer_alsa_input_impl.h",
+    "volume_control.cc",
   ]
 
   libs = [ "asound" ]
 
   deps = [
     ":alsa_features",
-    ":audio_filter_includes",
     ":slew_volume",
     "//base",
     "//chromecast/base",
@@ -66,34 +72,6 @@ source_set("alsa_cma_backend") {
     "//media",
     "//media:shared_memory_support",
   ]
-
-  if (chromecast_branding == "public") {
-    deps += [ ":audio_filter_null" ]
-  } else {
-    deps += [ "//chromecast/internal/media/cma/backend/alsa:filter" ]
-  }
-}
-
-source_set("audio_filter_null") {
-  sources = [
-    "audio_filter_factory_default.cc",
-  ]
-
-  deps = [
-    ":audio_filter_includes",
-  ]
-}
-
-source_set("audio_filter_includes") {
-  sources = [
-    "audio_filter_factory.h",
-    "audio_filter_interface.h",
-  ]
-
-  deps = [
-    "//base",
-    "//media",
-  ]
 }
 
 source_set("slew_volume") {
@@ -103,14 +81,19 @@ source_set("slew_volume") {
   ]
   deps = [
     "//base",
-    "//media",
+    "//media:shared_memory_support",
   ]
 }
+
+alsa_owns_volume = !enable_assistant
 
 buildflag_header("alsa_features") {
   header = "alsa_features.h"
 
-  flags = [ "ALSA_MONOTONIC_RAW_TSTAMPS=$use_alsa_monotonic_raw_tstamps" ]
+  flags = [
+    "ALSA_MONOTONIC_RAW_TSTAMPS=$use_alsa_monotonic_raw_tstamps",
+    "ALSA_OWNS_VOLUME=$alsa_owns_volume",
+  ]
 }
 
 test("cast_alsa_cma_backend_unittests") {
@@ -146,5 +129,18 @@ source_set("test_support") {
     "//base",
     "//media",
     "//testing/gmock",
+  ]
+}
+
+shared_library("libcast_governor_1.0") {
+  sources = [
+    "post_processors/governor_shlib.cc",
+  ]
+
+  deps = [
+    ":slew_volume",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/public/media",
   ]
 }

@@ -280,11 +280,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   // which one so we tell both.
   void SetIsLoading(bool is_loading);
 
-  // Whether to close the tab or not when there is a hang during an unload
-  // handler. If we are mid-crosssite navigation, then we should proceed
-  // with the navigation instead of closing the tab.
-  bool ShouldCloseTabOnUnresponsiveRenderer();
-
   // Confirms whether we should close the page or navigate away.  This is called
   // before a cross-site request or before a tab/window is closed (as indicated
   // by the first parameter) to allow the appropriate renderer to approve or
@@ -425,8 +420,9 @@ class CONTENT_EXPORT RenderFrameHostManager
   // frame proxies.
   void OnDidUpdateName(const std::string& name, const std::string& unique_name);
 
-  // Sends the newly added Content Security Policy header to all the proxies.
-  void OnDidAddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
+  // Sends the newly added Content Security Policy headers to all the proxies.
+  void OnDidAddContentSecurityPolicies(
+      const std::vector<ContentSecurityPolicyHeader>& headers);
 
   // Resets Content Security Policy in all the proxies.
   void OnDidResetContentSecurityPolicy();
@@ -754,6 +750,11 @@ class CONTENT_EXPORT RenderFrameHostManager
                               SiteInstance* source_instance,
                               SiteInstance* dest_instance,
                               bool was_server_redirect);
+
+  // After a renderer process crash we'd have marked the host as invisible, so
+  // we need to set the visibility of the new View to the correct value here
+  // after reload.
+  void EnsureRenderFrameHostVisibilityConsistent();
 
   // For use in creating RenderFrameHosts.
   FrameTreeNode* frame_tree_node_;

@@ -10,12 +10,12 @@
 #include "core/loader/EmptyClients.h"
 #include "core/paint/StubChromeClientForSPv2.h"
 #include "core/testing/DummyPageHolder.h"
+#include "platform/testing/EmptyWebMediaPlayer.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
-#include "public/platform/WebMediaPlayer.h"
 #include "public/platform/WebSize.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -24,69 +24,39 @@
 namespace blink {
 namespace {
 
-class StubWebMediaPlayer : public WebMediaPlayer {
+class StubWebMediaPlayer : public EmptyWebMediaPlayer {
  public:
-  StubWebMediaPlayer(WebMediaPlayerClient* client) : m_client(client) {}
+  StubWebMediaPlayer(WebMediaPlayerClient* client) : client_(client) {}
 
-  const WebLayer* getWebLayer() { return m_webLayer.get(); }
+  const WebLayer* GetWebLayer() { return web_layer_.get(); }
 
   // WebMediaPlayer
-  void load(LoadType, const WebMediaPlayerSource&, CORSMode) {
-    m_networkState = NetworkStateLoaded;
-    m_client->networkStateChanged();
-    m_readyState = ReadyStateHaveEnoughData;
-    m_client->readyStateChanged();
-    m_webLayer = Platform::current()->compositorSupport()->createLayer();
-    m_client->setWebLayer(m_webLayer.get());
+  void Load(LoadType, const WebMediaPlayerSource&, CORSMode) {
+    network_state_ = kNetworkStateLoaded;
+    client_->NetworkStateChanged();
+    ready_state_ = kReadyStateHaveEnoughData;
+    client_->ReadyStateChanged();
+    web_layer_ = Platform::Current()->CompositorSupport()->CreateLayer();
+    client_->SetWebLayer(web_layer_.get());
   }
-  void play() override {}
-  void pause() override {}
-  bool supportsSave() const override { return false; }
-  void seek(double seconds) override {}
-  void setRate(double) override {}
-  void setVolume(double) override {}
-  WebTimeRanges buffered() const override { return WebTimeRanges(); }
-  WebTimeRanges seekable() const override { return WebTimeRanges(); }
-  void setSinkId(const WebString& sinkId,
-                 const WebSecurityOrigin&,
-                 WebSetSinkIdCallbacks*) override {}
-  bool hasVideo() const override { return false; }
-  bool hasAudio() const override { return false; }
-  WebSize naturalSize() const override { return WebSize(0, 0); }
-  bool paused() const override { return false; }
-  bool seeking() const override { return false; }
-  double duration() const override { return 0.0; }
-  double currentTime() const override { return 0.0; }
-  NetworkState getNetworkState() const override { return m_networkState; }
-  ReadyState getReadyState() const override { return m_readyState; }
-  WebString getErrorMessage() override { return WebString(); }
-  bool didLoadingProgress() override { return false; }
-  bool hasSingleSecurityOrigin() const override { return true; }
-  bool didPassCORSAccessCheck() const override { return true; }
-  double mediaTimeForTimeValue(double timeValue) const override {
-    return timeValue;
-  }
-  unsigned decodedFrameCount() const override { return 0; }
-  unsigned droppedFrameCount() const override { return 0; }
-  size_t audioDecodedByteCount() const override { return 0; }
-  size_t videoDecodedByteCount() const override { return 0; }
-  void paint(WebCanvas*, const WebRect&, PaintFlags&) override {}
+  NetworkState GetNetworkState() const override { return network_state_; }
+  ReadyState GetReadyState() const override { return ready_state_; }
 
  private:
-  WebMediaPlayerClient* m_client;
-  std::unique_ptr<WebLayer> m_webLayer;
-  NetworkState m_networkState = NetworkStateEmpty;
-  ReadyState m_readyState = ReadyStateHaveNothing;
+  WebMediaPlayerClient* client_;
+  std::unique_ptr<WebLayer> web_layer_;
+  NetworkState network_state_ = kNetworkStateEmpty;
+  ReadyState ready_state_ = kReadyStateHaveNothing;
 };
 
 class StubLocalFrameClient : public EmptyLocalFrameClient {
  public:
   // LocalFrameClient
-  std::unique_ptr<WebMediaPlayer> createWebMediaPlayer(
+  std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient* client) override {
-    return WTF::makeUnique<StubWebMediaPlayer>(client);
+    return WTF::MakeUnique<StubWebMediaPlayer>(client);
   }
 };
 
@@ -97,50 +67,51 @@ class VideoPainterTestForSPv2 : public ::testing::Test,
 
  protected:
   void SetUp() override {
-    m_chromeClient = new StubChromeClientForSPv2();
-    m_localFrameClient = new StubLocalFrameClient;
+    chrome_client_ = new StubChromeClientForSPv2();
+    local_frame_client_ = new StubLocalFrameClient;
     Page::PageClients clients;
-    fillWithEmptyClients(clients);
-    clients.chromeClient = m_chromeClient.get();
-    m_pageHolder = DummyPageHolder::create(
-        IntSize(800, 600), &clients, m_localFrameClient.get(),
+    FillWithEmptyClients(clients);
+    clients.chrome_client = chrome_client_.Get();
+    page_holder_ = DummyPageHolder::Create(
+        IntSize(800, 600), &clients, local_frame_client_.Get(),
         [](Settings& settings) {
-          settings.setAcceleratedCompositingEnabled(true);
+          settings.SetAcceleratedCompositingEnabled(true);
         });
-    document().view()->setParentVisible(true);
-    document().view()->setSelfVisible(true);
-    document().setURL(KURL(KURL(), "https://example.com/"));
+    GetDocument().View()->SetParentVisible(true);
+    GetDocument().View()->SetSelfVisible(true);
+    GetDocument().SetURL(KURL(KURL(), "https://example.com/"));
   }
 
-  Document& document() { return m_pageHolder->document(); }
-  bool hasLayerAttached(const WebLayer& layer) {
-    return m_chromeClient->hasLayer(layer);
+  Document& GetDocument() { return page_holder_->GetDocument(); }
+  bool HasLayerAttached(const WebLayer& layer) {
+    return chrome_client_->HasLayer(layer);
   }
 
  private:
-  Persistent<StubChromeClientForSPv2> m_chromeClient;
-  Persistent<StubLocalFrameClient> m_localFrameClient;
-  std::unique_ptr<DummyPageHolder> m_pageHolder;
+  Persistent<StubChromeClientForSPv2> chrome_client_;
+  Persistent<StubLocalFrameClient> local_frame_client_;
+  std::unique_ptr<DummyPageHolder> page_holder_;
 };
 
 TEST_F(VideoPainterTestForSPv2, VideoLayerAppearsInLayerTree) {
   // Insert a <video> and allow it to begin loading.
-  document().body()->setInnerHTML("<video width=300 height=200 src=test.ogv>");
-  testing::runPendingTasks();
+  GetDocument().body()->setInnerHTML(
+      "<video width=300 height=200 src=test.ogv>");
+  testing::RunPendingTasks();
 
   // Force the page to paint.
-  document().view()->updateAllLifecyclePhases();
+  GetDocument().View()->UpdateAllLifecyclePhases();
 
   // Fetch the layer associated with the <video>, and check that it was
   // correctly configured in the layer tree.
   HTMLMediaElement* element =
-      toHTMLMediaElement(document().body()->firstChild());
+      ToHTMLMediaElement(GetDocument().body()->FirstChild());
   StubWebMediaPlayer* player =
-      static_cast<StubWebMediaPlayer*>(element->webMediaPlayer());
-  const WebLayer* layer = player->getWebLayer();
+      static_cast<StubWebMediaPlayer*>(element->GetWebMediaPlayer());
+  const WebLayer* layer = player->GetWebLayer();
   ASSERT_TRUE(layer);
-  EXPECT_TRUE(hasLayerAttached(*layer));
-  EXPECT_EQ(WebSize(300, 200), layer->bounds());
+  EXPECT_TRUE(HasLayerAttached(*layer));
+  EXPECT_EQ(WebSize(300, 200), layer->Bounds());
 }
 
 }  // namespace

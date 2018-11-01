@@ -555,6 +555,10 @@ class TestClientSocketPool : public ClientSocketPool {
 
   void CloseIdleSockets() override { base_.CloseIdleSockets(); }
 
+  void CloseIdleSocketsInGroup(const std::string& group_name) override {
+    base_.CloseIdleSocketsInGroup(group_name);
+  }
+
   int IdleSocketCount() const override { return base_.idle_socket_count(); }
 
   int IdleSocketCountInGroup(const std::string& group_name) const override {
@@ -1685,6 +1689,28 @@ TEST_F(ClientSocketPoolBaseTest, FailingActiveRequestWithPendingRequests) {
     EXPECT_THAT(request(i)->WaitForResult(), IsError(ERR_CONNECTION_FAILED));
 }
 
+// Make sure that pending requests that complete synchronously get serviced
+// after active requests fail. See https://crbug.com/723748
+TEST_F(ClientSocketPoolBaseTest, HandleMultipleSyncFailuresAfterAsyncFailure) {
+  const size_t kNumberOfRequests = 10;
+  const size_t kMaxSockets = 1;
+  CreatePool(kMaxSockets, kMaxSockets);
+
+  connect_job_factory_->set_job_type(TestConnectJob::kMockPendingFailingJob);
+
+  EXPECT_THAT(StartRequest("a", DEFAULT_PRIORITY), IsError(ERR_IO_PENDING));
+
+  connect_job_factory_->set_job_type(TestConnectJob::kMockFailingJob);
+
+  // Queue up all the other requests
+  for (size_t i = 1; i < kNumberOfRequests; ++i)
+    EXPECT_THAT(StartRequest("a", DEFAULT_PRIORITY), IsError(ERR_IO_PENDING));
+
+  // Make sure all requests fail, instead of hanging.
+  for (size_t i = 0; i < kNumberOfRequests; ++i)
+    EXPECT_THAT(request(i)->WaitForResult(), IsError(ERR_CONNECTION_FAILED));
+}
+
 TEST_F(ClientSocketPoolBaseTest, CancelActiveRequestThenRequestSocket) {
   CreatePool(kDefaultMaxSockets, kDefaultMaxSocketsPerGroup);
 
@@ -1727,6 +1753,36 @@ TEST_F(ClientSocketPoolBaseTest, CloseIdleSocketsForced) {
   EXPECT_THAT(histograms.GetAllSamples(kIdleSocketFateHistogram),
               testing::ElementsAre(
                   base::Bucket(/*IDLE_SOCKET_FATE_CLEAN_UP_FORCED=*/4, 1)));
+}
+
+TEST_F(ClientSocketPoolBaseTest, CloseIdleSocketsInGroupForced) {
+  base::HistogramTester histograms;
+  CreatePool(kDefaultMaxSockets, kDefaultMaxSocketsPerGroup);
+  TestCompletionCallback callback;
+  BoundTestNetLog log;
+  ClientSocketHandle handle1;
+  int rv = handle1.Init("a", params_, LOWEST,
+                        ClientSocketPool::RespectLimits::ENABLED,
+                        callback.callback(), pool_.get(), log.bound());
+  EXPECT_THAT(rv, IsOk());
+  ClientSocketHandle handle2;
+  rv = handle2.Init("a", params_, LOWEST,
+                    ClientSocketPool::RespectLimits::ENABLED,
+                    callback.callback(), pool_.get(), log.bound());
+  ClientSocketHandle handle3;
+  rv = handle3.Init("b", params_, LOWEST,
+                    ClientSocketPool::RespectLimits::ENABLED,
+                    callback.callback(), pool_.get(), log.bound());
+  EXPECT_THAT(rv, IsOk());
+  handle1.Reset();
+  handle2.Reset();
+  handle3.Reset();
+  EXPECT_EQ(3, pool_->IdleSocketCount());
+  pool_->CloseIdleSocketsInGroup("a");
+  EXPECT_EQ(1, pool_->IdleSocketCount());
+  EXPECT_THAT(histograms.GetAllSamples(kIdleSocketFateHistogram),
+              testing::ElementsAre(
+                  base::Bucket(/*IDLE_SOCKET_FATE_CLEAN_UP_FORCED=*/4, 2)));
 }
 
 TEST_F(ClientSocketPoolBaseTest, CleanUpUnusableIdleSockets) {

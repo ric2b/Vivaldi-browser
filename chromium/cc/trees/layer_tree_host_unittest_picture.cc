@@ -250,11 +250,8 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
         // Make the bottom of the layer visible.
         gfx::Transform transform;
         transform.Translate(0.f, -100000.f + 100.f);
-        impl->active_tree()
-            ->property_trees()
-            ->transform_tree.OnTransformAnimated(
-                transform, picture_impl->transform_tree_index(),
-                impl->active_tree());
+        impl->active_tree()->SetTransformMutated(picture_impl->element_id(),
+                                                 transform);
         impl->SetNeedsRedraw();
         break;
       }
@@ -265,11 +262,8 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
         EXPECT_FALSE(tiling->TileAt(0, 0));
 
         // Make the top of the layer visible again.
-        impl->active_tree()
-            ->property_trees()
-            ->transform_tree.OnTransformAnimated(
-                gfx::Transform(), picture_impl->transform_tree_index(),
-                impl->active_tree());
+        impl->active_tree()->SetTransformMutated(picture_impl->element_id(),
+                                                 gfx::Transform());
         impl->SetNeedsRedraw();
         break;
       }
@@ -458,19 +452,22 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
       case 0:
         // On 1st commit the pending layer has tilings.
         ASSERT_EQ(1u, picture->tilings()->num_tilings());
-        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(gfx::AxisTransform2d(),
+                  picture->tilings()->tiling_at(0)->raster_transform());
         break;
       case 1:
         // On 2nd commit, the pending layer is transparent, so has a stale
         // value.
         ASSERT_EQ(1u, picture->tilings()->num_tilings());
-        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(gfx::AxisTransform2d(),
+                  picture->tilings()->tiling_at(0)->raster_transform());
         break;
       case 2:
         // On 3rd commit, the pending layer is visible again, so has tilings and
         // is updated for the pinch.
         ASSERT_EQ(1u, picture->tilings()->num_tilings());
-        EXPECT_EQ(2.f, picture->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(gfx::AxisTransform2d(2.f, gfx::Vector2dF()),
+                  picture->tilings()->tiling_at(0)->raster_transform());
     }
   }
 
@@ -488,7 +485,8 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
         if (draws_in_frame_ == 1) {
           // On 1st commit the layer has tilings.
           EXPECT_GT(picture->tilings()->num_tilings(), 0u);
-          EXPECT_EQ(1.f, picture->HighResTiling()->contents_scale());
+          EXPECT_EQ(gfx::AxisTransform2d(),
+                    picture->HighResTiling()->raster_transform());
 
           // Pinch zoom in to change the scale on the active tree.
           impl->PinchGestureBegin();
@@ -498,7 +496,8 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
           // If the pinch gesture caused a commit we could get here with a
           // pending tree.
           EXPECT_FALSE(impl->pending_tree());
-          EXPECT_EQ(2.f, picture->HighResTiling()->contents_scale());
+          EXPECT_EQ(gfx::AxisTransform2d(2.f, gfx::Vector2dF()),
+                    picture->HighResTiling()->raster_transform());
 
           // Need to wait for ready to draw here so that the pinch is
           // entirely complete, otherwise another draw might come in before
@@ -507,7 +506,7 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
             ++frame_;
             MainThreadTaskRunner()->PostTask(
                 FROM_HERE,
-                base::Bind(
+                base::BindOnce(
                     &LayerTreeHostPictureTestRSLLMembershipWithScale::NextStep,
                     base::Unretained(this)));
           }
@@ -524,7 +523,7 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
         ++frame_;
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(
+            base::BindOnce(
                 &LayerTreeHostPictureTestRSLLMembershipWithScale::NextStep,
                 base::Unretained(this)));
         break;
@@ -616,14 +615,16 @@ class LayerTreeHostPictureTestForceRecalculateScales
       case 0:
         // On first commit, both layers are at the default scale.
         ASSERT_EQ(1u, will_change_layer->tilings()->num_tilings());
-        EXPECT_EQ(1.f,
-                  will_change_layer->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(
+            gfx::AxisTransform2d(),
+            will_change_layer->tilings()->tiling_at(0)->raster_transform());
         ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
-        EXPECT_EQ(1.f, normal_layer->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(gfx::AxisTransform2d(),
+                  normal_layer->tilings()->tiling_at(0)->raster_transform());
 
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(
+            base::BindOnce(
                 &LayerTreeHostPictureTestForceRecalculateScales::ScaleRootUp,
                 base::Unretained(this)));
         break;
@@ -631,25 +632,29 @@ class LayerTreeHostPictureTestForceRecalculateScales
         // On 2nd commit after scaling up to 2, the normal layer will adjust its
         // scale and the will change layer should not (as it is will change.
         ASSERT_EQ(1u, will_change_layer->tilings()->num_tilings());
-        EXPECT_EQ(1.f,
-                  will_change_layer->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(
+            gfx::AxisTransform2d(),
+            will_change_layer->tilings()->tiling_at(0)->raster_transform());
         ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
-        EXPECT_EQ(2.f, normal_layer->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(gfx::AxisTransform2d(2.f, gfx::Vector2dF()),
+                  normal_layer->tilings()->tiling_at(0)->raster_transform());
 
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(&LayerTreeHostPictureTestForceRecalculateScales::
-                           ScaleRootUpAndRecalculateScales,
-                       base::Unretained(this)));
+            base::BindOnce(&LayerTreeHostPictureTestForceRecalculateScales::
+                               ScaleRootUpAndRecalculateScales,
+                           base::Unretained(this)));
         break;
       case 2:
         // On 3rd commit, both layers should adjust scales due to forced
         // recalculating.
         ASSERT_EQ(1u, will_change_layer->tilings()->num_tilings());
-        EXPECT_EQ(4.f,
-                  will_change_layer->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(
+            gfx::AxisTransform2d(4.f, gfx::Vector2dF()),
+            will_change_layer->tilings()->tiling_at(0)->raster_transform());
         ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
-        EXPECT_EQ(4.f, normal_layer->tilings()->tiling_at(0)->contents_scale());
+        EXPECT_EQ(gfx::AxisTransform2d(4.f, gfx::Vector2dF()),
+                  normal_layer->tilings()->tiling_at(0)->raster_transform());
         EndTest();
         break;
     }

@@ -21,7 +21,7 @@
 #include "chrome/browser/chromeos/login/signin_specifics.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/base_webui_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/dbus/power_manager_client.h"
@@ -218,7 +218,7 @@ class SigninScreenHandlerDelegate {
 // A class that handles the WebUI hooks in sign-in screen in OobeUI and
 // LoginDisplay.
 class SigninScreenHandler
-    : public BaseScreenHandler,
+    : public BaseWebUIHandler,
       public LoginDisplayWebUIHandler,
       public content::NotificationObserver,
       public NetworkStateInformer::NetworkStateInformerObserver,
@@ -235,10 +235,10 @@ class SigninScreenHandler
       JSCallsContainer* js_calls_container);
   ~SigninScreenHandler() override;
 
-  static std::string GetUserLRUInputMethod(const std::string& username);
+  static std::string GetUserLastInputMethod(const std::string& username);
 
   // Update current input method (namely keyboard layout) in the given IME state
-  // to LRU by this user.
+  // to last input method used by this user.
   static void SetUserInputMethod(
       const std::string& username,
       input_method::InputMethodManager::State* ime_state);
@@ -347,8 +347,8 @@ class SigninScreenHandler
   // Restore input focus to current user pod.
   void RefocusCurrentPod();
 
-  // Hides the PIN keyboard if it is no longer available.
-  void HidePinKeyboardIfNeeded(const AccountId& account_id);
+  // Enable or disable the pin keyboard for the given account.
+  void UpdatePinKeyboardState(const AccountId& account_id);
 
   // WebUI message handlers.
   void HandleGetUsers();

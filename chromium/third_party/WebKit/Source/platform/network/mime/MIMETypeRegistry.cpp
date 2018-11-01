@@ -10,11 +10,11 @@
 #include "media/base/mime_util.h"
 #include "media/filters/stream_parser_factory.h"
 #include "net/base/mime_util.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/FilePathConversion.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
 #include "public/platform/mime_registry.mojom-blink.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -23,174 +23,201 @@ namespace {
 struct MimeRegistryPtrHolder {
  public:
   MimeRegistryPtrHolder() {
-    Platform::current()->interfaceProvider()->getInterface(
-        mojo::MakeRequest(&mimeRegistry));
+    Platform::Current()->GetInterfaceProvider()->GetInterface(
+        mojo::MakeRequest(&mime_registry));
   }
   ~MimeRegistryPtrHolder() {}
 
-  mojom::blink::MimeRegistryPtr mimeRegistry;
+  mojom::blink::MimeRegistryPtr mime_registry;
 };
 
 std::string ToASCIIOrEmpty(const WebString& string) {
-  return string.containsOnlyASCII() ? string.ascii() : std::string();
+  return string.ContainsOnlyASCII() ? string.Ascii() : std::string();
 }
 
 template <typename CHARTYPE, typename SIZETYPE>
 std::string ToLowerASCIIInternal(CHARTYPE* str, SIZETYPE length) {
-  std::string lowerASCII;
-  lowerASCII.reserve(length);
+  std::string lower_ascii;
+  lower_ascii.reserve(length);
   for (CHARTYPE* p = str; p < str + length; p++)
-    lowerASCII.push_back(base::ToLowerASCII(static_cast<char>(*p)));
-  return lowerASCII;
+    lower_ascii.push_back(base::ToLowerASCII(static_cast<char>(*p)));
+  return lower_ascii;
 }
 
 // Does the same as ToASCIIOrEmpty, but also makes the chars lower.
 std::string ToLowerASCIIOrEmpty(const String& str) {
-  if (str.isEmpty() || !str.containsOnlyASCII())
+  if (str.IsEmpty() || !str.ContainsOnlyASCII())
     return std::string();
-  if (str.is8Bit())
-    return ToLowerASCIIInternal(str.characters8(), str.length());
-  return ToLowerASCIIInternal(str.characters16(), str.length());
+  if (str.Is8Bit())
+    return ToLowerASCIIInternal(str.Characters8(), str.length());
+  return ToLowerASCIIInternal(str.Characters16(), str.length());
 }
 
 #define STATIC_ASSERT_ENUM(a, b)                            \
   static_assert(static_cast<int>(a) == static_cast<int>(b), \
                 "mismatching enums: " #a)
-STATIC_ASSERT_ENUM(MIMETypeRegistry::IsNotSupported, media::IsNotSupported);
-STATIC_ASSERT_ENUM(MIMETypeRegistry::IsSupported, media::IsSupported);
-STATIC_ASSERT_ENUM(MIMETypeRegistry::MayBeSupported, media::MayBeSupported);
+STATIC_ASSERT_ENUM(MIMETypeRegistry::kIsNotSupported, media::IsNotSupported);
+STATIC_ASSERT_ENUM(MIMETypeRegistry::kIsSupported, media::IsSupported);
+STATIC_ASSERT_ENUM(MIMETypeRegistry::kMayBeSupported, media::MayBeSupported);
 
 }  // namespace
 
-String MIMETypeRegistry::getMIMETypeForExtension(const String& ext) {
+String MIMETypeRegistry::GetMIMETypeForExtension(const String& ext) {
   // The sandbox restricts our access to the registry, so we need to proxy
   // these calls over to the browser process.
-  DEFINE_STATIC_LOCAL(MimeRegistryPtrHolder, registryHolder, ());
-  String mimeType;
-  if (!registryHolder.mimeRegistry->GetMimeTypeFromExtension(ext, &mimeType))
+  DEFINE_STATIC_LOCAL(MimeRegistryPtrHolder, registry_holder, ());
+  String mime_type;
+  if (!registry_holder.mime_registry->GetMimeTypeFromExtension(ext, &mime_type))
     return String();
-  return mimeType;
+  return mime_type;
 }
 
-String MIMETypeRegistry::getWellKnownMIMETypeForExtension(const String& ext) {
+String MIMETypeRegistry::GetWellKnownMIMETypeForExtension(const String& ext) {
   // This method must be thread safe and should not consult the OS/registry.
-  std::string mimeType;
+  std::string mime_type;
   net::GetWellKnownMimeTypeFromExtension(WebStringToFilePath(ext).value(),
-                                         &mimeType);
-  return String::fromUTF8(mimeType.data(), mimeType.length());
+                                         &mime_type);
+  return String::FromUTF8(mime_type.data(), mime_type.length());
 }
 
-String MIMETypeRegistry::getMIMETypeForPath(const String& path) {
-  int pos = path.reverseFind('.');
+String MIMETypeRegistry::GetMIMETypeForPath(const String& path) {
+  int pos = path.ReverseFind('.');
   if (pos < 0)
     return "application/octet-stream";
-  String extension = path.substring(pos + 1);
-  String mimeType = getMIMETypeForExtension(extension);
-  return mimeType.isEmpty() ? "application/octet-stream" : mimeType;
+  String extension = path.Substring(pos + 1);
+  String mime_type = GetMIMETypeForExtension(extension);
+  return mime_type.IsEmpty() ? "application/octet-stream" : mime_type;
 }
 
-bool MIMETypeRegistry::isSupportedMIMEType(const String& mimeType) {
-  return mime_util::IsSupportedMimeType(ToLowerASCIIOrEmpty(mimeType));
+bool MIMETypeRegistry::IsSupportedMIMEType(const String& mime_type) {
+  return mime_util::IsSupportedMimeType(ToLowerASCIIOrEmpty(mime_type));
 }
 
-bool MIMETypeRegistry::isSupportedImageMIMEType(const String& mimeType) {
-  return mime_util::IsSupportedImageMimeType(ToLowerASCIIOrEmpty(mimeType));
+bool MIMETypeRegistry::IsSupportedImageMIMEType(const String& mime_type) {
+  return mime_util::IsSupportedImageMimeType(ToLowerASCIIOrEmpty(mime_type));
 }
 
-bool MIMETypeRegistry::isSupportedImageResourceMIMEType(
-    const String& mimeType) {
-  return isSupportedImageMIMEType(mimeType);
+bool MIMETypeRegistry::IsSupportedImageResourceMIMEType(
+    const String& mime_type) {
+  return IsSupportedImageMIMEType(mime_type);
 }
 
-bool MIMETypeRegistry::isSupportedImagePrefixedMIMEType(
-    const String& mimeType) {
-  std::string asciiMimeType = ToLowerASCIIOrEmpty(mimeType);
-  return (mime_util::IsSupportedImageMimeType(asciiMimeType) ||
-          (base::StartsWith(asciiMimeType, "image/",
+bool MIMETypeRegistry::IsSupportedImagePrefixedMIMEType(
+    const String& mime_type) {
+  std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
+  return (mime_util::IsSupportedImageMimeType(ascii_mime_type) ||
+          (base::StartsWith(ascii_mime_type, "image/",
                             base::CompareCase::SENSITIVE) &&
-           mime_util::IsSupportedNonImageMimeType(asciiMimeType)));
+           mime_util::IsSupportedNonImageMimeType(ascii_mime_type)));
 }
 
-bool MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(
-    const String& mimeType) {
-  if (equalIgnoringCase(mimeType, "image/jpeg") ||
-      equalIgnoringCase(mimeType, "image/png"))
+bool MIMETypeRegistry::IsSupportedImageMIMETypeForEncoding(
+    const String& mime_type) {
+  if (DeprecatedEqualIgnoringCase(mime_type, "image/jpeg") ||
+      DeprecatedEqualIgnoringCase(mime_type, "image/png"))
     return true;
-  if (equalIgnoringCase(mimeType, "image/webp"))
+  if (DeprecatedEqualIgnoringCase(mime_type, "image/webp"))
     return true;
   return false;
 }
 
-bool MIMETypeRegistry::isSupportedJavaScriptMIMEType(const String& mimeType) {
+bool MIMETypeRegistry::IsSupportedJavaScriptMIMEType(const String& mime_type) {
   return mime_util::IsSupportedJavascriptMimeType(
-      ToLowerASCIIOrEmpty(mimeType));
+      ToLowerASCIIOrEmpty(mime_type));
 }
 
-bool MIMETypeRegistry::isSupportedNonImageMIMEType(const String& mimeType) {
-  return mime_util::IsSupportedNonImageMimeType(ToLowerASCIIOrEmpty(mimeType));
+bool MIMETypeRegistry::IsLegacySupportedJavaScriptLanguage(
+    const String& language) {
+  // Mozilla 1.8 accepts javascript1.0 - javascript1.7, but WinIE 7 accepts only
+  // javascript1.1 - javascript1.3.
+  // Mozilla 1.8 and WinIE 7 both accept javascript and livescript.
+  // WinIE 7 accepts ecmascript and jscript, but Mozilla 1.8 doesn't.
+  // Neither Mozilla 1.8 nor WinIE 7 accept leading or trailing whitespace.
+  // We want to accept all the values that either of these browsers accept, but
+  // not other values.
+
+  // FIXME: This function is not HTML5 compliant. These belong in the MIME
+  // registry as "text/javascript<version>" entries.
+  return EqualIgnoringASCIICase(language, "javascript") ||
+         EqualIgnoringASCIICase(language, "javascript1.0") ||
+         EqualIgnoringASCIICase(language, "javascript1.1") ||
+         EqualIgnoringASCIICase(language, "javascript1.2") ||
+         EqualIgnoringASCIICase(language, "javascript1.3") ||
+         EqualIgnoringASCIICase(language, "javascript1.4") ||
+         EqualIgnoringASCIICase(language, "javascript1.5") ||
+         EqualIgnoringASCIICase(language, "javascript1.6") ||
+         EqualIgnoringASCIICase(language, "javascript1.7") ||
+         EqualIgnoringASCIICase(language, "livescript") ||
+         EqualIgnoringASCIICase(language, "ecmascript") ||
+         EqualIgnoringASCIICase(language, "jscript");
 }
 
-bool MIMETypeRegistry::isSupportedMediaMIMEType(const String& mimeType,
+bool MIMETypeRegistry::IsSupportedNonImageMIMEType(const String& mime_type) {
+  return mime_util::IsSupportedNonImageMimeType(ToLowerASCIIOrEmpty(mime_type));
+}
+
+bool MIMETypeRegistry::IsSupportedMediaMIMEType(const String& mime_type,
                                                 const String& codecs) {
-  return supportsMediaMIMEType(mimeType, codecs) != IsNotSupported;
+  return SupportsMediaMIMEType(mime_type, codecs) != kIsNotSupported;
 }
 
-MIMETypeRegistry::SupportsType MIMETypeRegistry::supportsMediaMIMEType(
-    const String& mimeType,
+MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaMIMEType(
+    const String& mime_type,
     const String& codecs) {
-  const std::string asciiMimeType = ToLowerASCIIOrEmpty(mimeType);
+  const std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   // Some containers are known to be partially supported.
-  if (media::IsPartiallySupportedMediaMimeType(asciiMimeType))
-    return MayBeSupported;
+  if (media::IsPartiallySupportedMediaMimeType(ascii_mime_type))
+    return kMayBeSupported;
 #endif
 
-  std::vector<std::string> codecVector;
-  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &codecVector, false);
+  std::vector<std::string> codec_vector;
+  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &codec_vector, false);
   return static_cast<SupportsType>(
-      media::IsSupportedMediaFormat(asciiMimeType, codecVector));
+      media::IsSupportedMediaFormat(ascii_mime_type, codec_vector));
 }
 
-bool MIMETypeRegistry::isSupportedMediaSourceMIMEType(const String& mimeType,
+bool MIMETypeRegistry::IsSupportedMediaSourceMIMEType(const String& mime_type,
                                                       const String& codecs) {
-  const std::string asciiMimeType = ToLowerASCIIOrEmpty(mimeType);
-  if (asciiMimeType.empty())
+  const std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
+  if (ascii_mime_type.empty())
     return false;
-  std::vector<std::string> parsedCodecIds;
-  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &parsedCodecIds, false);
+  std::vector<std::string> parsed_codec_ids;
+  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &parsed_codec_ids, false);
   return static_cast<MIMETypeRegistry::SupportsType>(
-      media::StreamParserFactory::IsTypeSupported(asciiMimeType,
-                                                  parsedCodecIds));
+      media::StreamParserFactory::IsTypeSupported(ascii_mime_type,
+                                                  parsed_codec_ids));
 }
 
-bool MIMETypeRegistry::isJavaAppletMIMEType(const String& mimeType) {
+bool MIMETypeRegistry::IsJavaAppletMIMEType(const String& mime_type) {
   // Since this set is very limited and is likely to remain so we won't bother
   // with the overhead of using a hash set.  Any of the MIME types below may be
   // followed by any number of specific versions of the JVM, which is why we use
   // startsWith()
-  return mimeType.startsWith("application/x-java-applet",
-                             TextCaseASCIIInsensitive) ||
-         mimeType.startsWith("application/x-java-bean",
-                             TextCaseASCIIInsensitive) ||
-         mimeType.startsWith("application/x-java-vm", TextCaseASCIIInsensitive);
+  return mime_type.StartsWith("application/x-java-applet",
+                              kTextCaseASCIIInsensitive) ||
+         mime_type.StartsWith("application/x-java-bean",
+                              kTextCaseASCIIInsensitive) ||
+         mime_type.StartsWith("application/x-java-vm",
+                              kTextCaseASCIIInsensitive);
 }
 
-bool MIMETypeRegistry::isSupportedStyleSheetMIMEType(const String& mimeType) {
-  return equalIgnoringCase(mimeType, "text/css");
+bool MIMETypeRegistry::IsSupportedStyleSheetMIMEType(const String& mime_type) {
+  return DeprecatedEqualIgnoringCase(mime_type, "text/css");
 }
 
-bool MIMETypeRegistry::isSupportedFontMIMEType(const String& mimeType) {
-  static const unsigned fontLen = 5;
-  if (!mimeType.startsWith("font/", TextCaseASCIIInsensitive))
+bool MIMETypeRegistry::IsSupportedFontMIMEType(const String& mime_type) {
+  static const unsigned kFontLen = 5;
+  if (!mime_type.StartsWith("font/", kTextCaseASCIIInsensitive))
     return false;
-  String subType = mimeType.substring(fontLen).lower();
-  return subType == "woff" || subType == "woff2" || subType == "otf" ||
-         subType == "ttf" || subType == "sfnt";
+  String sub_type = mime_type.Substring(kFontLen).DeprecatedLower();
+  return sub_type == "woff" || sub_type == "woff2" || sub_type == "otf" ||
+         sub_type == "ttf" || sub_type == "sfnt";
 }
 
-bool MIMETypeRegistry::isSupportedTextTrackMIMEType(const String& mimeType) {
-  return equalIgnoringCase(mimeType, "text/vtt");
+bool MIMETypeRegistry::IsSupportedTextTrackMIMEType(const String& mime_type) {
+  return DeprecatedEqualIgnoringCase(mime_type, "text/vtt");
 }
 
 }  // namespace blink

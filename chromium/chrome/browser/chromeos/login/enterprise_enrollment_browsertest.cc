@@ -16,6 +16,7 @@
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/upstart_client.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 
 using testing::_;
@@ -155,6 +156,34 @@ class EnterpriseEnrollmentTest : public LoginManagerTest {
     });
   }
 
+  void SetupActiveDirectoryJSNotifications() {
+    js_checker().Evaluate(
+        "var testShowStep = login.OAuthEnrollmentScreen.showStep;"
+        "login.OAuthEnrollmentScreen.showStep = function(step) {"
+        "  testShowStep(step);"
+        "  if (step == 'working') {"
+        "    window.domAutomationController.setAutomationId(0);"
+        "    window.domAutomationController.send('ShowSpinnerScreen');"
+        "  }"
+        "}");
+    js_checker().Evaluate(
+        "var testInvalidateAd = login.OAuthEnrollmentScreen.invalidateAd;"
+        "login.OAuthEnrollmentScreen.invalidateAd = function(machineName, "
+        "user, errorState) {"
+        "  testInvalidateAd(machineName, user, errorState);"
+        "  window.domAutomationController.setAutomationId(0);"
+        "  window.domAutomationController.send('ShowJoinDomainError');"
+        "}");
+  }
+
+  void WaitForMessage(content::DOMMessageQueue* message_queue,
+                      const std::string& expected_message) {
+    std::string message;
+    do {
+      ASSERT_TRUE(message_queue->WaitForMessage(&message));
+    } while (message != expected_message);
+  }
+
   // Fills out the UI with device attribute information and submits it.
   void SubmitAttributePromptUpdate() {
     // Fill out the attribute prompt info and submit it.
@@ -201,7 +230,8 @@ class EnterpriseEnrollmentTest : public LoginManagerTest {
 
   // Helper method to return the current EnrollmentScreen instance.
   EnrollmentScreen* enrollment_screen() {
-    return EnrollmentScreen::Get(WizardController::default_controller());
+    return EnrollmentScreen::Get(
+        WizardController::default_controller()->screen_manager());
   }
 
  private:
@@ -296,7 +326,10 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
       ->GetUpstartClient()
       ->StartAuthPolicyService();
 
+  content::DOMMessageQueue message_queue;
+  SetupActiveDirectoryJSNotifications();
   SubmitActiveDirectoryCredentials("machine_name", kAdTestUser, "password");
+  WaitForMessage(&message_queue, "\"ShowSpinnerScreen\"");
   EXPECT_FALSE(IsStepDisplayed("ad-join"));
 
   CompleteEnrollment();
@@ -322,9 +355,11 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
       ->GetUpstartClient()
       ->StartAuthPolicyService();
 
+  content::DOMMessageQueue message_queue;
   // Checking error in case of empty password. Whether password is not empty
   // being checked in the UI. Machine name length is checked after that in the
   // authpolicyd.
+  SetupActiveDirectoryJSNotifications();
   SubmitActiveDirectoryCredentials("too_long_machine_name", kAdTestUser, "");
   EXPECT_TRUE(IsStepDisplayed("ad-join"));
   js_checker().ExpectFalse(std::string(kAdMachineNameInput) + ".isInvalid");
@@ -334,6 +369,7 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
   // Checking error in case of too long machine name.
   SubmitActiveDirectoryCredentials("too_long_machine_name", kAdTestUser,
                                    "password");
+  WaitForMessage(&message_queue, "\"ShowJoinDomainError\"");
   EXPECT_TRUE(IsStepDisplayed("ad-join"));
   js_checker().ExpectTrue(std::string(kAdMachineNameInput) + ".isInvalid");
   js_checker().ExpectFalse(std::string(kAdUsernameInput) + ".isInvalid");
@@ -341,6 +377,7 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
 
   // Checking error in case of bad username (without realm).
   SubmitActiveDirectoryCredentials("machine_name", "test_user", "password");
+  WaitForMessage(&message_queue, "\"ShowJoinDomainError\"");
   EXPECT_TRUE(IsStepDisplayed("ad-join"));
   js_checker().ExpectFalse(std::string(kAdMachineNameInput) + ".isInvalid");
   js_checker().ExpectTrue(std::string(kAdUsernameInput) + ".isInvalid");

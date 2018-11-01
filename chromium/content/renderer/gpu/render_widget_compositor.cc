@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -31,9 +32,9 @@
 #include "cc/animation/animation_timeline.h"
 #include "cc/base/region.h"
 #include "cc/base/switches.h"
+#include "cc/benchmarks/micro_benchmark.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/debug/layer_tree_debug_state.h"
-#include "cc/debug/micro_benchmark.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/layers/layer.h"
 #include "cc/output/begin_frame_args.h"
@@ -66,7 +67,7 @@
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebSelection.h"
 #include "ui/gl/gl_switches.h"
-#include "ui/native_theme/native_theme_switches.h"
+#include "ui/native_theme/native_theme_features.h"
 #include "ui/native_theme/overlay_scrollbar_constants_aura.h"
 
 namespace base {
@@ -108,25 +109,27 @@ cc::LayerSelectionBound ConvertWebSelectionBound(
     const WebSelection& web_selection,
     bool is_start) {
   cc::LayerSelectionBound cc_bound;
-  if (web_selection.isNone())
+  if (web_selection.IsNone())
     return cc_bound;
 
   const blink::WebSelectionBound& web_bound =
-      is_start ? web_selection.start() : web_selection.end();
-  DCHECK(web_bound.layerId);
+      is_start ? web_selection.Start() : web_selection.end();
+  DCHECK(web_bound.layer_id);
   cc_bound.type = gfx::SelectionBound::CENTER;
-  if (web_selection.isRange()) {
+  if (web_selection.IsRange()) {
     if (is_start) {
-      cc_bound.type = web_bound.isTextDirectionRTL ? gfx::SelectionBound::RIGHT
-                                                   : gfx::SelectionBound::LEFT;
+      cc_bound.type = web_bound.is_text_direction_rtl
+                          ? gfx::SelectionBound::RIGHT
+                          : gfx::SelectionBound::LEFT;
     } else {
-      cc_bound.type = web_bound.isTextDirectionRTL ? gfx::SelectionBound::LEFT
-                                                   : gfx::SelectionBound::RIGHT;
+      cc_bound.type = web_bound.is_text_direction_rtl
+                          ? gfx::SelectionBound::LEFT
+                          : gfx::SelectionBound::RIGHT;
     }
   }
-  cc_bound.layer_id = web_bound.layerId;
-  cc_bound.edge_top = gfx::Point(web_bound.edgeTopInLayer);
-  cc_bound.edge_bottom = gfx::Point(web_bound.edgeBottomInLayer);
+  cc_bound.layer_id = web_bound.layer_id;
+  cc_bound.edge_top = gfx::Point(web_bound.edge_top_in_layer);
+  cc_bound.edge_bottom = gfx::Point(web_bound.edge_bottom_in_layer);
   return cc_bound;
 }
 
@@ -171,11 +174,11 @@ gfx::Size CalculateDefaultTileSize(float initial_device_scale_factor,
 
 // Check cc::BrowserControlsState, and blink::WebBrowserControlsState
 // are kept in sync.
-static_assert(int(blink::WebBrowserControlsBoth) == int(cc::BOTH),
+static_assert(int(blink::kWebBrowserControlsBoth) == int(cc::BOTH),
               "mismatching enums: BOTH");
-static_assert(int(blink::WebBrowserControlsHidden) == int(cc::HIDDEN),
+static_assert(int(blink::kWebBrowserControlsHidden) == int(cc::HIDDEN),
               "mismatching enums: HIDDEN");
-static_assert(int(blink::WebBrowserControlsShown) == int(cc::SHOWN),
+static_assert(int(blink::kWebBrowserControlsShown) == int(cc::SHOWN),
               "mismatching enums: SHOWN");
 
 static cc::BrowserControlsState ConvertBrowserControlsState(
@@ -226,8 +229,8 @@ std::unique_ptr<cc::LayerTreeHost> RenderWidgetCompositor::CreateLayerTreeHost(
     float device_scale_factor,
     const ScreenInfo& screen_info) {
   base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-  cc::LayerTreeSettings settings =
-      GenerateLayerTreeSettings(*cmd, deps, device_scale_factor, screen_info);
+  cc::LayerTreeSettings settings = GenerateLayerTreeSettings(
+      *cmd, deps, device_scale_factor, client->IsForSubframe(), screen_info);
 
   const bool is_threaded = !!deps->GetCompositorImplThreadTaskRunner();
 
@@ -267,8 +270,11 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     const base::CommandLine& cmd,
     CompositorDependencies* compositor_deps,
     float device_scale_factor,
+    bool is_for_subframe,
     const ScreenInfo& screen_info) {
   cc::LayerTreeSettings settings;
+
+  settings.is_layer_tree_for_subframe = is_for_subframe;
 
   // For web contents, layer transforms should scale up the contents of layers
   // to keep content always crisp when possible.
@@ -329,9 +335,8 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
       compositor_deps->IsElasticOverscrollEnabled();
   settings.renderer_settings.use_gpu_memory_buffer_resources =
       compositor_deps->IsGpuMemoryBufferCompositorResourcesEnabled();
-  settings.enable_color_correct_rendering =
-      cmd.HasSwitch(cc::switches::kEnableColorCorrectRendering) ||
-      cmd.HasSwitch(cc::switches::kEnableTrueColorRendering);
+  settings.enable_color_correct_rasterization =
+      cmd.HasSwitch(cc::switches::kEnableColorCorrectRendering);
   settings.renderer_settings.buffer_to_texture_target_map =
       compositor_deps->GetBufferToTextureTargetMap();
   settings.image_decode_tasks_enabled =
@@ -352,8 +357,8 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   settings.single_thread_proxy_scheduler = false;
 
   // These flags should be mirrored by UI versions in ui/compositor/.
-  settings.initial_debug_state.show_debug_borders =
-      cmd.HasSwitch(cc::switches::kShowCompositedLayerBorders);
+  if (cmd.HasSwitch(cc::switches::kShowCompositedLayerBorders))
+    settings.initial_debug_state.show_debug_borders.set();
   settings.initial_debug_state.show_layer_animation_bounds_rects =
       cmd.HasSwitch(cc::switches::kShowLayerAnimationBounds);
   settings.initial_debug_state.show_paint_rects =
@@ -367,6 +372,8 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
 
   settings.initial_debug_state.SetRecordRenderingStats(
       cmd.HasSwitch(cc::switches::kEnableGpuBenchmarking));
+  settings.enable_surface_synchronization =
+      cmd.HasSwitch(cc::switches::kEnableSurfaceSynchronization);
 
   if (cmd.HasSwitch(cc::switches::kSlowDownRasterScaleFactor)) {
     const int kMinSlowDownScaleFactor = 0;
@@ -391,11 +398,10 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     settings.solid_color_scrollbar_color = SK_ColorTRANSPARENT;
   } else {
     settings.scrollbar_animator = cc::LayerTreeSettings::ANDROID_OVERLAY;
-    settings.scrollbar_fade_out_delay = base::TimeDelta::FromMilliseconds(300);
+    settings.scrollbar_fade_delay = base::TimeDelta::FromMilliseconds(300);
     settings.scrollbar_fade_out_resize_delay =
         base::TimeDelta::FromMilliseconds(2000);
-    settings.scrollbar_fade_out_duration =
-        base::TimeDelta::FromMilliseconds(300);
+    settings.scrollbar_fade_duration = base::TimeDelta::FromMilliseconds(300);
     settings.solid_color_scrollbar_color = SkColorSetARGB(128, 128, 128, 128);
   }
   settings.renderer_settings.highp_threshold_min = 2048;
@@ -425,17 +431,22 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   settings.renderer_settings.should_clear_root_render_pass =
       !using_synchronous_compositor;
 
+  if (base::SysInfo::IsLowEndDevice()) {
+    // When running on a low end device, we limit cached bytes to 2MB.
+    // This allows a typical page to fit its images in cache, but prevents
+    // most long-term caching.
+    settings.decoded_image_cache_budget_bytes = 2 * 1024 * 1024;
+  }
+
   // TODO(danakj): Only do this on low end devices.
   settings.create_low_res_tiling = true;
 #else  // defined(OS_ANDROID)
 #if !defined(OS_MACOSX)
   if (ui::IsOverlayScrollbarEnabled()) {
     settings.scrollbar_animator = cc::LayerTreeSettings::AURA_OVERLAY;
-    settings.scrollbar_show_delay = ui::kOverlayScrollbarShowDelay;
-    settings.scrollbar_fade_out_delay = ui::kOverlayScrollbarFadeOutDelay;
-    settings.scrollbar_fade_out_resize_delay =
-        ui::kOverlayScrollbarFadeOutDelay;
-    settings.scrollbar_fade_out_duration = ui::kOverlayScrollbarFadeOutDuration;
+    settings.scrollbar_fade_delay = ui::kOverlayScrollbarFadeDelay;
+    settings.scrollbar_fade_out_resize_delay = ui::kOverlayScrollbarFadeDelay;
+    settings.scrollbar_fade_duration = ui::kOverlayScrollbarFadeDuration;
     settings.scrollbar_thinning_duration =
         ui::kOverlayScrollbarThinningDuration;
   } else {
@@ -443,11 +454,10 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     // animations for non overlay scrollbars.
     settings.scrollbar_animator = cc::LayerTreeSettings::ANDROID_OVERLAY;
     settings.solid_color_scrollbar_color = SkColorSetARGB(128, 128, 128, 128);
-    settings.scrollbar_fade_out_delay = base::TimeDelta::FromMilliseconds(500);
+    settings.scrollbar_fade_delay = base::TimeDelta::FromMilliseconds(500);
     settings.scrollbar_fade_out_resize_delay =
         base::TimeDelta::FromMilliseconds(500);
-    settings.scrollbar_fade_out_duration =
-        base::TimeDelta::FromMilliseconds(300);
+    settings.scrollbar_fade_duration = base::TimeDelta::FromMilliseconds(300);
   }
 #endif  // !defined(OS_MACOSX)
 
@@ -456,12 +466,12 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   const int kImageDecodeMemoryThresholdMB = 4 * 1024;
   if (base::SysInfo::AmountOfPhysicalMemoryMB() >=
       kImageDecodeMemoryThresholdMB) {
-    settings.gpu_decoded_image_budget_bytes = 256 * 1024 * 1024;
-    settings.software_decoded_image_budget_bytes = 256 * 1024 * 1024;
+    settings.decoded_image_cache_budget_bytes = 256 * 1024 * 1024;
+    settings.decoded_image_working_set_budget_bytes = 256 * 1024 * 1024;
   } else {
     // These are the defaults, but recorded here as well.
-    settings.gpu_decoded_image_budget_bytes = 96 * 1024 * 1024;
-    settings.software_decoded_image_budget_bytes = 128 * 1024 * 1024;
+    settings.decoded_image_cache_budget_bytes = 128 * 1024 * 1024;
+    settings.decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
   }
 
 #endif  // defined(OS_ANDROID)
@@ -599,8 +609,7 @@ void RenderWidgetCompositor::SetNeedsRedrawRect(gfx::Rect damage_rect) {
 }
 
 void RenderWidgetCompositor::SetNeedsForcedRedraw() {
-  layer_tree_host_->SetNextCommitForcesRedraw();
-  layer_tree_host_->SetNeedsUpdateLayers();
+  layer_tree_host_->SetNeedsCommitWithForcedRedraw();
 }
 
 std::unique_ptr<cc::SwapPromiseMonitor>
@@ -617,14 +626,6 @@ void RenderWidgetCompositor::QueueSwapPromise(
 
 int RenderWidgetCompositor::GetSourceFrameNumber() const {
   return layer_tree_host_->SourceFrameNumber();
-}
-
-void RenderWidgetCompositor::SetNeedsUpdateLayers() {
-  layer_tree_host_->SetNeedsUpdateLayers();
-}
-
-void RenderWidgetCompositor::SetNeedsCommit() {
-  layer_tree_host_->SetNeedsCommit();
 }
 
 void RenderWidgetCompositor::NotifyInputThrottledUntilCommit() {
@@ -649,29 +650,29 @@ bool RenderWidgetCompositor::SendMessageToMicroBenchmark(
   return layer_tree_host_->SendMessageToMicroBenchmark(id, std::move(value));
 }
 
-cc::FrameSinkId RenderWidgetCompositor::getFrameSinkId() {
+cc::FrameSinkId RenderWidgetCompositor::GetFrameSinkId() {
   return frame_sink_id_;
 }
 
-void RenderWidgetCompositor::setRootLayer(const blink::WebLayer& layer) {
+void RenderWidgetCompositor::SetRootLayer(const blink::WebLayer& layer) {
   layer_tree_host_->SetRootLayer(
       static_cast<const cc_blink::WebLayerImpl*>(&layer)->layer());
 }
 
-void RenderWidgetCompositor::clearRootLayer() {
+void RenderWidgetCompositor::ClearRootLayer() {
   layer_tree_host_->SetRootLayer(scoped_refptr<cc::Layer>());
 }
 
-cc::AnimationHost* RenderWidgetCompositor::compositorAnimationHost() {
+cc::AnimationHost* RenderWidgetCompositor::CompositorAnimationHost() {
   return animation_host_.get();
 }
 
-void RenderWidgetCompositor::setViewportSize(
+void RenderWidgetCompositor::SetViewportSize(
     const WebSize& device_viewport_size) {
   layer_tree_host_->SetViewportSize(device_viewport_size);
 }
 
-WebSize RenderWidgetCompositor::getViewportSize() const {
+WebSize RenderWidgetCompositor::GetViewportSize() const {
   return layer_tree_host_->device_viewport_size();
 }
 
@@ -680,26 +681,24 @@ WebFloatPoint RenderWidgetCompositor::adjustEventPointForPinchZoom(
   return point;
 }
 
-void RenderWidgetCompositor::setDeviceScaleFactor(float device_scale) {
+void RenderWidgetCompositor::SetDeviceScaleFactor(float device_scale) {
   layer_tree_host_->SetDeviceScaleFactor(device_scale);
 }
 
-void RenderWidgetCompositor::setBackgroundColor(blink::WebColor color) {
+void RenderWidgetCompositor::SetBackgroundColor(blink::WebColor color) {
   layer_tree_host_->set_background_color(color);
+  layer_tree_host_->set_has_transparent_background(SkColorGetA(color) <
+                                                   SK_AlphaOPAQUE);
 }
 
-void RenderWidgetCompositor::setHasTransparentBackground(bool transparent) {
-  layer_tree_host_->set_has_transparent_background(transparent);
-}
-
-void RenderWidgetCompositor::setVisible(bool visible) {
+void RenderWidgetCompositor::SetVisible(bool visible) {
   if (never_visible_)
     return;
 
   layer_tree_host_->SetVisible(visible);
 }
 
-void RenderWidgetCompositor::setPageScaleFactorAndLimits(
+void RenderWidgetCompositor::SetPageScaleFactorAndLimits(
     float page_scale_factor,
     float minimum,
     float maximum) {
@@ -707,7 +706,7 @@ void RenderWidgetCompositor::setPageScaleFactorAndLimits(
                                                 maximum);
 }
 
-void RenderWidgetCompositor::startPageScaleAnimation(
+void RenderWidgetCompositor::StartPageScaleAnimation(
     const blink::WebPoint& destination,
     bool use_anchor,
     float new_page_scale,
@@ -719,28 +718,24 @@ void RenderWidgetCompositor::startPageScaleAnimation(
       duration);
 }
 
-bool RenderWidgetCompositor::hasPendingPageScaleAnimation() const {
+bool RenderWidgetCompositor::HasPendingPageScaleAnimation() const {
   return layer_tree_host_->HasPendingPageScaleAnimation();
 }
 
-void RenderWidgetCompositor::heuristicsForGpuRasterizationUpdated(
+void RenderWidgetCompositor::HeuristicsForGpuRasterizationUpdated(
     bool matches_heuristics) {
   layer_tree_host_->SetHasGpuRasterizationTrigger(matches_heuristics);
 }
 
-void RenderWidgetCompositor::setNeedsBeginFrame() {
+void RenderWidgetCompositor::SetNeedsBeginFrame() {
   layer_tree_host_->SetNeedsAnimate();
 }
 
-void RenderWidgetCompositor::setNeedsCompositorUpdate() {
-  layer_tree_host_->SetNeedsUpdateLayers();
-}
-
-void RenderWidgetCompositor::didStopFlinging() {
+void RenderWidgetCompositor::DidStopFlinging() {
   layer_tree_host_->DidStopFlinging();
 }
 
-void RenderWidgetCompositor::registerViewportLayers(
+void RenderWidgetCompositor::RegisterViewportLayers(
     const blink::WebLayer* overscrollElasticityLayer,
     const blink::WebLayer* pageScaleLayer,
     const blink::WebLayer* innerViewportScrollLayer,
@@ -749,8 +744,6 @@ void RenderWidgetCompositor::registerViewportLayers(
       // TODO(bokan): This check can probably be removed now, but it looks
       // like overscroll elasticity may still be NULL until VisualViewport
       // registers its layers.
-      // The scroll elasticity layer will only exist when using pinch virtual
-      // viewports.
       overscrollElasticityLayer ? static_cast<const cc_blink::WebLayerImpl*>(
                                       overscrollElasticityLayer)
                                       ->layer()
@@ -761,67 +754,65 @@ void RenderWidgetCompositor::registerViewportLayers(
       // TODO(bokan): This check can probably be removed now, but it looks
       // like overscroll elasticity may still be NULL until VisualViewport
       // registers its layers.
-      // The outer viewport layer will only exist when using pinch virtual
-      // viewports.
       outerViewportScrollLayer
           ? static_cast<const cc_blink::WebLayerImpl*>(outerViewportScrollLayer)
                 ->layer()
           : NULL);
 }
 
-void RenderWidgetCompositor::clearViewportLayers() {
+void RenderWidgetCompositor::ClearViewportLayers() {
   layer_tree_host_->RegisterViewportLayers(
       scoped_refptr<cc::Layer>(), scoped_refptr<cc::Layer>(),
       scoped_refptr<cc::Layer>(), scoped_refptr<cc::Layer>());
 }
 
-void RenderWidgetCompositor::registerSelection(
+void RenderWidgetCompositor::RegisterSelection(
     const blink::WebSelection& selection) {
   layer_tree_host_->RegisterSelection(ConvertWebSelection(selection));
 }
 
-void RenderWidgetCompositor::clearSelection() {
+void RenderWidgetCompositor::ClearSelection() {
   cc::LayerSelection empty_selection;
   layer_tree_host_->RegisterSelection(empty_selection);
 }
 
-void RenderWidgetCompositor::setMutatorClient(
+void RenderWidgetCompositor::SetMutatorClient(
     std::unique_ptr<blink::WebCompositorMutatorClient> client) {
   TRACE_EVENT0("compositor-worker", "RenderWidgetCompositor::setMutatorClient");
   layer_tree_host_->SetLayerTreeMutator(std::move(client));
 }
 
-void RenderWidgetCompositor::forceRecalculateRasterScales() {
+void RenderWidgetCompositor::ForceRecalculateRasterScales() {
   layer_tree_host_->SetNeedsRecalculateRasterScales();
 }
 
 static_assert(static_cast<cc::EventListenerClass>(
-                  blink::WebEventListenerClass::TouchStartOrMove) ==
+                  blink::WebEventListenerClass::kTouchStartOrMove) ==
                   cc::EventListenerClass::kTouchStartOrMove,
               "EventListenerClass and WebEventListenerClass enums must match");
 static_assert(static_cast<cc::EventListenerClass>(
-                  blink::WebEventListenerClass::MouseWheel) ==
+                  blink::WebEventListenerClass::kMouseWheel) ==
                   cc::EventListenerClass::kMouseWheel,
               "EventListenerClass and WebEventListenerClass enums must match");
 
 static_assert(static_cast<cc::EventListenerProperties>(
-                  blink::WebEventListenerProperties::Nothing) ==
+                  blink::WebEventListenerProperties::kNothing) ==
                   cc::EventListenerProperties::kNone,
               "EventListener and WebEventListener enums must match");
 static_assert(static_cast<cc::EventListenerProperties>(
-                  blink::WebEventListenerProperties::Passive) ==
+                  blink::WebEventListenerProperties::kPassive) ==
                   cc::EventListenerProperties::kPassive,
               "EventListener and WebEventListener enums must match");
 static_assert(static_cast<cc::EventListenerProperties>(
-                  blink::WebEventListenerProperties::Blocking) ==
+                  blink::WebEventListenerProperties::kBlocking) ==
                   cc::EventListenerProperties::kBlocking,
               "EventListener and WebEventListener enums must match");
 static_assert(static_cast<cc::EventListenerProperties>(
-                  blink::WebEventListenerProperties::BlockingAndPassive) ==
+                  blink::WebEventListenerProperties::kBlockingAndPassive) ==
                   cc::EventListenerProperties::kBlockingAndPassive,
               "EventListener and WebEventListener enums must match");
 
-void RenderWidgetCompositor::setEventListenerProperties(
+void RenderWidgetCompositor::SetEventListenerProperties(
     blink::WebEventListenerClass eventClass,
     blink::WebEventListenerProperties properties) {
   layer_tree_host_->SetEventListenerProperties(
@@ -829,7 +820,7 @@ void RenderWidgetCompositor::setEventListenerProperties(
       static_cast<cc::EventListenerProperties>(properties));
 }
 
-void RenderWidgetCompositor::updateEventRectsForSubframeIfNecessary() {
+void RenderWidgetCompositor::UpdateEventRectsForSubframeIfNecessary() {
   if (!is_for_oopif_)
     return;
 
@@ -842,22 +833,22 @@ void RenderWidgetCompositor::updateEventRectsForSubframeIfNecessary() {
   using blink::WebEventListenerClass;
 
   WebEventListenerProperties touch_start_properties =
-      eventListenerProperties(WebEventListenerClass::TouchStartOrMove);
+      EventListenerProperties(WebEventListenerClass::kTouchStartOrMove);
   WebEventListenerProperties touch_end_cancel_properties =
-      eventListenerProperties(WebEventListenerClass::TouchEndOrCancel);
+      EventListenerProperties(WebEventListenerClass::kTouchEndOrCancel);
   bool has_touch_handlers =
-      touch_start_properties == WebEventListenerProperties::Blocking ||
+      touch_start_properties == WebEventListenerProperties::kBlocking ||
       touch_start_properties ==
-          WebEventListenerProperties::BlockingAndPassive ||
-      touch_end_cancel_properties == WebEventListenerProperties::Blocking ||
+          WebEventListenerProperties::kBlockingAndPassive ||
+      touch_end_cancel_properties == WebEventListenerProperties::kBlocking ||
       touch_end_cancel_properties ==
-          WebEventListenerProperties::BlockingAndPassive;
+          WebEventListenerProperties::kBlockingAndPassive;
 
   WebEventListenerProperties wheel_event_properties =
-      eventListenerProperties(WebEventListenerClass::MouseWheel);
+      EventListenerProperties(WebEventListenerClass::kMouseWheel);
   bool has_wheel_handlers =
-      wheel_event_properties == WebEventListenerProperties::Blocking ||
-      wheel_event_properties == WebEventListenerProperties::BlockingAndPassive;
+      wheel_event_properties == WebEventListenerProperties::kBlocking ||
+      wheel_event_properties == WebEventListenerProperties::kBlockingAndPassive;
 
   cc::Layer* root_layer = layer_tree_host_->root_layer();
   cc::Region touch_handler_region;
@@ -872,18 +863,18 @@ void RenderWidgetCompositor::updateEventRectsForSubframeIfNecessary() {
 }
 
 blink::WebEventListenerProperties
-RenderWidgetCompositor::eventListenerProperties(
+RenderWidgetCompositor::EventListenerProperties(
     blink::WebEventListenerClass event_class) const {
   return static_cast<blink::WebEventListenerProperties>(
       layer_tree_host_->event_listener_properties(
           static_cast<cc::EventListenerClass>(event_class)));
 }
 
-void RenderWidgetCompositor::setHaveScrollEventHandlers(bool has_handlers) {
+void RenderWidgetCompositor::SetHaveScrollEventHandlers(bool has_handlers) {
   layer_tree_host_->SetHaveScrollEventHandlers(has_handlers);
 }
 
-bool RenderWidgetCompositor::haveScrollEventHandlers() const {
+bool RenderWidgetCompositor::HaveScrollEventHandlers() const {
   return layer_tree_host_->have_scroll_event_handlers();
 }
 
@@ -892,9 +883,9 @@ void CompositeAndReadbackAsyncCallback(
     std::unique_ptr<cc::CopyOutputResult> result) {
   if (result->HasBitmap()) {
     std::unique_ptr<SkBitmap> result_bitmap = result->TakeBitmap();
-    callback->didCompositeAndReadback(*result_bitmap);
+    callback->DidCompositeAndReadback(*result_bitmap);
   } else {
-    callback->didCompositeAndReadback(SkBitmap());
+    callback->DidCompositeAndReadback(SkBitmap());
   }
 }
 
@@ -906,7 +897,7 @@ bool RenderWidgetCompositor::CompositeIsSynchronous() const {
   return false;
 }
 
-void RenderWidgetCompositor::layoutAndPaintAsync(
+void RenderWidgetCompositor::LayoutAndPaintAsync(
     blink::WebLayoutAndPaintAsyncCallback* callback) {
   DCHECK(!layout_and_paint_async_callback_);
   layout_and_paint_async_callback_ = callback;
@@ -920,6 +911,15 @@ void RenderWidgetCompositor::layoutAndPaintAsync(
   }
 }
 
+void RenderWidgetCompositor::SetCompositorFrameSink(
+    std::unique_ptr<cc::CompositorFrameSink> compositor_frame_sink) {
+  if (!compositor_frame_sink) {
+    DidFailToInitializeCompositorFrameSink();
+    return;
+  }
+  layer_tree_host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
+}
+
 void RenderWidgetCompositor::LayoutAndUpdateLayers() {
   DCHECK(CompositeIsSynchronous());
   layer_tree_host_->LayoutAndUpdateLayers();
@@ -929,11 +929,11 @@ void RenderWidgetCompositor::LayoutAndUpdateLayers() {
 void RenderWidgetCompositor::InvokeLayoutAndPaintCallback() {
   if (!layout_and_paint_async_callback_)
     return;
-  layout_and_paint_async_callback_->didLayoutAndPaint();
+  layout_and_paint_async_callback_->DidLayoutAndPaint();
   layout_and_paint_async_callback_ = nullptr;
 }
 
-void RenderWidgetCompositor::compositeAndReadbackAsync(
+void RenderWidgetCompositor::CompositeAndReadbackAsync(
     blink::WebCompositeAndReadbackAsyncCallback* callback) {
   DCHECK(!layout_and_paint_async_callback_);
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
@@ -968,33 +968,33 @@ void RenderWidgetCompositor::SynchronouslyComposite() {
   layer_tree_host_->Composite(base::TimeTicks::Now());
 }
 
-void RenderWidgetCompositor::setDeferCommits(bool defer_commits) {
+void RenderWidgetCompositor::SetDeferCommits(bool defer_commits) {
   layer_tree_host_->SetDeferCommits(defer_commits);
 }
 
-int RenderWidgetCompositor::layerTreeId() const {
+int RenderWidgetCompositor::LayerTreeId() const {
   return layer_tree_host_->GetId();
 }
 
-void RenderWidgetCompositor::setShowFPSCounter(bool show) {
+void RenderWidgetCompositor::SetShowFPSCounter(bool show) {
   cc::LayerTreeDebugState debug_state = layer_tree_host_->GetDebugState();
   debug_state.show_fps_counter = show;
   layer_tree_host_->SetDebugState(debug_state);
 }
 
-void RenderWidgetCompositor::setShowPaintRects(bool show) {
+void RenderWidgetCompositor::SetShowPaintRects(bool show) {
   cc::LayerTreeDebugState debug_state = layer_tree_host_->GetDebugState();
   debug_state.show_paint_rects = show;
   layer_tree_host_->SetDebugState(debug_state);
 }
 
-void RenderWidgetCompositor::setShowDebugBorders(bool show) {
+void RenderWidgetCompositor::SetShowDebugBorders(bool show) {
   cc::LayerTreeDebugState debug_state = layer_tree_host_->GetDebugState();
   debug_state.show_debug_borders = show;
   layer_tree_host_->SetDebugState(debug_state);
 }
 
-void RenderWidgetCompositor::setShowScrollBottleneckRects(bool show) {
+void RenderWidgetCompositor::SetShowScrollBottleneckRects(bool show) {
   cc::LayerTreeDebugState debug_state = layer_tree_host_->GetDebugState();
   debug_state.show_touch_event_handler_rects = show;
   debug_state.show_wheel_event_handler_rects = show;
@@ -1002,7 +1002,7 @@ void RenderWidgetCompositor::setShowScrollBottleneckRects(bool show) {
   layer_tree_host_->SetDebugState(debug_state);
 }
 
-void RenderWidgetCompositor::updateBrowserControlsState(
+void RenderWidgetCompositor::UpdateBrowserControlsState(
     WebBrowserControlsState constraints,
     WebBrowserControlsState current,
     bool animate) {
@@ -1011,12 +1011,12 @@ void RenderWidgetCompositor::updateBrowserControlsState(
       ConvertBrowserControlsState(current), animate);
 }
 
-void RenderWidgetCompositor::setBrowserControlsHeight(float height,
+void RenderWidgetCompositor::SetBrowserControlsHeight(float height,
                                                       bool shrink) {
   layer_tree_host_->SetBrowserControlsHeight(height, shrink);
 }
 
-void RenderWidgetCompositor::setBrowserControlsShownRatio(float ratio) {
+void RenderWidgetCompositor::SetBrowserControlsShownRatio(float ratio) {
   layer_tree_host_->SetBrowserControlsShownRatio(ratio);
 }
 
@@ -1055,6 +1055,13 @@ void RenderWidgetCompositor::ApplyViewportDeltas(
                                  top_controls_delta);
 }
 
+void RenderWidgetCompositor::RecordWheelAndTouchScrollingCount(
+    bool has_scrolled_by_wheel,
+    bool has_scrolled_by_touch) {
+  delegate_->RecordWheelAndTouchScrollingCount(has_scrolled_by_wheel,
+                                               has_scrolled_by_touch);
+}
+
 void RenderWidgetCompositor::RequestNewCompositorFrameSink() {
   // If the host is closing, then no more compositing is possible.  This
   // prevents shutdown races between handling the close message and
@@ -1064,15 +1071,9 @@ void RenderWidgetCompositor::RequestNewCompositorFrameSink() {
 
   bool fallback = num_failed_recreate_attempts_ >=
                   COMPOSITOR_FRAME_SINK_RETRIES_BEFORE_FALLBACK;
-  std::unique_ptr<cc::CompositorFrameSink> surface(
-      delegate_->CreateCompositorFrameSink(frame_sink_id_, fallback));
-
-  if (!surface) {
-    DidFailToInitializeCompositorFrameSink();
-    return;
-  }
-
-  layer_tree_host_->SetCompositorFrameSink(std::move(surface));
+  delegate_->RequestNewCompositorFrameSink(
+      fallback, base::Bind(&RenderWidgetCompositor::SetCompositorFrameSink,
+                           weak_factory_.GetWeakPtr()));
 }
 
 void RenderWidgetCompositor::DidInitializeCompositorFrameSink() {
@@ -1114,6 +1115,10 @@ void RenderWidgetCompositor::DidCompletePageScaleAnimation() {
   delegate_->DidCompletePageScaleAnimation();
 }
 
+bool RenderWidgetCompositor::IsForSubframe() {
+  return is_for_oopif_;
+}
+
 void RenderWidgetCompositor::RequestScheduleAnimation() {
   delegate_->RequestScheduleAnimation();
 }
@@ -1132,9 +1137,9 @@ void RenderWidgetCompositor::SetPaintedDeviceScaleFactor(float device_scale) {
   layer_tree_host_->SetPaintedDeviceScaleFactor(device_scale);
 }
 
-void RenderWidgetCompositor::SetDeviceColorSpace(
+void RenderWidgetCompositor::SetRasterColorSpace(
     const gfx::ColorSpace& color_space) {
-  layer_tree_host_->SetDeviceColorSpace(color_space);
+  layer_tree_host_->SetRasterColorSpace(color_space);
 }
 
 void RenderWidgetCompositor::SetIsForOopif(bool is_for_oopif) {
@@ -1143,6 +1148,11 @@ void RenderWidgetCompositor::SetIsForOopif(bool is_for_oopif) {
 
 void RenderWidgetCompositor::SetContentSourceId(uint32_t id) {
   layer_tree_host_->SetContentSourceId(id);
+}
+
+void RenderWidgetCompositor::SetLocalSurfaceId(
+    const cc::LocalSurfaceId& local_surface_id) {
+  layer_tree_host_->SetLocalSurfaceId(local_surface_id);
 }
 
 }  // namespace content

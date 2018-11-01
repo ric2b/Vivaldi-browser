@@ -9,11 +9,11 @@
 #include <algorithm>
 
 #include "base/memory/ptr_util.h"
+#include "cc/base/filter_operations.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/render_surface_impl.h"
-#include "cc/output/filter_operations.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -128,8 +128,8 @@ void DamageTracker::UpdateDamageTrackingState(
     gfx::Rect damage_rect;
     bool is_rect_valid = damage_for_this_update.GetAsRect(&damage_rect);
     if (is_rect_valid) {
-      damage_rect = filters.MapRect(
-          damage_rect, target_surface->FiltersTransform().matrix());
+      damage_rect =
+          filters.MapRect(damage_rect, target_surface->SurfaceScale().matrix());
       damage_for_this_update = DamageAccumulator();
       damage_for_this_update.Union(damage_rect);
     }

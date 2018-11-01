@@ -14,6 +14,12 @@
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/persistent_notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_thread.h"
+#include "extensions/features/features.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/api/notifications/extension_notification_handler.h"
+#endif
 
 namespace {
 
@@ -40,6 +46,10 @@ NativeNotificationDisplayService::NativeNotificationDisplayService(
                          base::MakeUnique<NonPersistentNotificationHandler>());
   AddNotificationHandler(NotificationCommon::PERSISTENT,
                          base::MakeUnique<PersistentNotificationHandler>());
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  AddNotificationHandler(NotificationCommon::EXTENSION,
+                         base::MakeUnique<ExtensionNotificationHandler>());
+#endif
 }
 
 NativeNotificationDisplayService::~NativeNotificationDisplayService() {}
@@ -69,10 +79,10 @@ void NativeNotificationDisplayService::Close(
   handler->OnClose(profile_, "", notification_id, false /* by user */);
 }
 
-bool NativeNotificationDisplayService::GetDisplayed(
-    std::set<std::string>* notifications) const {
+void NativeNotificationDisplayService::GetDisplayed(
+    const DisplayedNotificationsCallback& callback) {
   return notification_bridge_->GetDisplayed(
-      GetProfileId(profile_), profile_->IsOffTheRecord(), notifications);
+      GetProfileId(profile_), profile_->IsOffTheRecord(), callback);
 }
 
 void NativeNotificationDisplayService::ProcessNotificationOperation(

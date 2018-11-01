@@ -190,7 +190,10 @@ typedef void(GL_BINDING_CALL* glCopyBufferSubDataProc)(GLenum readTarget,
                                                        GLsizeiptr size);
 typedef void(GL_BINDING_CALL* glCopySubTextureCHROMIUMProc)(
     GLuint sourceId,
+    GLint sourceLevel,
+    GLenum destTarget,
     GLuint destId,
+    GLint destLevel,
     GLint xoffset,
     GLint yoffset,
     GLint x,
@@ -227,7 +230,10 @@ typedef void(GL_BINDING_CALL* glCopyTexSubImage3DProc)(GLenum target,
                                                        GLsizei height);
 typedef void(GL_BINDING_CALL* glCopyTextureCHROMIUMProc)(
     GLuint sourceId,
+    GLint sourceLevel,
+    GLenum destTarget,
     GLuint destId,
+    GLint destLevel,
     GLint internalFormat,
     GLenum destType,
     GLboolean unpackFlipY,
@@ -997,6 +1003,8 @@ typedef void(GL_BINDING_CALL* glReadnPixelsRobustANGLEProc)(GLint x,
                                                             GLenum type,
                                                             GLsizei bufSize,
                                                             GLsizei* length,
+                                                            GLsizei* columns,
+                                                            GLsizei* rows,
                                                             void* data);
 typedef void(GL_BINDING_CALL* glReadPixelsProc)(GLint x,
                                                 GLint y,
@@ -1013,6 +1021,8 @@ typedef void(GL_BINDING_CALL* glReadPixelsRobustANGLEProc)(GLint x,
                                                            GLenum type,
                                                            GLsizei bufSize,
                                                            GLsizei* length,
+                                                           GLsizei* columns,
+                                                           GLsizei* rows,
                                                            void* pixels);
 typedef void(GL_BINDING_CALL* glReleaseShaderCompilerProc)(void);
 typedef void(GL_BINDING_CALL* glRenderbufferStorageEXTProc)(
@@ -1044,6 +1054,7 @@ typedef void(GL_BINDING_CALL* glRenderbufferStorageMultisampleIMGProc)(
     GLenum internalformat,
     GLsizei width,
     GLsizei height);
+typedef void(GL_BINDING_CALL* glRequestExtensionANGLEProc)(const char* name);
 typedef void(GL_BINDING_CALL* glResumeTransformFeedbackProc)(void);
 typedef void(GL_BINDING_CALL* glSampleCoverageProc)(GLclampf value,
                                                     GLboolean invert);
@@ -1477,6 +1488,7 @@ struct ExtensionsGL {
   bool b_GL_ANGLE_framebuffer_blit;
   bool b_GL_ANGLE_framebuffer_multisample;
   bool b_GL_ANGLE_instanced_arrays;
+  bool b_GL_ANGLE_request_extension;
   bool b_GL_ANGLE_robust_client_memory;
   bool b_GL_ANGLE_translated_shader_source;
   bool b_GL_APPLE_fence;
@@ -1837,6 +1849,7 @@ struct ProcsGL {
       glRenderbufferStorageMultisampleANGLEFn;
   glRenderbufferStorageMultisampleEXTProc glRenderbufferStorageMultisampleEXTFn;
   glRenderbufferStorageMultisampleIMGProc glRenderbufferStorageMultisampleIMGFn;
+  glRequestExtensionANGLEProc glRequestExtensionANGLEFn;
   glResumeTransformFeedbackProc glResumeTransformFeedbackFn;
   glSampleCoverageProc glSampleCoverageFn;
   glSamplerParameterfProc glSamplerParameterfFn;
@@ -2115,7 +2128,10 @@ class GL_EXPORT GLApi {
                                      GLintptr writeOffset,
                                      GLsizeiptr size) = 0;
   virtual void glCopySubTextureCHROMIUMFn(GLuint sourceId,
+                                          GLint sourceLevel,
+                                          GLenum destTarget,
                                           GLuint destId,
+                                          GLint destLevel,
                                           GLint xoffset,
                                           GLint yoffset,
                                           GLint x,
@@ -2151,7 +2167,10 @@ class GL_EXPORT GLApi {
                                      GLsizei width,
                                      GLsizei height) = 0;
   virtual void glCopyTextureCHROMIUMFn(GLuint sourceId,
+                                       GLint sourceLevel,
+                                       GLenum destTarget,
                                        GLuint destId,
+                                       GLint destLevel,
                                        GLint internalFormat,
                                        GLenum destType,
                                        GLboolean unpackFlipY,
@@ -2816,6 +2835,8 @@ class GL_EXPORT GLApi {
                                           GLenum type,
                                           GLsizei bufSize,
                                           GLsizei* length,
+                                          GLsizei* columns,
+                                          GLsizei* rows,
                                           void* data) = 0;
   virtual void glReadPixelsFn(GLint x,
                               GLint y,
@@ -2832,6 +2853,8 @@ class GL_EXPORT GLApi {
                                          GLenum type,
                                          GLsizei bufSize,
                                          GLsizei* length,
+                                         GLsizei* columns,
+                                         GLsizei* rows,
                                          void* pixels) = 0;
   virtual void glReleaseShaderCompilerFn(void) = 0;
   virtual void glRenderbufferStorageEXTFn(GLenum target,
@@ -2858,6 +2881,7 @@ class GL_EXPORT GLApi {
                                                      GLenum internalformat,
                                                      GLsizei width,
                                                      GLsizei height) = 0;
+  virtual void glRequestExtensionANGLEFn(const char* name) = 0;
   virtual void glResumeTransformFeedbackFn(void) = 0;
   virtual void glSampleCoverageFn(GLclampf value, GLboolean invert) = 0;
   virtual void glSamplerParameterfFn(GLuint sampler,
@@ -3662,6 +3686,8 @@ class GL_EXPORT GLApi {
   ::gl::g_current_gl_context->glRenderbufferStorageMultisampleEXTFn
 #define glRenderbufferStorageMultisampleIMG \
   ::gl::g_current_gl_context->glRenderbufferStorageMultisampleIMGFn
+#define glRequestExtensionANGLE \
+  ::gl::g_current_gl_context->glRequestExtensionANGLEFn
 #define glResumeTransformFeedback \
   ::gl::g_current_gl_context->glResumeTransformFeedbackFn
 #define glSampleCoverage ::gl::g_current_gl_context->glSampleCoverageFn

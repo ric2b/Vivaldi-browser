@@ -21,6 +21,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/precache/core/precache_database.h"
 #include "components/precache/core/precache_switches.h"
+#include "components/precache/core/proto/precache.pb.h"
 #include "components/precache/core/proto/unfinished_work.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_service.h"
@@ -62,12 +63,14 @@ PrecacheManager::PrecacheManager(
     const history::HistoryService* const history_service,
     const data_reduction_proxy::DataReductionProxySettings*
         data_reduction_proxy_settings,
+    Delegate* delegate,
     const base::FilePath& db_path,
     std::unique_ptr<PrecacheDatabase> precache_database)
     : browser_context_(browser_context),
       sync_service_(sync_service),
       history_service_(history_service),
       data_reduction_proxy_settings_(data_reduction_proxy_settings),
+      delegate_(delegate),
       is_precaching_(false) {
   precache_database_ = std::move(precache_database);
   BrowserThread::PostTask(
@@ -352,7 +355,6 @@ bool PrecacheManager::IsPrecaching() const {
 void PrecacheManager::UpdatePrecacheMetricsAndState(
     const GURL& url,
     const GURL& referrer,
-    const base::TimeDelta& latency,
     const base::Time& fetch_time,
     const net::HttpResponseInfo& info,
     int64_t size,
@@ -365,8 +367,7 @@ void PrecacheManager::UpdatePrecacheMetricsAndState(
       base::Bind(&PrecacheDatabase::GetLastPrecacheTimestamp,
                  base::Unretained(precache_database_.get())),
       base::Bind(&PrecacheManager::RecordStatsForFetch, AsWeakPtr(), url,
-                 referrer, latency, fetch_time, info, size,
-                 register_synthetic_trial));
+                 referrer, fetch_time, info, size, register_synthetic_trial));
 
   if (is_user_traffic && IsPrecaching())
     CancelPrecaching();
@@ -375,7 +376,6 @@ void PrecacheManager::UpdatePrecacheMetricsAndState(
 void PrecacheManager::RecordStatsForFetch(
     const GURL& url,
     const GURL& referrer,
-    const base::TimeDelta& latency,
     const base::Time& fetch_time,
     const net::HttpResponseInfo& info,
     int64_t size,
@@ -396,13 +396,12 @@ void PrecacheManager::RecordStatsForFetch(
   history_service_->HostRankIfAvailable(
       referrer,
       base::Bind(&PrecacheManager::RecordStatsForFetchInternal, AsWeakPtr(),
-                 url, referrer.host(), latency, fetch_time, info, size));
+                 url, referrer.host(), fetch_time, info, size));
 }
 
 void PrecacheManager::RecordStatsForFetchInternal(
     const GURL& url,
     const std::string& referrer_host,
-    const base::TimeDelta& latency,
     const base::Time& fetch_time,
     const net::HttpResponseInfo& info,
     int64_t size,
@@ -416,7 +415,7 @@ void PrecacheManager::RecordStatsForFetchInternal(
     BrowserThread::PostTask(
         BrowserThread::DB, FROM_HERE,
         base::Bind(&PrecacheDatabase::RecordURLPrefetchMetrics,
-                   base::Unretained(precache_database_.get()), info, latency));
+                   base::Unretained(precache_database_.get()), info));
   } else {
     bool is_connection_cellular =
         net::NetworkChangeNotifier::IsConnectionCellular(
@@ -425,8 +424,8 @@ void PrecacheManager::RecordStatsForFetchInternal(
     BrowserThread::PostTask(
         BrowserThread::DB, FROM_HERE,
         base::Bind(&PrecacheDatabase::RecordURLNonPrefetch,
-                   base::Unretained(precache_database_.get()), url, latency,
-                   fetch_time, info, size, host_rank, is_connection_cellular));
+                   base::Unretained(precache_database_.get()), url, fetch_time,
+                   info, size, host_rank, is_connection_cellular));
   }
 }
 
@@ -458,6 +457,13 @@ void PrecacheManager::OnDone() {
   }
 
   is_precaching_ = false;
+}
+
+void PrecacheManager::OnManifestFetched(const std::string& host,
+                                        const PrecacheManifest& manifest) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (delegate_)
+    delegate_->OnManifestFetched(host, manifest);
 }
 
 void PrecacheManager::OnHostsReceived(

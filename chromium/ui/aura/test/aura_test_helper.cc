@@ -4,6 +4,7 @@
 
 #include "ui/aura/test/aura_test_helper.h"
 
+#include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -12,6 +13,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/input_state_lookup.h"
 #include "ui/aura/mus/capture_synchronizer.h"
+#include "ui/aura/mus/focus_synchronizer.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/test/env_test_helper.h"
@@ -24,6 +26,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_port_local.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/base/platform_window_defaults.h"
@@ -111,7 +114,6 @@ void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
   // Tests assume they can set the mouse location on Env() and have it reflected
   // in tests.
   env_helper.SetAlwaysUseLastMouseLocation(true);
-  Env::GetInstance()->SetActiveFocusClient(focus_client_.get(), nullptr);
   Env::GetInstance()->set_context_factory(context_factory);
   Env::GetInstance()->set_context_factory_private(context_factory_private);
   // Unit tests generally don't want to query the system, rather use the state
@@ -121,25 +123,31 @@ void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
 
   ui::InitializeInputMethodForTesting();
 
-  display::Screen* screen = display::Screen::GetScreen();
-  gfx::Size host_size(screen ? screen->GetPrimaryDisplay().GetSizeInPixel()
-                             : gfx::Size(800, 600));
-  // TODO(sky): creating the screen and host should not happen for mus.
-  test_screen_.reset(TestScreen::Create(host_size));
-  if (!screen)
-    display::Screen::SetScreenInstance(test_screen_.get());
-  host_.reset(test_screen_->CreateHostForPrimaryDisplay());
+  if (mode_ != Mode::MUS) {
+    display::Screen* screen = display::Screen::GetScreen();
+    gfx::Size host_size(screen ? screen->GetPrimaryDisplay().GetSizeInPixel()
+                               : gfx::Size(800, 600));
+    test_screen_.reset(TestScreen::Create(host_size));
+    if (!screen)
+      display::Screen::SetScreenInstance(test_screen_.get());
+    host_.reset(test_screen_->CreateHostForPrimaryDisplay());
+    host_->window()->SetEventTargeter(
+        std::unique_ptr<ui::EventTargeter>(new WindowTargeter()));
 
-  client::SetFocusClient(root_window(), focus_client_.get());
-  client::SetCaptureClient(root_window(), capture_client());
-  parenting_client_.reset(new TestWindowParentingClient(root_window()));
+    client::SetFocusClient(root_window(), focus_client_.get());
+    client::SetCaptureClient(root_window(), capture_client());
+    parenting_client_.reset(new TestWindowParentingClient(root_window()));
 
-  root_window()->Show();
-  // Ensure width != height so tests won't confuse them.
-  host()->SetBoundsInPixels(gfx::Rect(host_size));
+    root_window()->Show();
+    // Ensure width != height so tests won't confuse them.
+    host()->SetBoundsInPixels(gfx::Rect(host_size));
+  }
 
-  if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT)
+  if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT) {
+    window_tree_client_->focus_synchronizer()->SetActiveFocusClient(
+        focus_client_.get(), root_window());
     window_tree()->AckAllChanges();
+  }
 
   g_instance = this;
 }
@@ -148,19 +156,20 @@ void AuraTestHelper::TearDown() {
   g_instance = nullptr;
   teardown_called_ = true;
   parenting_client_.reset();
-  client::SetFocusClient(root_window(), nullptr);
-  client::SetCaptureClient(root_window(), nullptr);
-  host_.reset();
+  if (mode_ != Mode::MUS) {
+    client::SetFocusClient(root_window(), nullptr);
+    client::SetCaptureClient(root_window(), nullptr);
+    host_.reset();
+
+    if (display::Screen::GetScreen() == test_screen_.get())
+      display::Screen::SetScreenInstance(nullptr);
+    test_screen_.reset();
+
+    window_tree_client_setup_.reset();
+    focus_client_.reset();
+    capture_client_.reset();
+  }
   ui::GestureRecognizer::Reset();
-  if (display::Screen::GetScreen() == test_screen_.get())
-    display::Screen::SetScreenInstance(nullptr);
-  test_screen_.reset();
-
-  Env::GetInstance()->SetActiveFocusClient(nullptr, nullptr);
-  window_tree_client_setup_.reset();
-  focus_client_.reset();
-  capture_client_.reset();
-
   ui::ShutdownInputMethodForTesting();
 
   if (env_)

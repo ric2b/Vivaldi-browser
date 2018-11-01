@@ -10,9 +10,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
+#include "device/vr/features.h"
 
 #if defined(OS_ANDROID)
 #include "device/vr/android/gvr/gvr_device_provider.h"
+#endif
+
+#if BUILDFLAG(ENABLE_OPENVR)
+#include "device/vr/openvr/openvr_device_provider.h"
 #endif
 
 namespace device {
@@ -29,6 +34,10 @@ VRDeviceManager::VRDeviceManager()
 // Register VRDeviceProviders for the current platform
 #if defined(OS_ANDROID)
   RegisterProvider(base::MakeUnique<GvrDeviceProvider>());
+#endif
+
+#if BUILDFLAG(ENABLE_OPENVR)
+  RegisterProvider(base::MakeUnique<OpenVRDeviceProvider>());
 #endif
 }
 
@@ -68,7 +77,26 @@ void VRDeviceManager::AddService(VRServiceImpl* service) {
   // Loop through any currently active devices and send Connected messages to
   // the service. Future devices that come online will send a Connected message
   // when they are created.
-  GetVRDevices(service);
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  InitializeProviders();
+
+  std::vector<VRDevice*> devices;
+  for (const auto& provider : providers_) {
+    provider->GetDevices(&devices);
+  }
+
+  for (auto* device : devices) {
+    if (device->id() == VR_DEVICE_LAST_ID) {
+      continue;
+    }
+
+    if (devices_.find(device->id()) == devices_.end()) {
+      devices_[device->id()] = device;
+    }
+
+    service->ConnectDevice(device);
+  }
 
   services_.insert(service);
 }
@@ -76,7 +104,7 @@ void VRDeviceManager::AddService(VRServiceImpl* service) {
 void VRDeviceManager::RemoveService(VRServiceImpl* service) {
 
   if (service->listening_for_activate()) {
-    ListeningForActivateChanged(false);
+    ListeningForActivateChanged(false, service);
   }
 
   services_.erase(service);
@@ -87,42 +115,19 @@ void VRDeviceManager::RemoveService(VRServiceImpl* service) {
   }
 }
 
-bool VRDeviceManager::GetVRDevices(VRServiceImpl* service) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  InitializeProviders();
-
-  std::vector<VRDevice*> devices;
-  for (const auto& provider : providers_)
-    provider->GetDevices(&devices);
-
-  if (devices.empty())
-    return false;
-
-  for (auto* device : devices) {
-    if (device->id() == VR_DEVICE_LAST_ID)
-      continue;
-
-    if (devices_.find(device->id()) == devices_.end())
-      devices_[device->id()] = device;
-
-    // Create a VRDisplayImpl for this service/device pair and attach
-    // the VRDisplayImpl to the device.
-    VRDisplayImpl* display_impl = service->GetVRDisplayImpl(device);
-    device->AddDisplay(display_impl);
-  }
-
-  return true;
-}
-
 unsigned int VRDeviceManager::GetNumberOfConnectedDevices() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   return static_cast<unsigned int>(devices_.size());
 }
 
-void VRDeviceManager::ListeningForActivateChanged(bool listening) {
+void VRDeviceManager::ListeningForActivateChanged(bool listening,
+                                                  VRServiceImpl* service) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (listening) {
+    most_recently_listening_for_activate_ = service;
+  }
 
   bool activate_listeners = listening;
   if (!activate_listeners) {
@@ -140,6 +145,13 @@ void VRDeviceManager::ListeningForActivateChanged(bool listening) {
     for (const auto& provider : providers_)
       provider->SetListeningForActivate(has_activate_listeners_);
   }
+}
+
+bool VRDeviceManager::IsMostRecentlyListeningForActivate(
+    VRServiceImpl* service) {
+  if (!service)
+    return false;
+  return service == most_recently_listening_for_activate_;
 }
 
 VRDevice* VRDeviceManager::GetDevice(unsigned int index) {

@@ -36,6 +36,7 @@
 namespace content {
 
 struct FrameReplicationState;
+class TimeoutMonitor;
 
 // This implements the RenderViewHost interface that is exposed to
 // embedders of content, and adds things only visible to content.
@@ -194,11 +195,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // re-entrantly.
   void PostRenderViewReady();
 
-  // TODO(creis): Remove after debugging https:/crbug.com/575245.
-  int main_frame_routing_id() const {
-    return main_frame_routing_id_;
-  }
-
   void set_main_frame_routing_id(int routing_id) {
     main_frame_routing_id_ = routing_id;
   }
@@ -261,10 +257,15 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   FRIEND_TEST_ALL_PREFIXES(RenderViewHostTest, RoutingIdSane);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
                            CleanUpSwappedOutRVHOnProcessCrash);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
+                           CloseWithPendingWhileUnresponsive);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            NavigateMainFrameToChildSite);
 
   void RenderViewReady();
+
+  // Called by |close_timeout_| when the page closing timeout fires.
+  void ClosePageTimeout();
 
   // TODO(creis): Move to a private namespace on RenderFrameHostImpl.
   // Delay to wait on closing the WebContents for a beforeunload/unload handler
@@ -320,6 +321,12 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // is in turn called when any of the settings change that the WebPreferences
   // values depend on.
   std::unique_ptr<WebPreferences> web_preferences_;
+
+  // The timeout monitor that runs from when the page close is started in
+  // ClosePage() until either the render process ACKs the close with an IPC to
+  // OnClosePageACK(), or until the timeout triggers and the page is forcibly
+  // closed.
+  std::unique_ptr<TimeoutMonitor> close_timeout_;
 
   bool updating_web_preferences_;
 

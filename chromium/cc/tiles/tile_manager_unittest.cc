@@ -5,15 +5,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/playback/raster_source.h"
-#include "cc/playback/recording_source.h"
+#include "cc/layers/recording_source.h"
 #include "cc/raster/raster_buffer.h"
+#include "cc/raster/raster_source.h"
 #include "cc/raster/synchronous_task_graph_runner.h"
 #include "cc/resources/resource_pool.h"
 #include "cc/test/begin_frame_args_test.h"
@@ -27,7 +29,6 @@
 #include "cc/test/fake_recording_source.h"
 #include "cc/test/fake_tile_manager.h"
 #include "cc/test/fake_tile_task_manager.h"
-#include "cc/test/layer_tree_settings_for_testing.h"
 #include "cc/test/test_layer_tree_host_base.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/test/test_tile_priorities.h"
@@ -56,18 +57,18 @@ namespace {
 class SynchronousSimpleTaskRunner : public base::TestSimpleTaskRunner {
  public:
   bool PostDelayedTask(const tracked_objects::Location& from_here,
-                       const base::Closure& task,
+                       base::OnceClosure task,
                        base::TimeDelta delay) override {
-    TestSimpleTaskRunner::PostDelayedTask(from_here, task, delay);
+    TestSimpleTaskRunner::PostDelayedTask(from_here, std::move(task), delay);
     if (run_tasks_synchronously_)
       RunUntilIdle();
     return true;
   }
 
   bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
-                                  const base::Closure& task,
+                                  base::OnceClosure task,
                                   base::TimeDelta delay) override {
-    return PostDelayedTask(from_here, task, delay);
+    return PostDelayedTask(from_here, std::move(task), delay);
   }
 
   void set_run_tasks_synchronously(bool run_tasks_synchronously) {
@@ -83,7 +84,7 @@ class SynchronousSimpleTaskRunner : public base::TestSimpleTaskRunner {
 class TileManagerTilePriorityQueueTest : public TestLayerTreeHostBase {
  public:
   LayerTreeSettings CreateSettings() override {
-    LayerTreeSettingsForTesting settings;
+    LayerTreeSettings settings;
     settings.create_low_res_tiling = true;
     settings.renderer_settings.buffer_to_texture_target_map =
         DefaultBufferToTextureTargetMapForTesting();
@@ -355,10 +356,18 @@ TEST_F(TileManagerTilePriorityQueueTest,
   host_impl()->SetViewportSize(viewport);
   SetupDefaultTrees(layer_bounds);
 
-  pending_layer()->tilings()->AddTiling(1.5f, pending_layer()->raster_source());
-  active_layer()->tilings()->AddTiling(1.5f, active_layer()->raster_source());
-  pending_layer()->tilings()->AddTiling(1.7f, pending_layer()->raster_source());
-  active_layer()->tilings()->AddTiling(1.7f, active_layer()->raster_source());
+  pending_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.5f, gfx::Vector2dF()),
+      pending_layer()->raster_source());
+  active_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.5f, gfx::Vector2dF()),
+      active_layer()->raster_source());
+  pending_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.7f, gfx::Vector2dF()),
+      pending_layer()->raster_source());
+  active_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.7f, gfx::Vector2dF()),
+      active_layer()->raster_source());
 
   pending_layer()->tilings()->UpdateTilePriorities(gfx::Rect(viewport), 1.f,
                                                    5.0, Occlusion(), true);
@@ -368,7 +377,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
   std::set<Tile*> all_expected_tiles;
   for (size_t i = 0; i < pending_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.f) {
+    if (tiling->contents_scale_key() == 1.f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -379,7 +388,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   for (size_t i = 0; i < active_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = active_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.5f) {
+    if (tiling->contents_scale_key() == 1.5f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -387,7 +396,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
       tiling->set_resolution(NON_IDEAL_RESOLUTION);
       // Non ideal tilings with a high res pending twin have to be processed
       // because of possible activation tiles.
-      if (tiling->contents_scale() == 1.f) {
+      if (tiling->contents_scale_key() == 1.f) {
         tiling->UpdateAndGetAllPrioritizedTilesForTesting();
         const auto& all_tiles = tiling->AllTilesForTesting();
         for (auto* tile : all_tiles)
@@ -422,10 +431,18 @@ TEST_F(TileManagerTilePriorityQueueTest,
   host_impl()->SetViewportSize(viewport);
   SetupDefaultTrees(layer_bounds);
 
-  pending_layer()->tilings()->AddTiling(1.5f, pending_layer()->raster_source());
-  active_layer()->tilings()->AddTiling(1.5f, active_layer()->raster_source());
-  pending_layer()->tilings()->AddTiling(1.7f, pending_layer()->raster_source());
-  active_layer()->tilings()->AddTiling(1.7f, active_layer()->raster_source());
+  pending_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.5f, gfx::Vector2dF()),
+      pending_layer()->raster_source());
+  active_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.5f, gfx::Vector2dF()),
+      active_layer()->raster_source());
+  pending_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.7f, gfx::Vector2dF()),
+      pending_layer()->raster_source());
+  active_layer()->tilings()->AddTiling(
+      gfx::AxisTransform2d(1.7f, gfx::Vector2dF()),
+      active_layer()->raster_source());
 
   pending_layer()->tilings()->UpdateTilePriorities(gfx::Rect(viewport), 1.f,
                                                    5.0, Occlusion(), true);
@@ -435,7 +452,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
   std::set<Tile*> all_expected_tiles;
   for (size_t i = 0; i < pending_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.f) {
+    if (tiling->contents_scale_key() == 1.f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -446,7 +463,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   for (size_t i = 0; i < active_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = active_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.5f) {
+    if (tiling->contents_scale_key() == 1.5f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -454,7 +471,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
       tiling->set_resolution(LOW_RESOLUTION);
       // Low res tilings with a high res pending twin have to be processed
       // because of possible activation tiles.
-      if (tiling->contents_scale() == 1.f) {
+      if (tiling->contents_scale_key() == 1.f) {
         tiling->UpdateAndGetAllPrioritizedTilesForTesting();
         const auto& all_tiles = tiling->AllTilesForTesting();
         for (auto* tile : all_tiles)
@@ -912,8 +929,8 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
         EXPECT_TRUE((tile_priority_bin < last_tile_priority_bin) ||
                     prioritized_tile.tile()->required_for_activation() ||
-                    (prioritized_tile.tile()->contents_scale() !=
-                     last_tile.tile()->contents_scale()));
+                    (prioritized_tile.tile()->raster_transform() !=
+                     last_tile.tile()->raster_transform()));
       }
     }
     last_tile = prioritized_tile;
@@ -950,9 +967,8 @@ TEST_F(TileManagerTilePriorityQueueTest,
   host_impl()->pending_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
 
-  host_impl()->pending_tree()->property_trees()->effect_tree.OnOpacityAnimated(
-      0.0f, pending_child_layer->effect_tree_index(),
-      host_impl()->pending_tree());
+  host_impl()->pending_tree()->SetOpacityMutated(
+      pending_child_layer->element_id(), 0.0f);
 
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
   host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
@@ -1125,7 +1141,6 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   client.SetTileSize(gfx::Size(30, 30));
   LayerTreeSettings settings;
-  settings.verify_clip_tree_calculations = true;
 
   std::unique_ptr<PictureLayerTilingSet> tiling_set =
       PictureLayerTilingSet::Create(
@@ -1136,7 +1151,8 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   scoped_refptr<FakeRasterSource> raster_source =
       FakeRasterSource::CreateFilled(layer_bounds);
-  PictureLayerTiling* tiling = tiling_set->AddTiling(1.0f, raster_source);
+  PictureLayerTiling* tiling =
+      tiling_set->AddTiling(gfx::AxisTransform2d(), raster_source);
   tiling->set_resolution(HIGH_RESOLUTION);
 
   tiling_set->UpdateTilePriorities(viewport, 1.0f, 1.0, Occlusion(), true);
@@ -1237,7 +1253,6 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   client.SetTileSize(gfx::Size(30, 30));
   LayerTreeSettings settings;
-  settings.verify_clip_tree_calculations = true;
 
   std::unique_ptr<PictureLayerTilingSet> tiling_set =
       PictureLayerTilingSet::Create(
@@ -1248,7 +1263,8 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   scoped_refptr<FakeRasterSource> raster_source =
       FakeRasterSource::CreateFilled(layer_bounds);
-  PictureLayerTiling* tiling = tiling_set->AddTiling(1.0f, raster_source);
+  PictureLayerTiling* tiling =
+      tiling_set->AddTiling(gfx::AxisTransform2d(), raster_source);
   tiling->set_resolution(HIGH_RESOLUTION);
 
   tiling_set->UpdateTilePriorities(viewport, 1.0f, 1.0, Occlusion(), true);
@@ -1404,7 +1420,7 @@ TEST_F(TileManagerTilePriorityQueueTest, RasterQueueAllUsesCorrectTileBounds) {
                                     1.0f, 1.0f, 1000, 1000.f);
   pending_client.set_twin_tiling_set(tiling_set.get());
 
-  auto* tiling = tiling_set->AddTiling(1.0f, raster_source);
+  auto* tiling = tiling_set->AddTiling(gfx::AxisTransform2d(), raster_source);
 
   tiling->set_resolution(HIGH_RESOLUTION);
   tiling->CreateAllTilesForTesting();
@@ -1480,7 +1496,8 @@ TEST_F(TileManagerTilePriorityQueueTest, NoRasterTasksforSolidColorTiles) {
   layer_impl->set_is_drawn_render_surface_layer_list_member(true);
   PictureLayerTilingSet* tiling_set = layer_impl->picture_layer_tiling_set();
 
-  PictureLayerTiling* tiling = tiling_set->AddTiling(1.0f, raster_source);
+  PictureLayerTiling* tiling =
+      tiling_set->AddTiling(gfx::AxisTransform2d(), raster_source);
   tiling->set_resolution(HIGH_RESOLUTION);
   tiling->CreateAllTilesForTesting();
   tiling->SetTilePriorityRectsForTesting(
@@ -1683,7 +1700,7 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
     PictureLayerTilingSet* tiling_set = layer->picture_layer_tiling_set();
     layer->set_is_drawn_render_surface_layer_list_member(true);
 
-    auto* tiling = tiling_set->AddTiling(1.0f, raster);
+    auto* tiling = tiling_set->AddTiling(gfx::AxisTransform2d(), raster);
     tiling->set_resolution(resolutions[i]);
     tiling->CreateAllTilesForTesting();
     tiling->SetTilePriorityRectsForTesting(
@@ -1990,7 +2007,7 @@ class MockReadyToDrawRasterBufferProviderImpl
         const gfx::Rect& raster_full_rect,
         const gfx::Rect& raster_dirty_rect,
         uint64_t new_content_id,
-        float scale,
+        const gfx::AxisTransform2d& transform,
         const RasterSource::PlaybackSettings& playback_settings) override {}
   };
 };
@@ -2036,7 +2053,7 @@ class TileManagerReadyToDrawTest : public TileManagerTest {
   }
 
   LayerTreeSettings CreateSettings() override {
-    LayerTreeSettingsForTesting settings;
+    LayerTreeSettings settings;
     settings.renderer_settings.buffer_to_texture_target_map =
         DefaultBufferToTextureTargetMapForTesting();
     return settings;
@@ -2365,7 +2382,8 @@ TEST_F(CheckerImagingTileManagerTest,
   layer_impl->set_is_drawn_render_surface_layer_list_member(true);
   PictureLayerTilingSet* tiling_set = layer_impl->picture_layer_tiling_set();
 
-  PictureLayerTiling* tiling = tiling_set->AddTiling(1.0f, raster_source);
+  PictureLayerTiling* tiling =
+      tiling_set->AddTiling(gfx::AxisTransform2d(), raster_source);
   tiling->set_resolution(HIGH_RESOLUTION);
   tiling->CreateAllTilesForTesting();
   tiling->SetTilePriorityRectsForTesting(

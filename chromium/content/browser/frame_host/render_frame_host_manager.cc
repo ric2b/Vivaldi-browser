@@ -40,11 +40,11 @@
 #include "content/common/frame_owner_properties.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/referrer.h"
@@ -247,19 +247,7 @@ RenderFrameHostImpl* RenderFrameHostManager::Navigate(
       if (dest_render_frame_host->GetView())
         dest_render_frame_host->GetView()->Hide();
     } else {
-      // After a renderer crash we'd have marked the host as invisible, so we
-      // need to set the visibility of the new View to the correct value here
-      // after reload.
-      if (dest_render_frame_host->GetView() &&
-          dest_render_frame_host->render_view_host()
-                  ->GetWidget()
-                  ->is_hidden() != delegate_->IsHidden()) {
-        if (delegate_->IsHidden()) {
-          dest_render_frame_host->GetView()->Hide();
-        } else {
-          dest_render_frame_host->GetView()->Show();
-        }
-      }
+      EnsureRenderFrameHostVisibilityConsistent();
 
       // TODO(nasko): This is a very ugly hack. The Chrome extensions process
       // manager still uses NotificationService and expects to see a
@@ -319,42 +307,6 @@ void RenderFrameHostManager::SetIsLoading(bool is_loading) {
   }
 }
 
-bool RenderFrameHostManager::ShouldCloseTabOnUnresponsiveRenderer() {
-  // If we're waiting for a close ACK, then the tab should close whether there's
-  // a navigation in progress or not.  Unfortunately, we also need to check for
-  // cases that we arrive here with no navigation in progress, since there are
-  // some tab closure paths that don't set is_waiting_for_close_ack to true.
-  // TODO(creis): Clean this up in http://crbug.com/418266.
-  if (!pending_render_frame_host_ ||
-      render_frame_host_->render_view_host()->is_waiting_for_close_ack())
-    return true;
-
-  // We should always have a pending RFH when there's a cross-process navigation
-  // in progress.  Sanity check this for http://crbug.com/276333.
-  CHECK(pending_render_frame_host_);
-
-  // Unload handlers run in the background, so we should never get an
-  // unresponsiveness warning for them.
-  CHECK(!render_frame_host_->IsWaitingForUnloadACK());
-
-  // If the tab becomes unresponsive during beforeunload while doing a
-  // cross-process navigation, proceed with the navigation.  (This assumes that
-  // the pending RenderFrameHost is still responsive.)
-  if (render_frame_host_->is_waiting_for_beforeunload_ack()) {
-    // Haven't gotten around to starting the request, because we're still
-    // waiting for the beforeunload handler to finish.  We'll pretend that it
-    // did finish, to let the navigation proceed.  Note that there's a danger
-    // that the beforeunload handler will later finish and possibly return
-    // false (meaning the navigation should not proceed), but we'll ignore it
-    // in this case because it took too long.
-    if (pending_render_frame_host_->are_navigations_suspended()) {
-      pending_render_frame_host_->SetNavigationsSuspended(
-          false, base::TimeTicks::Now());
-    }
-  }
-  return false;
-}
-
 void RenderFrameHostManager::OnBeforeUnloadACK(
     bool for_cross_site_transition,
     bool proceed,
@@ -367,10 +319,7 @@ void RenderFrameHostManager::OnBeforeUnloadACK(
 
     if (proceed) {
       // Ok to unload the current page, so proceed with the cross-process
-      // navigation.  Note that if navigations are not currently suspended, it
-      // might be because the renderer was deemed unresponsive and this call was
-      // already made by ShouldCloseTabOnUnresponsiveRenderer.  In that case, it
-      // is ok to do nothing here.
+      // navigation.
       if (pending_render_frame_host_ &&
           pending_render_frame_host_->are_navigations_suspended()) {
         pending_render_frame_host_->SetNavigationsSuspended(false,
@@ -502,6 +451,7 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
 
     // We should only hear this from our current renderer.
     DCHECK_EQ(render_frame_host_.get(), render_frame_host);
+    EnsureRenderFrameHostVisibilityConsistent();
 
     // If the current RenderFrameHost has a pending WebUI it must be committed.
     // Note: When one tries to move same-site commit logic into RenderFrameHost
@@ -520,7 +470,7 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     // commit call below.
     CommitPending();
     if (IsBrowserSideNavigationEnabled())
-      frame_tree_node_->ResetNavigationRequest(false);
+      frame_tree_node_->ResetNavigationRequest(false, true);
   } else if (render_frame_host == render_frame_host_.get()) {
     // A same-process navigation committed while a simultaneous cross-process
     // navigation is still ongoing.
@@ -536,7 +486,7 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     if (was_caused_by_user_gesture) {
       if (IsBrowserSideNavigationEnabled()) {
         CleanUpNavigation();
-        frame_tree_node_->ResetNavigationRequest(false);
+        frame_tree_node_->ResetNavigationRequest(false, true);
       } else {
         CancelPending();
       }
@@ -950,14 +900,14 @@ void RenderFrameHostManager::OnDidUpdateName(const std::string& name,
   }
 }
 
-void RenderFrameHostManager::OnDidAddContentSecurityPolicy(
-    const ContentSecurityPolicyHeader& header) {
+void RenderFrameHostManager::OnDidAddContentSecurityPolicies(
+    const std::vector<ContentSecurityPolicyHeader>& headers) {
   if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
     return;
 
   for (const auto& pair : proxy_hosts_) {
-    pair.second->Send(new FrameMsg_AddContentSecurityPolicy(
-        pair.second->GetRoutingID(), header));
+    pair.second->Send(new FrameMsg_AddContentSecurityPolicies(
+        pair.second->GetRoutingID(), headers));
   }
 }
 
@@ -1041,7 +991,7 @@ void RenderFrameHostManager::CancelPendingIfNecessary(
   else if (render_frame_host == speculative_render_frame_host_.get()) {
     // TODO(nasko, clamy): This should just clean up the speculative RFH
     // without canceling the request.  See https://crbug.com/636119.
-    frame_tree_node_->ResetNavigationRequest(false);
+    frame_tree_node_->ResetNavigationRequest(false, true);
   }
 }
 
@@ -1351,6 +1301,20 @@ RenderFrameHostManager::DetermineSiteInstanceForURL(
         dest_url.SchemeIs(kChromeUIScheme)) {
       return SiteInstanceDescriptor(parent_site_instance);
     }
+    // TODO(alexmos, nick): Remove this once https://crbug.com/706169 is fixed.
+    if (parent_site_instance->GetSiteURL().SchemeIs(kChromeDevToolsScheme)) {
+      url::Origin origin(dest_url);
+      auto* policy = ChildProcessSecurityPolicy::GetInstance();
+      // Some non-devtools origins (e.g., devtools extensions) have special
+      // permission to stay in the devtools process.
+      bool is_origin_allowed_in_devtools_process =
+          policy->HasSpecificPermissionForOrigin(
+              parent_site_instance->GetProcess()->GetID(), origin);
+      if (origin.scheme() == kChromeDevToolsScheme ||
+          is_origin_allowed_in_devtools_process) {
+        return SiteInstanceDescriptor(parent_site_instance);
+      }
+    }
   }
 
   // If we haven't used our SiteInstance (and thus RVH) yet, then we can use it
@@ -1529,12 +1493,19 @@ bool RenderFrameHostManager::IsRendererTransferNeededForNavigation(
   if (rfh->GetSiteInstance()->GetSiteURL().SchemeIs(kGuestScheme))
     return false;
 
-  // Don't swap processes for extensions embedded in DevTools. See
-  // https://crbug.com/564216.
+  // TODO(alexmos, nick): Remove this once https://crbug.com/706169 is fixed.
+  // Devtools pages and devtools extensions must stay in the devtools process.
+  // See https://crbug.com/564216.
   if (rfh->GetSiteInstance()->GetSiteURL().SchemeIs(kChromeDevToolsScheme)) {
-    // TODO(nick): https://crbug.com/570483 Check to see if |dest_url| is a
-    // devtools extension, and swap processes if not.
-    return false;
+    url::Origin origin(dest_url);
+    auto* policy = ChildProcessSecurityPolicy::GetInstance();
+    // Some non-devtools origins (e.g., devtools extensions) have special
+    // permission to stay in the devtools process.
+    bool is_origin_allowed_in_devtools_process =
+        policy->HasSpecificPermissionForOrigin(rfh->GetProcess()->GetID(),
+                                               origin);
+    return !(origin.scheme() == kChromeDevToolsScheme ||
+             is_origin_allowed_in_devtools_process);
   }
 
   BrowserContext* context = rfh->GetSiteInstance()->GetBrowserContext();
@@ -2022,33 +1993,8 @@ bool RenderFrameHostManager::InitRenderFrame(
   if (existing_proxy) {
     proxy_routing_id = existing_proxy->GetRoutingID();
     CHECK_NE(proxy_routing_id, MSG_ROUTING_NONE);
-    if (!existing_proxy->is_render_frame_proxy_live()) {
-      // Calling InitRenderFrameProxy on main frames seems to be causing
-      // https://crbug.com/575245, so track down how this can happen.
-      // TODO(creis): Remove this once we've found the cause.
-      if (!frame_tree_node_->parent()) {
-        base::debug::SetCrashKeyValue(
-            "initrf_frame_id",
-            base::IntToString(render_frame_host->GetRoutingID()));
-        base::debug::SetCrashKeyValue("initrf_proxy_id",
-                                      base::IntToString(proxy_routing_id));
-        base::debug::SetCrashKeyValue(
-            "initrf_view_id",
-            base::IntToString(
-                render_frame_host->render_view_host()->GetRoutingID()));
-        base::debug::SetCrashKeyValue(
-            "initrf_main_frame_id",
-            base::IntToString(render_frame_host->render_view_host()
-                                  ->main_frame_routing_id()));
-        base::debug::SetCrashKeyValue(
-            "initrf_view_is_live",
-            render_frame_host->render_view_host()->IsRenderViewLive() ? "yes"
-                                                                      : "no");
-        base::debug::DumpWithoutCrashing();
-      }
-
+    if (!existing_proxy->is_render_frame_proxy_live())
       existing_proxy->InitRenderFrameProxy();
-    }
   }
 
   // TODO(alexmos): These crash keys are temporary to track down
@@ -2858,6 +2804,18 @@ bool RenderFrameHostManager::CanSubframeSwapProcess(
   }
 
   return true;
+}
+
+void RenderFrameHostManager::EnsureRenderFrameHostVisibilityConsistent() {
+  if (render_frame_host_->GetView() &&
+      render_frame_host_->render_view_host()->GetWidget()->is_hidden() !=
+          delegate_->IsHidden()) {
+    if (delegate_->IsHidden()) {
+      render_frame_host_->GetView()->Hide();
+    } else {
+      render_frame_host_->GetView()->Show();
+    }
+  }
 }
 
 }  // namespace content

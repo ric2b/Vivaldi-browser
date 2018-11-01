@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/views/payments/view_stack.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/memory/ptr_util.h"
 #include "ui/views/layout/fill_layout.h"
 
@@ -81,7 +84,7 @@ void ViewStack::UpdateAnimatorBounds(
   // If an animator is currently animating, figure out which views and update
   // their target bounds.
   if (animator->IsAnimating()) {
-    for (auto& view: stack_) {
+    for (auto& view : stack_) {
       if (animator->IsAnimating(view.get())) {
         animator->SetTargetBounds(view.get(), target);
       }

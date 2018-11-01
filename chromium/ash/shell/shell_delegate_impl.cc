@@ -4,21 +4,21 @@
 
 #include "ash/shell/shell_delegate_impl.h"
 
-#include "ash/common/accessibility_delegate.h"
-#include "ash/common/default_accessibility_delegate.h"
-#include "ash/common/gpu_support_stub.h"
-#include "ash/common/palette_delegate.h"
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/common/system/tray/default_system_tray_delegate.h"
-#include "ash/common/test/test_shelf_delegate.h"
-#include "ash/common/wm/window_state.h"
+#include "ash/accessibility_delegate.h"
+#include "ash/default_accessibility_delegate.h"
 #include "ash/default_wallpaper_delegate.h"
+#include "ash/gpu_support_stub.h"
+#include "ash/palette_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
 #include "ash/shell/context_menu.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
+#include "ash/system/tray/default_system_tray_delegate.h"
 #include "ash/test/test_keyboard_ui.h"
+#include "ash/test/test_shelf_delegate.h"
+#include "ash/wm/window_state.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -59,59 +59,19 @@ class PaletteDelegateImpl : public PaletteDelegate {
 
 class SessionStateDelegateImpl : public SessionStateDelegate {
  public:
-  SessionStateDelegateImpl()
-      : screen_locked_(false), user_info_(new user_manager::UserInfoImpl()) {}
+  SessionStateDelegateImpl() : user_info_(new user_manager::UserInfoImpl()) {}
 
   ~SessionStateDelegateImpl() override {}
 
   // SessionStateDelegate:
-  int GetMaximumNumberOfLoggedInUsers() const override { return 3; }
-  int NumberOfLoggedInUsers() const override {
-    // ash_shell has 2 users.
-    return 2;
-  }
-  bool IsActiveUserSessionStarted() const override { return true; }
-  bool CanLockScreen() const override { return true; }
-  bool IsScreenLocked() const override { return screen_locked_; }
-  bool ShouldLockScreenAutomatically() const override { return false; }
-  void LockScreen() override {
-    shell::CreateLockScreen();
-    screen_locked_ = true;
-    Shell::GetInstance()->UpdateShelfVisibility();
-  }
-  void UnlockScreen() override {
-    screen_locked_ = false;
-    Shell::GetInstance()->UpdateShelfVisibility();
-  }
-  bool IsUserSessionBlocked() const override {
-    return !IsActiveUserSessionStarted() || IsScreenLocked();
-  }
-  session_manager::SessionState GetSessionState() const override {
-    // Assume that if session is not active we're at login.
-    return IsActiveUserSessionStarted()
-               ? session_manager::SessionState::ACTIVE
-               : session_manager::SessionState::LOGIN_PRIMARY;
-  }
-  const user_manager::UserInfo* GetUserInfo(UserIndex index) const override {
-    return user_info_.get();
-  }
   bool ShouldShowAvatar(WmWindow* window) const override {
     return !user_info_->GetImage().isNull();
   }
   gfx::ImageSkia GetAvatarImageForWindow(WmWindow* window) const override {
     return gfx::ImageSkia();
   }
-  void SwitchActiveUser(const AccountId& account_id) override {}
-  void CycleActiveUser(CycleUserDirection direction) override {}
-  bool IsMultiProfileAllowedByPrimaryUserPolicy() const override {
-    return true;
-  }
-  void AddSessionStateObserver(SessionStateObserver* observer) override {}
-  void RemoveSessionStateObserver(SessionStateObserver* observer) override {}
 
  private:
-  bool screen_locked_;
-
   // A pseudo user info.
   std::unique_ptr<user_manager::UserInfo> user_info_;
 

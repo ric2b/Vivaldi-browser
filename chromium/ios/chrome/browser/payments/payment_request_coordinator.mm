@@ -8,22 +8,26 @@
 #include <vector>
 
 #include "base/memory/ptr_util.h"
-#include "base/memory/weak_ptr.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
+#include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller_impl.h"
+#include "components/payments/core/payment_address.h"
+#include "components/payments/core/payment_request_data_util.h"
+#include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #include "ios/chrome/browser/payments/payment_request_util.h"
+#include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_bridge.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -32,8 +36,8 @@
 #endif
 
 namespace {
-using ::payment_request_util::GetBasicCardResponseFromAutofillCreditCard;
-using ::payment_request_util::GetPaymentAddressFromAutofillProfile;
+using ::payments::data_util::GetBasicCardResponseFromAutofillCreditCard;
+using ::payments::data_util::GetPaymentAddressFromAutofillProfile;
 }  // namespace
 
 // The unmask prompt UI for Payment Request.
@@ -155,6 +159,14 @@ class FullCardRequester
   [_viewController setPageTitle:_pageTitle];
   [_viewController setPageHost:_pageHost];
   [_viewController setDelegate:self];
+  DCHECK(_browserState);
+  const SigninManager* signinManager =
+      ios::SigninManagerFactory::GetForBrowserStateIfExists(_browserState);
+  if (signinManager && signinManager->IsAuthenticated()) {
+    NSString* accountName = base::SysUTF8ToNSString(
+        signinManager->GetAuthenticatedAccountInfo().email);
+    [_viewController setAuthenticatedAccountName:accountName];
+  }
   [_viewController loadModel];
 
   _navigationController = [[UINavigationController alloc]
@@ -170,10 +182,15 @@ class FullCardRequester
   [[_navigationController presentingViewController]
       dismissViewControllerAnimated:YES
                          completion:nil];
+  [_itemsDisplayCoordinator stop];
   _itemsDisplayCoordinator = nil;
+  [_shippingAddressSelectionCoordinator stop];
   _shippingAddressSelectionCoordinator = nil;
+  [_shippingOptionSelectionCoordinator stop];
   _shippingOptionSelectionCoordinator = nil;
+  [_methodSelectionCoordinator stop];
   _methodSelectionCoordinator = nil;
+  [_errorCoordinator stop];
   _errorCoordinator = nil;
   _viewController = nil;
   _navigationController = nil;
@@ -191,21 +208,30 @@ class FullCardRequester
                                       CVC:(const base::string16&)cvc {
   web::PaymentResponse paymentResponse;
 
+  // If the merchant specified the card network as part of the "basic-card"
+  // payment method, return "basic-card" as the method_name. Otherwise, return
+  // the name of the network directly.
+  std::string basic_card_type =
+      autofill::data_util::GetPaymentRequestData(card.type())
+          .basic_card_payment_type;
   paymentResponse.method_name =
-      base::ASCIIToUTF16(autofill::data_util::GetPaymentRequestData(card.type())
-                             .basic_card_payment_type);
+      _paymentRequest->basic_card_specified_networks().find(basic_card_type) !=
+              _paymentRequest->basic_card_specified_networks().end()
+          ? base::ASCIIToUTF16("basic-card")
+          : base::ASCIIToUTF16(basic_card_type);
 
-  paymentResponse.details =
-      GetBasicCardResponseFromAutofillCreditCard(*_paymentRequest, card, cvc);
+  paymentResponse.details = GetBasicCardResponseFromAutofillCreditCard(
+      card, cvc, _paymentRequest->billing_profiles(),
+      GetApplicationContext()->GetApplicationLocale());
 
-  if (_paymentRequest->payment_options().request_shipping) {
+  if (_paymentRequest->request_shipping()) {
     autofill::AutofillProfile* shippingAddress =
         _paymentRequest->selected_shipping_profile();
     // TODO(crbug.com/602666): User should get here only if they have selected
     // a shipping address.
     DCHECK(shippingAddress);
-    paymentResponse.shipping_address =
-        GetPaymentAddressFromAutofillProfile(*shippingAddress);
+    paymentResponse.shipping_address = GetPaymentAddressFromAutofillProfile(
+        *shippingAddress, GetApplicationContext()->GetApplicationLocale());
 
     web::PaymentShippingOption* shippingOption =
         _paymentRequest->selected_shipping_option();
@@ -213,7 +239,7 @@ class FullCardRequester
     paymentResponse.shipping_option = shippingOption->id;
   }
 
-  if (_paymentRequest->payment_options().request_payer_name) {
+  if (_paymentRequest->request_payer_name()) {
     autofill::AutofillProfile* contactInfo =
         _paymentRequest->selected_contact_profile();
     // TODO(crbug.com/602666): User should get here only if they have selected
@@ -224,7 +250,7 @@ class FullCardRequester
                              GetApplicationContext()->GetApplicationLocale());
   }
 
-  if (_paymentRequest->payment_options().request_payer_email) {
+  if (_paymentRequest->request_payer_email()) {
     autofill::AutofillProfile* contactInfo =
         _paymentRequest->selected_contact_profile();
     // TODO(crbug.com/602666): User should get here only if they have selected
@@ -234,7 +260,7 @@ class FullCardRequester
         contactInfo->GetRawInfo(autofill::EMAIL_ADDRESS);
   }
 
-  if (_paymentRequest->payment_options().request_payer_phone) {
+  if (_paymentRequest->request_payer_phone()) {
     autofill::AutofillProfile* contactInfo =
         _paymentRequest->selected_contact_profile();
     // TODO(crbug.com/602666): User should get here only if they have selected
@@ -317,6 +343,11 @@ class FullCardRequester
   [self sendPaymentResponse];
 }
 
+- (void)paymentRequestViewControllerDidSelectSettings:
+    (PaymentRequestViewController*)controller {
+  [_delegate paymentRequestCoordinatorDidSelectSettings:self];
+}
+
 - (void)paymentRequestViewControllerDidSelectPaymentSummaryItem:
     (PaymentRequestViewController*)controller {
   _itemsDisplayCoordinator = [[PaymentItemsDisplayCoordinator alloc]
@@ -396,8 +427,8 @@ class FullCardRequester
                        (autofill::AutofillProfile*)shippingAddress {
   _pendingShippingAddress = shippingAddress;
   DCHECK(shippingAddress);
-  web::PaymentAddress address =
-      GetPaymentAddressFromAutofillProfile(*shippingAddress);
+  payments::PaymentAddress address = GetPaymentAddressFromAutofillProfile(
+      *shippingAddress, GetApplicationContext()->GetApplicationLocale());
   [_delegate paymentRequestCoordinator:self didSelectShippingAddress:address];
 }
 

@@ -10,18 +10,29 @@
 #include "app/vivaldi_constants.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "base/memory/ref_counted.h"
+#include "base/strings/string_util.h"
+#include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/window_controller.h"
+#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/schema/devtools_private.h"
+#include "ui/devtools/devtools_connector.h"
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_WIN)
@@ -30,8 +41,6 @@
 #include "chrome/browser/win/jumplist_factory.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
-
-#include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 
 // VivaldiBrowserWindow --------------------------------------------------------
 
@@ -223,10 +232,10 @@ ToolbarActionsBar* VivaldiBrowserWindow::GetToolbarActionsBar() {
   return NULL;
 }
 
-bool VivaldiBrowserWindow::PreHandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event,
-    bool* is_keyboard_shortcut) {
-  return false;
+content::KeyboardEventProcessingResult
+VivaldiBrowserWindow::PreHandleKeyboardEvent(
+    const content::NativeWebKeyboardEvent& event) {
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool VivaldiBrowserWindow::IsBookmarkBarVisible() const {
@@ -253,21 +262,6 @@ DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
   return NULL;
 }
 
-void VivaldiBrowserWindow::ShowWebsiteSettings(
-    Profile* profile,
-    content::WebContents* web_contents,
-    const GURL& url,
-    const security_state::SecurityInfo& security_info) {
-  // For Vivaldi we reroute this back to javascript site, for either
-  // display a javascript siteinfo or call back to us (via webview) using
-  // VivaldiShowWebsiteSettingsAt.
-  content::WebContentsImpl* web_contents_impl =
-      static_cast<content::WebContentsImpl*>(web_contents);
-
-  static_cast<extensions::WebViewGuest*>(web_contents_impl->GetDelegate())
-      ->RequestPageInfo(url);
-}
-
 // See comments on: BrowserWindow.VivaldiShowWebSiteSettingsAt.
 void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
     Profile* profile,
@@ -277,7 +271,7 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
     gfx::Point pos) {
 #if defined(USE_AURA)
   // This is only for AURA.  Mac is done in VivaldiBrowserCocoa.
-  WebsiteSettingsPopupView::ShowPopupAtPos(pos, profile, web_contents, url,
+  PageInfoBubbleView::ShowPopupAtPos(pos, profile, web_contents, url,
                                            security_info, browser_.get(),
                                            GetAppWindow()->GetNativeWindow());
 #endif
@@ -362,4 +356,91 @@ ShowTranslateBubbleResult VivaldiBrowserWindow::ShowTranslateBubble(
     translate::TranslateErrors::Type error_type,
     bool is_user_gesture) {
   return ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_VALID;
+}
+
+void VivaldiBrowserWindow::UpdateDevTools() {
+  TabStripModel* tab_strip_model = browser_->tab_strip_model();
+
+  // Get the docking state.
+  const base::DictionaryValue* prefs =
+      browser_->profile()->GetPrefs()->GetDictionary(
+          prefs::kDevToolsPreferences);
+
+  std::string docking_state;
+  std::string device_mode;
+
+  // DevToolsWindow code has already activated the tab.
+  content::WebContents* contents = tab_strip_model->GetActiveWebContents();
+  int tab_id = SessionTabHelper::IdForTab(contents);
+  extensions::DevtoolsConnectorAPI* api =
+    extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
+      browser_->profile());
+  DCHECK(api);
+  scoped_refptr<extensions::DevtoolsConnectorItem> item =
+      make_scoped_refptr(api->GetOrCreateDevtoolsConnectorItem(tab_id));
+
+  DevToolsWindow* window =
+      DevToolsWindow::GetInstanceForInspectedWebContents(contents);
+
+  if (window) {
+    if (window->IsClosing()) {
+      std::unique_ptr<base::ListValue> args =
+          extensions::vivaldi::devtools_private::OnClosed::Create(tab_id);
+
+      extensions::DevtoolsConnectorAPI::BroadcastEvent(
+          extensions::vivaldi::devtools_private::OnClosed::kEventName,
+          std::move(args), browser_->profile());
+
+      ResetDockingState(tab_id);
+    } else {
+      if (prefs->GetString("currentDockState", &docking_state)) {
+        // Strip quotation marks from the state.
+        base::ReplaceChars(docking_state, "\"", "", &docking_state);
+        if (item->docking_state() != docking_state) {
+          item->set_docking_state(docking_state);
+
+          std::unique_ptr<base::ListValue> args =
+            extensions::vivaldi::devtools_private::OnDockingStateChanged::Create(
+              tab_id, docking_state);
+
+          extensions::DevtoolsConnectorAPI::BroadcastEvent(
+            extensions::vivaldi::devtools_private::OnDockingStateChanged::
+            kEventName,
+            std::move(args), browser_->profile());
+        }
+      }
+      if (prefs->GetString("showDeviceMode", &device_mode)) {
+        base::ReplaceChars(device_mode, "\"", "", &device_mode);
+        bool device_mode_enabled = device_mode == "true";
+        if (item->device_mode_enabled() == device_mode_enabled) {
+          item->set_device_mode_enabled(device_mode_enabled);
+        }
+      }
+    }
+  }
+}
+
+void VivaldiBrowserWindow::ResetDockingState(int tab_id) {
+  extensions::DevtoolsConnectorAPI* api =
+    extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
+      browser_->profile());
+  DCHECK(api);
+  scoped_refptr<extensions::DevtoolsConnectorItem> item =
+      make_scoped_refptr(api->GetOrCreateDevtoolsConnectorItem(tab_id));
+
+  item->ResetDockingState();
+
+  std::unique_ptr<base::ListValue> args =
+    extensions::vivaldi::devtools_private::OnDockingStateChanged::Create(
+      tab_id, item->docking_state());
+
+  extensions::DevtoolsConnectorAPI::BroadcastEvent(
+    extensions::vivaldi::devtools_private::OnDockingStateChanged::
+    kEventName,
+    std::move(args),
+    browser_->profile());
+}
+
+bool VivaldiBrowserWindow::IsToolbarShowing() const {
+  return false;
 }

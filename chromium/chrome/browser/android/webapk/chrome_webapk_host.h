@@ -17,7 +17,7 @@ enum class GooglePlayInstallState {
   SUPPORTED = 0,
   DISABLED_OTHER = 1,
   NO_PLAY_SERVICES = 2,
-  DISABLED_BY_VARIATIONS = 3,
+  // Deprecated: DISABLED_BY_VARIATIONS = 3,
   DISABLED_BY_PLAY = 4,
   MAX = 5
 };
@@ -29,8 +29,7 @@ class ChromeWebApkHost {
   // Registers JNI hooks.
   static bool Register(JNIEnv* env);
 
-  // Returns whether installing WebApk is possible either from "unknown sources"
-  // or Google Play.
+  // Returns whether installing WebApk is possible.
   static bool CanInstallWebApk();
 
   // Returns the state of installing a WebAPK from Google Play.

@@ -20,8 +20,8 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "cc/resources/shared_bitmap_manager.h"
+#include "components/display_compositor/host_shared_bitmap_manager.h"
 #include "content/common/cache_storage/cache_storage_types.h"
-#include "content/common/host_shared_bitmap_manager.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -120,16 +120,14 @@ class CONTENT_EXPORT RenderMessageFilter
   void CreateFullscreenWidget(
       int opener_id,
       const CreateFullscreenWidgetCallback& callback) override;
-  void AllocatedSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
-                             const cc::SharedBitmapId& id) override;
-  void DeletedSharedBitmap(const cc::SharedBitmapId& id) override;
+  void GetSharedBitmapManager(
+      cc::mojom::SharedBitmapManagerAssociatedRequest request) override;
 
   // Message handlers called on the browser IO thread:
   void OnHasGpuProcess(IPC::Message* reply);
   // Helper callbacks for the message handlers.
-  void GetGpuProcessHandlesCallback(
-      std::unique_ptr<IPC::Message> reply,
-      const std::list<base::ProcessHandle>& handles);
+  void GetHasGpuProcessCallback(std::unique_ptr<IPC::Message> reply,
+                                bool has_gpu);
   void OnResolveProxy(const GURL& url, IPC::Message* reply_msg);
 
 #if defined(OS_LINUX)
@@ -165,7 +163,7 @@ class CONTENT_EXPORT RenderMessageFilter
   // than we do.
   ResourceDispatcherHostImpl* resource_dispatcher_host_;
 
-  HostSharedBitmapManagerClient bitmap_manager_client_;
+  display_compositor::HostSharedBitmapManagerClient bitmap_manager_client_;
 
   // Contextual information to be used for requests created here.
   scoped_refptr<net::URLRequestContextGetter> request_context_;

@@ -22,6 +22,9 @@ const char kDisableMediaSuspend[] = "disable-media-suspend";
 const char kReportVp9AsAnUnsupportedMimeType[] =
     "report-vp9-as-an-unsupported-mime-type";
 
+// Enable parsing of new multi-part VP9 string for webm.
+const char kEnableNewVp9CodecString[] = "enable-new-vp9-codec-string";
+
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
 // The Alsa device to use when opening an audio input stream.
 const char kAlsaInputDevice[] = "alsa-input-device";
@@ -61,6 +64,18 @@ const char kWaveOutBuffers[] = "waveout-buffers";
 const char kUseCras[] = "use-cras";
 #endif
 
+// For automated testing of protected content, this switch allows specific
+// domains (e.g. example.com) to skip asking the user for permission to share
+// their personal identifier. In this context, domain does not include the
+// port number. This flag will have no effect if user-data-dir is not set and
+// will not affect the user's content settings.
+// Reference: http://crbug.com/718608
+// Example:
+// --unsafely-allow-protected-media-identifier-for-domain=a.com,b.ca
+// --user-data-dir=/test/only/profile/dir
+const char kUnsafelyAllowProtectedMediaIdentifierForDomain[] =
+    "unsafely-allow-protected-media-identifier-for-domain";
+
 #if !defined(OS_ANDROID) || BUILDFLAG(ENABLE_PLUGINS)
 // Use a media session for each tabs in a way that two tabs can't play on top of
 // each other. This is different from the Media Session API as it is enabling a
@@ -97,6 +112,11 @@ const char kUseFileForFakeVideoCapture[] = "use-file-for-fake-video-capture";
 // or <path>%noloop to stop after playing the file to completion.
 const char kUseFileForFakeAudioCapture[] = "use-file-for-fake-audio-capture";
 
+// Use fake device for accelerated decoding of JPEG. This allows, for example,
+// testing of the communication to the GPU service without requiring actual
+// accelerator hardware to be present.
+const char kUseFakeJpegDecodeAccelerator[] = "use-fake-jpeg-decode-accelerator";
+
 // Enables support for inband text tracks in media content.
 const char kEnableInbandTextTracks[] = "enable-inband-text-tracks";
 
@@ -126,11 +146,6 @@ const char kForceVideoOverlays[] = "force-video-overlays";
 // Default values are 150M for video and 12M for audio.
 const char kMSEAudioBufferSizeLimit[] = "mse-audio-buffer-size-limit";
 const char kMSEVideoBufferSizeLimit[] = "mse-video-buffer-size-limit";
-
-// By default, if any CDM host (including signature) file is missing, the CDM
-// will not be called to verify the host. Enable this switch to ignore missing
-// CDM host files. This can be used in tests.
-const char kIgnoreMissingCdmHostFile[] = "ignore-missing-cdm-host-file";
 
 }  // namespace switches
 
@@ -169,6 +184,10 @@ const base::Feature kResumeBackgroundVideo {
 // Let video track be unselected when video is playing in the background.
 const base::Feature kBackgroundVideoTrackOptimization{
     "BackgroundVideoTrackOptimization", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Let video without audio be paused when it is playing in the background.
+const base::Feature kBackgroundVideoPauseOptimization{
+    "BackgroundVideoPauseOptimization", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Make MSE garbage collection algorithm more aggressive when we are under
 // moderate or critical memory pressure. This will relieve memory pressure by

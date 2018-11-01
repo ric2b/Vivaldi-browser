@@ -9,6 +9,10 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @implementation CWVTranslateManagerImpl {
   std::unique_ptr<translate::TranslateUIDelegate> _translateUIDelegate;
 }
@@ -24,7 +28,7 @@
   return self;
 }
 
-#pragma mark CRIWVTranslateManager methods
+#pragma mark CWVTranslateManager methods
 
 - (void)translate {
   _translateUIDelegate->Translate();

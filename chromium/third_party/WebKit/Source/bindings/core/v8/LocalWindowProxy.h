@@ -32,11 +32,13 @@
 #define LocalWindowProxy_h
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/frame/LocalFrame.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/AtomicString.h"
 #include "v8/include/v8.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -46,52 +48,70 @@ class SecurityOrigin;
 // Subclass of WindowProxy that only handles LocalFrame.
 class LocalWindowProxy final : public WindowProxy {
  public:
-  static LocalWindowProxy* create(v8::Isolate* isolate,
+  static LocalWindowProxy* Create(v8::Isolate* isolate,
                                   LocalFrame& frame,
                                   RefPtr<DOMWrapperWorld> world) {
     return new LocalWindowProxy(isolate, frame, std::move(world));
   }
 
-  // Update document object of the frame.
-  void updateDocument();
+  v8::Local<v8::Context> ContextIfInitialized() const {
+    return script_state_ ? script_state_->GetContext()
+                         : v8::Local<v8::Context>();
+  }
 
-  void namedItemAdded(HTMLDocument*, const AtomicString&);
-  void namedItemRemoved(HTMLDocument*, const AtomicString&);
+  // Update document object of the frame.
+  void UpdateDocument();
+
+  void NamedItemAdded(HTMLDocument*, const AtomicString&);
+  void NamedItemRemoved(HTMLDocument*, const AtomicString&);
 
   // Update the security origin of a document
   // (e.g., after setting docoument.domain).
-  void updateSecurityOrigin(SecurityOrigin*);
+  void UpdateSecurityOrigin(SecurityOrigin*);
 
  private:
   LocalWindowProxy(v8::Isolate*, LocalFrame&, RefPtr<DOMWrapperWorld>);
 
-  void initialize() override;
-  void disposeContext(GlobalDetachmentBehavior) override;
+  bool IsLocal() const override { return true; }
+  void Initialize() override;
+  void DisposeContext(Lifecycle next_status) override;
 
   // Creates a new v8::Context with the window wrapper object as the global
   // object (aka the inner global).  Note that the window wrapper and its
   // prototype chain do not get fully initialized yet, e.g. the window
   // wrapper is not yet associated with the native DOMWindow object.
-  void createContext();
+  void CreateContext();
 
-  void setSecurityToken(SecurityOrigin*);
+  // Associates the window wrapper and its prototype chain with the native
+  // DOMWindow object. Also does some more Window-specific initialization.
+  void SetupWindowPrototypeChain();
+
+  void SetSecurityToken(SecurityOrigin*);
 
   // Triggers updates of objects that are associated with a Document:
   // - the activity logger
   // - the document DOM wrapper
   // - the security origin
-  void updateDocumentInternal();
+  void UpdateDocumentInternal();
 
   // The JavaScript wrapper for the document object is cached on the global
   // object for fast access. UpdateDocumentProperty sets the wrapper
   // for the current document on the global object.
-  void updateDocumentProperty();
+  void UpdateDocumentProperty();
 
   // Updates Activity Logger for the current context.
-  void updateActivityLogger();
+  void UpdateActivityLogger();
 
-  LocalFrame* frame() const { return toLocalFrame(WindowProxy::frame()); }
+  LocalFrame* GetFrame() const { return ToLocalFrame(WindowProxy::GetFrame()); }
+
+  RefPtr<ScriptState> script_state_;
 };
+
+DEFINE_TYPE_CASTS(LocalWindowProxy,
+                  WindowProxy,
+                  windowProxy,
+                  windowProxy->IsLocal(),
+                  windowProxy.IsLocal());
 
 }  // namespace blink
 

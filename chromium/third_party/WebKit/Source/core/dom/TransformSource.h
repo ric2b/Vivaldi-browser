@@ -20,9 +20,9 @@
 #ifndef TransformSource_h
 #define TransformSource_h
 
-#include "wtf/Allocator.h"
-#include "wtf/Noncopyable.h"
 #include <libxml/tree.h>
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -34,10 +34,10 @@ class TransformSource {
   explicit TransformSource(xmlDocPtr source);
   ~TransformSource();
 
-  xmlDocPtr platformSource() const { return m_source; }
+  xmlDocPtr PlatformSource() const { return source_; }
 
  private:
-  xmlDocPtr m_source;
+  xmlDocPtr source_;
 };
 
 }  // namespace blink

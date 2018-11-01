@@ -9,8 +9,8 @@
 #include "base/message_loop/message_loop.h"
 #include "cc/base/math_util.h"
 #include "cc/output/gl_renderer.h"
-#include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/picture_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
@@ -27,7 +27,9 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/effects/SkColorFilterImageFilter.h"
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
+#include "ui/gfx/color_transform.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/test/icc_profiles.h"
 
 using gpu::gles2::GLES2Interface;
 
@@ -99,12 +101,12 @@ void CreateTestRenderPassDrawQuad(const SharedQuadState* shared_state,
   RenderPassDrawQuad* quad =
       render_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   quad->SetNew(shared_state, rect, rect, pass_id,
-               0,                 // mask_resource_id
-               gfx::RectF(),      // mask_uv_rect
-               gfx::Size(),       // mask_texture_size
-               gfx::Vector2dF(),  // filters scale
-               gfx::PointF(),     // filter origin
-               gfx::RectF());     // tex_coord_rect
+               0,                  // mask_resource_id
+               gfx::RectF(),       // mask_uv_rect
+               gfx::Size(),        // mask_texture_size
+               gfx::Vector2dF(),   // filters scale
+               gfx::PointF(),      // filter origin
+               gfx::RectF(rect));  // tex_coord_rect
 }
 
 void CreateTestTwoColoredTextureDrawQuad(const gfx::Rect& rect,
@@ -1586,9 +1588,9 @@ TYPED_TEST(RendererPixelTest, FastPassColorFilterAlpha) {
 
   RenderPassDrawQuad* render_pass_quad =
       root_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
-  render_pass_quad->SetNew(pass_shared_state, pass_rect, pass_rect,
-                           child_pass_id, 0, gfx::RectF(), gfx::Size(),
-                           gfx::Vector2dF(), gfx::PointF(), gfx::RectF());
+  render_pass_quad->SetNew(
+      pass_shared_state, pass_rect, pass_rect, child_pass_id, 0, gfx::RectF(),
+      gfx::Size(), gfx::Vector2dF(), gfx::PointF(), gfx::RectF(pass_rect));
 
   RenderPassList pass_list;
   pass_list.push_back(std::move(child_pass));
@@ -1652,9 +1654,9 @@ TYPED_TEST(RendererPixelTest, FastPassSaturateFilter) {
 
   RenderPassDrawQuad* render_pass_quad =
       root_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
-  render_pass_quad->SetNew(pass_shared_state, pass_rect, pass_rect,
-                           child_pass_id, 0, gfx::RectF(), gfx::Size(),
-                           gfx::Vector2dF(), gfx::PointF(), gfx::RectF());
+  render_pass_quad->SetNew(
+      pass_shared_state, pass_rect, pass_rect, child_pass_id, 0, gfx::RectF(),
+      gfx::Size(), gfx::Vector2dF(), gfx::PointF(), gfx::RectF(pass_rect));
 
   RenderPassList pass_list;
   pass_list.push_back(std::move(child_pass));
@@ -1718,9 +1720,9 @@ TYPED_TEST(RendererPixelTest, FastPassFilterChain) {
 
   RenderPassDrawQuad* render_pass_quad =
       root_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
-  render_pass_quad->SetNew(pass_shared_state, pass_rect, pass_rect,
-                           child_pass_id, 0, gfx::RectF(), gfx::Size(),
-                           gfx::Vector2dF(), gfx::PointF(), gfx::RectF());
+  render_pass_quad->SetNew(
+      pass_shared_state, pass_rect, pass_rect, child_pass_id, 0, gfx::RectF(),
+      gfx::Size(), gfx::Vector2dF(), gfx::PointF(), gfx::RectF(pass_rect));
 
   RenderPassList pass_list;
   pass_list.push_back(std::move(child_pass));
@@ -1805,9 +1807,9 @@ TYPED_TEST(RendererPixelTest, FastPassColorFilterAlphaTranslation) {
 
   RenderPassDrawQuad* render_pass_quad =
       root_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
-  render_pass_quad->SetNew(pass_shared_state, pass_rect, pass_rect,
-                           child_pass_id, 0, gfx::RectF(), gfx::Size(),
-                           gfx::Vector2dF(), gfx::PointF(), gfx::RectF());
+  render_pass_quad->SetNew(
+      pass_shared_state, pass_rect, pass_rect, child_pass_id, 0, gfx::RectF(),
+      gfx::Size(), gfx::Vector2dF(), gfx::PointF(), gfx::RectF(pass_rect));
 
   RenderPassList pass_list;
 
@@ -1963,7 +1965,7 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad) {
   SkBitmap bitmap;
   bitmap.allocPixels(
       SkImageInfo::MakeN32Premul(mask_rect.width(), mask_rect.height()));
-  PaintCanvas canvas(bitmap);
+  SkiaPaintCanvas canvas(bitmap);
   PaintFlags flags;
   flags.setStyle(PaintFlags::kStroke_Style);
   flags.setStrokeWidth(SkIntToScalar(4));
@@ -2007,7 +2009,7 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad) {
       gfx::Size(mask_rect.size()),               // mask_texture_size
       gfx::Vector2dF(),                          // filters scale
       gfx::PointF(),                             // filter origin
-      gfx::RectF());                             // tex_coord_rect
+      gfx::RectF(sub_rect));                     // tex_coord_rect
 
   // White background behind the masked render pass.
   SolidColorDrawQuad* white =
@@ -2058,7 +2060,7 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad2) {
   SkBitmap bitmap;
   bitmap.allocPixels(
       SkImageInfo::MakeN32Premul(mask_rect.width(), mask_rect.height()));
-  PaintCanvas canvas(bitmap);
+  SkiaPaintCanvas canvas(bitmap);
   PaintFlags flags;
   flags.setStyle(PaintFlags::kStroke_Style);
   flags.setStrokeWidth(SkIntToScalar(4));
@@ -2102,7 +2104,7 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad2) {
       gfx::Size(mask_rect.size()),               // mask_texture_size
       gfx::Vector2dF(),                          // filters scale
       gfx::PointF(),                             // filter origin
-      gfx::RectF());                             // tex_coord_rect
+      gfx::RectF(sub_rect));                     // tex_coord_rect
 
   // White background behind the masked render pass.
   SolidColorDrawQuad* white =
@@ -3382,6 +3384,195 @@ TEST_F(GLRendererPixelTestWithOverdrawFeedback, TranslucentRectangles) {
                                                  "translucent_rectangles.png")),
                                  ExactPixelComparator(true)));
 }
+
+typedef std::tr1::tuple<gfx::ColorSpace, gfx::ColorSpace> ColorSpacePair;
+
+class ColorTransformPixelTest
+    : public GLRendererPixelTest,
+      public testing::WithParamInterface<ColorSpacePair> {
+ public:
+  ColorTransformPixelTest() {
+    settings_.renderer_settings.enable_color_correct_rendering = true;
+    // Note that this size of 17 is not random -- it is chosen to match the
+    // size of LUTs that are created. If we did not match the LUT size exactly,
+    // then the error for LUT based transforms is much larger.
+    device_viewport_size_ = gfx::Size(17, 4);
+    src_color_space_ = std::tr1::get<0>(GetParam());
+    dst_color_space_ = std::tr1::get<1>(GetParam());
+    if (!src_color_space_.IsValid()) {
+      src_color_space_ =
+          gfx::ICCProfileForTestingNoAnalyticTrFn().GetColorSpace();
+    }
+    if (!dst_color_space_.IsValid()) {
+      dst_color_space_ =
+          gfx::ICCProfileForTestingNoAnalyticTrFn().GetColorSpace();
+    }
+  }
+  gfx::ColorSpace src_color_space_;
+  gfx::ColorSpace dst_color_space_;
+};
+
+TEST_P(ColorTransformPixelTest, Basic) {
+  gfx::Rect rect(this->device_viewport_size_);
+  std::vector<uint8_t> input_colors(4 * rect.width() * rect.height(), 0);
+  std::vector<SkColor> expected_output_colors(rect.width() * rect.height());
+
+  renderer_->DisableColorChecksForTesting();
+
+  // Set the input data to be:
+  //   Row 0: Gradient of red from 0 to 255
+  //   Row 1: Gradient of green from 0 to 255
+  //   Row 2: Gradient of blue from 0 to 255
+  //   Row 3: Gradient of grey from 0 to 255
+  for (int x = 0; x < rect.width(); ++x) {
+    int v = (x * 255) / (rect.width() - 1);
+    for (int y = 0; y < rect.height(); ++y) {
+      for (int c = 0; c < 3; ++c) {
+        if (y == c || y == rect.height() - 1) {
+          input_colors[c + 4 * (x + rect.width() * y)] = v;
+        }
+      }
+      input_colors[3 + 4 * (x + rect.width() * y)] = 255;
+    }
+  }
+
+  std::unique_ptr<gfx::ColorTransform> transform =
+      gfx::ColorTransform::NewColorTransform(
+          src_color_space_, dst_color_space_,
+          gfx::ColorTransform::Intent::INTENT_PERCEPTUAL);
+
+  for (size_t i = 0; i < expected_output_colors.size(); ++i) {
+    gfx::ColorTransform::TriStim color;
+    color.set_x(input_colors[4 * i + 0] / 255.f);
+    color.set_y(input_colors[4 * i + 1] / 255.f);
+    color.set_z(input_colors[4 * i + 2] / 255.f);
+    transform->Transform(&color, 1);
+    color.set_x(std::min(std::max(0.f, color.x()), 1.f));
+    color.set_y(std::min(std::max(0.f, color.y()), 1.f));
+    color.set_z(std::min(std::max(0.f, color.z()), 1.f));
+    expected_output_colors[i] =
+        SkColorSetARGBInline(255, static_cast<size_t>(255.f * color.x() + 0.5f),
+                             static_cast<size_t>(255.f * color.y() + 0.5f),
+                             static_cast<size_t>(255.f * color.z() + 0.5f));
+  }
+
+  int id = 1;
+  std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass(id, rect);
+  pass->color_space = dst_color_space_;
+
+  {
+    SharedQuadState* shared_state =
+        CreateTestSharedQuadState(gfx::Transform(), rect, pass.get());
+
+    ResourceId resource = resource_provider_->CreateResource(
+        rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+        src_color_space_);
+    resource_provider_->CopyToResource(resource, input_colors.data(),
+                                       rect.size());
+
+    const gfx::PointF uv_top_left(0.0f, 0.0f);
+    const gfx::PointF uv_bottom_right(1.0f, 1.0f);
+    const bool flipped = false;
+    const bool nearest_neighbor = false;
+    const bool premultiplied_alpha = false;
+    TextureDrawQuad* quad = pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
+
+    float vertex_opacity[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    quad->SetNew(shared_state, rect, gfx::Rect(), rect, resource,
+                 premultiplied_alpha, uv_top_left, uv_bottom_right,
+                 SK_ColorBLACK, vertex_opacity, flipped, nearest_neighbor,
+                 false);
+
+    SolidColorDrawQuad* color_quad =
+        pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+    color_quad->SetNew(shared_state, rect, rect, SK_ColorWHITE, false);
+  }
+
+  RenderPassList pass_list;
+  pass_list.push_back(std::move(pass));
+
+  // Allow a difference of 2 bytes in comparison for shader-based transforms,
+  // and 4 bytes for LUT-based transforms (determined empirically).
+  FuzzyPixelComparator comparator(false, 100.f, 0.f, 2.f, 2, 0);
+  if (!transform->CanGetShaderSource())
+    comparator = FuzzyPixelComparator(false, 100.f, 0.f, 6.f, 6, 0);
+  EXPECT_TRUE(RunPixelTest(&pass_list, &expected_output_colors, comparator));
+}
+
+typedef gfx::ColorSpace::PrimaryID PrimaryID;
+typedef gfx::ColorSpace::TransferID TransferID;
+typedef gfx::ColorSpace::MatrixID MatrixID;
+typedef gfx::ColorSpace::RangeID RangeID;
+
+gfx::ColorSpace src_color_spaces[] = {
+    // This will be replaced by an ICC-based space (which can't be initialized
+    // here).
+    gfx::ColorSpace(),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT709),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::GAMMA22),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::GAMMA24),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::GAMMA28),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::SMPTE170M),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::SMPTE240M),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LINEAR),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LOG),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LOG_SQRT),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_4),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT1361_ECG),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT2020_10),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT2020_12),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::SMPTEST2084),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::SMPTEST428_1),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::ARIB_STD_B67),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1_HDR),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LINEAR_HDR),
+    gfx::ColorSpace(PrimaryID::BT709,
+                    TransferID::BT2020_10,
+                    MatrixID::BT2020_CL,
+                    RangeID::FULL),
+};
+
+gfx::ColorSpace dst_color_spaces[] = {
+    // This will be replaced by an ICC-based space (which can't be initialized
+    // here).
+    gfx::ColorSpace(),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT709),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::GAMMA22),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::GAMMA24),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::GAMMA28),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::SMPTE170M),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::SMPTE240M),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LINEAR),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LOG),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LOG_SQRT),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_4),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT1361_ECG),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT2020_10),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::BT2020_12),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::SMPTEST2084),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::ARIB_STD_B67),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1_HDR),
+    gfx::ColorSpace(PrimaryID::BT709, TransferID::LINEAR_HDR),
+};
+
+gfx::ColorSpace intermediate_color_spaces[] = {
+    gfx::ColorSpace(PrimaryID::XYZ_D50, TransferID::LINEAR),
+    gfx::ColorSpace(PrimaryID::XYZ_D50, TransferID::IEC61966_2_1_HDR),
+};
+
+INSTANTIATE_TEST_CASE_P(
+    FromColorSpace,
+    ColorTransformPixelTest,
+    testing::Combine(testing::ValuesIn(src_color_spaces),
+                     testing::ValuesIn(intermediate_color_spaces)));
+
+INSTANTIATE_TEST_CASE_P(
+    ToColorSpace,
+    ColorTransformPixelTest,
+    testing::Combine(testing::ValuesIn(intermediate_color_spaces),
+                     testing::ValuesIn(dst_color_spaces)));
 
 #endif  // !defined(OS_ANDROID)
 

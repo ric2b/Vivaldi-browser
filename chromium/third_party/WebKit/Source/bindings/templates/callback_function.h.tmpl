@@ -18,17 +18,17 @@ class {{forward_declaration}};
 
 class {{exported}}{{cpp_class}} final : public GarbageCollectedFinalized<{{cpp_class}}>, public TraceWrapperBase {
  public:
-  static {{cpp_class}}* create(ScriptState* scriptState, v8::Local<v8::Value> callback);
+  static {{cpp_class}}* Create(ScriptState*, v8::Local<v8::Value> callback);
 
   ~{{cpp_class}}() = default;
 
-  DECLARE_TRACE();
+  DEFINE_INLINE_TRACE() {}
   DECLARE_TRACE_WRAPPERS();
 
   bool call({{argument_declarations | join(', ')}});
 
   v8::Local<v8::Function> v8Value(v8::Isolate* isolate) {
-    return m_callback.newLocal(isolate);
+    return m_callback.NewLocal(isolate);
   }
 
  private:
@@ -36,6 +36,11 @@ class {{exported}}{{cpp_class}} final : public GarbageCollectedFinalized<{{cpp_c
 
   RefPtr<ScriptState> m_scriptState;
   TraceWrapperV8Reference<v8::Function> m_callback;
+};
+
+template <>
+struct NativeValueTraits<{{cpp_class}}> : public NativeValueTraitsBase<{{cpp_class}}> {
+  {{exported}}static {{cpp_class}}* NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
 };
 
 }  // namespace blink

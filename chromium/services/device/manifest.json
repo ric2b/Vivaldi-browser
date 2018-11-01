@@ -4,9 +4,20 @@
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
+        "device:battery_monitor": [ "device::mojom::BatteryMonitor" ],
+        "device:fingerprint": [ "device::mojom::Fingerprint" ],
+        "device:generic_sensor": [ "device::mojom::SensorProvider" ],
         "device:power_monitor": [ "device::mojom::PowerMonitor" ],
+        "device:screen_orientation": [ "device::mojom::ScreenOrientationListener" ],
+        "device:sensors": [
+          "device::mojom::LightSensor",
+          "device::mojom::MotionSensor",
+          "device::mojom::OrientationAbsoluteSensor",
+          "device::mojom::OrientationSensor"
+        ],
         "device:time_zone_monitor": [ "device::mojom::TimeZoneMonitor" ],
-	"device:fingerprint": [ "device::mojom::Fingerprint" ]
+        "device:vibration": [ "device::mojom::VibrationManager" ],
+        "device:wake_lock": [ "device::mojom::WakeLockContextProvider" ]
       },
       "requires": {
         "service_manager": [ "service_manager:all_users" ]

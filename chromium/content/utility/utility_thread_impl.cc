@@ -29,17 +29,6 @@
 
 namespace content {
 
-namespace {
-
-template<typename SRC, typename DEST>
-void ConvertVector(const SRC& src, DEST* dest) {
-  dest->reserve(src.size());
-  for (typename SRC::const_iterator i = src.begin(); i != src.end(); ++i)
-    dest->push_back(typename DEST::value_type(*i));
-}
-
-}  // namespace
-
 UtilityThreadImpl::UtilityThreadImpl()
     : ChildThreadImpl(ChildThreadImpl::Options::Builder().Build()) {
   Init();
@@ -84,7 +73,7 @@ void UtilityThreadImpl::EnsureBlinkInitialized() {
   }
 
   blink_platform_impl_.reset(new UtilityBlinkPlatformImpl);
-  blink::Platform::initialize(blink_platform_impl_.get());
+  blink::Platform::Initialize(blink_platform_impl_.get());
 }
 
 void UtilityThreadImpl::Init() {

@@ -119,7 +119,7 @@ RemoteSuggestion::CreateFromChromeReaderDictionary(
   std::vector<SnippetSource> sources;
   for (const auto& value : *corpus_infos_list) {
     const base::DictionaryValue* dict_value = nullptr;
-    if (!value->GetAsDictionary(&dict_value)) {
+    if (!value.GetAsDictionary(&dict_value)) {
       DLOG(WARNING) << "Invalid source info for article " << primary_id;
       continue;
     }
@@ -151,8 +151,8 @@ RemoteSuggestion::CreateFromChromeReaderDictionary(
     // Expected to not have AMP url sometimes.
     if (dict_value->GetString("ampUrl", &amp_url_str)) {
       amp_url = GURL(amp_url_str);
-      DLOG_IF(WARNING, !amp_url.is_valid()) << "Invalid AMP url "
-                                            << amp_url_str;
+      DLOG_IF(WARNING, !amp_url.is_valid())
+          << "Invalid AMP url " << amp_url_str;
     }
     sources.emplace_back(corpus_id, site_title,
                          amp_url.is_valid() ? amp_url : GURL());
@@ -228,7 +228,7 @@ RemoteSuggestion::CreateFromContentSuggestionsDictionary(
   std::vector<std::string> parsed_ids;
   for (const auto& value : *ids) {
     std::string id;
-    if (!value->GetAsString(&id)) {
+    if (!value.GetAsString(&id)) {
       return nullptr;
     }
     parsed_ids.push_back(id);
@@ -308,8 +308,8 @@ std::unique_ptr<RemoteSuggestion> RemoteSuggestion::CreateFromProto(
     GURL amp_url;
     if (source_proto.has_amp_url()) {
       amp_url = GURL(source_proto.amp_url());
-      DLOG_IF(WARNING, !amp_url.is_valid()) << "Invalid AMP URL "
-                                            << source_proto.amp_url();
+      DLOG_IF(WARNING, !amp_url.is_valid())
+          << "Invalid AMP URL " << source_proto.amp_url();
     }
 
     sources.emplace_back(url, source_proto.publisher_name(), amp_url);
@@ -389,11 +389,17 @@ SnippetProto RemoteSuggestion::ToProto() const {
 ContentSuggestion RemoteSuggestion::ToContentSuggestion(
     Category category) const {
   GURL url = url_;
-  if (base::FeatureList::IsEnabled(kPreferAmpUrlsFeature) &&
-      !amp_url_.is_empty()) {
+  bool use_amp = base::FeatureList::IsEnabled(kPreferAmpUrlsFeature) &&
+                 !amp_url_.is_empty();
+  if (use_amp) {
     url = amp_url_;
   }
   ContentSuggestion suggestion(category, id(), url);
+  // Set url for fetching favicons if it differs from the main url (domains of
+  // AMP URLs sometimes failed to provide favicons).
+  if (use_amp) {
+    suggestion.set_url_with_favicon(url_);
+  }
   suggestion.set_title(base::UTF8ToUTF16(title_));
   suggestion.set_snippet_text(base::UTF8ToUTF16(snippet_));
   suggestion.set_publish_date(publish_date_);

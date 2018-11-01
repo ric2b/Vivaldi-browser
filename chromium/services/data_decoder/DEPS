@@ -1,0 +1,7 @@
+include_rules = [
+  "+gin",
+  "+skia",
+  "+third_party/WebKit/public",
+  "+third_party/skia",
+  "+ui/gfx",
+]

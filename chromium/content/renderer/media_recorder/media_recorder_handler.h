@@ -49,24 +49,28 @@ class CONTENT_EXPORT MediaRecorderHandler final
   ~MediaRecorderHandler() override;
 
   // blink::WebMediaRecorderHandler.
-  bool canSupportMimeType(const blink::WebString& web_type,
+  bool CanSupportMimeType(const blink::WebString& web_type,
                           const blink::WebString& web_codecs) override;
-  bool initialize(blink::WebMediaRecorderHandlerClient* client,
+  bool Initialize(blink::WebMediaRecorderHandlerClient* client,
                   const blink::WebMediaStream& media_stream,
                   const blink::WebString& type,
                   const blink::WebString& codecs,
                   int32_t audio_bits_per_second,
                   int32_t video_bits_per_second) override;
-  bool start(int timeslice) override;
-  void stop() override;
-  void pause() override;
-  void resume() override;
+  bool Start(int timeslice) override;
+  void Stop() override;
+  void Pause() override;
+  void Resume() override;
 
  private:
   friend class MediaRecorderHandlerTest;
 
+  // Called to indicate there is encoded video data available. |encoded_alpha|
+  // represents the encode output of alpha channel when available, can be
+  // nullptr otherwise.
   void OnEncodedVideo(const media::WebmMuxer::VideoParameters& params,
                       std::unique_ptr<std::string> encoded_data,
+                      std::unique_ptr<std::string> encoded_alpha,
                       base::TimeTicks timestamp,
                       bool is_key_frame);
   void OnEncodedAudio(const media::AudioParameters& params,

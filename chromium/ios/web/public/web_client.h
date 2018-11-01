@@ -18,7 +18,6 @@
 
 namespace base {
 class RefCountedMemory;
-class SchedulerWorkerPoolParams;
 }
 
 class GURL;
@@ -108,7 +107,10 @@ class WebClient {
 
   // Gives the embedder a chance to provide the JavaScript to be injected into
   // the web view as early as possible. Result must not be nil.
-  virtual NSString* GetEarlyPageScript() const;
+  //
+  // TODO(crbug.com/703964): Change the return value to NSArray<NSString*> to
+  // improve performance.
+  virtual NSString* GetEarlyPageScript(BrowserState* browser_state) const;
 
   // Informs the embedder that a certificate error has occurred. If
   // |overridable| is true, the user can ignore the error and continue. The
@@ -122,12 +124,10 @@ class WebClient {
       bool overridable,
       const base::Callback<void(bool)>& callback);
 
-  // Provides parameters for initializing the global task scheduler. If
-  // |params_vector| is empty, default parameters are used.
-  virtual void GetTaskSchedulerInitializationParams(
-      std::vector<base::SchedulerWorkerPoolParams>* params_vector,
-      base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
-          index_to_traits_callback) {}
+  // Provides parameters for initializing the global task scheduler. Default
+  // params are used if this returns nullptr.
+  virtual std::unique_ptr<base::TaskScheduler::InitParams>
+  GetTaskSchedulerInitParams();
 
   // Performs any necessary PostTask API redirection to the task scheduler.
   virtual void PerformExperimentalTaskSchedulerRedirections() {}

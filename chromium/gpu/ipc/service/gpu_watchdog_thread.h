@@ -19,10 +19,6 @@
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(USE_X11)
-extern "C" {
-#include <X11/Xlib.h>
-#include <X11/Xatom.h>
-}
 #include <sys/poll.h>
 #include "ui/base/x/x11_util.h"  // nogncheck
 #include "ui/gfx/x/x11_types.h"  // nogncheck
@@ -73,6 +69,7 @@ class GPU_EXPORT GpuWatchdogThread : public base::Thread,
 
   void OnAcknowledge();
   void OnCheck(bool after_suspend);
+  void OnCheckTimeout();
   void DeliberatelyTerminateToRecoverFromHang();
 #if defined(USE_X11)
   void SetupXServer();

@@ -22,7 +22,7 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -33,7 +33,7 @@ class DOMParser final : public GarbageCollected<DOMParser>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static DOMParser* create(Document& document) {
+  static DOMParser* Create(Document& document) {
     return new DOMParser(document);
   }
 
@@ -44,7 +44,7 @@ class DOMParser final : public GarbageCollected<DOMParser>,
  private:
   explicit DOMParser(Document&);
 
-  WeakMember<Document> m_contextDocument;
+  WeakMember<Document> context_document_;
 };
 
 }  // namespace blink

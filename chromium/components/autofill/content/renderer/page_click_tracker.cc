@@ -22,7 +22,6 @@
 
 using blink::WebElement;
 using blink::WebFormControlElement;
-using blink::WebGestureEvent;
 using blink::WebInputElement;
 using blink::WebNode;
 using blink::WebPoint;
@@ -34,14 +33,14 @@ namespace autofill {
 namespace {
 
 // Casts |element| to a WebFormControlElement, but only if it's a text field.
-// Returns an empty (isNull()) wrapper otherwise.
+// Returns an empty (IsNull()) wrapper otherwise.
 const WebFormControlElement GetTextFormControlElement(
     const WebElement& element) {
-  if (!element.isFormControlElement())
+  if (!element.IsFormControlElement())
     return WebFormControlElement();
-  if (form_util::IsTextInput(blink::toWebInputElement(&element)) ||
-      element.hasHTMLTagName("textarea"))
-    return element.toConst<WebFormControlElement>();
+  if (form_util::IsTextInput(blink::ToWebInputElement(&element)) ||
+      element.HasHTMLTagName("textarea"))
+    return element.ToConst<WebFormControlElement>();
   return WebFormControlElement();
 }
 
@@ -49,48 +48,47 @@ const WebFormControlElement GetTextFormControlElement(
 
 PageClickTracker::PageClickTracker(content::RenderFrame* render_frame,
                                    PageClickListener* listener)
-    : content::RenderFrameObserver(render_frame),
-      focused_node_was_last_clicked_(false),
+    : focused_node_was_last_clicked_(false),
       was_focused_before_now_(false),
       listener_(listener),
-      legacy_(this) {
-}
+      render_frame_(render_frame) {}
 
 PageClickTracker::~PageClickTracker() {
-}
-
-void PageClickTracker::OnMouseDown(const WebNode& mouse_down_node) {
-  focused_node_was_last_clicked_ = !mouse_down_node.isNull() &&
-                                   mouse_down_node.focused();
-
-  if (IsKeyboardAccessoryEnabled())
-    DoFocusChangeComplete();
 }
 
 void PageClickTracker::FocusedNodeChanged(const WebNode& node) {
   was_focused_before_now_ = false;
 
   if (IsKeyboardAccessoryEnabled() &&
-      WebUserGestureIndicator::isProcessingUserGesture()) {
+      WebUserGestureIndicator::IsProcessingUserGesture()) {
     focused_node_was_last_clicked_ = true;
     DoFocusChangeComplete();
   }
 }
 
-void PageClickTracker::FocusChangeComplete() {
+void PageClickTracker::DidCompleteFocusChangeInFrame() {
   if (IsKeyboardAccessoryEnabled())
     return;
 
   DoFocusChangeComplete();
 }
 
+void PageClickTracker::DidReceiveLeftMouseDownOrGestureTapInNode(
+    const blink::WebNode& node) {
+  DCHECK(!node.IsNull());
+  focused_node_was_last_clicked_ = node.Focused();
+
+  if (IsKeyboardAccessoryEnabled())
+    DoFocusChangeComplete();
+}
+
 void PageClickTracker::DoFocusChangeComplete() {
   WebElement focused_element =
-      render_frame()->GetWebFrame()->document().focusedElement();
-  if (focused_node_was_last_clicked_ && !focused_element.isNull()) {
+      render_frame()->GetWebFrame()->GetDocument().FocusedElement();
+  if (focused_node_was_last_clicked_ && !focused_element.IsNull()) {
     const WebFormControlElement control =
         GetTextFormControlElement(focused_element);
-    if (!control.isNull()) {
+    if (!control.IsNull()) {
       listener_->FormControlElementClicked(control,
                                            was_focused_before_now_);
     }
@@ -98,29 +96,6 @@ void PageClickTracker::DoFocusChangeComplete() {
 
   was_focused_before_now_ = true;
   focused_node_was_last_clicked_ = false;
-}
-
-void PageClickTracker::OnDestruct() {
-  delete this;
-}
-
-// PageClickTracker::Legacy ----------------------------------------------------
-
-PageClickTracker::Legacy::Legacy(PageClickTracker* tracker)
-    : content::RenderViewObserver(tracker->render_frame()->GetRenderView()),
-      tracker_(tracker) {
-}
-
-void PageClickTracker::Legacy::OnDestruct() {
-  // No-op. Don't delete |this|.
-}
-
-void PageClickTracker::Legacy::OnMouseDown(const WebNode& mouse_down_node) {
-  tracker_->OnMouseDown(mouse_down_node);
-}
-
-void PageClickTracker::Legacy::FocusChangeComplete() {
-  tracker_->FocusChangeComplete();
 }
 
 }  // namespace autofill

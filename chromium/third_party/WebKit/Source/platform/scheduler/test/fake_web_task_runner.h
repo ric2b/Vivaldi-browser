@@ -7,11 +7,12 @@
 
 #include <deque>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "platform/WebTaskRunner.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 namespace scheduler {
@@ -21,20 +22,20 @@ class FakeWebTaskRunner : public WebTaskRunner {
  public:
   FakeWebTaskRunner();
 
-  void setTime(double new_time);
+  void SetTime(double new_time);
 
   // WebTaskRunner implementation:
-  void postDelayedTask(const WebTraceLocation&,
-                       const base::Closure&,
+  void PostDelayedTask(const WebTraceLocation&,
+                       base::OnceClosure,
                        double) override;
-  bool runsTasksOnCurrentThread() override;
-  double virtualTimeSeconds() const override;
-  double monotonicallyIncreasingVirtualTimeSeconds() const override;
-  SingleThreadTaskRunner* toSingleThreadTaskRunner() override;
+  bool RunsTasksOnCurrentThread() override;
+  double VirtualTimeSeconds() const override;
+  double MonotonicallyIncreasingVirtualTimeSeconds() const override;
+  SingleThreadTaskRunner* ToSingleThreadTaskRunner() override;
 
-  void runUntilIdle();
-  void advanceTimeAndRun(double delta_seconds);
-  std::deque<std::pair<base::Closure, double>> takePendingTasksForTesting();
+  void RunUntilIdle();
+  void AdvanceTimeAndRun(double delta_seconds);
+  std::deque<std::pair<base::OnceClosure, double>> TakePendingTasksForTesting();
 
  private:
   ~FakeWebTaskRunner() override;

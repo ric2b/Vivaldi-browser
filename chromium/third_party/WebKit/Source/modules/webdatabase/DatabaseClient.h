@@ -35,7 +35,7 @@
 #include "modules/ModulesExport.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -44,36 +44,37 @@ class ExecutionContext;
 class InspectorDatabaseAgent;
 class Page;
 
-class MODULES_EXPORT DatabaseClient : public Supplement<Page> {
+class MODULES_EXPORT DatabaseClient : public GarbageCollected<DatabaseClient>,
+                                      public Supplement<Page> {
+  USING_GARBAGE_COLLECTED_MIXIN(DatabaseClient);
   WTF_MAKE_NONCOPYABLE(DatabaseClient);
 
  public:
   DatabaseClient();
-  virtual ~DatabaseClient() {}
 
   DECLARE_VIRTUAL_TRACE();
 
-  virtual bool allowDatabase(ExecutionContext*,
-                             const String& name,
-                             const String& displayName,
-                             unsigned estimatedSize) = 0;
+  bool AllowDatabase(ExecutionContext*,
+                     const String& name,
+                     const String& display_name,
+                     unsigned estimated_size);
 
-  void didOpenDatabase(Database*,
+  void DidOpenDatabase(Database*,
                        const String& domain,
                        const String& name,
                        const String& version);
 
-  static DatabaseClient* fromPage(Page*);
-  static DatabaseClient* from(ExecutionContext*);
-  static const char* supplementName();
+  static DatabaseClient* FromPage(Page*);
+  static DatabaseClient* From(ExecutionContext*);
+  static const char* SupplementName();
 
-  void setInspectorAgent(InspectorDatabaseAgent*);
+  void SetInspectorAgent(InspectorDatabaseAgent*);
 
  private:
-  Member<InspectorDatabaseAgent> m_inspectorAgent;
+  Member<InspectorDatabaseAgent> inspector_agent_;
 };
 
-MODULES_EXPORT void provideDatabaseClientTo(Page&, DatabaseClient*);
+MODULES_EXPORT void ProvideDatabaseClientTo(Page&, DatabaseClient*);
 
 }  // namespace blink
 

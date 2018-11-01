@@ -1116,6 +1116,58 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.ChromeHome.Closed">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>User closed the Chrome Home bottom sheet.</description>
+</action>
+
+<action name="Android.ChromeHome.FullState">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User put the Chrome Home bottom sheet in the fully-open state.
+  </description>
+</action>
+
+<action name="Android.ChromeHome.HalfState">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User put the Chrome Home bottom sheet in the half-open state.
+  </description>
+</action>
+
+<action name="Android.ChromeHome.Opened">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>User opened the Chrome Home bottom sheet.</description>
+</action>
+
+<action name="Android.ChromeHome.ShowBookmarks">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>User showed the bookmarks bottom sheet content.</description>
+</action>
+
+<action name="Android.ChromeHome.ShowDownloads">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>User showed the downloads bottom sheet content.</description>
+</action>
+
+<action name="Android.ChromeHome.ShowHistory">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>User showed the history bottom sheet content.</description>
+</action>
+
+<action name="Android.ChromeHome.ShowSuggestions">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>User showed the suggestions bottom sheet content.</description>
+</action>
+
 <action name="Android.ContentDetectorActivated">
   <owner>twellington@chromium.org</owner>
   <description>
@@ -1357,7 +1409,7 @@ should be able to be added at any place in this file.
   <owner>mariakhomenko@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <description>
-    An instant app was launched from the website settings popup.
+    An instant app was launched from the page info popup.
   </description>
 </action>
 
@@ -3295,6 +3347,38 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="ContentSuggestions.NotificationsPreferenceOff">
+  <owner>dgn@chromium.org</owner>
+  <owner>finkm@chromium.org</owner>
+  <description>
+    The user turned off the content suggestions notifications in the settings.
+  </description>
+</action>
+
+<action name="ContentSuggestions.NotificationsPreferenceOn">
+  <owner>dgn@chromium.org</owner>
+  <owner>finkm@chromium.org</owner>
+  <description>
+    The user turned on the content suggestions notifications in the settings.
+  </description>
+</action>
+
+<action name="ContentSuggestions.RemoteSuggestionsPreferenceOff">
+  <owner>dgn@chromium.org</owner>
+  <owner>finkm@chromium.org</owner>
+  <description>
+    The user turned off remote content suggestions in the settings.
+  </description>
+</action>
+
+<action name="ContentSuggestions.RemoteSuggestionsPreferenceOn">
+  <owner>dgn@chromium.org</owner>
+  <owner>finkm@chromium.org</owner>
+  <description>
+    The user turned on remote content suggestions in the settings.
+  </description>
+</action>
+
 <action name="ContextualSearch.BackPressClose">
   <owner>donnd@chromium.org</owner>
   <description>
@@ -3513,6 +3597,7 @@ should be able to be added at any place in this file.
 <action name="CreateShortcut">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated as of 04/2017 (replaced by CreateHostedApp).</obsolete>
 </action>
 
 <action name="CredentialManager_AccountChooser_Accepted">
@@ -3566,6 +3651,14 @@ should be able to be added at any place in this file.
   <description>Close button of the CustomTabActivity was clicked.</description>
 </action>
 
+<action name="CustomTabs.CloseButtonClicked.DownloadsUI">
+  <owner>shaktisahu@chromium.org</owner>
+  <description>
+    The user has clicked on the back arrow while viewing downloaded media on
+    Android.
+  </description>
+</action>
+
 <action name="CustomTabs.StartedInitially">
   <owner>tedchoc@chromium.org</owner>
   <description>A CustomTabActivity was stared for the first time.</description>
@@ -3597,9 +3690,25 @@ should be able to be added at any place in this file.
   <description>Please enter the description of the metric.</description>
 </action>
 
+<action name="CustomTabsCustomActionButtonClick.DownloadsUI.Share">
+  <owner>shaktisahu@chromium.org</owner>
+  <description>
+    The user has clicked on the share button while viewing downloaded media on
+    Android.
+  </description>
+</action>
+
 <action name="CustomTabsMenuCustomMenuItem">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of the metric.</description>
+</action>
+
+<action name="CustomTabsMenuCustomMenuItem.DownloadsUI.OpenWith">
+  <owner>shaktisahu@chromium.org</owner>
+  <description>
+    The user has selected Open With from the menu while viewing downloaded media
+    on Android.
+  </description>
 </action>
 
 <action name="CustomTabsMenuFindInPage">
@@ -4384,6 +4493,7 @@ should be able to be added at any place in this file.
 <action name="FirstRunDef_Accept">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated 02/2017.</obsolete>
 </action>
 
 <action name="Flash.JavaScriptUsed" not_user_triggered="true">
@@ -8994,9 +9104,27 @@ should be able to be added at any place in this file.
   <description>The user entered fullscreen mode from the controls.</description>
 </action>
 
+<action name="Media.Controls.EnterFullscreen.EmbeddedExperience">
+  <owner>shaktisahu@chromium.org</owner>
+  <description>
+    The user has entered fullscreen mode from the controls. Recorded only for
+    downloaded media on Android and is a subset of
+    Media.Controls.EnterFullscreen.
+  </description>
+</action>
+
 <action name="Media.Controls.ExitFullscreen">
   <owner>mlamouri@chromium.org</owner>
   <description>The user left fullscreen mode from the controls.</description>
+</action>
+
+<action name="Media.Controls.ExitFullscreen.EmbeddedExperience">
+  <owner>shaktisahu@chromium.org</owner>
+  <description>
+    The user has left fullscreen mode from the controls. Recorded only for
+    downloaded media on Android and is a subset of
+    Media.Controls.ExitFullscreen.
+  </description>
 </action>
 
 <action name="Media.Controls.Mute">
@@ -9429,6 +9557,21 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of at least 2017/02/28.</obsolete>
 </action>
 
+<action name="MobileClipboardChanged">
+  <owner>jif@chromium.org</owner>
+  <owner>mpearson@chromium.org</owner>
+  <description>
+    Emitted when Chrome detects that the clipboard contains new content.
+
+    On iOS: this occurs either when Chrome enters the foreground and notices
+    that the content of the clipboard changed, or when the users selects the
+    omnibox and Chrome notices that the content of the clipboard changed.
+
+    On Android: this occurs when Chrome starts up or when the clipboard changes
+    while Chrome is running (in the foreground or not).
+  </description>
+</action>
+
 <action name="MobileComeToForeground">
   <owner>tedchoc@chromium.org</owner>
   <description>
@@ -9699,6 +9842,11 @@ should be able to be added at any place in this file.
   <obsolete>This menu item was never added to the app menu.</obsolete>
 </action>
 
+<action name="MobileMenuDataSaverOpened">
+  <owner>megjablon@chromium.org</owner>
+  <description>User opened the data saver item in the app menu.</description>
+</action>
+
 <action name="MobileMenuDirectShare">
   <owner>aurimas@chromium.org</owner>
   <description>
@@ -9803,11 +9951,21 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileMenuReportAnIssue">
+  <owner>rohitrao@chromium.org</owner>
+  <description>User pressed 'Report an Issue' in the app menu.</description>
+</action>
+
 <action name="MobileMenuRequestDesktopSite">
   <owner>aurimas@chromium.org</owner>
   <description>
     User pressed 'Request Desktop Site' in the app menu.
   </description>
+</action>
+
+<action name="MobileMenuRequestMobileSite">
+  <owner>liaoyuke@chromium.org</owner>
+  <description>User pressed 'Request Mobile Site' in the app menu.</description>
 </action>
 
 <action name="MobileMenuSettings">
@@ -10003,11 +10161,18 @@ should be able to be added at any place in this file.
 <action name="MobileOmniboxClipboardChanged">
   <owner>jif@chromium.org</owner>
   <description>
-    Emitted when Chrome detects that the clipboard contains a new URL. This
-    occurs either when Chrome enters the foreground and notices that the content
-    of the clipboard changed, or when the clipboard changes while Chrome is in
-    the foreground.
+    Emitted when Chrome detects that the clipboard contains a new URL.
+
+    On iOS: this occurs either when Chrome enters the foreground and notices
+    that the content of the clipboard changed, or when the clipboard changes
+    while Chrome is in the foreground.
+
+    On Android: this occurs when Chrome starts up or when the clipboard changes
+    while Chrome is running (in the foreground or not).
   </description>
+  <obsolete>
+    Replaced with MobileOmniboxClipboardChanged in April 2017.
+  </obsolete>
 </action>
 
 <action name="MobileOmniboxDeleteGesture">
@@ -10458,13 +10623,13 @@ should be able to be added at any place in this file.
 
 <action name="MobileWebsiteSettingsOpenedFromMenu">
   <owner>tedchoc@chromium.org</owner>
-  <description>Website Settings opened via the menu.</description>
+  <description>Page Info opened via the menu.</description>
 </action>
 
 <action name="MobileWebsiteSettingsOpenedFromToolbar">
   <owner>tedchoc@chromium.org</owner>
   <description>
-    Website Settings opened via the toolbar page info (i.e. https lock) icon.
+    Page Info opened via the toolbar page info (i.e. https lock) icon.
   </description>
 </action>
 
@@ -14378,9 +14543,28 @@ should be able to be added at any place in this file.
   <description>The user accepted the settings reset prompt.</description>
 </action>
 
+<action name="SettingsResetPrompt_Canceled">
+  <owner>alito@chromium.org</owner>
+  <description>
+    The user clicked the cancel button in the settings reset prompt dialog.
+  </description>
+</action>
+
 <action name="SettingsResetPrompt_Declined">
   <owner>alito@chromium.org</owner>
   <description>The user declined the settings reset prompt.</description>
+  <obsolete>
+    Deprecated in M59 in April 2017 and replaced by SettingsResetPrompt_Canceled
+    and SettingsResetPrompt_Dismissed.
+  </obsolete>
+</action>
+
+<action name="SettingsResetPrompt_Dismissed">
+  <owner>alito@chromium.org</owner>
+  <description>
+    The user dismissed the settings reset prompt, for example by clicking the x
+    in the top right corner or pressing the Escape key.
+  </description>
 </action>
 
 <action name="SettingsResetPrompt_Shown">
@@ -15188,6 +15372,20 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="StatusArea_CaretHighlightDisabled">
+  <owner>minch@chromium.org</owner>
+  <description>
+    Ash system menu: Accessibility: Disable caret highlighting
+  </description>
+</action>
+
+<action name="StatusArea_CaretHighlightEnabled">
+  <owner>minch@chromium.org</owner>
+  <description>
+    Ash system menu: Accessibility: Enable caret highlighting
+  </description>
+</action>
+
 <action name="StatusArea_Cast_Detailed">
   <owner>jdufault@chromium.org</owner>
   <description>
@@ -15292,6 +15490,34 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="StatusArea_HighlightKeyboardFocusDisabled">
+  <owner>minch@chromium.org</owner>
+  <description>
+    Ash system menu: Accessibility: Disable keyboard focus highlighting
+  </description>
+</action>
+
+<action name="StatusArea_HighlightKeyboardFocusEnabled">
+  <owner>minch@chromium.org</owner>
+  <description>
+    Ash system menu: Accessibility: Enable keyboard focus highlighting
+  </description>
+</action>
+
+<action name="StatusArea_HighlightMouseCursorDisabled">
+  <owner>minch@chromium.org</owner>
+  <description>
+    Ash system menu: Accessibility: Disable mouse cursor highlighting
+  </description>
+</action>
+
+<action name="StatusArea_HighlightMouseCursorEnabled">
+  <owner>minch@chromium.org</owner>
+  <description>
+    Ash system menu: Accessibility: Enable mouse cursor highlighting
+  </description>
+</action>
+
 <action name="StatusArea_IME_Detailed">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -15325,6 +15551,16 @@ should be able to be added at any place in this file.
 <action name="StatusArea_MenuOpened">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="StatusArea_MonoAudioDisabled">
+  <owner>minch@chromium.org</owner>
+  <description>Ash system menu: Accessibility: Disable mono audio</description>
+</action>
+
+<action name="StatusArea_MonoAudioEnabled">
+  <owner>minch@chromium.org</owner>
+  <description>Ash system menu: Accessibility: Enable mono audio</description>
 </action>
 
 <action name="StatusArea_Network_ConnectConfigured">
@@ -15441,6 +15677,28 @@ should be able to be added at any place in this file.
 <action name="StatusArea_SpokenFeedbackEnabled">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="StatusArea_StickyKeysDisabled">
+  <owner>minch@chromium.org</owner>
+  <description>Ash system menu: Accessibility: Disable sticky keys</description>
+</action>
+
+<action name="StatusArea_StickyKeysEnabled">
+  <owner>minch@chromium.org</owner>
+  <description>Ash system menu: Accessibility: Enable sticky keys</description>
+</action>
+
+<action name="StatusArea_TapDraggingDisabled">
+  <owner>minch@chromium.org</owner>
+  <description>
+    Ash system menu: Accessibility: Disable tap dragging
+  </description>
+</action>
+
+<action name="StatusArea_TapDraggingEnabled">
+  <owner>minch@chromium.org</owner>
+  <description>Ash system menu: Accessibility: Enable tap dragging</description>
 </action>
 
 <action name="StatusArea_Tracing_Default_Selected">
@@ -15796,6 +16054,54 @@ should be able to be added at any place in this file.
 <action name="ThirdPartyCookieBlockingEnabled" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="TodayExtension.ExtensionDismissed">
+  <owner>olivierrobin@chromium.org</owner>
+  <description>Dismissed the Chrome Today extension.</description>
+</action>
+
+<action name="TodayExtension.ExtensionDisplayed">
+  <owner>olivierrobin@chromium.org</owner>
+  <description>
+    Displayed the notification center and display the Chrome Today extension.
+  </description>
+</action>
+
+<action name="TodayExtension.ExtensionInitialized">
+  <owner>olivierrobin@chromium.org</owner>
+  <description>
+    Displayed the notification center and initialize the Chrome Today extension.
+  </description>
+</action>
+
+<action name="TodayExtension.NewTabPressed">
+  <owner>olivierrobin@chromium.org</owner>
+  <description>
+    Tapped on the &quot;New Tab&quot; button in the Chrome Today extension.
+  </description>
+</action>
+
+<action name="TodayExtension.OpenClipboardPressed">
+  <owner>olivierrobin@chromium.org</owner>
+  <description>
+    Tapped on the &quot;Open Copied Link&quot; button in the Chrome Today
+    extension.
+  </description>
+</action>
+
+<action name="TodayExtension.PhysicalWebPressed">
+  <owner>olivierrobin@chromium.org</owner>
+  <description>
+    Tapped on physical web URL in the Chrome Today extension.
+  </description>
+</action>
+
+<action name="TodayExtension.VoiceSearchPressed">
+  <owner>olivierrobin@chromium.org</owner>
+  <description>
+    Tapped on the &quot;Voice Search&quot; button in the Chrome Today extension.
+  </description>
 </action>
 
 <action name="ToggleBold">

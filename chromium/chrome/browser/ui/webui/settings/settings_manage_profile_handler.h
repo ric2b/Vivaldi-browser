@@ -34,7 +34,10 @@ class ManageProfileHandler : public settings::SettingsPageUIHandler,
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ManageProfileHandlerTest,
-                           HandleSetProfileIconAndName);
+                           HandleSetProfileIconToGaiaAvatar);
+  FRIEND_TEST_ALL_PREFIXES(ManageProfileHandlerTest,
+                           HandleSetProfileIconToDefaultAvatar);
+  FRIEND_TEST_ALL_PREFIXES(ManageProfileHandlerTest, HandleSetProfileName);
   FRIEND_TEST_ALL_PREFIXES(ManageProfileHandlerTest, HandleGetAvailableIcons);
 
   // Callback for the "getAvailableIcons" message.
@@ -44,13 +47,14 @@ class ManageProfileHandler : public settings::SettingsPageUIHandler,
   // Get all the available profile icons to choose from.
   std::unique_ptr<base::ListValue> GetAvailableIcons();
 
-  // Callback for the "setProfileIconAndName" message. Sets the name and icon
-  // of a given profile.
-  // |args| is of the form: [
-  //   /*string*/ newProfileIconURL
-  //   /*string*/ newProfileName,
-  // ]
-  void HandleSetProfileIconAndName(const base::ListValue* args);
+  // Callback for the "setProfileIconToGaiaAvatar" message.
+  void HandleSetProfileIconToGaiaAvatar(const base::ListValue* args);
+
+  // Callback for the "setProfileIconToDefaultAvatar" message.
+  void HandleSetProfileIconToDefaultAvatar(const base::ListValue* args);
+
+  // Callback for the "setProfileName" message.
+  void HandleSetProfileName(const base::ListValue* args);
 
   // Callback for the "requestProfileShortcutStatus" message, which is called
   // when editing an existing profile. Asks the profile shortcut manager whether
@@ -74,9 +78,6 @@ class ManageProfileHandler : public settings::SettingsPageUIHandler,
 
   // Non-owning pointer to the associated profile.
   Profile* profile_;
-
-  // URL for the current profile's GAIA picture.
-  std::string gaia_picture_url_;
 
   // Used to observe profile avatar updates.
   ScopedObserver<ProfileAttributesStorage, ManageProfileHandler> observer_;

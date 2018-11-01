@@ -41,10 +41,12 @@
 
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/repost_form_warning_controller.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
+#include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -52,8 +54,6 @@
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
 #endif
-
-#define ROCKER_GESTURES
 
 #if defined(OS_LINUX) || defined(OS_MACOSX)
 // Vivaldi addition: only define mouse gesture for OSX & linux
@@ -324,6 +324,10 @@ void WebViewGuest::MoveValidationMessage(content::WebContents* web_contents,
   }
 }
 
+bool WebViewGuest::IsVivaldiMail() {
+  return name_.compare("vivaldi-mail") == 0;
+}
+
 bool WebViewGuest::IsVivaldiWebPanel() {
   return name_.compare("vivaldi-webpanel") == 0;
 }
@@ -467,7 +471,7 @@ void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
       new GuestViewEvent(webview::kEventSSLStateChanged, std::move(args))));
 }
 
-bool WebViewGuest::GetMousegesturesEnabled() {
+bool WebViewGuest::IsMouseGesturesEnabled() const {
   PrefService* pref_service =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext())
           ->GetPrefs();
@@ -482,77 +486,83 @@ bool WebViewGuest::IsRockerGesturesEnabled() const {
 }
 
 bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
-// Rocker gestures, a.la Opera
-#ifdef ROCKER_GESTURES
+  // Rocker gestures, a.la Opera
   if (IsRockerGesturesEnabled()) {
     if (has_left_mousebutton_down_ &&
-        mouse_event.type() == blink::WebInputEvent::MouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::Left) {
+        mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
+        mouse_event.button == blink::WebMouseEvent::Button::kLeft) {
       has_left_mousebutton_down_ = false;
-    } else if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
-               mouse_event.button == blink::WebMouseEvent::Button::Left) {
+    } else if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
+               mouse_event.button == blink::WebMouseEvent::Button::kLeft) {
       has_left_mousebutton_down_ = true;
     }
 
     if (has_right_mousebutton_down_ &&
-        mouse_event.type() == blink::WebInputEvent::MouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::Right) {
+        mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
+        mouse_event.button == blink::WebMouseEvent::Button::kRight) {
       has_right_mousebutton_down_ = false;
-    } else if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
-               mouse_event.button == blink::WebMouseEvent::Button::Right) {
+    } else if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
+               mouse_event.button == blink::WebMouseEvent::Button::kRight) {
       has_right_mousebutton_down_ = true;
     }
 
-    if (mouse_event.button == blink::WebMouseEvent::Button::NoButton) {
+    if (mouse_event.button == blink::WebMouseEvent::Button::kNoButton) {
       has_right_mousebutton_down_ = false;
       has_left_mousebutton_down_ = false;
     }
 
     if (has_left_mousebutton_down_ &&
-        (mouse_event.type() == blink::WebInputEvent::MouseDown &&
-         mouse_event.button == blink::WebMouseEvent::Button::Right)) {
+        (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
+         mouse_event.button == blink::WebMouseEvent::Button::kRight)) {
       eat_next_right_mouseup_ = true;
       Go(1);
       return true;
     }
 
     if (has_right_mousebutton_down_ &&
-        (mouse_event.type() == blink::WebInputEvent::MouseDown &&
-         mouse_event.button == blink::WebMouseEvent::Button::Left)) {
+        (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
+         mouse_event.button == blink::WebMouseEvent::Button::kLeft)) {
       Go(-1);
       eat_next_right_mouseup_ = true;
       return true;
     }
 
     if (eat_next_right_mouseup_ &&
-        mouse_event.type() == blink::WebInputEvent::MouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::Right) {
+        mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
+        mouse_event.button == blink::WebMouseEvent::Button::kRight) {
       eat_next_right_mouseup_ = false;
+#ifdef  MOUSE_GESTURES
+      // Allows the sequence LMB-DOWN - RMB-DOWN - RMB-UP - LMB-UP (single
+      // back nav) to be repeatable without a menu popping up breaking it
+      // when LMB-DOWN is activated to start another sequence.
+      gesture_recording_ = false;
+#endif
       return true;
     }
   }
-#endif  // ROCKER_GESTURES
 
-#ifdef MOUSE_GESTURES
-  if (!GetMousegesturesEnabled()) {
+#ifdef  MOUSE_GESTURES
+  // Both mouse gestures and rocker gestures need a delayed menu (on mouse up)
+  // to work propely.
+  if (!IsMouseGesturesEnabled() && !IsRockerGesturesEnabled()) {
     return false;
   }
 
   // Record the gesture
-  if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
-      mouse_event.button == blink::WebMouseEvent::Button::Right &&
-      !(mouse_event.modifiers() & blink::WebInputEvent::LeftButtonDown) &&
+  if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
+      mouse_event.button == blink::WebMouseEvent::Button::kRight &&
+      !(mouse_event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown) &&
       !gesture_recording_) {
     gesture_recording_ = true;
-    mousedown_x_ = mouse_event.x;
-    mousedown_y_ = mouse_event.y;
+    mousedown_x_ = mouse_event.PositionInWidget().x;
+    mousedown_y_ = mouse_event.PositionInWidget().y;
     fire_context_menu_ = true;
     return true;
   } else if (gesture_recording_ &&
-             (mouse_event.type() == blink::WebInputEvent::MouseMove ||
-              mouse_event.type() == blink::WebInputEvent::MouseUp)) {
-    int dx = mouse_event.x - mousedown_x_;
-    int dy = mouse_event.y - mousedown_y_;
+             (mouse_event.GetType() == blink::WebInputEvent::kMouseMove ||
+              mouse_event.GetType() == blink::WebInputEvent::kMouseUp)) {
+    int dx = mouse_event.PositionInWidget().x - mousedown_x_;
+    int dy = mouse_event.PositionInWidget().y - mousedown_y_;
 
     // If we went over the 5px threshold to cancel the context menu,
     // the flag is set. It persists if we go under the threshold by
@@ -562,31 +572,44 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     }
 
     // Copy event and fire
-    if (mouse_event.type() == blink::WebInputEvent::MouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::Right) {
+    if (mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
+        mouse_event.button == blink::WebMouseEvent::Button::kRight) {
       blink::WebMouseEvent event_copy(mouse_event);
       content::RenderViewHost* render_view_host =
           web_contents()->GetRenderViewHost();
 
       if (fire_context_menu_) {
         // Send the originally-culled right mouse down at original coords
-        event_copy.setType(blink::WebInputEvent::MouseDown);
-        event_copy.windowX -= (mouse_event.x - mousedown_x_);
-        event_copy.windowY -= (mouse_event.y - mousedown_y_);
-        event_copy.x = mousedown_x_;
-        event_copy.y = mousedown_y_;
+        event_copy.SetType(blink::WebInputEvent::kMouseDown);
+
+        int screenx = event_copy.PositionInScreen().x;
+        screenx -= (mouse_event.PositionInWidget().x - mousedown_x_);
+
+        int screeny = event_copy.PositionInScreen().y;
+        screeny -= (mouse_event.PositionInWidget().y - mousedown_y_);
+
+        event_copy.SetPositionInScreen(screenx, screeny);
+
+        event_copy.SetPositionInWidget(mousedown_x_, mousedown_y_);
+
         render_view_host->GetWidget()->ForwardMouseEvent(event_copy);
+
+        // Mac will not reset rocker gestures when a context menu closes
+        // (like what happens on lin and win that receive a mouse event with
+        // blink::WebMouseEvent::Button::kNoButton set). So, reset flags here.
+        has_right_mousebutton_down_ = false;
+        has_left_mousebutton_down_ = false;
       }
 
       gesture_recording_ = false;
       return fire_context_menu_;
-    } else if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
-               mouse_event.button == blink::WebMouseEvent::Button::Left) {
+    } else if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
+               mouse_event.button == blink::WebMouseEvent::Button::kLeft) {
       fire_context_menu_ = true;
       gesture_recording_ = false;
     }
 
-    if ((mouse_event.modifiers() & blink::WebInputEvent::RightButtonDown) ==
+    if ((mouse_event.GetModifiers() & blink::WebInputEvent::kRightButtonDown) ==
         0) {
       gesture_recording_ = false;
     }
@@ -757,7 +780,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
 
 bool WebViewGuest::RequestPageInfo(const GURL& url) {
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->Set(webview::kTargetURL, new base::StringValue(url.spec()));
+  args->Set(webview::kTargetURL, new base::Value(url.spec()));
   DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventRequestPageInfo, std::move(args))));
   return true;
@@ -811,7 +834,7 @@ blink::WebSecurityStyle WebViewGuest::GetSecurityStyle(
   if (browser) {
     return browser->GetSecurityStyle(contents, security_style_explanations);
   } else {
-    return blink::WebSecurityStyleUnknown;
+    return blink::kWebSecurityStyleUnknown;
   }
 }
 
@@ -856,6 +879,11 @@ void WebViewGuest::OnMouseLeave() {
     cursor_hider_.get()->Stop();
   }
 #endif  // USE_AURA
+}
+
+void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
+  TabModalConfirmDialog::Create(new RepostFormWarningController(source),
+                                source);
 }
 
 }  // namespace extensions

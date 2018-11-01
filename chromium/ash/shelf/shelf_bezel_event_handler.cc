@@ -4,7 +4,7 @@
 
 #include "ash/shelf/shelf_bezel_event_handler.h"
 
-#include "ash/common/shelf/wm_shelf.h"
+#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
@@ -18,11 +18,11 @@ namespace ash {
 
 ShelfBezelEventHandler::ShelfBezelEventHandler(WmShelf* shelf)
     : shelf_(shelf), in_touch_drag_(false) {
-  Shell::GetInstance()->AddPreTargetHandler(this);
+  Shell::Get()->AddPreTargetHandler(this);
 }
 
 ShelfBezelEventHandler::~ShelfBezelEventHandler() {
-  Shell::GetInstance()->RemovePreTargetHandler(this);
+  Shell::Get()->RemovePreTargetHandler(this);
 }
 
 void ShelfBezelEventHandler::OnGestureEvent(ui::GestureEvent* event) {

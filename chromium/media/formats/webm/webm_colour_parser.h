@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "media/base/hdr_metadata.h"
+#include "media/base/video_color_space.h"
 #include "media/formats/webm/webm_parser.h"
 
 namespace media {
@@ -22,7 +23,7 @@ struct MEDIA_EXPORT WebMColorMetadata {
   unsigned ChromaSitingHorz = 0;
   unsigned ChromaSitingVert = 0;
 
-  gfx::ColorSpace color_space;
+  VideoColorSpace color_space;
 
   HDRMetadata hdr_metadata;
 
@@ -75,8 +76,8 @@ class WebMColourParser : public WebMParserClient {
   int64_t range_;
   int64_t transfer_characteristics_;
   int64_t primaries_;
-  int64_t max_cll_;
-  int64_t max_fall_;
+  int64_t max_content_light_level_;
+  int64_t max_frame_average_light_level_;
 
   WebMMasteringMetadataParser mastering_metadata_parser_;
   bool mastering_metadata_parsed_ = false;

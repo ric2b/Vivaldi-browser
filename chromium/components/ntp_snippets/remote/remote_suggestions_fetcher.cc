@@ -24,6 +24,7 @@
 #include "components/ntp_snippets/ntp_snippets_constants.h"
 #include "components/ntp_snippets/remote/request_params.h"
 #include "components/ntp_snippets/user_classifier.h"
+#include "components/signin/core/browser/access_token_fetcher.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/strings/grit/components_strings.h"
@@ -40,13 +41,10 @@ using translate::LanguageModel;
 namespace ntp_snippets {
 
 using internal::JsonRequest;
-using internal::FetchAPI;
 using internal::FetchResult;
 
 namespace {
 
-const char kChromeReaderApiScope[] =
-    "https://www.googleapis.com/auth/webhistory";
 const char kContentSuggestionsApiScope[] =
     "https://www.googleapis.com/auth/chrome-content-suggestions";
 const char kSnippetsServerNonAuthorizedFormat[] = "%s?key=%s";
@@ -71,6 +69,8 @@ std::string FetchResultToString(FetchResult result) {
       return "Invalid / empty list.";
     case FetchResult::OAUTH_TOKEN_ERROR:
       return "Error in obtaining an OAuth2 access token.";
+    case FetchResult::MISSING_API_KEY:
+      return "No API key available.";
     case FetchResult::RESULT_MAX:
       break;
   }
@@ -85,6 +85,7 @@ Status FetchResultToStatus(FetchResult result) {
     // Permanent errors occur if it is more likely that the error originated
     // from the client.
     case FetchResult::OAUTH_TOKEN_ERROR:
+    case FetchResult::MISSING_API_KEY:
       return Status(StatusCode::PERMANENT_ERROR, FetchResultToString(result));
     // Temporary errors occur if it's more likely that the client behaved
     // correctly but the server failed to respond as expected.
@@ -101,20 +102,6 @@ Status FetchResultToStatus(FetchResult result) {
   return Status(StatusCode::PERMANENT_ERROR, std::string());
 }
 
-bool UsesChromeContentSuggestionsAPI(const GURL& endpoint) {
-  if (endpoint == kChromeReaderServer) {
-    return false;
-  }
-
-  if (endpoint != kContentSuggestionsServer &&
-      endpoint != kContentSuggestionsStagingServer &&
-      endpoint != kContentSuggestionsAlphaServer) {
-    LOG(WARNING) << "Unknown value for " << kContentSuggestionsBackend << ": "
-                 << endpoint << "; assuming chromecontentsuggestions-style API";
-  }
-  return true;
-}
-
 // Creates suggestions from dictionary values in |list| and adds them to
 // |suggestions|. Returns true on success, false if anything went wrong.
 // |remote_category_id| is only used if |content_suggestions_api| is true.
@@ -125,7 +112,7 @@ bool AddSuggestionsFromListValue(bool content_suggestions_api,
                                  const base::Time& fetch_time) {
   for (const auto& value : list) {
     const base::DictionaryValue* dict = nullptr;
-    if (!value->GetAsDictionary(&dict)) {
+    if (!value.GetAsDictionary(&dict)) {
       return false;
     }
 
@@ -213,18 +200,20 @@ CategoryInfo BuildArticleCategoryInfo(
                         : l10n_util::GetStringUTF16(
                               IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_HEADER),
       ContentSuggestionsCardLayout::FULL_CARD,
-      /*has_fetch_action=*/true,
-      /*has_view_all_action=*/false,
+      ContentSuggestionsAdditionalAction::FETCH,
       /*show_if_empty=*/true,
       l10n_util::GetStringUTF16(IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_EMPTY));
 }
 
 CategoryInfo BuildRemoteCategoryInfo(const base::string16& title,
                                      bool allow_fetching_more_results) {
+  ContentSuggestionsAdditionalAction action =
+      ContentSuggestionsAdditionalAction::NONE;
+  if (allow_fetching_more_results) {
+    action = ContentSuggestionsAdditionalAction::FETCH;
+  }
   return CategoryInfo(
-      title, ContentSuggestionsCardLayout::FULL_CARD,
-      /*has_fetch_action=*/allow_fetching_more_results,
-      /*has_view_all_action=*/false,
+      title, ContentSuggestionsCardLayout::FULL_CARD, action,
       /*show_if_empty=*/false,
       // TODO(tschumann): The message for no-articles is likely wrong
       // and needs to be added to the stubby protocol if we want to
@@ -255,25 +244,17 @@ RemoteSuggestionsFetcher::RemoteSuggestionsFetcher(
     const GURL& api_endpoint,
     const std::string& api_key,
     const UserClassifier* user_classifier)
-    : OAuth2TokenService::Consumer("ntp_snippets"),
-      signin_manager_(signin_manager),
+    : signin_manager_(signin_manager),
       token_service_(token_service),
       url_request_context_getter_(std::move(url_request_context_getter)),
       language_model_(language_model),
       parse_json_callback_(parse_json_callback),
       fetch_url_(api_endpoint),
-      fetch_api_(UsesChromeContentSuggestionsAPI(fetch_url_)
-                     ? FetchAPI::CHROME_CONTENT_SUGGESTIONS_API
-                     : FetchAPI::CHROME_READER_API),
       api_key_(api_key),
       clock_(new base::DefaultClock()),
       user_classifier_(user_classifier) {}
 
-RemoteSuggestionsFetcher::~RemoteSuggestionsFetcher() {
-  if (waiting_for_refresh_token_) {
-    token_service_->RemoveObserver(this);
-  }
-}
+RemoteSuggestionsFetcher::~RemoteSuggestionsFetcher() = default;
 
 void RemoteSuggestionsFetcher::FetchSnippets(
     const RequestParams& params,
@@ -290,29 +271,17 @@ void RemoteSuggestionsFetcher::FetchSnippets(
   }
 
   JsonRequest::Builder builder;
-  builder.SetFetchAPI(fetch_api_)
-      .SetFetchAPI(fetch_api_)
-      .SetLanguageModel(language_model_)
+  builder.SetLanguageModel(language_model_)
       .SetParams(params)
       .SetParseJsonCallback(parse_json_callback_)
       .SetClock(clock_.get())
       .SetUrlRequestContextGetter(url_request_context_getter_)
       .SetUserClassifier(*user_classifier_);
 
-  if (signin_manager_->IsAuthenticated()) {
+  if (signin_manager_->IsAuthenticated() || signin_manager_->AuthInProgress()) {
     // Signed-in: get OAuth token --> fetch suggestions.
-    oauth_token_retried_ = false;
     pending_requests_.emplace(std::move(builder), std::move(callback));
     StartTokenRequest();
-  } else if (signin_manager_->AuthInProgress()) {
-    // Currently signing in: wait for auth to finish (the refresh token) -->
-    //     get OAuth token --> fetch suggestions.
-    pending_requests_.emplace(std::move(builder), std::move(callback));
-    if (!waiting_for_refresh_token_) {
-      // Wait until we get a refresh token.
-      waiting_for_refresh_token_ = true;
-      token_service_->AddObserver(this);
-    }
   } else {
     // Not signed in: fetch suggestions (without authentication).
     FetchSnippetsNonAuthenticated(std::move(builder), std::move(callback));
@@ -322,6 +291,12 @@ void RemoteSuggestionsFetcher::FetchSnippets(
 void RemoteSuggestionsFetcher::FetchSnippetsNonAuthenticated(
     JsonRequest::Builder builder,
     SnippetsAvailableCallback callback) {
+  if (api_key_.empty()) {
+    // If we don't have an API key, don't even try.
+    FetchFinished(OptionalFetchedCategories(), std::move(callback),
+                  FetchResult::MISSING_API_KEY, std::string());
+    return;
+  }
   // When not providing OAuth token, we need to pass the Google API key.
   builder.SetUrl(
       GURL(base::StringPrintf(kSnippetsServerNonAuthorizedFormat,
@@ -332,11 +307,10 @@ void RemoteSuggestionsFetcher::FetchSnippetsNonAuthenticated(
 void RemoteSuggestionsFetcher::FetchSnippetsAuthenticated(
     JsonRequest::Builder builder,
     SnippetsAvailableCallback callback,
-    const std::string& account_id,
     const std::string& oauth_access_token) {
   // TODO(jkrcal, treib): Add unit-tests for authenticated fetches.
   builder.SetUrl(fetch_url_)
-      .SetAuthentication(account_id,
+      .SetAuthentication(signin_manager_->GetAuthenticatedAccountId(),
                          base::StringPrintf(kAuthorizationRequestHeaderFormat,
                                             oauth_access_token.c_str()));
   StartRequest(std::move(builder), std::move(callback));
@@ -353,25 +327,33 @@ void RemoteSuggestionsFetcher::StartRequest(
 }
 
 void RemoteSuggestionsFetcher::StartTokenRequest() {
-  OAuth2TokenService::ScopeSet scopes;
-  scopes.insert(fetch_api_ == FetchAPI::CHROME_CONTENT_SUGGESTIONS_API
-                    ? kContentSuggestionsApiScope
-                    : kChromeReaderApiScope);
-  oauth_request_ = token_service_->StartRequest(
-      signin_manager_->GetAuthenticatedAccountId(), scopes, this);
+  // If there is already an ongoing token request, just wait for that.
+  if (token_fetcher_) {
+    return;
+  }
+
+  OAuth2TokenService::ScopeSet scopes{kContentSuggestionsApiScope};
+  token_fetcher_ = base::MakeUnique<AccessTokenFetcher>(
+      "ntp_snippets", signin_manager_, token_service_, scopes,
+      base::BindOnce(&RemoteSuggestionsFetcher::AccessTokenFetchFinished,
+                     base::Unretained(this)));
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// OAuth2TokenService::Consumer overrides
-void RemoteSuggestionsFetcher::OnGetTokenSuccess(
-    const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
-  // Delete the request after we leave this method.
-  std::unique_ptr<OAuth2TokenService::Request> oauth_request(
-      std::move(oauth_request_));
-  DCHECK_EQ(oauth_request.get(), request)
-      << "Got tokens from some previous request";
+void RemoteSuggestionsFetcher::AccessTokenFetchFinished(
+    const GoogleServiceAuthError& error,
+    const std::string& access_token) {
+  // Delete the fetcher only after we leave this method (which is called from
+  // the fetcher itself).
+  DCHECK(token_fetcher_);
+  std::unique_ptr<AccessTokenFetcher> token_fetcher_deleter(
+      std::move(token_fetcher_));
+
+  if (error.state() != GoogleServiceAuthError::NONE) {
+    AccessTokenError(error);
+    return;
+  }
+
+  DCHECK(!access_token.empty());
 
   while (!pending_requests_.empty()) {
     std::pair<JsonRequest::Builder, SnippetsAvailableCallback>
@@ -379,25 +361,16 @@ void RemoteSuggestionsFetcher::OnGetTokenSuccess(
     pending_requests_.pop();
     FetchSnippetsAuthenticated(std::move(builder_and_callback.first),
                                std::move(builder_and_callback.second),
-                               oauth_request->GetAccountId(), access_token);
+                               access_token);
   }
 }
 
-void RemoteSuggestionsFetcher::OnGetTokenFailure(
-    const OAuth2TokenService::Request* request,
+void RemoteSuggestionsFetcher::AccessTokenError(
     const GoogleServiceAuthError& error) {
-  oauth_request_.reset();
-
-  if (!oauth_token_retried_ &&
-      error.state() == GoogleServiceAuthError::State::REQUEST_CANCELED) {
-    // The request (especially on startup) can get reset by loading the refresh
-    // token - do it one more time.
-    oauth_token_retried_ = true;
-    StartTokenRequest();
-    return;
-  }
+  DCHECK_NE(error.state(), GoogleServiceAuthError::NONE);
 
   DLOG(ERROR) << "Unable to get token: " << error.ToString();
+
   while (!pending_requests_.empty()) {
     std::pair<JsonRequest::Builder, SnippetsAvailableCallback>
         builder_and_callback = std::move(pending_requests_.front());
@@ -405,25 +378,10 @@ void RemoteSuggestionsFetcher::OnGetTokenFailure(
     FetchFinished(OptionalFetchedCategories(),
                   std::move(builder_and_callback.second),
                   FetchResult::OAUTH_TOKEN_ERROR,
-                  /*error_details=*/base::StringPrintf(
-                      " (%s)", error.ToString().c_str()));
+                  /*error_details=*/
+                  base::StringPrintf(" (%s)", error.ToString().c_str()));
     pending_requests_.pop();
   }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// OAuth2TokenService::Observer overrides
-void RemoteSuggestionsFetcher::OnRefreshTokenAvailable(
-    const std::string& account_id) {
-  // Only react on tokens for the account the user has signed in with.
-  if (account_id != signin_manager_->GetAuthenticatedAccountId()) {
-    return;
-  }
-
-  token_service_->RemoveObserver(this);
-  waiting_for_refresh_token_ = false;
-  oauth_token_retried_ = false;
-  StartTokenRequest();
 }
 
 void RemoteSuggestionsFetcher::JsonRequestDone(
@@ -446,8 +404,8 @@ void RemoteSuggestionsFetcher::JsonRequestDone(
                   error_details);
     return;
   }
-  FetchedCategoriesVector categories;
 
+  FetchedCategoriesVector categories;
   if (!JsonToSnippets(*result, &categories, fetch_time)) {
     LOG(WARNING) << "Received invalid snippets: " << last_fetch_json_;
     FetchFinished(OptionalFetchedCategories(), std::move(callback),
@@ -491,70 +449,51 @@ bool RemoteSuggestionsFetcher::JsonToSnippets(
     return false;
   }
 
-  switch (fetch_api_) {
-    case FetchAPI::CHROME_READER_API: {
-      const int kUnusedRemoteCategoryId = -1;
-      categories->push_back(FetchedCategory(
-          Category::FromKnownCategory(KnownCategories::ARTICLES),
-          BuildArticleCategoryInfo(base::nullopt)));
+  const base::ListValue* categories_value = nullptr;
+  if (!top_dict->GetList("categories", &categories_value)) {
+    return false;
+  }
 
-      const base::ListValue* recos = nullptr;
-      return top_dict->GetList("recos", &recos) &&
-             AddSuggestionsFromListValue(
-                 /*content_suggestions_api=*/false, kUnusedRemoteCategoryId,
-                 *recos, &categories->back().suggestions, fetch_time);
+  for (const auto& v : *categories_value) {
+    std::string utf8_title;
+    int remote_category_id = -1;
+    const base::DictionaryValue* category_value = nullptr;
+    if (!(v.GetAsDictionary(&category_value) &&
+          category_value->GetString("localizedTitle", &utf8_title) &&
+          category_value->GetInteger("id", &remote_category_id) &&
+          (remote_category_id > 0))) {
+      return false;
     }
 
-    case FetchAPI::CHROME_CONTENT_SUGGESTIONS_API: {
-      const base::ListValue* categories_value = nullptr;
-      if (!top_dict->GetList("categories", &categories_value)) {
+    RemoteSuggestion::PtrVector suggestions;
+    const base::ListValue* suggestions_list = nullptr;
+    // Absence of a list of suggestions is treated as an empty list, which
+    // is permissible.
+    if (category_value->GetList("suggestions", &suggestions_list)) {
+      if (!AddSuggestionsFromListValue(
+              /*content_suggestions_api=*/true, remote_category_id,
+              *suggestions_list, &suggestions, fetch_time)) {
         return false;
       }
-
-      for (const auto& v : *categories_value) {
-        std::string utf8_title;
-        int remote_category_id = -1;
-        const base::DictionaryValue* category_value = nullptr;
-        if (!(v->GetAsDictionary(&category_value) &&
-              category_value->GetString("localizedTitle", &utf8_title) &&
-              category_value->GetInteger("id", &remote_category_id) &&
-              (remote_category_id > 0))) {
-          return false;
-        }
-
-        RemoteSuggestion::PtrVector suggestions;
-        const base::ListValue* suggestions_list = nullptr;
-        // Absence of a list of suggestions is treated as an empty list, which
-        // is permissible.
-        if (category_value->GetList("suggestions", &suggestions_list)) {
-          if (!AddSuggestionsFromListValue(
-                  /*content_suggestions_api=*/true, remote_category_id,
-                  *suggestions_list, &suggestions, fetch_time)) {
-            return false;
-          }
-        }
-        Category category = Category::FromRemoteCategory(remote_category_id);
-        if (category.IsKnownCategory(KnownCategories::ARTICLES)) {
-          categories->push_back(FetchedCategory(
-              category,
-              BuildArticleCategoryInfo(base::UTF8ToUTF16(utf8_title))));
-        } else {
-          // TODO(tschumann): Right now, the backend does not yet populate this
-          // field. Make it mandatory once the backends provide it.
-          bool allow_fetching_more_results = false;
-          category_value->GetBoolean("allowFetchingMoreResults",
-                                     &allow_fetching_more_results);
-          categories->push_back(FetchedCategory(
-              category, BuildRemoteCategoryInfo(base::UTF8ToUTF16(utf8_title),
-                                                allow_fetching_more_results)));
-        }
-        categories->back().suggestions = std::move(suggestions);
-      }
-      return true;
     }
+    Category category = Category::FromRemoteCategory(remote_category_id);
+    if (category.IsKnownCategory(KnownCategories::ARTICLES)) {
+      categories->push_back(FetchedCategory(
+          category, BuildArticleCategoryInfo(base::UTF8ToUTF16(utf8_title))));
+    } else {
+      // TODO(tschumann): Right now, the backend does not yet populate this
+      // field. Make it mandatory once the backends provide it.
+      bool allow_fetching_more_results = false;
+      category_value->GetBoolean("allowFetchingMoreResults",
+                                 &allow_fetching_more_results);
+      categories->push_back(FetchedCategory(
+          category, BuildRemoteCategoryInfo(base::UTF8ToUTF16(utf8_title),
+                                            allow_fetching_more_results)));
+    }
+    categories->back().suggestions = std::move(suggestions);
   }
-  NOTREACHED();
-  return false;
+
+  return true;
 }
 
 }  // namespace ntp_snippets

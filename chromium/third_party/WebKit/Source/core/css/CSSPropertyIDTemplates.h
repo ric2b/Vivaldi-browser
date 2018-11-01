@@ -6,8 +6,8 @@
 #define CSSPropertyIDTemplates_h
 
 #include "core/CSSPropertyNames.h"
-#include "wtf/HashFunctions.h"
-#include "wtf/HashTraits.h"
+#include "platform/wtf/HashFunctions.h"
+#include "platform/wtf/HashTraits.h"
 
 namespace WTF {
 template <>
@@ -17,13 +17,12 @@ struct DefaultHash<blink::CSSPropertyID> {
 template <>
 struct HashTraits<blink::CSSPropertyID>
     : GenericHashTraits<blink::CSSPropertyID> {
-  static const bool emptyValueIsZero = true;
-  static void constructDeletedValue(blink::CSSPropertyID& slot, bool) {
-    slot =
-        static_cast<blink::CSSPropertyID>(blink::lastUnresolvedCSSProperty + 1);
+  static const bool kEmptyValueIsZero = true;
+  static void ConstructDeletedValue(blink::CSSPropertyID& slot, bool) {
+    slot = static_cast<blink::CSSPropertyID>(blink::numCSSPropertyIDs);
   }
-  static bool isDeletedValue(blink::CSSPropertyID value) {
-    return value == (blink::lastUnresolvedCSSProperty + 1);
+  static bool IsDeletedValue(blink::CSSPropertyID value) {
+    return value == blink::numCSSPropertyIDs;
   }
 };
 }  // namespace WTF

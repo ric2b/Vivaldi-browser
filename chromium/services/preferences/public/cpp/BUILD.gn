@@ -4,18 +4,43 @@
 
 source_set("cpp") {
   sources = [
-    "pref_client_store.cc",
-    "pref_client_store.h",
+    "persistent_pref_store_client.cc",
+    "persistent_pref_store_client.h",
+    "pref_registry_serializer.cc",
+    "pref_registry_serializer.h",
+    "pref_service_factory.cc",
+    "pref_service_factory.h",
+    "pref_store_adapter.cc",
+    "pref_store_adapter.h",
+    "pref_store_client.cc",
+    "pref_store_client.h",
+    "pref_store_client_mixin.cc",
+    "pref_store_client_mixin.h",
+    "pref_store_impl.cc",
+    "pref_store_impl.h",
   ]
 
   public_deps = [
     "//base",
-    "//components/prefs:prefs",
+    "//components/prefs",
     "//services/preferences/public/interfaces",
     "//services/service_manager/public/cpp",
   ]
 
   deps = [
-    "//mojo/public/cpp/bindings:bindings",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
+source_set("service_main") {
+  deps = [
+    "//base",
+    "//components/prefs",
+    "//services/preferences",
+    "//services/service_manager/public/cpp",
+  ]
+  sources = [
+    "pref_service_main.cc",
+    "pref_service_main.h",
   ]
 }

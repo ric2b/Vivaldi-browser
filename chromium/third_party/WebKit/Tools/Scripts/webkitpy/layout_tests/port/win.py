@@ -38,6 +38,7 @@ try:
 except ImportError:
     _winreg = None  # pylint: disable=invalid-name
 
+from webkitpy.common import exit_codes
 from webkitpy.layout_tests.breakpad.dump_reader_win import DumpReaderWin
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port import base
@@ -77,7 +78,7 @@ class WinPort(base.Port):
     def __init__(self, host, port_name, **kwargs):
         super(WinPort, self).__init__(host, port_name, **kwargs)
         self._version = port_name[port_name.index('win-') + len('win-'):]
-        assert self._version in self.SUPPORTED_VERSIONS, "%s is not in %s" % (self._version, self.SUPPORTED_VERSIONS)
+        assert self._version in self.SUPPORTED_VERSIONS, '%s is not in %s' % (self._version, self.SUPPORTED_VERSIONS)
         if self.get_option('disable_breakpad'):
             self._dump_reader = None
         else:
@@ -103,7 +104,7 @@ class WinPort(base.Port):
                 res = self._check_reg(r'.cgi\Shell\ExecCGI\Command') and res
                 res = self._check_reg(r'.pl\Shell\ExecCGI\Command') and res
             else:
-                _log.warning("Could not check the registry; http may not work correctly.")
+                _log.warning('Could not check the registry; http may not work correctly.')
 
         return res
 
@@ -159,19 +160,12 @@ class WinPort(base.Port):
 
         # FIXME: This is a temporary hack to get the cr-win bot online until
         # someone from the cr-win port can take a look.
+        # TODO(qyearsley): Remove this in a separate CL.
         apache_envvars = ['SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'TMP']
         for key, value in self.host.environ.copy().items():
             if key not in env and key in apache_envvars:
                 env[key] = value
 
-        # Put the cygwin directory first in the path to find cygwin1.dll.
-        env["PATH"] = "%s;%s" % (self.path_from_chromium_base("third_party", "cygwin", "bin"), env["PATH"])
-        # Configure the cygwin directory so that pywebsocket finds proper
-        # python executable to run cgi program.
-        env["CYGWIN_PATH"] = self.path_from_chromium_base("third_party", "cygwin", "bin")
-        if self.get_option('register_cygwin'):
-            setup_mount = self.path_from_chromium_base("third_party", "cygwin", "setup_mount.bat")
-            self._executive.run_command([setup_mount])  # Paths are all absolute, so this does not require a cwd.
         return env
 
     def check_build(self, needs_http, printer):
@@ -179,7 +173,7 @@ class WinPort(base.Port):
 
         self._crash_service_available = self._check_crash_service_available()
         if not self._crash_service_available:
-            result = test_run_results.UNEXPECTED_ERROR_EXIT_STATUS
+            result = exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
         if result:
             _log.error('For complete Windows build requirements, please see:')
@@ -224,7 +218,7 @@ class WinPort(base.Port):
 
     def _check_crash_service_available(self):
         """Checks whether the crash service binary is present."""
-        result = self._check_file_exists(self._path_to_crash_service(), "content_shell_crash_service.exe")
+        result = self._check_file_exists(self._path_to_crash_service(), 'content_shell_crash_service.exe')
         if not result:
             _log.error("    Could not find crash service, unexpected crashes won't be symbolized.")
             _log.error('    Did you build the target blink_tests?')

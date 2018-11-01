@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/plugins/plugin_finder.h"
@@ -15,6 +16,31 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_json/safe_json_parser.h"
 #include "url/gurl.h"
+
+namespace {
+constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+    net::DefineNetworkTrafficAnnotation("plugins_resource_service", R"(
+        semantics {
+          sender: "Plugins Resource Service"
+          description:
+            "Fetches updates to the list of plugins known to Chromium. For a "
+            "given plugin, this list contains the minimum version not "
+            "containing known security vulnerabilities, and can be used to "
+            "inform the user that their plugins need to be updated."
+          trigger: "Triggered at regular intervals (once per day)."
+          data: "None"
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled in settings."
+          policy_exception_justification:
+            "Not implemented. AllowOutdatedPlugins policy silences local "
+            "warnings, but network request to update the list of plugins are "
+            "still sent."
+        })");
+
+}  // namespace
 
 namespace {
 
@@ -31,6 +57,8 @@ GURL GetPluginsServerURL() {
   std::string filename;
 #if defined(OS_WIN)
   filename = "plugins_win.json";
+#elif defined(OS_CHROMEOS)
+  filename = "plugins_chromeos.json";
 #elif defined(OS_LINUX)
   filename = "plugins_linux.json";
 #elif defined(OS_MACOSX)
@@ -54,7 +82,8 @@ PluginsResourceService::PluginsResourceService(PrefService* local_state)
           kCacheUpdateDelayMs,
           g_browser_process->system_request_context(),
           switches::kDisableBackgroundNetworking,
-          base::Bind(safe_json::SafeJsonParser::Parse)) {}
+          base::Bind(safe_json::SafeJsonParser::Parse),
+          kTrafficAnnotation) {}
 
 void PluginsResourceService::Init() {
   const base::DictionaryValue* metadata =
@@ -69,7 +98,7 @@ PluginsResourceService::~PluginsResourceService() {
 // static
 void PluginsResourceService::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kPluginsMetadata,
-                                   new base::DictionaryValue());
+                                   base::MakeUnique<base::DictionaryValue>());
   registry->RegisterStringPref(prefs::kPluginsResourceCacheUpdate, "0");
 }
 

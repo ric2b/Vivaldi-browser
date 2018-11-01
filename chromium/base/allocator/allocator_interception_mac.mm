@@ -27,14 +27,15 @@
 
 #include <new>
 
-#include "base/allocator/allocator_shim.h"
 #include "base/allocator/features.h"
 #include "base/allocator/malloc_zone_functions_mac.h"
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/mach_logging.h"
 #include "base/process/memory.h"
 #include "base/scoped_clear_errno.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "third_party/apple_apsl/CFBase.h"
 
@@ -264,6 +265,14 @@ id oom_killer_allocWithZone(id self, SEL _cmd, NSZone* zone) {
   return result;
 }
 
+void UninterceptMallocZoneForTesting(struct _malloc_zone_t* zone) {
+  ChromeMallocZone* chrome_zone = reinterpret_cast<ChromeMallocZone*>(zone);
+  if (!IsMallocZoneAlreadyStored(chrome_zone))
+    return;
+  MallocZoneFunctions& functions = GetFunctionsForZone(zone);
+  ReplaceZoneFunctions(chrome_zone, &functions);
+}
+
 }  // namespace
 
 bool UncheckedMallocMac(size_t size, void** result) {
@@ -294,44 +303,6 @@ bool UncheckedCallocMac(size_t num_items, size_t size, void** result) {
   return *result != NULL;
 }
 
-void ReplaceZoneFunctions(ChromeMallocZone* zone,
-                          const MallocZoneFunctions* functions) {
-  // Remove protection.
-  mach_vm_address_t reprotection_start = 0;
-  mach_vm_size_t reprotection_length = 0;
-  vm_prot_t reprotection_value = VM_PROT_NONE;
-  DeprotectMallocZone(zone, &reprotection_start, &reprotection_length,
-                      &reprotection_value);
-
-  CHECK(functions->malloc && functions->calloc && functions->valloc &&
-        functions->free && functions->realloc);
-  zone->malloc = functions->malloc;
-  zone->calloc = functions->calloc;
-  zone->valloc = functions->valloc;
-  zone->free = functions->free;
-  zone->realloc = functions->realloc;
-  if (functions->batch_malloc)
-    zone->batch_malloc = functions->batch_malloc;
-  if (functions->batch_free)
-    zone->batch_free = functions->batch_free;
-  if (functions->size)
-    zone->size = functions->size;
-  if (zone->version >= 5 && functions->memalign) {
-    zone->memalign = functions->memalign;
-  }
-  if (zone->version >= 6 && functions->free_definite_size) {
-    zone->free_definite_size = functions->free_definite_size;
-  }
-
-  // Restore protection if it was active.
-  if (reprotection_start) {
-    kern_return_t result =
-        mach_vm_protect(mach_task_self(), reprotection_start,
-                        reprotection_length, false, reprotection_value);
-    MACH_CHECK(result == KERN_SUCCESS, result) << "mach_vm_protect";
-  }
-}
-
 void StoreFunctionsForDefaultZone() {
   ChromeMallocZone* default_zone = reinterpret_cast<ChromeMallocZone*>(
       malloc_default_zone());
@@ -355,6 +326,13 @@ void StoreFunctionsForAllZones() {
 }
 
 void ReplaceFunctionsForStoredZones(const MallocZoneFunctions* functions) {
+  // The default zone does not get returned in malloc_get_all_zones().
+  ChromeMallocZone* default_zone =
+      reinterpret_cast<ChromeMallocZone*>(malloc_default_zone());
+  if (DoesMallocZoneNeedReplacing(default_zone, functions)) {
+    ReplaceZoneFunctions(default_zone, functions);
+  }
+
   vm_address_t* zones;
   unsigned int count;
   kern_return_t kr =
@@ -363,7 +341,7 @@ void ReplaceFunctionsForStoredZones(const MallocZoneFunctions* functions) {
     return;
   for (unsigned int i = 0; i < count; ++i) {
     ChromeMallocZone* zone = reinterpret_cast<ChromeMallocZone*>(zones[i]);
-    if (IsMallocZoneAlreadyStored(zone) && zone->malloc != functions->malloc) {
+    if (DoesMallocZoneNeedReplacing(zone, functions)) {
       ReplaceZoneFunctions(zone, functions);
     }
   }
@@ -392,7 +370,7 @@ void InterceptAllocationsMac() {
       reinterpret_cast<ChromeMallocZone*>(malloc_default_zone());
   if (!IsMallocZoneAlreadyStored(default_zone)) {
     StoreZoneFunctions(default_zone, &g_old_zone);
-    MallocZoneFunctions new_functions;
+    MallocZoneFunctions new_functions = {};
     new_functions.malloc = oom_killer_malloc;
     new_functions.calloc = oom_killer_calloc;
     new_functions.valloc = oom_killer_valloc;
@@ -408,7 +386,7 @@ void InterceptAllocationsMac() {
       reinterpret_cast<ChromeMallocZone*>(malloc_default_purgeable_zone());
   if (purgeable_zone && !IsMallocZoneAlreadyStored(purgeable_zone)) {
     StoreZoneFunctions(purgeable_zone, &g_old_purgeable_zone);
-    MallocZoneFunctions new_functions;
+    MallocZoneFunctions new_functions = {};
     new_functions.malloc = oom_killer_malloc_purgeable;
     new_functions.calloc = oom_killer_calloc_purgeable;
     new_functions.valloc = oom_killer_valloc_purgeable;
@@ -494,6 +472,96 @@ void InterceptAllocationsMac() {
       << "Failed to get allocWithZone allocation function.";
   method_setImplementation(orig_method,
                            reinterpret_cast<IMP>(oom_killer_allocWithZone));
+}
+
+void UninterceptMallocZonesForTesting() {
+  UninterceptMallocZoneForTesting(malloc_default_zone());
+  vm_address_t* zones;
+  unsigned int count;
+  kern_return_t kr = malloc_get_all_zones(mach_task_self(), 0, &zones, &count);
+  CHECK(kr == KERN_SUCCESS);
+  for (unsigned int i = 0; i < count; ++i) {
+    UninterceptMallocZoneForTesting(
+        reinterpret_cast<struct _malloc_zone_t*>(zones[i]));
+  }
+
+  ClearAllMallocZonesForTesting();
+}
+
+namespace {
+
+void ShimNewMallocZonesAndReschedule(base::Time end_time,
+                                     base::TimeDelta delay) {
+  ShimNewMallocZones();
+
+  if (base::Time::Now() > end_time)
+    return;
+
+  base::TimeDelta next_delay = delay * 2;
+  SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&ShimNewMallocZonesAndReschedule, end_time, next_delay),
+      delay);
+}
+
+}  // namespace
+
+void PeriodicallyShimNewMallocZones() {
+  base::Time end_time = base::Time::Now() + base::TimeDelta::FromMinutes(1);
+  base::TimeDelta initial_delay = base::TimeDelta::FromSeconds(1);
+  ShimNewMallocZonesAndReschedule(end_time, initial_delay);
+}
+
+void ShimNewMallocZones() {
+  StoreFunctionsForAllZones();
+
+  // Use the functions for the default zone as a template to replace those
+  // new zones.
+  ChromeMallocZone* default_zone =
+      reinterpret_cast<ChromeMallocZone*>(malloc_default_zone());
+  DCHECK(IsMallocZoneAlreadyStored(default_zone));
+
+  MallocZoneFunctions new_functions;
+  StoreZoneFunctions(default_zone, &new_functions);
+  ReplaceFunctionsForStoredZones(&new_functions);
+}
+
+void ReplaceZoneFunctions(ChromeMallocZone* zone,
+                          const MallocZoneFunctions* functions) {
+  // Remove protection.
+  mach_vm_address_t reprotection_start = 0;
+  mach_vm_size_t reprotection_length = 0;
+  vm_prot_t reprotection_value = VM_PROT_NONE;
+  DeprotectMallocZone(zone, &reprotection_start, &reprotection_length,
+                      &reprotection_value);
+
+  CHECK(functions->malloc && functions->calloc && functions->valloc &&
+        functions->free && functions->realloc);
+  zone->malloc = functions->malloc;
+  zone->calloc = functions->calloc;
+  zone->valloc = functions->valloc;
+  zone->free = functions->free;
+  zone->realloc = functions->realloc;
+  if (functions->batch_malloc)
+    zone->batch_malloc = functions->batch_malloc;
+  if (functions->batch_free)
+    zone->batch_free = functions->batch_free;
+  if (functions->size)
+    zone->size = functions->size;
+  if (zone->version >= 5 && functions->memalign) {
+    zone->memalign = functions->memalign;
+  }
+  if (zone->version >= 6 && functions->free_definite_size) {
+    zone->free_definite_size = functions->free_definite_size;
+  }
+
+  // Restore protection if it was active.
+  if (reprotection_start) {
+    kern_return_t result =
+        mach_vm_protect(mach_task_self(), reprotection_start,
+                        reprotection_length, false, reprotection_value);
+    MACH_CHECK(result == KERN_SUCCESS, result) << "mach_vm_protect";
+  }
 }
 
 }  // namespace allocator

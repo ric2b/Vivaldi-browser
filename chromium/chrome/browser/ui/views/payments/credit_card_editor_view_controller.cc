@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/views/payments/credit_card_editor_view_controller.h"
 
+#include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
@@ -25,7 +28,8 @@
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
-#include "components/payments/content/payment_request.h"
+#include "components/payments/content/payment_request_spec.h"
+#include "components/payments/content/payment_request_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/native_theme/native_theme.h"
@@ -76,9 +80,16 @@ std::vector<base::string16> GetExpirationYearItems() {
 }  // namespace
 
 CreditCardEditorViewController::CreditCardEditorViewController(
-    PaymentRequest* request,
-    PaymentRequestDialogView* dialog)
-    : EditorViewController(request, dialog) {}
+    PaymentRequestSpec* spec,
+    PaymentRequestState* state,
+    PaymentRequestDialogView* dialog,
+    base::OnceClosure on_edited,
+    base::OnceCallback<void(const autofill::CreditCard&)> on_added,
+    autofill::CreditCard* credit_card)
+    : EditorViewController(spec, state, dialog),
+      on_edited_(std::move(on_edited)),
+      on_added_(std::move(on_added)),
+      credit_card_to_edit_(credit_card) {}
 
 CreditCardEditorViewController::~CreditCardEditorViewController() {}
 
@@ -120,12 +131,14 @@ CreditCardEditorViewController::CreateHeaderView() {
 
   constexpr gfx::Size kCardIconSize = gfx::Size(30, 18);
   for (const std::string& supported_network :
-       request()->supported_card_networks()) {
+       spec()->supported_card_networks()) {
     const std::string autofill_card_type =
         autofill::data_util::GetCardTypeForBasicCardPaymentType(
             supported_network);
-    std::unique_ptr<views::ImageView> card_icon_view =
-        CreateCardIconView(autofill_card_type);
+    std::unique_ptr<views::ImageView> card_icon_view = CreateInstrumentIconView(
+        autofill::data_util::GetPaymentRequestData(autofill_card_type)
+            .icon_resource_id,
+        base::UTF8ToUTF16(supported_network));
     card_icon_view->SetImageSize(kCardIconSize);
 
     icons_row->AddChildView(card_icon_view.release());
@@ -153,9 +166,21 @@ std::vector<EditorField> CreditCardEditorViewController::GetFieldDefinitions() {
        EditorField::ControlType::COMBOBOX}};
 }
 
+base::string16 CreditCardEditorViewController::GetInitialValueForType(
+    autofill::ServerFieldType type) {
+  if (!credit_card_to_edit_)
+    return base::string16();
+
+  return credit_card_to_edit_->GetInfo(autofill::AutofillType(type),
+                                       state()->GetApplicationLocale());
+}
+
 bool CreditCardEditorViewController::ValidateModelAndSave() {
+  const std::string& locale = state()->GetApplicationLocale();
+  // Use a temporary object for validation.
   autofill::CreditCard credit_card;
   credit_card.set_origin(autofill::kSettingsOrigin);
+
   for (const auto& field : text_fields()) {
     // ValidatingTextfield* is the key, EditorField is the value.
     DCHECK_EQ(autofill::CREDIT_CARD,
@@ -163,7 +188,8 @@ bool CreditCardEditorViewController::ValidateModelAndSave() {
     if (field.first->invalid())
       return false;
 
-    credit_card.SetRawInfo(field.second.type, field.first->text());
+    credit_card.SetInfo(autofill::AutofillType(field.second.type),
+                        field.first->text(), locale);
   }
   for (const auto& field : comboboxes()) {
     // ValidatingCombobox* is the key, EditorField is the value.
@@ -173,16 +199,39 @@ bool CreditCardEditorViewController::ValidateModelAndSave() {
     if (combobox->invalid())
       return false;
 
-    credit_card.SetRawInfo(field.second.type,
-                           combobox->GetTextForRow(combobox->selected_index()));
+    credit_card.SetInfo(autofill::AutofillType(field.second.type),
+                        combobox->GetTextForRow(combobox->selected_index()),
+                        locale);
   }
 
   // TODO(mathp): Display global error message.
   if (!credit_card.IsValid())
     return false;
 
-  // Add the card (will not add a duplicate).
-  request()->personal_data_manager()->AddCreditCard(credit_card);
+  if (!credit_card_to_edit_) {
+    // Add the card (will not add a duplicate).
+    state()->GetPersonalDataManager()->AddCreditCard(credit_card);
+    std::move(on_added_).Run(credit_card);
+  } else {
+    // We were in edit mode. Copy the data from the temporary object to retain
+    // the edited object's other properties (use count, use date, guid, etc.).
+    for (const auto& field : text_fields()) {
+      credit_card_to_edit_->SetInfo(
+          autofill::AutofillType(field.second.type),
+          credit_card.GetInfo(autofill::AutofillType(field.second.type),
+                              locale),
+          locale);
+    }
+    for (const auto& field : comboboxes()) {
+      credit_card_to_edit_->SetInfo(
+          autofill::AutofillType(field.second.type),
+          credit_card.GetInfo(autofill::AutofillType(field.second.type),
+                              locale),
+          locale);
+    }
+    state()->GetPersonalDataManager()->UpdateCreditCard(*credit_card_to_edit_);
+    std::move(on_edited_).Run();
+  }
 
   return true;
 }
@@ -196,7 +245,7 @@ CreditCardEditorViewController::CreateValidationDelegate(
       CreditCardEditorViewController::CreditCardValidationDelegate>(
       field, this,
       field.type == autofill::CREDIT_CARD_NUMBER
-          ? request()->supported_card_networks()
+          ? spec()->supported_card_networks()
           : std::vector<std::string>());
 }
 
@@ -219,6 +268,11 @@ CreditCardEditorViewController::GetComboboxModelForType(
       break;
   }
   return std::unique_ptr<ui::ComboboxModel>();
+}
+
+base::string16 CreditCardEditorViewController::GetSheetTitle() {
+  return l10n_util::GetStringUTF16(
+      IDS_PAYMENT_REQUEST_CREDIT_CARD_EDITOR_ADD_TITLE);
 }
 
 CreditCardEditorViewController::CreditCardValidationDelegate::

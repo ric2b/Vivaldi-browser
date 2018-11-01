@@ -10,6 +10,7 @@
 #include "services/service_manager/public/cpp/service_test.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/window_server_test.mojom.h"
+#include "ui/views/layout/layout_provider.h"
 
 namespace ash {
 namespace mus {
@@ -30,12 +31,14 @@ class AppLaunchTest : public service_manager::test::ServiceTest {
     ServiceTest::SetUp();
   }
 
+  views::LayoutProvider layout_provider_;
+
   DISALLOW_COPY_AND_ASSIGN(AppLaunchTest);
 };
 
 TEST_F(AppLaunchTest, TestQuickLaunch) {
-  connector()->Connect(mojom::kServiceName);
-  connector()->Connect(mash::quick_launch::mojom::kServiceName);
+  connector()->StartService(mojom::kServiceName);
+  connector()->StartService(mash::quick_launch::mojom::kServiceName);
 
   ui::mojom::WindowServerTestPtr test_interface;
   connector()->BindInterface(ui::mojom::kServiceName, &test_interface);

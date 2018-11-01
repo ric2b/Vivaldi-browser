@@ -12,10 +12,7 @@
 
 namespace net {
 
-using base::StringPiece;
-using std::string;
-
-HpackInputStream::HpackInputStream(StringPiece buffer)
+HpackInputStream::HpackInputStream(SpdyStringPiece buffer)
     : buffer_(buffer),
       bit_offset_(0),
       parsed_bytes_(0),
@@ -119,7 +116,7 @@ bool HpackInputStream::DecodeNextUint32(uint32_t* I) {
   return !has_more;
 }
 
-bool HpackInputStream::DecodeNextIdentityString(StringPiece* str) {
+bool HpackInputStream::DecodeNextIdentityString(SpdyStringPiece* str) {
   uint32_t size = 0;
   if (!DecodeNextUint32(&size)) {
     return false;
@@ -130,13 +127,13 @@ bool HpackInputStream::DecodeNextIdentityString(StringPiece* str) {
     return false;
   }
 
-  *str = StringPiece(buffer_.data(), size);
+  *str = SpdyStringPiece(buffer_.data(), size);
   buffer_.remove_prefix(size);
   parsed_bytes_current_ += size;
   return true;
 }
 
-bool HpackInputStream::DecodeNextHuffmanString(string* str) {
+bool HpackInputStream::DecodeNextHuffmanString(SpdyString* str) {
   uint32_t encoded_size = 0;
   if (!DecodeNextUint32(&encoded_size)) {
     if (!need_more_data_) {

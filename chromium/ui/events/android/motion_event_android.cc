@@ -15,6 +15,7 @@
 #include "ui/events/event_utils.h"
 
 using base::android::AttachCurrentThread;
+using base::android::ScopedJavaLocalRef;
 using namespace JNI_MotionEvent;
 
 namespace ui {
@@ -180,14 +181,18 @@ MotionEventAndroid::CachedPointer::CachedPointer()
       tool_type(TOOL_TYPE_UNKNOWN) {
 }
 
-MotionEventAndroid::MotionEventAndroid(float pix_to_dip,
-                                       JNIEnv* env,
+MotionEventAndroid::MotionEventAndroid(JNIEnv* env,
                                        jobject event,
+                                       jfloat pix_to_dip,
+                                       jfloat ticks_x,
+                                       jfloat ticks_y,
+                                       jfloat tick_multiplier,
                                        jlong time_ms,
                                        jint android_action,
                                        jint pointer_count,
                                        jint history_size,
                                        jint action_index,
+                                       jint android_action_button,
                                        jint android_button_state,
                                        jint android_meta_state,
                                        jfloat raw_offset_x_pixels,
@@ -195,11 +200,16 @@ MotionEventAndroid::MotionEventAndroid(float pix_to_dip,
                                        const Pointer* const pointer0,
                                        const Pointer* const pointer1)
     : pix_to_dip_(pix_to_dip),
+      ticks_x_(ticks_x),
+      ticks_y_(ticks_y),
+      tick_multiplier_(tick_multiplier),
+      time_sec_(time_ms / 1000),
       cached_time_(FromAndroidTime(time_ms)),
       cached_action_(FromAndroidAction(android_action)),
       cached_pointer_count_(pointer_count),
       cached_history_size_(ToValidHistorySize(history_size, cached_action_)),
       cached_action_index_(action_index),
+      cached_action_button_(android_action_button),
       cached_button_state_(FromAndroidButtonState(android_button_state)),
       cached_flags_(ToEventFlags(android_meta_state, android_button_state)),
       cached_raw_position_offset_(ToDips(raw_offset_x_pixels),
@@ -217,6 +227,37 @@ MotionEventAndroid::MotionEventAndroid(float pix_to_dip,
     cached_pointers_[1] = FromAndroidPointer(*pointer1);
 }
 
+MotionEventAndroid::MotionEventAndroid(const MotionEventAndroid& e)
+    : event_(e.event_),
+      pix_to_dip_(e.pix_to_dip_),
+      ticks_x_(e.ticks_x_),
+      ticks_y_(e.ticks_y_),
+      tick_multiplier_(e.tick_multiplier_),
+      time_sec_(e.time_sec_),
+      cached_time_(e.cached_time_),
+      cached_action_(e.cached_action_),
+      cached_pointer_count_(e.cached_pointer_count_),
+      cached_history_size_(e.cached_history_size_),
+      cached_action_index_(e.cached_action_index_),
+      cached_action_button_(e.cached_action_button_),
+      cached_button_state_(e.cached_button_state_),
+      cached_flags_(e.cached_flags_),
+      cached_raw_position_offset_(e.cached_raw_position_offset_),
+      unique_event_id_(ui::GetNextTouchEventId()) {
+  cached_pointers_[0] = e.cached_pointers_[0];
+  if (cached_pointer_count_ > 1)
+    cached_pointers_[1] = e.cached_pointers_[1];
+}
+
+std::unique_ptr<MotionEventAndroid> MotionEventAndroid::Offset(float x,
+                                                               float y) const {
+  std::unique_ptr<MotionEventAndroid> event(new MotionEventAndroid(*this));
+  event->cached_pointers_[0] = OffsetCachedPointer(cached_pointers_[0], x, y);
+  if (cached_pointer_count_ > 1)
+    event->cached_pointers_[1] = OffsetCachedPointer(cached_pointers_[1], x, y);
+  return event;
+}
+
 MotionEventAndroid::~MotionEventAndroid() {
 }
 
@@ -226,6 +267,18 @@ uint32_t MotionEventAndroid::GetUniqueEventId() const {
 
 MotionEventAndroid::Action MotionEventAndroid::GetAction() const {
   return cached_action_;
+}
+
+int MotionEventAndroid::GetActionButton() const {
+  return cached_action_button_;
+}
+
+float MotionEventAndroid::GetTickMultiplier() const {
+  return ToDips(tick_multiplier_);
+}
+
+ScopedJavaLocalRef<jobject> MotionEventAndroid::GetJavaObject() const {
+  return ScopedJavaLocalRef<jobject>(event_);
 }
 
 int MotionEventAndroid::GetActionIndex() const {
@@ -388,4 +441,20 @@ MotionEventAndroid::CachedPointer MotionEventAndroid::FromAndroidPointer(
   return result;
 }
 
-}  // namespace content
+MotionEventAndroid::CachedPointer MotionEventAndroid::OffsetCachedPointer(
+    const CachedPointer& pointer,
+    float x,
+    float y) const {
+  CachedPointer result;
+  result.id = pointer.id;
+  result.position = gfx::PointF(pointer.position.x() + ToDips(x),
+                                pointer.position.y() + ToDips(y));
+  result.touch_major = pointer.touch_major;
+  result.touch_minor = pointer.touch_minor;
+  result.orientation = pointer.orientation;
+  result.tilt = pointer.tilt;
+  result.tool_type = pointer.tool_type;
+  return result;
+}
+
+}  // namespace ui

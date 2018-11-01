@@ -110,7 +110,7 @@ cr.define('settings_toggle_button', function() {
           value: 5
         };
 
-        testElement._setNumericUncheckedValue(5);
+        testElement.numericUncheckedValue = 5;
 
         testElement.set('pref', prefNum);
         assertFalse(testElement.checked);
@@ -125,13 +125,13 @@ cr.define('settings_toggle_button', function() {
       });
 
       test('numerical pref with unknown inital value', function() {
-        prefNum = {
+        var prefNum = {
           key: 'test',
           type: chrome.settingsPrivate.PrefType.NUMBER,
           value: 3
         };
 
-        testElement._setNumericUncheckedValue(5);
+        testElement.numericUncheckedValue = 5;
 
         testElement.set('pref', prefNum);
 
@@ -150,6 +150,41 @@ cr.define('settings_toggle_button', function() {
         MockInteractions.tap(testElement.$.control);
         assertTrue(testElement.checked);
         assertEquals(1, prefNum.value);
+      });
+
+      test('shows controlled indicator when pref is controlled', function() {
+        assertFalse(!!testElement.$$('cr-policy-pref-indicator'));
+
+        var pref = {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.NUMBER,
+          value: 3,
+          enforcement: chrome.settingsPrivate.Enforcement.ENFORCED,
+          controlledBy: chrome.settingsPrivate.ControlledBy.EXTENSION
+        };
+
+        testElement.set('pref', pref);
+        Polymer.dom.flush();
+
+        assertTrue(!!testElement.$$('cr-policy-pref-indicator'));
+      });
+
+      test('no indicator with no-extension-indicator flag', function() {
+        assertFalse(!!testElement.$$('cr-policy-pref-indicator'));
+
+        testElement.noExtensionIndicator = true;
+        var pref = {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.NUMBER,
+          value: 3,
+          enforcement: chrome.settingsPrivate.Enforcement.ENFORCED,
+          controlledBy: chrome.settingsPrivate.ControlledBy.EXTENSION
+        };
+
+        testElement.set('pref', pref);
+        Polymer.dom.flush();
+
+        assertFalse(!!testElement.$$('cr-policy-pref-indicator'));
       });
     });
   }

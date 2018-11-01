@@ -32,7 +32,7 @@
 #define V0CustomElementProcessingStep_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -44,8 +44,8 @@ class V0CustomElementProcessingStep
   V0CustomElementProcessingStep() {}
 
   virtual ~V0CustomElementProcessingStep() {}
-  virtual void dispatch(Element*) = 0;
-  virtual bool isCreatedCallback() const { return false; }
+  virtual void Dispatch(Element*) = 0;
+  virtual bool IsCreatedCallback() const { return false; }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 };

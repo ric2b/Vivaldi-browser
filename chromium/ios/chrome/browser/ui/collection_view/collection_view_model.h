@@ -39,8 +39,11 @@ const NSInteger kItemTypeEnumZero = 100;
 // Disclaimer: CollectionViewModel doesn't support a batch update logic. All
 // changes are immediately processed (contrary to the reload/delete/add order of
 // UICollectionView's |performBatchUpdates:completion:|).
-
-@interface CollectionViewModel : NSObject
+// The __covariant modifier allows an instance of CollectionViewModel<A> to be
+// assigned to an instance of CollectionViewModel<B> iff A:B (see unit test for
+// an example).
+@interface CollectionViewModel<__covariant ObjectType : CollectionViewItem*>
+    : NSObject
 
 #pragma mark Modification methods
 
@@ -55,12 +58,12 @@ const NSInteger kItemTypeEnumZero = 100;
 
 // Adds an item to the section with the given identifier. Adding several times
 // the same item is undefined behavior.
-- (void)addItem:(CollectionViewItem*)item
+- (void)addItem:(ObjectType)item
     toSectionWithIdentifier:(NSInteger)sectionIdentifier;
 
 // Inserts an item to the section with the given identifier at the given index.
 // |index| must not be greater than the count of elements in the section.
-- (void)insertItem:(CollectionViewItem*)item
+- (void)insertItem:(ObjectType)item
     inSectionWithIdentifier:(NSInteger)sectionIdentifier
                     atIndex:(NSUInteger)index;
 
@@ -112,7 +115,7 @@ const NSInteger kItemTypeEnumZero = 100;
 - (BOOL)hasItemAtIndexPath:(NSIndexPath*)indexPath;
 
 // Returns the item at the given index path.
-- (CollectionViewItem*)itemAtIndexPath:(NSIndexPath*)indexPath;
+- (ObjectType)itemAtIndexPath:(NSIndexPath*)indexPath;
 
 // Returns the header for the given |section|.
 - (CollectionViewItem*)headerForSection:(NSInteger)section;
@@ -121,7 +124,8 @@ const NSInteger kItemTypeEnumZero = 100;
 - (CollectionViewItem*)footerForSection:(NSInteger)section;
 
 // Returns an array of items in the section with the given identifier.
-- (NSArray*)itemsInSectionWithIdentifier:(NSInteger)sectionIdentifier;
+- (NSArray<ObjectType>*)itemsInSectionWithIdentifier:
+    (NSInteger)sectionIdentifier;
 
 // Returns the header for the section with the given |sectionIdentifier|.
 - (CollectionViewItem*)headerForSectionWithIdentifier:
@@ -165,11 +169,11 @@ const NSInteger kItemTypeEnumZero = 100;
 #pragma mark Query index paths from items
 
 // Returns whether |item| exists in section for |sectionIdentifier|.
-- (BOOL)hasItem:(CollectionViewItem*)item
+- (BOOL)hasItem:(ObjectType)item
     inSectionWithIdentifier:(NSInteger)sectionIdentifier;
 
 // Returns the index path corresponding to the given |item|.
-- (NSIndexPath*)indexPathForItem:(CollectionViewItem*)itemType
+- (NSIndexPath*)indexPathForItem:(ObjectType)item
          inSectionWithIdentifier:(NSInteger)sectionIdentifier;
 
 #pragma mark UICollectionView data sourcing

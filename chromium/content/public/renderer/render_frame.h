@@ -58,6 +58,7 @@ class AssociatedInterfaceRegistry;
 class ContextMenuClient;
 class PluginInstanceThrottler;
 class RenderAccessibility;
+class RenderFrameVisitor;
 class RenderView;
 struct ContextMenuParams;
 struct WebPluginInfo;
@@ -81,8 +82,8 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
     CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_WHITELISTED = 3,
     // Content is tiny in size. These are usually blocked.
     CONTENT_STATUS_TINY = 4,
-    // Content has an unknown size.
-    CONTENT_STATUS_UNKNOWN_SIZE = 5,
+    // Deprecated, as now entirely obscured content is treated as tiny.
+    DEPRECATED_CONTENT_STATUS_UNKNOWN_SIZE = 5,
     // Must be last.
     CONTENT_STATUS_NUM_ITEMS
   };
@@ -97,6 +98,9 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
 
   // Returns the RenderFrame given a routing id.
   static RenderFrame* FromRoutingID(int routing_id);
+
+  // Visit all live RenderFrames.
+  static void ForEach(RenderFrameVisitor* visitor);
 
   // Returns the RenderView associated with this frame.
   virtual RenderView* GetRenderView() = 0;

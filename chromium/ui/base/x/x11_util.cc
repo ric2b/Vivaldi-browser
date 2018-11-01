@@ -1185,6 +1185,12 @@ std::string GuessWindowManagerName() {
   return "Unknown";
 }
 
+bool IsCompositingManagerPresent() {
+  static bool is_compositing_manager_present =
+      XGetSelectionOwner(gfx::GetXDisplay(), GetAtom("_NET_WM_CM_S0")) != None;
+  return is_compositing_manager_present;
+}
+
 void SetDefaultX11ErrorHandlers() {
   SetX11ErrorHandlers(NULL, NULL);
 }

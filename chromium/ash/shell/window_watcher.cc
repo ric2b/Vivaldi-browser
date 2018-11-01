@@ -6,16 +6,16 @@
 
 #include <utility>
 
-#include "ash/common/shelf/shelf_model.h"
-#include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
-#include "ash/common/wm_window_property.h"
-#include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/shelf/shelf_model.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell/window_watcher_shelf_item_delegate.h"
+#include "ash/shell_port.h"
+#include "ash/wm/window_properties.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/display/display.h"
@@ -96,7 +96,7 @@ void WindowWatcher::OnWindowAdded(aura::Window* new_window) {
     return;
 
   static int image_count = 0;
-  ShelfModel* model = WmShell::Get()->shelf_model();
+  ShelfModel* model = Shell::Get()->shelf_model();
   ShelfItem item;
   item.type = new_window->type() == ui::wm::WINDOW_TYPE_PANEL
                   ? ash::TYPE_APP_PANEL
@@ -114,17 +114,16 @@ void WindowWatcher::OnWindowAdded(aura::Window* new_window) {
 
   model->Add(item);
 
-  std::unique_ptr<ShelfItemDelegate> delegate(
-      new WindowWatcherShelfItemDelegate(id, this));
-  model->SetShelfItemDelegate(id, std::move(delegate));
-  WmWindow::Get(new_window)->SetIntProperty(WmWindowProperty::SHELF_ID, id);
+  model->SetShelfItemDelegate(
+      id, base::MakeUnique<WindowWatcherShelfItemDelegate>(id, this));
+  new_window->SetProperty(kShelfIDKey, id);
 }
 
 void WindowWatcher::OnWillRemoveWindow(aura::Window* window) {
   for (IDToWindow::iterator i = id_to_window_.begin(); i != id_to_window_.end();
        ++i) {
     if (i->second == window) {
-      ShelfModel* model = WmShell::Get()->shelf_model();
+      ShelfModel* model = Shell::Get()->shelf_model();
       int index = model->ItemIndexByID(i->first);
       DCHECK_NE(-1, index);
       model->RemoveItemAt(index);
@@ -135,10 +134,9 @@ void WindowWatcher::OnWillRemoveWindow(aura::Window* window) {
 }
 
 void WindowWatcher::OnDisplayAdded(const display::Display& new_display) {
-  aura::Window* root = Shell::GetInstance()
-                           ->window_tree_host_manager()
-                           ->GetRootWindowForDisplayId(new_display.id());
-  workspace_window_watcher_->RootWindowAdded(root);
+  WmWindow* root =
+      ShellPort::Get()->GetRootWindowForDisplayId(new_display.id());
+  workspace_window_watcher_->RootWindowAdded(root->aura_window());
 }
 
 void WindowWatcher::OnDisplayRemoved(const display::Display& old_display) {

@@ -24,6 +24,7 @@
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/audio/audio_device_description.h"
+#include "media/audio/audio_system_impl.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/fake_audio_manager.h"
 #include "media/base/media_switches.h"
@@ -98,13 +99,13 @@ class AudioInputRendererHostWithInterception : public AudioInputRendererHost {
       media::UserInputMonitor* user_input_monitor,
       MockRenderer* renderer)
       : AudioInputRendererHost(render_process_id,
-                               renderer_pid,
                                audio_manager,
                                media_stream_manager,
                                audio_mirroring_manager,
                                user_input_monitor),
         renderer_(renderer) {
     set_peer_process_for_testing(base::Process::Current());
+    set_renderer_pid(renderer_pid);
   }
 
  protected:
@@ -266,8 +267,9 @@ class AudioInputRendererHostTest : public testing::Test {
     audio_manager_.reset(new media::FakeAudioManager(
         base::ThreadTaskRunnerHandle::Get(),
         base::ThreadTaskRunnerHandle::Get(), &log_factory_));
+    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
     media_stream_manager_ =
-        base::MakeUnique<MediaStreamManager>(audio_manager_.get());
+        base::MakeUnique<MediaStreamManager>(audio_system_.get());
     airh_ = new AudioInputRendererHostWithInterception(
         kRenderProcessId, kRendererPid, media::AudioManager::Get(),
         media_stream_manager_.get(), AudioMirroringManager::GetInstance(),
@@ -284,7 +286,7 @@ class AudioInputRendererHostTest : public testing::Test {
   // session id returned.
   int Open(const std::string& device_id, const std::string& name) {
     int session_id = media_stream_manager_->audio_input_device_manager()->Open(
-        StreamDeviceInfo(MEDIA_DEVICE_AUDIO_CAPTURE, name, device_id));
+        MediaStreamDevice(MEDIA_DEVICE_AUDIO_CAPTURE, device_id, name));
     base::RunLoop().RunUntilIdle();
     return session_id;
   }
@@ -315,6 +317,7 @@ class AudioInputRendererHostTest : public testing::Test {
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   TestBrowserThreadBundle thread_bundle_;
   media::ScopedAudioManagerPtr audio_manager_;
+  std::unique_ptr<media::AudioSystem> audio_system_;
   StrictMock<MockRenderer> renderer_;
   scoped_refptr<AudioInputRendererHost> airh_;
 

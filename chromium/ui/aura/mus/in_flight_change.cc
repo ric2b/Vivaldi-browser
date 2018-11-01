@@ -31,20 +31,28 @@ void InFlightChange::ChangeFailed() {}
 
 // InFlightBoundsChange -------------------------------------------------------
 
-InFlightBoundsChange::InFlightBoundsChange(WindowTreeClient* window_tree_client,
-                                           WindowMus* window,
-                                           const gfx::Rect& revert_bounds)
+InFlightBoundsChange::InFlightBoundsChange(
+    WindowTreeClient* window_tree_client,
+    WindowMus* window,
+    const gfx::Rect& revert_bounds,
+    const base::Optional<cc::LocalSurfaceId>& revert_local_surface_id)
     : InFlightChange(window, ChangeType::BOUNDS),
       window_tree_client_(window_tree_client),
-      revert_bounds_(revert_bounds) {}
+      revert_bounds_(revert_bounds),
+      revert_local_surface_id_(revert_local_surface_id) {}
+
+InFlightBoundsChange::~InFlightBoundsChange() {}
 
 void InFlightBoundsChange::SetRevertValueFrom(const InFlightChange& change) {
   revert_bounds_ =
       static_cast<const InFlightBoundsChange&>(change).revert_bounds_;
+  revert_local_surface_id_ =
+      static_cast<const InFlightBoundsChange&>(change).revert_local_surface_id_;
 }
 
 void InFlightBoundsChange::Revert() {
-  window_tree_client_->SetWindowBoundsFromServer(window(), revert_bounds_);
+  window_tree_client_->SetWindowBoundsFromServer(window(), revert_bounds_,
+                                                 revert_local_surface_id_);
 }
 
 // InFlightDragChange -----------------------------------------------------
@@ -177,7 +185,7 @@ void InFlightPropertyChange::Revert() {
 
 InFlightPredefinedCursorChange::InFlightPredefinedCursorChange(
     WindowMus* window,
-    ui::mojom::Cursor revert_value)
+    ui::mojom::CursorType revert_value)
     : InFlightChange(window, ChangeType::PREDEFINED_CURSOR),
       revert_cursor_(revert_value) {}
 
@@ -231,18 +239,25 @@ void InFlightOpacityChange::Revert() {
   window()->SetOpacityFromServer(revert_opacity_);
 }
 
-// InFlightSetModalChange ------------------------------------------------------
+// InFlightSetModalTypeChange
+// ------------------------------------------------------
 
-InFlightSetModalChange::InFlightSetModalChange(WindowMus* window)
-    : InFlightChange(window, ChangeType::SET_MODAL) {}
+InFlightSetModalTypeChange::InFlightSetModalTypeChange(
+    WindowMus* window,
+    ui::ModalType revert_value)
+    : InFlightChange(window, ChangeType::SET_MODAL),
+      revert_modal_type_(revert_value) {}
 
-InFlightSetModalChange::~InFlightSetModalChange() {}
+InFlightSetModalTypeChange::~InFlightSetModalTypeChange() {}
 
-void InFlightSetModalChange::SetRevertValueFrom(const InFlightChange& change) {}
+void InFlightSetModalTypeChange::SetRevertValueFrom(
+    const InFlightChange& change) {
+  revert_modal_type_ =
+      static_cast<const InFlightSetModalTypeChange&>(change).revert_modal_type_;
+}
 
-void InFlightSetModalChange::Revert() {
-  // TODO: need to support more than just off. http://crbug.com/660073.
-  window()->GetWindow()->SetProperty(client::kModalKey, ui::MODAL_TYPE_NONE);
+void InFlightSetModalTypeChange::Revert() {
+  window()->GetWindow()->SetProperty(client::kModalKey, revert_modal_type_);
 }
 
 }  // namespace aura

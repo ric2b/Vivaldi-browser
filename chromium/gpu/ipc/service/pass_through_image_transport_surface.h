@@ -14,10 +14,18 @@
 #include "base/memory/weak_ptr.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "gpu/ipc/service/image_transport_surface_delegate.h"
-#include "ui/events/latency_info.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/latency/latency_info.h"
 
 namespace gpu {
+
+enum MultiWindowSwapInterval {
+  // Use the default swap interval of 1 even if multiple windows are swapping.
+  // This can reduce frame rate if the swap buffers calls block.
+  kMultiWindowSwapIntervalDefault,
+  // Force swap interval to 0 when multiple windows are swapping.
+  kMultiWindowSwapIntervalForceZero
+};
 
 // An implementation of ImageTransportSurface that implements GLSurface through
 // GLSurfaceAdapter, thereby forwarding GLSurface methods through to it.
@@ -25,7 +33,8 @@ class PassThroughImageTransportSurface : public gl::GLSurfaceAdapter {
  public:
   PassThroughImageTransportSurface(
       base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
-      gl::GLSurface* surface);
+      gl::GLSurface* surface,
+      MultiWindowSwapInterval multi_window_swap_interval);
 
   // GLSurface implementation.
   bool Initialize(gl::GLSurfaceFormat format) override;
@@ -43,7 +52,6 @@ class PassThroughImageTransportSurface : public gl::GLSurfaceAdapter {
   gfx::SwapResult CommitOverlayPlanes() override;
   void CommitOverlayPlanesAsync(
       const SwapCompletionCallback& callback) override;
-  bool OnMakeCurrent(gl::GLContext* context) override;
 
  private:
   ~PassThroughImageTransportSurface() override;
@@ -52,7 +60,11 @@ class PassThroughImageTransportSurface : public gl::GLSurfaceAdapter {
   // the browser.
   void SendVSyncUpdateIfAvailable();
 
-  void SetLatencyInfo(const std::vector<ui::LatencyInfo>& latency_info);
+  void UpdateSwapInterval();
+
+  // Add |latency_info| to be reported and augumented with GPU latency
+  // components next time there is a GPU buffer swap.
+  void AddLatencyInfo(const std::vector<ui::LatencyInfo>& latency_info);
   std::unique_ptr<std::vector<ui::LatencyInfo>> StartSwapBuffers();
   void FinishSwapBuffers(
       std::unique_ptr<std::vector<ui::LatencyInfo>> latency_info,
@@ -63,8 +75,11 @@ class PassThroughImageTransportSurface : public gl::GLSurfaceAdapter {
       gfx::SwapResult result);
 
   base::WeakPtr<ImageTransportSurfaceDelegate> delegate_;
-  bool did_set_swap_interval_;
   std::vector<ui::LatencyInfo> latency_info_;
+  MultiWindowSwapInterval multi_window_swap_interval_ =
+      kMultiWindowSwapIntervalDefault;
+  int swap_generation_ = 0;
+
   base::WeakPtrFactory<PassThroughImageTransportSurface> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PassThroughImageTransportSurface);

@@ -82,10 +82,11 @@ class FakeSyncEngine : public SyncEngine {
 
   void RefreshTypesForTest(ModelTypeSet types) override;
 
-  void ClearServerData(
-      const SyncManager::ClearServerDataCallback& callback) override;
+  void ClearServerData(const base::Closure& callback) override;
 
-  void OnCookieJarChanged(bool account_mismatch, bool empty_jar) override;
+  void OnCookieJarChanged(bool account_mismatch,
+                          bool empty_jar,
+                          const base::Closure& callback) override;
 
   void set_fail_initial_download(bool should_fail);
 

@@ -17,8 +17,9 @@ class HTMLMenuItemElement final : public HTMLElement {
 
  private:
   explicit HTMLMenuItemElement(Document&);
-  bool isURLAttribute(const Attribute&) const override;
-  void defaultEventHandler(Event*) override;
+  bool IsURLAttribute(const Attribute&) const override;
+  void ParseAttribute(const AttributeModificationParams&) override;
+  void DefaultEventHandler(Event*) override;
 };
 
 }  // namespace blink

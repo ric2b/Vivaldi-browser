@@ -33,6 +33,7 @@ import errno
 import optparse
 import socket
 
+from webkitpy.common import exit_codes
 from webkitpy.common.system.executive_mock import MockExecutive
 from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.common.system.system_host import SystemHost
@@ -78,7 +79,7 @@ class PortTestCase(LoggingTestCase):
         port._check_driver_build_up_to_date = lambda config: True
         port.check_httpd = lambda: True
         self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
-                         test_run_results.OK_EXIT_STATUS)
+                         exit_codes.OK_EXIT_STATUS)
         # We should get a warning about PrettyPatch being missing,
         # but not the driver itself.
         logs = ''.join(self.logMessages())
@@ -95,12 +96,11 @@ class PortTestCase(LoggingTestCase):
         port._check_file_exists = lambda path, desc: False
         port._check_driver_build_up_to_date = lambda config: False
         self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
-                         test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
+                         exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
         # And, here we should get warnings about both.
         logs = ''.join(self.logMessages())
         self.assertIn('pretty patches', logs)
         self.assertIn('build requirements', logs)
-
 
     def test_default_batch_size(self):
         port = self.make_port()
@@ -125,9 +125,6 @@ class PortTestCase(LoggingTestCase):
     def test_default_timeout_ms(self):
         self.assertEqual(self.make_port(options=optparse.Values({'configuration': 'Release'})).default_timeout_ms(), 6000)
         self.assertEqual(self.make_port(options=optparse.Values({'configuration': 'Debug'})).default_timeout_ms(), 18000)
-
-    def test_default_pixel_tests(self):
-        self.assertEqual(self.make_port().default_pixel_tests(), True)
 
     def test_driver_cmd_line(self):
         port = self.make_port()
@@ -160,12 +157,12 @@ class PortTestCase(LoggingTestCase):
     def test_diff_image(self):
 
         def _path_to_image_diff():
-            return "/path/to/image_diff"
+            return '/path/to/image_diff'
 
         port = self.make_port()
         port._path_to_image_diff = _path_to_image_diff
 
-        mock_image_diff = "MOCK Image Diff"
+        mock_image_diff = 'MOCK Image Diff'
 
         def mock_run_command(args):
             port.host.filesystem.write_binary_file(args[4], mock_image_diff)
@@ -173,17 +170,17 @@ class PortTestCase(LoggingTestCase):
 
         # Images are different.
         port._executive = MockExecutive(run_command_fn=mock_run_command)  # pylint: disable=protected-access
-        self.assertEqual(mock_image_diff, port.diff_image("EXPECTED", "ACTUAL")[0])
+        self.assertEqual(mock_image_diff, port.diff_image('EXPECTED', 'ACTUAL')[0])
 
         # Images are the same.
         port._executive = MockExecutive(exit_code=0)  # pylint: disable=protected-access
-        self.assertEqual(None, port.diff_image("EXPECTED", "ACTUAL")[0])
+        self.assertEqual(None, port.diff_image('EXPECTED', 'ACTUAL')[0])
 
         # There was some error running image_diff.
         port._executive = MockExecutive(exit_code=2)  # pylint: disable=protected-access
         exception_raised = False
         try:
-            port.diff_image("EXPECTED", "ACTUAL")
+            port.diff_image('EXPECTED', 'ACTUAL')
         except ValueError:
             exception_raised = True
         self.assertFalse(exception_raised)
@@ -191,7 +188,7 @@ class PortTestCase(LoggingTestCase):
     def test_diff_image_crashed(self):
         port = self.make_port()
         port._executive = MockExecutive(exit_code=2)  # pylint: disable=protected-access
-        self.assertEqual(port.diff_image("EXPECTED", "ACTUAL"),
+        self.assertEqual(port.diff_image('EXPECTED', 'ACTUAL'),
                          (None, 'Image diff returned an exit code of 2. See http://crbug.com/278596'))
 
     def test_test_configuration(self):
@@ -244,9 +241,9 @@ class PortTestCase(LoggingTestCase):
     def test_check_sys_deps(self):
         port = self.make_port()
         port._executive = MockExecutive(exit_code=0)  # pylint: disable=protected-access
-        self.assertEqual(port.check_sys_deps(needs_http=False), test_run_results.OK_EXIT_STATUS)
+        self.assertEqual(port.check_sys_deps(needs_http=False), exit_codes.OK_EXIT_STATUS)
         port._executive = MockExecutive(exit_code=1, output='testing output failure')  # pylint: disable=protected-access
-        self.assertEqual(port.check_sys_deps(needs_http=False), test_run_results.SYS_DEPS_EXIT_STATUS)
+        self.assertEqual(port.check_sys_deps(needs_http=False), exit_codes.SYS_DEPS_EXIT_STATUS)
 
     def test_expectations_ordering(self):
         port = self.make_port()

@@ -8,7 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/CompositorProxyClient.h"
 #include "core/workers/WorkerClients.h"
-#include "wtf/Noncopyable.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -16,27 +16,22 @@ class WorkerClients;
 class WorkerGlobalScope;
 
 class CORE_EXPORT CompositorWorkerProxyClient
-    : public CompositorProxyClient,
-      public Supplement<WorkerClients> {
+    : public Supplement<WorkerClients> {
   WTF_MAKE_NONCOPYABLE(CompositorWorkerProxyClient);
-  USING_GARBAGE_COLLECTED_MIXIN(CompositorWorkerProxyClient);
 
  public:
   CompositorWorkerProxyClient() {}
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    CompositorProxyClient::trace(visitor);
-    Supplement<WorkerClients>::trace(visitor);
-  }
 
-  static CompositorWorkerProxyClient* from(WorkerClients*);
-  static const char* supplementName();
+  static CompositorWorkerProxyClient* From(WorkerClients*);
+  static const char* SupplementName();
 
-  virtual void dispose() = 0;
-  virtual void setGlobalScope(WorkerGlobalScope*) = 0;
-  virtual void requestAnimationFrame() = 0;
+  virtual void Dispose() = 0;
+  virtual void SetGlobalScope(WorkerGlobalScope*) = 0;
+  virtual void RequestAnimationFrame() = 0;
+  virtual CompositorProxyClient* GetCompositorProxyClient() = 0;
 };
 
-CORE_EXPORT void provideCompositorWorkerProxyClientTo(
+CORE_EXPORT void ProvideCompositorWorkerProxyClientTo(
     WorkerClients*,
     CompositorWorkerProxyClient*);
 

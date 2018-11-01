@@ -50,6 +50,8 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/common/cloud/policy_header_io_helper.h"
+#include "components/previews/core/previews_experiments.h"
+#include "components/previews/core/previews_io_data.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
 #include "components/search_engines/template_url_service.h"
@@ -76,6 +78,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/url_request/url_request.h"
+#include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 
 #if !defined(DISABLE_NACL)
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
@@ -93,16 +96,6 @@
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_handlers/mime_types_handler.h"
 #include "extensions/common/user_script.h"
-#endif
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_resource_throttle.h"
-#endif
-
-#if defined(USE_SYSTEM_PROTOBUF)
-#include <google/protobuf/repeated_field.h>
-#else
-#include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -267,7 +260,7 @@ void AppendComponentUpdaterThrottles(
     ResourceType resource_type,
     std::vector<std::unique_ptr<content::ResourceThrottle>>* throttles) {
   bool is_prerendering =
-      info.GetVisibilityState() == blink::WebPageVisibilityStatePrerender;
+      info.GetVisibilityState() == blink::kWebPageVisibilityStatePrerender;
   if (is_prerendering)
     return;
 
@@ -360,7 +353,8 @@ void NotifyUIThreadOfRequestComplete(
     const content::GlobalRequestID& request_id,
     ResourceType resource_type,
     bool was_cached,
-    bool used_data_reduction_proxy,
+    std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
+        data_reduction_proxy_data,
     int net_error,
     int64_t total_received_bytes,
     int64_t raw_body_bytes,
@@ -389,9 +383,10 @@ void NotifyUIThreadOfRequestComplete(
       page_load_metrics::MetricsWebContentsObserver::FromWebContents(
           web_contents);
   if (metrics_observer) {
-    metrics_observer->OnRequestComplete(
-        request_id, resource_type, was_cached, used_data_reduction_proxy,
-        raw_body_bytes, original_content_length, request_creation_time);
+    metrics_observer->OnRequestComplete(request_id, resource_type, was_cached,
+                                        std::move(data_reduction_proxy_data),
+                                        raw_body_bytes, original_content_length,
+                                        request_creation_time);
   }
 }
 
@@ -452,27 +447,6 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
     safe_browsing_->OnResourceRequest(request);
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
-
-// The lowering of request priority causes issues with scheduling, since
-// content::ResourceScheduler uses it to delay and throttle requests. This is
-// disabled only on Android, as the prerenders are not likely to compete with
-// page loads there.
-// See https://crbug.com/652746 for details.
-// TODO(lizeb,droger): Fix the issue on all platforms.
-#if !defined(OS_ANDROID)
-  bool is_prerendering =
-      info->GetVisibilityState() == blink::WebPageVisibilityStatePrerender;
-  if (is_prerendering) {
-    // Requests with the IGNORE_LIMITS flag set (i.e., sync XHRs)
-    // should remain at MAXIMUM_PRIORITY.
-    if (request->load_flags() & net::LOAD_IGNORE_LIMITS) {
-      DCHECK_EQ(request->priority(), net::MAXIMUM_PRIORITY);
-    } else {
-      request->SetPriority(net::IDLE);
-    }
-  }
-#endif  // OS_ANDROID
-
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(
       resource_context);
 
@@ -672,14 +646,6 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
   if (first_throttle)
     throttles->push_back(base::WrapUnique(first_throttle));
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  std::unique_ptr<content::ResourceThrottle> supervised_user_throttle =
-      SupervisedUserResourceThrottle::MaybeCreate(
-          request, resource_type, io_data->supervised_user_url_filter());
-  if (supervised_user_throttle)
-    throttles->push_back(std::move(supervised_user_throttle));
-#endif
-
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   content::ResourceThrottle* wait_for_extensions_init_throttle =
       user_script_listener_->CreateResourceThrottle(request->url(),
@@ -698,7 +664,7 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
 #endif
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
-  if (info->GetVisibilityState() == blink::WebPageVisibilityStatePrerender) {
+  if (info->GetVisibilityState() == blink::kWebPageVisibilityStatePrerender) {
     throttles->push_back(
         base::MakeUnique<prerender::PrerenderResourceThrottle>(request));
   }
@@ -872,9 +838,12 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
 
   data_reduction_proxy::DataReductionProxyData* data =
       data_reduction_proxy::DataReductionProxyData::GetData(*url_request);
-  bool used_data_reduction_proxy = data && data->used_data_reduction_proxy();
+  std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
+      data_reduction_proxy_data;
+  if (data)
+    data_reduction_proxy_data = data->DeepCopy();
   int64_t original_content_length =
-      used_data_reduction_proxy
+      data && data->used_data_reduction_proxy()
           ? data_reduction_proxy::util::CalculateEffectiveOCL(*url_request)
           : url_request->GetRawBodyBytes();
 
@@ -883,8 +852,9 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
       base::Bind(&NotifyUIThreadOfRequestComplete,
                  info->GetWebContentsGetterForRequest(), url_request->url(),
                  info->GetGlobalRequestID(), info->GetResourceType(),
-                 url_request->was_cached(), used_data_reduction_proxy,
-                 net_error, url_request->GetTotalReceivedBytes(),
+                 url_request->was_cached(),
+                 base::Passed(&data_reduction_proxy_data), net_error,
+                 url_request->GetTotalReceivedBytes(),
                  url_request->GetRawBodyBytes(), original_content_length,
                  url_request->creation_time(),
                  base::TimeTicks::Now() - url_request->creation_time()));
@@ -904,6 +874,13 @@ content::PreviewsState ChromeResourceDispatcherHostDelegate::GetPreviewsState(
       previews_state |= content::SERVER_LOFI_ON;
     if (data_reduction_proxy_io_data->ShouldEnableLitePages(url_request))
       previews_state |= content::SERVER_LITE_PAGE_ON;
+
+    previews::PreviewsIOData* previews_io_data = io_data->previews_io_data();
+    if (data_reduction_proxy_io_data->IsEnabled() && previews_io_data &&
+        previews_io_data->ShouldAllowPreview(
+            url_request, previews::PreviewsType::CLIENT_LOFI)) {
+      previews_state |= content::CLIENT_LOFI_ON;
+    }
   }
 
   if (previews_state == content::PREVIEWS_UNSPECIFIED)

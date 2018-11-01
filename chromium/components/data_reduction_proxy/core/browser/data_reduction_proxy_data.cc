@@ -14,16 +14,23 @@ const void* const kDataReductionProxyUserDataKey =
 DataReductionProxyData::DataReductionProxyData()
     : used_data_reduction_proxy_(false),
       lofi_requested_(false),
+      lite_page_received_(false),
+      lofi_received_(false),
       effective_connection_type_(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {}
+
+DataReductionProxyData::~DataReductionProxyData() {}
 
 std::unique_ptr<DataReductionProxyData> DataReductionProxyData::DeepCopy()
     const {
   std::unique_ptr<DataReductionProxyData> copy(new DataReductionProxyData());
   copy->used_data_reduction_proxy_ = used_data_reduction_proxy_;
   copy->lofi_requested_ = lofi_requested_;
+  copy->lite_page_received_ = lite_page_received_;
+  copy->lofi_received_ = lofi_received_;
   copy->session_key_ = session_key_;
   copy->request_url_ = request_url_;
   copy->effective_connection_type_ = effective_connection_type_;
+  copy->page_id_ = page_id_;
   return copy;
 }
 

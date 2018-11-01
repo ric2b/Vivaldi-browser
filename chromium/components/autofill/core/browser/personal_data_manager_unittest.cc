@@ -119,60 +119,9 @@ void ExpectSameElements(const std::vector<T*>& expectations,
 
 }  // anonymous namespace
 
-class PersonalDataManagerTest : public testing::Test {
+class PersonalDataManagerTestBase {
  protected:
-  PersonalDataManagerTest() : autofill_table_(nullptr) {}
-
-  void SetUp() override {
-    OSCryptMocker::SetUpWithSingleton();
-    prefs_ = test::PrefServiceForTesting();
-    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    base::FilePath path = temp_dir_.GetPath().AppendASCII("TestWebDB");
-    web_database_ =
-        new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
-                               base::ThreadTaskRunnerHandle::Get());
-
-    // Setup account tracker.
-    signin_client_.reset(new TestSigninClient(prefs_.get()));
-    account_tracker_.reset(new AccountTrackerService());
-    account_tracker_->Initialize(signin_client_.get());
-    signin_manager_.reset(new FakeSigninManagerBase(signin_client_.get(),
-                                                    account_tracker_.get()));
-    signin_manager_->Initialize(prefs_.get());
-
-    // Hacky: hold onto a pointer but pass ownership.
-    autofill_table_ = new AutofillTable;
-    web_database_->AddTable(std::unique_ptr<WebDatabaseTable>(autofill_table_));
-    web_database_->LoadDatabase();
-    autofill_database_service_ = new AutofillWebDataService(
-        web_database_, base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(),
-        WebDataServiceBase::ProfileErrorCallback());
-    autofill_database_service_->Init();
-
-    test::DisableSystemServices(prefs_.get());
-    ResetPersonalDataManager(USER_MODE_NORMAL);
-
-    // Reset the deduping pref to its default value.
-    personal_data_->pref_service_->SetInteger(
-        prefs::kAutofillLastVersionDeduped, 0);
-    personal_data_->pref_service_->SetBoolean(
-        prefs::kAutofillProfileUseDatesFixed, false);
-  }
-
-  void TearDown() override {
-    // Order of destruction is important as AutofillManager relies on
-    // PersonalDataManager to be around when it gets destroyed.
-    signin_manager_->Shutdown();
-    signin_manager_.reset();
-
-    account_tracker_->Shutdown();
-    account_tracker_.reset();
-    signin_client_.reset();
-
-    test::DisableSystemServices(prefs_.get());
-    OSCryptMocker::TearDown();
-  }
+  PersonalDataManagerTestBase() : autofill_table_(nullptr) {}
 
   void ResetPersonalDataManager(UserMode user_mode) {
     bool is_incognito = (user_mode == USER_MODE_INCOGNITO);
@@ -315,7 +264,7 @@ class PersonalDataManagerTest : public testing::Test {
                                                const char* exp_cc_month,
                                                const char* exp_cc_year) {
     FormStructure form_structure(form);
-    form_structure.DetermineHeuristicTypes();
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
     std::unique_ptr<CreditCard> imported_credit_card;
     EXPECT_TRUE(ImportCreditCard(form_structure, false, &imported_credit_card));
     ASSERT_TRUE(imported_credit_card);
@@ -349,6 +298,60 @@ class PersonalDataManagerTest : public testing::Test {
   std::unique_ptr<PersonalDataManager> personal_data_;
 
   variations::testing::VariationParamsManager variation_params_;
+};
+
+class PersonalDataManagerTest : public PersonalDataManagerTestBase,
+                                public testing::Test {
+  void SetUp() override {
+    OSCryptMocker::SetUpWithSingleton();
+    prefs_ = test::PrefServiceForTesting();
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    base::FilePath path = temp_dir_.GetPath().AppendASCII("TestWebDB");
+    web_database_ =
+        new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
+                               base::ThreadTaskRunnerHandle::Get());
+
+    // Setup account tracker.
+    signin_client_.reset(new TestSigninClient(prefs_.get()));
+    account_tracker_.reset(new AccountTrackerService());
+    account_tracker_->Initialize(signin_client_.get());
+    signin_manager_.reset(new FakeSigninManagerBase(signin_client_.get(),
+                                                    account_tracker_.get()));
+    signin_manager_->Initialize(prefs_.get());
+
+    // Hacky: hold onto a pointer but pass ownership.
+    autofill_table_ = new AutofillTable;
+    web_database_->AddTable(std::unique_ptr<WebDatabaseTable>(autofill_table_));
+    web_database_->LoadDatabase();
+    autofill_database_service_ = new AutofillWebDataService(
+        web_database_, base::ThreadTaskRunnerHandle::Get(),
+        base::ThreadTaskRunnerHandle::Get(),
+        WebDataServiceBase::ProfileErrorCallback());
+    autofill_database_service_->Init();
+
+    test::DisableSystemServices(prefs_.get());
+    ResetPersonalDataManager(USER_MODE_NORMAL);
+
+    // Reset the deduping pref to its default value.
+    personal_data_->pref_service_->SetInteger(
+        prefs::kAutofillLastVersionDeduped, 0);
+    personal_data_->pref_service_->SetBoolean(
+        prefs::kAutofillProfileUseDatesFixed, false);
+  }
+
+  void TearDown() override {
+    // Order of destruction is important as AutofillManager relies on
+    // PersonalDataManager to be around when it gets destroyed.
+    signin_manager_->Shutdown();
+    signin_manager_.reset();
+
+    account_tracker_->Shutdown();
+    account_tracker_.reset();
+    signin_client_.reset();
+
+    test::DisableSystemServices(prefs_.get());
+    OSCryptMocker::TearDown();
+  }
 };
 
 TEST_F(PersonalDataManagerTest, AddProfile) {
@@ -1030,7 +1033,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles) {
   test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1068,7 +1071,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_BadEmail) {
   test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_FALSE(ImportAddressProfiles(form_structure));
 
   const std::vector<AutofillProfile*>& results = personal_data_->GetProfiles();
@@ -1098,7 +1101,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_TwoEmails) {
       "Confirm email:", "confirm_email", "example@example.com", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
   const std::vector<AutofillProfile*>& results = personal_data_->GetProfiles();
   ASSERT_EQ(1U, results.size());
@@ -1127,7 +1130,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_TwoDifferentEmails) {
       "Email:", "email2", "example2@example.com", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_FALSE(ImportAddressProfiles(form_structure));
   const std::vector<AutofillProfile*>& results = personal_data_->GetProfiles();
   ASSERT_EQ(0U, results.size());
@@ -1147,7 +1150,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_NotEnoughFilledFields) {
       "Card number:", "card_number", "4111 1111 1111 1111", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_FALSE(ImportAddressProfiles(form_structure));
 
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
@@ -1175,7 +1178,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MinimumAddressUSA) {
   test::CreateTestFormField("Country:", "country", "USA", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
   ASSERT_EQ(1U, profiles.size());
@@ -1200,7 +1203,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MinimumAddressGB) {
       "Country:", "country", "United Kingdom", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
   ASSERT_EQ(1U, profiles.size());
@@ -1220,7 +1223,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MinimumAddressGI) {
   test::CreateTestFormField("Country:", "country", "Gibraltar", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
   ASSERT_EQ(1U, profiles.size());
@@ -1258,7 +1261,7 @@ TEST_F(PersonalDataManagerTest,
   test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1302,7 +1305,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MultilineAddress) {
   test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
   form.fields.push_back(field);
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1343,7 +1346,7 @@ TEST_F(PersonalDataManagerTest,
   form1.fields.push_back(field);
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure1));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1381,7 +1384,7 @@ TEST_F(PersonalDataManagerTest,
   form2.fields.push_back(field);
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure2));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1442,7 +1445,7 @@ TEST_F(PersonalDataManagerTest,
   form.fields.push_back(field);
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1520,7 +1523,7 @@ TEST_F(PersonalDataManagerTest,
 
   // Still able to do the import.
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1604,7 +1607,7 @@ TEST_F(PersonalDataManagerTest,
   form.fields.push_back(field);
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1659,7 +1662,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_SameProfileWithConflict) {
   form1.fields.push_back(field);
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure1));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1707,7 +1710,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_SameProfileWithConflict) {
   form2.fields.push_back(field);
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure2));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1745,7 +1748,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MissingInfoInOld) {
   form1.fields.push_back(field);
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure1));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1783,7 +1786,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MissingInfoInOld) {
   form2.fields.push_back(field);
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure2));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1828,7 +1831,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MissingInfoInNew) {
   form1.fields.push_back(field);
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure1));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1867,7 +1870,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_MissingInfoInNew) {
   form2.fields.push_back(field);
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure2));
 
   // Verify that the web database has been updated and the notification sent.
@@ -1905,7 +1908,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_InsufficientAddress) {
   form1.fields.push_back(field);
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_FALSE(ImportAddressProfiles(form_structure1));
 
   // Since no refresh is expected, reload the data from the database to make
@@ -1962,7 +1965,7 @@ TEST_F(PersonalDataManagerTest,
   form.fields.push_back(field);
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Wait for the refresh, which in this case is a no-op.
@@ -1983,7 +1986,7 @@ TEST_F(PersonalDataManagerTest,
   form.fields[0] = field;
 
   FormStructure form_structure2(form);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure2));
 
   // Wait for the refresh, which in this case is a no-op.
@@ -2024,7 +2027,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_UnrecognizedCountry) {
   form.fields.push_back(field);
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_FALSE(ImportAddressProfiles(form_structure));
 
   // Since no refresh is expected, reload the data from the database to make
@@ -2065,7 +2068,7 @@ TEST_F(PersonalDataManagerTest,
   form.fields.push_back(field);
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(ImportAddressProfiles(form_structure));
 
   // Verify that the web database has been updated and the notification sent.
@@ -2114,7 +2117,7 @@ TEST_F(PersonalDataManagerTest,
   form.fields.push_back(field);
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_FALSE(ImportAddressProfiles(form_structure));
 
   // Since no refresh is expected, reload the data from the database to make
@@ -2137,7 +2140,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_Valid) {
                         "2999");
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2163,7 +2166,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_Invalid) {
                         "2999");
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_FALSE(ImportCreditCard(form_structure, false, &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
@@ -2197,7 +2200,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_MonthSelectInvalidText) {
   form.fields[2].option_contents = contents;
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2224,7 +2227,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_TwoValidCards) {
                         "2999");
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure1, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2247,7 +2250,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_TwoValidCards) {
   AddFullCreditCardForm(&form2, "", "5500 0000 0000 0004", "02", "2999");
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card2;
   EXPECT_TRUE(ImportCreditCard(form_structure2, false, &imported_credit_card2));
   ASSERT_TRUE(imported_credit_card2);
@@ -2362,7 +2365,7 @@ TEST_F(PersonalDataManagerTest,
   // The card should be offered to be saved locally because it only matches the
   // masked server card.
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2392,7 +2395,7 @@ TEST_F(PersonalDataManagerTest,
   // The card should not be offered to be saved locally because it only matches
   // the full server card.
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_FALSE(ImportCreditCard(form_structure, false, &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
@@ -2405,7 +2408,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_SameCreditCardWithConflict) {
                         "2998");
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure1, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2430,7 +2433,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_SameCreditCardWithConflict) {
                         /* different year */ "2999");
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card2;
   EXPECT_TRUE(ImportCreditCard(form_structure2, false, &imported_credit_card2));
   EXPECT_FALSE(imported_credit_card2);
@@ -2457,7 +2460,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_ShouldReturnLocalCard) {
                         "2998");
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure1, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2482,7 +2485,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_ShouldReturnLocalCard) {
                         /* different year */ "2999");
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card2;
   EXPECT_TRUE(ImportCreditCard(form_structure2,
                                /* should_return_local_card= */ true,
@@ -2512,7 +2515,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_EmptyCardWithConflict) {
                         "2998");
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure1, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2536,7 +2539,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_EmptyCardWithConflict) {
                         "2999");
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card2;
   EXPECT_FALSE(
       ImportCreditCard(form_structure2, false, &imported_credit_card2));
@@ -2562,7 +2565,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_MissingInfoInNew) {
                         "2999");
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure1, false, &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
@@ -2587,7 +2590,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_MissingInfoInNew) {
                         "4111-1111-1111-1111", "01", "2999");
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card2;
   EXPECT_TRUE(ImportCreditCard(form_structure2, false, &imported_credit_card2));
   EXPECT_FALSE(imported_credit_card2);
@@ -2611,7 +2614,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_MissingInfoInNew) {
                         /* no year */ nullptr);
 
   FormStructure form_structure3(form3);
-  form_structure3.DetermineHeuristicTypes();
+  form_structure3.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card3;
   EXPECT_FALSE(
       ImportCreditCard(form_structure3, false, &imported_credit_card3));
@@ -2654,7 +2657,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_MissingInfoInOld) {
                         /* different year */ "2999");
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure, false, &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
@@ -2699,7 +2702,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_SameCardWithSeparators) {
                         "2999");
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure, false, &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
@@ -2738,7 +2741,7 @@ TEST_F(PersonalDataManagerTest,
                         /* different year */ "2999");
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(ImportCreditCard(form_structure, false, &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
@@ -2785,7 +2788,7 @@ TEST_F(PersonalDataManagerTest, ImportFormData_OneAddressOneCreditCard) {
                         "2999");
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
@@ -2863,7 +2866,7 @@ TEST_F(PersonalDataManagerTest, ImportFormData_TwoAddressesOneCreditCard) {
                         "2999");
 
   FormStructure form_structure(form);
-  form_structure.DetermineHeuristicTypes();
+  form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   // Still returns true because the credit card import was successful.
   EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
@@ -4139,7 +4142,7 @@ TEST_F(PersonalDataManagerTest, DontDuplicateServerCard) {
   form1.fields.push_back(field);
 
   FormStructure form_structure1(form1);
-  form_structure1.DetermineHeuristicTypes();
+  form_structure1.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card;
   EXPECT_FALSE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
@@ -4161,7 +4164,7 @@ TEST_F(PersonalDataManagerTest, DontDuplicateServerCard) {
   form2.fields.push_back(field);
 
   FormStructure form_structure2(form2);
-  form_structure2.DetermineHeuristicTypes();
+  form_structure2.DetermineHeuristicTypes(nullptr /* ukm_service */);
   std::unique_ptr<CreditCard> imported_credit_card2;
   EXPECT_FALSE(personal_data_->ImportFormData(form_structure2, false,
                                               &imported_credit_card2));
@@ -4170,10 +4173,9 @@ TEST_F(PersonalDataManagerTest, DontDuplicateServerCard) {
 
 // Tests the SaveImportedProfile method with different profiles to make sure the
 // merge logic works correctly.
-TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
-  typedef struct {
-    autofill::ServerFieldType field_type;
-    std::string field_value;
+typedef struct {
+  autofill::ServerFieldType field_type;
+  std::string field_value;
   } ProfileField;
 
   typedef std::vector<ProfileField> ProfileFields;
@@ -4188,254 +4190,72 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
     // For tests with profile merging, makes sure that these fields' values are
     // the ones we expect (depending on the test).
     ProfileFields changed_field_values;
-  } TestCase;
+  } SaveImportedProfileTestCase;
 
-  TestCase test_cases[] = {
-      // Test that saving an identical profile except for the name results in
-      // two profiles being saved.
-      {ProfileFields(), {{NAME_FIRST, "Marionette"}}},
+  class SaveImportedProfileTest
+      : public PersonalDataManagerTestBase,
+        public testing::TestWithParam<SaveImportedProfileTestCase> {
+   public:
+    SaveImportedProfileTest() {}
+    ~SaveImportedProfileTest() override {}
 
-      // Test that saving an identical profile except with the middle name
-      // initial instead of the full middle name results in the profiles
-      // getting merged and the full middle name being kept.
-      {ProfileFields(),
-       {{NAME_MIDDLE, "M"}},
-       {{NAME_MIDDLE, "Mitchell"}, {NAME_FULL, "Marion Mitchell Morrison"}}},
+    void SetUp() override {
+      OSCryptMocker::SetUpWithSingleton();
+      prefs_ = test::PrefServiceForTesting();
+      ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+      base::FilePath path = temp_dir_.GetPath().AppendASCII("TestWebDB");
+      web_database_ =
+          new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
+                                 base::ThreadTaskRunnerHandle::Get());
 
-      // Test that saving an identical profile except with the full middle name
-      // instead of the middle name initial results in the profiles getting
-      // merged and the full middle name replacing the initial.
-      {{{NAME_MIDDLE, "M"}},
-       {{NAME_MIDDLE, "Mitchell"}},
-       {{NAME_MIDDLE, "Mitchell"}}},
+      // Setup account tracker.
+      signin_client_.reset(new TestSigninClient(prefs_.get()));
+      account_tracker_.reset(new AccountTrackerService());
+      account_tracker_->Initialize(signin_client_.get());
+      signin_manager_.reset(new FakeSigninManagerBase(signin_client_.get(),
+                                                      account_tracker_.get()));
+      signin_manager_->Initialize(prefs_.get());
 
-      // Test that saving an identical profile except with no middle name
-      // results in the profiles getting merged and the full middle name being
-      // kept.
-      {ProfileFields(), {{NAME_MIDDLE, ""}}, {{NAME_MIDDLE, "Mitchell"}}},
+      // Hacky: hold onto a pointer but pass ownership.
+      autofill_table_ = new AutofillTable;
+      web_database_->AddTable(
+          std::unique_ptr<WebDatabaseTable>(autofill_table_));
+      web_database_->LoadDatabase();
+      autofill_database_service_ = new AutofillWebDataService(
+          web_database_, base::ThreadTaskRunnerHandle::Get(),
+          base::ThreadTaskRunnerHandle::Get(),
+          WebDataServiceBase::ProfileErrorCallback());
+      autofill_database_service_->Init();
 
-      // Test that saving an identical profile except with a middle name initial
-      // results in the profiles getting merged and the middle name initial
-      // being saved.
-      {{{NAME_MIDDLE, ""}}, {{NAME_MIDDLE, "M"}}, {{NAME_MIDDLE, "M"}}},
+      test::DisableSystemServices(prefs_.get());
+      ResetPersonalDataManager(USER_MODE_NORMAL);
 
-      // Test that saving an identical profile except with a middle name
-      // results in the profiles getting merged and the full middle name being
-      // saved.
-      {{{NAME_MIDDLE, ""}},
-       {{NAME_MIDDLE, "Mitchell"}},
-       {{NAME_MIDDLE, "Mitchell"}}},
+      // Reset the deduping pref to its default value.
+      personal_data_->pref_service_->SetInteger(
+          prefs::kAutofillLastVersionDeduped, 0);
+      personal_data_->pref_service_->SetBoolean(
+          prefs::kAutofillProfileUseDatesFixed, false);
+    }
 
-      // Test that saving a identical profile except with the full name set
-      // instead of the name parts results in the two profiles being merged and
-      // all the name parts kept and the full name being added.
-      {
-          {
-              {NAME_FIRST, "Marion"},
-              {NAME_MIDDLE, "Mitchell"},
-              {NAME_LAST, "Morrison"},
-              {NAME_FULL, ""},
-          },
-          {
-              {NAME_FIRST, ""},
-              {NAME_MIDDLE, ""},
-              {NAME_LAST, ""},
-              {NAME_FULL, "Marion Mitchell Morrison"},
-          },
-          {
-              {NAME_FIRST, "Marion"},
-              {NAME_MIDDLE, "Mitchell"},
-              {NAME_LAST, "Morrison"},
-              {NAME_FULL, "Marion Mitchell Morrison"},
-          },
-      },
+    void TearDown() override {
+      // Order of destruction is important as AutofillManager relies on
+      // PersonalDataManager to be around when it gets destroyed.
+      signin_manager_->Shutdown();
+      signin_manager_.reset();
 
-      // Test that saving a identical profile except with the name parts set
-      // instead of the full name results in the two profiles being merged and
-      // the full name being kept and all the name parts being added.
-      {
-          {
-              {NAME_FIRST, ""},
-              {NAME_MIDDLE, ""},
-              {NAME_LAST, ""},
-              {NAME_FULL, "Marion Mitchell Morrison"},
-          },
-          {
-              {NAME_FIRST, "Marion"},
-              {NAME_MIDDLE, "Mitchell"},
-              {NAME_LAST, "Morrison"},
-              {NAME_FULL, ""},
-          },
-          {
-              {NAME_FIRST, "Marion"},
-              {NAME_MIDDLE, "Mitchell"},
-              {NAME_LAST, "Morrison"},
-              {NAME_FULL, "Marion Mitchell Morrison"},
-          },
-      },
+      account_tracker_->Shutdown();
+      account_tracker_.reset();
+      signin_client_.reset();
 
-      // Test that saving a profile that has only a full name set does not get
-      // merged with a profile with only the name parts set if the names are
-      // different.
-      {
-          {
-              {NAME_FIRST, "Marion"},
-              {NAME_MIDDLE, "Mitchell"},
-              {NAME_LAST, "Morrison"},
-              {NAME_FULL, ""},
-          },
-          {
-              {NAME_FIRST, ""},
-              {NAME_MIDDLE, ""},
-              {NAME_LAST, ""},
-              {NAME_FULL, "John Thompson Smith"},
-          },
-      },
-
-      // Test that saving a profile that has only the name parts set does not
-      // get merged with a profile with only the full name set if the names are
-      // different.
-      {
-          {
-              {NAME_FIRST, ""},
-              {NAME_MIDDLE, ""},
-              {NAME_LAST, ""},
-              {NAME_FULL, "John Thompson Smith"},
-          },
-          {
-              {NAME_FIRST, "Marion"},
-              {NAME_MIDDLE, "Mitchell"},
-              {NAME_LAST, "Morrison"},
-              {NAME_FULL, ""},
-          },
-      },
-
-      // Test that saving an identical profile except for the first address line
-      // results in two profiles being saved.
-      {ProfileFields(), {{ADDRESS_HOME_LINE1, "123 Aquarium St."}}},
-
-      // Test that saving an identical profile except for the second address
-      // line results in two profiles being saved.
-      {ProfileFields(), {{ADDRESS_HOME_LINE2, "unit 7"}}},
-
-      // Tests that saving an identical profile that has a new piece of
-      // information (company name) results in a merge and that the original
-      // empty value gets overwritten by the new information.
-      {{{COMPANY_NAME, ""}}, ProfileFields(), {{COMPANY_NAME, "Fox"}}},
-
-      // Tests that saving an identical profile except a loss of information
-      // results in a merge but the original value is not overwritten (no
-      // information loss).
-      {ProfileFields(), {{COMPANY_NAME, ""}}, {{COMPANY_NAME, "Fox"}}},
-
-      // Tests that saving an identical profile except a slightly different
-      // postal code results in a merge with the new value kept.
-      {{{ADDRESS_HOME_ZIP, "R2C 0A1"}},
-       {{ADDRESS_HOME_ZIP, "R2C0A1"}},
-       {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
-      {{{ADDRESS_HOME_ZIP, "R2C0A1"}},
-       {{ADDRESS_HOME_ZIP, "R2C 0A1"}},
-       {{ADDRESS_HOME_ZIP, "R2C 0A1"}}},
-      {{{ADDRESS_HOME_ZIP, "r2c 0a1"}},
-       {{ADDRESS_HOME_ZIP, "R2C0A1"}},
-       {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
-
-      // Tests that saving an identical profile plus a new piece of information
-      // on the address line 2 results in a merge and that the original empty
-      // value gets overwritten by the new information.
-      {{{ADDRESS_HOME_LINE2, ""}},
-       ProfileFields(),
-       {{ADDRESS_HOME_LINE2, "unit 5"}}},
-
-      // Tests that saving an identical profile except a loss of information on
-      // the address line 2 results in a merge but that the original value gets
-      // not overwritten (no information loss).
-      {ProfileFields(),
-       {{ADDRESS_HOME_LINE2, ""}},
-       {{ADDRESS_HOME_LINE2, "unit 5"}}},
-
-      // Tests that saving an identical except with more punctuation in the fist
-      // address line, while the second is empty, results in a merge and that
-      // the original address gets overwritten.
-      {{{ADDRESS_HOME_LINE2, ""}},
-       {{ADDRESS_HOME_LINE2, ""}, {ADDRESS_HOME_LINE1, "123, Zoo St."}},
-       {{ADDRESS_HOME_LINE1, "123, Zoo St."}}},
-
-      // Tests that saving an identical profile except with less punctuation in
-      // the fist address line, while the second is empty, results in a merge
-      // and that the longer address is retained.
-      {{{ADDRESS_HOME_LINE2, ""}, {ADDRESS_HOME_LINE1, "123, Zoo St."}},
-       {{ADDRESS_HOME_LINE2, ""}},
-       {{ADDRESS_HOME_LINE1, "123 Zoo St"}}},
-
-      // Tests that saving an identical profile except additional punctuation in
-      // the two address lines results in a merge and that the newer address
-      // is retained.
-      {ProfileFields(),
-       {{ADDRESS_HOME_LINE1, "123, Zoo St."}, {ADDRESS_HOME_LINE2, "unit. 5"}},
-       {{ADDRESS_HOME_LINE1, "123, Zoo St."}, {ADDRESS_HOME_LINE2, "unit. 5"}}},
-
-      // Tests that saving an identical profile except less punctuation in the
-      // two address lines results in a merge and that the newer address is
-      // retained.
-      {{{ADDRESS_HOME_LINE1, "123, Zoo St."}, {ADDRESS_HOME_LINE2, "unit. 5"}},
-       ProfileFields(),
-       {{ADDRESS_HOME_LINE1, "123 Zoo St"}, {ADDRESS_HOME_LINE2, "unit 5"}}},
-
-      // Tests that saving an identical profile with accented characters in
-      // the two address lines results in a merge and that the newer address
-      // is retained.
-      {ProfileFields(),
-       {{ADDRESS_HOME_LINE1, "123 Zôö St"}, {ADDRESS_HOME_LINE2, "üñìt 5"}},
-       {{ADDRESS_HOME_LINE1, "123 Zôö St"}, {ADDRESS_HOME_LINE2, "üñìt 5"}}},
-
-      // Tests that saving an identical profile without accented characters in
-      // the two address lines results in a merge and that the newer address
-      // is retained.
-      {{{ADDRESS_HOME_LINE1, "123 Zôö St"}, {ADDRESS_HOME_LINE2, "üñìt 5"}},
-       ProfileFields(),
-       {{ADDRESS_HOME_LINE1, "123 Zoo St"}, {ADDRESS_HOME_LINE2, "unit 5"}}},
-
-      // Tests that saving an identical profile except that the address line 1
-      // is in the address line 2 results in a merge and that the multi-lne
-      // address is retained.
-      {ProfileFields(),
-       {{ADDRESS_HOME_LINE1, "123 Zoo St, unit 5"}, {ADDRESS_HOME_LINE2, ""}},
-       {{ADDRESS_HOME_LINE1, "123 Zoo St"}, {ADDRESS_HOME_LINE2, "unit 5"}}},
-
-      // Tests that saving an identical profile except that the address line 2
-      // contains part of the old address line 1 results in a merge and that the
-      // original address lines of the reference profile get overwritten.
-      {{{ADDRESS_HOME_LINE1, "123 Zoo St, unit 5"}, {ADDRESS_HOME_LINE2, ""}},
-       ProfileFields(),
-       {{ADDRESS_HOME_LINE1, "123 Zoo St"}, {ADDRESS_HOME_LINE2, "unit 5"}}},
-
-      // Tests that saving an identical profile except that the state is the
-      // abbreviation instead of the full form results in a merge and that the
-      // original state gets overwritten.
-      {{{ADDRESS_HOME_STATE, "California"}},
-       ProfileFields(),
-       {{ADDRESS_HOME_STATE, "CA"}}},
-
-      // Tests that saving an identical profile except that the state is the
-      // full form instead of the abbreviation results in a merge and that the
-      // abbreviated state is retained.
-      {ProfileFields(),
-       {{ADDRESS_HOME_STATE, "California"}},
-       {{ADDRESS_HOME_STATE, "CA"}}},
-
-      // Tests that saving and identical profile except that the company name
-      // has different punctuation and case results in a merge and that the
-      // syntax of the new profile replaces the old one.
-      {{{COMPANY_NAME, "Stark inc"}},
-       {{COMPANY_NAME, "Stark Inc."}},
-       {{COMPANY_NAME, "Stark Inc."}}},
+      test::DisableSystemServices(prefs_.get());
+      OSCryptMocker::TearDown();
+    }
   };
 
-  // Create the test clock.
-  TestAutofillClock test_clock;
-
-  for (TestCase test_case : test_cases) {
+  TEST_P(SaveImportedProfileTest, SaveImportedProfile) {
+    // Create the test clock.
+    TestAutofillClock test_clock;
+    auto test_case = GetParam();
     // Set the time to a specific value.
     test_clock.SetNow(kArbitraryTime);
 
@@ -4490,45 +4310,322 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
     // Erase the profiles for the next test.
     ResetProfiles();
   }
-}
 
-// Tests that MergeProfile tries to merge the imported profile into the
-// existing profile in decreasing order of frecency.
-TEST_F(PersonalDataManagerTest, MergeProfile_Frecency) {
-  // Create two very similar profiles except with different company names.
-  std::unique_ptr<AutofillProfile> profile1 = base::MakeUnique<AutofillProfile>(
-      base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(profile1.get(), "Homer", "Jay", "Simpson",
-                       "homer.simpson@abc.com", "SNP", "742 Evergreen Terrace",
-                       "", "Springfield", "IL", "91601", "US", "12345678910");
-  AutofillProfile* profile2 =
-      new AutofillProfile(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(profile2, "Homer", "Jay", "Simpson",
-                       "homer.simpson@abc.com", "Fox", "742 Evergreen Terrace",
-                       "", "Springfield", "IL", "91601", "US", "12345678910");
+  INSTANTIATE_TEST_CASE_P(
+      PersonalDataManagerTest,
+      SaveImportedProfileTest,
+      testing::Values(
+          // Test that saving an identical profile except for the name results
+          // in two profiles being saved.
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{NAME_FIRST, "Marionette"}}},
 
-  // Give the "Fox" profile a bigger frecency score.
-  profile2->set_use_count(15);
+          // Test that saving an identical profile except with the middle name
+          // initial instead of the full middle name results in the profiles
+          // getting merged and the full middle name being kept.
+          SaveImportedProfileTestCase{
+              ProfileFields(),
+              {{NAME_MIDDLE, "M"}},
+              {{NAME_MIDDLE, "Mitchell"},
+               {NAME_FULL, "Marion Mitchell Morrison"}}},
 
-  // Create the |existing_profiles| vector.
-  std::vector<std::unique_ptr<AutofillProfile>> existing_profiles;
-  existing_profiles.push_back(std::move(profile1));
-  existing_profiles.push_back(base::WrapUnique(profile2));
+          // Test that saving an identical profile except with the full middle
+          // name instead of the middle name initial results in the profiles
+          // getting merged and the full middle name replacing the initial.
+          SaveImportedProfileTestCase{{{NAME_MIDDLE, "M"}},
+                                      {{NAME_MIDDLE, "Mitchell"}},
+                                      {{NAME_MIDDLE, "Mitchell"}}},
 
-  // Create a new imported profile with no company name.
-  AutofillProfile imported_profile(base::GenerateGUID(),
-                                   "https://www.example.com");
-  test::SetProfileInfo(&imported_profile, "Homer", "Jay", "Simpson",
-                       "homer.simpson@abc.com", "", "742 Evergreen Terrace", "",
-                       "Springfield", "IL", "91601", "US", "12345678910");
+          // Test that saving an identical profile except with no middle name
+          // results in the profiles getting merged and the full middle name
+          // being kept.
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{NAME_MIDDLE, ""}},
+                                      {{NAME_MIDDLE, "Mitchell"}}},
 
-  // Merge the imported profile into the existing profiles.
-  std::vector<AutofillProfile> profiles;
-  std::string guid = personal_data_->MergeProfile(
-      imported_profile, &existing_profiles, "US-EN", &profiles);
+          // Test that saving an identical profile except with a middle name
+          // initial results in the profiles getting merged and the middle name
+          // initial being saved.
+          SaveImportedProfileTestCase{{{NAME_MIDDLE, ""}},
+                                      {{NAME_MIDDLE, "M"}},
+                                      {{NAME_MIDDLE, "M"}}},
 
-  // The new profile should be merged into the "fox" profile.
-  EXPECT_EQ(profile2->guid(), guid);
+          // Test that saving an identical profile except with a middle name
+          // results in the profiles getting merged and the full middle name
+          // being saved.
+          SaveImportedProfileTestCase{{{NAME_MIDDLE, ""}},
+                                      {{NAME_MIDDLE, "Mitchell"}},
+                                      {{NAME_MIDDLE, "Mitchell"}}},
+
+          // Test that saving a identical profile except with the full name set
+          // instead of the name parts results in the two profiles being merged
+          // and all the name parts kept and the full name being added.
+          SaveImportedProfileTestCase{
+              {
+                  {NAME_FIRST, "Marion"},
+                  {NAME_MIDDLE, "Mitchell"},
+                  {NAME_LAST, "Morrison"},
+                  {NAME_FULL, ""},
+              },
+              {
+                  {NAME_FIRST, ""},
+                  {NAME_MIDDLE, ""},
+                  {NAME_LAST, ""},
+                  {NAME_FULL, "Marion Mitchell Morrison"},
+              },
+              {
+                  {NAME_FIRST, "Marion"},
+                  {NAME_MIDDLE, "Mitchell"},
+                  {NAME_LAST, "Morrison"},
+                  {NAME_FULL, "Marion Mitchell Morrison"},
+              },
+          },
+
+          // Test that saving a identical profile except with the name parts set
+          // instead of the full name results in the two profiles being merged
+          // and the full name being kept and all the name parts being added.
+          SaveImportedProfileTestCase{
+              {
+                  {NAME_FIRST, ""},
+                  {NAME_MIDDLE, ""},
+                  {NAME_LAST, ""},
+                  {NAME_FULL, "Marion Mitchell Morrison"},
+              },
+              {
+                  {NAME_FIRST, "Marion"},
+                  {NAME_MIDDLE, "Mitchell"},
+                  {NAME_LAST, "Morrison"},
+                  {NAME_FULL, ""},
+              },
+              {
+                  {NAME_FIRST, "Marion"},
+                  {NAME_MIDDLE, "Mitchell"},
+                  {NAME_LAST, "Morrison"},
+                  {NAME_FULL, "Marion Mitchell Morrison"},
+              },
+          },
+
+          // Test that saving a profile that has only a full name set does not
+          // get merged with a profile with only the name parts set if the names
+          // are different.
+          SaveImportedProfileTestCase{
+              {
+                  {NAME_FIRST, "Marion"},
+                  {NAME_MIDDLE, "Mitchell"},
+                  {NAME_LAST, "Morrison"},
+                  {NAME_FULL, ""},
+              },
+              {
+                  {NAME_FIRST, ""},
+                  {NAME_MIDDLE, ""},
+                  {NAME_LAST, ""},
+                  {NAME_FULL, "John Thompson Smith"},
+              },
+          },
+
+          // Test that saving a profile that has only the name parts set does
+          // not get merged with a profile with only the full name set if the
+          // names are different.
+          SaveImportedProfileTestCase{
+              {
+                  {NAME_FIRST, ""},
+                  {NAME_MIDDLE, ""},
+                  {NAME_LAST, ""},
+                  {NAME_FULL, "John Thompson Smith"},
+              },
+              {
+                  {NAME_FIRST, "Marion"},
+                  {NAME_MIDDLE, "Mitchell"},
+                  {NAME_LAST, "Morrison"},
+                  {NAME_FULL, ""},
+              },
+          },
+
+          // Test that saving an identical profile except for the first address
+          // line results in two profiles being saved.
+          SaveImportedProfileTestCase{
+              ProfileFields(),
+              {{ADDRESS_HOME_LINE1, "123 Aquarium St."}}},
+
+          // Test that saving an identical profile except for the second address
+          // line results in two profiles being saved.
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{ADDRESS_HOME_LINE2, "unit 7"}}},
+
+          // Tests that saving an identical profile that has a new piece of
+          // information (company name) results in a merge and that the original
+          // empty value gets overwritten by the new information.
+          SaveImportedProfileTestCase{{{COMPANY_NAME, ""}},
+                                      ProfileFields(),
+                                      {{COMPANY_NAME, "Fox"}}},
+
+          // Tests that saving an identical profile except a loss of information
+          // results in a merge but the original value is not overwritten (no
+          // information loss).
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{COMPANY_NAME, ""}},
+                                      {{COMPANY_NAME, "Fox"}}},
+
+          // Tests that saving an identical profile except a slightly different
+          // postal code results in a merge with the new value kept.
+          SaveImportedProfileTestCase{{{ADDRESS_HOME_ZIP, "R2C 0A1"}},
+                                      {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+                                      {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
+          SaveImportedProfileTestCase{{{ADDRESS_HOME_ZIP, "R2C0A1"}},
+                                      {{ADDRESS_HOME_ZIP, "R2C 0A1"}},
+                                      {{ADDRESS_HOME_ZIP, "R2C 0A1"}}},
+          SaveImportedProfileTestCase{{{ADDRESS_HOME_ZIP, "r2c 0a1"}},
+                                      {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+                                      {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
+
+          // Tests that saving an identical profile plus a new piece of
+          // information on the address line 2 results in a merge and that the
+          // original empty value gets overwritten by the new information.
+          SaveImportedProfileTestCase{{{ADDRESS_HOME_LINE2, ""}},
+                                      ProfileFields(),
+                                      {{ADDRESS_HOME_LINE2, "unit 5"}}},
+
+          // Tests that saving an identical profile except a loss of information
+          // on the address line 2 results in a merge but that the original
+          // value gets not overwritten (no information loss).
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{ADDRESS_HOME_LINE2, ""}},
+                                      {{ADDRESS_HOME_LINE2, "unit 5"}}},
+
+          // Tests that saving an identical except with more punctuation in the
+          // fist address line, while the second is empty, results in a merge
+          // and that the original address gets overwritten.
+          SaveImportedProfileTestCase{
+              {{ADDRESS_HOME_LINE2, ""}},
+              {{ADDRESS_HOME_LINE2, ""}, {ADDRESS_HOME_LINE1, "123, Zoo St."}},
+              {{ADDRESS_HOME_LINE1, "123, Zoo St."}}},
+
+          // Tests that saving an identical profile except with less punctuation
+          // in the fist address line, while the second is empty, results in a
+          // merge and that the longer address is retained.
+          SaveImportedProfileTestCase{
+              {{ADDRESS_HOME_LINE2, ""}, {ADDRESS_HOME_LINE1, "123, Zoo St."}},
+              {{ADDRESS_HOME_LINE2, ""}},
+              {{ADDRESS_HOME_LINE1, "123 Zoo St"}}},
+
+          // Tests that saving an identical profile except additional
+          // punctuation in the two address lines results in a merge and that
+          // the newer address is retained.
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{ADDRESS_HOME_LINE1, "123, Zoo St."},
+                                       {ADDRESS_HOME_LINE2, "unit. 5"}},
+                                      {{ADDRESS_HOME_LINE1, "123, Zoo St."},
+                                       {ADDRESS_HOME_LINE2, "unit. 5"}}},
+
+          // Tests that saving an identical profile except less punctuation in
+          // the two address lines results in a merge and that the newer address
+          // is retained.
+          SaveImportedProfileTestCase{{{ADDRESS_HOME_LINE1, "123, Zoo St."},
+                                       {ADDRESS_HOME_LINE2, "unit. 5"}},
+                                      ProfileFields(),
+                                      {{ADDRESS_HOME_LINE1, "123 Zoo St"},
+                                       {ADDRESS_HOME_LINE2, "unit 5"}}},
+
+          // Tests that saving an identical profile with accented characters in
+          // the two address lines results in a merge and that the newer address
+          // is retained.
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{ADDRESS_HOME_LINE1, "123 Zôö St"},
+                                       {ADDRESS_HOME_LINE2, "üñìt 5"}},
+                                      {{ADDRESS_HOME_LINE1, "123 Zôö St"},
+                                       {ADDRESS_HOME_LINE2, "üñìt 5"}}},
+
+          // Tests that saving an identical profile without accented characters
+          // in the two address lines results in a merge and that the newer
+          // address is retained.
+          SaveImportedProfileTestCase{{{ADDRESS_HOME_LINE1, "123 Zôö St"},
+                                       {ADDRESS_HOME_LINE2, "üñìt 5"}},
+                                      ProfileFields(),
+                                      {{ADDRESS_HOME_LINE1, "123 Zoo St"},
+                                       {ADDRESS_HOME_LINE2, "unit 5"}}},
+
+          // Tests that saving an identical profile except that the address line
+          // 1 is in the address line 2 results in a merge and that the
+          // multi-lne address is retained.
+          SaveImportedProfileTestCase{
+              ProfileFields(),
+              {{ADDRESS_HOME_LINE1, "123 Zoo St, unit 5"},
+               {ADDRESS_HOME_LINE2, ""}},
+              {{ADDRESS_HOME_LINE1, "123 Zoo St"},
+               {ADDRESS_HOME_LINE2, "unit 5"}}},
+
+          // Tests that saving an identical profile except that the address line
+          // 2 contains part of the old address line 1 results in a merge and
+          // that the original address lines of the reference profile get
+          // overwritten.
+          SaveImportedProfileTestCase{
+              {{ADDRESS_HOME_LINE1, "123 Zoo St, unit 5"},
+               {ADDRESS_HOME_LINE2, ""}},
+              ProfileFields(),
+              {{ADDRESS_HOME_LINE1, "123 Zoo St"},
+               {ADDRESS_HOME_LINE2, "unit 5"}}},
+
+          // Tests that saving an identical profile except that the state is the
+          // abbreviation instead of the full form results in a merge and that
+          // the original state gets overwritten.
+          SaveImportedProfileTestCase{{{ADDRESS_HOME_STATE, "California"}},
+                                      ProfileFields(),
+                                      {{ADDRESS_HOME_STATE, "CA"}}},
+
+          // Tests that saving an identical profile except that the state is the
+          // full form instead of the abbreviation results in a merge and that
+          // the abbreviated state is retained.
+          SaveImportedProfileTestCase{ProfileFields(),
+                                      {{ADDRESS_HOME_STATE, "California"}},
+                                      {{ADDRESS_HOME_STATE, "CA"}}},
+
+          // Tests that saving and identical profile except that the company
+          // name has different punctuation and case results in a merge and that
+          // the syntax of the new profile replaces the old one.
+          SaveImportedProfileTestCase{{{COMPANY_NAME, "Stark inc"}},
+                                      {{COMPANY_NAME, "Stark Inc."}},
+                                      {{COMPANY_NAME, "Stark Inc."}}}));
+
+  // Tests that MergeProfile tries to merge the imported profile into the
+  // existing profile in decreasing order of frecency.
+  TEST_F(PersonalDataManagerTest, MergeProfile_Frecency) {
+    // Create two very similar profiles except with different company names.
+    std::unique_ptr<AutofillProfile> profile1 =
+        base::MakeUnique<AutofillProfile>(base::GenerateGUID(),
+                                          "https://www.example.com");
+    test::SetProfileInfo(profile1.get(), "Homer", "Jay", "Simpson",
+                         "homer.simpson@abc.com", "SNP",
+                         "742 Evergreen Terrace", "", "Springfield", "IL",
+                         "91601", "US", "12345678910");
+    AutofillProfile* profile2 =
+        new AutofillProfile(base::GenerateGUID(), "https://www.example.com");
+    test::SetProfileInfo(profile2, "Homer", "Jay", "Simpson",
+                         "homer.simpson@abc.com", "Fox",
+                         "742 Evergreen Terrace", "", "Springfield", "IL",
+                         "91601", "US", "12345678910");
+
+    // Give the "Fox" profile a bigger frecency score.
+    profile2->set_use_count(15);
+
+    // Create the |existing_profiles| vector.
+    std::vector<std::unique_ptr<AutofillProfile>> existing_profiles;
+    existing_profiles.push_back(std::move(profile1));
+    existing_profiles.push_back(base::WrapUnique(profile2));
+
+    // Create a new imported profile with no company name.
+    AutofillProfile imported_profile(base::GenerateGUID(),
+                                     "https://www.example.com");
+    test::SetProfileInfo(&imported_profile, "Homer", "Jay", "Simpson",
+                         "homer.simpson@abc.com", "", "742 Evergreen Terrace",
+                         "", "Springfield", "IL", "91601", "US", "12345678910");
+
+    // Merge the imported profile into the existing profiles.
+    std::vector<AutofillProfile> profiles;
+    std::string guid = personal_data_->MergeProfile(
+        imported_profile, &existing_profiles, "US-EN", &profiles);
+
+    // The new profile should be merged into the "fox" profile.
+    EXPECT_EQ(profile2->guid(), guid);
 }
 
 // Tests that MergeProfile produces a merged profile with the expected usage

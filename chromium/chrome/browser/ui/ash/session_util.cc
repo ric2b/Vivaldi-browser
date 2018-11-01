@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/ash/session_util.h"
 
-#include "ash/common/wm_shell.h"
 #include "ash/content/shell_content_state.h"
 #include "ash/resources/grit/ash_resources.h"
 #include "build/build_config.h"

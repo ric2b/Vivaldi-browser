@@ -38,14 +38,16 @@
 .data-grid td .bar-container {
 }
 
-.data-grid td .bar-slack-size {
-  background-color: rgb(150, 150, 200);
-}
-
 .data-grid td .bar-unused-size {
   background-color: #E57373;
 }
 
 .data-grid td .bar-used-size {
   background-color: #81C784;
+}
+
+.data-grid td .percent-value {
+  color: #888;
+  width: 45px;
+  display: inline-block;
 }

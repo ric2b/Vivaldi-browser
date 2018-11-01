@@ -10,8 +10,9 @@ namespace blink {
 
 const CSSValue* CSSPropertyAPIImage::parseSingleValue(
     CSSParserTokenRange& range,
-    const CSSParserContext* context) {
-  return CSSPropertyParserHelpers::consumeImageOrNone(range, context);
+    const CSSParserContext& context,
+    CSSPropertyID) {
+  return CSSPropertyParserHelpers::ConsumeImageOrNone(range, &context);
 }
 
 }  // namespace blink

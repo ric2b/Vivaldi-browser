@@ -103,10 +103,10 @@ void InstantUIMessageHandler::GetPreferenceValue(const base::ListValue* args) {
   std::string pref_name;
   if (!args->GetString(0, &pref_name)) return;
 
-  base::StringValue pref_name_value(pref_name);
+  base::Value pref_name_value(pref_name);
   if (pref_name == prefs::kInstantUIZeroSuggestUrlPrefix) {
     PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
-    base::StringValue arg(prefs->GetString(pref_name.c_str()));
+    base::Value arg(prefs->GetString(pref_name.c_str()));
     web_ui()->CallJavascriptFunctionUnsafe(
         "instantConfig.getPreferenceValueResult", pref_name_value, arg);
   }
@@ -121,7 +121,7 @@ void InstantUIMessageHandler::SetPreferenceValue(const base::ListValue* args) {
     if (!args->GetString(1, &value))
       return;
     PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
-    prefs->SetString(pref_name.c_str(), value);
+    prefs->SetString(pref_name, value);
   }
 }
 

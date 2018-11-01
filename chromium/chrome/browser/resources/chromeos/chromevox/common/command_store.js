@@ -190,6 +190,11 @@ cvox.CommandStore.CMD_WHITELIST = {
                     msgId: 'toggle_earcons',
                     category: 'controlling_speech'},
 
+  'toggleSpeechOnOrOff': {
+    msgId: 'speech_on_off_description',
+    category: 'controlling_speech'
+  },
+
   'handleTab': {
     allowEvents: true,
     msgId: 'handle_tab_next',
@@ -338,6 +343,21 @@ cvox.CommandStore.CMD_WHITELIST = {
                          disallowContinuation: true,
                          msgId: 'toggle_search_widget',
                          category: 'information'},
+
+  'undarkenScreen': {
+    msgId: 'undarken_screen',
+    category: 'help_commands'
+  },
+
+  'darkenScreen': {
+    msgId: 'darken_screen',
+    category: 'help_commands'
+  },
+
+  'toggleBrailleTable': {
+    msgId: 'toggle_braille_table',
+    category: 'help_commands'
+  },
 
   'toggleKeyboardHelp': {announce: false,
                          disallowContinuation: true,

@@ -8,11 +8,13 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -25,6 +27,7 @@
 #include "extensions/browser/api/declarative_webrequest/webrequest_constants.h"
 #include "extensions/browser/api/web_request/web_request_api_helpers.h"
 #include "net/base/request_priority.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -100,24 +103,23 @@ class WebRequestRulesRegistryTest : public testing::Test {
   // Returns a rule that roughly matches http://*.example.com and
   // https://www.example.com and cancels it
   linked_ptr<api::events::Rule> CreateRule1() {
-    base::ListValue* scheme_http = new base::ListValue();
+    auto scheme_http = base::MakeUnique<base::ListValue>();
     scheme_http->AppendString("http");
-    base::DictionaryValue* http_condition_dict = new base::DictionaryValue();
-    http_condition_dict->Set(keys2::kSchemesKey, scheme_http);
+    auto http_condition_dict = base::MakeUnique<base::DictionaryValue>();
     http_condition_dict->SetString(keys2::kHostSuffixKey, "example.com");
     base::DictionaryValue http_condition_url_filter;
-    http_condition_url_filter.Set(keys::kUrlKey, http_condition_dict);
     http_condition_url_filter.SetString(keys::kInstanceTypeKey,
                                         keys::kRequestMatcherType);
 
-    base::ListValue* scheme_https = new base::ListValue();
     scheme_http->AppendString("https");
-    base::DictionaryValue* https_condition_dict = new base::DictionaryValue();
-    https_condition_dict->Set(keys2::kSchemesKey, scheme_https);
+    auto https_condition_dict = base::MakeUnique<base::DictionaryValue>();
+    https_condition_dict->Set(keys2::kSchemesKey,
+                              base::MakeUnique<base::ListValue>());
     https_condition_dict->SetString(keys2::kHostSuffixKey, "example.com");
     https_condition_dict->SetString(keys2::kHostPrefixKey, "www");
     base::DictionaryValue https_condition_url_filter;
-    https_condition_url_filter.Set(keys::kUrlKey, https_condition_dict);
+    https_condition_url_filter.Set(keys::kUrlKey,
+                                   std::move(https_condition_dict));
     https_condition_url_filter.SetString(keys::kInstanceTypeKey,
                                          keys::kRequestMatcherType);
 
@@ -128,6 +130,9 @@ class WebRequestRulesRegistryTest : public testing::Test {
     rule->id.reset(new std::string(kRuleId1));
     rule->priority.reset(new int(100));
     rule->actions.push_back(action_dict.CreateDeepCopy());
+    http_condition_dict->Set(keys2::kSchemesKey, std::move(scheme_http));
+    http_condition_url_filter.Set(keys::kUrlKey,
+                                  std::move(http_condition_dict));
     rule->conditions.push_back(http_condition_url_filter.CreateDeepCopy());
     rule->conditions.push_back(https_condition_url_filter.CreateDeepCopy());
     return rule;
@@ -170,10 +175,10 @@ class WebRequestRulesRegistryTest : public testing::Test {
   // contains index.html.
   linked_ptr<api::events::Rule> CreateIgnoreRule() {
     base::DictionaryValue condition_dict;
-    base::DictionaryValue* http_condition_dict = new base::DictionaryValue();
+    auto http_condition_dict = base::MakeUnique<base::DictionaryValue>();
     http_condition_dict->SetString(keys2::kPathContainsKey, "index.html");
     condition_dict.SetString(keys::kInstanceTypeKey, keys::kRequestMatcherType);
-    condition_dict.Set(keys::kUrlKey, http_condition_dict);
+    condition_dict.Set(keys::kUrlKey, std::move(http_condition_dict));
 
     base::DictionaryValue action_dict;
     action_dict.SetString(keys::kInstanceTypeKey, keys::kIgnoreRulesType);
@@ -279,8 +284,8 @@ TEST_F(WebRequestRulesRegistryTest, AddRulesImpl) {
 
   GURL http_url("http://www.example.com");
   net::TestURLRequestContext context;
-  std::unique_ptr<net::URLRequest> http_request(
-      context.CreateRequest(http_url, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> http_request(context.CreateRequest(
+      http_url, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   WebRequestData request_data(http_request.get(), ON_BEFORE_REQUEST);
   matches = registry->GetMatches(request_data);
   EXPECT_EQ(2u, matches.size());
@@ -295,8 +300,8 @@ TEST_F(WebRequestRulesRegistryTest, AddRulesImpl) {
       base::ContainsKey(matches_ids, std::make_pair(kExtensionId, kRuleId2)));
 
   GURL foobar_url("http://www.foobar.com");
-  std::unique_ptr<net::URLRequest> foobar_request(
-      context.CreateRequest(foobar_url, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> foobar_request(context.CreateRequest(
+      foobar_url, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   request_data.request = foobar_request.get();
   matches = registry->GetMatches(request_data);
   EXPECT_EQ(1u, matches.size());
@@ -422,8 +427,8 @@ TEST_F(WebRequestRulesRegistryTest, Precedences) {
 
   GURL url("http://www.google.com");
   net::TestURLRequestContext context;
-  std::unique_ptr<net::URLRequest> request(
-      context.CreateRequest(url, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> request(context.CreateRequest(
+      url, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   WebRequestData request_data(request.get(), ON_BEFORE_REQUEST);
   std::list<LinkedPtrEventResponseDelta> deltas =
       registry->CreateDeltas(NULL, request_data, false);
@@ -471,8 +476,8 @@ TEST_F(WebRequestRulesRegistryTest, Priorities) {
 
   GURL url("http://www.google.com/index.html");
   net::TestURLRequestContext context;
-  std::unique_ptr<net::URLRequest> request(
-      context.CreateRequest(url, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> request(context.CreateRequest(
+      url, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   WebRequestData request_data(request.get(), ON_BEFORE_REQUEST);
   std::list<LinkedPtrEventResponseDelta> deltas =
       registry->CreateDeltas(NULL, request_data, false);
@@ -545,8 +550,8 @@ TEST_F(WebRequestRulesRegistryTest, IgnoreRulesByTag) {
 
   GURL url("http://www.foo.com/test");
   net::TestURLRequestContext context;
-  std::unique_ptr<net::URLRequest> request(
-      context.CreateRequest(url, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> request(context.CreateRequest(
+      url, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   WebRequestData request_data(request.get(), ON_BEFORE_REQUEST);
   std::list<LinkedPtrEventResponseDelta> deltas =
       registry->CreateDeltas(NULL, request_data, false);
@@ -595,8 +600,8 @@ TEST_F(WebRequestRulesRegistryTest, GetMatchesCheckFulfilled) {
 
   GURL http_url("http://www.example.com");
   net::TestURLRequestContext context;
-  std::unique_ptr<net::URLRequest> http_request(
-      context.CreateRequest(http_url, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> http_request(context.CreateRequest(
+      http_url, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   WebRequestData request_data(http_request.get(), ON_BEFORE_REQUEST);
   matches = registry->GetMatches(request_data);
   EXPECT_EQ(1u, matches.size());
@@ -654,8 +659,8 @@ TEST_F(WebRequestRulesRegistryTest, GetMatchesDifferentUrls) {
 
   for (size_t i = 0; i < arraysize(matchingRuleIds); ++i) {
     // Construct the inputs.
-    std::unique_ptr<net::URLRequest> http_request(
-        context.CreateRequest(urls[i], net::DEFAULT_PRIORITY, NULL));
+    std::unique_ptr<net::URLRequest> http_request(context.CreateRequest(
+        urls[i], net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
     WebRequestData request_data(http_request.get(), ON_BEFORE_REQUEST);
     http_request->set_first_party_for_cookies(firstPartyUrls[i]);
     // Now run both rules on the input.
@@ -803,16 +808,16 @@ TEST_F(WebRequestRulesRegistryTest, CheckOriginAndPathRegEx) {
 
   // No match because match is in the query parameter.
   GURL url1("http://bar.com/index.html?foo.com");
-  std::unique_ptr<net::URLRequest> request1(
-      context.CreateRequest(url1, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> request1(context.CreateRequest(
+      url1, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   WebRequestData request_data1(request1.get(), ON_BEFORE_REQUEST);
   deltas = registry->CreateDeltas(NULL, request_data1, false);
   EXPECT_EQ(0u, deltas.size());
 
   // This is a correct match.
   GURL url2("http://foo.com/index.html");
-  std::unique_ptr<net::URLRequest> request2(
-      context.CreateRequest(url2, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> request2(context.CreateRequest(
+      url2, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   WebRequestData request_data2(request2.get(), ON_BEFORE_REQUEST);
   deltas = registry->CreateDeltas(NULL, request_data2, false);
   EXPECT_EQ(1u, deltas.size());

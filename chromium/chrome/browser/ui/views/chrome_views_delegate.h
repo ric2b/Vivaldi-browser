@@ -58,16 +58,6 @@ class ChromeViewsDelegate : public views::ViewsDelegate {
   std::string GetApplicationName() override;
   scoped_refptr<base::TaskRunner> GetBlockingPoolTaskRunner() override;
 
-  gfx::Insets GetDialogButtonInsets() const override;
-  int GetDialogCloseButtonMargin() const override;
-  int GetDialogRelatedButtonHorizontalSpacing() const override;
-  int GetDialogRelatedControlVerticalSpacing() const override;
-  gfx::Insets GetDialogFrameViewInsets() const override;
-  gfx::Insets GetBubbleDialogMargins() const override;
-  int GetButtonMinimumWidth() const override;
-  int GetDialogButtonMinimumWidth() const override;
-  int GetButtonHorizontalPadding() const override;
-
  private:
 #if defined(OS_WIN)
   typedef std::map<HMONITOR, int> AppbarAutohideEdgeMap;
@@ -106,9 +96,9 @@ class ChromeViewsDelegate : public views::ViewsDelegate {
   AppbarAutohideEdgeMap appbar_autohide_edge_map_;
   // If true we're in the process of notifying a callback from
   // GetAutohideEdges().start a new query.
-  bool in_autohide_edges_callback_;
+  bool in_autohide_edges_callback_ = false;
 
-  base::WeakPtrFactory<ChromeViewsDelegate> weak_factory_;
+  base::WeakPtrFactory<ChromeViewsDelegate> weak_factory_{this};
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ChromeViewsDelegate);

@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/lazy_instance.h"
@@ -47,7 +49,7 @@ class WorkerPoolImpl {
   ~WorkerPoolImpl() = delete;
 
   void PostTask(const tracked_objects::Location& from_here,
-                const base::Closure& task,
+                base::OnceClosure task,
                 bool task_is_slow);
 
  private:
@@ -59,9 +61,9 @@ WorkerPoolImpl::WorkerPoolImpl()
                                              kIdleSecondsBeforeExit)) {}
 
 void WorkerPoolImpl::PostTask(const tracked_objects::Location& from_here,
-                              const base::Closure& task,
+                              base::OnceClosure task,
                               bool task_is_slow) {
-  pool_->PostTask(from_here, task);
+  pool_->PostTask(from_here, std::move(task));
 }
 
 base::LazyInstance<WorkerPoolImpl>::Leaky g_lazy_worker_pool =
@@ -112,9 +114,10 @@ void WorkerThread::ThreadMain() {
 
 // static
 bool WorkerPool::PostTask(const tracked_objects::Location& from_here,
-                          const base::Closure& task,
+                          base::OnceClosure task,
                           bool task_is_slow) {
-  g_lazy_worker_pool.Pointer()->PostTask(from_here, task, task_is_slow);
+  g_lazy_worker_pool.Pointer()->PostTask(from_here, std::move(task),
+                                         task_is_slow);
   return true;
 }
 
@@ -137,12 +140,18 @@ PosixDynamicThreadPool::~PosixDynamicThreadPool() {
 
 void PosixDynamicThreadPool::PostTask(
     const tracked_objects::Location& from_here,
-    const base::Closure& task) {
-  PendingTask pending_task(from_here, task);
+    base::OnceClosure task) {
+  PendingTask pending_task(from_here, std::move(task));
   AddTask(&pending_task);
 }
 
 void PosixDynamicThreadPool::AddTask(PendingTask* pending_task) {
+  DCHECK(pending_task);
+
+  // Use CHECK instead of DCHECK to crash earlier. See http://crbug.com/711167
+  // for details.
+  CHECK(pending_task->task);
+
   AutoLock locked(lock_);
 
   pending_tasks_.push(std::move(*pending_task));

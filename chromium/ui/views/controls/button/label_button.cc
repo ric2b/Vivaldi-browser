@@ -25,14 +25,13 @@
 #include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button_border.h"
+#include "ui/views/layout/layout_constants.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/window/dialog_delegate.h"
 
 namespace {
-
-// The default spacing between the icon and text.
-const int kSpacing = 5;
 
 gfx::Font::Weight GetValueBolderThan(gfx::Font::Weight weight) {
   if (weight < gfx::Font::Weight::BOLD)
@@ -93,7 +92,8 @@ LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
       is_default_(false),
       style_(STYLE_TEXTBUTTON),
       border_is_themed_border_(true),
-      image_label_spacing_(kSpacing),
+      image_label_spacing_(LayoutProvider::Get()->GetDistanceMetric(
+          DISTANCE_RELATED_CONTROL_HORIZONTAL)),
       horizontal_alignment_(gfx::ALIGN_LEFT) {
   SetAnimationDuration(kHoverAnimationDurationMs);
   SetTextInternal(text);
@@ -157,10 +157,6 @@ void LabelButton::SetTextShadows(const gfx::ShadowValues& shadows) {
 
 void LabelButton::SetTextSubpixelRenderingEnabled(bool enabled) {
   label_->SetSubpixelRenderingEnabled(enabled);
-}
-
-void LabelButton::SetFontListDeprecated(const gfx::FontList& font_list) {
-  SetFontList(font_list);
 }
 
 void LabelButton::AdjustFontSize(int font_size_delta) {
@@ -237,7 +233,8 @@ gfx::Size LabelButton::GetPreferredSize() const {
     return cached_preferred_size_;
 
   // Use a temporary label copy for sizing to avoid calculation side-effects.
-  Label label(GetText(), label_->font_list());
+  Label label(GetText(), {label_->font_list()});
+  label.SetLineHeight(label_->line_height());
   label.SetShadows(label_->shadows());
 
   if (style_ == STYLE_BUTTON && PlatformStyle::kDefaultLabelButtonHasBoldFont) {

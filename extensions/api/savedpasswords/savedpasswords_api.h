@@ -94,6 +94,50 @@ class SavedpasswordsRemoveFunction : public ChromeAsyncExtensionFunction,
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsRemoveFunction);
 };
+
+class SavedpasswordsAddFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("savedpasswords.add", SAVEDPASSWORDS_ADD)
+  SavedpasswordsAddFunction() = default;
+
+ private:
+  ~SavedpasswordsAddFunction() override = default;
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsAddFunction);
+};
+
+class SavedpasswordsGetFunction
+    : public ChromeAsyncExtensionFunction,
+      public password_manager::PasswordStoreConsumer {
+ public:
+  DECLARE_EXTENSION_FUNCTION("savedpasswords.get", SAVEDPASSWORDS_GET)
+  SavedpasswordsGetFunction() = default;
+
+ private:
+  ~SavedpasswordsGetFunction() override = default;
+  bool RunAsync() override;
+
+  void OnGetPasswordStoreResults(
+      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+
+  std::string username_;
+
+  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetFunction);
+};
+
+class SavedpasswordsDeleteFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("savedpasswords.delete", SAVEDPASSWORDS_DELETE)
+  SavedpasswordsDeleteFunction() = default;
+
+ private:
+  ~SavedpasswordsDeleteFunction() override = default;
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsDeleteFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SAVEDPASSWORDS_SAVEDPASSWORDS_API_H_

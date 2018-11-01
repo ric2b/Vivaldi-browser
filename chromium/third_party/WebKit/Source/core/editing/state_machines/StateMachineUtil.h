@@ -6,7 +6,7 @@
 #define StateMachineUtil_h
 
 #include "core/CoreExport.h"
-#include "wtf/text/Unicode.h"
+#include "platform/wtf/text/Unicode.h"
 
 namespace blink {
 
@@ -15,7 +15,8 @@ namespace blink {
 // DO NOT USE this function directly since this doesn't care about preceding
 // regional indicator symbols. Use ForwardGraphemeBoundaryStateMachine or
 // BackwardGraphemeBoundaryStateMachine instead.
-CORE_EXPORT bool isGraphemeBreak(UChar32 prevCodePoint, UChar32 nextCodePoint);
+CORE_EXPORT bool IsGraphemeBreak(UChar32 prev_code_point,
+                                 UChar32 next_code_point);
 
 }  // namespace blink
 

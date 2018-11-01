@@ -106,12 +106,7 @@ class CC_SURFACES_EXPORT Surface {
                          : nullptr;
   }
 
-  const std::vector<SurfaceId>* pending_referenced_surfaces() const {
-    return pending_frame_ ? &pending_frame_->metadata.referenced_surfaces
-                          : nullptr;
-  }
-
-  const SurfaceDependencies& blocking_surfaces_for_testing() const {
+  const SurfaceDependencies& blocking_surfaces() const {
     return blocking_surfaces_;
   }
 
@@ -159,8 +154,6 @@ class CC_SURFACES_EXPORT Surface {
 
   DISALLOW_COPY_AND_ASSIGN(Surface);
 };
-
-using PendingSurfaceSet = base::flat_set<Surface*>;
 
 }  // namespace cc
 

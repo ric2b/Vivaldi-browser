@@ -163,6 +163,10 @@ const char kHistogramPageTimingForegroundDurationAfterPaint[] =
     "PageLoad.PageTiming.ForegroundDuration.AfterPaint";
 const char kHistogramPageTimingForegroundDurationNoCommit[] =
     "PageLoad.PageTiming.ForegroundDuration.NoCommit";
+const char kHistogramPageTimingForegroundDurationWithPaint[] =
+    "PageLoad.PageTiming.ForegroundDuration.WithPaint";
+const char kHistogramPageTimingForegroundDurationWithoutPaint[] =
+    "PageLoad.PageTiming.ForegroundDuration.WithoutPaint";
 
 const char kHistogramLoadTypeParseStartReload[] =
     "PageLoad.ParseTiming.NavigationToParseStart.LoadType.Reload";
@@ -213,6 +217,27 @@ const char kHistogramFirstScrollInputAfterFirstPaint[] =
 const char kHistogramTotalBytes[] = "PageLoad.Experimental.Bytes.Total";
 const char kHistogramNetworkBytes[] = "PageLoad.Experimental.Bytes.Network";
 const char kHistogramCacheBytes[] = "PageLoad.Experimental.Bytes.Cache";
+
+const char kHistogramLoadTypeTotalBytesForwardBack[] =
+    "PageLoad.Experimental.Bytes.Total.LoadType.ForwardBackNavigation";
+const char kHistogramLoadTypeNetworkBytesForwardBack[] =
+    "PageLoad.Experimental.Bytes.Network.LoadType.ForwardBackNavigation";
+const char kHistogramLoadTypeCacheBytesForwardBack[] =
+    "PageLoad.Experimental.Bytes.Cache.LoadType.ForwardBackNavigation";
+
+const char kHistogramLoadTypeTotalBytesReload[] =
+    "PageLoad.Experimental.Bytes.Total.LoadType.Reload";
+const char kHistogramLoadTypeNetworkBytesReload[] =
+    "PageLoad.Experimental.Bytes.Network.LoadType.Reload";
+const char kHistogramLoadTypeCacheBytesReload[] =
+    "PageLoad.Experimental.Bytes.Cache.LoadType.Reload";
+
+const char kHistogramLoadTypeTotalBytesNewNavigation[] =
+    "PageLoad.Experimental.Bytes.Total.LoadType.NewNavigation";
+const char kHistogramLoadTypeNetworkBytesNewNavigation[] =
+    "PageLoad.Experimental.Bytes.Network.LoadType.NewNavigation";
+const char kHistogramLoadTypeCacheBytesNewNavigation[] =
+    "PageLoad.Experimental.Bytes.Cache.LoadType.NewNavigation";
 
 const char kHistogramTotalCompletedResources[] =
     "PageLoad.Experimental.CompletedResources.Total";
@@ -598,7 +623,7 @@ void CorePageLoadMetricsObserver::OnUserInput(
   base::TimeTicks now;
   if (!first_paint_.is_null() &&
       first_user_interaction_after_first_paint_.is_null() &&
-      event.type() != blink::WebInputEvent::MouseMove) {
+      event.GetType() != blink::WebInputEvent::kMouseMove) {
     if (now.is_null())
       now = base::TimeTicks::Now();
     first_user_interaction_after_first_paint_ = now;
@@ -608,8 +633,8 @@ void CorePageLoadMetricsObserver::OnUserInput(
     return;
 
   if (!received_non_scroll_input_after_first_paint_) {
-    if (event.type() == blink::WebInputEvent::GestureTap ||
-        event.type() == blink::WebInputEvent::MouseUp) {
+    if (event.GetType() == blink::WebInputEvent::kGestureTap ||
+        event.GetType() == blink::WebInputEvent::kMouseUp) {
       received_non_scroll_input_after_first_paint_ = true;
       if (now.is_null())
         now = base::TimeTicks::Now();
@@ -619,7 +644,7 @@ void CorePageLoadMetricsObserver::OnUserInput(
     }
   }
   if (!received_scroll_input_after_first_paint_ &&
-      event.type() == blink::WebInputEvent::GestureScrollBegin) {
+      event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
     received_scroll_input_after_first_paint_ = true;
     if (now.is_null())
       now = base::TimeTicks::Now();
@@ -697,6 +722,13 @@ void CorePageLoadMetricsObserver::RecordForegroundDurationHistograms(
       PAGE_LOAD_LONG_HISTOGRAM(
           internal::kHistogramPageTimingForegroundDurationAfterPaint,
           foreground_duration.value() - timing.first_paint.value());
+      PAGE_LOAD_LONG_HISTOGRAM(
+          internal::kHistogramPageTimingForegroundDurationWithPaint,
+          foreground_duration.value());
+    } else {
+      PAGE_LOAD_LONG_HISTOGRAM(
+          internal::kHistogramPageTimingForegroundDurationWithoutPaint,
+          foreground_duration.value());
     }
   } else {
     PAGE_LOAD_LONG_HISTOGRAM(
@@ -715,6 +747,37 @@ void CorePageLoadMetricsObserver::RecordByteAndResourceHistograms(
   PAGE_BYTES_HISTOGRAM(internal::kHistogramNetworkBytes, network_bytes_);
   PAGE_BYTES_HISTOGRAM(internal::kHistogramCacheBytes, cache_bytes_);
   PAGE_BYTES_HISTOGRAM(internal::kHistogramTotalBytes, total_bytes);
+
+  switch (GetPageLoadType(transition_)) {
+    case LOAD_TYPE_RELOAD:
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeNetworkBytesReload,
+                           network_bytes_);
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeCacheBytesReload,
+                           cache_bytes_);
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeTotalBytesReload,
+                           total_bytes);
+      break;
+    case LOAD_TYPE_FORWARD_BACK:
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeNetworkBytesForwardBack,
+                           network_bytes_);
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeCacheBytesForwardBack,
+                           cache_bytes_);
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeTotalBytesForwardBack,
+                           total_bytes);
+      break;
+    case LOAD_TYPE_NEW_NAVIGATION:
+      PAGE_BYTES_HISTOGRAM(
+          internal::kHistogramLoadTypeNetworkBytesNewNavigation,
+          network_bytes_);
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeCacheBytesNewNavigation,
+                           cache_bytes_);
+      PAGE_BYTES_HISTOGRAM(internal::kHistogramLoadTypeTotalBytesNewNavigation,
+                           total_bytes);
+      break;
+    case LOAD_TYPE_NONE:
+      NOTREACHED();
+      break;
+  }
 
   PAGE_RESOURCE_COUNT_HISTOGRAM(internal::kHistogramNetworkCompletedResources,
                                 num_network_resources_);

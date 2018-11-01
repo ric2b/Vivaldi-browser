@@ -15,6 +15,8 @@ Bindings.CSSWorkspaceBinding = class {
 
     /** @type {!Map.<!SDK.CSSModel, !Bindings.CSSWorkspaceBinding.ModelInfo>} */
     this._modelToInfo = new Map();
+    /** @type {!Array<!Bindings.CSSWorkspaceBinding.SourceMapping>} */
+    this._sourceMappings = [];
     targetManager.observeModels(SDK.CSSModel, this);
   }
 
@@ -83,8 +85,33 @@ Bindings.CSSWorkspaceBinding = class {
   rawLocationToUILocation(rawLocation) {
     if (!rawLocation)
       return null;
+    for (var i = this._sourceMappings.length - 1; i >= 0; --i) {
+      var uiLocation = this._sourceMappings[i].rawLocationToUILocation(rawLocation);
+      if (uiLocation)
+        return uiLocation;
+    }
     return this._modelToInfo.get(rawLocation.cssModel())._rawLocationToUILocation(rawLocation);
   }
+
+  /**
+   * @param {!Bindings.CSSWorkspaceBinding.SourceMapping} sourceMapping
+   */
+  addSourceMapping(sourceMapping) {
+    this._sourceMappings.push(sourceMapping);
+  }
+};
+
+/**
+ * @interface
+ */
+Bindings.CSSWorkspaceBinding.SourceMapping = function() {};
+
+Bindings.CSSWorkspaceBinding.SourceMapping.prototype = {
+  /**
+   * @param {!SDK.CSSLocation} rawLocation
+   * @return {?Workspace.UILocation}
+   */
+  rawLocationToUILocation(rawLocation) {},
 };
 
 Bindings.CSSWorkspaceBinding.ModelInfo = class {
@@ -99,8 +126,9 @@ Bindings.CSSWorkspaceBinding.ModelInfo = class {
     ];
 
     this._stylesSourceMapping = new Bindings.StylesSourceMapping(cssModel, workspace);
-    this._sassSourceMapping =
-        new Bindings.SASSSourceMapping(cssModel, workspace, Bindings.NetworkProject.forTarget(cssModel.target()));
+    var sourceMapManager = cssModel.sourceMapManager();
+    this._sassSourceMapping = new Bindings.SASSSourceMapping(
+        sourceMapManager, workspace, Bindings.NetworkProject.forTarget(cssModel.target()));
 
     /** @type {!Multimap<!SDK.CSSStyleSheetHeader, !Bindings.CSSWorkspaceBinding.LiveLocation>} */
     this._locations = new Multimap();
@@ -219,7 +247,7 @@ Bindings.CSSWorkspaceBinding.LiveLocation = class extends Bindings.LiveLocationW
     if (!this._header)
       return null;
     var rawLocation = new SDK.CSSLocation(this._header, this._lineNumber, this._columnNumber);
-    return this._info._rawLocationToUILocation(rawLocation);
+    return Bindings.cssWorkspaceBinding.rawLocationToUILocation(rawLocation);
   }
 
   /**

@@ -5,13 +5,26 @@
 #import "ios/chrome/browser/content_suggestions/content_suggestions_coordinator.h"
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/ntp_snippets/content_suggestions_service.h"
+#include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
+#include "components/ntp_tiles/most_visited_sites.h"
+#include "components/reading_list/core/reading_list_model.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_mediator.h"
+#include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
+#include "ios/chrome/browser/ntp_tiles/ios_most_visited_sites_factory.h"
+#include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_article_item.h"
+#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
+#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_article_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
+#import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/referrer.h"
@@ -22,16 +35,21 @@
 #error "This file requires ARC support."
 #endif
 
-@interface ContentSuggestionsCoordinator ()<ContentSuggestionsCommands> {
-  ContentSuggestionsMediator* _contentSuggestionsMediator;
-}
+@interface ContentSuggestionsCoordinator ()<ContentSuggestionsCommands>
 
 @property(nonatomic, strong) AlertCoordinator* alertCoordinator;
 @property(nonatomic, strong) UINavigationController* navigationController;
 @property(nonatomic, strong)
     ContentSuggestionsViewController* suggestionsViewController;
+@property(nonatomic, strong)
+    ContentSuggestionsMediator* contentSuggestionsMediator;
 
+// Opens the |URL| in a new tab |incognito| or not.
 - (void)openNewTabWithURL:(const GURL&)URL incognito:(BOOL)incognito;
+// Dismisses the |article|, removing it from the content service, and dismisses
+// the item at |indexPath| in the view controller.
+- (void)dismissArticle:(ContentSuggestionsArticleItem*)article
+           atIndexPath:(NSIndexPath*)indexPath;
 
 @end
 
@@ -43,6 +61,7 @@
 @synthesize suggestionsViewController = _suggestionsViewController;
 @synthesize URLLoader = _URLLoader;
 @synthesize visible = _visible;
+@synthesize contentSuggestionsMediator = _contentSuggestionsMediator;
 
 - (void)start {
   if (self.visible || !self.browserState) {
@@ -53,13 +72,22 @@
 
   _visible = YES;
 
-  _contentSuggestionsMediator = [[ContentSuggestionsMediator alloc]
-      initWithContentService:IOSChromeContentSuggestionsServiceFactory::
-                                 GetForBrowserState(self.browserState)];
+  ntp_snippets::ContentSuggestionsService* contentSuggestionsService =
+      IOSChromeContentSuggestionsServiceFactory::GetForBrowserState(
+          self.browserState);
+  contentSuggestionsService->remote_suggestions_scheduler()->OnNTPOpened();
+
+  self.contentSuggestionsMediator = [[ContentSuggestionsMediator alloc]
+      initWithContentService:contentSuggestionsService
+            largeIconService:IOSChromeLargeIconServiceFactory::
+                                 GetForBrowserState(self.browserState)
+             mostVisitedSite:IOSMostVisitedSitesFactory::NewForBrowserState(
+                                 self.browserState)];
+  self.contentSuggestionsMediator.commandHandler = self;
 
   self.suggestionsViewController = [[ContentSuggestionsViewController alloc]
       initWithStyle:CollectionViewControllerStyleDefault
-         dataSource:_contentSuggestionsMediator];
+         dataSource:self.contentSuggestionsMediator];
 
   self.suggestionsViewController.suggestionCommandHandler = self;
   _navigationController = [[UINavigationController alloc]
@@ -82,18 +110,17 @@
       dismissViewControllerAnimated:YES
                          completion:nil];
   self.navigationController = nil;
+  self.contentSuggestionsMediator = nil;
+  self.alertCoordinator = nil;
   _visible = NO;
 }
 
 #pragma mark - ContentSuggestionsCommands
 
 - (void)openReadingList {
-}
-
-- (void)openFirstPageOfReadingList {
-}
-
-- (void)openFaviconAtIndex:(NSInteger)index {
+  [self.baseViewController
+      chromeExecuteCommand:[GenericChromeCommand
+                               commandWithTag:IDC_SHOW_READING_LIST]];
 }
 
 - (void)openURL:(const GURL&)URL {
@@ -108,18 +135,20 @@
 }
 
 - (void)displayContextMenuForArticle:(ContentSuggestionsArticleItem*)articleItem
-                             atPoint:(CGPoint)touchLocation {
-  NSString* urlString = base::SysUTF8ToNSString(articleItem.articleURL.spec());
+                             atPoint:(CGPoint)touchLocation
+                         atIndexPath:(NSIndexPath*)indexPath {
   self.alertCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.navigationController
-                           title:articleItem.title
-                         message:urlString
+                           title:nil
+                         message:nil
                             rect:CGRectMake(touchLocation.x, touchLocation.y, 0,
                                             0)
                             view:self.suggestionsViewController.collectionView];
 
   __weak ContentSuggestionsCoordinator* weakSelf = self;
   GURL articleURL = articleItem.articleURL;
+  NSString* articleTitle = articleItem.title;
+  __weak ContentSuggestionsArticleItem* weakArticle = articleItem;
 
   NSString* openInNewTabTitle =
       l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB);
@@ -141,12 +170,35 @@
                 }
                  style:UIAlertActionStyleDefault];
 
+  NSString* readLaterTitle =
+      l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_ADDTOREADINGLIST);
+  [self.alertCoordinator
+      addItemWithTitle:readLaterTitle
+                action:^{
+                  ContentSuggestionsCoordinator* strongSelf = weakSelf;
+                  if (!strongSelf)
+                    return;
+
+                  base::RecordAction(
+                      base::UserMetricsAction("MobileReadingListAdd"));
+                  // TODO(crbug.com/691979): Add metrics.
+
+                  ReadingListModel* readingModel =
+                      ReadingListModelFactory::GetForBrowserState(
+                          strongSelf.browserState);
+                  readingModel->AddEntry(articleURL,
+                                         base::SysNSStringToUTF8(articleTitle),
+                                         reading_list::ADDED_VIA_CURRENT_APP);
+                }
+                 style:UIAlertActionStyleDefault];
+
   NSString* deleteTitle =
       l10n_util::GetNSString(IDS_IOS_CONTENT_SUGGESTIONS_DELETE);
   [self.alertCoordinator addItemWithTitle:deleteTitle
                                    action:^{
                                      // TODO(crbug.com/691979): Add metrics.
-                                     [weakSelf removeEntry];
+                                     [weakSelf dismissArticle:weakArticle
+                                                  atIndexPath:indexPath];
                                    }
                                     style:UIAlertActionStyleDefault];
 
@@ -157,6 +209,11 @@
                                     style:UIAlertActionStyleCancel];
 
   [self.alertCoordinator start];
+}
+
+- (void)dismissContextMenu {
+  [self.alertCoordinator stop];
+  self.alertCoordinator = nil;
 }
 
 #pragma mark - Private
@@ -173,8 +230,15 @@
   [self stop];
 }
 
-- (void)removeEntry {
+- (void)dismissArticle:(ContentSuggestionsArticleItem*)article
+           atIndexPath:(NSIndexPath*)indexPath {
+  if (!article)
+    return;
+
   // TODO(crbug.com/691979): Add metrics.
+  [self.contentSuggestionsMediator
+      dismissSuggestion:article.suggestionIdentifier];
+  [self.suggestionsViewController dismissEntryAtIndexPath:indexPath];
 }
 
 @end

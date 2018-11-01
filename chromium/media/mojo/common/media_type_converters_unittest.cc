@@ -184,7 +184,6 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_Normal) {
       reinterpret_cast<const uint8_t*>(&kSideData), kSideDataSize));
   buffer->set_timestamp(base::TimeDelta::FromMilliseconds(123));
   buffer->set_duration(base::TimeDelta::FromMilliseconds(456));
-  buffer->set_splice_timestamp(base::TimeDelta::FromMilliseconds(200));
   buffer->set_discard_padding(
       DecoderBuffer::DiscardPadding(base::TimeDelta::FromMilliseconds(5),
                                     base::TimeDelta::FromMilliseconds(6)));
@@ -202,7 +201,6 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_Normal) {
   EXPECT_EQ(buffer->timestamp(), result->timestamp());
   EXPECT_EQ(buffer->duration(), result->duration());
   EXPECT_EQ(buffer->is_key_frame(), result->is_key_frame());
-  EXPECT_EQ(buffer->splice_timestamp(), result->splice_timestamp());
   EXPECT_EQ(buffer->discard_padding(), result->discard_padding());
 
   // Both |buffer| and |result| are not encrypted.
@@ -344,6 +342,42 @@ TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_Encrypted) {
                             COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
                             kNaturalSize, EmptyExtraData(),
                             AesCtrEncryptionScheme());
+  mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
+  VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
+  EXPECT_TRUE(result.Matches(config));
+}
+
+TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_ColorSpaceInfo) {
+  VideoDecoderConfig config(kCodecVP8, VP8PROFILE_ANY, PIXEL_FORMAT_YV12,
+                            COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
+                            kNaturalSize, EmptyExtraData(), Unencrypted());
+  config.set_color_space_info(VideoColorSpace(
+      VideoColorSpace::PrimaryID::BT2020,
+      VideoColorSpace::TransferID::SMPTEST2084,
+      VideoColorSpace::MatrixID::BT2020_CL, gfx::ColorSpace::RangeID::LIMITED));
+  mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
+  VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
+  EXPECT_TRUE(result.Matches(config));
+}
+
+TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_HDRMetadata) {
+  VideoDecoderConfig config(kCodecVP8, VP8PROFILE_ANY, PIXEL_FORMAT_YV12,
+                            COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
+                            kNaturalSize, EmptyExtraData(), Unencrypted());
+  HDRMetadata hdr_metadata;
+  hdr_metadata.max_frame_average_light_level = 123;
+  hdr_metadata.max_content_light_level = 456;
+  hdr_metadata.mastering_metadata.primary_r.set_x(0.1f);
+  hdr_metadata.mastering_metadata.primary_r.set_y(0.2f);
+  hdr_metadata.mastering_metadata.primary_g.set_x(0.3f);
+  hdr_metadata.mastering_metadata.primary_g.set_y(0.4f);
+  hdr_metadata.mastering_metadata.primary_b.set_x(0.5f);
+  hdr_metadata.mastering_metadata.primary_b.set_y(0.6f);
+  hdr_metadata.mastering_metadata.white_point.set_x(0.7f);
+  hdr_metadata.mastering_metadata.white_point.set_y(0.8f);
+  hdr_metadata.mastering_metadata.luminance_max = 1000;
+  hdr_metadata.mastering_metadata.luminance_min = 0;
+  config.set_hdr_metadata(hdr_metadata);
   mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
   VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
   EXPECT_TRUE(result.Matches(config));

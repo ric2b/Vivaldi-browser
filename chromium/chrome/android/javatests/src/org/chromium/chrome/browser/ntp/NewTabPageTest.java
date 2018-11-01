@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.browser.suggestions.TileGroupDelegateImpl;
+import org.chromium.chrome.browser.suggestions.TileSource;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeTabbedActivityTestBase;
@@ -59,7 +60,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
 
     private static final String[] FAKE_MOST_VISITED_TITLES = new String[] { "Simple" };
     private static final String[] FAKE_MOST_VISITED_WHITELIST_ICON_PATHS = new String[] { "" };
-    private static final int[] FAKE_MOST_VISITED_SOURCES = new int[] {NTPTileSource.TOP_SITES};
+    private static final int[] FAKE_MOST_VISITED_SOURCES = new int[] {TileSource.TOP_SITES};
 
     private Tab mTab;
     private NewTabPage mNtp;
@@ -73,38 +74,25 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     protected void setUp() throws Exception {
         mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         mSiteSuggestionUrls = new String[] {mTestServer.getURL(TEST_PAGE)};
+
+        mMostVisitedSites = new FakeMostVisitedSites();
+        mMostVisitedSites.setTileSuggestions(FAKE_MOST_VISITED_TITLES, mSiteSuggestionUrls,
+                FAKE_MOST_VISITED_WHITELIST_ICON_PATHS, FAKE_MOST_VISITED_SOURCES);
+        TileGroupDelegateImpl.setMostVisitedSitesForTests(mMostVisitedSites);
         super.setUp();
     }
 
     @Override
     protected void tearDown() throws Exception {
         mTestServer.stopAndDestroyServer();
+        TileGroupDelegateImpl.setMostVisitedSitesForTests(null);
         super.tearDown();
     }
 
     @Override
     public void startMainActivity() throws InterruptedException {
-        startMainActivityOnBlankPage();
+        startMainActivityWithURL(UrlConstants.NTP_URL);
         mTab = getActivity().getActivityTab();
-
-        try {
-            runTestOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    // Create FakeMostVisitedSites after starting the activity, since it depends on
-                    // native code.
-                    mMostVisitedSites = new FakeMostVisitedSites(mTab.getProfile());
-                    mMostVisitedSites.setTileSuggestions(FAKE_MOST_VISITED_TITLES,
-                            mSiteSuggestionUrls, FAKE_MOST_VISITED_WHITELIST_ICON_PATHS,
-                            FAKE_MOST_VISITED_SOURCES);
-                }
-            });
-        } catch (Throwable t) {
-            fail(t.getMessage());
-        }
-        TileGroupDelegateImpl.setMostVisitedSitesForTests(mMostVisitedSites);
-
-        loadUrl(UrlConstants.NTP_URL);
         NewTabPageTestUtils.waitForNtpLoaded(mTab);
 
         assertTrue(mTab.getNativePage() instanceof NewTabPage);
@@ -116,7 +104,6 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
 
     @MediumTest
     @Feature({"NewTabPage", "RenderTest"})
-    @CommandLineFlags.Add("enable-features=NTPSnippets")
     public void testRender() throws IOException {
         ViewRenderer viewRenderer = new ViewRenderer(getActivity(),
                 "chrome/test/data/android/render_tests", "NewTabPageTest");
@@ -146,7 +133,6 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
 
     @MediumTest
     @Feature({"NewTabPage"})
-    @CommandLineFlags.Add("enable-features=NTPSnippets")
     @UiThreadTest
     public void testThumbnailInvalidations() {
         captureThumbnail();
@@ -286,7 +272,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     @MediumTest
     @Feature({"NewTabPage"})
     public void testUrlFocusAnimationsDisabledOnLoad() throws InterruptedException {
-        assertFalse(getUrlFocusAnimatonsDisabled());
+        assertFalse(getUrlFocusAnimationsDisabled());
         ChromeTabUtils.waitForTabPageLoaded(mTab, new Runnable() {
             @Override
             public void run() {
@@ -298,13 +284,13 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
                         mTab.loadUrl(new LoadUrlParams(mTestServer.getURL(TEST_PAGE),
                                 pageTransition));
                         // It should be disabled as soon as a load URL is triggered.
-                        assertTrue(getUrlFocusAnimatonsDisabled());
+                        assertTrue(getUrlFocusAnimationsDisabled());
                     }
                 });
             }
         });
         // Ensure it is still marked as disabled once the new page is fully loaded.
-        assertTrue(getUrlFocusAnimatonsDisabled());
+        assertTrue(getUrlFocusAnimationsDisabled());
     }
 
     @LargeTest
@@ -328,7 +314,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
                     "/ntp_test.html",
                     "<html><body></body></html>", null, delayAction);
 
-            assertFalse(getUrlFocusAnimatonsDisabled());
+            assertFalse(getUrlFocusAnimationsDisabled());
 
             clickFakebox();
             UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);
@@ -362,7 +348,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
             waitForUrlFocusAnimationsDisabledState(false);
             delaySemaphore.release();
             loadedCallback.waitForCallback(0);
-            assertFalse(getUrlFocusAnimatonsDisabled());
+            assertFalse(getUrlFocusAnimationsDisabled());
         } finally {
             webServer.shutdown();
         }
@@ -470,7 +456,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
         mNtp.captureThumbnail(canvas);
     }
 
-    private boolean getUrlFocusAnimatonsDisabled() {
+    private boolean getUrlFocusAnimationsDisabled() {
         return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
@@ -483,7 +469,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
         CriteriaHelper.pollInstrumentationThread(Criteria.equals(disabled, new Callable<Boolean>() {
             @Override
             public Boolean call() {
-                return getUrlFocusAnimatonsDisabled();
+                return getUrlFocusAnimationsDisabled();
             }
         }));
     }

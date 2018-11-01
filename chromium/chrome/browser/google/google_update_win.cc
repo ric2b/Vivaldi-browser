@@ -6,6 +6,7 @@
 
 #include <atlbase.h>
 #include <atlcom.h>
+#include <objbase.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -34,7 +35,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/install_static/install_util.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/install_util.h"
@@ -94,9 +94,8 @@ GoogleUpdateErrorCode CanUpdateCurrentChrome(
     const base::FilePath& chrome_exe_path,
     bool system_level_install) {
   DCHECK_NE(InstallUtil::IsPerUserInstall(), system_level_install);
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  base::FilePath user_exe_path = installer::GetChromeInstallPath(false, dist);
-  base::FilePath machine_exe_path = installer::GetChromeInstallPath(true, dist);
+  base::FilePath user_exe_path = installer::GetChromeInstallPath(false);
+  base::FilePath machine_exe_path = installer::GetChromeInstallPath(true);
   if (!base::FilePath::CompareEqualIgnoreCase(chrome_exe_path.value(),
                                         user_exe_path.value()) &&
       !base::FilePath::CompareEqualIgnoreCase(chrome_exe_path.value(),
@@ -128,9 +127,9 @@ void ConfigureProxyBlanket(IUnknown* interface_pointer) {
 // Vista+. |hwnd| must refer to a foregound window in order to get the UAC
 // prompt to appear in the foreground if running on Vista+. It can also be NULL
 // if background UAC prompts are desired.
-HRESULT CoGetClassObjectAsAdmin(REFCLSID class_id,
+HRESULT CoGetClassObjectAsAdmin(gfx::AcceleratedWidget hwnd,
+                                REFCLSID class_id,
                                 REFIID interface_id,
-                                gfx::AcceleratedWidget hwnd,
                                 void** interface_ptr) {
   if (!interface_ptr)
     return E_POINTER;
@@ -184,24 +183,19 @@ HRESULT CreateGoogleUpdate3WebClass(
       !install_update_if_possible ||
       !IsElevationRequiredForSystemLevelUpdates()) {
     hresult = ::CoGetClassObject(google_update_clsid, CLSCTX_ALL, nullptr,
-                                 base::win::ScopedComPtr<IClassFactory>::iid(),
-                                 class_factory.ReceiveVoid());
+                                 IID_PPV_ARGS(&class_factory));
   } else {
     // With older versions of GoogleUpdate, a system-level update requires Admin
     // privileges. Elevate while instantiating the MachineClass.
-    hresult = CoGetClassObjectAsAdmin(
-        google_update_clsid, base::win::ScopedComPtr<IClassFactory>::iid(),
-        elevation_window, class_factory.ReceiveVoid());
+    hresult = CoGetClassObjectAsAdmin(elevation_window, google_update_clsid,
+                                      IID_PPV_ARGS(&class_factory));
   }
   if (FAILED(hresult))
     return hresult;
 
   ConfigureProxyBlanket(class_factory.get());
 
-  return class_factory->CreateInstance(
-      nullptr,
-      base::win::ScopedComPtr<IGoogleUpdate3Web>::iid(),
-      google_update->ReceiveVoid());
+  return class_factory->CreateInstance(nullptr, IID_PPV_ARGS(google_update));
 }
 
 // UpdateCheckDriver -----------------------------------------------------------
@@ -537,7 +531,7 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
     hresult = dispatch.QueryInterface(app_bundle.Receive());
     if (FAILED(hresult))
       return hresult;
-    dispatch.Release();
+    dispatch.Reset();
 
     ConfigureProxyBlanket(app_bundle.get());
 
@@ -824,10 +818,10 @@ void UpdateCheckDriver::PollGoogleUpdate() {
 
   // Release the reference on the COM objects before bouncing back to the
   // caller's thread.
-  state.Release();
-  app_.Release();
-  app_bundle_.Release();
-  google_update_.Release();
+  state.Reset();
+  app_.Reset();
+  app_bundle_.Reset();
+  google_update_.Reset();
 
   result_runner_->DeleteSoon(FROM_HERE, this);
 }

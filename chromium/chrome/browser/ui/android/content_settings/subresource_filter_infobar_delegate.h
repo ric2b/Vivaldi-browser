@@ -23,6 +23,9 @@ class SubresourceFilterInfobarDelegate : public ConfirmInfoBarDelegate {
   ~SubresourceFilterInfobarDelegate() override;
 
   base::string16 GetExplanationText() const;
+  base::string16 GetToggleText() const;
+
+  bool ShouldShowExperimentalInfobar() const;
 
   // ConfirmInfoBarDelegate:
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
@@ -31,9 +34,12 @@ class SubresourceFilterInfobarDelegate : public ConfirmInfoBarDelegate {
   int GetButtons() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
   bool Cancel() override;
+  bool LinkClicked(WindowOpenDisposition disposition) override;
 
  private:
   SubresourceFilterInfobarDelegate();
+
+  bool using_experimental_infobar_;
 
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilterInfobarDelegate);
 };

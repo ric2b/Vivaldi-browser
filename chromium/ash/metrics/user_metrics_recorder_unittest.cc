@@ -6,14 +6,16 @@
 
 #include <memory>
 
-#include "ash/common/login_status.h"
-#include "ash/common/shelf/shelf_model.h"
-#include "ash/common/test/test_shelf_delegate.h"
-#include "ash/common/test/test_system_tray_delegate.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
+#include "ash/login_status.h"
+#include "ash/public/cpp/config.h"
+#include "ash/shelf/shelf_model.h"
+#include "ash/shell.h"
+#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/test_shelf_delegate.h"
+#include "ash/test/test_system_tray_delegate.h"
 #include "ash/test/user_metrics_recorder_test_api.h"
+#include "ash/wm_window.h"
 #include "base/test/histogram_tester.h"
 #include "ui/aura/window.h"
 
@@ -188,7 +190,7 @@ TEST_F(UserMetricsRecorderTest, VerifyStatsRecordedByRecordPeriodicMetrics) {
 // UserMetricsRecorder::RecordPeriodicMetrics() method.
 TEST_F(UserMetricsRecorderTest, ValuesRecordedByRecordShelfItemCounts) {
   // TODO: investigate failure in mash, http://crbug.com/695629.
-  if (WmShell::Get()->IsRunningInMash())
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
 
   test::TestShelfDelegate* test_shelf_delegate =
@@ -196,7 +198,7 @@ TEST_F(UserMetricsRecorderTest, ValuesRecordedByRecordShelfItemCounts) {
   SetUserInActiveDesktopEnvironment(true);
 
   // Make sure the shelf contains the app list launcher button.
-  const ShelfItems& shelf_items = WmShell::Get()->shelf_model()->items();
+  const ShelfItems& shelf_items = Shell::Get()->shelf_model()->items();
   ASSERT_EQ(1u, shelf_items.size());
   ASSERT_EQ(TYPE_APP_LIST, shelf_items[0].type);
 

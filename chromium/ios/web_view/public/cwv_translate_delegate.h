@@ -5,9 +5,10 @@
 #ifndef IOS_WEB_VIEW_PUBLIC_CWV_TRANSLATE_DELEGATE_H_
 #define IOS_WEB_VIEW_PUBLIC_CWV_TRANSLATE_DELEGATE_H_
 
+#import <ChromeWebView/cwv_export.h>
 #import <Foundation/Foundation.h>
 
-@protocol CRIWVTranslateManager;
+@protocol CWVTranslateManager;
 
 typedef NS_ENUM(NSInteger, CRIWVTransateStep) {
   CRIWVTransateStepBeforeTranslate,
@@ -18,10 +19,11 @@ typedef NS_ENUM(NSInteger, CRIWVTransateStep) {
 
 // Delegate interface for the CRIWVTranslate.  Embedders can implement the
 // functions in order to customize the behavior.
+CWV_EXPORT
 @protocol CWVTranslateDelegate
 
 - (void)translateStepChanged:(CRIWVTransateStep)step
-                     manager:(id<CRIWVTranslateManager>)manager;
+                     manager:(id<CWVTranslateManager>)manager;
 
 @end
 

@@ -6,28 +6,28 @@
 
 #include "core/HTMLNames.h"
 #include "core/html/HTMLMetaElement.h"
+#include "platform/wtf/PassRefPtr.h"
 #include "public/platform/WebString.h"
-#include "wtf/PassRefPtr.h"
 
 namespace blink {
 
-WebString WebMetaElement::computeEncoding() const {
-  return String(constUnwrap<HTMLMetaElement>()->computeEncoding().name());
+WebString WebMetaElement::ComputeEncoding() const {
+  return String(ConstUnwrap<HTMLMetaElement>()->ComputeEncoding().GetName());
 }
 
 WebMetaElement::WebMetaElement(HTMLMetaElement* element)
     : WebElement(element) {}
 
 DEFINE_WEB_NODE_TYPE_CASTS(WebMetaElement,
-                           isHTMLMetaElement(constUnwrap<Node>()));
+                           isHTMLMetaElement(ConstUnwrap<Node>()));
 
 WebMetaElement& WebMetaElement::operator=(HTMLMetaElement* element) {
-  m_private = element;
+  private_ = element;
   return *this;
 }
 
 WebMetaElement::operator HTMLMetaElement*() const {
-  return toHTMLMetaElement(m_private.get());
+  return toHTMLMetaElement(private_.Get());
 }
 
 }  // namespace blink

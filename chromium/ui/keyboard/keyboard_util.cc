@@ -17,7 +17,7 @@
 #include "ui/base/ime/input_method_base.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_flags.h"
-#include "ui/events/event_processor.h"
+#include "ui/events/event_sink.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
@@ -27,6 +27,8 @@
 #include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/scoped_keyboard_disabler.h"
+
+namespace keyboard {
 
 namespace {
 
@@ -39,11 +41,11 @@ void SendProcessKeyEvent(ui::EventType type,
                      ui::EF_IS_SYNTHESIZED, ui::DomKey::PROCESS,
                      ui::EventTimeForNow());
   ui::EventDispatchDetails details =
-      host->event_processor()->OnEventFromSource(&event);
+      host->event_sink()->OnEventFromSource(&event);
   CHECK(!details.dispatcher_destroyed);
 }
 
-base::LazyInstance<base::Time> g_keyboard_load_time_start =
+base::LazyInstance<base::Time>::DestructorAtExit g_keyboard_load_time_start =
     LAZY_INSTANCE_INITIALIZER;
 
 bool g_accessibility_keyboard_enabled = false;
@@ -56,18 +58,14 @@ bool g_touch_keyboard_enabled = false;
 
 bool g_overscroll_enabled_with_accessibility_keyboard = false;
 
-keyboard::KeyboardState g_requested_keyboard_state =
-    keyboard::KEYBOARD_STATE_AUTO;
+KeyboardState g_requested_keyboard_state = KEYBOARD_STATE_AUTO;
 
-keyboard::KeyboardOverscrolOverride g_keyboard_overscroll_override =
-    keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_NONE;
+KeyboardOverscrolOverride g_keyboard_overscroll_override =
+    KEYBOARD_OVERSCROLL_OVERRIDE_NONE;
 
-keyboard::KeyboardShowOverride g_keyboard_show_override =
-    keyboard::KEYBOARD_SHOW_OVERRIDE_NONE;
+KeyboardShowOverride g_keyboard_show_override = KEYBOARD_SHOW_OVERRIDE_NONE;
 
 }  // namespace
-
-namespace keyboard {
 
 gfx::Rect FullWidthKeyboardBoundsFromRootBounds(const gfx::Rect& root_bounds,
                                                 int keyboard_height) {
@@ -124,21 +122,26 @@ bool IsKeyboardEnabled() {
   if (g_accessibility_keyboard_enabled)
     return true;
   // Policy strictly disables showing a virtual keyboard.
-  if (g_keyboard_show_override == keyboard::KEYBOARD_SHOW_OVERRIDE_DISABLED)
+  if (g_keyboard_show_override == KEYBOARD_SHOW_OVERRIDE_DISABLED)
     return false;
   // Policy strictly enables the keyboard.
-  if (g_keyboard_show_override == keyboard::KEYBOARD_SHOW_OVERRIDE_ENABLED)
+  if (g_keyboard_show_override == KEYBOARD_SHOW_OVERRIDE_ENABLED)
     return true;
   // Run-time flag to enable keyboard has been included.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableVirtualKeyboard))
     return true;
   // Requested state from the application layer.
-  if (g_requested_keyboard_state == keyboard::KEYBOARD_STATE_DISABLED)
+  if (g_requested_keyboard_state == KEYBOARD_STATE_DISABLED)
     return false;
   // Check if any of the other flags are enabled.
   return g_touch_keyboard_enabled ||
-         g_requested_keyboard_state == keyboard::KEYBOARD_STATE_ENABLED;
+         g_requested_keyboard_state == KEYBOARD_STATE_ENABLED;
+}
+
+bool IsKeyboardVisible() {
+  auto* keyboard_controller = keyboard::KeyboardController::GetInstance();
+  return keyboard_controller && keyboard_controller->keyboard_visible();
 }
 
 bool IsKeyboardOverscrollEnabled() {
@@ -219,7 +222,7 @@ bool IsVoiceInputEnabled() {
 }
 
 bool InsertText(const base::string16& text) {
-  keyboard::KeyboardController* controller = KeyboardController::GetInstance();
+  KeyboardController* controller = KeyboardController::GetInstance();
   if (!controller)
     return false;
 
@@ -267,12 +270,12 @@ bool MoveCursor(int swipe_direction,
                              modifier_flags, domkeyx,
                              ui::EventTimeForNow());
     ui::EventDispatchDetails details =
-        host->event_processor()->OnEventFromSource(&press_event);
+        host->event_sink()->OnEventFromSource(&press_event);
     CHECK(!details.dispatcher_destroyed);
     ui::KeyEvent release_event(ui::ET_KEY_RELEASED, codex, domcodex,
                                modifier_flags, domkeyx,
                                ui::EventTimeForNow());
-    details = host->event_processor()->OnEventFromSource(&release_event);
+    details = host->event_sink()->OnEventFromSource(&release_event);
     CHECK(!details.dispatcher_destroyed);
   }
 
@@ -286,12 +289,12 @@ bool MoveCursor(int swipe_direction,
                              modifier_flags, domkeyy,
                              ui::EventTimeForNow());
     ui::EventDispatchDetails details =
-        host->event_processor()->OnEventFromSource(&press_event);
+        host->event_sink()->OnEventFromSource(&press_event);
     CHECK(!details.dispatcher_destroyed);
     ui::KeyEvent release_event(ui::ET_KEY_RELEASED, codey, domcodey,
                                modifier_flags, domkeyy,
                                ui::EventTimeForNow());
-    details = host->event_processor()->OnEventFromSource(&release_event);
+    details = host->event_sink()->OnEventFromSource(&release_event);
     CHECK(!details.dispatcher_destroyed);
   }
   return true;
@@ -358,7 +361,7 @@ bool SendKeyEvent(const std::string type,
       input_method->DispatchKeyEvent(&event);
     } else {
       ui::EventDispatchDetails details =
-          host->event_processor()->OnEventFromSource(&event);
+          host->event_sink()->OnEventFromSource(&event);
       CHECK(!details.dispatcher_destroyed);
     }
   }
@@ -391,10 +394,8 @@ void MarkKeyboardLoadFinished() {
 }
 
 void LogKeyboardControlEvent(KeyboardControlEvent event) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "VirtualKeyboard.KeyboardControlEvent",
-      event,
-      keyboard::KEYBOARD_CONTROL_MAX);
+  UMA_HISTOGRAM_ENUMERATION("VirtualKeyboard.KeyboardControlEvent", event,
+                            KEYBOARD_CONTROL_MAX);
 }
 
 void SetOverscrollEnabledWithAccessibilityKeyboard(bool enabled) {

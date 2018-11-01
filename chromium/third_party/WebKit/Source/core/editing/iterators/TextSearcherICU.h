@@ -6,14 +6,14 @@
 #define TextSearcherICU_h
 
 #include "core/CoreExport.h"
-#include "wtf/text/StringView.h"
-#include "wtf/text/Unicode.h"
+#include "platform/wtf/text/StringView.h"
+#include "platform/wtf/text/Unicode.h"
 
 struct UStringSearch;
 
 namespace blink {
 
-struct CORE_EXPORT MatchResult {
+struct CORE_EXPORT MatchResultICU {
   size_t start;
   size_t length;
 };
@@ -25,17 +25,17 @@ class CORE_EXPORT TextSearcherICU {
   TextSearcherICU();
   ~TextSearcherICU();
 
-  void setPattern(const StringView& pattern, bool sensitive);
-  void setText(const UChar* text, size_t length);
-  void setOffset(size_t);
-  bool nextMatchResult(MatchResult&);
+  void SetPattern(const StringView& pattern, bool sensitive);
+  void SetText(const UChar* text, size_t length);
+  void SetOffset(size_t);
+  bool NextMatchResult(MatchResultICU&);
 
  private:
-  void setPattern(const UChar* pattern, size_t length);
-  void setCaseSensitivity(bool caseSensitive);
+  void SetPattern(const UChar* pattern, size_t length);
+  void SetCaseSensitivity(bool case_sensitive);
 
-  UStringSearch* m_searcher = nullptr;
-  size_t m_textLength = 0;
+  UStringSearch* searcher_ = nullptr;
+  size_t text_length_ = 0;
 };
 
 }  // namespace blink

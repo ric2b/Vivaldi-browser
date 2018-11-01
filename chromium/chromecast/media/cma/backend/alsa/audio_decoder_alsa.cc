@@ -18,7 +18,6 @@
 #include "chromecast/media/cma/base/decoder_buffer_adapter.h"
 #include "chromecast/media/cma/base/decoder_buffer_base.h"
 #include "chromecast/public/media/cast_decoder_buffer.h"
-#include "media/base/audio_buffer.h"
 #include "media/base/audio_bus.h"
 #include "media/base/channel_layout.h"
 #include "media/base/decoder_buffer.h"
@@ -72,6 +71,7 @@ AudioDecoderAlsa::AudioDecoderAlsa(MediaPipelineBackendAlsa* backend)
       current_pts_(kInvalidTimestamp),
       pending_output_frames_(kNoPendingOutput),
       volume_multiplier_(1.0f),
+      pool_(new ::media::AudioBufferMemoryPool()),
       weak_factory_(this) {
   TRACE_FUNCTION_ENTRY0();
   DCHECK(backend_);
@@ -108,9 +108,9 @@ bool AudioDecoderAlsa::Start(int64_t start_pts) {
   TRACE_FUNCTION_ENTRY0();
   current_pts_ = start_pts;
   DCHECK(IsValidConfig(config_));
-  mixer_input_.reset(new StreamMixerAlsaInput(this, config_.samples_per_second,
-                                              backend_->Primary(),
-                                              backend_->DeviceId()));
+  mixer_input_.reset(new StreamMixerAlsaInput(
+      this, config_.samples_per_second, backend_->Primary(),
+      backend_->DeviceId(), backend_->ContentType()));
   mixer_input_->SetVolumeMultiplier(volume_multiplier_);
   // Create decoder_ if necessary. This can happen if Stop() was called, and
   // SetConfig() was not called since then.
@@ -238,9 +238,9 @@ bool AudioDecoderAlsa::SetConfig(const AudioConfig& config) {
     // Destroy the old input first to ensure that the mixer output sample rate
     // is updated.
     mixer_input_.reset();
-    mixer_input_.reset(new StreamMixerAlsaInput(this, config.samples_per_second,
-                                                backend_->Primary(),
-                                                backend_->DeviceId()));
+    mixer_input_.reset(new StreamMixerAlsaInput(
+        this, config.samples_per_second, backend_->Primary(),
+        backend_->DeviceId(), backend_->ContentType()));
     mixer_input_->SetVolumeMultiplier(volume_multiplier_);
     pending_output_frames_ = kNoPendingOutput;
   }
@@ -380,7 +380,7 @@ void AudioDecoderAlsa::OnBufferDecoded(
     scoped_refptr<::media::AudioBuffer> buffer = ::media::AudioBuffer::CopyFrom(
         ::media::kSampleFormatPlanarF32, ::media::CHANNEL_LAYOUT_STEREO,
         kNumChannels, config_.samples_per_second, input_frames, channels,
-        base::TimeDelta());
+        base::TimeDelta(), pool_);
     rate_shifter_->EnqueueBuffer(buffer);
     rate_shifter_info_.back().input_frames += input_frames;
   }

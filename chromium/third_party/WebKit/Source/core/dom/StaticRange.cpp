@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://discourse.wicg.io/t/proposal-staticrange-to-be-used-instead-of-range-for-new-apis/1472
-
 #include "core/dom/StaticRange.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -14,45 +12,45 @@
 namespace blink {
 
 StaticRange::StaticRange(Document& document)
-    : m_ownerDocument(document),
-      m_startContainer(document),
-      m_startOffset(0),
-      m_endContainer(document),
-      m_endOffset(0) {}
+    : owner_document_(document),
+      start_container_(document),
+      start_offset_(0u),
+      end_container_(document),
+      end_offset_(0u) {}
 
 StaticRange::StaticRange(Document& document,
-                         Node* startContainer,
-                         int startOffset,
-                         Node* endContainer,
-                         int endOffset)
-    : m_ownerDocument(document),
-      m_startContainer(startContainer),
-      m_startOffset(startOffset),
-      m_endContainer(endContainer),
-      m_endOffset(endOffset) {}
+                         Node* start_container,
+                         unsigned start_offset,
+                         Node* end_container,
+                         unsigned end_offset)
+    : owner_document_(document),
+      start_container_(start_container),
+      start_offset_(start_offset),
+      end_container_(end_container),
+      end_offset_(end_offset) {}
 
-void StaticRange::setStart(Node* container, int offset) {
-  m_startContainer = container;
-  m_startOffset = offset;
+void StaticRange::setStart(Node* container, unsigned offset) {
+  start_container_ = container;
+  start_offset_ = offset;
 }
 
-void StaticRange::setEnd(Node* container, int offset) {
-  m_endContainer = container;
-  m_endOffset = offset;
+void StaticRange::setEnd(Node* container, unsigned offset) {
+  end_container_ = container;
+  end_offset_ = offset;
 }
 
-Range* StaticRange::toRange(ExceptionState& exceptionState) const {
-  Range* range = Range::create(*m_ownerDocument.get());
+Range* StaticRange::toRange(ExceptionState& exception_state) const {
+  Range* range = Range::Create(*owner_document_.Get());
   // Do the offset checking.
-  range->setStart(m_startContainer, m_startOffset, exceptionState);
-  range->setEnd(m_endContainer, m_endOffset, exceptionState);
+  range->setStart(start_container_, start_offset_, exception_state);
+  range->setEnd(end_container_, end_offset_, exception_state);
   return range;
 }
 
 DEFINE_TRACE(StaticRange) {
-  visitor->trace(m_ownerDocument);
-  visitor->trace(m_startContainer);
-  visitor->trace(m_endContainer);
+  visitor->Trace(owner_document_);
+  visitor->Trace(start_container_);
+  visitor->Trace(end_container_);
 }
 
 }  // namespace blink

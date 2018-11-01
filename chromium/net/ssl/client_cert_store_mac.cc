@@ -91,9 +91,12 @@ bool IsIssuedByInKeychain(const std::vector<std::string>& valid_issuers,
   DCHECK(cert);
   DCHECK(cert->get());
 
-  X509Certificate::OSCertHandle cert_handle = (*cert)->os_cert_handle();
+  base::ScopedCFTypeRef<SecCertificateRef> os_cert(
+      x509_util::CreateSecCertificateFromX509Certificate(cert->get()));
+  if (!os_cert)
+    return false;
   CFArrayRef cert_chain = NULL;
-  OSStatus result = CopyCertChain(cert_handle, &cert_chain);
+  OSStatus result = CopyCertChain(os_cert.get(), &cert_chain);
   if (result) {
     OSSTATUS_LOG(ERROR, result) << "CopyCertChain error";
     return false;
@@ -102,7 +105,7 @@ bool IsIssuedByInKeychain(const std::vector<std::string>& valid_issuers,
   if (!cert_chain)
     return false;
 
-  X509Certificate::OSCertHandles intermediates;
+  std::vector<SecCertificateRef> intermediates;
   for (CFIndex i = 1, chain_count = CFArrayGetCount(cert_chain);
        i < chain_count; ++i) {
     SecCertificateRef cert = reinterpret_cast<SecCertificateRef>(
@@ -110,14 +113,66 @@ bool IsIssuedByInKeychain(const std::vector<std::string>& valid_issuers,
     intermediates.push_back(cert);
   }
 
-  scoped_refptr<X509Certificate> new_cert(X509Certificate::CreateFromHandle(
-      cert_handle, intermediates));
+  scoped_refptr<X509Certificate> new_cert(
+      x509_util::CreateX509CertificateFromSecCertificate(os_cert.get(),
+                                                         intermediates));
   CFRelease(cert_chain);  // Also frees |intermediates|.
 
-  if (!new_cert->IsIssuedByEncoded(valid_issuers))
+  if (!new_cert || !new_cert->IsIssuedByEncoded(valid_issuers))
     return false;
 
   cert->swap(new_cert);
+  return true;
+}
+
+// Returns true if |purpose| is listed as allowed in |usage|. This
+// function also considers the "Any" purpose. If the attribute is
+// present and empty, we return false.
+bool ExtendedKeyUsageAllows(const CE_ExtendedKeyUsage* usage,
+                            const CSSM_OID* purpose) {
+  for (unsigned p = 0; p < usage->numPurposes; ++p) {
+    if (CSSMOIDEqual(&usage->purposes[p], purpose))
+      return true;
+    if (CSSMOIDEqual(&usage->purposes[p], &CSSMOID_ExtendedKeyUsageAny))
+      return true;
+  }
+  return false;
+}
+
+// Does |cert|'s usage allow SSL client authentication?
+bool SupportsSSLClientAuth(SecCertificateRef cert) {
+  x509_util::CSSMCachedCertificate cached_cert;
+  OSStatus status = cached_cert.Init(cert);
+  if (status)
+    return false;
+
+  // RFC5280 says to take the intersection of the two extensions.
+  //
+  // Our underlying crypto libraries don't expose
+  // ClientCertificateType, so for now we will not support fixed
+  // Diffie-Hellman mechanisms. For rsa_sign, we need the
+  // digitalSignature bit.
+  //
+  // In particular, if a key has the nonRepudiation bit and not the
+  // digitalSignature one, we will not offer it to the user.
+  x509_util::CSSMFieldValue key_usage;
+  status = cached_cert.GetField(&CSSMOID_KeyUsage, &key_usage);
+  if (status == CSSM_OK && key_usage.field()) {
+    const CSSM_X509_EXTENSION* ext = key_usage.GetAs<CSSM_X509_EXTENSION>();
+    const CE_KeyUsage* key_usage_value =
+        reinterpret_cast<const CE_KeyUsage*>(ext->value.parsedValue);
+    if (!((*key_usage_value) & CE_KU_DigitalSignature))
+      return false;
+  }
+
+  status = cached_cert.GetField(&CSSMOID_ExtendedKeyUsage, &key_usage);
+  if (status == CSSM_OK && key_usage.field()) {
+    const CSSM_X509_EXTENSION* ext = key_usage.GetAs<CSSM_X509_EXTENSION>();
+    const CE_ExtendedKeyUsage* ext_key_usage =
+        reinterpret_cast<const CE_ExtendedKeyUsage*>(ext->value.parsedValue);
+    if (!ExtendedKeyUsageAllows(ext_key_usage, &CSSMOID_ClientAuth))
+      return false;
+  }
   return true;
 }
 
@@ -142,7 +197,7 @@ void GetClientCertsImpl(const scoped_refptr<X509Certificate>& preferred_cert,
   selected_certs->clear();
   for (size_t i = 0; i < preliminary_list.size(); ++i) {
     scoped_refptr<X509Certificate>& cert = preliminary_list[i];
-    if (cert->HasExpired() || !cert->SupportsSSLClientAuth())
+    if (cert->HasExpired())
       continue;
 
     // Skip duplicates (a cert may be in multiple keychains).
@@ -236,9 +291,14 @@ void ClientCertStoreMac::GetClientCerts(const SSLCertRequestInfo& request,
       continue;
     ScopedCFTypeRef<SecCertificateRef> scoped_cert_handle(cert_handle);
 
+    if (!SupportsSSLClientAuth(cert_handle))
+      continue;
+
     scoped_refptr<X509Certificate> cert(
-        X509Certificate::CreateFromHandle(cert_handle,
-                                          X509Certificate::OSCertHandles()));
+        x509_util::CreateX509CertificateFromSecCertificate(
+            cert_handle, std::vector<SecCertificateRef>()));
+    if (!cert)
+      continue;
 
     if (preferred_identity && CFEqual(preferred_identity, identity)) {
       // Only one certificate should match.

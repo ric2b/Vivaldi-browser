@@ -273,13 +273,13 @@ TEST_F(PrefServiceSyncableTest, ModelAssociationCloudHasData) {
 
   syncer::SyncDataList in;
   syncer::SyncChangeList out;
-  AddToRemoteDataList(kStringPrefName, base::StringValue(kExampleUrl1), &in);
+  AddToRemoteDataList(kStringPrefName, base::Value(kExampleUrl1), &in);
   base::ListValue urls_to_restore;
   urls_to_restore.AppendString(kExampleUrl1);
   urls_to_restore.AppendString(kExampleUrl2);
   AddToRemoteDataList(kListPrefName, urls_to_restore, &in);
   AddToRemoteDataList(kDefaultCharsetPrefName,
-                      base::StringValue(kNonDefaultCharsetValue), &in);
+                      base::Value(kNonDefaultCharsetValue), &in);
   InitWithSyncDataTakeOutput(in, &out);
 
   ASSERT_FALSE(FindValue(kStringPrefName, out).get());
@@ -316,7 +316,7 @@ TEST_F(PrefServiceSyncableTest, UpdatedPreferenceWithDefaultValue) {
   InitWithSyncDataTakeOutput(syncer::SyncDataList(), &out);
   out.clear();
 
-  base::StringValue expected(kExampleUrl0);
+  base::Value expected(kExampleUrl0);
   GetPrefs()->Set(kStringPrefName, expected);
 
   std::unique_ptr<base::Value> actual(FindValue(kStringPrefName, out));
@@ -330,7 +330,7 @@ TEST_F(PrefServiceSyncableTest, UpdatedPreferenceWithValue) {
   InitWithSyncDataTakeOutput(syncer::SyncDataList(), &out);
   out.clear();
 
-  base::StringValue expected(kExampleUrl1);
+  base::Value expected(kExampleUrl1);
   GetPrefs()->Set(kStringPrefName, expected);
 
   std::unique_ptr<base::Value> actual(FindValue(kStringPrefName, out));
@@ -342,7 +342,7 @@ TEST_F(PrefServiceSyncableTest, UpdatedSyncNodeActionUpdate) {
   GetPrefs()->SetString(kStringPrefName, kExampleUrl0);
   InitWithNoSyncData();
 
-  base::StringValue expected(kExampleUrl1);
+  base::Value expected(kExampleUrl1);
   syncer::SyncChangeList list;
   list.push_back(MakeRemoteChange(1, kStringPrefName, expected,
                                   SyncChange::ACTION_UPDATE));
@@ -355,7 +355,7 @@ TEST_F(PrefServiceSyncableTest, UpdatedSyncNodeActionUpdate) {
 TEST_F(PrefServiceSyncableTest, UpdatedSyncNodeActionAdd) {
   InitWithNoSyncData();
 
-  base::StringValue expected(kExampleUrl0);
+  base::Value expected(kExampleUrl0);
   syncer::SyncChangeList list;
   list.push_back(
       MakeRemoteChange(1, kStringPrefName, expected, SyncChange::ACTION_ADD));
@@ -370,7 +370,7 @@ TEST_F(PrefServiceSyncableTest, UpdatedSyncNodeActionAdd) {
 TEST_F(PrefServiceSyncableTest, UpdatedSyncNodeUnknownPreference) {
   InitWithNoSyncData();
   syncer::SyncChangeList list;
-  base::StringValue expected(kExampleUrl0);
+  base::Value expected(kExampleUrl0);
   list.push_back(MakeRemoteChange(1, "unknown preference", expected,
                                   SyncChange::ACTION_UPDATE));
   pref_sync_service_->ProcessSyncChanges(FROM_HERE, list);
@@ -380,21 +380,21 @@ TEST_F(PrefServiceSyncableTest, UpdatedSyncNodeUnknownPreference) {
 
 TEST_F(PrefServiceSyncableTest, ManagedPreferences) {
   // Make the homepage preference managed.
-  base::StringValue managed_value("http://example.com");
-  prefs_.SetManagedPref(kStringPrefName, managed_value.DeepCopy());
+  base::Value managed_value("http://example.com");
+  prefs_.SetManagedPref(kStringPrefName, managed_value.CreateDeepCopy());
 
   syncer::SyncChangeList out;
   InitWithSyncDataTakeOutput(syncer::SyncDataList(), &out);
   out.clear();
 
   // Changing the homepage preference should not sync anything.
-  base::StringValue user_value("http://chromium..com");
-  prefs_.SetUserPref(kStringPrefName, user_value.DeepCopy());
+  base::Value user_value("http://chromium..com");
+  prefs_.SetUserPref(kStringPrefName, user_value.CreateDeepCopy());
   EXPECT_TRUE(out.empty());
 
   // An incoming sync transaction should change the user value, not the managed
   // value.
-  base::StringValue sync_value("http://crbug.com");
+  base::Value sync_value("http://crbug.com");
   syncer::SyncChangeList list;
   list.push_back(MakeRemoteChange(1, kStringPrefName, sync_value,
                                   SyncChange::ACTION_UPDATE));
@@ -412,7 +412,7 @@ TEST_F(PrefServiceSyncableTest, ManagedListPreferences) {
   base::ListValue managed_value;
   managed_value.AppendString(kExampleUrl0);
   managed_value.AppendString(kExampleUrl1);
-  prefs_.SetManagedPref(kListPrefName, managed_value.DeepCopy());
+  prefs_.SetManagedPref(kListPrefName, managed_value.CreateDeepCopy());
 
   // Set a cloud version.
   syncer::SyncDataList in;
@@ -431,7 +431,7 @@ TEST_F(PrefServiceSyncableTest, ManagedListPreferences) {
   // anything.
   base::ListValue user_value;
   user_value.AppendString("http://chromium.org");
-  prefs_.SetUserPref(kListPrefName, user_value.DeepCopy());
+  prefs_.SetUserPref(kListPrefName, user_value.CreateDeepCopy());
   EXPECT_FALSE(FindValue(kListPrefName, out).get());
 
   // An incoming sync transaction should change the user value, not the managed
@@ -451,16 +451,16 @@ TEST_F(PrefServiceSyncableTest, DynamicManagedPreferences) {
   syncer::SyncChangeList out;
   InitWithSyncDataTakeOutput(syncer::SyncDataList(), &out);
   out.clear();
-  base::StringValue initial_value("http://example.com/initial");
+  base::Value initial_value("http://example.com/initial");
   GetPrefs()->Set(kStringPrefName, initial_value);
   std::unique_ptr<base::Value> actual(FindValue(kStringPrefName, out));
   ASSERT_TRUE(actual.get());
   EXPECT_TRUE(initial_value.Equals(actual.get()));
 
   // Switch kHomePage to managed and set a different value.
-  base::StringValue managed_value("http://example.com/managed");
+  base::Value managed_value("http://example.com/managed");
   GetTestingPrefService()->SetManagedPref(kStringPrefName,
-                                          managed_value.DeepCopy());
+                                          managed_value.CreateDeepCopy());
 
   // The pref value should be the one dictated by policy.
   EXPECT_TRUE(managed_value.Equals(&GetPreferenceValue(kStringPrefName)));
@@ -477,18 +477,18 @@ TEST_F(PrefServiceSyncableTest, DynamicManagedPreferencesWithSyncChange) {
   InitWithSyncDataTakeOutput(syncer::SyncDataList(), &out);
   out.clear();
 
-  base::StringValue initial_value("http://example.com/initial");
+  base::Value initial_value("http://example.com/initial");
   GetPrefs()->Set(kStringPrefName, initial_value);
   std::unique_ptr<base::Value> actual(FindValue(kStringPrefName, out));
   EXPECT_TRUE(initial_value.Equals(actual.get()));
 
   // Switch kHomePage to managed and set a different value.
-  base::StringValue managed_value("http://example.com/managed");
+  base::Value managed_value("http://example.com/managed");
   GetTestingPrefService()->SetManagedPref(kStringPrefName,
-                                          managed_value.DeepCopy());
+                                          managed_value.CreateDeepCopy());
 
   // Change the sync value.
-  base::StringValue sync_value("http://example.com/sync");
+  base::Value sync_value("http://example.com/sync");
   syncer::SyncChangeList list;
   list.push_back(MakeRemoteChange(1, kStringPrefName, sync_value,
                                   SyncChange::ACTION_UPDATE));
@@ -516,9 +516,9 @@ TEST_F(PrefServiceSyncableTest, DynamicManagedDefaultPreferences) {
   out.clear();
 
   // Switch kHomePage to managed and set a different value.
-  base::StringValue managed_value("http://example.com/managed");
+  base::Value managed_value("http://example.com/managed");
   GetTestingPrefService()->SetManagedPref(kStringPrefName,
-                                          managed_value.DeepCopy());
+                                          managed_value.CreateDeepCopy());
   // The pref value should be the one dictated by policy.
   EXPECT_TRUE(managed_value.Equals(&GetPreferenceValue(kStringPrefName)));
   EXPECT_FALSE(pref->IsDefaultValue());
@@ -539,7 +539,7 @@ TEST_F(PrefServiceSyncableTest, DeletePreference) {
 
   InitWithNoSyncData();
 
-  std::unique_ptr<base::Value> null_value = base::Value::CreateNullValue();
+  auto null_value = base::MakeUnique<base::Value>();
   syncer::SyncChangeList list;
   list.push_back(MakeRemoteChange(1, kStringPrefName, *null_value,
                                   SyncChange::ACTION_DELETE));

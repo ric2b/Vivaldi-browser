@@ -15,6 +15,10 @@
 #include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/ax_tree_source.h"
 
+namespace ui {
+struct AXActionData;
+}  // namespace ui
+
 namespace views {
 class AXAuraObjWrapper;
 }  // namespace views
@@ -29,12 +33,8 @@ class AXTreeSourceAura
   AXTreeSourceAura();
   ~AXTreeSourceAura() override;
 
-  // A set of actions invoked on an Aura view.
-  void DoDefault(int32_t id);
-  void Focus(int32_t id);
-  void MakeVisible(int32_t id);
-  void SetSelection(int32_t id, int32_t start, int32_t end);
-  void ShowContextMenu(int32_t id);
+  // Invoke actions on an Aura view.
+  bool HandleAccessibleAction(const ui::AXActionData& action);
 
   // AXTreeSource implementation.
   bool GetTreeData(ui::AXTreeData* data) const override;

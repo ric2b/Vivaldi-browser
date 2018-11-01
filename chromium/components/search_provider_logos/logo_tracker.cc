@@ -17,6 +17,7 @@
 #include "components/search_provider_logos/switches.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
@@ -95,7 +96,7 @@ void LogoTracker::SetServerAPI(
     const ParseLogoResponse& parse_logo_response_func,
     const AppendQueryparamsToLogoURL& append_queryparams_func,
     bool wants_cta,
-    bool transparent) {
+    bool gray_background) {
   if (logo_url == logo_url_)
     return;
 
@@ -105,7 +106,7 @@ void LogoTracker::SetServerAPI(
   parse_logo_response_func_ = parse_logo_response_func;
   append_queryparams_func_ = append_queryparams_func;
   wants_cta_ = wants_cta;
-  transparent_ = transparent;
+  gray_background_ = gray_background;
 }
 
 void LogoTracker::GetLogo(LogoObserver* observer) {
@@ -222,11 +223,35 @@ void LogoTracker::FetchLogo() {
   if (command_line->HasSwitch(switches::kGoogleDoodleUrl)) {
     url = GURL(command_line->GetSwitchValueASCII(switches::kGoogleDoodleUrl));
   } else {
-    url = append_queryparams_func_.Run(
-        logo_url_, fingerprint, wants_cta_, transparent_);
+    url = append_queryparams_func_.Run(logo_url_, fingerprint, wants_cta_,
+                                       gray_background_);
   }
 
-  fetcher_ = net::URLFetcher::Create(url, net::URLFetcher::GET, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("logo_tracker", R"(
+        semantics {
+          sender: "Logo Tracker"
+          description:
+            "Provides the logo image (aka Doodle) if Google is your configured "
+            "search provider."
+          trigger: "Displaying the new tab page on iOS or Android."
+          data:
+            "Logo ID, and the user's Google cookies to show for example "
+            "birthday doodles at appropriate times."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: true
+          cookies_store: "user"
+          setting:
+            "Choosing a non-Google search engine in Chromium settings under "
+            "'Search Engine' will disable this feature."
+          policy_exception_justification:
+            "Not implemented, considered not useful as it does not upload any"
+            "data and just downloads a logo image."
+        })");
+  fetcher_ = net::URLFetcher::Create(url, net::URLFetcher::GET, this,
+                                     traffic_annotation);
   fetcher_->SetRequestContext(request_context_getter_.get());
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_.get(),
@@ -236,6 +261,7 @@ void LogoTracker::FetchLogo() {
 }
 
 void LogoTracker::OnFreshLogoParsed(bool* parsing_failed,
+                                    bool from_http_cache,
                                     std::unique_ptr<EncodedLogo> logo) {
   DCHECK(!is_idle_);
 
@@ -243,7 +269,8 @@ void LogoTracker::OnFreshLogoParsed(bool* parsing_failed,
     logo->metadata.source_url = logo_url_.spec();
 
   if (!logo || !logo->encoded_image.get()) {
-    OnFreshLogoAvailable(std::move(logo), *parsing_failed, SkBitmap());
+    OnFreshLogoAvailable(std::move(logo), *parsing_failed, from_http_cache,
+                         SkBitmap());
   } else {
     // Store the value of logo->encoded_image for use below. This ensures that
     // logo->encoded_image is evaulated before base::Passed(&logo), which sets
@@ -252,15 +279,15 @@ void LogoTracker::OnFreshLogoParsed(bool* parsing_failed,
     logo_delegate_->DecodeUntrustedImage(
         encoded_image,
         base::Bind(&LogoTracker::OnFreshLogoAvailable,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   base::Passed(&logo),
-                   *parsing_failed));
+                   weak_ptr_factory_.GetWeakPtr(), base::Passed(&logo),
+                   *parsing_failed, from_http_cache));
   }
 }
 
 void LogoTracker::OnFreshLogoAvailable(
     std::unique_ptr<EncodedLogo> encoded_logo,
     bool parsing_failed,
+    bool from_http_cache,
     const SkBitmap& image) {
   DCHECK(!is_idle_);
 
@@ -282,6 +309,8 @@ void LogoTracker::OnFreshLogoAvailable(
     std::unique_ptr<Logo> logo;
     // Check if the server returned a valid, non-empty response.
     if (encoded_logo) {
+      UMA_HISTOGRAM_BOOLEAN("NewTabPage.LogoImageDownloaded", from_http_cache);
+
       DCHECK(!image.isNull());
       logo.reset(new Logo());
       logo->metadata = encoded_logo->metadata;
@@ -335,13 +364,16 @@ void LogoTracker::OnURLFetchComplete(const net::URLFetcher* source) {
   source->GetResponseAsString(response.get());
   base::Time response_time = clock_->Now();
 
+  bool from_http_cache = source->WasCached();
+
   bool* parsing_failed = new bool(false);
   base::PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE,
       base::Bind(parse_logo_response_func_, base::Passed(&response),
                  response_time, parsing_failed),
       base::Bind(&LogoTracker::OnFreshLogoParsed,
-                 weak_ptr_factory_.GetWeakPtr(), base::Owned(parsing_failed)));
+                 weak_ptr_factory_.GetWeakPtr(), base::Owned(parsing_failed),
+                 from_http_cache));
 }
 
 void LogoTracker::OnURLFetchDownloadProgress(const net::URLFetcher* source,

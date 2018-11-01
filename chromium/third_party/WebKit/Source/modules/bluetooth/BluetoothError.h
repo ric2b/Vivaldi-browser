@@ -6,19 +6,28 @@
 #define BluetoothError_h
 
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Allocator.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom-blink.h"
-#include "wtf/Allocator.h"
 
 namespace blink {
 
+// Used when generating DOMExceptions specific to each operation.
+// TODO(crbug.com/684445): Add DescriptorsRetrieval.
+enum class BluetoothOperation {
+  kServicesRetrieval,
+  kCharacteristicsRetrieval,
+  kDescriptorsRetrieval,
+  GATT,
+};
+
 // These error codes requires detailed error messages.
 enum class BluetoothErrorCode {
-  InvalidService,
-  InvalidCharacteristic,
-  InvalidDescriptor,
-  ServiceNotFound,
-  CharacteristicNotFound,
-  DescriptorNotFound
+  kInvalidService,
+  kInvalidCharacteristic,
+  kInvalidDescriptor,
+  kServiceNotFound,
+  kCharacteristicNotFound,
+  kDescriptorNotFound
 };
 
 class DOMException;
@@ -29,10 +38,11 @@ class BluetoothError {
   STATIC_ONLY(BluetoothError);
 
  public:
-  static DOMException* createDOMException(BluetoothErrorCode,
-                                          const String& detailedMessage);
+  static DOMException* CreateNotConnectedException(BluetoothOperation);
+  static DOMException* CreateDOMException(BluetoothErrorCode,
+                                          const String& detailed_message);
 
-  static DOMException* createDOMException(
+  static DOMException* CreateDOMException(
       mojom::blink::WebBluetoothResult error);
 };
 

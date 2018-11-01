@@ -5,12 +5,9 @@
 package org.chromium.components.signin.test.util;
 
 import android.accounts.Account;
-import android.accounts.AccountManager;
 import android.accounts.AuthenticatorDescription;
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
-import android.os.AsyncTask;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
@@ -56,7 +53,7 @@ public class MockAccountManager implements AccountManagerDelegate {
         mGetAccountsTaskCounter = new ZeroCounter();
         if (accounts != null) {
             for (Account account : accounts) {
-                mAccounts.add(AccountHolder.create().account(account).alwaysAccept(true).build());
+                mAccounts.add(AccountHolder.builder(account).alwaysAccept(true).build());
             }
         }
     }
@@ -75,68 +72,30 @@ public class MockAccountManager implements AccountManagerDelegate {
         return validAccounts.toArray(new Account[0]);
     }
 
-    @Override
-    public void getAccountsByType(final String type, final Callback<Account[]> callback) {
-        mGetAccountsTaskCounter.increment();
-        new AsyncTask<Void, Void, Account[]>() {
-            @Override
-            protected Account[] doInBackground(Void... params) {
-                return getAccountsByType(type);
-            }
-
-            @Override
-            protected void onPostExecute(Account[] accounts) {
-                callback.onResult(accounts);
-                mGetAccountsTaskCounter.decrement();
-            }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-    }
-
     @VisibleForTesting
     public void waitForGetAccountsTask() throws InterruptedException {
         // Wait until all tasks are done because we don't know which is being waited for.
         mGetAccountsTaskCounter.waitUntilZero();
     }
 
-    @VisibleForTesting
-    public boolean addAccountHolderExplicitly(AccountHolder accountHolder) {
-        return addAccountHolderExplicitly(accountHolder, false);
-    }
-
     /**
      * Add an AccountHolder directly.
      *
      * @param accountHolder the account holder to add
-     * @param broadcastEvent whether to broadcast an AccountChangedEvent
      * @return whether the account holder was added successfully
      */
-    public boolean addAccountHolderExplicitly(AccountHolder accountHolder, boolean broadcastEvent) {
-        boolean result = mAccounts.add(accountHolder);
-        if (broadcastEvent) {
-            postAsyncAccountChangedEvent();
-        }
-        return result;
-    }
-
-    @VisibleForTesting
-    public boolean removeAccountHolderExplicitly(AccountHolder accountHolder) {
-        return removeAccountHolderExplicitly(accountHolder, false);
+    public boolean addAccountHolderExplicitly(AccountHolder accountHolder) {
+        return mAccounts.add(accountHolder);
     }
 
     /**
      * Remove an AccountHolder directly.
      *
      * @param accountHolder the account holder to remove
-     * @param broadcastEvent whether to broadcast an AccountChangedEvent
      * @return whether the account holder was removed successfully
      */
-    public boolean removeAccountHolderExplicitly(
-            AccountHolder accountHolder, boolean broadcastEvent) {
-        boolean result = mAccounts.remove(accountHolder);
-        if (broadcastEvent) {
-            postAsyncAccountChangedEvent();
-        }
-        return result;
+    public boolean removeAccountHolderExplicitly(AccountHolder accountHolder) {
+        return mAccounts.remove(accountHolder);
     }
 
     @Override
@@ -179,29 +138,27 @@ public class MockAccountManager implements AccountManagerDelegate {
     }
 
     @Override
-    public void hasFeatures(
-            Account account, final String[] features, final Callback<Boolean> callback) {
+    public boolean hasFeatures(Account account, String[] features) {
         final AccountHolder accountHolder = getAccountHolder(account);
-        accountHolder.addFeaturesCallback(new Runnable() {
-            @Override
-            public void run() {
-                Set<String> accountFeatures = accountHolder.getFeatures();
-                boolean hasAllFeatures = true;
-                for (String feature : features) {
-                    if (!accountFeatures.contains(feature)) {
-                        Log.d(TAG, accountFeatures + " does not contain " + feature);
-                        hasAllFeatures = false;
-                    }
-                }
-                callback.onResult(hasAllFeatures);
+        Set<String> accountFeatures = accountHolder.getFeatures();
+        boolean hasAllFeatures = true;
+        for (String feature : features) {
+            if (!accountFeatures.contains(feature)) {
+                Log.d(TAG, accountFeatures + " does not contain " + feature);
+                hasAllFeatures = false;
             }
-        });
+        }
+        return hasAllFeatures;
     }
 
     @Override
     public void updateCredentials(
             Account account, Activity activity, final Callback<Boolean> callback) {
         ThreadUtils.assertOnUiThread();
+        if (callback == null) {
+            return;
+        }
+
         ThreadUtils.postOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -220,17 +177,6 @@ public class MockAccountManager implements AccountManagerDelegate {
             }
         }
         throw new IllegalArgumentException("Can not find AccountHolder for account " + account);
-    }
-
-    private void postAsyncAccountChangedEvent() {
-        // Mimic that this does not happen on the main thread.
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                mContext.sendBroadcast(new Intent(AccountManager.LOGIN_ACCOUNTS_CHANGED_ACTION));
-                return null;
-            }
-        }.execute();
     }
 
     /**

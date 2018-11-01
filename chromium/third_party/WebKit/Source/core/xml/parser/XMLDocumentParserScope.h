@@ -26,9 +26,9 @@
 #ifndef XMLDocumentParserScope_h
 #define XMLDocumentParserScope_h
 
-#include "platform/heap/Handle.h"
-#include "wtf/Noncopyable.h"
 #include <libxml/xmlerror.h>
+#include "platform/heap/Handle.h"
+#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -43,17 +43,17 @@ class XMLDocumentParserScope {
   XMLDocumentParserScope(Document*,
                          xmlGenericErrorFunc,
                          xmlStructuredErrorFunc = 0,
-                         void* errorContext = 0);
+                         void* error_context = 0);
   ~XMLDocumentParserScope();
 
-  static Document* currentDocument;
+  static Document* current_document_;
 
  private:
-  Member<Document> m_oldDocument;
+  Member<Document> old_document_;
 
-  xmlGenericErrorFunc m_oldGenericErrorFunc;
-  xmlStructuredErrorFunc m_oldStructuredErrorFunc;
-  void* m_oldErrorContext;
+  xmlGenericErrorFunc old_generic_error_func_;
+  xmlStructuredErrorFunc old_structured_error_func_;
+  void* old_error_context_;
 };
 
 }  // namespace blink

@@ -33,9 +33,29 @@ void LogPreviewsEligibilityReason(PreviewsEligibilityReason status,
           "Previews.EligibilityReason.Offline", static_cast<int>(status),
           static_cast<int>(PreviewsEligibilityReason::LAST));
       break;
+    case PreviewsType::CLIENT_LOFI:
+      UMA_HISTOGRAM_ENUMERATION(
+          "Previews.EligibilityReason.ClientLoFi", static_cast<int>(status),
+          static_cast<int>(PreviewsEligibilityReason::LAST));
+      break;
     default:
       NOTREACHED();
   }
+}
+
+net::EffectiveConnectionType GetEffectiveConnectionTypeThresholdForPreviewsType(
+    PreviewsType type) {
+  switch (type) {
+    case PreviewsType::OFFLINE:
+      return params::EffectiveConnectionTypeThresholdForOffline();
+    case PreviewsType::CLIENT_LOFI:
+      return params::EffectiveConnectionTypeThresholdForClientLoFi();
+    case PreviewsType::NONE:
+    case PreviewsType::LAST:
+      break;
+  }
+  NOTREACHED();
+  return net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
 }
 
 }  // namespace
@@ -51,8 +71,10 @@ PreviewsIOData::~PreviewsIOData() {}
 
 void PreviewsIOData::Initialize(
     base::WeakPtr<PreviewsUIService> previews_ui_service,
-    std::unique_ptr<PreviewsOptOutStore> previews_opt_out_store) {
+    std::unique_ptr<PreviewsOptOutStore> previews_opt_out_store,
+    const PreviewsIsEnabledCallback& is_enabled_callback) {
   DCHECK(ui_task_runner_->BelongsToCurrentThread());
+  is_enabled_callback_ = is_enabled_callback;
   previews_ui_service_ = previews_ui_service;
 
   // Set up the IO thread portion of |this|.
@@ -88,15 +110,16 @@ void PreviewsIOData::ClearBlackList(base::Time begin_time,
 
 bool PreviewsIOData::ShouldAllowPreview(const net::URLRequest& request,
                                         PreviewsType type) const {
-  if (!IsPreviewsTypeEnabled(type))
-    return false;
-  // The blacklist will disallow certain hosts for periods of time based on
-  // user's opting out of the preview
-  if (!previews_black_list_) {
+  if (is_enabled_callback_.is_null() || !previews_black_list_) {
     LogPreviewsEligibilityReason(
         PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE, type);
     return false;
   }
+  if (!is_enabled_callback_.Run(type))
+    return false;
+
+  // The blacklist will disallow certain hosts for periods of time based on
+  // user's opting out of the preview
   PreviewsEligibilityReason status =
       previews_black_list_->IsLoadedAndAllowed(request.url(), type);
   if (status != PreviewsEligibilityReason::ALLOWED) {
@@ -112,8 +135,9 @@ bool PreviewsIOData::ShouldAllowPreview(const net::URLRequest& request,
         PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE, type);
     return false;
   }
+
   if (network_quality_estimator->GetEffectiveConnectionType() >
-      params::EffectiveConnectionTypeThreshold()) {
+      GetEffectiveConnectionTypeThresholdForPreviewsType(type)) {
     LogPreviewsEligibilityReason(PreviewsEligibilityReason::NETWORK_NOT_SLOW,
                                  type);
     return false;
@@ -121,8 +145,8 @@ bool PreviewsIOData::ShouldAllowPreview(const net::URLRequest& request,
   // LOAD_VALIDATE_CACHE or LOAD_BYPASS_CACHE mean the user reloaded the page.
   // If this is a query for offline previews, reloads should be disallowed.
   if (type == PreviewsType::OFFLINE &&
-      request.load_flags() &
-          (net::LOAD_VALIDATE_CACHE | net::LOAD_BYPASS_CACHE)) {
+      (request.load_flags() &
+       (net::LOAD_VALIDATE_CACHE | net::LOAD_BYPASS_CACHE))) {
     LogPreviewsEligibilityReason(
         PreviewsEligibilityReason::RELOAD_DISALLOWED_FOR_OFFLINE, type);
     return false;

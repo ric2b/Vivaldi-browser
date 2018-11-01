@@ -6,15 +6,16 @@
 
 #include "core/dom/Document.h"
 #include "core/frame/RemoteFrameClient.h"
+#include "platform/weborigin/SecurityOrigin.h"
 
 namespace blink {
 
-ExecutionContext* RemoteDOMWindow::getExecutionContext() const {
+ExecutionContext* RemoteDOMWindow::GetExecutionContext() const {
   return nullptr;
 }
 
 DEFINE_TRACE(RemoteDOMWindow) {
-  DOMWindow::trace(visitor);
+  DOMWindow::Trace(visitor);
 }
 
 void RemoteDOMWindow::blur() {
@@ -23,15 +24,15 @@ void RemoteDOMWindow::blur() {
 
 RemoteDOMWindow::RemoteDOMWindow(RemoteFrame& frame) : DOMWindow(frame) {}
 
-void RemoteDOMWindow::frameDetached() {
-  disconnectFromFrame();
+void RemoteDOMWindow::FrameDetached() {
+  DisconnectFromFrame();
 }
 
-void RemoteDOMWindow::schedulePostMessage(MessageEvent* event,
+void RemoteDOMWindow::SchedulePostMessage(MessageEvent* event,
                                           PassRefPtr<SecurityOrigin> target,
                                           Document* source) {
-  frame()->client()->forwardPostMessage(event, std::move(target),
-                                        source->frame());
+  GetFrame()->Client()->ForwardPostMessage(event, std::move(target),
+                                           source->GetFrame());
 }
 
 }  // namespace blink

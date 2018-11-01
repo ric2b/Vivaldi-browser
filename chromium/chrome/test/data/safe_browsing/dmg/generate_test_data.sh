@@ -86,5 +86,5 @@ generate_test_data() {
   rm -rf "${DMG_SOURCE}"
 }
 
-# Silence any log output.
+# Silence any stdout, but keep stderr.
 generate_test_data > /dev/null

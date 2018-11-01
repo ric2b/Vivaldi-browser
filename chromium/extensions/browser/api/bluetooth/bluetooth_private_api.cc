@@ -10,7 +10,9 @@
 
 #include "base/callback.h"
 #include "base/lazy_instance.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "components/device_event_log/device_event_log.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_common.h"
@@ -25,8 +27,8 @@ namespace SetDiscoveryFilter = bt_private::SetDiscoveryFilter;
 
 namespace extensions {
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<BluetoothPrivateAPI>>
-    g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<BluetoothPrivateAPI>>::
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 namespace {
 
@@ -161,18 +163,21 @@ bool BluetoothPrivateSetAdapterStateFunction::DoWork(
   bool* discoverable = new_state.discoverable.get();
 
   if (name && adapter->GetName() != *name) {
+    BLUETOOTH_LOG(USER) << "SetAdapterState: name=" << *name;
     pending_properties_.insert(kNameProperty);
     adapter->SetName(*name, CreatePropertySetCallback(kNameProperty),
                      CreatePropertyErrorCallback(kNameProperty));
   }
 
   if (powered && adapter->IsPowered() != *powered) {
+    BLUETOOTH_LOG(USER) << "SetAdapterState: powerd=" << *powered;
     pending_properties_.insert(kPoweredProperty);
     adapter->SetPowered(*powered, CreatePropertySetCallback(kPoweredProperty),
                         CreatePropertyErrorCallback(kPoweredProperty));
   }
 
   if (discoverable && adapter->IsDiscoverable() != *discoverable) {
+    BLUETOOTH_LOG(USER) << "SetAdapterState: discoverable=" << *discoverable;
     pending_properties_.insert(kDiscoverableProperty);
     adapter->SetDiscoverable(
         *discoverable, CreatePropertySetCallback(kDiscoverableProperty),
@@ -189,6 +194,7 @@ bool BluetoothPrivateSetAdapterStateFunction::DoWork(
 base::Closure
 BluetoothPrivateSetAdapterStateFunction::CreatePropertySetCallback(
     const std::string& property_name) {
+  BLUETOOTH_LOG(DEBUG) << "Set property succeeded: " << property_name;
   return base::Bind(
       &BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertySet, this,
       property_name);
@@ -197,6 +203,7 @@ BluetoothPrivateSetAdapterStateFunction::CreatePropertySetCallback(
 base::Closure
 BluetoothPrivateSetAdapterStateFunction::CreatePropertyErrorCallback(
     const std::string& property_name) {
+  BLUETOOTH_LOG(DEBUG) << "Set property failed: " << property_name;
   return base::Bind(
       &BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertyError, this,
       property_name);
@@ -230,9 +237,8 @@ void BluetoothPrivateSetAdapterStateFunction::SendError() {
   DCHECK(pending_properties_.empty());
   DCHECK(!failed_properties_.empty());
 
-  std::vector<std::string> failed_vector;
-  std::copy(failed_properties_.begin(), failed_properties_.end(),
-            std::back_inserter(failed_vector));
+  std::vector<base::StringPiece> failed_vector(failed_properties_.begin(),
+                                               failed_properties_.end());
 
   std::vector<std::string> replacements(1);
   replacements[0] = base::JoinString(failed_vector, ", ");
@@ -516,9 +522,6 @@ void BluetoothPrivateConnectFunction::OnErrorCallback(
     device::BluetoothDevice::ConnectErrorCode error) {
   bt_private::ConnectResultType result = bt_private::CONNECT_RESULT_TYPE_NONE;
   switch (error) {
-    case device::BluetoothDevice::ERROR_ATTRIBUTE_LENGTH_INVALID:
-      result = bt_private::CONNECT_RESULT_TYPE_ATTRIBUTELENGTHINVALID;
-      break;
     case device::BluetoothDevice::ERROR_AUTH_CANCELED:
       result = bt_private::CONNECT_RESULT_TYPE_AUTHCANCELED;
       break;
@@ -531,35 +534,17 @@ void BluetoothPrivateConnectFunction::OnErrorCallback(
     case device::BluetoothDevice::ERROR_AUTH_TIMEOUT:
       result = bt_private::CONNECT_RESULT_TYPE_AUTHTIMEOUT;
       break;
-    case device::BluetoothDevice::ERROR_CONNECTION_CONGESTED:
-      result = bt_private::CONNECT_RESULT_TYPE_CONNECTIONCONGESTED;
-      break;
     case device::BluetoothDevice::ERROR_FAILED:
       result = bt_private::CONNECT_RESULT_TYPE_FAILED;
       break;
     case device::BluetoothDevice::ERROR_INPROGRESS:
       result = bt_private::CONNECT_RESULT_TYPE_INPROGRESS;
       break;
-    case device::BluetoothDevice::ERROR_INSUFFICIENT_ENCRYPTION:
-      result = bt_private::CONNECT_RESULT_TYPE_INSUFFICIENTENCRYPTION;
-      break;
-    case device::BluetoothDevice::ERROR_OFFSET_INVALID:
-      result = bt_private::CONNECT_RESULT_TYPE_OFFSETINVALID;
-      break;
-    case device::BluetoothDevice::ERROR_READ_NOT_PERMITTED:
-      result = bt_private::CONNECT_RESULT_TYPE_READNOTPERMITTED;
-      break;
-    case device::BluetoothDevice::ERROR_REQUEST_NOT_SUPPORTED:
-      result = bt_private::CONNECT_RESULT_TYPE_REQUESTNOTSUPPORTED;
-      break;
     case device::BluetoothDevice::ERROR_UNKNOWN:
       result = bt_private::CONNECT_RESULT_TYPE_UNKNOWNERROR;
       break;
     case device::BluetoothDevice::ERROR_UNSUPPORTED_DEVICE:
       result = bt_private::CONNECT_RESULT_TYPE_UNSUPPORTEDDEVICE;
-      break;
-    case device::BluetoothDevice::ERROR_WRITE_NOT_PERMITTED:
-      result = bt_private::CONNECT_RESULT_TYPE_WRITENOTPERMITTED;
       break;
     case device::BluetoothDevice::NUM_CONNECT_ERROR_CODES:
       NOTREACHED();

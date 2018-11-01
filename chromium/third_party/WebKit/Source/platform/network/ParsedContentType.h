@@ -33,9 +33,9 @@
 #define ParsedContentType_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/Allocator.h"
-#include "wtf/HashMap.h"
-#include "wtf/text/StringHash.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/text/StringHash.h"
 
 namespace blink {
 
@@ -49,31 +49,35 @@ class PLATFORM_EXPORT ParsedContentType final {
   // When |Relaxed| is specified, the parser parses parameter values in a sloppy
   // manner, i.e., only ';' and '"' are treated as special characters.
   // See https://chromiumcodereview.appspot.com/23043002.
+  // When |Strict| is specified, the parser does not allow multiple values
+  // for the same parameter. Some RFCs based on RFC2045 (e.g. RFC6838) note that
+  // "It is an error for a specific parameter to be specified more than once."
   enum class Mode {
-    Normal,
-    Relaxed,
+    kNormal,
+    kRelaxed,
+    kStrict,
   };
-  explicit ParsedContentType(const String&, Mode = Mode::Normal);
+  explicit ParsedContentType(const String&, Mode = Mode::kNormal);
 
-  String mimeType() const { return m_mimeType; }
-  String charset() const;
+  String MimeType() const { return mime_type_; }
+  String Charset() const;
 
   // Note that in the case of multiple values for the same name, the last value
   // is returned.
-  String parameterValueForName(const String&) const;
-  size_t parameterCount() const;
+  String ParameterValueForName(const String&) const;
+  size_t ParameterCount() const;
 
-  bool isValid() const { return m_isValid; }
+  bool IsValid() const { return is_valid_; }
 
  private:
-  bool parse(const String&);
+  bool Parse(const String&);
 
-  const Mode m_mode;
-  bool m_isValid;
+  const Mode mode_;
+  bool is_valid_;
 
   typedef HashMap<String, String> KeyValuePairs;
-  KeyValuePairs m_parameters;
-  String m_mimeType;
+  KeyValuePairs parameters_;
+  String mime_type_;
 };
 
 }  // namespace blink

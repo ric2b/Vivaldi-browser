@@ -6,12 +6,13 @@
 
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/label.h"
 
@@ -53,9 +54,8 @@ bool LocationIconView::OnMousePressed(const ui::MouseEvent& event) {
       model->PasteAndGo(text);
   }
 
-  suppress_mouse_released_action_ =
-      WebsiteSettingsPopupView::GetShownPopupType() !=
-      WebsiteSettingsPopupView::POPUP_NONE;
+  suppress_mouse_released_action_ = PageInfoBubbleView::GetShownBubbleType() !=
+                                    PageInfoBubbleView::BUBBLE_NONE;
   return true;
 }
 
@@ -101,7 +101,7 @@ bool LocationIconView::OnActivate(const ui::Event& event) {
   WebContents* contents = location_bar_->GetWebContents();
   if (!contents)
     return false;
-  location_bar_->delegate()->ShowWebsiteSettings(contents);
+  location_bar_->delegate()->ShowPageInfo(contents);
   return true;
 }
 
@@ -112,7 +112,7 @@ void LocationIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 gfx::Size LocationIconView::GetMinimumSizeForLabelText(
     const base::string16& text) const {
-  views::Label label(text, font_list());
+  views::Label label(text, {font_list()});
   return GetMinimumSizeForPreferredSize(
       GetSizeForLabelWidth(label.GetPreferredSize().width()));
 }

@@ -60,10 +60,11 @@ SKIP = {
   # http://crbug.com/441429
   'Linux Trusty (32)', 'Linux Trusty (dbg)(32)',
 
-  # swarming may not work on Mac10.10 and 10.11, need to
-  # re-investigate and confirm
+  # Swarming may not work on Mac10.10,11,12; need to
+  # re-investigate and confirm.
   'WebKit Mac10.10',
   'WebKit Mac10.11',
+  'WebKit Mac10.12',
   'WebKit Mac10.11 (dbg)',
   'WebKit Mac10.11 (retina)',
   'Chromium Mac10.10 Tests',
@@ -154,6 +155,7 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   # iOS tests are listed in //ios/build/bots.
   'cronet_test',
   'ios_chrome_integration_egtests',
+  'ios_chrome_reading_list_egtests',
   'ios_chrome_settings_egtests',
   'ios_chrome_smoke_egtests',
   'ios_chrome_ui_egtests',
@@ -177,6 +179,7 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   'junit_unit_tests',
   'media_router_perf_tests',
   'media_router_tests',
+  'motopho_latency_test',
   'net_junit_tests',
   'net_junit_tests',
   'ui_junit_tests',

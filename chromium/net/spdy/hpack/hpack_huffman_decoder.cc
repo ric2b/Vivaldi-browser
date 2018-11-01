@@ -298,12 +298,12 @@ char HpackHuffmanDecoder::CanonicalToSource(HuffmanWord canonical) {
 }
 
 // TODO(jamessynge): Maybe further refactorings, including just passing in a
-// StringPiece instead of an HpackInputStream, thus avoiding the PeekBits calls,
-// and also allowing us to separate the code into portions dealing with long
-// strings, and a later portion dealing with the last few bytes of strings.
+// SpdyStringPiece instead of an HpackInputStream, thus avoiding the PeekBits
+// calls, and also allowing us to separate the code into portions dealing with
+// long strings, and a later portion dealing with the last few bytes of strings.
 // TODO(jamessynge): Determine if that is worth it by adding some counters to
 // measure the distribution of string sizes seen in practice.
-bool HpackHuffmanDecoder::DecodeString(HpackInputStream* in, std::string* out) {
+bool HpackHuffmanDecoder::DecodeString(HpackInputStream* in, SpdyString* out) {
   out->clear();
 
   // Load |bits| with the leading bits of the input stream, left justified

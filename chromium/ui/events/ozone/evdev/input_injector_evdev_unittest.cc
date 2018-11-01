@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/ozone/device/device_manager.h"
@@ -77,7 +78,7 @@ class MockCursorEvdev : public CursorDelegateEvdev {
 MATCHER_P4(MatchesMouseEvent, type, button, x, y, "") {
   if (arg->type() != type) {
     *result_listener << "Expected type: " << type << " actual: " << arg->type()
-                     << " (" << arg->name() << ")";
+                     << " (" << arg->GetName() << ")";
     return false;
   }
   if (button == EF_LEFT_MOUSE_BUTTON && !arg->IsLeftMouseButton()) {
@@ -117,7 +118,7 @@ class InputInjectorEvdevTest : public testing::Test {
 
   InputInjectorEvdev injector_;
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::RunLoop run_loop_;
 
  private:

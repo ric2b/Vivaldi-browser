@@ -22,7 +22,6 @@
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
-#include "base/sys_info.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
@@ -57,8 +56,14 @@
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_POSIX)
+#include <signal.h>
+
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/app/shutdown_signal_handlers_posix.h"
+#endif  // defined(OS_POSIX)
+
+#if defined(OS_CHROMEOS)
+#include "chrome/app/mash/chrome_mus_catalog.h"
 #endif
 
 using service_manager::mojom::ServiceFactory;
@@ -69,6 +74,10 @@ namespace {
 const char* kMashChild = "mash-child";
 
 const char kChromeMashServiceName[] = "chrome_mash";
+
+// Name used for --mus. This is only applicable to ChromeOS. it is placed
+// outside of ifdefs to make code slightly more readable.
+const char kChromeMusServiceName[] = "chrome_mus";
 
 bool IsChild() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -99,6 +108,7 @@ class ServiceProcessLauncherDelegateImpl
         const service_manager::Identity& target,
         base::CommandLine* command_line) override {
     if (target.name() == kChromeMashServiceName ||
+        target.name() == kChromeMusServiceName ||
         target.name() == content::mojom::kPackagedServicesServiceName) {
       base::FilePath exe_path;
       base::PathService::Get(base::FILE_EXE, &exe_path);
@@ -115,14 +125,21 @@ class ServiceProcessLauncherDelegateImpl
     }
 
     // When launching the browser process, ensure that we don't inherit the
-    // --mash flag so it proceeds with the normal content/browser startup path.
+    // the mash/mus flag so it proceeds with the normal content/browser startup
+    // path.
+    const bool is_mash = command_line->HasSwitch(switches::kMash);
     base::CommandLine::SwitchMap new_switches = command_line->GetSwitches();
     new_switches.erase(switches::kMash);
+    new_switches.erase(switches::kMus);
     *command_line = base::CommandLine(command_line->GetProgram());
     for (const std::pair<std::string, base::CommandLine::StringType>& sw :
          new_switches) {
       command_line->AppendSwitchNative(sw.first, sw.second);
     }
+    // Add kMusConfig so that launched processes know what config they are
+    // running in.
+    command_line->AppendSwitchASCII(switches::kMusConfig,
+                                    is_mash ? switches::kMash : switches::kMus);
   }
 
   DISALLOW_COPY_AND_ASSIGN(ServiceProcessLauncherDelegateImpl);
@@ -155,8 +172,7 @@ MashRunner::MashRunner() {}
 MashRunner::~MashRunner() {}
 
 int MashRunner::Run() {
-  base::TaskScheduler::CreateAndSetSimpleTaskScheduler(
-      base::SysInfo::NumberOfProcessors());
+  base::TaskScheduler::CreateAndSetSimpleTaskScheduler("MashRunner");
 
   if (IsChild())
     return RunChild();
@@ -190,15 +206,24 @@ int MashRunner::RunServiceManagerInMain() {
   // shouldn't we using context as it has a lot of stuff we don't really want
   // in chrome.
   ServiceProcessLauncherDelegateImpl service_process_launcher_delegate;
+  const bool is_mash =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kMash);
+#if defined(OS_CHROMEOS)
+  service_manager::BackgroundServiceManager background_service_manager(
+      &service_process_launcher_delegate,
+      is_mash ? CreateChromeMashCatalog() : CreateChromeMusCatalog());
+#else
   service_manager::BackgroundServiceManager background_service_manager(
       &service_process_launcher_delegate, CreateChromeMashCatalog());
+#endif
   service_manager::mojom::ServicePtr service;
   service_manager::ServiceContext context(
       base::MakeUnique<mash::MashPackagedService>(),
       service_manager::mojom::ServiceRequest(&service));
   background_service_manager.RegisterService(
       service_manager::Identity(
-          kChromeMashServiceName, service_manager::mojom::kRootUserID),
+          is_mash ? kChromeMashServiceName : kChromeMusServiceName,
+          service_manager::mojom::kRootUserID),
       std::move(service), nullptr);
 
   // Quit the main process if an important child (e.g. window manager) dies.
@@ -218,10 +243,14 @@ int MashRunner::RunServiceManagerInMain() {
 
   // Ping services that we know we want to launch on startup (UI service,
   // window manager, quick launch app).
-  context.connector()->Connect(ui::mojom::kServiceName);
-  context.connector()->Connect(mash::common::GetWindowManagerServiceName());
-  context.connector()->Connect(mash::quick_launch::mojom::kServiceName);
-  context.connector()->Connect(content::mojom::kPackagedServicesServiceName);
+  context.connector()->StartService(ui::mojom::kServiceName);
+  context.connector()->StartService(
+      content::mojom::kPackagedServicesServiceName);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kMash)) {
+    context.connector()->StartService(
+        mash::common::GetWindowManagerServiceName());
+    context.connector()->StartService(mash::quick_launch::mojom::kServiceName);
+  }
 
   run_loop.Run();
 
@@ -260,6 +289,16 @@ int MashMain() {
 #if !defined(OFFICIAL_BUILD) && defined(OS_WIN)
   base::RouteStdioToConsole(false);
 #endif
+
+#if defined(OS_POSIX)
+  // We inherit the signal mask of our parent process, which might block signals
+  // like SIGTERM that we need in order to cleanly shut down. Reset the signal
+  // mask to unblock all signals. http://crbug.com/699777
+  sigset_t empty_signal_set;
+  CHECK_EQ(0, sigemptyset(&empty_signal_set));
+  CHECK_EQ(0, sigprocmask(SIG_SETMASK, &empty_signal_set, nullptr));
+#endif
+
   // TODO(sky): wire this up correctly.
   service_manager::InitializeLogging();
 

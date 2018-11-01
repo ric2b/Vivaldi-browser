@@ -8,41 +8,45 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "ui/views/controls/button/vector_icon_button_delegate.h"
+#include "ui/views/controls/button/button.h"
 
 namespace views {
-class Button;
 class View;
 }
 
 namespace payments {
 
 class PaymentRequestDialogView;
-class PaymentRequest;
+class PaymentRequestSpec;
+class PaymentRequestState;
 
 // The base class for objects responsible for the creation and event handling in
 // views shown in the PaymentRequestDialog.
-class PaymentRequestSheetController : public views::VectorIconButtonDelegate {
+class PaymentRequestSheetController : public views::ButtonListener {
  public:
   // Objects of this class are owned by |dialog|, so it's a non-owned pointer
   // that should be valid throughout this object's lifetime.
-  // |request| is also not owned by this and is guaranteed to outlive dialog.
-  // Neither |request| or |dialog| should be null.
-  PaymentRequestSheetController(PaymentRequest* request,
+  // |state| and |spec| are also not owned by this and are guaranteed to outlive
+  // dialog. Neither |state|, |spec| or |dialog| should be null.
+  PaymentRequestSheetController(PaymentRequestSpec* spec,
+                                PaymentRequestState* state,
                                 PaymentRequestDialogView* dialog);
-  ~PaymentRequestSheetController() override {}
+  ~PaymentRequestSheetController() override;
 
-  virtual std::unique_ptr<views::View> CreateView() = 0;
+  std::unique_ptr<views::View> CreateView();
 
-  // The PaymentRequest object associated with this instance of the dialog.
-  // Caller should not take ownership of the result.
-  PaymentRequest* request() { return request_; }
+  PaymentRequestSpec* spec() { return spec_; }
+  PaymentRequestState* state() { return state_; }
 
   // The dialog that contains and owns this object.
   // Caller should not take ownership of the result.
   PaymentRequestDialogView* dialog() { return dialog_; }
 
  protected:
+  // Clears the content part of the view represented by this view controller and
+  // calls FillContentView again to re-populate it with updated views.
+  void UpdateContentView();
+
   // Creates and returns the primary action button for this sheet. It's
   // typically a blue button with the "Pay" or "Done" labels. Subclasses may
   // return an empty std::unique_ptr (nullptr) to indicate that no primary
@@ -52,20 +56,43 @@ class PaymentRequestSheetController : public views::VectorIconButtonDelegate {
   // enabled state).
   virtual std::unique_ptr<views::Button> CreatePrimaryButton();
 
+  // Returns the text that should be on the secondary button, by default
+  // "Cancel".
+  virtual base::string16 GetSecondaryButtonLabel();
+
+  // Returns whether this sheet should display a back arrow in the header next
+  // to the title.
+  virtual bool ShouldShowHeaderBackArrow();
+
+  // Returns the title to be displayed in this sheet's header.
+  virtual base::string16 GetSheetTitle() = 0;
+
+  // Implemented by subclasses to populate |content_view| with the views that
+  // should be displayed in their content area (between the header and the
+  // footer). This may be called at view creation time as well as anytime
+  // UpdateContentView is called.
+  virtual void FillContentView(views::View* content_view) = 0;
+
   // Creates and returns the view to be displayed next to the "Pay" and "Cancel"
   // buttons. May return an empty std::unique_ptr (nullptr) to indicate that no
   // extra view is to be displayed.The caller takes ownership of the view but
   // the view is guaranteed to be outlived by the controller so subclasses may
   // retain a raw pointer to the returned view (for example to control its
-  // enabled state).
+  // enabled state). The horizontal and vertical insets (to the left and bottom
+  // borders) is taken care of by the caller, so can be set to 0.
   // +---------------------------+
   // | EXTRA VIEW | PAY | CANCEL |
   // +---------------------------+
   virtual std::unique_ptr<views::View> CreateExtraFooterView();
 
-  // views::VectorIconButtonDelegate:
+  // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
+  // Creates the row of button containing the Pay, cancel, and extra buttons.
+  // |controller| is installed as the listener for button events.
+  std::unique_ptr<views::View> CreateFooterView();
+
+ private:
   // Creates a view to be displayed in the PaymentRequestDialog.
   // |header_view| is the view displayed on top of the dialog, containing title,
   // (optional) back button, and close buttons.
@@ -81,19 +108,16 @@ class PaymentRequestSheetController : public views::VectorIconButtonDelegate {
   // +---------------------------+
   // | EXTRA VIEW | PAY | CANCEL | <-- footer
   // +---------------------------+
-  std::unique_ptr<views::View> CreatePaymentView(
-      std::unique_ptr<views::View> header_view,
-      std::unique_ptr<views::View> content_view);
+  std::unique_ptr<views::View> CreatePaymentView();
 
-  // Creates the row of button containing the Pay, cancel, and extra buttons.
-  // |controller| is installed as the listener for button events.
-  std::unique_ptr<views::View> CreateFooterView();
-
- private:
-  // Not owned. Will outlive this.
-  PaymentRequest* request_;
-  // Not owned. Will outlive this.
+  // All these are not owned. Will outlive this.
+  PaymentRequestSpec* spec_;
+  PaymentRequestState* state_;
   PaymentRequestDialogView* dialog_;
+
+  // This view is owned by its encompassing ScrollView.
+  views::View* pane_;
+  views::View* content_view_;
 
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestSheetController);
 };

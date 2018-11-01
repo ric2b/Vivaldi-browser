@@ -33,6 +33,7 @@
 #include "components/history/core/browser/delete_directive_handler.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/keyword_id.h"
+#include "components/history/core/browser/typed_url_sync_bridge.h"
 #include "components/history/core/browser/typed_url_syncable_service.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/model/syncable_service.h"
@@ -130,6 +131,11 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Following functions get URL information from in-memory database.
   // They return false if database is not available (e.g. not loaded yet) or the
   // URL does not exist.
+
+  // Returns a pointer to the TypedURLSyncBridge owned by HistoryBackend.
+  // This method should only be called from the history thread, because the
+  // returned bridge is intended to be accessed only via the history thread.
+  TypedURLSyncBridge* GetTypedURLSyncBridge() const;
 
   // Returns a pointer to the TypedUrlSyncableService owned by HistoryBackend.
   // This method should only be called from the history thread, because the
@@ -782,6 +788,20 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
                    const GURL& icon_url,
                    const std::vector<SkBitmap>& bitmaps);
 
+  // Same as SetFavicons with three differences:
+  // 1) It will be a no-op if there is an existing cached favicon for *any* type
+  //    for |page_url|.
+  // 2) If |icon_url| is known to the database, |bitmaps| will be ignored (i.e.
+  //    the icon won't be overwritten) but the mappings from |page_url| to
+  //    |icon_url| will be stored (conditioned to point 1 above).
+  // 3) If |icon_url| is stored, it will be marked as expired.
+  // The callback will receive whether the write actually happened.
+  void SetLastResortFavicons(const GURL& page_url,
+                             favicon_base::IconType icon_type,
+                             const GURL& icon_url,
+                             const std::vector<SkBitmap>& bitmaps,
+                             base::Callback<void(bool)> callback);
+
   // Used by the FaviconService to mark the favicon for the page as being out
   // of date.
   void SetFaviconsOutOfDateForPage(const GURL& page_url);
@@ -802,7 +822,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   // Call to schedule a given task for running on the history thread with the
   // specified priority. The task will have ownership taken.
-  void ScheduleTask(SchedulePriority priority, const base::Closure& task);
+  void ScheduleTask(SchedulePriority priority, base::OnceClosure task);
 
   // Called when the favicons for the given page URLs (e.g.
   // http://www.google.com) and the given icon URL (e.g.

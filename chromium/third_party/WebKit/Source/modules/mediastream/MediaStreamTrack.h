@@ -26,23 +26,27 @@
 #ifndef MediaStreamTrack_h
 #define MediaStreamTrack_h
 
+#include <memory>
 #include "bindings/core/v8/ActiveScriptWrappable.h"
+#include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
 #include "platform/mediastream/MediaStreamSource.h"
+#include "platform/wtf/Forward.h"
 #include "public/platform/WebMediaConstraints.h"
-#include "wtf/Forward.h"
-#include <memory>
 
 namespace blink {
 
 class AudioSourceProvider;
 class ExceptionState;
+class ImageCapture;
+class MediaTrackCapabilities;
 class MediaTrackConstraints;
 class MediaStream;
 class MediaTrackSettings;
+class ScriptState;
 
 class MODULES_EXPORT MediaStreamTrack
     : public EventTargetWithInlineData,
@@ -53,56 +57,56 @@ class MODULES_EXPORT MediaStreamTrack
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MediaStreamTrack* create(ExecutionContext*, MediaStreamComponent*);
+  static MediaStreamTrack* Create(ExecutionContext*, MediaStreamComponent*);
   ~MediaStreamTrack() override;
 
   String kind() const;
   String id() const;
   String label() const;
-  bool remote() const;
 
   bool enabled() const;
   void setEnabled(bool);
 
   bool muted() const;
 
-  String contentHint() const;
-  void setContentHint(const String&);
+  String ContentHint() const;
+  void SetContentHint(const String&);
 
   String readyState() const;
 
   void stopTrack(ExceptionState&);
   virtual MediaStreamTrack* clone(ScriptState*);
 
-  void getConstraints(MediaTrackConstraints&);
-
   // This function is called when constrains have been successfully applied.
   // Called from UserMediaRequest when it succeeds. It is not IDL-exposed.
-  void setConstraints(const WebMediaConstraints&);
+  void SetConstraints(const WebMediaConstraints&);
 
+  void getCapabilities(MediaTrackCapabilities&);
+  void getConstraints(MediaTrackConstraints&);
   void getSettings(MediaTrackSettings&);
+  ScriptPromise applyConstraints(ScriptState*, const MediaTrackConstraints&);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(mute);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(unmute);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(ended);
 
-  MediaStreamComponent* component() { return m_component; }
-  bool ended() const;
+  MediaStreamComponent* Component() { return component_; }
+  bool Ended() const;
 
-  void registerMediaStream(MediaStream*);
-  void unregisterMediaStream(MediaStream*);
+  void RegisterMediaStream(MediaStream*);
+  void UnregisterMediaStream(MediaStream*);
 
   // EventTarget
-  const AtomicString& interfaceName() const override;
-  ExecutionContext* getExecutionContext() const override;
+  const AtomicString& InterfaceName() const override;
+  ExecutionContext* GetExecutionContext() const override;
 
   // ScriptWrappable
-  bool hasPendingActivity() const final;
+  bool HasPendingActivity() const final;
 
   // ContextLifecycleObserver
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
-  std::unique_ptr<AudioSourceProvider> createWebAudioSource();
+  std::unique_ptr<AudioSourceProvider> CreateWebAudioSource();
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -112,16 +116,17 @@ class MODULES_EXPORT MediaStreamTrack
   MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
 
   // MediaStreamSourceObserver
-  void sourceChangedState() override;
+  void SourceChangedState() override;
 
-  void propagateTrackEnded();
+  void PropagateTrackEnded();
 
-  MediaStreamSource::ReadyState m_readyState;
-  HeapHashSet<Member<MediaStream>> m_registeredMediaStreams;
-  bool m_isIteratingRegisteredMediaStreams;
-  bool m_stopped;
-  Member<MediaStreamComponent> m_component;
-  WebMediaConstraints m_constraints;
+  MediaStreamSource::ReadyState ready_state_;
+  HeapHashSet<Member<MediaStream>> registered_media_streams_;
+  bool is_iterating_registered_media_streams_;
+  bool stopped_;
+  Member<MediaStreamComponent> component_;
+  WebMediaConstraints constraints_;
+  Member<ImageCapture> image_capture_;
 };
 
 typedef HeapVector<Member<MediaStreamTrack>> MediaStreamTrackVector;

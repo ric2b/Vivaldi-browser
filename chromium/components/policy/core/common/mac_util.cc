@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/mac/foundation_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 
@@ -39,14 +40,14 @@ void ArrayEntryToValue(const void* value, void* context) {
   std::unique_ptr<base::Value> converted =
       PropertyToValue(static_cast<CFPropertyListRef>(value));
   if (converted)
-    static_cast<base::ListValue *>(context)->Append(converted.release());
+    static_cast<base::ListValue*>(context)->Append(std::move(converted));
 }
 
 }  // namespace
 
 std::unique_ptr<base::Value> PropertyToValue(CFPropertyListRef property) {
   if (CFCast<CFNullRef>(property))
-    return base::Value::CreateNullValue();
+    return base::MakeUnique<base::Value>();
 
   if (CFBooleanRef boolean = CFCast<CFBooleanRef>(property)) {
     return std::unique_ptr<base::Value>(
@@ -71,7 +72,7 @@ std::unique_ptr<base::Value> PropertyToValue(CFPropertyListRef property) {
 
   if (CFStringRef string = CFCast<CFStringRef>(property)) {
     return std::unique_ptr<base::Value>(
-        new base::StringValue(base::SysCFStringRefToUTF8(string)));
+        new base::Value(base::SysCFStringRefToUTF8(string)));
   }
 
   if (CFDictionaryRef dict = CFCast<CFDictionaryRef>(property)) {

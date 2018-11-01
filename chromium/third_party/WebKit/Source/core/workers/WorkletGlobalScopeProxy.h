@@ -7,7 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -19,8 +19,8 @@ class CORE_EXPORT WorkletGlobalScopeProxy {
  public:
   virtual ~WorkletGlobalScopeProxy() {}
 
-  virtual void evaluateScript(const ScriptSourceCode&) = 0;
-  virtual void terminateWorkletGlobalScope() = 0;
+  virtual void EvaluateScript(const ScriptSourceCode&) = 0;
+  virtual void TerminateWorkletGlobalScope() = 0;
 };
 
 }  // namespace blink

@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">Please enter a valid value. The nearest valid value is <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Submit</translation>
 <translation id="2674318244760992338">footer</translation>
+<translation id="2709516037105925701">Auto-fill</translation>
 <translation id="2723001399770238859">audio</translation>
 <translation id="2746543609216772311">Value must be <ph name="MINIMUM_DATE_OR_TIME" /> or later.</translation>
 <translation id="2759744352195237655">pop-up button</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">directory</translation>
 <translation id="6934078000481955284">blockquote</translation>
 <translation id="6941933287844615239">download media</translation>
+<translation id="6989848892321993519">Please lengthen this text to <ph name="MIN_CHARACTERS" /> characters or more (you are currently using 1 character).</translation>
 <translation id="7057186640035488495">film time</translation>
 <translation id="709897737746224366">Please match the format requested.</translation>
 <translation id="7223624360433298498">elapsed time</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">Please select a file.</translation>
 <translation id="8461852803063341183">radio button</translation>
 <translation id="8511325616783751178">drop-down button</translation>
+<translation id="8519420564908284378">Play on both screens</translation>
 <translation id="8534579021159131403">Minutes</translation>
 <translation id="8541249477527128034">media control</translation>
 <translation id="8583702881314752957">definition list</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">control remote playback</translation>
 <translation id="8750798805984357768">Please select one of these options.</translation>
 <translation id="8785498733064193001">begin playback</translation>
+<translation id="8845239796550121995">Now casting to your TV</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8987927404178983737">Month</translation>
 <translation id="901493112792887934">current time in seconds</translation>

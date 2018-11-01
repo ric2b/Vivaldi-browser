@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/task_runner.h"
 #include "components/wallpaper/wallpaper_resizer_observer.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -23,14 +24,19 @@ int RoundPositive(double x) {
   return static_cast<int>(floor(x + 0.5));
 }
 
-// Resizes |orig_bitmap| to |target_size| using |layout| and stores the
+// Resizes |image| to |target_size| using |layout| and stores the
 // resulting bitmap at |resized_bitmap_out|.
-void Resize(SkBitmap orig_bitmap,
+//
+// NOTE: |image| is intentionally a copy to ensure it exists for the duration of
+// the function.
+void Resize(const gfx::ImageSkia image,
             const gfx::Size& target_size,
             WallpaperLayout layout,
             SkBitmap* resized_bitmap_out,
             base::TaskRunner* task_runner) {
   DCHECK(task_runner->RunsTasksOnCurrentThread());
+
+  SkBitmap orig_bitmap = *image.bitmap();
   SkBitmap new_bitmap = orig_bitmap;
 
   const int orig_width = orig_bitmap.width();
@@ -121,11 +127,13 @@ WallpaperResizer::~WallpaperResizer() {
 }
 
 void WallpaperResizer::StartResize() {
+  start_calculation_time_ = base::TimeTicks::Now();
+
   SkBitmap* resized_bitmap = new SkBitmap;
   if (!task_runner_->PostTaskAndReply(
           FROM_HERE,
-          base::Bind(&Resize, *image_.bitmap(), target_size_, layout_,
-                     resized_bitmap, base::RetainedRef(task_runner_)),
+          base::Bind(&Resize, image_, target_size_, layout_, resized_bitmap,
+                     base::RetainedRef(task_runner_)),
           base::Bind(&WallpaperResizer::OnResizeFinished,
                      weak_ptr_factory_.GetWeakPtr(),
                      base::Owned(resized_bitmap)))) {
@@ -144,6 +152,9 @@ void WallpaperResizer::RemoveObserver(WallpaperResizerObserver* observer) {
 
 void WallpaperResizer::OnResizeFinished(SkBitmap* resized_bitmap) {
   image_ = gfx::ImageSkia::CreateFrom1xBitmap(*resized_bitmap);
+  UMA_HISTOGRAM_TIMES("Ash.Wallpaper.TimeSpentResizing",
+                      base::TimeTicks::Now() - start_calculation_time_);
+
   for (auto& observer : observers_)
     observer.OnWallpaperResized();
 }

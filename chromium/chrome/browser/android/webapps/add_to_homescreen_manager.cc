@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/android/banners/app_banner_infobar_delegate_android.h"
+#include "chrome/browser/android/banners/app_banner_manager_android.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
@@ -119,11 +120,9 @@ void AddToHomescreenManager::AddShortcut(const ShortcutInfo& info,
   ShortcutHelper::AddToLauncherWithSkBitmap(web_contents, info, icon);
 
   // Fire the appinstalled event.
-  blink::mojom::InstallationServicePtr installation_service;
-  web_contents->GetMainFrame()->GetRemoteInterfaces()->GetInterface(
-      mojo::MakeRequest(&installation_service));
-  DCHECK(installation_service);
-  installation_service->OnInstall();
+  banners::AppBannerManagerAndroid* app_banner_manager =
+      banners::AppBannerManagerAndroid::FromWebContents(web_contents);
+  app_banner_manager->OnInstall();
 }
 
 void AddToHomescreenManager::RecordAddToHomescreen() {
@@ -163,14 +162,13 @@ void AddToHomescreenManager::OnDataAvailable(const ShortcutInfo& info,
                                              const SkBitmap& primary_icon,
                                              const SkBitmap& badge_icon) {
   if (is_webapk_compatible_) {
-    // TODO(zpeng): Add badge to WebAPK installation flow.
     WebApkInstallService* install_service =
         WebApkInstallService::Get(
             data_fetcher_->web_contents()->GetBrowserContext());
     if (install_service->IsInstallInProgress(info.manifest_url))
       ShortcutHelper::ShowWebApkInstallInProgressToast();
     else
-      CreateInfoBarForWebApk(info, primary_icon);
+      CreateInfoBarForWebApk(info, primary_icon, badge_icon);
 
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_AddToHomescreenManager_onFinished(env, java_ref_);
@@ -188,11 +186,16 @@ void AddToHomescreenManager::OnDataAvailable(const ShortcutInfo& info,
     AddShortcut(info, primary_icon);
 }
 
-void AddToHomescreenManager::CreateInfoBarForWebApk(const ShortcutInfo& info,
-                                                    const SkBitmap& icon) {
+void AddToHomescreenManager::CreateInfoBarForWebApk(
+    const ShortcutInfo& info,
+    const SkBitmap& primary_icon,
+    const SkBitmap& badge_icon) {
+  content::WebContents* web_contents = data_fetcher_->web_contents();
+  banners::AppBannerManagerAndroid* app_banner_manager =
+      banners::AppBannerManagerAndroid::FromWebContents(web_contents);
   banners::AppBannerInfoBarDelegateAndroid::Create(
-      data_fetcher_->web_contents(), nullptr, info.user_title,
-      base::MakeUnique<ShortcutInfo>(info), base::MakeUnique<SkBitmap>(icon),
+      web_contents, app_banner_manager->GetWeakPtr(), info.user_title,
+      base::MakeUnique<ShortcutInfo>(info), primary_icon, badge_icon,
       -1 /* event_request_id */, webapk::INSTALL_SOURCE_MENU);
 }
 

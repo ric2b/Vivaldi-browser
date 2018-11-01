@@ -15,10 +15,12 @@
 #include "chrome/browser/page_load_metrics/observers/core_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/css_scanning_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/data_reduction_proxy_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/delay_navigation_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/google_captcha_observer.h"
 #include "chrome/browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/media_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/no_state_prefetch_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/omnibox_suggestion_used_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/prerender_page_load_metrics_observer.h"
@@ -80,8 +82,9 @@ void PageLoadMetricsEmbedder::RegisterObservers(
         base::MakeUnique<google_captcha_observer::GoogleCaptchaObserver>());
     tracker->AddObserver(
         base::MakeUnique<DocumentWritePageLoadMetricsObserver>());
+    tracker->AddObserver(base::MakeUnique<MediaPageLoadMetricsObserver>());
     tracker->AddObserver(
-        base::WrapUnique(new previews::PreviewsPageLoadMetricsObserver()));
+        base::MakeUnique<previews::PreviewsPageLoadMetricsObserver>());
     tracker->AddObserver(
         base::MakeUnique<ServiceWorkerPageLoadMetricsObserver>());
     tracker->AddObserver(base::MakeUnique<SubresourceFilterMetricsObserver>());
@@ -122,6 +125,8 @@ void PageLoadMetricsEmbedder::RegisterObservers(
   }
   tracker->AddObserver(
       base::MakeUnique<OmniboxSuggestionUsedMetricsObserver>(IsPrerendering()));
+  tracker->AddObserver(
+      base::MakeUnique<DelayNavigationPageLoadMetricsObserver>());
 }
 
 bool PageLoadMetricsEmbedder::IsPrerendering() const {

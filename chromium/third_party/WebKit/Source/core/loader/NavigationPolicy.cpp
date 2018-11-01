@@ -30,49 +30,49 @@
 
 #include "core/loader/NavigationPolicy.h"
 
-#include "wtf/Assertions.h"
+#include "platform/wtf/Assertions.h"
 
 #include "app/vivaldi_apptools.h"
 
 namespace blink {
 
-bool navigationPolicyFromMouseEvent(unsigned short button,
+bool NavigationPolicyFromMouseEvent(unsigned short button,
                                     bool ctrl,
                                     bool shift,
                                     bool alt,
                                     bool meta,
                                     NavigationPolicy* policy) {
 #if OS(MACOSX)
-  const bool newTabModifier = (button == 1) || meta;
+  const bool new_tab_modifier = (button == 1) || meta;
 #else
-  const bool newTabModifier = (button == 1) || ctrl;
+  const bool new_tab_modifier = (button == 1) || ctrl;
 #endif
-  if (!newTabModifier && !shift && !alt)
+  if (!new_tab_modifier && !shift && !alt)
     return false;
 
   DCHECK(policy);
-  if (newTabModifier) {
+  if (new_tab_modifier) {
     if (shift) {
       if (ctrl && vivaldi::IsVivaldiRunning()){
-        *policy = NavigationPolicyNewWindow;
+        *policy = kNavigationPolicyNewWindow;
         return true;
       } else {
-      *policy = NavigationPolicyNewForegroundTab;
+      *policy = kNavigationPolicyNewForegroundTab;
       }
     }
     else
-      *policy = NavigationPolicyNewBackgroundTab;
+      *policy = kNavigationPolicyNewBackgroundTab;
   } else {
     if (shift) {
       if (vivaldi::IsVivaldiRunning()){
-        *policy = NavigationPolicyNewForegroundTab;
+        *policy = kNavigationPolicyNewForegroundTab;
       }
       else{
-      *policy = NavigationPolicyNewWindow;
+      *policy = kNavigationPolicyNewWindow;
       }
     }
     else
-      *policy = NavigationPolicyDownload;
+      *policy = kNavigationPolicyDownload;
   }
   return true;
 }

@@ -11,6 +11,7 @@
     // chrome/common/extensions/permissions/permission_set_unittest.cc
     kAutoUpdate,
     kBookmarksPrivate,
+    kDevtoolsPrivate,
     kExtensionActionUtils,
     kHistoryPrivate,
     kImportData,

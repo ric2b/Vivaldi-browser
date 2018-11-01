@@ -215,7 +215,7 @@ class RealFileSystemTest(unittest.TestCase, GenericFileSystemTests):
         fs = FileSystem()
 
         with fs.mkdtemp(prefix='filesystem_unittest_') as base_path:
-            sub_path = os.path.join(base_path, "newdir")
+            sub_path = os.path.join(base_path, 'newdir')
             self.assertFalse(os.path.exists(sub_path))
             self.assertFalse(fs.isdir(sub_path))
 
@@ -237,7 +237,7 @@ class RealFileSystemTest(unittest.TestCase, GenericFileSystemTests):
     def test_maybe_make_directory__failure(self):
         # FIXME: os.chmod() doesn't work on Windows to set directories
         # as readonly, so we skip this test for now.
-        if sys.platform in ('win32', 'cygwin'):
+        if sys.platform == 'win32':
             return
 
         fs = FileSystem()
@@ -324,5 +324,5 @@ class RealFileSystemTest(unittest.TestCase, GenericFileSystemTests):
         fs = FileSystem()
 
         self.assertEqual(fs.sep, os.sep)
-        self.assertEqual(fs.join("foo", "bar"),
-                         os.path.join("foo", "bar"))
+        self.assertEqual(fs.join('foo', 'bar'),
+                         os.path.join('foo', 'bar'))

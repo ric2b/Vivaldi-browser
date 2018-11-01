@@ -24,11 +24,11 @@
 #include "content/browser/indexed_db/indexed_db_value.h"
 #include "content/browser/indexed_db/leveldb/leveldb_factory.h"
 #include "content/browser/quota/mock_quota_manager_proxy.h"
-#include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/url_request/url_request_test_util.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/quota/special_storage_policy.h"
+#include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
 
@@ -38,6 +38,7 @@ using url::Origin;
 namespace content {
 
 namespace {
+static const size_t kDefaultMaxOpenIteratorsPerDatabase = 50;
 
 // Write |content| to |file|. Returns true on success.
 bool WriteFile(const base::FilePath& file, base::StringPiece content) {
@@ -62,7 +63,9 @@ class DefaultLevelDBFactory : public LevelDBFactory {
                               const LevelDBComparator* comparator,
                               std::unique_ptr<LevelDBDatabase>* db,
                               bool* is_disk_full) override {
-    return LevelDBDatabase::Open(file_name, comparator, db, is_disk_full);
+    return LevelDBDatabase::Open(file_name, comparator,
+                                 kDefaultMaxOpenIteratorsPerDatabase, db,
+                                 is_disk_full);
   }
   leveldb::Status DestroyLevelDB(const base::FilePath& file_name) override {
     return LevelDBDatabase::Destroy(file_name);
@@ -266,7 +269,7 @@ class IndexedDBBackingStoreTest : public testing::Test {
                           base::UTF8ToUTF16("file type")));
     m_value3 = IndexedDBValue("value3", m_blob_info);
 
-    m_key1 = IndexedDBKey(99, blink::WebIDBKeyTypeNumber);
+    m_key1 = IndexedDBKey(99, blink::kWebIDBKeyTypeNumber);
     m_key2 = IndexedDBKey(ASCIIToUTF16("key2"));
     m_key3 = IndexedDBKey(ASCIIToUTF16("key3"));
   }

@@ -28,8 +28,8 @@
 
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/PassRefPtr.h"
 #include "public/platform/WebVector.h"
-#include "wtf/PassRefPtr.h"
 
 #include <unordered_map>
 
@@ -47,29 +47,29 @@ class MODULES_EXPORT IDBDatabaseCallbacks
   using TransactionMap =
       std::unordered_map<int32_t, std::pair<int64_t, std::vector<int64_t>>>;
 
-  static IDBDatabaseCallbacks* create();
+  static IDBDatabaseCallbacks* Create();
   virtual ~IDBDatabaseCallbacks();
   DECLARE_TRACE();
 
   // IDBDatabaseCallbacks
-  virtual void onForcedClose();
-  virtual void onVersionChange(int64_t oldVersion, int64_t newVersion);
+  virtual void OnForcedClose();
+  virtual void OnVersionChange(int64_t old_version, int64_t new_version);
 
-  virtual void onAbort(int64_t transactionId, DOMException*);
-  virtual void onComplete(int64_t transactionId);
-  virtual void onChanges(
+  virtual void OnAbort(int64_t transaction_id, DOMException*);
+  virtual void OnComplete(int64_t transaction_id);
+  virtual void OnChanges(
       const std::unordered_map<int32_t, std::vector<int32_t>>&
           observation_index_map,
       const WebVector<WebIDBObservation>& observations,
       const TransactionMap& transactions);
 
-  void connect(IDBDatabase*);
+  void Connect(IDBDatabase*);
 
   // Returns a new WebIDBDatabaseCallbacks for this object. Must only be
   // called once.
-  std::unique_ptr<WebIDBDatabaseCallbacks> createWebCallbacks();
-  void detachWebCallbacks();
-  void webCallbacksDestroyed();
+  std::unique_ptr<WebIDBDatabaseCallbacks> CreateWebCallbacks();
+  void DetachWebCallbacks();
+  void WebCallbacksDestroyed();
 
  protected:
   // Exposed to subclasses for unit tests.
@@ -81,13 +81,13 @@ class MODULES_EXPORT IDBDatabaseCallbacks
   // object.
   // Oilpan: We'd like to delete an IDBDatabase object by a
   // GC. WebIDBDatabaseCallbacks can survive the GC, and IDBDatabaseCallbacks
-  // can survive too. m_database should be a weak reference to avoid that an
+  // can survive too. |database_| should be a weak reference to avoid that an
   // IDBDatabase survives the GC with the IDBDatabaseCallbacks.
-  WeakMember<IDBDatabase> m_database;
+  WeakMember<IDBDatabase> database_;
 
   // Pointer back to the WebIDBDatabaseCallbacks that holds a persistent
   // reference to this object.
-  WebIDBDatabaseCallbacks* m_webCallbacks = nullptr;
+  WebIDBDatabaseCallbacks* web_callbacks_ = nullptr;
 };
 
 }  // namespace blink

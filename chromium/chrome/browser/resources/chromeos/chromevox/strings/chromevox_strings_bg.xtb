@@ -7,6 +7,7 @@
 <translation id="1023866615269196768">Разпростряна.</translation>
 <translation id="1025074108959230262">Фиксираният режим е деактивиран</translation>
 <translation id="1031961866430398710">след това</translation>
+<translation id="1038643060055067718">Редове:</translation>
 <translation id="1038795173450935438">За да се придвижите напред през елементите в страница, натиснете „търсене“ + стрелка за надясно. За да се върнете, използвайте „търсене“ + стрелка за наляво. За да преминете на следващия ред, натиснете „търсене“ + стрелка за надолу. За преминаване на предишния ред използвайте „търсене“ + стрелка за нагоре. Ако достигнете до елемент, върху който искате да кликнете, натиснете „търсене“ + интервал.</translation>
 <translation id="1044777062731150180">Няма заглавки</translation>
 <translation id="106222400312645156">rwhdr</translation>
@@ -109,7 +110,7 @@
 <translation id="2110480898214777136">Преход от началото до края или от края до началото в дадена страница, диалогов прозорец или друг елемент със съдържание</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">клавиш за достъп: <ph name="KEY" /></translation>
-<translation id="2155457205053847599">Променете текущата 6-точкова брайлова таблица, като изберете опция от списъка по-долу.</translation>
+<translation id="2138345533858834403">Симулира съдържанието на опресняващ се брайлов дисплей в панела на ChromeVox в горната част на екрана.</translation>
 <translation id="2169714232367507776">Кликване върху текущия елемент</translation>
 <translation id="2179452035581866348">ChromeVox използва звуци, за да ви предоставя основна и допълнителна информация. Чрез тях сте в състояние да навигирате по-бързо, като научите какво означава всеки звук. След като овладеете функцията, можете да изключите подробните описания с говор и да разчитате на тях за получаването на основна информация за страниците. Ето пълен списък на сигналите и предназначенията им.</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{затваряща скоба}other{# затварящи скоби}}</translation>
@@ -124,6 +125,7 @@
 <translation id="2344193891939537199">Контрола за периода от време</translation>
 <translation id="2347456970887948350">Връзка</translation>
 <translation id="2359897517538099099">Не сте в табличен режим.</translation>
+<translation id="2381733276052567791">Включване или изключване на функцията за реч</translation>
 <translation id="2390264819538553347">За да продължите, натиснете Enter, а за да се върнете – Backspace.</translation>
 <translation id="241124561063364910">последвано от</translation>
 <translation id="2416512023405990736">Квадратче без отметка</translation>
@@ -166,6 +168,7 @@
 <translation id="2800204403141299078">Няма повече различни елементи.</translation>
 <translation id="2800780099804980316">Няма предишно заглавие от първо ниво.</translation>
 <translation id="280499067616661124">Търсене в страницата чрез ChromeVox</translation>
+<translation id="2808001342598757276">Отмяна на потъмняването на екрана</translation>
 <translation id="2811019999044652585">За да преминете към други части на екрана, като ленти с инструменти или системната област, натиснете Control + „напред“. На Chromebook клавишът „напред“ е точно над клавиша с цифрата 2.</translation>
 <translation id="2811204574343810641">Ред</translation>
 <translation id="2816654101880605877">Няма следващ плъзгач.</translation>
@@ -185,11 +188,11 @@
 <translation id="296951647852255825">{COUNT,plural, =1{табулатор}other{# табулатора}}</translation>
 <translation id="2972078295414139404">Няма предишна посетена връзка.</translation>
 <translation id="2972205263822847197">Подсказка</translation>
-<translation id="2978549349327282388">Колони:</translation>
 <translation id="2998131015536248178">Предишният знак</translation>
 <translation id="2999559350546931576">Намаляване на височината на звука</translation>
 <translation id="2999945368667127852">Няма следващо приспособление за мултимедия.</translation>
 <translation id="3012414509011670858">Няма предишна секция.</translation>
+<translation id="3014130421870723208">@ адрес, 8 т.</translation>
 <translation id="3030432017085518523">Бутон за избор на елемент от меню</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостроф}other{# апострофа}}</translation>
 <translation id="3040901448410802366">Индикатор за напредъка</translation>
@@ -212,6 +215,7 @@
 <translation id="3138767756593758860">Показване на списъка с ориентири</translation>
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">Следващият ред</translation>
+<translation id="3153024374267644603">Функцията за реч е включена</translation>
 <translation id="3155083529632865074">Няма предишен бутон.</translation>
 <translation id="3163593631834463955">Празна заглавка на графа</translation>
 <translation id="316542773973815724">Навигация</translation>
@@ -224,6 +228,7 @@
 <translation id="3229375994964697375">Посетена връзка</translation>
 <translation id="3232388865800379423">Бутон с изскачащ прозорец</translation>
 <translation id="3241052487511142956">Предишна посетена връзка</translation>
+<translation id="3241638166094654466">Клетки във всеки ред:</translation>
 <translation id="3286390186030710347">Плъзгач</translation>
 <translation id="3299925995433437805">Няма следваща посетена връзка.</translation>
 <translation id="3307886118343381874">Към края на таблицата</translation>
@@ -380,6 +385,7 @@
 <translation id="4376316291247992553">Преглед на графиката като брайлов текст</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">нулиране</translation>
+<translation id="4457472090507035117">Изберете текущия глас:</translation>
 <translation id="4471074325120394300">Няма връзки.</translation>
 <translation id="4476183483923481720">нов ред</translation>
 <translation id="4482330759234983253">Предишната таблица</translation>
@@ -453,7 +459,6 @@
 <translation id="5105050547967751155">rq</translation>
 <translation id="5110983769041734144">Няма предишно поле във формуляра.</translation>
 <translation id="5111640677200759579">Заглавка на графа</translation>
-<translation id="5117636609870536415">@ed</translation>
 <translation id="5136967254288895616">Няма предишна връзка.</translation>
 <translation id="513774504516943387">връзка</translation>
 <translation id="517143700877085897">, неизбрано</translation>
@@ -564,10 +569,10 @@
 <translation id="5968607524793740041">Показване на контекстното меню</translation>
 <translation id="5983179082906765664">По-подробна навигация</translation>
 <translation id="5999630716831179808">Гласове</translation>
-<translation id="6000417740266304866">Променете текущата 8-точкова брайлова таблица, като изберете опция от списъка по-долу.</translation>
 <translation id="6006050241733874051">Формуляр</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{обратна наклонена черта}other{# обратни наклонени черти}}</translation>
 <translation id="6037602951055904232">Панорамно придвижване напред</translation>
+<translation id="6044160928851315051">Потъмняване на екрана</translation>
 <translation id="6082768461603900813">Основна навигация</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Край на клетката.</translation>
@@ -606,7 +611,6 @@
 <translation id="6444046323172968959">Диалогов прозорец със сигнал</translation>
 <translation id="6459511626086141404">Фиксирана клавиатурна подредба</translation>
 <translation id="6468049171101508116">Следващият бутон</translation>
-<translation id="6491972999578897419">Променете текущия глас, като изберете опция от списъка по-долу.</translation>
 <translation id="6493991254603208962">намаляване на яркостта</translation>
 <translation id="6508059270146105198">Преместване на брайловия дисплей в долната част на страницата</translation>
 <translation id="6536864053412760904">Означение в Math ML</translation>
@@ -658,6 +662,7 @@
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">ехо за думите</translation>
 <translation id="713824876195128146">Следващият блоков цитат</translation>
+<translation id="7143034430156387447">Превключване между 6- и 8-точково брайлово писмо</translation>
 <translation id="7161771961008409533">Бутон с изскачащ прозорец</translation>
 <translation id="7165714724802225287">Използва се изгледът с наслагване.</translation>
 <translation id="7167657087543110">ехо за знаците</translation>
@@ -668,6 +673,7 @@
 <translation id="7217912842225915592">+<ph name="NUM" /></translation>
 <translation id="7221740160534240920">ред</translation>
 <translation id="7226216518520804442">списък</translation>
+<translation id="7229749224609077523">Изберете таблица за 6-точково брайлово писмо:</translation>
 <translation id="72393384879519786">Заглавие</translation>
 <translation id="7241683698754534149">Отваряне на дългото описание в нов раздел</translation>
 <translation id="7248671827512403053">Приложение</translation>
@@ -741,6 +747,7 @@
 <translation id="7974390230414479278">Елемент от меню</translation>
 <translation id="8007540374018858731">заглавие от трето ниво</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{кавички}other{# кавички}}</translation>
+<translation id="8017588669690167134">Функцията за реч е изключена</translation>
 <translation id="8033827949643255796">откроени</translation>
 <translation id="8035962149453661158">максимум: <ph name="X" /></translation>
 <translation id="8042761080832772327">Поле за въвеждане на заявка за търсене</translation>
@@ -759,7 +766,6 @@
 <translation id="820417203470636242">Празна клетка.</translation>
 <translation id="8215202828671303819">Избор на няколко елемента</translation>
 <translation id="8224171046658870249">Превключихте към ChromeVox Next</translation>
-<translation id="8259358278692921574">Редове:</translation>
 <translation id="8276439074553447000">Преминаване към предишния елемент, който може да получи фокус</translation>
 <translation id="8278417001922463147">Няма предишна статия.</translation>
 <translation id="8283603667300770666">Следващото поле във формуляра</translation>
@@ -797,7 +803,6 @@
 <translation id="8638532244051952400">Съобщаване на координатите на текущата клетка</translation>
 <translation id="8650576015643545550">Няма предишен списък.</translation>
 <translation id="8651481478098336970">заглушаване на звука</translation>
-<translation id="8653031188082306838">urled</translation>
 <translation id="8653646212587894517">Показване на списъка с връзки</translation>
 <translation id="8664519043722036194">секунди</translation>
 <translation id="867187640362843212">Заглавие от пето ниво</translation>
@@ -817,6 +822,7 @@
 <translation id="8856538297388979332">Натиснете стрелките за нагоре или надолу, за да прегледате командите, натиснете „enter“ за активиране</translation>
 <translation id="8864099967139188018">Няма следващо заглавие от шесто ниво.</translation>
 <translation id="8882002077197914455">Заглавка на ред</translation>
+<translation id="8883850400338911892">URL адрес, 8 т.</translation>
 <translation id="8896347895970027998">Превключване на ChromeVox между активно или неактивно състояние.</translation>
 <translation id="8898516272131543774">Цикъл на ехото за препинателни знаци</translation>
 <translation id="8900148057318340779">Клавиш за префикс</translation>
@@ -830,6 +836,7 @@
 <translation id="9027462562263121875">Няма таблици.</translation>
 <translation id="9040132695316389094">Заглавие от първо ниво</translation>
 <translation id="9043969572162476692"><ph name="NUM" />%</translation>
+<translation id="9061884144798498064">Изберете таблица за 8-точково брайлово писмо:</translation>
 <translation id="9065283790526219006">+изскачащ прозорец</translation>
 <translation id="9077213568694924680">премахнати от открояването</translation>
 <translation id="9082874451376019682">Няма предишен плъзгач.</translation>

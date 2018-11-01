@@ -83,11 +83,6 @@ size_t GbmBuffer::GetSize(size_t index) const {
   return planes_[index].size;
 }
 
-uint64_t GbmBuffer::GetFormatModifier(size_t index) const {
-  DCHECK_LT(index, planes_.size());
-  return planes_[index].modifier;
-}
-
 // TODO(reveman): This should not be needed once crbug.com/597932 is fixed,
 // as the size would be queried directly from the underlying bo.
 gfx::Size GbmBuffer::GetSize() const {
@@ -184,23 +179,27 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBufferFromFds(
   DCHECK_EQ(planes[0].offset, 0);
 
   // Try to use scanout if supported.
-  bool try_scanout =
-      gbm_device_is_format_supported(
-          gbm->device(), format, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING) &&
-      (planes.size() == 1);
+  bool try_scanout = gbm_device_is_format_supported(
+      gbm->device(), format, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
 
   gbm_bo* bo = nullptr;
   if (try_scanout) {
-    struct gbm_import_fd_data fd_data;
-    fd_data.fd = fds[0].get();
+    struct gbm_import_fd_planar_data fd_data;
     fd_data.width = size.width();
     fd_data.height = size.height();
-    fd_data.stride = planes[0].stride;
     fd_data.format = format;
+
+    DCHECK_LE(planes.size(), 3u);
+    for (size_t i = 0; i < planes.size(); ++i) {
+      fd_data.fds[i] = fds[i < fds.size() ? i : 0].get();
+      fd_data.strides[i] = planes[i].stride;
+      fd_data.offsets[i] = planes[i].offset;
+      fd_data.format_modifiers[i] = planes[i].modifier;
+    }
 
     // The fd passed to gbm_bo_import is not ref-counted and need to be
     // kept open for the lifetime of the buffer.
-    bo = gbm_bo_import(gbm->device(), GBM_BO_IMPORT_FD, &fd_data,
+    bo = gbm_bo_import(gbm->device(), GBM_BO_IMPORT_FD_PLANAR, &fd_data,
                        GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
     if (!bo) {
       LOG(ERROR) << "nullptr returned from gbm_bo_import";
@@ -246,7 +245,7 @@ gfx::NativePixmapHandle GbmPixmap::ExportHandle() {
     }
     handle.planes.emplace_back(buffer_->GetStride(i), buffer_->GetOffset(i),
                                buffer_->GetSize(i),
-                               buffer_->GetFormatModifier(i));
+                               buffer_->GetFormatModifier());
   }
   return handle;
 }
@@ -279,7 +278,7 @@ int GbmPixmap::GetDmaBufOffset(size_t plane) const {
 }
 
 uint64_t GbmPixmap::GetDmaBufModifier(size_t plane) const {
-  return buffer_->GetFormatModifier(plane);
+  return buffer_->GetFormatModifier();
 }
 
 gfx::BufferFormat GbmPixmap::GetBufferFormat() const {

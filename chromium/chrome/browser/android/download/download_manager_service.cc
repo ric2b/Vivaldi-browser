@@ -41,7 +41,7 @@ int kDefaultAutoResumptionLimit = 5;
 const char kAutoResumptionLimitVariation[] = "AutoResumptionLimit";
 
 bool ShouldShowDownloadItem(content::DownloadItem* item) {
-  return !item->IsTemporary();
+  return !item->IsTemporary() && !item->IsTransient();
 }
 
 void UpdateNotifier(DownloadManagerService* service,
@@ -57,6 +57,7 @@ void UpdateNotifier(DownloadManagerService* service,
 
 ScopedJavaLocalRef<jobject> CreateJavaDownloadItem(
     JNIEnv* env, content::DownloadItem* item) {
+  DCHECK(!item->IsTransient());
   return Java_DownloadItem_createDownloadItem(
       env, DownloadManagerService::CreateJavaDownloadInfo(env, item),
       item->GetStartTime().ToJavaTime(), item->GetFileExternallyRemoved());
@@ -121,7 +122,8 @@ ScopedJavaLocalRef<jobject> DownloadManagerService::CreateJavaDownloadInfo(
       ConvertUTF8ToJavaString(env, original_url),
       ConvertUTF8ToJavaString(env, item->GetReferrerUrl().spec()),
       time_remaining_known ? time_delta.InMilliseconds()
-                           : kUnknownRemainingTime);
+                           : kUnknownRemainingTime,
+      item->GetLastAccessTime().ToJavaTime());
 }
 
 static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& jobj) {
@@ -239,6 +241,21 @@ void DownloadManagerService::CheckForExternallyRemovedDownloads(
   manager->CheckForHistoryFilesRemoval();
 }
 
+void DownloadManagerService::UpdateLastAccessTime(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& jdownload_guid,
+    bool is_off_the_record) {
+  std::string download_guid = ConvertJavaStringToUTF8(env, jdownload_guid);
+  content::DownloadManager* manager = GetDownloadManager(is_off_the_record);
+  if (!manager)
+    return;
+
+  content::DownloadItem* item = manager->GetDownloadByGuid(download_guid);
+  if (item)
+    item->SetLastAccessTime(base::Time::Now());
+}
+
 void DownloadManagerService::CancelDownload(
     JNIEnv* env,
     jobject obj,
@@ -285,6 +302,8 @@ void DownloadManagerService::OnHistoryQueryComplete() {
 
 void DownloadManagerService::OnDownloadCreated(
     content::DownloadManager* manager, content::DownloadItem* item) {
+  if (item->IsTransient())
+    return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> j_item = CreateJavaDownloadItem(env, item);
@@ -297,7 +316,7 @@ void DownloadManagerService::OnDownloadUpdated(
   if (java_ref_.is_null())
     return;
 
-  if (item->IsTemporary())
+  if (item->IsTemporary() || item->IsTransient())
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -308,7 +327,7 @@ void DownloadManagerService::OnDownloadUpdated(
 
 void DownloadManagerService::OnDownloadRemoved(
     content::DownloadManager* manager, content::DownloadItem* item) {
-  if (java_ref_.is_null())
+  if (java_ref_.is_null() || item->IsTransient())
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();

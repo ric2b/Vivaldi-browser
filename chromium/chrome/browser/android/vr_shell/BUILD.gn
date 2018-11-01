@@ -4,9 +4,10 @@
 
 import("//build/config/android/rules.gni")
 import("//chrome/common/features.gni")
+import("//device/vr/features.gni")
 import("//testing/test.gni")
 
-assert(enable_webvr)
+assert(enable_vr)
 
 if (current_cpu == "arm" || current_cpu == "arm64") {
   static_library("vr_common") {
@@ -19,18 +20,36 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "animation.h",
       "easing.cc",
       "easing.h",
+      "fps_meter.cc",
+      "fps_meter.h",
+      "gltf_asset.cc",
+      "gltf_asset.h",
+      "gltf_parser.cc",
+      "gltf_parser.h",
+      "mailbox_to_surface_bridge.cc",
+      "mailbox_to_surface_bridge.h",
       "non_presenting_gvr_delegate.cc",
       "non_presenting_gvr_delegate.h",
-      "ui_elements.cc",
-      "ui_elements.h",
+      "textures/insecure_content_permanent_texture.cc",
+      "textures/insecure_content_permanent_texture.h",
+      "textures/insecure_content_transient_texture.cc",
+      "textures/insecure_content_transient_texture.h",
+      "textures/ui_texture.cc",
+      "textures/ui_texture.h",
+      "ui_element.cc",
+      "ui_element.h",
       "ui_interface.cc",
       "ui_interface.h",
       "ui_scene.cc",
       "ui_scene.h",
+      "ui_scene_manager.cc",
+      "ui_scene_manager.h",
       "vr_compositor.cc",
       "vr_compositor.h",
       "vr_controller.cc",
       "vr_controller.h",
+      "vr_controller_model.cc",
+      "vr_controller_model.h",
       "vr_gesture.h",
       "vr_gl_thread.cc",
       "vr_gl_thread.h",
@@ -38,10 +57,6 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "vr_gl_util.h",
       "vr_input_manager.cc",
       "vr_input_manager.h",
-      "vr_math.cc",
-      "vr_math.h",
-      "vr_omnibox.cc",
-      "vr_omnibox.h",
       "vr_shell.cc",
       "vr_shell.h",
       "vr_shell_delegate.cc",
@@ -56,10 +71,6 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "vr_web_contents_observer.h",
     ]
 
-    if (enable_vr_shell_ui_dev) {
-      defines += [ "ENABLE_VR_SHELL_UI_DEV" ]
-    }
-
     deps = [
       ":vr_shell_jni_headers",
       "//base",
@@ -72,17 +83,20 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "//content/public/common",
       "//device/gamepad",
       "//device/vr",
+      "//services/ui/public/cpp/gpu",
       "//ui/android",
       "//ui/base",
       "//ui/display",
       "//ui/gl",
       "//ui/gl/init",
+      "//ui/vector_icons",
     ]
 
     libs = [
       "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a",
       "android",
     ]
+
     configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
   }
 
@@ -95,10 +109,14 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
   }
 }
 
-if (enable_webvr) {
+if (enable_vr) {
   test("vr_shell_unittests") {
     sources = [
-      "ui_elements_unittest.cc",
+      "fps_meter_unittest.cc",
+      "gltf_parser_unittest.cc",
+      "test/paths.cc",
+      "test/paths.h",
+      "ui_element_unittest.cc",
       "ui_scene_unittest.cc",
     ]
 
@@ -110,6 +128,17 @@ if (enable_webvr) {
       "//testing/gtest",
       "//third_party/WebKit/public:blink",
       "//ui/gfx/geometry",
+    ]
+
+    # Ensure libgvr static library appears before gcc library in linking order.
+    # See https://crbug.com/704305 for details.
+    libs =
+        [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
+
+    data = [
+      "test/data/sample_inline.gltf",
+      "test/data/sample_external.gltf",
+      "test/data/sample.bin",
     ]
   }
 }

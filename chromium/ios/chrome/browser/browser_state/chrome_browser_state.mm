@@ -12,11 +12,11 @@
 #include "components/prefs/json_pref_store.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#include "ios/chrome/browser/net/ios_chrome_url_request_context_getter.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/public/webui/web_ui_ios.h"
 #include "ios/web/webui/url_data_manager_ios_backend.h"
+#include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_interceptor.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -75,9 +75,8 @@ net::URLRequestContextGetter* ChromeBrowserState::GetRequestContext() {
         linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
             web::URLDataManagerIOSBackend::CreateProtocolHandler(this)
                 .release());
-    URLRequestInterceptorScopedVector request_interceptors;
-    request_context_getter_ = make_scoped_refptr(CreateRequestContext(
-        &protocol_handlers, std::move(request_interceptors)));
+    request_context_getter_ =
+        make_scoped_refptr(CreateRequestContext(&protocol_handlers));
   }
   return request_context_getter_.get();
 }

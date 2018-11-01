@@ -4,6 +4,8 @@
 
 // https://w3c.github.io/ServiceWorker/#fetch-event-interface
 [
+    ActiveScriptWrappable,
+    DependentLifetime,
     Constructor(DOMString type, FetchEventInit eventInitDict),
     ConstructorCallWith=ScriptState,
     Exposed=ServiceWorker,
@@ -13,5 +15,5 @@
     readonly attribute boolean isReload;
 
     [CallWith=ScriptState, RaisesException] void respondWith(Promise<Response> r);
-    [OriginTrialEnabled=ServiceWorkerNavigationPreload, CallWith=ScriptState] readonly attribute Promise<any> preloadResponse;
+    [RuntimeEnabled=ServiceWorkerNavigationPreload, CallWith=ScriptState] readonly attribute Promise<any> preloadResponse;
 };

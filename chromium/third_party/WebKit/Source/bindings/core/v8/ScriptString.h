@@ -32,10 +32,10 @@
 #define ScriptString_h
 
 #include "bindings/core/v8/SharedPersistent.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 #include "v8/include/v8.h"
-#include "wtf/Allocator.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -47,20 +47,20 @@ class ScriptString final {
   ScriptString(v8::Isolate*, v8::Local<v8::String>);
   ScriptString& operator=(const ScriptString&);
 
-  v8::Isolate* isolate() {
-    if (!m_isolate)
-      m_isolate = v8::Isolate::GetCurrent();
-    return m_isolate;
+  v8::Isolate* GetIsolate() {
+    if (!isolate_)
+      isolate_ = v8::Isolate::GetCurrent();
+    return isolate_;
   }
-  bool isEmpty() const { return !m_string || m_string->isEmpty(); }
-  void clear() { m_string = nullptr; }
-  v8::Local<v8::String> v8Value();
-  ScriptString concatenateWith(const String&);
-  String flattenToString();
+  bool IsEmpty() const { return !string_ || string_->IsEmpty(); }
+  void Clear() { string_ = nullptr; }
+  v8::Local<v8::String> V8Value();
+  ScriptString ConcatenateWith(const String&);
+  String FlattenToString();
 
  private:
-  v8::Isolate* m_isolate;
-  RefPtr<SharedPersistent<v8::String>> m_string;
+  v8::Isolate* isolate_;
+  RefPtr<SharedPersistent<v8::String>> string_;
 };
 
 }  // namespace blink

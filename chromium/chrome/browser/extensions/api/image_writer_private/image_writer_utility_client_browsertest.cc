@@ -11,6 +11,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/common/extensions/removable_storage_writer.mojom.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/browser_thread.h"
@@ -29,8 +30,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     EXPECT_TRUE(base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &image_));
 
     base::RunLoop run_loop;
-    content::BrowserThread::PostBlockingPoolTaskAndReply(
-        FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits().MayBlock(),
         base::Bind(&ImageWriterUtilityClientTest::FillFile, image_, pattern),
         run_loop.QuitClosure());
 
@@ -41,8 +42,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     device_ = image_.ReplaceExtension(FILE_PATH_LITERAL("out"));
 
     base::RunLoop run_loop;
-    content::BrowserThread::PostBlockingPoolTaskAndReply(
-        FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits().MayBlock(),
         base::Bind(&ImageWriterUtilityClientTest::FillFile, device_, pattern),
         run_loop.QuitClosure());
 
@@ -59,7 +60,7 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     cancel_ = (option == CANCEL);
 
     content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
+        content::BrowserThread::FILE, FROM_HERE,
         base::Bind(&ImageWriterUtilityClientTest::StartWriteTest,
                    base::Unretained(this)));
     run_loop.Run();
@@ -75,7 +76,7 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     cancel_ = (option == CANCEL);
 
     content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
+        content::BrowserThread::FILE, FROM_HERE,
         base::Bind(&ImageWriterUtilityClientTest::StartVerifyTest,
                    base::Unretained(this)));
     run_loop.Run();
@@ -89,7 +90,7 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
 
  private:
   void StartWriteTest() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     if (!image_writer_utility_client_)
       image_writer_utility_client_ = new ImageWriterUtilityClient();
@@ -107,7 +108,7 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
   }
 
   void Progress(int64_t progress) {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     progress_ = progress;
     if (!cancel_)
@@ -118,7 +119,7 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
   }
 
   void Success() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     EXPECT_EQ(kTestFileSize, progress_);
     EXPECT_FALSE(cancel_);
@@ -130,13 +131,13 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     }
 
     content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
+        content::BrowserThread::FILE, FROM_HERE,
         base::Bind(&ImageWriterUtilityClientTest::Shutdown,
                    base::Unretained(this)));
   }
 
   void StartVerifyTest() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     if (!image_writer_utility_client_)
       image_writer_utility_client_ = new ImageWriterUtilityClient();
@@ -154,33 +155,33 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
   }
 
   void Failure(const std::string& error) {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     EXPECT_FALSE(error.empty());
     success_ = false;
     error_ = error;
 
     content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
+        content::BrowserThread::FILE, FROM_HERE,
         base::Bind(&ImageWriterUtilityClientTest::Shutdown,
                    base::Unretained(this)));
   }
 
   void Verified() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     EXPECT_EQ(kTestFileSize, progress_);
     EXPECT_FALSE(cancel_);
     success_ = !cancel_;
 
     content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
+        content::BrowserThread::FILE, FROM_HERE,
         base::Bind(&ImageWriterUtilityClientTest::Shutdown,
                    base::Unretained(this)));
   }
 
   void Cancelled() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     EXPECT_TRUE(cancel_);
     success_ = cancel_;
@@ -191,7 +192,7 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
   }
 
   void Shutdown() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
     image_writer_utility_client_->Shutdown();
 
@@ -259,8 +260,7 @@ IN_PROC_BROWSER_TEST_F(ImageWriterUtilityClientTest, WriteVerify) {
   EXPECT_TRUE(error().empty());
 }
 
-// TODO(crbug.com/690717): test is flaky.
-IN_PROC_BROWSER_TEST_F(ImageWriterUtilityClientTest, DISABLED_WriteCancel) {
+IN_PROC_BROWSER_TEST_F(ImageWriterUtilityClientTest, WriteCancel) {
   FillImageFileWithPattern('a');
   FillDeviceFileWithPattern(0);
 
@@ -306,8 +306,7 @@ IN_PROC_BROWSER_TEST_F(ImageWriterUtilityClientTest, Verify) {
   EXPECT_TRUE(error().empty());
 }
 
-// TODO(crbug.com/690717): test is flaky.
-IN_PROC_BROWSER_TEST_F(ImageWriterUtilityClientTest, DISABLED_VerifyCancel) {
+IN_PROC_BROWSER_TEST_F(ImageWriterUtilityClientTest, VerifyCancel) {
   FillImageFileWithPattern('s');
   FillDeviceFileWithPattern('s');
 

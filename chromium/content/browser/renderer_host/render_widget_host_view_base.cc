@@ -17,7 +17,7 @@
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_switches_internal.h"
 #include "media/base/video_frame.h"
-#include "ui/display/display.h"
+#include "ui/base/layout.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -34,16 +34,14 @@ const int kFlushInputRateInUs = 16666;
 
 RenderWidgetHostViewBase::RenderWidgetHostViewBase()
     : is_fullscreen_(false),
-      popup_type_(blink::WebPopupTypeNone),
-      background_color_(SK_ColorWHITE),
+      popup_type_(blink::kWebPopupTypeNone),
       mouse_locked_(false),
       showing_context_menu_(false),
       current_device_scale_factor_(0),
       current_display_rotation_(display::Display::ROTATE_0),
       text_input_manager_(nullptr),
       renderer_frame_number_(0),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 RenderWidgetHostViewBase::~RenderWidgetHostViewBase() {
   DCHECK(!mouse_locked_);
@@ -91,27 +89,14 @@ bool RenderWidgetHostViewBase::OnMessageReceived(const IPC::Message& msg){
   return false;
 }
 
-void RenderWidgetHostViewBase::SetBackgroundColor(SkColor color) {
-  background_color_ = color;
-}
-
-SkColor RenderWidgetHostViewBase::background_color() {
-  return background_color_;
-}
-
 void RenderWidgetHostViewBase::SetBackgroundColorToDefault() {
   SetBackgroundColor(SK_ColorWHITE);
 }
 
-bool RenderWidgetHostViewBase::GetBackgroundOpaque() {
-  return SkColorGetA(background_color_) == SK_AlphaOPAQUE;
-}
-
 gfx::Size RenderWidgetHostViewBase::GetPhysicalBackingSize() const {
-  display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(GetNativeView());
-  return gfx::ScaleToCeiledSize(GetRequestedRendererSize(),
-                                display.device_scale_factor());
+  return gfx::ScaleToCeiledSize(
+      GetRequestedRendererSize(),
+      ui::GetScaleFactorForNativeView(GetNativeView()));
 }
 
 bool RenderWidgetHostViewBase::DoBrowserControlsShrinkBlinkSize() const {
@@ -157,7 +142,6 @@ void RenderWidgetHostViewBase::SetIsInVR(bool is_in_vr) {
 }
 
 bool RenderWidgetHostViewBase::IsInVR() const {
-  NOTIMPLEMENTED();
   return false;
 }
 
@@ -284,7 +268,7 @@ void RenderWidgetHostViewBase::UpdateScreenInfo(gfx::NativeView view) {
 
 bool RenderWidgetHostViewBase::HasDisplayPropertyChanged(gfx::NativeView view) {
   display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(view);
+      display::Screen::GetScreen()->GetDisplayNearestView(view);
   if (current_display_area_ == display.work_area() &&
       current_device_scale_factor_ == display.device_scale_factor() &&
       current_display_rotation_ == display.rotation()) {

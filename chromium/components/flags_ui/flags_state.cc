@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/stl_util.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -105,7 +106,7 @@ void AddInternalName(const FeatureEntry& e, std::set<std::string>* names) {
     case FeatureEntry::MULTI_VALUE:
     case FeatureEntry::ENABLE_DISABLE_VALUE:
     case FeatureEntry::FEATURE_VALUE:
-    case FeatureEntry::FEATURE_WITH_VARIATIONS_VALUE:
+    case FeatureEntry::FEATURE_WITH_PARAMS_VALUE:
       for (int i = 0; i < e.num_options; ++i)
         names->insert(e.NameForOption(i));
       break;
@@ -140,7 +141,7 @@ bool ValidateFeatureEntry(const FeatureEntry& e) {
       DCHECK(!e.choices);
       DCHECK(e.feature);
       return true;
-    case FeatureEntry::FEATURE_WITH_VARIATIONS_VALUE:
+    case FeatureEntry::FEATURE_WITH_PARAMS_VALUE:
       DCHECK_GT(e.num_options, 2);
       DCHECK(!e.choices);
       DCHECK(e.feature);
@@ -162,7 +163,7 @@ bool IsDefaultValue(const FeatureEntry& entry,
     case FeatureEntry::MULTI_VALUE:
     case FeatureEntry::ENABLE_DISABLE_VALUE:
     case FeatureEntry::FEATURE_VALUE:
-    case FeatureEntry::FEATURE_WITH_VARIATIONS_VALUE:
+    case FeatureEntry::FEATURE_WITH_PARAMS_VALUE:
       for (int i = 0; i < entry.num_options; ++i) {
         if (enabled_entries.count(entry.NameForOption(i)) > 0)
           return false;
@@ -179,7 +180,7 @@ base::Value* CreateOptionsData(const FeatureEntry& entry,
   DCHECK(entry.type == FeatureEntry::MULTI_VALUE ||
          entry.type == FeatureEntry::ENABLE_DISABLE_VALUE ||
          entry.type == FeatureEntry::FEATURE_VALUE ||
-         entry.type == FeatureEntry::FEATURE_WITH_VARIATIONS_VALUE);
+         entry.type == FeatureEntry::FEATURE_WITH_PARAMS_VALUE);
   base::ListValue* result = new base::ListValue;
   for (int i = 0; i < entry.num_options; ++i) {
     std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue);
@@ -389,13 +390,13 @@ void FlagsState::RemoveFlagsSwitches(
     const std::string& existing_value_utf8 = existing_value;
 #endif
 
-    std::vector<std::string> features =
+    std::vector<base::StringPiece> features =
         base::FeatureList::SplitFeatureListString(existing_value_utf8);
-    std::vector<std::string> remaining_features;
+    std::vector<base::StringPiece> remaining_features;
     // For any featrue name in |features| that is not in |switch_added_values| -
     // i.e. it wasn't added by about_flags code, add it to |remaining_features|.
-    for (const std::string& feature : features) {
-      if (!base::ContainsKey(switch_added_values, feature))
+    for (const auto& feature : features) {
+      if (!base::ContainsKey(switch_added_values, feature.as_string()))
         remaining_features.push_back(feature);
     }
 
@@ -440,7 +441,7 @@ std::vector<std::string> FlagsState::RegisterAllFeatureVariationParameters(
   // First collect all the data for each trial.
   for (size_t i = 0; i < num_feature_entries_; ++i) {
     const FeatureEntry& e = feature_entries_[i];
-    if (e.type == FeatureEntry::FEATURE_WITH_VARIATIONS_VALUE) {
+    if (e.type == FeatureEntry::FEATURE_WITH_PARAMS_VALUE) {
       for (int j = 0; j < e.num_options; ++j) {
         if (e.StateForOption(j) == FeatureEntry::FeatureState::ENABLED &&
             enabled_entries.count(e.NameForOption(j))) {
@@ -510,9 +511,9 @@ void FlagsState::GetFlagFeatureEntries(
 
     std::unique_ptr<base::DictionaryValue> data(new base::DictionaryValue());
     data->SetString("internal_name", entry.internal_name);
-    data->SetString("name", l10n_util::GetStringUTF16(entry.visible_name_id));
+    data->SetString("name", base::StringPiece(entry.visible_name));
     data->SetString("description",
-                    l10n_util::GetStringUTF16(entry.visible_description_id));
+                    base::StringPiece(entry.visible_description));
 
     base::ListValue* supported_platforms = new base::ListValue();
     AddOsStrings(entry.supported_platforms, supported_platforms);
@@ -533,7 +534,7 @@ void FlagsState::GetFlagFeatureEntries(
       case FeatureEntry::MULTI_VALUE:
       case FeatureEntry::ENABLE_DISABLE_VALUE:
       case FeatureEntry::FEATURE_VALUE:
-      case FeatureEntry::FEATURE_WITH_VARIATIONS_VALUE:
+      case FeatureEntry::FEATURE_WITH_PARAMS_VALUE:
         data->Set("options", CreateOptionsData(entry, enabled_entries));
         break;
     }
@@ -683,7 +684,7 @@ void FlagsState::MergeFeatureCommandLineSwitch(
     base::CommandLine* command_line) {
   std::string original_switch_value =
       command_line->GetSwitchValueASCII(switch_name);
-  std::vector<std::string> features =
+  std::vector<base::StringPiece> features =
       base::FeatureList::SplitFeatureListString(original_switch_value);
   // Only add features that don't already exist in the lists.
   // Note: The base::ContainsValue() call results in O(n^2) performance, but in
@@ -783,7 +784,7 @@ void FlagsState::GenerateFlagsToSwitchesMapping(
                          e.disable_command_line_value, name_to_switch_map);
         break;
       case FeatureEntry::FEATURE_VALUE:
-      case FeatureEntry::FEATURE_WITH_VARIATIONS_VALUE:
+      case FeatureEntry::FEATURE_WITH_PARAMS_VALUE:
         for (int j = 0; j < e.num_options; ++j) {
           FeatureEntry::FeatureState state = e.StateForOption(j);
           if (state == FeatureEntry::FeatureState::DEFAULT) {

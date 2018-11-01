@@ -5,7 +5,9 @@
 #include "ui/views/layout/grid_layout.h"
 
 #include "base/compiler_specific.h"
+#include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/views/test/platform_test_helper.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -26,8 +28,42 @@ class SettableSizeView : public View {
 
   gfx::Size GetPreferredSize() const override { return pref_; }
 
+  void set_pref(const gfx::Size& pref) { pref_ = pref; }
+
  private:
-   gfx::Size pref_;
+  gfx::Size pref_;
+
+  DISALLOW_COPY_AND_ASSIGN(SettableSizeView);
+};
+
+// A test view that wants to alter its preferred size and re-layout when it gets
+// added to the View hierarchy.
+class LayoutOnAddView : public SettableSizeView {
+ public:
+  LayoutOnAddView() : SettableSizeView(gfx::Size(10, 10)) {}
+
+  void set_target_size(const gfx::Size& target_size) {
+    target_size_ = target_size;
+  }
+
+  // View:
+  void ViewHierarchyChanged(
+      const ViewHierarchyChangedDetails& details) override {
+    if (GetPreferredSize() == target_size_)
+      return;
+
+    // Contrive a realistic thing that a View might what to do, but which would
+    // break the layout machinery. Note an override of OnNativeThemeChanged()
+    // would be more compelling, but there is no Widget in this test harness.
+    set_pref(target_size_);
+    PreferredSizeChanged();
+    parent()->Layout();
+  }
+
+ private:
+  gfx::Size target_size_;
+
+  DISALLOW_COPY_AND_ASSIGN(LayoutOnAddView);
 };
 
 // A view with fixed circumference that trades height for width.
@@ -140,6 +176,75 @@ TEST_F(GridLayoutTest, TwoColumns) {
   layout.Layout(&host);
   ExpectViewBoundsEquals(0, 0, 10, 20, &v1);
   ExpectViewBoundsEquals(10, 0, 20, 20, &v2);
+
+  RemoveAll();
+}
+
+// Test linked column sizes, and the column size limit.
+TEST_F(GridLayoutTest, LinkedSizes) {
+  SettableSizeView v1(gfx::Size(10, 20));
+  SettableSizeView v2(gfx::Size(20, 20));
+  SettableSizeView v3(gfx::Size(0, 20));
+  ColumnSet* c1 = layout.AddColumnSet(0);
+
+  // Fill widths.
+  c1->AddColumn(GridLayout::FILL, GridLayout::LEADING, 0, GridLayout::USE_PREF,
+                0, 0);
+  c1->AddColumn(GridLayout::FILL, GridLayout::LEADING, 0, GridLayout::USE_PREF,
+                0, 0);
+  c1->AddColumn(GridLayout::FILL, GridLayout::LEADING, 0, GridLayout::USE_PREF,
+                0, 0);
+
+  layout.StartRow(0, 0);
+  layout.AddView(&v1);
+  layout.AddView(&v2);
+  layout.AddView(&v3);
+
+  // Link all the columns.
+  c1->LinkColumnSizes(0, 1, 2, -1);
+  GetPreferredSize();
+
+  // |v1| and |v3| should obtain the same width as |v2|, since |v2| is largest.
+  EXPECT_EQ(gfx::Size(20 + 20 + 20, 20), pref);
+  host.SetBounds(0, 0, pref.width(), pref.height());
+  layout.Layout(&host);
+  ExpectViewBoundsEquals(0, 0, 20, 20, &v1);
+  ExpectViewBoundsEquals(20, 0, 20, 20, &v2);
+  ExpectViewBoundsEquals(40, 0, 20, 20, &v3);
+
+  // If the limit is zero, behaves as though the columns are not linked.
+  c1->set_linked_column_size_limit(0);
+  GetPreferredSize();
+  EXPECT_EQ(gfx::Size(10 + 20 + 0, 20), pref);
+  host.SetBounds(0, 0, pref.width(), pref.height());
+  layout.Layout(&host);
+  ExpectViewBoundsEquals(0, 0, 10, 20, &v1);
+  ExpectViewBoundsEquals(10, 0, 20, 20, &v2);
+  ExpectViewBoundsEquals(30, 0, 0, 20, &v3);
+
+  // Set a size limit.
+  c1->set_linked_column_size_limit(40);
+  v1.set_pref(gfx::Size(35, 20));
+  GetPreferredSize();
+
+  // |v1| now dominates, but it is still below the limit.
+  EXPECT_EQ(gfx::Size(35 + 35 + 35, 20), pref);
+  host.SetBounds(0, 0, pref.width(), pref.height());
+  layout.Layout(&host);
+  ExpectViewBoundsEquals(0, 0, 35, 20, &v1);
+  ExpectViewBoundsEquals(35, 0, 35, 20, &v2);
+  ExpectViewBoundsEquals(70, 0, 35, 20, &v3);
+
+  // Go over the limit. |v1| shouldn't influence size at all, but the others
+  // should still be linked to the next largest width.
+  v1.set_pref(gfx::Size(45, 20));
+  GetPreferredSize();
+  EXPECT_EQ(gfx::Size(45 + 20 + 20, 20), pref);
+  host.SetBounds(0, 0, pref.width(), pref.height());
+  layout.Layout(&host);
+  ExpectViewBoundsEquals(0, 0, 45, 20, &v1);
+  ExpectViewBoundsEquals(45, 0, 20, 20, &v2);
+  ExpectViewBoundsEquals(65, 0, 20, 20, &v3);
 
   RemoveAll();
 }
@@ -660,6 +765,38 @@ TEST_F(GridLayoutTest, MinimumPreferredSize) {
   layout.set_minimum_size(gfx::Size(40, 40));
   GetPreferredSize();
   EXPECT_EQ(gfx::Size(40, 40), pref);
+
+  RemoveAll();
+}
+
+// Test that attempting a Layout() while nested in AddView() causes a DCHECK.
+// GridLayout must guard against this as it hasn't yet updated the internal
+// structures it uses to calculate Layout, so will give bogus results.
+TEST_F(GridLayoutTest, LayoutOnAddDeath) {
+  // gtest death tests, such as EXPECT_DCHECK_DEATH(), can not work in the
+  // presence of fork() and other process launching. In views-mus, we have
+  // already launched additional processes for our service manager. Performing
+  // this test under mus is impossible.
+  if (PlatformTestHelper::IsMus())
+    return;
+
+  // Don't use the |layout| data member from the test harness, otherwise
+  // SetLayoutManager() can take not take ownership.
+  GridLayout* grid_layout = new GridLayout(&host);
+  host.SetLayoutManager(grid_layout);
+  ColumnSet* set = grid_layout->AddColumnSet(0);
+  set->AddColumn(GridLayout::FILL, GridLayout::FILL, 0, GridLayout::USE_PREF, 0,
+                 0);
+  grid_layout->StartRow(0, 0);
+  LayoutOnAddView view;
+  EXPECT_DCHECK_DEATH(grid_layout->AddView(&view));
+  // Death tests use fork(), so nothing should be added here.
+  EXPECT_FALSE(view.parent());
+
+  // If the View has nothing to change, adding should succeed.
+  view.set_target_size(view.GetPreferredSize());
+  grid_layout->AddView(&view);
+  EXPECT_TRUE(view.parent());
 
   RemoveAll();
 }

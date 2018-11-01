@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_NET_NQE_UI_NETWORK_QUALITY_ESTIMATOR_SERVICE_H_
 #define CHROME_BROWSER_NET_NQE_UI_NETWORK_QUALITY_ESTIMATOR_SERVICE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <memory>
 
@@ -46,6 +48,23 @@ class UINetworkQualityEstimatorService
   void RemoveEffectiveConnectionTypeObserver(
       net::NetworkQualityEstimator::EffectiveConnectionTypeObserver* observer)
       override;
+  base::Optional<base::TimeDelta> GetHttpRTT() const override;
+  base::Optional<base::TimeDelta> GetTransportRTT() const override;
+  base::Optional<int32_t> GetDownstreamThroughputKbps() const override;
+
+  // Must be called on the UI thread. |observer| will be notified on the UI
+  // thread. |observer| would be notified of the changes in the HTTP RTT,
+  // transport RTT or throughput. |observer| would be notified of the current
+  // values in the next message pump.
+  void AddRTTAndThroughputEstimatesObserver(
+      net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver* observer)
+      override;
+
+  // Removes |observer| from the list of RTT and throughput estimate observers.
+  // Must be called on the UI thread.
+  void RemoveRTTAndThroughputEstimatesObserver(
+      net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver* observer)
+      override;
 
   // Registers the profile-specific network quality estimator prefs.
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -72,6 +91,12 @@ class UINetworkQualityEstimatorService
       net::NetworkQualityEstimator::EffectiveConnectionTypeObserver* observer)
       const;
 
+  // Notifies |observer| of the current effective connection type if |observer|
+  // is still registered as an observer.
+  void NotifyRTTAndThroughputObserverIfPresent(
+      net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver* observer)
+      const;
+
   // KeyedService implementation:
   void Shutdown() override;
 
@@ -81,8 +106,19 @@ class UINetworkQualityEstimatorService
   // reported by NetworkchangeNotifier::GetConnectionType.
   void EffectiveConnectionTypeChanged(net::EffectiveConnectionType type);
 
+  // Called when the estimated HTTP RTT, estimated transport RTT or estimated
+  // downstream throughput is computed.
+  void RTTOrThroughputComputed(base::TimeDelta http_rtt,
+                               base::TimeDelta transport_rtt,
+                               int32_t downstream_throughput_kbps);
+
   // The current EffectiveConnectionType.
   net::EffectiveConnectionType type_;
+
+  // Current network quality metrics.
+  base::TimeDelta http_rtt_;
+  base::TimeDelta transport_rtt_;
+  int32_t downstream_throughput_kbps_;
 
   // IO thread based observer that is owned by this service. Created on the UI
   // thread, but used and deleted on the IO thread.
@@ -92,6 +128,11 @@ class UINetworkQualityEstimatorService
   base::ObserverList<
       net::NetworkQualityEstimator::EffectiveConnectionTypeObserver>
       effective_connection_type_observer_list_;
+
+  // Observer list for changes in RTT or throughput values.
+  base::ObserverList<
+      net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver>
+      rtt_throughput_observer_list_;
 
   // Prefs manager that is owned by this service. Created on the UI thread, but
   // used and deleted on the IO thread.

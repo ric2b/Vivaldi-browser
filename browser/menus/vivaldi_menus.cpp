@@ -20,6 +20,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "net/base/escape.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -61,12 +62,18 @@ void SendSimpleAction(WebContents* web_contents,
   WebViewGuest* guestView = WebViewGuest::FromWebContents(web_contents);
   DCHECK(guestView);
   base::ListValue* args = new base::ListValue;
-  args->Append(base::MakeUnique<base::StringValue>(command));
-  args->Append(base::MakeUnique<base::StringValue>(text));
-  args->Append(base::MakeUnique<base::StringValue>(url));
+  args->Append(base::MakeUnique<base::Value>(command));
+  args->Append(base::MakeUnique<base::Value>(text));
+  args->Append(base::MakeUnique<base::Value>(url));
   base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
-  args->Append(base::MakeUnique<base::StringValue>(modifiers));
+  args->Append(base::MakeUnique<base::Value>(modifiers));
   guestView->SimpleAction(*args);
+}
+
+bool IsVivaldiMail(WebContents* web_contents) {
+  extensions::WebViewGuest* web_view_guest =
+      extensions::WebViewGuest::FromWebContents(web_contents);
+  return web_view_guest && web_view_guest->IsVivaldiMail();
 }
 
 bool IsVivaldiWebPanel(WebContents* web_contents) {
@@ -184,7 +191,7 @@ void VivaldiAddPageItems(SimpleMenuModel* menu,
                          WebContents* web_contents,
                          const ContextMenuParams& params) {
   if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents) &&
-      !IsVivaldiWebPanel(web_contents)) {
+      !IsVivaldiWebPanel(web_contents) && !IsVivaldiMail(web_contents)) {
     int index = menu->GetIndexOfCommandId(IDC_SAVE_PAGE);
     DCHECK_GE(index, 0);
     menu->InsertItemWithStringIdAt(index, IDC_VIV_BOOKMARK_PAGE,
@@ -209,9 +216,9 @@ void VivaldiAddEditableItems(SimpleMenuModel* menu,
     const bool use_spellcheck_and_search = !chrome::IsRunningInForcedAppMode();
     const bool use_paste_and_match_style =
         params.input_field_type !=
-            blink::WebContextMenuData::InputFieldTypePlainText &&
+            blink::WebContextMenuData::kInputFieldTypePlainText &&
         params.input_field_type !=
-            blink::WebContextMenuData::InputFieldTypePassword;
+            blink::WebContextMenuData::kInputFieldTypePassword;
 
     int index = menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_PASTE);
     DCHECK_GE(index, 0);
@@ -253,7 +260,7 @@ void VivaldiAddDeveloperItems(SimpleMenuModel* menu,
                               WebContents* web_contents,
                               const ContextMenuParams& params) {
   if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents) &&
-      !IsVivaldiWebPanel(web_contents)) {
+      !IsVivaldiWebPanel(web_contents) && !IsVivaldiMail(web_contents)) {
     if (params.src_url.is_empty() && params.link_url.is_empty()) {
       int index = menu->GetIndexOfCommandId(IDC_VIEW_SOURCE);
       if (index == -1) {
@@ -270,7 +277,7 @@ void VivaldiAddFullscreenItems(SimpleMenuModel* menu,
                                WebContents* web_contents,
                                const ContextMenuParams& params) {
   if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents) &&
-      !IsVivaldiWebPanel(web_contents)) {
+      !IsVivaldiWebPanel(web_contents) && !IsVivaldiMail(web_contents)) {
     menu->AddSeparator(ui::NORMAL_SEPARATOR);
     menu->AddItemWithStringId(IDC_VIV_FULLSCREEN, IDS_VIV_FULLSCREEN);
     menu->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -296,10 +303,10 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
     case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
     case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
       *enabled =
-          params.has_image_contents == WebContextMenuData::MediaTypeImage;
+          params.has_image_contents == WebContextMenuData::kMediaTypeImage;
       break;
     case IDC_CONTENT_CONTEXT_PASTE_AND_GO: {
-      if (!(params.edit_flags & WebContextMenuData::CanPaste)) {
+      if (!(params.edit_flags & WebContextMenuData::kCanPaste)) {
         *enabled = false;
         break;
       }
@@ -394,9 +401,9 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
           target = base::ASCIIToUTF16("search");
         base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
         base::ListValue* args = new base::ListValue;
-        args->Append(base::MakeUnique<base::StringValue>(text));
-        args->Append(base::MakeUnique<base::StringValue>(target));
-        args->Append(base::MakeUnique<base::StringValue>(modifiers));
+        args->Append(base::MakeUnique<base::Value>(text));
+        args->Append(base::MakeUnique<base::Value>(target));
+        args->Append(base::MakeUnique<base::Value>(modifiers));
         extensions::WebViewGuest* current_webviewguest =
             vivaldi::ui_tools::GetActiveWebViewGuest();
         if (current_webviewguest) {
@@ -409,9 +416,9 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       WebViewGuest* vivGuestView =
           WebViewGuest::FromWebContents(source_web_contents);
       base::ListValue* args = new base::ListValue;
-      args->Append(base::MakeUnique<base::StringValue>(keyword));
+      args->Append(base::MakeUnique<base::Value>(keyword));
       args->Append(
-          base::MakeUnique<base::StringValue>(params.keyword_url.spec()));
+          base::MakeUnique<base::Value>(params.keyword_url.spec()));
 
       vivGuestView->CreateSearch(*args);
     } break;
@@ -476,9 +483,28 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
 
     case IDC_VIV_USE_IMAGE_AS_BACKGROUND:
       if (IsVivaldiRunning()) {
-        SendSimpleAction(source_web_contents, event_flags,
-                         "useImageAsBackground", base::ASCIIToUTF16(""),
-                         params.src_url.spec());
+        // The app does not have access to file:// schemes, so handle it
+        // differently.
+        if (params.src_url.SchemeIs(url::kFileScheme)) {
+          // Strip any url encoding.
+          std::string filename = net::UnescapeURLComponent(
+              params.src_url.GetContent(),
+              net::UnescapeRule::NORMAL | net::UnescapeRule::SPACES |
+                  net::UnescapeRule::REPLACE_PLUS_WITH_SPACE |
+                  net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
+          if (filename[0] == '/') {
+            // It might be in a format /D:/somefile.png so strip the first
+            // slash.
+            filename = filename.substr(1, std::string::npos);
+          }
+          SendSimpleAction(source_web_contents, event_flags,
+                           "useLocalImageAsBackground", base::ASCIIToUTF16(""),
+                           filename);
+        } else {
+          SendSimpleAction(source_web_contents, event_flags,
+                           "useImageAsBackground", base::ASCIIToUTF16(""),
+                           params.src_url.spec());
+        }
       }
       break;
 

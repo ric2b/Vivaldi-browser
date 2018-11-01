@@ -35,19 +35,22 @@ Polymer({
      */
     automatic_: {
       type: Boolean,
-      value: false,
+      value: true,
       observer: 'automaticChanged_',
     },
 
     /**
      * The currently visible IP Config property dictionary. The 'RoutingPrefix'
      * property is a human-readable mask instead of a prefix length.
-     * @private {!{
+     * @private {?{
      *   ipv4: !CrOnc.IPConfigUIProperties,
      *   ipv6: !CrOnc.IPConfigUIProperties
-     * }|undefined}
+     * }}
      */
-    ipConfig_: Object,
+    ipConfig_: {
+      type: Object,
+      value: null,
+    },
 
     /**
      * Array of properties to pass to the property list.
@@ -84,49 +87,39 @@ Polymer({
       this.savedStaticIp_ = undefined;
 
     // Update the 'automatic' property.
-    var ipConfigType =
-        CrOnc.getActiveValue(this.networkProperties.IPAddressConfigType);
-    this.automatic_ = (ipConfigType != CrOnc.IPConfigType.STATIC);
+    if (this.networkProperties.IPAddressConfigType ) {
+      var ipConfigType =
+          CrOnc.getActiveValue(this.networkProperties.IPAddressConfigType);
+      this.automatic_ = (ipConfigType != CrOnc.IPConfigType.STATIC);
+    }
 
-    // Update the 'ipConfig' property.
-    var ipv4 =
-        CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
-    var ipv6 =
-        CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV6);
-    this.ipConfig_ = {
-      ipv4: this.getIPConfigUIProperties_(ipv4),
-      ipv6: this.getIPConfigUIProperties_(ipv6)
-    };
+    if (this.networkProperties.IPConfigs) {
+      // Update the 'ipConfig' property.
+      var ipv4 =
+          CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
+      var ipv6 =
+          CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV6);
+      this.ipConfig_ = {
+        ipv4: this.getIPConfigUIProperties_(ipv4),
+        ipv6: this.getIPConfigUIProperties_(ipv6)
+      };
+    }
   },
 
-  /**
-   * Polymer automatic changed method.
-   */
+  /** @private */
   automaticChanged_: function() {
-    if (!this.automatic_ || !this.ipConfig_)
+    if (!this.automatic_ || !this.ipConfig_) {
+      // When switching from automatic, don't send any changes, ip-change will
+      // be fired in onIPChange when a field is changed.
       return;
-    if (this.automatic_ || !this.savedStaticIp_) {
-      // Save the static IP configuration when switching to automatic.
-      this.savedStaticIp_ = this.ipConfig_.ipv4;
-      var configType =
-          this.automatic_ ? CrOnc.IPConfigType.DHCP : CrOnc.IPConfigType.STATIC;
-      this.fire('ip-change', {
-        field: 'IPAddressConfigType',
-        value: configType,
-      });
-    } else {
-      // Restore the saved static IP configuration.
-      var ipconfig = {
-        Gateway: this.savedStaticIp_.Gateway,
-        IPAddress: this.savedStaticIp_.IPAddress,
-        RoutingPrefix: this.savedStaticIp_.RoutingPrefix,
-        Type: this.savedStaticIp_.Type,
-      };
-      this.fire('ip-change', {
-        field: 'StaticIPConfig',
-        value: this.getIPConfigProperties_(ipconfig),
-      });
     }
+    // Save the static IP configuration when switching to automatic.
+    this.savedStaticIp_ = this.ipConfig_.ipv4;
+    // Send the change.
+    this.fire('ip-change', {
+      field: 'IPAddressConfigType',
+      value: CrOnc.IPConfigType.DHCP,
+    });
   },
 
   /**
@@ -181,7 +174,7 @@ Polymer({
    * @private
    */
   getIPEditFields_: function() {
-    if (!this.editable || this.automatic__)
+    if (!this.editable || this.automatic_)
       return {};
     return {
       'ipv4.IPAddress': 'String',
@@ -203,6 +196,7 @@ Polymer({
     var value = event.detail.value;
     // Note: |field| includes the 'ipv4.' prefix.
     this.set('ipConfig_.' + field, value);
+    // This will also set IPAddressConfigType to STATIC.
     this.fire('ip-change', {
       field: 'StaticIPConfig',
       value: this.getIPConfigProperties_(this.ipConfig_.ipv4)

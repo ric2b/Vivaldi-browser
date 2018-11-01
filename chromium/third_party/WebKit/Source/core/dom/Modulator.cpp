@@ -5,39 +5,61 @@
 #include "core/dom/Modulator.h"
 
 #include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/V8Binding.h"
 
 namespace blink {
 
-Modulator* Modulator::from(LocalFrame* frame) {
-  ScriptState* scriptState = ScriptState::forMainWorld(frame);
-  if (!scriptState)
+namespace {
+const char kPerContextDataKey[] = "Modulator";
+}  // namespace
+
+Modulator* Modulator::From(ScriptState* script_state) {
+  if (!script_state)
     return nullptr;
-  // TODO(kouhei): setModulator in V8PerContextData when we land ModulatorImpl.
-  return scriptState->perContextData()->modulator();
+  V8PerContextData* per_context_data = script_state->PerContextData();
+  if (!per_context_data)
+    return nullptr;
+  return static_cast<Modulator*>(per_context_data->GetData(kPerContextDataKey));
 }
 
-KURL Modulator::resolveModuleSpecifier(const String& moduleRequest,
-                                       const KURL& baseURL) {
+Modulator::~Modulator() {}
+
+void Modulator::SetModulator(ScriptState* script_state, Modulator* modulator) {
+  DCHECK(script_state);
+  V8PerContextData* per_context_data = script_state->PerContextData();
+  DCHECK(per_context_data);
+  per_context_data->AddData(kPerContextDataKey, modulator);
+}
+
+void Modulator::ClearModulator(ScriptState* script_state) {
+  DCHECK(script_state);
+  V8PerContextData* per_context_data = script_state->PerContextData();
+  DCHECK(per_context_data);
+  per_context_data->ClearData(kPerContextDataKey);
+}
+
+KURL Modulator::ResolveModuleSpecifier(const String& module_request,
+                                       const KURL& base_url) {
   // Step 1. Apply the URL parser to specifier. If the result is not failure,
   // return the result.
-  KURL url(KURL(), moduleRequest);
-  if (url.isValid())
+  KURL url(KURL(), module_request);
+  if (url.IsValid())
     return url;
 
   // Step 2. If specifier does not start with the character U+002F SOLIDUS (/),
   // the two-character sequence U+002E FULL STOP, U+002F SOLIDUS (./), or the
   // three-character sequence U+002E FULL STOP, U+002E FULL STOP, U+002F SOLIDUS
   // (../), return failure and abort these steps.
-  if (!moduleRequest.startsWith("/") && !moduleRequest.startsWith("./") &&
-      !moduleRequest.startsWith("../"))
+  if (!module_request.StartsWith("/") && !module_request.StartsWith("./") &&
+      !module_request.StartsWith("../"))
     return KURL();
 
   // Step 3. Return the result of applying the URL parser to specifier with
   // script's base URL as the base URL.
-  DCHECK(baseURL.isValid());
-  KURL absoluteURL(baseURL, moduleRequest);
-  if (absoluteURL.isValid())
-    return absoluteURL;
+  DCHECK(base_url.IsValid());
+  KURL absolute_url(base_url, module_request);
+  if (absolute_url.IsValid())
+    return absolute_url;
 
   return KURL();
 }

@@ -12,6 +12,7 @@
 #include "components/data_use_measurement/core/url_request_classifier.h"
 #include "components/metrics/data_use_tracker.h"
 #include "net/socket/socket_test_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,6 +39,13 @@ class TestURLRequestClassifier : public base::SupportsUserData::Data,
       const net::URLRequest& request,
       const net::HttpResponseHeaders& response_headers) const override {
     return DataUseUserData::OTHER;
+  }
+
+  void RecordPageTransitionUMA(uint64_t page_transition,
+                               int64_t received_bytes) const override {}
+
+  bool IsFavIconRequest(const net::URLRequest& request) const override {
+    return false;
   }
 };
 
@@ -94,8 +102,9 @@ std::unique_ptr<net::URLRequest> RequestURL(
   socket_factory->AddSocketDataProvider(&response_socket_data_provider);
   net::TestDelegate test_delegate;
   test_delegate.set_quit_on_complete(true);
-  std::unique_ptr<net::URLRequest> request(context->CreateRequest(
-      GURL("http://example.com"), net::DEFAULT_PRIORITY, &test_delegate));
+  std::unique_ptr<net::URLRequest> request(
+      context->CreateRequest(GURL("http://example.com"), net::DEFAULT_PRIORITY,
+                             &test_delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
 
   if (from_user) {
     TestURLRequestClassifier::MarkAsUserRequest(request.get());

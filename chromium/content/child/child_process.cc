@@ -14,6 +14,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_local.h"
 #include "build/build_config.h"
@@ -31,16 +32,14 @@ static void SigUSR1Handler(int signal) { }
 namespace content {
 
 namespace {
-
-base::LazyInstance<base::ThreadLocalPointer<ChildProcess> > g_lazy_tls =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ThreadLocalPointer<ChildProcess>>::DestructorAtExit
+    g_lazy_tls = LAZY_INSTANCE_INITIALIZER;
 }
 
 ChildProcess::ChildProcess(
     base::ThreadPriority io_thread_priority,
-    const std::vector<base::SchedulerWorkerPoolParams>& worker_pool_params,
-    base::TaskScheduler::WorkerPoolIndexForTraitsCallback
-        worker_pool_index_for_traits_callback)
+    const std::string& task_scheduler_name,
+    std::unique_ptr<base::TaskScheduler::InitParams> task_scheduler_init_params)
     : ref_count_(0),
       shutdown_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                       base::WaitableEvent::InitialState::NOT_SIGNALED),
@@ -54,14 +53,11 @@ ChildProcess::ChildProcess(
   // exist when ChildProcess is instantiated in the browser process or in a
   // test process.
   if (!base::TaskScheduler::GetInstance()) {
-    if (worker_pool_params.empty()) {
-      DCHECK(!worker_pool_index_for_traits_callback);
-      constexpr int kMaxThreads = 2;
-      base::TaskScheduler::CreateAndSetSimpleTaskScheduler(kMaxThreads);
-    } else {
-      DCHECK(worker_pool_index_for_traits_callback);
+    if (task_scheduler_init_params) {
       base::TaskScheduler::CreateAndSetDefaultTaskScheduler(
-          worker_pool_params, std::move(worker_pool_index_for_traits_callback));
+          task_scheduler_name, *task_scheduler_init_params.get());
+    } else {
+      base::TaskScheduler::CreateAndSetSimpleTaskScheduler(task_scheduler_name);
     }
 
     DCHECK(base::TaskScheduler::GetInstance());

@@ -4,9 +4,15 @@
 
 package org.chromium.android_webview;
 
+import android.annotation.TargetApi;
+import android.content.Context;
+import android.webkit.ValueCallback;
+
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+
+import java.lang.reflect.Method;
 
 /**
  * Implementations of various static methods, and also a home for static
@@ -20,6 +26,9 @@ public class AwContentsStatics {
     private static String sUnreachableWebDataUrl;
 
     private static boolean sRecordFullDocument;
+
+    private static final String sSafeBrowsingWarmUpHelper =
+            "com.android.webview.chromium.SafeBrowsingWarmUpHelper";
 
     /**
      * Return the client certificate lookup table.
@@ -88,8 +97,55 @@ public class AwContentsStatics {
         nativeSetSafeBrowsingEnabled(enable);
     }
 
+    @SuppressWarnings("unchecked")
+    @TargetApi(19)
+    public static void initSafeBrowsing(Context context, ValueCallback<Boolean> callback) {
+        if (callback == null) {
+            callback = new ValueCallback<Boolean>() {
+                @Override
+                public void onReceiveValue(Boolean b) {}
+            };
+        }
+
+        try {
+            Class cls = Class.forName(sSafeBrowsingWarmUpHelper);
+            Method m =
+                    cls.getDeclaredMethod("warmUpSafeBrowsing", Context.class, ValueCallback.class);
+            m.invoke(null, context, callback);
+        } catch (ReflectiveOperationException e) {
+            callback.onReceiveValue(false);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    @TargetApi(19)
+    public static void shutdownSafeBrowsing() {
+        try {
+            Class cls = Class.forName(sSafeBrowsingWarmUpHelper);
+            Method m = cls.getDeclaredMethod("coolDownSafeBrowsing");
+            m.invoke(null);
+        } catch (ReflectiveOperationException e) {
+            // This is not an error; it just means this device doesn't have specialized services.
+        }
+    }
+
     public static void setCheckClearTextPermitted(boolean permitted) {
         nativeSetCheckClearTextPermitted(permitted);
+    }
+
+    /**
+     * Return the first substring consisting of the address of a physical location.
+     * @see {@link android.webkit.WebView#findAddress(String)}
+     *
+     * @param addr The string to search for addresses.
+     * @return the address, or if no address is found, return null.
+     */
+    public static String findAddress(String addr) {
+        if (addr == null) {
+            throw new NullPointerException("addr is null");
+        }
+        String result = nativeFindAddress(addr);
+        return result == null || result.isEmpty() ? null : result;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -104,4 +160,5 @@ public class AwContentsStatics {
     private static native boolean nativeGetSafeBrowsingEnabled();
     private static native void nativeSetSafeBrowsingEnabled(boolean enable);
     private static native void nativeSetCheckClearTextPermitted(boolean permitted);
+    private static native String nativeFindAddress(String addr);
 }

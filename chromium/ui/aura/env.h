@@ -11,6 +11,7 @@
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
 #include "ui/aura/aura_export.h"
+#include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/event_target.h"
 #include "ui/gfx/geometry/point.h"
@@ -21,11 +22,6 @@ class ContextFactoryPrivate;
 class PlatformEventSource;
 }
 namespace aura {
-
-namespace client {
-class FocusClient;
-}
-
 namespace test {
 class EnvTestHelper;
 }
@@ -39,7 +35,9 @@ class WindowTreeClient;
 class WindowTreeHost;
 
 // A singleton object that tracks general state within Aura.
-class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
+class AURA_EXPORT Env : public ui::EventTarget,
+                        public ui::OSExchangeDataProviderFactory::Factory,
+                        public base::SupportsUserData {
  public:
   enum class Mode {
     // Classic aura.
@@ -101,17 +99,7 @@ class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
   void SetWindowTreeClient(WindowTreeClient* window_tree_client);
   bool HasWindowTreeClient() const { return window_tree_client_ != nullptr; }
 
-  // Sets the active FocusClient and the window the FocusClient is associated
-  // with. |window| is not necessarily the window that actually has focus.
-  // |window| may be null, which indicates all windows share a FocusClient.
-  void SetActiveFocusClient(client::FocusClient* focus_client,
-                            Window* focus_client_root);
-  client::FocusClient* active_focus_client() { return active_focus_client_; }
-  Window* active_focus_client_root() { return active_focus_client_root_; }
-
  private:
-  class ActiveFocusClientWindowObserver;
-
   friend class test::EnvTestHelper;
   friend class MusMouseLocationUpdater;
   friend class Window;
@@ -120,6 +108,11 @@ class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
   explicit Env(Mode mode);
 
   void Init();
+
+  // After calling this method, all OSExchangeDataProvider instances will be
+  // Mus instances. We can't do this work in Init(), because our mode may
+  // changed via the EnvTestHelper.
+  void EnableMusOSExchangeDataProvider();
 
   // Called by the Window when it is initialized. Notifies observers.
   void NotifyWindowInitialized(Window* window);
@@ -130,17 +123,21 @@ class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
   // Invoked by WindowTreeHost when it is activated. Notifies observers.
   void NotifyHostActivated(WindowTreeHost* host);
 
-  void OnActiveFocusClientWindowDestroying();
-
   // Overridden from ui::EventTarget:
   bool CanAcceptEvent(const ui::Event& event) override;
   ui::EventTarget* GetParentTarget() override;
   std::unique_ptr<ui::EventTargetIterator> GetChildIterator() const override;
   ui::EventTargeter* GetEventTargeter() override;
 
+  // Overridden from ui::OSExchangeDataProviderFactory::Factory:
+  std::unique_ptr<ui::OSExchangeData::Provider> BuildProvider() override;
+
   // This is not const for tests, which may share Env across tests and so needs
   // to reset the value.
   Mode mode_;
+
+  // Intentionally not exposed publicly. Someday we might want to support
+  // multiple WindowTreeClients. Use EnvTestHelper in tests.
   WindowTreeClient* window_tree_client_ = nullptr;
 
   base::ObserverList<EnvObserver> observers_;
@@ -153,17 +150,14 @@ class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
   // This may be set to true in tests to force using |last_mouse_location_|
   // rather than querying WindowTreeClient.
   bool always_use_last_mouse_location_ = false;
+  // Whether we set ourselves as the OSExchangeDataProviderFactory.
+  bool is_os_exchange_data_provider_factory_ = false;
 
   std::unique_ptr<InputStateLookup> input_state_lookup_;
   std::unique_ptr<ui::PlatformEventSource> event_source_;
 
   ui::ContextFactory* context_factory_;
   ui::ContextFactoryPrivate* context_factory_private_;
-
-  Window* active_focus_client_root_ = nullptr;
-  client::FocusClient* active_focus_client_ = nullptr;
-  std::unique_ptr<ActiveFocusClientWindowObserver>
-      active_focus_client_window_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(Env);
 };

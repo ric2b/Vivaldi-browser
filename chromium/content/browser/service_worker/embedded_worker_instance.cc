@@ -95,7 +95,7 @@ void SetupOnUI(
                 service_worker_version_id, url, scope),
             is_installed);
     if (request.is_pending())
-      rph->GetRemoteInterfaces()->GetInterface(std::move(request));
+      BindInterface(rph, std::move(request));
   }
   BrowserThread::PostTask(
       BrowserThread::IO,
@@ -515,7 +515,7 @@ void EmbeddedWorkerInstance::StopIfIdle() {
       // Check ShouldNotifyWorkerStopIgnored not to show the same message
       // multiple times in DevTools.
       if (devtools_proxy_->ShouldNotifyWorkerStopIgnored()) {
-        AddMessageToConsole(blink::WebConsoleMessage::LevelVerbose,
+        AddMessageToConsole(blink::WebConsoleMessage::kLevelVerbose,
                             kServiceWorkerTerminationCanceledMesage);
         devtools_proxy_->WorkerStopIgnoredNotified();
       }
@@ -823,6 +823,12 @@ void EmbeddedWorkerInstance::AddListener(Listener* listener) {
 
 void EmbeddedWorkerInstance::RemoveListener(Listener* listener) {
   listener_list_.RemoveObserver(listener);
+}
+
+void EmbeddedWorkerInstance::SetDevToolsAttached(bool attached) {
+  devtools_attached_ = attached;
+  if (attached)
+    registry_->OnDevToolsAttached(embedded_worker_id_);
 }
 
 void EmbeddedWorkerInstance::OnNetworkAccessedForScriptLoad() {

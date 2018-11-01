@@ -4,21 +4,29 @@
 
 #include <memory>
 
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_app_list_view_presenter_impl.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/macros.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
-#include "ui/display/manager/display_manager.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 
 namespace ash {
+namespace {
+
+int64_t GetPrimaryDisplayId() {
+  return display::Screen::GetScreen()->GetPrimaryDisplay().id();
+}
+
+}  // namespace
 
 class AppListPresenterDelegateTest : public test::AshTestBase {
  public:
@@ -45,7 +53,7 @@ class AppListPresenterDelegateTest : public test::AshTestBase {
 
 // Tests that app launcher hides when focus moves to a normal window.
 TEST_F(AppListPresenterDelegateTest, HideOnFocusOut) {
-  app_list_presenter_impl()->Show(display_manager()->first_display_id());
+  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl()->GetTargetVisibility());
 
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
@@ -58,7 +66,7 @@ TEST_F(AppListPresenterDelegateTest, HideOnFocusOut) {
 // window in kShellWindowId_AppListContainer.
 TEST_F(AppListPresenterDelegateTest,
        RemainVisibleWhenFocusingToApplistContainer) {
-  app_list_presenter_impl()->Show(display_manager()->first_display_id());
+  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl()->GetTargetVisibility());
 
   aura::Window* applist_container = Shell::GetContainer(
@@ -72,7 +80,7 @@ TEST_F(AppListPresenterDelegateTest,
 
 // Tests that clicking outside the app-list bubble closes it.
 TEST_F(AppListPresenterDelegateTest, ClickOutsideBubbleClosesBubble) {
-  app_list_presenter_impl()->Show(display_manager()->first_display_id());
+  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
   aura::Window* app_window = app_list_presenter_impl()->GetWindow();
   ASSERT_TRUE(app_window);
   ui::test::EventGenerator& generator = GetEventGenerator();
@@ -93,7 +101,7 @@ TEST_F(AppListPresenterDelegateTest, ClickOutsideBubbleClosesBubble) {
 
 // Tests that clicking outside the app-list bubble closes it.
 TEST_F(AppListPresenterDelegateTest, TapOutsideBubbleClosesBubble) {
-  app_list_presenter_impl()->Show(display_manager()->first_display_id());
+  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
 
   aura::Window* app_window = app_list_presenter_impl()->GetWindow();
   ASSERT_TRUE(app_window);
@@ -118,7 +126,7 @@ TEST_F(AppListPresenterDelegateTest, NonPrimaryDisplay) {
   // Set up a screen with two displays (horizontally adjacent).
   UpdateDisplay("1024x768,1024x768");
 
-  std::vector<WmWindow*> root_windows = WmShell::Get()->GetAllRootWindows();
+  std::vector<WmWindow*> root_windows = ShellPort::Get()->GetAllRootWindows();
   ASSERT_EQ(2u, root_windows.size());
   WmWindow* secondary_root = root_windows[1];
   EXPECT_EQ("1024,0 1024x768", secondary_root->GetBoundsInScreen().ToString());
@@ -140,7 +148,7 @@ TEST_F(AppListPresenterDelegateTest, TinyDisplay) {
   // Set up a screen with a tiny display (height smaller than the app list).
   UpdateDisplay("400x300");
 
-  app_list_presenter_impl()->Show(display_manager()->first_display_id());
+  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl()->GetTargetVisibility());
 
   // The top of the app list should be on-screen (even if the bottom is not).

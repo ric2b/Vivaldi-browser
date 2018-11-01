@@ -78,6 +78,7 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
     case gfx::ColorSpace::PrimaryID::SMPTEST432_1:
     case gfx::ColorSpace::PrimaryID::XYZ_D50:
     case gfx::ColorSpace::PrimaryID::ADOBE_RGB:
+    case gfx::ColorSpace::PrimaryID::ICC_BASED:
     case gfx::ColorSpace::PrimaryID::CUSTOM:
     case gfx::ColorSpace::PrimaryID::INVALID:
       // Not handled
@@ -103,6 +104,7 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
       format.VideoTransferFunction = DXVA2_VideoTransFunc_10;
       break;
     case gfx::ColorSpace::TransferID::IEC61966_2_1:
+    case gfx::ColorSpace::TransferID::IEC61966_2_1_HDR:
       format.VideoTransferFunction = DXVA2_VideoTransFunc_sRGB;
       break;
 
@@ -117,6 +119,7 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
     case gfx::ColorSpace::TransferID::ARIB_STD_B67:
     case gfx::ColorSpace::TransferID::GAMMA24:
     case gfx::ColorSpace::TransferID::SMPTEST2084_NON_HDR:
+    case gfx::ColorSpace::TransferID::ICC_BASED:
     case gfx::ColorSpace::TransferID::CUSTOM:
     case gfx::ColorSpace::TransferID::INVALID:
       // Not handled
@@ -148,7 +151,8 @@ DXGI_COLOR_SPACE_TYPE ColorSpaceWin::GetDXGIColorSpace(
           return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020;
         }
       } else {
-        if (color_space.transfer_ == gfx::ColorSpace::TransferID::LINEAR) {
+        if (color_space.transfer_ == gfx::ColorSpace::TransferID::LINEAR ||
+            color_space.transfer_ == gfx::ColorSpace::TransferID::LINEAR_HDR) {
           return DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
         } else {
           return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
@@ -206,12 +210,26 @@ D3D11_VIDEO_PROCESSOR_COLOR_SPACE ColorSpaceWin::GetD3D11ColorSpace(
   } else {
     ret.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235;
   }
-  switch (color_space.transfer_) {
-    case gfx::ColorSpace::TransferID::BT709:
-    case gfx::ColorSpace::TransferID::SMPTE170M:
-      ret.YCbCr_Matrix = 1;
 
-    default:
+  switch (color_space.matrix_) {
+    case gfx::ColorSpace::MatrixID::BT709:
+      ret.YCbCr_Matrix = 1;
+      break;
+
+    case gfx::ColorSpace::MatrixID::BT470BG:
+    case gfx::ColorSpace::MatrixID::SMPTE170M:
+      ret.YCbCr_Matrix = 0;
+      break;
+
+    case gfx::ColorSpace::MatrixID::SMPTE240M:
+    case gfx::ColorSpace::MatrixID::RGB:
+    case gfx::ColorSpace::MatrixID::FCC:
+    case gfx::ColorSpace::MatrixID::YCOCG:
+    case gfx::ColorSpace::MatrixID::BT2020_NCL:
+    case gfx::ColorSpace::MatrixID::BT2020_CL:
+    case gfx::ColorSpace::MatrixID::YDZDX:
+    case gfx::ColorSpace::MatrixID::INVALID:
+      // Not handled
       break;
   }
   return ret;

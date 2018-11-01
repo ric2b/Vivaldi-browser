@@ -85,6 +85,13 @@ Polymer({
   /** @override */
   attached: function() {
     this.listen(this, 'freeze-scroll', 'onFreezeScroll_');
+    this.listen(this, 'lazy-loaded', 'onLazyLoaded_');
+  },
+
+  /** @private */
+  onLazyLoaded_: function() {
+    Polymer.dom.flush();
+    this.updateOverscrollForPage_();
   },
 
   /** @override */
@@ -254,19 +261,28 @@ Polymer({
       setTimeout(function() {
         var whenSearchDone =
             assert(this.getPage_(settings.Route.BASIC)).searchContents(query);
-        whenSearchDone.then(function(request) {
+        whenSearchDone.then(function(result) {
           resolve();
-          if (!request.finished) {
+          if (result.canceled) {
             // Nothing to do here. A previous search request was canceled
-            // because a new search request was issued before the first one
-            // completed.
+            // because a new search request was issued with a different query
+            // before the previous completed.
             return;
           }
 
           this.toolbarSpinnerActive = false;
-          this.inSearchMode_ = !request.isSame('');
+          this.inSearchMode_ = !result.wasClearSearch;
           this.showNoResultsFound_ =
-              this.inSearchMode_ && !request.didFindMatches();
+              this.inSearchMode_ && result.didFindMatches;
+
+          if (this.inSearchMode_) {
+            Polymer.IronA11yAnnouncer.requestAvailability();
+            this.fire('iron-announce', {
+              text: this.showNoResultsFound_ ?
+                  loadTimeData.getString('searchNoResults') :
+                  loadTimeData.getStringF('searchResults', query)
+            });
+          }
         }.bind(this));
       }.bind(this), 0);
     }.bind(this));

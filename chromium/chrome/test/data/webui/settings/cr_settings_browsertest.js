@@ -27,7 +27,9 @@ CrSettingsBrowserTest.prototype = {
   },
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH),
+  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    'ensure_lazy_loaded.js',
+  ]),
 
   /** @override */
   setUp: function() {
@@ -39,6 +41,8 @@ CrSettingsBrowserTest.prototype = {
     // https://github.com/PolymerElements/paper-slider/issues/131.
     this.accessibilityAuditConfig.ignoreSelectors(
         'badAriaAttributeValue', 'paper-slider');
+
+    settings.ensureLazyLoaded();
   },
 };
 
@@ -64,6 +68,33 @@ TEST_F('CrSettingsCheckboxTest', 'All', function() {
   mocha.run();
 });
 
+/**
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsSliderTest() {}
+
+CrSettingsSliderTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/controls/settings_slider.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'settings_slider_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsSliderTest', 'All', function() {
+  settings_slider.registerTests();
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
 function CrSettingsToggleButtonTest() {}
 
 CrSettingsToggleButtonTest.prototype = {
@@ -759,6 +790,11 @@ CrSettingsSiteSettingsTest.prototype = {
   browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
 
   /** @override */
+  commandLineSwitches: [{
+    switchName: 'enable-site-settings',
+  }],
+
+  /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     // TODO(dbeam): split these up.
     'category_default_setting_tests.js',
@@ -957,7 +993,6 @@ CrSettingsSubpageTest.prototype = {
 };
 
 TEST_F('CrSettingsSubpageTest', 'SettingsSubpage', function() {
-  settings_subpage.registerTests();
   mocha.run();
 });
 
@@ -982,7 +1017,7 @@ CrSettingsSystemPageTest.prototype = {
   ]),
 };
 
-TEST_F('CrSettingsSystemPageTest', 'Restart', function() {
+TEST_F('CrSettingsSystemPageTest', 'All', function() {
   mocha.run();
 });
 GEN('#endif');
@@ -1101,7 +1136,13 @@ CrSettingsNonExistentRouteTest.prototype = {
   runAccessibilityChecks: false,
 };
 
-TEST_F('CrSettingsNonExistentRouteTest', 'All', function() {
+// Failing on ChromiumOS dbg. https://crbug.com/709442
+GEN('#if defined(OS_CHROMEOS) && !defined(NDEBUG)');
+GEN('#define MAYBE_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_All All');
+GEN('#endif');
+TEST_F('CrSettingsNonExistentRouteTest', 'MAYBE_All', function() {
   suite('NonExistentRoutes', function() {
     test('redirect to basic', function() {
       assertEquals(settings.Route.BASIC, settings.getCurrentRoute());
@@ -1121,7 +1162,7 @@ CrSettingsRouteDynamicParametersTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people?guid=a%2Fb&foo=42',
+  browsePreload: 'chrome://md-settings/search?guid=a%2Fb&foo=42',
 
   /** @override */
   runAccessibilityChecks: false,
@@ -1130,22 +1171,22 @@ CrSettingsRouteDynamicParametersTest.prototype = {
 TEST_F('CrSettingsRouteDynamicParametersTest', 'All', function() {
   suite('DynamicParameters', function() {
     test('get parameters from URL and navigation', function(done) {
-      assertEquals(settings.Route.PEOPLE, settings.getCurrentRoute());
+      assertEquals(settings.Route.SEARCH, settings.getCurrentRoute());
       assertEquals('a/b', settings.getQueryParameters().get('guid'));
       assertEquals('42', settings.getQueryParameters().get('foo'));
 
       var params = new URLSearchParams();
       params.set('bar', 'b=z');
       params.set('biz', '3');
-      settings.navigateTo(settings.Route.SYNC, params);
-      assertEquals(settings.Route.SYNC, settings.getCurrentRoute());
+      settings.navigateTo(settings.Route.SEARCH_ENGINES, params);
+      assertEquals(settings.Route.SEARCH_ENGINES, settings.getCurrentRoute());
       assertEquals('b=z', settings.getQueryParameters().get('bar'));
       assertEquals('3', settings.getQueryParameters().get('biz'));
       assertEquals('?bar=b%3Dz&biz=3', window.location.search);
 
       window.addEventListener('popstate', function(event) {
-        assertEquals('/people', settings.getCurrentRoute().path);
-        assertEquals(settings.Route.PEOPLE, settings.getCurrentRoute());
+        assertEquals('/search', settings.getCurrentRoute().path);
+        assertEquals(settings.Route.SEARCH, settings.getCurrentRoute());
         assertEquals('a/b', settings.getQueryParameters().get('guid'));
         assertEquals('42', settings.getQueryParameters().get('foo'));
         done();
@@ -1386,28 +1427,5 @@ CrSettingsExtensionControlledIndicatorTest.prototype = {
 };
 
 TEST_F('CrSettingsExtensionControlledIndicatorTest', 'All', function() {
-  mocha.run();
-});
-
-/**
- * Test fixture for the Date and Time page.
- * @constructor
- * @extends {CrSettingsBrowserTest}
- */
-function CrSettingsFocusableIronListItemBehavior() {}
-
-CrSettingsFocusableIronListItemBehavior.prototype = {
-  __proto__: CrSettingsBrowserTest.prototype,
-
-  /** @override */
-  browsePreload: 'chrome://md-settings/focusable_iron_list_item_behavior.html',
-
-  /** @override */
-  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
-    'focusable_iron_list_item_behavior_test.js',
-  ]),
-};
-
-TEST_F('CrSettingsFocusableIronListItemBehavior', 'FocusTest', function() {
   mocha.run();
 });

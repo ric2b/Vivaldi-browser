@@ -74,7 +74,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
@@ -297,6 +296,8 @@ void NavigationControllerImpl::Restore(
 
 void NavigationControllerImpl::Reload(ReloadType reload_type,
                                       bool check_for_repost) {
+  DCHECK_NE(ReloadType::NONE, reload_type);
+
   if (transient_entry_index_ != -1) {
     // If an interstitial is showing, treat a reload as a navigation to the
     // transient entry's URL.
@@ -594,6 +595,8 @@ void NavigationControllerImpl::GoForward() {
 }
 
 void NavigationControllerImpl::GoToIndex(int index) {
+  TRACE_EVENT0("browser,navigation,benchmark",
+               "NavigationControllerImpl::GoToIndex");
   if (index < 0 || index >= static_cast<int>(entries_.size())) {
     NOTREACHED();
     return;
@@ -1047,6 +1050,11 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
     return NAVIGATION_TYPE_SAME_PAGE;
   }
 
+  // Everything below here is assumed to be an existing entry, but if there is
+  // no last committed entry, we must consider it a new navigation instead.
+  if (!GetLastCommittedEntry())
+    return NAVIGATION_TYPE_NEW_PAGE;
+
   if (params.intended_as_new_entry) {
     // This was intended to be a navigation to a new entry but the pending entry
     // got cleared in the meanwhile. Classify as EXISTING_PAGE because we may or
@@ -1201,6 +1209,9 @@ void NavigationControllerImpl::RendererDidNavigateToExistingPage(
     bool is_in_page,
     bool was_restored,
     NavigationHandleImpl* handle) {
+  DCHECK(GetLastCommittedEntry()) << "ClassifyNavigation should guarantee "
+                                  << "that a last committed entry exists.";
+
   // We should only get here for main frame navigations.
   DCHECK(!rfh->GetParent());
 

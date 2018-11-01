@@ -12,6 +12,9 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
+#include "base/process/launch.h"
+#include "base/process/process.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -44,6 +47,15 @@ const int kDaysBetweenSwReporterRunsForPendingPrompt = 1;
 // The number of days to wait before sending out reporter logs.
 const int kDaysBetweenReporterLogsSent = 7;
 
+// When enabled, moves all user interaction with the Software Reporter and the
+// Chrome Cleanup tool to Chrome.
+extern const base::Feature kInBrowserCleanerUIFeature;
+
+// The switch to be passed to the Software Reporter process with the Mojo pipe
+// token for the IPC communication with Chrome.
+// TODO(crbug/709035) Move this to //components/chrome_cleaner.
+extern const char kChromeMojoPipeTokenSwitch[];
+
 // Parameters used to invoke the sw_reporter component.
 struct SwReporterInvocation {
   base::CommandLine command_line;
@@ -59,7 +71,6 @@ struct SwReporterInvocation {
   // supported.
   using Behaviours = uint32_t;
   enum : Behaviours {
-    BEHAVIOUR_LOG_TO_RAPPOR = 0x1,
     BEHAVIOUR_LOG_EXIT_CODE_TO_PREFS = 0x2,
     BEHAVIOUR_TRIGGER_PROMPT = 0x4,
     BEHAVIOUR_ALLOW_SEND_REPORTER_LOGS = 0x8,
@@ -114,7 +125,9 @@ class SwReporterTestingDelegate {
   virtual ~SwReporterTestingDelegate() {}
 
   // Test mock for launching the reporter.
-  virtual int LaunchReporter(const SwReporterInvocation& invocation) = 0;
+  virtual base::Process LaunchReporter(
+      const SwReporterInvocation& invocation,
+      const base::LaunchOptions& launch_options) = 0;
 
   // Test mock for showing the prompt.
   virtual void TriggerPrompt(Browser* browser,
@@ -132,6 +145,8 @@ class SwReporterTestingDelegate {
 // reset the delegate. If |delegate| is nullptr, any previous delegate is
 // cleared.
 void SetSwReporterTestingDelegate(SwReporterTestingDelegate* delegate);
+
+void DisplaySRTPromptForTesting(const base::FilePath& download_path);
 
 }  // namespace safe_browsing
 

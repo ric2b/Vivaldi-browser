@@ -14,6 +14,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/default_clock.h"
 #include "components/ntp_snippets/category_info.h"
 #include "components/ntp_snippets/category_rankers/constant_category_ranker.h"
 #include "components/ntp_snippets/category_rankers/fake_category_ranker.h"
@@ -22,6 +23,7 @@
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
 #include "components/ntp_snippets/mock_content_suggestions_provider.h"
+#include "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
 #include "components/ntp_snippets/user_classifier.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -140,15 +142,24 @@ class ContentSuggestionsServiceTest : public testing::Test {
  protected:
   void RegisterPrefs() {
     ContentSuggestionsService::RegisterProfilePrefs(pref_service_->registry());
+    RemoteSuggestionsProviderImpl::RegisterProfilePrefs(
+        pref_service_->registry());
     UserClassifier::RegisterProfilePrefs(pref_service_->registry());
   }
 
   void CreateContentSuggestionsService(
       ContentSuggestionsService::State enabled) {
     ASSERT_FALSE(service_);
+
+    // TODO(jkrcal): Replace by a mock.
+    auto user_classifier = base::MakeUnique<UserClassifier>(
+        pref_service_.get(), base::MakeUnique<base::DefaultClock>());
+
     service_ = base::MakeUnique<ContentSuggestionsService>(
         enabled, /*signin_manager=*/nullptr, /*history_service=*/nullptr,
-        pref_service_.get(), std::move(category_ranker_));
+        /*large_icon_service=*/nullptr, pref_service_.get(),
+        std::move(category_ranker_), std::move(user_classifier),
+        /*scheduler=*/nullptr);
   }
 
   void ResetService() {
@@ -433,8 +444,7 @@ TEST_F(ContentSuggestionsServiceTest, ShouldReturnCategoryInfo) {
   const CategoryInfo& actual = result.value();
   EXPECT_THAT(expected.title(), Eq(actual.title()));
   EXPECT_THAT(expected.card_layout(), Eq(actual.card_layout()));
-  EXPECT_THAT(expected.has_fetch_action(), Eq(actual.has_fetch_action()));
-  EXPECT_THAT(expected.has_view_all_action(), Eq(actual.has_view_all_action()));
+  EXPECT_THAT(expected.additional_action(), Eq(actual.additional_action()));
 }
 
 TEST_F(ContentSuggestionsServiceTest,

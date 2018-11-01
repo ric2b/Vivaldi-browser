@@ -18,7 +18,8 @@
 #include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/views/harmony/layout_delegate.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/strings/grit/components_strings.h"
@@ -33,7 +34,6 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/controls/button/label_button_border.h"
-#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/combobox/combobox.h"
@@ -46,6 +46,7 @@
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/native_cursor.h"
+#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 
@@ -170,7 +171,7 @@ ContentSettingBubbleContents::ContentSettingBubbleContents(
       content_setting_bubble_model_(content_setting_bubble_model),
       custom_link_(nullptr),
       manage_link_(nullptr),
-      manage_button_(nullptr),
+      manage_checkbox_(nullptr),
       learn_more_link_(nullptr) {
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(
@@ -185,8 +186,8 @@ ContentSettingBubbleContents::~ContentSettingBubbleContents() {
 
 gfx::Size ContentSettingBubbleContents::GetPreferredSize() const {
   gfx::Size preferred_size(views::View::GetPreferredSize());
-  int preferred_width = LayoutDelegate::Get()->GetDialogPreferredWidth(
-      LayoutDelegate::DialogWidth::SMALL);
+  int preferred_width =
+      ChromeLayoutProvider::Get()->GetDialogPreferredWidth(DialogWidth::SMALL);
   if (!preferred_width)
     preferred_width = (!content_setting_bubble_model_->bubble_content()
                             .domain_lists.empty() &&
@@ -209,13 +210,13 @@ void ContentSettingBubbleContents::Init() {
 
   GridLayout* layout = new views::GridLayout(this);
   SetLayoutManager(layout);
-  const LayoutDelegate* layout_delegate = LayoutDelegate::Get();
-  const int related_control_horizontal_spacing = layout_delegate->GetMetric(
-      LayoutDelegate::Metric::RELATED_CONTROL_HORIZONTAL_SPACING);
-  const int related_control_vertical_spacing = layout_delegate->GetMetric(
-      LayoutDelegate::Metric::RELATED_CONTROL_VERTICAL_SPACING);
-  const int unrelated_control_vertical_spacing = layout_delegate->GetMetric(
-      LayoutDelegate::Metric::UNRELATED_CONTROL_VERTICAL_SPACING);
+  const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  const int related_control_horizontal_spacing =
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
+  const int related_control_vertical_spacing =
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
+  const int unrelated_control_vertical_spacing =
+      provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_VERTICAL);
 
   const int kSingleColumnSetId = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(kSingleColumnSetId);
@@ -230,14 +231,14 @@ void ContentSettingBubbleContents::Init() {
   bool bubble_content_empty = true;
 
   if (!bubble_content.title.empty()) {
-    views::Label* title_label = new views::Label(bubble_content.title);
+    const int title_context =
+        provider->IsHarmonyMode()
+            ? static_cast<int>(views::style::CONTEXT_DIALOG_TITLE)
+            : CONTEXT_BODY_TEXT_SMALL;
+    views::Label* title_label =
+        new views::Label(bubble_content.title, title_context);
     title_label->SetMultiLine(true);
     title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    if (layout_delegate->IsHarmonyMode()) {
-      ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-      title_label->SetFontList(
-          rb.GetFontListWithDelta(ui::kTitleFontSizeDelta));
-    }
     layout->StartRow(0, kSingleColumnSetId);
     layout->AddView(title_label);
     bubble_content_empty = false;
@@ -254,8 +255,7 @@ void ContentSettingBubbleContents::Init() {
   }
 
   if (!bubble_content.learn_more_link.empty()) {
-    learn_more_link_ =
-        new views::Link(base::UTF8ToUTF16(bubble_content.learn_more_link));
+    learn_more_link_ = new views::Link(bubble_content.learn_more_link);
     learn_more_link_->set_listener(this);
     learn_more_link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     layout->AddView(learn_more_link_);
@@ -281,7 +281,7 @@ void ContentSettingBubbleContents::Init() {
         layout->AddPaddingRow(0, related_control_vertical_spacing);
       layout->StartRow(0, kItemListColumnSetId);
       if (list_item.has_link) {
-        views::Link* link = new views::Link(base::UTF8ToUTF16(list_item.title));
+        views::Link* link = new views::Link(list_item.title);
         link->set_listener(this);
         link->SetElideBehavior(gfx::ELIDE_MIDDLE);
         list_item_links_[link] = row;
@@ -291,7 +291,7 @@ void ContentSettingBubbleContents::Init() {
         views::ImageView* icon = new views::ImageView();
         icon->SetImage(list_item.image.AsImageSkia());
         layout->AddView(icon);
-        layout->AddView(new views::Label(base::UTF8ToUTF16(list_item.title)));
+        layout->AddView(new views::Label(list_item.title));
       }
       row++;
       bubble_content_empty = false;
@@ -303,9 +303,7 @@ void ContentSettingBubbleContents::Init() {
   views::ColumnSet* indented_single_column_set =
       layout->AddColumnSet(indented_kSingleColumnSetId);
   indented_single_column_set->AddPaddingColumn(
-      0,
-      layout_delegate->GetMetric(
-          LayoutDelegate::Metric::SUBSECTION_HORIZONTAL_INDENT));
+      0, provider->GetDistanceMetric(DISTANCE_SUBSECTION_HORIZONTAL_INDENT));
   indented_single_column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL,
                                         1, GridLayout::USE_PREF, 0, 0);
 
@@ -317,11 +315,10 @@ void ContentSettingBubbleContents::Init() {
     for (ContentSettingBubbleModel::RadioItems::const_iterator i(
          radio_group.radio_items.begin());
          i != radio_group.radio_items.end(); ++i) {
-      views::RadioButton* radio =
-          new views::RadioButton(base::UTF8ToUTF16(*i), 0);
+      views::RadioButton* radio = new views::RadioButton(*i, 0);
       radio->SetEnabled(bubble_content.radio_group_enabled);
       radio->set_listener(this);
-      if (layout_delegate->IsHarmonyMode()) {
+      if (provider->IsHarmonyMode()) {
         std::unique_ptr<views::LabelButtonBorder> border =
             radio->CreateDefaultBorder();
         gfx::Insets insets = border->GetInsets();
@@ -346,9 +343,7 @@ void ContentSettingBubbleContents::Init() {
     views::ColumnSet* menu_column_set =
         layout->AddColumnSet(kMediaMenuColumnSetId);
     menu_column_set->AddPaddingColumn(
-        0,
-        layout_delegate->GetMetric(
-            LayoutDelegate::Metric::SUBSECTION_HORIZONTAL_INDENT));
+        0, provider->GetDistanceMetric(DISTANCE_SUBSECTION_HORIZONTAL_INDENT));
     menu_column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL, 0,
                                GridLayout::USE_PREF, 0, 0);
     menu_column_set->AddPaddingColumn(0, related_control_horizontal_spacing);
@@ -362,8 +357,7 @@ void ContentSettingBubbleContents::Init() {
         layout->AddPaddingRow(0, related_control_vertical_spacing);
       layout->StartRow(0, kMediaMenuColumnSetId);
 
-      views::Label* label =
-          new views::Label(base::UTF8ToUTF16(i->second.label));
+      views::Label* label = new views::Label(i->second.label);
       label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       layout->AddView(label);
 
@@ -385,28 +379,26 @@ void ContentSettingBubbleContents::Init() {
     }
   }
 
-  const gfx::FontList& domain_font =
-      ui::ResourceBundle::GetSharedInstance().GetFontList(
-          ui::ResourceBundle::BoldFont);
   for (std::vector<ContentSettingBubbleModel::DomainList>::const_iterator i(
            bubble_content.domain_lists.begin());
        i != bubble_content.domain_lists.end(); ++i) {
     layout->StartRow(0, kSingleColumnSetId);
-    views::Label* section_title = new views::Label(base::UTF8ToUTF16(i->title));
+    views::Label* section_title = new views::Label(i->title);
     section_title->SetMultiLine(true);
     section_title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     layout->AddView(section_title, 1, 1, GridLayout::FILL, GridLayout::LEADING);
     for (std::set<std::string>::const_iterator j = i->hosts.begin();
          j != i->hosts.end(); ++j) {
       layout->StartRow(0, indented_kSingleColumnSetId);
-      layout->AddView(new views::Label(base::UTF8ToUTF16(*j), domain_font));
+      // TODO(tapted): Verify this when we have a mock. http://crbug.com/700196.
+      layout->AddView(new views::Label(
+          base::UTF8ToUTF16(*j), CONTEXT_BODY_TEXT_LARGE, STYLE_EMPHASIZED));
     }
     bubble_content_empty = false;
   }
 
   if (!bubble_content.custom_link.empty()) {
-    custom_link_ =
-        new views::Link(base::UTF8ToUTF16(bubble_content.custom_link));
+    custom_link_ = new views::Link(bubble_content.custom_link);
     custom_link_->SetEnabled(bubble_content.custom_link_enabled);
     custom_link_->set_listener(this);
     if (!bubble_content_empty)
@@ -416,8 +408,16 @@ void ContentSettingBubbleContents::Init() {
     bubble_content_empty = false;
   }
 
+  if (bubble_content.show_manage_text_as_checkbox) {
+    manage_checkbox_ = new views::Checkbox(bubble_content.manage_text);
+    manage_checkbox_->set_listener(this);
+    layout->AddPaddingRow(0, related_control_vertical_spacing);
+    layout->StartRow(0, indented_kSingleColumnSetId);
+    layout->AddView(manage_checkbox_);
+  }
+
   if (!bubble_content_empty) {
-    if (!layout_delegate->IsHarmonyMode()) {
+    if (!provider->IsHarmonyMode()) {
       layout->AddPaddingRow(0, related_control_vertical_spacing);
       layout->StartRow(0, kSingleColumnSetId);
       layout->AddView(new views::Separator(), 1, 1, GridLayout::FILL,
@@ -428,18 +428,15 @@ void ContentSettingBubbleContents::Init() {
 }
 
 views::View* ContentSettingBubbleContents::CreateExtraView() {
-  if (content_setting_bubble_model_->bubble_content()
-          .show_manage_text_as_button) {
-    manage_button_ = views::MdTextButton::CreateSecondaryUiButton(
-        this, base::UTF8ToUTF16(
-                  content_setting_bubble_model_->bubble_content().manage_text));
-    return manage_button_;
-  } else {
-    manage_link_ = new views::Link(base::UTF8ToUTF16(
-        content_setting_bubble_model_->bubble_content().manage_text));
-    manage_link_->set_listener(this);
-    return manage_link_;
-  }
+  const ContentSettingBubbleModel::BubbleContent& bubble_content =
+      content_setting_bubble_model_->bubble_content();
+  // Added as part of the primary view.
+  if (bubble_content.show_manage_text_as_checkbox)
+    return nullptr;
+
+  manage_link_ = new views::Link(bubble_content.manage_text);
+  manage_link_->set_listener(this);
+  return manage_link_;
 }
 
 bool ContentSettingBubbleContents::Accept() {
@@ -457,6 +454,10 @@ int ContentSettingBubbleContents::GetDialogButtons() const {
 
 base::string16 ContentSettingBubbleContents::GetDialogButtonLabel(
     ui::DialogButton button) const {
+  const base::string16& done_text =
+      content_setting_bubble_model_->bubble_content().done_button_text;
+  if (!done_text.empty())
+    return done_text;
   return l10n_util::GetStringUTF16(IDS_DONE);
 }
 
@@ -472,9 +473,13 @@ void ContentSettingBubbleContents::DidFinishNavigation(
 
 void ContentSettingBubbleContents::ButtonPressed(views::Button* sender,
                                                  const ui::Event& event) {
-  if (manage_button_ == sender) {
-    GetWidget()->Close();
-    content_setting_bubble_model_->OnManageLinkClicked();
+  if (manage_checkbox_ == sender) {
+    content_setting_bubble_model_->OnManageCheckboxChecked(
+        manage_checkbox_->checked());
+
+    // Toggling the check state may change the dialog button text.
+    GetDialogClientView()->UpdateDialogButtons();
+    GetDialogClientView()->Layout();
   } else {
     RadioGroup::const_iterator i(
         std::find(radio_group_.begin(), radio_group_.end(), sender));

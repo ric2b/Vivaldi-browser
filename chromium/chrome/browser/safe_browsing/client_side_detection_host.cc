@@ -20,9 +20,9 @@
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/safe_browsing/csd.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
+#include "components/safe_browsing/csd.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
@@ -367,8 +367,8 @@ void ClientSideDetectionHost::DidFinishNavigation(
   // TODO(noelutz): move this DCHECK to WebContents and fix all the unit tests
   // that don't call this method on the UI thread.
   // DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (navigation_handle->IsSamePage()) {
-    // If the navigation is within the same page, the user isn't really
+  if (navigation_handle->IsSameDocument()) {
+    // If the navigation is within the same document, the user isn't really
     // navigating away.  We don't need to cancel a pending callback or
     // begin a new classification.
     return;

@@ -5,6 +5,7 @@
 #include "base/containers/hash_tables.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/platform/test_ax_node_wrapper.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace ui {
 
@@ -71,7 +72,7 @@ TestAXNodeWrapper::~TestAXNodeWrapper() {
   platform_node_->Destroy();
 }
 
-const AXNodeData& TestAXNodeWrapper::GetData() {
+const AXNodeData& TestAXNodeWrapper::GetData() const {
   return node_->data();
 }
 
@@ -100,8 +101,10 @@ gfx::NativeViewAccessible TestAXNodeWrapper::ChildAtIndex(int index) {
       nullptr;
 }
 
-gfx::Vector2d TestAXNodeWrapper::GetGlobalCoordinateOffset() {
-  return g_offset;
+gfx::Rect TestAXNodeWrapper::GetScreenBoundsRect() const {
+  gfx::RectF bounds = GetData().location;
+  bounds.Offset(g_offset);
+  return gfx::ToEnclosingRect(bounds);
 }
 
 gfx::NativeViewAccessible TestAXNodeWrapper::HitTestSync(int x, int y) {
@@ -121,8 +124,6 @@ bool TestAXNodeWrapper::AccessibilityPerformAction(
     const ui::AXActionData& data) {
   return true;
 }
-
-void TestAXNodeWrapper::DoDefaultAction() {}
 
 TestAXNodeWrapper::TestAXNodeWrapper(AXTree* tree, AXNode* node)
     : tree_(tree),

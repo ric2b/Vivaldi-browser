@@ -12,15 +12,17 @@
 #include "V8TestInterface2Partial.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterface2.h"
 #include "bindings/tests/idls/modules/TestInterface2Partial.h"
 #include "bindings/tests/idls/modules/TestInterface2Partial2.h"
-#include "core/dom/Document.h"
+#include "core/dom/ExecutionContext.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "wtf/GetPtr.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/GetPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -30,13 +32,13 @@ static void voidMethodPartial1Method(const v8::FunctionCallbackInfo<v8::Value>& 
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
   if (UNLIKELY(info.Length() < 1)) {
-    V8ThrowException::throwTypeError(info.GetIsolate(), ExceptionMessages::failedToExecute("voidMethodPartial1", "TestInterface2", ExceptionMessages::notEnoughArguments(1, info.Length())));
+    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodPartial1", "TestInterface2", ExceptionMessages::NotEnoughArguments(1, info.Length())));
     return;
   }
 
   V8StringResource<> value;
   value = info[0];
-  if (!value.prepare())
+  if (!value.Prepare())
     return;
 
   TestInterface2Partial::voidMethodPartial1(*impl, value);
@@ -46,13 +48,13 @@ static void voidMethodPartial2Method(const v8::FunctionCallbackInfo<v8::Value>& 
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
   if (UNLIKELY(info.Length() < 1)) {
-    V8ThrowException::throwTypeError(info.GetIsolate(), ExceptionMessages::failedToExecute("voidMethodPartial2", "TestInterface2", ExceptionMessages::notEnoughArguments(1, info.Length())));
+    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodPartial2", "TestInterface2", ExceptionMessages::NotEnoughArguments(1, info.Length())));
     return;
   }
 
   V8StringResource<> value;
   value = info[0];
-  if (!value.prepare())
+  if (!value.Prepare())
     return;
 
   TestInterface2Partial2::voidMethodPartial2(*impl, value);
@@ -68,8 +70,8 @@ void V8TestInterface2Partial::voidMethodPartial2MethodCallback(const v8::Functio
   TestInterface2PartialV8Internal::voidMethodPartial2Method(info);
 }
 
-const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] = {
-    {"voidMethodPartial2", V8TestInterface2Partial::voidMethodPartial2MethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+static const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] = {
+    {"voidMethodPartial2", V8TestInterface2Partial::voidMethodPartial2MethodCallback, 1, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
 };
 
 void V8TestInterface2Partial::installV8TestInterface2Template(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate) {
@@ -84,11 +86,14 @@ void V8TestInterface2Partial::installV8TestInterface2Template(v8::Isolate* isola
   ALLOW_UNUSED_LOCAL(prototypeTemplate);
 
   // Register DOM constants, attributes and operations.
-  V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterface2Methods, WTF_ARRAY_LENGTH(V8TestInterface2Methods));
+  V8DOMConfiguration::InstallMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterface2Methods, WTF_ARRAY_LENGTH(V8TestInterface2Methods));
 
   if (RuntimeEnabledFeatures::interface2PartialFeatureNameEnabled()) {
-    const V8DOMConfiguration::MethodConfiguration voidMethodPartial1MethodConfiguration = {"voidMethodPartial1", V8TestInterface2Partial::voidMethodPartial1MethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess};
-    V8DOMConfiguration::installMethod(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, voidMethodPartial1MethodConfiguration);
+    const V8DOMConfiguration::MethodConfiguration voidMethodPartial1MethodConfiguration[] = {
+      {"voidMethodPartial1", V8TestInterface2Partial::voidMethodPartial1MethodCallback, 1, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds}
+    };
+    for (const auto& methodConfig : voidMethodPartial1MethodConfiguration)
+      V8DOMConfiguration::InstallMethod(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, methodConfig);
   }
 }
 

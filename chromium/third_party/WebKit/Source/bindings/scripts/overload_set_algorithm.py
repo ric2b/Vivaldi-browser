@@ -45,6 +45,7 @@ def effective_overload_set(F):  # pylint: disable=invalid-name
 
     Arguments:
         F: list of overloads for a given callable name.
+        value_reader: an OverloadSetValueReader instance.
 
     Returns:
         S: list of tuples of the form (callable, type list, optionality list).
@@ -78,7 +79,8 @@ def effective_overload_set(F):  # pylint: disable=invalid-name
         # (“optionality list”)
         # (We’re just using a boolean for optional/variadic vs. required.)
         o = tuple(argument['is_optional']  # pylint: disable=invalid-name
-                  or argument['is_variadic'] for argument in arguments)
+                  or argument['is_variadic']
+                  for argument in arguments)
         # 4. Add to S the tuple <X, t0..n−1, o0..n−1>.
         S.append((X, t, o))
         # 5. If X is declared to be variadic, then:
@@ -99,7 +101,7 @@ def effective_overload_set(F):  # pylint: disable=invalid-name
         # 8. If n > 0 and all arguments of X are optional, then add to S the
         # tuple <X, (), ()> (where “()” represents the empty list).
         if n > 0 and all(oi for oi in o):
-            S.append((X, [], []))
+            S.append((X, (), ()))
     # 6. The effective overload set is S.
     return S
 

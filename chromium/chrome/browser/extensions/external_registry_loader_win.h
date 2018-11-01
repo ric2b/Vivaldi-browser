@@ -14,21 +14,27 @@ namespace extensions {
 
 class ExternalRegistryLoader : public ExternalLoader {
  public:
-  ExternalRegistryLoader() {}
+  ExternalRegistryLoader();
 
  protected:
+  ~ExternalRegistryLoader() override {}  // protected for unit test.
+
   void StartLoading() override;
+
+  // Overridden to mock registry reading in unit tests.
+  virtual std::unique_ptr<base::DictionaryValue> LoadPrefsOnFileThread();
 
  private:
   friend class base::RefCountedThreadSafe<ExternalLoader>;
 
-  ~ExternalRegistryLoader() override {}
-
-  std::unique_ptr<base::DictionaryValue> LoadPrefsOnFileThread();
   void LoadOnFileThread();
-  void CompleteLoadAndStartWatchingRegistry();
+  void CompleteLoadAndStartWatchingRegistry(
+      std::unique_ptr<base::DictionaryValue> prefs);
   void UpdatePrefsOnFileThread();
   void OnRegistryKeyChanged(base::win::RegKey* key);
+
+  // Whether or not we attempted to observe registry.
+  bool attempted_watching_registry_;
 
   base::win::RegKey hklm_key_;
   base::win::RegKey hkcu_key_;

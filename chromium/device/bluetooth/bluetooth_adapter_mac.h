@@ -53,6 +53,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
   // Converts CBUUID into BluetoothUUID
   static BluetoothUUID BluetoothUUIDWithCBUUID(CBUUID* UUID);
 
+  // Converts NSError to string for logging.
+  static std::string String(NSError* error);
+
   // BluetoothAdapter overrides:
   std::string GetAddress() const override;
   std::string GetName() const override;

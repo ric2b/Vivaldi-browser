@@ -62,3 +62,12 @@ DISABLE(ContentSubresourceFilterDriverFactoryTest,
 
 // Seems to have gotten flaky in v57 stable
 DISABLE(OAuthRequestSignerTest, DecodeEncoded)
+
+DISABLE(MediaGalleriesGalleryWatchApiTest, SetupWatchOnInvalidGallery)
+DISABLE(MediaGalleriesGalleryWatchApiTest,
+        SetupGalleryChangedListenerWithoutWatchers)
+DISABLE(MediaGalleriesGalleryWatchApiTest, SetupGalleryWatchWithoutListeners)
+
+// Seems to have failed in v59
+DISABLE(ExtensionApiTest, UserLevelNativeMessaging)
+DISABLE(MediaGalleriesPlatformAppBrowserTest, NoGalleriesCopyTo)

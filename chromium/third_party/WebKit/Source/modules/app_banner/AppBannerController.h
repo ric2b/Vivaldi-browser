@@ -7,9 +7,9 @@
 
 #include "modules/ModulesExport.h"
 #include "platform/heap/Persistent.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
 #include "public/platform/modules/app_banner/app_banner.mojom-blink.h"
-#include "wtf/Allocator.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -20,7 +20,7 @@ class MODULES_EXPORT AppBannerController final
  public:
   explicit AppBannerController(LocalFrame&);
 
-  static void bindMojoRequest(LocalFrame*,
+  static void BindMojoRequest(LocalFrame*,
                               mojom::blink::AppBannerControllerRequest);
 
   void BannerPromptRequest(mojom::blink::AppBannerServicePtr,
@@ -29,7 +29,7 @@ class MODULES_EXPORT AppBannerController final
                            const BannerPromptRequestCallback&) override;
 
  private:
-  WeakPersistent<LocalFrame> m_frame;
+  WeakPersistent<LocalFrame> frame_;
 };
 
 }  // namespace blink

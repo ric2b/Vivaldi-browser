@@ -13,6 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/common/manifest_url_handlers.h"
 
 namespace extensions {
@@ -47,7 +48,7 @@ ExtensionFunction::ResponseAction ExtensionSetUpdateUrlDataFunction::Run() {
 
   ExtensionPrefs::Get(browser_context())
       ->UpdateExtensionPref(extension_id(), extension::kUpdateURLData,
-                            new base::StringValue(data));
+                            base::MakeUnique<base::Value>(data));
   return RespondNow(NoArguments());
 }
 

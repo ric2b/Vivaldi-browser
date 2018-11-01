@@ -2658,8 +2658,7 @@ function testFindAPI_findupdate() {
     // Test the |findupdate| event.
     webview.addEventListener('findupdate', function(e) {
       if (e.activeMatchOrdinal > 0) {
-        // embedder.test.assertTrue(e.numberOfMatches >= e.activeMatchOrdinal)
-        // This currently fails because of http://crbug.com/342445 .
+        embedder.test.assertTrue(e.numberOfMatches >= e.activeMatchOrdinal)
         embedder.test.assertTrue(e.selectionRect.width > 0);
         embedder.test.assertTrue(e.selectionRect.height > 0);
       }
@@ -2676,9 +2675,9 @@ function testFindAPI_findupdate() {
         }
       }
     });
-    wv.find("dog");
-    wv.find("cat");
-    wv.find("dog");
+    webview.find("dog");
+    webview.find("cat");
+    webview.find("dog");
   });
 
   document.body.appendChild(webview);
@@ -2935,6 +2934,24 @@ function testPDFInWebview() {
   document.body.appendChild(webview);
 }
 
+function testNavigateToPDFInWebview() {
+  var webview = document.createElement('webview');
+  var pdfUrl = 'test.pdf';
+  // partition 'foobar' has access to local resource |pdfUrl|.
+  webview.partition = 'foobar';
+  webview.onloadabort = embedder.test.fail;
+
+  var loadstopHandler = function(e) {
+    webview.removeEventListener('loadstop', loadstopHandler);
+    webview.addEventListener('loadstop', embedder.test.succeed);
+    webview.setAttribute('src', pdfUrl);
+  };
+  webview.addEventListener('loadstop', loadstopHandler);
+
+  webview.setAttribute('src', 'about:blank');
+  document.body.appendChild(webview);
+}
+
 // This test verifies that mailto links are enabled.
 function testMailtoLink() {
   var webview = new WebView();
@@ -3123,7 +3140,7 @@ embedder.test.testList = {
   'testScreenshotCapture' : testScreenshotCapture,
   'testZoomAPI' : testZoomAPI,
   'testFindAPI': testFindAPI,
-  'testFindAPI_findupdate': testFindAPI,
+  'testFindAPI_findupdate': testFindAPI_findupdate,
   'testLoadDataAPI': testLoadDataAPI,
   'testResizeEvents': testResizeEvents,
   'testPerOriginZoomMode': testPerOriginZoomMode,
@@ -3135,6 +3152,7 @@ embedder.test.testList = {
   'testCloseNewWindowCleanup': testCloseNewWindowCleanup,
   'testFocusWhileFocused': testFocusWhileFocused,
   'testPDFInWebview': testPDFInWebview,
+  'testNavigateToPDFInWebview': testNavigateToPDFInWebview,
   'testMailtoLink': testMailtoLink,
   'testRendererNavigationRedirectWhileUnattached':
        testRendererNavigationRedirectWhileUnattached,

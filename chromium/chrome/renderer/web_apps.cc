@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -18,7 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/common/chrome_switches.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "third_party/WebKit/public/platform/WebIconSizesParser.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -73,19 +74,19 @@ gfx::Size ParseIconSize(const base::string16& text) {
 
 void AddInstallIcon(const WebElement& link,
                     std::vector<WebApplicationInfo::IconInfo>* icons) {
-  WebString href = link.getAttribute("href");
-  if (href.isNull() || href.isEmpty())
+  WebString href = link.GetAttribute("href");
+  if (href.IsNull() || href.IsEmpty())
     return;
 
   // Get complete url.
-  GURL url = link.document().completeURL(href);
+  GURL url = link.GetDocument().CompleteURL(href);
   if (!url.is_valid())
     return;
 
   WebApplicationInfo::IconInfo icon_info;
-  if (link.hasAttribute("sizes")) {
+  if (link.HasAttribute("sizes")) {
     blink::WebVector<blink::WebSize> icon_sizes =
-        blink::WebIconSizesParser::parseIconSizes(link.getAttribute("sizes"));
+        blink::WebIconSizesParser::ParseIconSizes(link.GetAttribute("sizes"));
     if (icon_sizes.size() == 1 &&
         icon_sizes[0].width != 0 &&
         icon_sizes[0].height != 0) {
@@ -125,23 +126,23 @@ bool ParseIconSizes(const base::string16& text,
 
 void ParseWebAppFromWebDocument(WebFrame* frame,
                                 WebApplicationInfo* app_info) {
-  WebDocument document = frame->document();
-  if (document.isNull())
+  WebDocument document = frame->GetDocument();
+  if (document.IsNull())
     return;
 
-  WebElement head = document.head();
-  if (head.isNull())
+  WebElement head = document.Head();
+  if (head.IsNull())
     return;
 
-  GURL document_url = document.url();
-  for (WebNode child = head.firstChild(); !child.isNull();
-      child = child.nextSibling()) {
-    if (!child.isElementNode())
+  GURL document_url = document.Url();
+  for (WebNode child = head.FirstChild(); !child.IsNull();
+       child = child.NextSibling()) {
+    if (!child.IsElementNode())
       continue;
-    WebElement elem = child.to<WebElement>();
+    WebElement elem = child.To<WebElement>();
 
-    if (elem.hasHTMLTagName("link")) {
-      std::string rel = elem.getAttribute("rel").utf8();
+    if (elem.HasHTMLTagName("link")) {
+      std::string rel = elem.GetAttribute("rel").Utf8();
       // "rel" attribute may use either "icon" or "shortcut icon".
       // see also
       //   <http://en.wikipedia.org/wiki/Favicon>
@@ -150,11 +151,10 @@ void ParseWebAppFromWebDocument(WebFrame* frame,
       // Bookmark apps also support "apple-touch-icon" and
       // "apple-touch-icon-precomposed".
 #if defined(OS_MACOSX)
-      bool bookmark_apps_enabled = base::CommandLine::ForCurrentProcess()->
-          HasSwitch(switches::kEnableNewBookmarkApps);
+      bool bookmark_apps_enabled =
+          base::FeatureList::IsEnabled(features::kBookmarkApps);
 #else
-      bool bookmark_apps_enabled = !base::CommandLine::ForCurrentProcess()->
-          HasSwitch(switches::kDisableNewBookmarkApps);
+      bool bookmark_apps_enabled = true;
 #endif
       if (base::LowerCaseEqualsASCII(rel, "icon") ||
           base::LowerCaseEqualsASCII(rel, "shortcut icon") ||
@@ -163,24 +163,24 @@ void ParseWebAppFromWebDocument(WebFrame* frame,
             base::LowerCaseEqualsASCII(rel, "apple-touch-icon-precomposed")))) {
         AddInstallIcon(elem, &app_info->icons);
       }
-    } else if (elem.hasHTMLTagName("meta") && elem.hasAttribute("name")) {
-      std::string name = elem.getAttribute("name").utf8();
-      WebString content = elem.getAttribute("content");
+    } else if (elem.HasHTMLTagName("meta") && elem.HasAttribute("name")) {
+      std::string name = elem.GetAttribute("name").Utf8();
+      WebString content = elem.GetAttribute("content");
       if (name == "application-name") {
-        app_info->title = content.utf16();
+        app_info->title = content.Utf16();
       } else if (name == "description") {
-        app_info->description = content.utf16();
+        app_info->description = content.Utf16();
       } else if (name == "application-url") {
-        std::string url = content.utf8();
+        std::string url = content.Utf8();
         app_info->app_url = document_url.is_valid() ?
             document_url.Resolve(url) : GURL(url);
         if (!app_info->app_url.is_valid())
           app_info->app_url = GURL();
       } else if (name == "mobile-web-app-capable" &&
-                 base::LowerCaseEqualsASCII(content.utf16(), "yes")) {
+                 base::LowerCaseEqualsASCII(content.Utf16(), "yes")) {
         app_info->mobile_capable = WebApplicationInfo::MOBILE_CAPABLE;
       } else if (name == "apple-mobile-web-app-capable" &&
-                 base::LowerCaseEqualsASCII(content.utf16(), "yes") &&
+                 base::LowerCaseEqualsASCII(content.Utf16(), "yes") &&
                  app_info->mobile_capable ==
                      WebApplicationInfo::MOBILE_CAPABLE_UNSPECIFIED) {
         app_info->mobile_capable = WebApplicationInfo::MOBILE_CAPABLE_APPLE;

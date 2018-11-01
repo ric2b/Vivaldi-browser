@@ -10,17 +10,13 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/tab_contents/retargeting_details.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/navigation_details.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -47,10 +43,9 @@ bool IsEventExpired(const base::Time& event_time, double ttl_in_second) {
 ReferrerChainEntry::URLType GetURLTypeAndAdjustAttributionResult(
     bool at_user_gesture_limit,
     SafeBrowsingNavigationObserverManager::AttributionResult* out_result) {
-  // Landing page of a download refers to the page user directly interacts
-  // with to trigger this download (e.g. clicking on download button). Landing
-  // referrer page is the one user interacts with right before navigating to
-  // the landing page.
+  // Landing page refers to the page user directly interacts with to trigger
+  // this event (e.g. clicking on download button). Landing referrer page is the
+  // one user interacts with right before navigating to the landing page.
   // Since we are tracing navigations backwards, if we've reached
   // user gesture limit before this navigation event, this is a navigation
   // leading to the landing referrer page, otherwise it leads to landing page.
@@ -200,10 +195,8 @@ std::size_t NavigationEventList::CleanUpNavigationEvents() {
 
 // -----------------SafeBrowsingNavigationObserverManager-----------
 // static
-const base::Feature
-SafeBrowsingNavigationObserverManager::kDownloadAttribution {
-    "DownloadAttribution", base::FEATURE_DISABLED_BY_DEFAULT
-};
+const base::Feature SafeBrowsingNavigationObserverManager::kDownloadAttribution{
+    "DownloadAttribution", base::FEATURE_ENABLED_BY_DEFAULT};
 // static
 bool SafeBrowsingNavigationObserverManager::IsUserGestureExpired(
     const base::Time& timestamp) {
@@ -232,8 +225,6 @@ bool SafeBrowsingNavigationObserverManager::IsEnabledAndReady(
 
 SafeBrowsingNavigationObserverManager::SafeBrowsingNavigationObserverManager()
     : navigation_event_list_(kNavigationRecordMaxSize) {
-  registrar_.Add(this, chrome::NOTIFICATION_RETARGETING,
-                 content::NotificationService::AllSources());
 
   // Schedule clean up in 2 minutes.
   ScheduleNextCleanUpAfterInterval(
@@ -311,23 +302,23 @@ void SafeBrowsingNavigationObserverManager::CleanUpStaleNavigationFootprints() {
 }
 
 SafeBrowsingNavigationObserverManager::AttributionResult
-SafeBrowsingNavigationObserverManager::IdentifyReferrerChainForDownload(
-    const GURL& target_url,
-    int target_tab_id,
+SafeBrowsingNavigationObserverManager::IdentifyReferrerChainByEventURL(
+    const GURL& event_url,
+    int event_tab_id,
     int user_gesture_count_limit,
     ReferrerChain* out_referrer_chain) {
-  if (!target_url.is_valid())
+  if (!event_url.is_valid())
     return INVALID_URL;
 
   NavigationEvent* nav_event = navigation_event_list_.FindNavigationEvent(
-      target_url, GURL(), target_tab_id);
+      event_url, GURL(), event_tab_id);
   if (!nav_event) {
-    // We cannot find a single navigation event related to this download.
+    // We cannot find a single navigation event related to this event.
     return NAVIGATION_EVENT_NOT_FOUND;
   }
   AttributionResult result = SUCCESS;
   AddToReferrerChain(out_referrer_chain, nav_event, GURL(),
-                     ReferrerChainEntry::DOWNLOAD_URL);
+                     ReferrerChainEntry::EVENT_URL);
   int user_gesture_count = 0;
   GetRemainingReferrerChain(
       nav_event,
@@ -339,37 +330,34 @@ SafeBrowsingNavigationObserverManager::IdentifyReferrerChainForDownload(
 }
 
 SafeBrowsingNavigationObserverManager::AttributionResult
-SafeBrowsingNavigationObserverManager::
-    IdentifyReferrerChainByDownloadWebContent(
-        content::WebContents* web_contents,
-        int user_gesture_count_limit,
-        ReferrerChain* out_referrer_chain) {
+SafeBrowsingNavigationObserverManager::IdentifyReferrerChainByWebContents(
+    content::WebContents* web_contents,
+    int user_gesture_count_limit,
+    ReferrerChain* out_referrer_chain) {
   if (!web_contents || !web_contents->GetLastCommittedURL().is_valid())
     return INVALID_URL;
   bool has_user_gesture = HasUserGesture(web_contents);
   int tab_id = SessionTabHelper::IdForTab(web_contents);
-  return IdentifyReferrerChainForDownloadHostingPage(
+  return IdentifyReferrerChainByHostingPage(
       web_contents->GetLastCommittedURL(), GURL(), tab_id, has_user_gesture,
       user_gesture_count_limit, out_referrer_chain);
 }
 
 SafeBrowsingNavigationObserverManager::AttributionResult
-SafeBrowsingNavigationObserverManager::
-    IdentifyReferrerChainForDownloadHostingPage(
-        const GURL& initiating_frame_url,
-        const GURL& initiating_main_frame_url,
-        int tab_id,
-        bool has_user_gesture,
-        int user_gesture_count_limit,
-        ReferrerChain* out_referrer_chain) {
+SafeBrowsingNavigationObserverManager::IdentifyReferrerChainByHostingPage(
+    const GURL& initiating_frame_url,
+    const GURL& initiating_main_frame_url,
+    int tab_id,
+    bool has_user_gesture,
+    int user_gesture_count_limit,
+    ReferrerChain* out_referrer_chain) {
   if (!initiating_frame_url.is_valid())
     return INVALID_URL;
 
   NavigationEvent* nav_event = navigation_event_list_.FindNavigationEvent(
       initiating_frame_url, initiating_main_frame_url, tab_id);
   if (!nav_event) {
-    // We cannot find a single navigation event related to this download hosting
-    // page.
+    // We cannot find a single navigation event related to this hosting page.
     return NAVIGATION_EVENT_NOT_FOUND;
   }
 
@@ -377,7 +365,7 @@ SafeBrowsingNavigationObserverManager::
 
   int user_gesture_count = 0;
   // If this initiating_frame has user gesture, we consider this as the landing
-  // page of the PPAPI download.
+  // page of this event.
   if (has_user_gesture) {
     user_gesture_count = 1;
     AddToReferrerChain(
@@ -401,33 +389,22 @@ SafeBrowsingNavigationObserverManager::
 SafeBrowsingNavigationObserverManager::
     ~SafeBrowsingNavigationObserverManager() {}
 
-void SafeBrowsingNavigationObserverManager::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  if (type == chrome::NOTIFICATION_RETARGETING)
-    RecordRetargeting(details);
-}
-
-void SafeBrowsingNavigationObserverManager::RecordRetargeting(
-    const content::NotificationDetails& details) {
-  const RetargetingDetails* retargeting_detail =
-      content::Details<const RetargetingDetails>(details).ptr();
-  DCHECK(retargeting_detail);
-  content::WebContents* source_contents =
-      retargeting_detail->source_web_contents;
-  content::WebContents* target_contents =
-      retargeting_detail->target_web_contents;
-  DCHECK(source_contents);
-  DCHECK(target_contents);
+void SafeBrowsingNavigationObserverManager::RecordNewWebContents(
+    content::WebContents* source_web_contents,
+    int source_render_process_id,
+    int source_render_frame_id,
+    GURL target_url,
+    content::WebContents* target_web_contents,
+    bool not_yet_in_tabstrip) {
+  DCHECK(source_web_contents);
+  DCHECK(target_web_contents);
 
   content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-      retargeting_detail->source_render_process_id,
-      retargeting_detail->source_render_frame_id);
+      source_render_process_id, source_render_frame_id);
   // Remove the "#" at the end of URL, since it does not point to any actual
   // page fragment ID.
-  GURL target_url = SafeBrowsingNavigationObserverManager::ClearEmptyRef(
-      retargeting_detail->target_url);
+  GURL cleaned_target_url =
+      SafeBrowsingNavigationObserverManager::ClearEmptyRef(target_url);
 
   std::unique_ptr<NavigationEvent> nav_event =
       base::MakeUnique<NavigationEvent>();
@@ -436,14 +413,14 @@ void SafeBrowsingNavigationObserverManager::RecordRetargeting(
         SafeBrowsingNavigationObserverManager::ClearEmptyRef(
             rfh->GetLastCommittedURL());
   }
-  nav_event->source_tab_id = SessionTabHelper::IdForTab(source_contents);
+  nav_event->source_tab_id = SessionTabHelper::IdForTab(source_web_contents);
   nav_event->source_main_frame_url =
       SafeBrowsingNavigationObserverManager::ClearEmptyRef(
-          source_contents->GetLastCommittedURL());
-  nav_event->original_request_url = target_url;
-  nav_event->target_tab_id = SessionTabHelper::IdForTab(target_contents);
+          source_web_contents->GetLastCommittedURL());
+  nav_event->original_request_url = cleaned_target_url;
+  nav_event->target_tab_id = SessionTabHelper::IdForTab(target_web_contents);
   nav_event->frame_id = rfh ? rfh->GetFrameTreeNodeId() : -1;
-  auto it = user_gesture_map_.find(source_contents);
+  auto it = user_gesture_map_.find(source_web_contents);
   if (it != user_gesture_map_.end() &&
       !SafeBrowsingNavigationObserverManager::IsUserGestureExpired(
           it->second)) {

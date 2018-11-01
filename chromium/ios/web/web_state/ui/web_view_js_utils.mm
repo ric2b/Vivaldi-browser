@@ -32,7 +32,7 @@ std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result,
 
   CFTypeID result_type = CFGetTypeID(wk_result);
   if (result_type == CFStringGetTypeID()) {
-    result.reset(new base::StringValue(base::SysNSStringToUTF16(wk_result)));
+    result.reset(new base::Value(base::SysNSStringToUTF16(wk_result)));
     DCHECK(result->IsType(base::Value::Type::STRING));
   } else if (result_type == CFNumberGetTypeID()) {
     result.reset(new base::Value([wk_result doubleValue]));
@@ -41,7 +41,7 @@ std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result,
     result.reset(new base::Value(static_cast<bool>([wk_result boolValue])));
     DCHECK(result->IsType(base::Value::Type::BOOLEAN));
   } else if (result_type == CFNullGetTypeID()) {
-    result = base::Value::CreateNullValue();
+    result = base::MakeUnique<base::Value>();
     DCHECK(result->IsType(base::Value::Type::NONE));
   } else if (result_type == CFDictionaryGetTypeID()) {
     std::unique_ptr<base::DictionaryValue> dictionary =

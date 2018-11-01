@@ -5,14 +5,10 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_CHROME_LAUNCHER_CONTROLLER_MUS_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_CHROME_LAUNCHER_CONTROLLER_MUS_H_
 
-#include <map>
-#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-
-class ChromeShelfItemDelegate;
 
 class ChromeLauncherControllerMus : public ChromeLauncherController {
  public:
@@ -20,21 +16,16 @@ class ChromeLauncherControllerMus : public ChromeLauncherController {
   ~ChromeLauncherControllerMus() override;
 
   // ChromeLauncherController:
-  ash::ShelfID CreateAppLauncherItem(LauncherItemController* controller,
-                                     const std::string& app_id,
-                                     ash::ShelfItemStatus status) override;
+  ash::ShelfID CreateAppLauncherItem(
+      std::unique_ptr<ash::ShelfItemDelegate> item_delegate,
+      ash::ShelfItemStatus status) override;
   const ash::ShelfItem* GetItem(ash::ShelfID id) const override;
   void SetItemType(ash::ShelfID id, ash::ShelfItemType type) override;
   void SetItemStatus(ash::ShelfID id, ash::ShelfItemStatus status) override;
-  void SetItemController(ash::ShelfID id,
-                         LauncherItemController* controller) override;
   void CloseLauncherItem(ash::ShelfID id) override;
-  void Pin(ash::ShelfID id) override;
-  void Unpin(ash::ShelfID id) override;
   bool IsPinned(ash::ShelfID id) override;
-  void TogglePinned(ash::ShelfID id) override;
-  void LockV1AppWithID(const std::string& app_id) override;
-  void UnlockV1AppWithID(const std::string& app_id) override;
+  void SetV1AppStatus(const std::string& app_id,
+                      ash::ShelfItemStatus status) override;
   void Launch(ash::ShelfID id, int event_flags) override;
   void Close(ash::ShelfID id) override;
   bool IsOpen(ash::ShelfID id) override;
@@ -54,7 +45,7 @@ class ChromeLauncherControllerMus : public ChromeLauncherController {
       bool allow_minimize) override;
   void ActiveUserChanged(const std::string& user_email) override;
   void AdditionalUserAddedToSession(Profile* profile) override;
-  ash::ShelfAppMenuItemList GetAppMenuItemsForTesting(
+  ash::MenuItemList GetAppMenuItemsForTesting(
       const ash::ShelfItem& item) override;
   std::vector<content::WebContents*> GetV1ApplicationsFromAppId(
       const std::string& app_id) override;
@@ -68,8 +59,6 @@ class ChromeLauncherControllerMus : public ChromeLauncherController {
       content::WebContents* web_contents) const override;
   BrowserShortcutLauncherItemController*
   GetBrowserShortcutLauncherItemController() override;
-  LauncherItemController* GetLauncherItemController(
-      const ash::ShelfID id) override;
   bool ShelfBoundsChangesProbablyWithUser(
       ash::WmShelf* shelf,
       const AccountId& account_id) const override;
@@ -88,9 +77,6 @@ class ChromeLauncherControllerMus : public ChromeLauncherController {
  private:
   // Pin the items set in the current profile's preferences.
   void PinAppsFromPrefs();
-
-  std::map<std::string, std::unique_ptr<ChromeShelfItemDelegate>>
-      app_id_to_item_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerMus);
 };

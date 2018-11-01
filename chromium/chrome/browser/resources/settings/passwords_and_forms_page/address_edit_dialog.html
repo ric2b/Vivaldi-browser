@@ -1,9 +1,9 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_scrollable_behavior.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-keys/iron-a11y-keys.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-textarea.html">
 <link rel="import" href="../settings_shared_css.html">
@@ -12,6 +12,13 @@
 <dom-module id="settings-address-edit-dialog">
   <template>
     <style include="settings-shared md-select">
+      :host {
+        --iron-autogrow-textarea: {
+          box-sizing: border-box;
+          padding: 0;
+        };
+      }
+
       .address-row {
         display: flex;
       }
@@ -22,18 +29,27 @@
         width: calc((var(--paper-input-max-width) - 16px) / 2);
       }
 
-      .md-select.address-column {
-        -webkit-margin-end: 0;
-        margin-bottom: 0;
-      }
-
       #select-row {
         display: block;
       }
 
+      .md-select-wrapper {
+        /* Mitigate for md-select's start padding, to make it look aligned with
+         * other elements on the page. */
+        -webkit-margin-start: -12px;
+      }
+
+      .md-select {
+        --md-select-width: var(--paper-input-max-width);
+      }
+
       #select-label {
-       color: var(--light-theme-secondary-color);
-       font-size: 12px
+        /* Mimic other paper-input floating labels. */
+        color: var(--light-theme-secondary-color);
+        transform: scale(0.75);
+        transform-origin: left;
+        width: 133%;
+        @apply(--paper-input-container-label-floating);
       }
 
       .long {
@@ -44,17 +60,32 @@
         -webkit-margin-start: 8px;
       }
 
-      #dialog .body {
-        max-height: 450px;
+      #dialog {
+        --cr-dialog-body-container: {
+          max-height: 450px;
+        };
       }
 
       @media all and (max-height: 714px) {
-        #dialog .body {
-          max-height: 270px;
+        #dialog {
+          --cr-dialog-body-container: {
+            max-height: 270px;
+          };
         }
       }
+
+      paper-textarea {
+        /**
+         * Workaround for iron-autogrow-textarea's display:inline-block creating
+         * too much vertical space than intended.
+         */
+        --layout-relative : {
+          line-height: 1;
+        };
+      }
     </style>
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}">
+    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}"
+        show-scroll-borders>
       <div class="title">[[title_]]</div>
       <div class="body">
         <template is="dom-repeat" items="[[addressWrapper_]]">
@@ -72,9 +103,6 @@
                     always-float-label autofocus value="{{item.value}}"
                     on-value-changed="updateCanSave_"
                     class$="address-column [[long_(item)]]">
-                  <iron-a11y-keys keys="enter"
-                      on-keys-pressed="onSaveButtonTap_">
-                  </iron-a11y-keys>
                 </paper-input>
               </template>
             </template>
@@ -83,8 +111,8 @@
         <div id="select-row" class="address-row">
           <div id="select-label">$i18n{addressCountry}</div>
           <span class="md-select-wrapper">
-            <select class="md-select address-column long"
-                  value="[[countryCode_]]" on-change="onCountryChange_">
+            <select class="md-select" aria-labelledby="select-label"
+                value="[[countryCode_]]" on-change="onCountryChange_">
               <option value=""></option>
               <template is="dom-repeat" items="[[countries_]]">
                 <option value="[[getCode_(item)]]"
@@ -97,8 +125,6 @@
           </span>
         </div>
         <div class="address-row">
-          <iron-a11y-keys keys="enter" on-keys-pressed="onSaveButtonTap_">
-          </iron-a11y-keys>
           <paper-input id="phoneInput" type="text" label="$i18n{addressPhone}"
               always-float-label class="address-column"
               on-value-changed="updateCanSave_" value="{{phoneNumber_}}">

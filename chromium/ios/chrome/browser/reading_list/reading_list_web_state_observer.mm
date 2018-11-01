@@ -8,13 +8,14 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "components/reading_list/ios/reading_list_model.h"
+#include "components/reading_list/core/reading_list_model.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/reading_list/offline_url_utils.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/navigation_manager.h"
+#include "ios/web/public/reload_type.h"
 #include "ios/web/public/web_state/web_state_user_data.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -207,7 +208,8 @@ void ReadingListWebStateObserver::PageLoaded(
   last_load_result_ = load_completion_status;
   web::NavigationItem* item =
       web_state()->GetNavigationManager()->GetLastCommittedItem();
-  if (!item || !pending_url_.is_valid()) {
+  if (!item || !pending_url_.is_valid() ||
+      !reading_list_model_->GetEntryByURL(pending_url_)) {
     StopCheckingProgress();
     return;
   }
@@ -294,7 +296,14 @@ void ReadingListWebStateObserver::LoadOfflineReadingListEntry() {
     item = navigationManager->GetLastCommittedItem();
     item->SetURL(url);
     item->SetVirtualURL(pending_url_);
-    navigationManager->Reload(false);
+    // It is not possible to call |navigationManager->Reload| at that point as
+    // an error page is currently displayed.
+    // Calling Reload will eventually call |ErrorPageContent reload| which
+    // simply loads |pending_url_| and will erase the distilled_url.
+    // Instead, go to the index that will branch further in the reload stack
+    // and avoid this situation.
+    navigationManager->GoToIndex(
+        navigationManager->GetLastCommittedItemIndex());
   } else if (navigationManager->GetPendingItemIndex() != -1 &&
              navigationManager->GetItemAtIndex(
                  navigationManager->GetPendingItemIndex()) == item) {

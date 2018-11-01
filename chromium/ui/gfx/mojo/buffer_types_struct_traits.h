@@ -40,6 +40,8 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
         return gfx::mojom::BufferFormat::BGRX_8888;
       case gfx::BufferFormat::BGRA_8888:
         return gfx::mojom::BufferFormat::BGRA_8888;
+      case gfx::BufferFormat::RGBA_F16:
+        return gfx::mojom::BufferFormat::RGBA_F16;
       case gfx::BufferFormat::YVU_420:
         return gfx::mojom::BufferFormat::YVU_420;
       case gfx::BufferFormat::YUV_420_BIPLANAR:
@@ -92,6 +94,9 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
         return true;
       case gfx::mojom::BufferFormat::BGRA_8888:
         *out = gfx::BufferFormat::BGRA_8888;
+        return true;
+      case gfx::mojom::BufferFormat::RGBA_F16:
+        *out = gfx::BufferFormat::RGBA_F16;
         return true;
       case gfx::mojom::BufferFormat::YVU_420:
         *out = gfx::BufferFormat::YVU_420;
@@ -160,8 +165,8 @@ struct EnumTraits<gfx::mojom::GpuMemoryBufferType, gfx::GpuMemoryBufferType> {
         return gfx::mojom::GpuMemoryBufferType::SHARED_MEMORY_BUFFER;
       case gfx::GpuMemoryBufferType::IO_SURFACE_BUFFER:
         return gfx::mojom::GpuMemoryBufferType::IO_SURFACE_BUFFER;
-      case gfx::GpuMemoryBufferType::OZONE_NATIVE_PIXMAP:
-        return gfx::mojom::GpuMemoryBufferType::OZONE_NATIVE_PIXMAP;
+      case gfx::GpuMemoryBufferType::NATIVE_PIXMAP:
+        return gfx::mojom::GpuMemoryBufferType::NATIVE_PIXMAP;
     }
     NOTREACHED();
     return gfx::mojom::GpuMemoryBufferType::LAST;
@@ -179,8 +184,8 @@ struct EnumTraits<gfx::mojom::GpuMemoryBufferType, gfx::GpuMemoryBufferType> {
       case gfx::mojom::GpuMemoryBufferType::IO_SURFACE_BUFFER:
         *out = gfx::GpuMemoryBufferType::IO_SURFACE_BUFFER;
         return true;
-      case gfx::mojom::GpuMemoryBufferType::OZONE_NATIVE_PIXMAP:
-        *out = gfx::GpuMemoryBufferType::OZONE_NATIVE_PIXMAP;
+      case gfx::mojom::GpuMemoryBufferType::NATIVE_PIXMAP:
+        *out = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
         return true;
     }
     return false;
@@ -235,10 +240,10 @@ struct StructTraits<gfx::mojom::NativePixmapHandleDataView,
                               void* context);
 
   static bool IsNull(const gfx::NativePixmapHandle& handle) {
-#if defined(USE_OZONE)
+#if defined(OS_LINUX)
     return false;
 #else
-    // NativePixmapHandle are not used on non-ozone platforms.
+    // NativePixmapHandle are not used on non-linux platforms.
     return true;
 #endif
   }

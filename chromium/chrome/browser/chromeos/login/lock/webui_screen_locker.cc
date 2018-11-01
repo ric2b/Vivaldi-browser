@@ -4,9 +4,9 @@
 
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 
-#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/system/chromeos/power/power_event_observer.h"
+#include "ash/shell_port.h"
+#include "ash/system/power/power_event_observer.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
@@ -21,6 +21,7 @@
 #include "chrome/browser/chromeos/login/ui/preloaded_web_view_factory.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/common/chrome_features.h"
@@ -81,6 +82,12 @@ void WebUIScreenLocker::RequestPreload() {
 
 // static
 bool WebUIScreenLocker::ShouldPreloadLockScreen() {
+  // Bail for mash because IdleDetector/UserActivityDetector does not work
+  // properly there.
+  // TODO(xiyuan): Revisit after http://crbug.com/626899.
+  if (ash_util::IsRunningInMash())
+    return false;
+
   Profile* profile = ProfileHelper::Get()->GetProfileByUser(
       user_manager::UserManager::Get()->GetActiveUser());
 
@@ -118,8 +125,8 @@ WebUIScreenLocker::WebUIScreenLocker(ScreenLocker* screen_locker)
       network_state_helper_(new login::NetworkStateHelper),
       weak_factory_(this) {
   set_should_emit_login_prompt_visible(false);
-  ash::WmShell::Get()->AddLockStateObserver(this);
-  ash::WmShell::Get()->AddShellObserver(this);
+  ash::ShellPort::Get()->AddLockStateObserver(this);
+  ash::Shell::Get()->AddShellObserver(this);
   display::Screen::GetScreen()->AddObserver(this);
   DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(this);
 
@@ -132,8 +139,8 @@ WebUIScreenLocker::WebUIScreenLocker(ScreenLocker* screen_locker)
 WebUIScreenLocker::~WebUIScreenLocker() {
   DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
-  ash::WmShell::Get()->RemoveLockStateObserver(this);
-  ash::WmShell::Get()->RemoveShellObserver(this);
+  ash::ShellPort::Get()->RemoveLockStateObserver(this);
+  ash::Shell::Get()->RemoveShellObserver(this);
   // In case of shutdown, lock_window_ may be deleted before WebUIScreenLocker.
   if (lock_window_) {
     lock_window_->RemoveObserver(this);
@@ -264,7 +271,7 @@ void WebUIScreenLocker::OnLockBackgroundDisplayed() {
 void WebUIScreenLocker::OnHeaderBarVisible() {
   DCHECK(ash::Shell::HasInstance());
 
-  ash::Shell::GetInstance()->power_event_observer()->OnLockAnimationsComplete();
+  ash::Shell::Get()->power_event_observer()->OnLockAnimationsComplete();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -374,9 +381,9 @@ void WebUIScreenLocker::OnWidgetDestroying(views::Widget* widget) {
 ////////////////////////////////////////////////////////////////////////////////
 // PowerManagerClient::Observer:
 
-void WebUIScreenLocker::LidEventReceived(bool open,
+void WebUIScreenLocker::LidEventReceived(PowerManagerClient::LidState state,
                                          const base::TimeTicks& time) {
-  if (open) {
+  if (state == PowerManagerClient::LidState::OPEN) {
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
         base::Bind(&WebUIScreenLocker::FocusUserPod,
@@ -409,7 +416,9 @@ void WebUIScreenLocker::RenderProcessGone(base::TerminationStatus status) {
 ////////////////////////////////////////////////////////////////////////////////
 // ash::ShellObserver:
 
-void WebUIScreenLocker::OnVirtualKeyboardStateChanged(bool activated) {
+void WebUIScreenLocker::OnVirtualKeyboardStateChanged(
+    bool activated,
+    ash::WmWindow* root_window) {
   if (keyboard::KeyboardController::GetInstance()) {
     if (activated) {
       if (!is_observing_keyboard_) {

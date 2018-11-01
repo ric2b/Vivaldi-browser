@@ -32,28 +32,10 @@
 
 namespace blink {
 
-PassRefPtr<AnimatableValue> AnimatableLengthSize::interpolateTo(
-    const AnimatableValue* value,
-    double fraction) const {
-  const AnimatableLengthSize* lengthSize = toAnimatableLengthSize(value);
-  return AnimatableLengthSize::create(
-      AnimatableValue::interpolate(this->width(), lengthSize->width(),
-                                   fraction),
-      AnimatableValue::interpolate(this->height(), lengthSize->height(),
-                                   fraction));
-}
-
-bool AnimatableLengthSize::equalTo(const AnimatableValue* value) const {
-  const AnimatableLengthSize* lengthSize = toAnimatableLengthSize(value);
-  return width()->equals(lengthSize->width()) &&
-         height()->equals(lengthSize->height());
-}
-
-bool AnimatableLengthSize::usesDefaultInterpolationWith(
-    const AnimatableValue* other) const {
-  const AnimatableLengthSize* lengthSize = toAnimatableLengthSize(other);
-  return usesDefaultInterpolation(width(), lengthSize->width()) ||
-         usesDefaultInterpolation(height(), lengthSize->height());
+bool AnimatableLengthSize::EqualTo(const AnimatableValue* value) const {
+  const AnimatableLengthSize* length_size = ToAnimatableLengthSize(value);
+  return width_->Equals(length_size->width_.Get()) &&
+         height_->Equals(length_size->height_.Get());
 }
 
 }  // namespace blink

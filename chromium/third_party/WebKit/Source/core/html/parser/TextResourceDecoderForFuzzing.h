@@ -8,7 +8,7 @@
 #include "core/html/parser/TextResourceDecoder.h"
 
 #include "platform/testing/FuzzedDataProvider.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -22,20 +22,20 @@ class TextResourceDecoderForFuzzing : public TextResourceDecoder {
   // Similarly, charsets can be long too (see the various encodings in
   // wtf/text). For instance: "unicode-1-1-utf-8". To ensure good coverage,
   // set a generous max limit for these sizes (32 bytes should be good).
-  TextResourceDecoderForFuzzing(FuzzedDataProvider& fuzzedData)
+  TextResourceDecoderForFuzzing(FuzzedDataProvider& fuzzed_data)
       : TextResourceDecoder(
-            String::fromUTF8(fuzzedData.ConsumeBytesInRange(0, 32)),
-            String::fromUTF8(fuzzedData.ConsumeBytesInRange(0, 32)),
-            FuzzedOption(fuzzedData),
-            String()) {}
+            String::FromUTF8(fuzzed_data.ConsumeBytesInRange(0, 32)),
+            String::FromUTF8(fuzzed_data.ConsumeBytesInRange(0, 32)),
+            FuzzedOption(fuzzed_data),
+            KURL()) {}
 
  private:
   static TextResourceDecoder::EncodingDetectionOption FuzzedOption(
-      FuzzedDataProvider& fuzzedData) {
+      FuzzedDataProvider& fuzzed_data) {
     // Don't use AlwaysUseUTF8ForText which requires knowing the mimeType
     // ahead of time.
-    return fuzzedData.ConsumeBool() ? UseAllAutoDetection
-                                    : UseContentAndBOMBasedDetection;
+    return fuzzed_data.ConsumeBool() ? kUseAllAutoDetection
+                                     : kUseContentAndBOMBasedDetection;
   }
 };
 

@@ -10,6 +10,7 @@ source_set("tab_grid") {
   deps = [
     "//base",
     "//ios/clean/chrome/browser/ui/commands",
+    "//ios/clean/chrome/browser/ui/tab_collection:tab_collection_ui",
     "//ios/clean/chrome/browser/ui/tab_grid:tab_grid_ui",
     "//ios/showcase/common",
   ]
@@ -24,7 +25,6 @@ source_set("eg_tests") {
   ]
   deps = [
     "//ios/showcase/test",
-    "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]

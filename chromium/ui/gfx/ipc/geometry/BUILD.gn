@@ -6,13 +6,14 @@ component("geometry") {
   output_name = "gfx_ipc_geometry"
 
   sources = [
+    "gfx_ipc_geometry_export.h",
     "gfx_param_traits.cc",
     "gfx_param_traits.h",
   ]
 
   defines = [ "GFX_IPC_GEOMETRY_IMPLEMENTATION" ]
 
-  deps = [
+  public_deps = [
     "//base",
     "//ipc",
     "//ui/gfx/geometry",

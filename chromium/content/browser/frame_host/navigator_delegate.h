@@ -47,14 +47,6 @@ class CONTENT_EXPORT NavigatorDelegate {
   // TODO(clamy): all methods below that are related to navigation
   // events should go away in favor of the ones above.
 
-  // A provisional load in |render_frame_host| failed.
-  virtual void DidFailProvisionalLoadWithError(
-      RenderFrameHostImpl* render_frame_host,
-      const GURL& validated_url,
-      int error_code,
-      const base::string16& error_description,
-      bool was_ignored_by_handler) {}
-
   // Document load in |render_frame_host| failed.
   virtual void DidFailLoadWithError(
       RenderFrameHostImpl* render_frame_host,
@@ -104,6 +96,9 @@ class CONTENT_EXPORT NavigatorDelegate {
   // Returns whether URLs for aborted browser-initiated navigations should be
   // preserved in the omnibox.  Defaults to false.
   virtual bool ShouldPreserveAbortedURLs();
+
+  // Returns the overriden user agent string if it's set.
+  virtual const std::string& GetUserAgentOverride() const = 0;
 
   // A RenderFrameHost in the specified |frame_tree_node| started loading a new
   // document. This correponds to Blink's notion of the throbber starting.

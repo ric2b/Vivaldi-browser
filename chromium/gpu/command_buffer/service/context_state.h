@@ -309,6 +309,13 @@ struct GPU_EXPORT ContextState {
   PixelStoreParams GetPackParams();
   PixelStoreParams GetUnpackParams(Dimension dimension);
 
+  // If a buffer object is bound to PIXEL_PACK_BUFFER, set all pack parameters
+  // user values; otherwise, set them to 0.
+  void UpdatePackParameters() const;
+  // If a buffer object is bound to PIXEL_UNPACK_BUFFER, set all unpack
+  // parameters user values; otherwise, set them to 0.
+  void UpdateUnpackParameters() const;
+
   void EnableDisableFramebufferSRGB(bool enable);
 
   #include "gpu/command_buffer/service/context_state_autogen.h"
@@ -368,13 +375,6 @@ struct GPU_EXPORT ContextState {
 
  private:
   void EnableDisable(GLenum pname, bool enable) const;
-
-  // If a buffer object is bound to PIXEL_PACK_BUFFER, set all pack parameters
-  // user values; otherwise, set them to 0.
-  void UpdatePackParameters() const;
-  // If a buffer object is bound to PIXEL_UNPACK_BUFFER, set all unpack
-  // parameters user values; otherwise, set them to 0.
-  void UpdateUnpackParameters() const;
 
   void InitStateManual(const ContextState* prev_state) const;
 

@@ -4,7 +4,6 @@
 
 #include "chromecast/public/cast_media_shlib.h"
 #include "chromecast/public/media/media_capabilities_shlib.h"
-#include "chromecast/public/media_codec_support_shlib.h"
 
 namespace chromecast {
 namespace media {
@@ -20,11 +19,6 @@ VideoPlane* CastMediaShlib::GetVideoPlane() {
 MediaPipelineBackend* CastMediaShlib::CreateMediaPipelineBackend(
     const MediaPipelineDeviceParams& params) {
   return nullptr;
-}
-
-MediaCodecSupportShlib::CodecSupport MediaCodecSupportShlib::IsSupported(
-    const std::string& codec) {
-  return kDefault;
 }
 
 double CastMediaShlib::GetMediaClockRate() {
@@ -50,6 +44,11 @@ bool MediaCapabilitiesShlib::IsSupportedVideoConfig(VideoCodec codec,
                                                     VideoProfile profile,
                                                     int level) {
   return (codec == kCodecH264 || codec == kCodecVP8);
+}
+
+bool MediaCapabilitiesShlib::IsSupportedAudioConfig(const AudioConfig& config) {
+  return config.codec == kCodecAAC || config.codec == kCodecMP3 ||
+         config.codec == kCodecPCM || config.codec == kCodecVorbis;
 }
 
 }  // namespace media

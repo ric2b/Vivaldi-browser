@@ -518,6 +518,7 @@ size_t Textfield::GetCursorPosition() const {
 
 void Textfield::SetColor(SkColor value) {
   GetRenderText()->SetColor(value);
+  cursor_view_.layer()->SetColor(value);
   SchedulePaint();
 }
 
@@ -770,8 +771,11 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
 
 // This function is called by BrowserView to execute clipboard commands.
 bool Textfield::AcceleratorPressed(const ui::Accelerator& accelerator) {
-  ui::KeyEvent event(accelerator.type(), accelerator.key_code(),
-                     accelerator.modifiers());
+  ui::KeyEvent event(
+      accelerator.key_state() == ui::Accelerator::KeyState::PRESSED
+          ? ui::ET_KEY_PRESSED
+          : ui::ET_KEY_RELEASED,
+      accelerator.key_code(), accelerator.modifiers());
   ExecuteTextEditCommand(GetCommandForKeyEvent(event));
   return true;
 }
@@ -1063,13 +1067,13 @@ void Textfield::WriteDragDataForView(View* sender,
                                      OSExchangeData* data) {
   const base::string16& selected_text(GetSelectedText());
   data->SetString(selected_text);
-  Label label(selected_text, GetFontList());
+  Label label(selected_text, {GetFontList()});
   label.SetBackgroundColor(GetBackgroundColor());
   label.SetSubpixelRenderingEnabled(false);
   gfx::Size size(label.GetPreferredSize());
   gfx::NativeView native_view = GetWidget()->GetNativeView();
   display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(native_view);
+      display::Screen::GetScreen()->GetDisplayNearestView(native_view);
   size.SetToMin(gfx::Size(display.size().width(), height()));
   label.SetBoundsRect(gfx::Rect(size));
   label.SetEnabledColor(GetTextColor());

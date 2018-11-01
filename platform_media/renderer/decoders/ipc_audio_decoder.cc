@@ -33,18 +33,19 @@ namespace {
 
 bool g_enabled = true;
 
-base::LazyInstance<media::IPCMediaPipelineHost::Creator>::Leaky
-    g_ipc_media_pipeline_host_creator = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<scoped_refptr<base::SequencedTaskRunner>>
-    g_main_task_runner = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<scoped_refptr<base::SequencedTaskRunner>>
-    g_media_task_runner = LAZY_INSTANCE_INITIALIZER;
+static media::IPCMediaPipelineHost::Creator
+    g_ipc_media_pipeline_host_creator;
+static scoped_refptr<base::SequencedTaskRunner>
+    g_main_task_runner;
+static scoped_refptr<base::SequencedTaskRunner>
+    g_media_task_runner;
 
 void RunCreatorOnMainThread(
     DataSource* data_source,
     std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host) {
-  *ipc_media_pipeline_host = g_ipc_media_pipeline_host_creator.Get()
-                                .Run(g_media_task_runner.Get(), data_source);
+  *ipc_media_pipeline_host =
+            g_ipc_media_pipeline_host_creator.Run(g_media_task_runner,
+                                                  data_source);
 }
 
 void RunAndSignal(const base::Closure& task, base::WaitableEvent* done) {
@@ -171,11 +172,11 @@ IPCAudioDecoder::~IPCAudioDecoder() {
   if (!ipc_media_pipeline_host_)
     return;
 
-  PostTaskAndWait(g_media_task_runner.Get(), FROM_HERE,
+  PostTaskAndWait(g_media_task_runner, FROM_HERE,
                   base::Bind(&IPCMediaPipelineHost::Stop,
                              base::Unretained(ipc_media_pipeline_host_.get())));
 
-  g_media_task_runner.Get()->DeleteSoon(FROM_HERE,
+  g_media_task_runner->DeleteSoon(FROM_HERE,
                                         ipc_media_pipeline_host_.release());
 }
 
@@ -205,20 +206,20 @@ void IPCAudioDecoder::Preinitialize(
   DCHECK(main_task_runner);
   DCHECK(media_task_runner);
 
-  g_ipc_media_pipeline_host_creator.Get() = ipc_media_pipeline_host_creator;
-  g_main_task_runner.Get() = main_task_runner;
-  g_media_task_runner.Get() = media_task_runner;
+  g_ipc_media_pipeline_host_creator = ipc_media_pipeline_host_creator;
+  g_main_task_runner = main_task_runner;
+  g_media_task_runner = media_task_runner;
 }
 
 bool IPCAudioDecoder::Initialize() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(g_media_task_runner.Get()) << "Must call Preinitialize() first";
+  DCHECK(g_media_task_runner) << "Must call Preinitialize() first";
 
-  PostTaskAndWait(g_main_task_runner.Get(), FROM_HERE,
+  PostTaskAndWait(g_main_task_runner, FROM_HERE,
                   base::Bind(&RunCreatorOnMainThread, data_source_.get(),
                              &ipc_media_pipeline_host_));
 
-  g_media_task_runner.Get()->PostTask(
+  g_media_task_runner->PostTask(
       FROM_HERE, base::Bind(&IPCMediaPipelineHost::Initialize,
                             base::Unretained(ipc_media_pipeline_host_.get()),
                             data_source_->mime_type(),
@@ -235,7 +236,7 @@ void IPCAudioDecoder::OnInitialized(
     const PlatformMediaTimeInfo& time_info,
     const PlatformAudioConfig& audio_config,
     const PlatformVideoConfig& /* video_config */) {
-  DCHECK(g_media_task_runner.Get()->RunsTasksOnCurrentThread());
+  DCHECK(g_media_task_runner->RunsTasksOnCurrentThread());
 
   if (success && audio_config.is_valid()) {
     channels_ = audio_config.channel_count;
@@ -263,7 +264,7 @@ int IPCAudioDecoder::Read(
 
   decoded_audio_packets_ = decoded_audio_packets;
 
-  g_media_task_runner.Get()->PostTask(
+  g_media_task_runner->PostTask(
       FROM_HERE,
       base::Bind(&IPCAudioDecoder::ReadInternal, base::Unretained(this)));
   media_task_done_.Wait();
@@ -272,7 +273,7 @@ int IPCAudioDecoder::Read(
 }
 
 void IPCAudioDecoder::ReadInternal() {
-  DCHECK(g_media_task_runner.Get()->RunsTasksOnCurrentThread());
+  DCHECK(g_media_task_runner->RunsTasksOnCurrentThread());
 
   ipc_media_pipeline_host_->ReadDecodedData(
       PLATFORM_MEDIA_AUDIO,
@@ -281,7 +282,7 @@ void IPCAudioDecoder::ReadInternal() {
 
 void IPCAudioDecoder::DataReady(DemuxerStream::Status status,
                                 const scoped_refptr<DecoderBuffer>& buffer) {
-  DCHECK(g_media_task_runner.Get()->RunsTasksOnCurrentThread());
+  DCHECK(g_media_task_runner->RunsTasksOnCurrentThread());
 
   switch (status) {
     case DemuxerStream::Status::kAborted:

@@ -5,7 +5,9 @@
 #include "chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h"
 
 #include "ash/public/cpp/mus_property_mirror_ash.h"
+#include "ash/public/cpp/window_pin_type.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "base/memory/ptr_util.h"
@@ -54,6 +56,9 @@ void ChromeBrowserMainExtraPartsAsh::ServiceManagerConnectionStarted(
         ash::kShelfItemTypeKey,
         ui::mojom::WindowManager::kShelfItemType_Property,
         base::Bind(&ash::IsValidShelfItemType));
+    converter->RegisterProperty(ash::kWindowPinTypeKey,
+                                ash::mojom::kWindowPinType_Property,
+                                base::Bind(&ash::IsValidWindowPinType));
 
     mus_client->SetMusPropertyMirror(
         base::MakeUnique<ash::MusPropertyMirrorAsh>());
@@ -62,7 +67,7 @@ void ChromeBrowserMainExtraPartsAsh::ServiceManagerConnectionStarted(
 
 void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   if (ash_util::ShouldOpenAshOnStartup())
-    chrome::OpenAsh(gfx::kNullAcceleratedWidget);
+    ash_init_ = base::MakeUnique<AshInit>();
 
   if (ash_util::IsRunningInMash()) {
     immersive_context_ = base::MakeUnique<ImmersiveContextMus>();
@@ -70,6 +75,7 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   }
 
   session_controller_client_ = base::MakeUnique<SessionControllerClient>();
+  session_controller_client_->Init();
 
   // Must be available at login screen, so initialize before profile.
   system_tray_client_ = base::MakeUnique<SystemTrayClient>();
@@ -119,5 +125,5 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   cast_config_client_media_router_.reset();
   session_controller_client_.reset();
 
-  chrome::CloseAsh();
+  ash_init_.reset();
 }

@@ -419,7 +419,8 @@
                 "description": "Capture page screenshot.",
                 "parameters": [
                     { "name": "format", "type": "string", "optional": true, "enum": ["jpeg", "png"], "description": "Image compression format (defaults to png)." },
-                    { "name": "quality", "type": "integer", "optional": true, "description": "Compression quality from range [0..100] (jpeg only)." }
+                    { "name": "quality", "type": "integer", "optional": true, "description": "Compression quality from range [0..100] (jpeg only)." },
+                    { "name": "fromSurface", "type": "boolean", "optional": true, "description": "Capture the screenshot from the surface, rather than the view. Defaults to false.", "experimental": true }
                 ],
                 "returns": [
                     { "name": "data", "type": "string", "description": "Base64-encoded image data." }
@@ -543,7 +544,8 @@
                 "description": "Fired when frame has been attached to its parent.",
                 "parameters": [
                     { "name": "frameId", "$ref": "FrameId", "description": "Id of the frame that has been attached." },
-                    { "name": "parentFrameId", "$ref": "FrameId", "description": "Parent frame identifier." }
+                    { "name": "parentFrameId", "$ref": "FrameId", "description": "Parent frame identifier." },
+                    { "name": "stack", "$ref": "Runtime.StackTrace", "optional": true, "description": "JavaScript stack trace of when frame was attached, only set if frame initiated from script.", "experimental": true }
                 ]
             },
             {
@@ -900,12 +902,19 @@
                 "properties": [
                     { "name": "ranMixedContent", "type": "boolean", "description": "True if the page was loaded over HTTPS and ran mixed (HTTP) content such as scripts." },
                     { "name": "displayedMixedContent", "type": "boolean", "description": "True if the page was loaded over HTTPS and displayed mixed (HTTP) content such as images." },
+                    { "name": "containedMixedForm", "type": "boolean", "description": "True if the page was loaded over HTTPS and contained a form targeting an insecure url." },
                     { "name": "ranContentWithCertErrors", "type": "boolean", "description": "True if the page was loaded over HTTPS without certificate errors, and ran content such as scripts that were loaded with certificate errors." },
                     { "name": "displayedContentWithCertErrors", "type": "boolean", "description": "True if the page was loaded over HTTPS without certificate errors, and displayed content such as images that were loaded with certificate errors." },
                     { "name": "ranInsecureContentStyle", "$ref": "SecurityState", "description": "Security state representing a page that ran insecure content." },
                     { "name": "displayedInsecureContentStyle", "$ref": "SecurityState", "description": "Security state representing a page that displayed insecure content." }
                 ],
                 "description": "Information about insecure content on the page."
+            },
+            {
+                "id": "CertificateErrorAction",
+                "type": "string",
+                "enum": ["continue", "cancel"],
+                "description": "The action to take when a certificate error occurs. continue will continue processing the request and cancel will cancel the request."
             }
         ],
         "commands": [
@@ -920,6 +929,21 @@
             {
                 "name": "showCertificateViewer",
                 "description": "Displays native dialog with the certificate details."
+            },
+            {
+                "name": "handleCertificateError",
+                "description": "Handles a certificate error that fired a certificateError event.",
+                "parameters": [
+                    { "name": "eventId", "type": "integer", "description": "The ID of the event."},
+                    { "name": "action", "$ref": "CertificateErrorAction", "description": "The action to take on the certificate error." }
+                ]
+            },
+            {
+                "name": "setOverrideCertificateErrors",
+                "description": "Enable/disable overriding certificate errors. If enabled, all certificate error events need to be handled by the DevTools client and should be answered with handleCertificateError commands.",
+                "parameters": [
+                    { "name": "override", "type": "boolean", "description": "If true, certificate errors will be overridden."}
+                ]
             }
         ],
         "events": [
@@ -932,6 +956,15 @@
                     { "name": "explanations", "type": "array", "items": { "$ref": "SecurityStateExplanation" }, "description": "List of explanations for the security state. If the overall security state is `insecure` or `warning`, at least one corresponding explanation should be included." },
                     { "name": "insecureContentStatus", "$ref": "InsecureContentStatus", "description": "Information about insecure content on the page." },
                     { "name": "summary", "type": "string", "description": "Overrides user-visible description of the state.", "optional": true }
+                ]
+            },
+            {
+                "name": "certificateError",
+                "description": "There is a certificate error. If overriding certificate errors is enabled, then it should be handled with the handleCertificateError command. Note: this event does not fire if the certificate error has been allowed internally.",
+                "parameters": [
+                    { "name": "eventId", "type": "integer", "description": "The ID of the event."},
+                    { "name": "errorType", "type": "string", "description": "The type of the error."},
+                    { "name": "requestURL", "type": "string", "description": "The url that was requested."}
                 ]
             }
         ]
@@ -1013,7 +1046,8 @@
                     { "name": "postData", "type": "string", "optional": true, "description": "HTTP POST request data." },
                     { "name": "mixedContentType", "optional": true, "type": "string", "enum": ["blockable", "optionally-blockable", "none"], "description": "The mixed content status of the request, as defined in http://www.w3.org/TR/mixed-content/" },
                     { "name": "initialPriority", "$ref": "ResourcePriority", "description": "Priority of the resource request at the time request is sent."},
-                    { "name": "referrerPolicy", "type": "string", "enum": [ "unsafe-url", "no-referrer-when-downgrade", "no-referrer", "origin", "origin-when-cross-origin", "no-referrer-when-downgrade-origin-when-cross-origin" ], "description": "The referrer policy of the request, as defined in https://www.w3.org/TR/referrer-policy/" }
+                    { "name": "referrerPolicy", "type": "string", "enum": [ "unsafe-url", "no-referrer-when-downgrade", "no-referrer", "origin", "origin-when-cross-origin", "no-referrer-when-downgrade-origin-when-cross-origin" ], "description": "The referrer policy of the request, as defined in https://www.w3.org/TR/referrer-policy/" },
+                    { "name": "isLinkPreload", "type": "boolean", "optional": true, "description": "Whether is loaded via link preload." }
                 ]
             },
             {
@@ -1197,18 +1231,10 @@
                 ]
             },
             {
-                "name": "addBlockedURL",
-                "description": "Blocks specific URL from loading.",
+                "name": "setBlockedURLs",
+                "description": "Blocks URLs from loading.",
                 "parameters": [
-                    { "name": "url", "type": "string", "description": "URL to block." }
-                ],
-                "experimental": true
-            },
-            {
-                "name": "removeBlockedURL",
-                "description": "Cancels blocking of a specific URL from loading.",
-                "parameters": [
-                    { "name": "url", "type": "string", "description": "URL to stop blocking." }
+                    { "name": "urls", "type": "array", "items": { "type": "string" }, "description": "URL patterns to block. Wildcards ('*') are allowed." }
                 ],
                 "experimental": true
             },
@@ -2532,7 +2558,8 @@
                 "name": "getNodeForLocation",
                 "parameters": [
                     { "name": "x", "type": "integer", "description": "X coordinate." },
-                    { "name": "y", "type": "integer", "description": "Y coordinate." }
+                    { "name": "y", "type": "integer", "description": "Y coordinate." },
+                    { "name": "includeUserAgentShadowDOM", "type": "boolean", "optional": true, "description": "False to skip to the nearest non-UA shadow root ancestor (default: false)." }
                 ],
                 "returns": [
                     { "name": "nodeId", "$ref": "NodeId", "description": "Id of the node at given coordinates." }
@@ -2772,7 +2799,8 @@
                     { "name": "hasSourceURL", "type": "boolean", "optional": true, "description": "Whether the sourceURL field value comes from the sourceURL comment." },
                     { "name": "isInline", "type": "boolean", "description": "Whether this stylesheet is created for STYLE tag by parser. This flag is not set for document.written STYLE tags." },
                     { "name": "startLine", "type": "number", "description": "Line offset of the stylesheet within the resource (zero based)." },
-                    { "name": "startColumn", "type": "number", "description": "Column offset of the stylesheet within the resource (zero based)." }
+                    { "name": "startColumn", "type": "number", "description": "Column offset of the stylesheet within the resource (zero based)." },
+                    { "name": "length", "type": "number", "description": "Size of the content (in characters).", "experimental": true }
                 ],
                 "description": "CSS stylesheet metainformation."
             },
@@ -2793,10 +2821,11 @@
                 "type": "object",
                 "properties": [
                     { "name": "styleSheetId", "$ref": "StyleSheetId", "description": "The css style sheet identifier (absent for user agent stylesheet and user-specified stylesheet rules) this rule came from." },
-                    { "name": "range", "$ref": "SourceRange", "description": "Style declaration range in the enclosing stylesheet (if available)." },
+                    { "name": "startOffset", "type": "number", "description": "Offset of the start of the rule (including selector) from the beginning of the stylesheet." },
+                    { "name": "endOffset", "type": "number", "description": "Offset of the end of the rule body from the beginning of the stylesheet." },
                     { "name": "used", "type": "boolean", "description": "Indicates whether the rule was actually used by some element in the page." }
                 ],
-                "description": "CSS rule usage information.",
+                "description": "CSS coverage information.",
                 "experimental": true
             },
             {
@@ -3168,10 +3197,18 @@
                 ],
                 "description": "For the main document and any content documents, return the LayoutTreeNodes and a whitelisted subset of the computed style. It only returns pushed nodes, on way to pull all nodes is to call DOM.getDocument with a depth of -1.",
                 "experimental": true
-	    },
+            },
             {
                 "name": "startRuleUsageTracking",
                 "description": "Enables the selector recording.",
+                "experimental": true
+            },
+            {
+                "name": "takeCoverageDelta",
+                "description": "Obtain list of rules that became used since last call to this method (or since start of coverage instrumentation)",
+                "returns": [
+                    { "name": "coverage", "type": "array", "items": { "$ref": "RuleUsage" } }
+                ],
                 "experimental": true
             },
             {
@@ -3421,7 +3458,7 @@
                 "name": "sendMessageToTarget",
                 "description": "Sends protocol message to the target with given id.",
                 "parameters": [
-                    { "name": "targetId", "type": "string" },
+                    { "name": "targetId", "$ref": "TargetID" },
                     { "name": "message", "type": "string" }
                 ]
             },
@@ -4553,6 +4590,66 @@
                 "parameters": [
                     {"name": "port", "type": "integer", "description": "Port number that was successfully bound." },
                     {"name": "connectionId", "type": "string", "description": "Connection id to be used." }
+                ]
+            }
+        ]
+    },
+    {
+        "domain": "Browser",
+        "description": "The Browser domain defines methods and events for browser managing.",
+        "experimental": true,
+        "types": [
+            {
+                "id": "WindowID",
+                "type": "integer"
+            },
+            {
+                "id": "WindowState",
+                "type": "string",
+                "enum": ["normal", "minimized", "maximized", "fullscreen"],
+                "description": "The state of the browser window."
+            },
+            {
+                "id": "Bounds",
+                "type": "object",
+                "description": "Browser window bounds information",
+                "properties": [
+                    { "name": "left", "type": "integer", "optional": true, "description": "The offset from the left edge of the screen to the window in pixels."},
+                    { "name": "top", "type": "integer", "optional": true, "description": "The offset from the top edge of the screen to the window in pixels."},
+                    { "name": "width", "type": "integer", "optional": true, "description": "The window width in pixels."},
+                    { "name": "height", "type": "integer", "optional": true, "description": "The window height in pixels."},
+                    { "name": "windowState", "$ref": "WindowState", "optional": true, "description": "The window state. Default to normal."}
+                ]
+            }
+        ],
+        "commands": [
+            {
+                "name": "getWindowForTarget",
+                "description": "Get the browser window that contains the devtools target.",
+                "parameters": [
+                    { "name": "targetId", "$ref": "Target.TargetID", "description": "Devtools agent host id." }
+                ],
+                "returns": [
+                    { "name": "windowId", "$ref": "WindowID", "description": "Browser window id." },
+                    { "name": "bounds", "$ref": "Bounds", "description": "Bounds information of the window. When window state is 'minimized', the restored window position and size are returned." }
+                ]
+            },
+            {
+                "name": "setWindowBounds",
+                "description": "Set position and/or size of the browser window.",
+                "parameters": [
+                    { "name": "windowId", "$ref": "WindowID", "description": "Browser window id." },
+                    { "name": "bounds", "$ref": "Bounds", "description": "New window bounds. The 'minimized', 'maximized' and 'fullscreen' states cannot be combined with 'left', 'top', 'width' or 'height'. Leaves unspecified fields unchanged." }
+                ]
+            },
+            {
+                "name": "getWindowBounds",
+                "description": "Get position and size of the browser window.",
+                "parameters": [
+                    { "name": "windowId", "$ref": "WindowID", "description": "Browser window id." }
+                ],
+                "returns": [
+                    { "name": "bounds", "$ref": "Bounds", "description": "Bounds information of the window. When window state is 'minimized', the restored window position and size are returned." }
                 ]
             }
         ]

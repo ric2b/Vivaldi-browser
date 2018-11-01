@@ -4,19 +4,19 @@
 
 #include "platform/testing/TransformPrinters.h"
 
+#include <ostream>  // NOLINT
 #include "platform/transforms/AffineTransform.h"
 #include "platform/transforms/TransformationMatrix.h"
-#include "wtf/text/WTFString.h"
-#include <ostream>  // NOLINT
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 void PrintTo(const AffineTransform& transform, std::ostream* os) {
-  *os << transform.toString();
+  *os << transform.ToString();
 }
 
 void PrintTo(const TransformationMatrix& matrix, std::ostream* os) {
-  *os << matrix.toString();
+  *os << matrix.ToString();
 }
 
 }  // namespace blink

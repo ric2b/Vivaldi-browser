@@ -6,28 +6,29 @@
 
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
-#import "base/mac/scoped_nsobject.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/material_components/utils.h"
 #import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 #import "ios/third_party/material_components_ios/src/components/CollectionCells/src/MaterialCollectionCells.h"
 
-@implementation CollectionViewController {
-  // The implementation of this controller follows the guidelines from
-  // https://github.com/material-components/material-components-ios/tree/develop/components/AppBar
-  base::scoped_nsobject<MDCAppBar> _appBar;
-  base::scoped_nsobject<CollectionViewModel> _collectionViewModel;
-}
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
+// The implementation of this controller follows the guidelines from
+// https://github.com/material-components/material-components-ios/tree/develop/components/AppBar
+@implementation CollectionViewController
+@synthesize appBar = _appBar;
+@synthesize collectionViewModel = _collectionViewModel;
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style {
-  UICollectionViewLayout* layout =
-      [[[MDCCollectionViewFlowLayout alloc] init] autorelease];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
   self = [super initWithCollectionViewLayout:layout];
   if (self) {
     if (style == CollectionViewControllerStyleAppBar) {
-      _appBar.reset([[MDCAppBar alloc] init]);
-      [self addChildViewController:_appBar.get().headerViewController];
+      _appBar = [[MDCAppBar alloc] init];
+      [self addChildViewController:_appBar.headerViewController];
     }
   }
   return self;
@@ -56,32 +57,25 @@
   return self.appBar.headerViewController;
 }
 
-- (MDCAppBar*)appBar {
-  return _appBar.get();
-}
-
-- (CollectionViewModel*)collectionViewModel {
-  return _collectionViewModel.get();
-}
-
 - (void)loadModel {
-  _collectionViewModel.reset([[CollectionViewModel alloc] init]);
+  _collectionViewModel = [[CollectionViewModel alloc] init];
 }
 
 - (void)reconfigureCellsForItems:(NSArray*)items
          inSectionWithIdentifier:(NSInteger)sectionIdentifier {
   for (CollectionViewItem* item in items) {
     NSIndexPath* indexPath =
-        [_collectionViewModel indexPathForItem:item
-                       inSectionWithIdentifier:sectionIdentifier];
-    MDCCollectionViewCell* cell =
-        base::mac::ObjCCastStrict<MDCCollectionViewCell>(
-            [self.collectionView cellForItemAtIndexPath:indexPath]);
+        [self.collectionViewModel indexPathForItem:item
+                           inSectionWithIdentifier:sectionIdentifier];
+    [self reconfigureCellAtIndexPath:indexPath withItem:item];
+  }
+}
 
-    // |cell| may be nil if the row is not currently on screen.
-    if (cell) {
-      [item configureCell:cell];
-    }
+- (void)reconfigureCellsAtIndexPaths:(NSArray*)indexPaths {
+  for (NSIndexPath* indexPath in indexPaths) {
+    CollectionViewItem* item =
+        [self.collectionViewModel itemAtIndexPath:indexPath];
+    [self reconfigureCellAtIndexPath:indexPath withItem:item];
   }
 }
 
@@ -99,14 +93,15 @@
   NSArray* sortedIndexPaths =
       [indexPaths sortedArrayUsingSelector:@selector(compare:)];
   for (NSIndexPath* indexPath in [sortedIndexPaths reverseObjectEnumerator]) {
-    NSInteger sectionIdentifier =
-        [_collectionViewModel sectionIdentifierForSection:indexPath.section];
-    NSInteger itemType = [_collectionViewModel itemTypeForIndexPath:indexPath];
+    NSInteger sectionIdentifier = [self.collectionViewModel
+        sectionIdentifierForSection:indexPath.section];
+    NSInteger itemType =
+        [self.collectionViewModel itemTypeForIndexPath:indexPath];
     NSUInteger index =
-        [_collectionViewModel indexInItemTypeForIndexPath:indexPath];
-    [_collectionViewModel removeItemWithType:itemType
-                   fromSectionWithIdentifier:sectionIdentifier
-                                     atIndex:index];
+        [self.collectionViewModel indexInItemTypeForIndexPath:indexPath];
+    [self.collectionViewModel removeItemWithType:itemType
+                       fromSectionWithIdentifier:sectionIdentifier
+                                         atIndex:index];
   }
 }
 
@@ -119,8 +114,8 @@
   DCHECK(![MDCCollectionViewController instancesRespondToSelector:_cmd]);
 
   // Retain the item to be able to move it.
-  base::scoped_nsobject<CollectionViewItem> item(
-      [[self.collectionViewModel itemAtIndexPath:indexPath] retain]);
+  CollectionViewItem* item =
+      [self.collectionViewModel itemAtIndexPath:indexPath];
 
   // Item coordinates.
   NSInteger sectionIdentifier =
@@ -145,17 +140,18 @@
 
 - (NSInteger)numberOfSectionsInCollectionView:
     (UICollectionView*)collectionView {
-  return [_collectionViewModel numberOfSections];
+  return [self.collectionViewModel numberOfSections];
 }
 
 - (NSInteger)collectionView:(UICollectionView*)collectionView
      numberOfItemsInSection:(NSInteger)section {
-  return [_collectionViewModel numberOfItemsInSection:section];
+  return [self.collectionViewModel numberOfItemsInSection:section];
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
                  cellForItemAtIndexPath:(NSIndexPath*)indexPath {
-  CollectionViewItem* item = [_collectionViewModel itemAtIndexPath:indexPath];
+  CollectionViewItem* item =
+      [self.collectionViewModel itemAtIndexPath:indexPath];
   Class cellClass = [item cellClass];
   NSString* reuseIdentifier = NSStringFromClass(cellClass);
   [self.collectionView registerClass:cellClass
@@ -173,10 +169,10 @@
   CollectionViewItem* item = nil;
   UIAccessibilityTraits traits = UIAccessibilityTraitNone;
   if ([kind isEqualToString:UICollectionElementKindSectionHeader]) {
-    item = [_collectionViewModel headerForSection:indexPath.section];
+    item = [self.collectionViewModel headerForSection:indexPath.section];
     traits = UIAccessibilityTraitHeader;
   } else if ([kind isEqualToString:UICollectionElementKindSectionFooter]) {
-    item = [_collectionViewModel footerForSection:indexPath.section];
+    item = [self.collectionViewModel footerForSection:indexPath.section];
   } else {
     return [super collectionView:collectionView
         viewForSupplementaryElementOfKind:kind
@@ -203,7 +199,8 @@
                              layout:
                                  (UICollectionViewLayout*)collectionViewLayout
     referenceSizeForHeaderInSection:(NSInteger)section {
-  CollectionViewItem* item = [_collectionViewModel headerForSection:section];
+  CollectionViewItem* item =
+      [self.collectionViewModel headerForSection:section];
 
   if (item) {
     // TODO(crbug.com/635604): Support arbitrary sized headers.
@@ -216,7 +213,8 @@
                              layout:
                                  (UICollectionViewLayout*)collectionViewLayout
     referenceSizeForFooterInSection:(NSInteger)section {
-  CollectionViewItem* item = [_collectionViewModel footerForSection:section];
+  CollectionViewItem* item =
+      [self.collectionViewModel footerForSection:section];
 
   if (item) {
     // TODO(crbug.com/635604): Support arbitrary sized footers.
@@ -261,6 +259,21 @@
     [headerView
         trackingScrollViewWillEndDraggingWithVelocity:velocity
                                   targetContentOffset:targetContentOffset];
+  }
+}
+
+#pragma mark - Private
+
+// Reconfigures the cell at |indexPath| by calling |configureCell:| with |item|.
+- (void)reconfigureCellAtIndexPath:(NSIndexPath*)indexPath
+                          withItem:(CollectionViewItem*)item {
+  MDCCollectionViewCell* cell =
+      base::mac::ObjCCastStrict<MDCCollectionViewCell>(
+          [self.collectionView cellForItemAtIndexPath:indexPath]);
+
+  // |cell| may be nil if the row is not currently on screen.
+  if (cell) {
+    [item configureCell:cell];
   }
 }
 

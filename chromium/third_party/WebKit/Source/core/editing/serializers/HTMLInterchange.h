@@ -26,22 +26,20 @@
 #ifndef HTMLInterchange_h
 #define HTMLInterchange_h
 
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
 class Text;
 
 #define AppleInterchangeNewline "Apple-interchange-newline"
-#define AppleConvertedSpace "Apple-converted-space"
-#define AppleTabSpanClass "Apple-tab-span"
 
 enum EAnnotateForInterchange {
-  DoNotAnnotateForInterchange,
-  AnnotateForInterchange
+  kDoNotAnnotateForInterchange,
+  kAnnotateForInterchange
 };
 
-String convertHTMLTextToInterchangeFormat(const String&, const Text&);
+String ConvertHTMLTextToInterchangeFormat(const String&, const Text&);
 
 }  // namespace blink
 

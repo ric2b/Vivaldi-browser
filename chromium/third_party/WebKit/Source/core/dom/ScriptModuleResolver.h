@@ -6,8 +6,9 @@
 #define ScriptModuleResolver_h
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -21,19 +22,21 @@ class ModuleScript;
 // the specifier, and the module identified by 'x' is the descendant.
 // ScriptModuleResolver, given a referrer and specifier, can look up the
 // descendant.
-class ScriptModuleResolver : public GarbageCollected<ScriptModuleResolver> {
+class CORE_EXPORT ScriptModuleResolver
+    : public GarbageCollectedFinalized<ScriptModuleResolver> {
  public:
+  virtual ~ScriptModuleResolver() {}
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 
   // Notify the ScriptModuleResolver that a ModuleScript exists.
   // This hook gives a chance for the resolver impl to populate module record
   // identifier -> ModuleScript mapping entry.
-  virtual void registerModuleScript(ModuleScript*) = 0;
+  virtual void RegisterModuleScript(ModuleScript*) = 0;
 
   // Implements "Runtime Semantics: HostResolveImportedModule"
   // https://tc39.github.io/ecma262/#sec-hostresolveimportedmodule
   // This returns a null ScriptModule when an exception is thrown.
-  virtual ScriptModule resolve(const String& specifier,
+  virtual ScriptModule Resolve(const String& specifier,
                                const ScriptModule& referrer,
                                ExceptionState&) = 0;
 };

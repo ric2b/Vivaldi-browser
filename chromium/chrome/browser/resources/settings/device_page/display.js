@@ -24,6 +24,21 @@ Polymer({
 
   properties: {
     /**
+     * @type {!chrome.settingsPrivate.PrefObject}
+     * @private
+     */
+    selectedModePref_: {
+      type: Object,
+      value: function() {
+        return {
+          key: 'fakeDisplaySliderPref',
+          type: chrome.settingsPrivate.PrefType.NUMBER,
+          value: 0,
+        };
+      },
+    },
+
+    /**
      * Array of displays.
      * @type {!Array<!chrome.system.display.DisplayUnitInfo>}
      */
@@ -45,7 +60,7 @@ Polymer({
     primaryDisplayId: String,
 
     /** @type {!chrome.system.display.DisplayUnitInfo|undefined} */
-    selectedDisplay: {type: Object, observer: 'selectedDisplayChanged_'},
+    selectedDisplay: Object,
 
     /** Id passed to the overscan dialog. */
     overscanDisplayId: {
@@ -56,8 +71,19 @@ Polymer({
     /** @private {!Array<number>} Mode index values for slider. */
     modeValues_: Array,
 
-    /** @private Selected mode index value for slider. */
-    selectedModeIndex_: Number,
+    /** @private */
+    unifiedDesktopAvailable_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('unifiedDesktopAvailable');
+      }
+    },
+
+    /** @private */
+    unifiedDesktopMode_: {
+      type: Boolean,
+      value: false,
+    },
   },
 
   /** @private {number} Selected mode index received from chrome. */
@@ -110,8 +136,11 @@ Polymer({
 
   /** @private */
   getDisplayInfo_: function() {
+    /** @type {chrome.system.display.GetInfoFlags} */ var flags = {
+      singleUnified: true
+    };
     settings.display.systemDisplayApi.getInfo(
-        this.displayInfoFetched_.bind(this));
+        flags, this.displayInfoFetched_.bind(this));
   },
 
   /**
@@ -149,20 +178,28 @@ Polymer({
     return 0;
   },
 
-  /** @private */
-  selectedDisplayChanged_: function() {
-    // Set |modeValues_| before |selectedModeIndex_| so that the slider updates
-    // correctly.
-    var numModes = this.selectedDisplay.modes.length;
+  /**
+   * We need to call this explicitly rather than relying on change events
+   * so that we can control the update order.
+   * @param {!chrome.system.display.DisplayUnitInfo} selectedDisplay
+   * @private
+   */
+  setSelectedDisplay_: function(selectedDisplay) {
+    // Set |currentSelectedModeIndex_| and |modeValues_| first since these
+    // are not used directly in data binding.
+    var numModes = selectedDisplay.modes.length;
     if (numModes == 0) {
       this.modeValues_ = [];
-      this.selectedModeIndex_ = 0;
       this.currentSelectedModeIndex_ = 0;
-      return;
+    } else {
+      this.modeValues_ = Array.from(Array(numModes).keys());
+      this.currentSelectedModeIndex_ = this.getSelectedModeIndex_(
+        selectedDisplay);
     }
-    this.modeValues_ = Array.from(Array(numModes).keys());
-    this.selectedModeIndex_ = this.getSelectedModeIndex_(this.selectedDisplay);
-    this.currentSelectedModeIndex_ = this.selectedModeIndex_;
+    // Set |selectedDisplay| first since only the resolution slider depends
+    // on |selectedModePref_|.
+    this.selectedDisplay = selectedDisplay;
+    this.set('selectedModePref_.value', this.currentSelectedModeIndex_);
   },
 
   /**
@@ -204,7 +241,7 @@ Polymer({
    * primary or extended.
    * @param {!chrome.system.display.DisplayUnitInfo} selectedDisplay
    * @param {string} primaryDisplayId
-   * @return {number} Retruns 0 if the display is primary else returns 1.
+   * @return {number} Returns 0 if the display is primary else returns 1.
    * @private
    */
   getDisplaySelectMenuIndex_: function(selectedDisplay, primaryDisplayId) {
@@ -220,17 +257,41 @@ Polymer({
    * @private
    */
   getDisplayMirrorText_: function(displays) {
-    return this.i18n(
-        this.isMirrored_(displays) ? 'displayMirrorOn' : 'displayMirrorOff');
+    return this.i18n(this.isMirrored_(displays) ? 'toggleOn' : 'toggleOff');
   },
 
   /**
+   * @param {boolean} unifiedDesktopAvailable
+   * @param {boolean} unifiedDesktopMode
    * @param {!Array<!chrome.system.display.DisplayUnitInfo>} displays
    * @return {boolean}
    * @private
    */
-  showMirror_: function(displays) {
-    return this.isMirrored_(displays) || displays.length == 2;
+  showUnifiedDesktop_: function(
+      unifiedDesktopAvailable, unifiedDesktopMode, displays) {
+    return unifiedDesktopMode ||
+        (unifiedDesktopAvailable && displays.length > 1 &&
+         !this.isMirrored_(displays));
+  },
+
+  /**
+   * @param {boolean} unifiedDesktopMode
+   * @return {string}
+   * @private
+   */
+  getUnifiedDesktopText_: function(unifiedDesktopMode) {
+    return this.i18n(unifiedDesktopMode ? 'toggleOn' : 'toggleOff');
+  },
+
+  /**
+   * @param {boolean} unifiedDesktopMode
+   * @param {!Array<!chrome.system.display.DisplayUnitInfo>} displays
+   * @return {boolean}
+   * @private
+   */
+  showMirror_: function(unifiedDesktopMode, displays) {
+    return this.isMirrored_(displays) ||
+        (!unifiedDesktopMode && displays.length == 2);
   },
 
   /**
@@ -269,12 +330,14 @@ Polymer({
     if (this.selectedDisplay.modes.length == 0 ||
         this.currentSelectedModeIndex_ == -1) {
       // If currentSelectedModeIndex_ == -1, selectedDisplay and
-      // selectedModeIndex_ are not in sync.
+      // |selectedModePref_.value| are not in sync.
       return this.i18n(
           'displayResolutionText', this.selectedDisplay.bounds.width.toString(),
           this.selectedDisplay.bounds.height.toString());
     }
-    var mode = this.selectedDisplay.modes[this.selectedModeIndex_];
+    var mode = this.selectedDisplay.modes[
+        /** @type {number} */(this.selectedModePref_.value)];
+    assert(mode);
     var best =
         this.selectedDisplay.isInternal ? mode.uiScale == 1.0 : mode.isNative;
     var widthStr = mode.width.toString();
@@ -294,14 +357,10 @@ Polymer({
     var id = e.detail;
     for (var i = 0; i < this.displays.length; ++i) {
       var display = this.displays[i];
-      if (id != display.id)
-        continue;
-      if (this.selectedDisplay != display) {
-        // Set currentSelectedModeIndex_ to -1 so that getResolutionText_ does
-        // not flicker. selectedDisplayChanged will update selectedModeIndex_
-        // and currentSelectedModeIndex_ correctly.
-        this.currentSelectedModeIndex_ = -1;
-        this.selectedDisplay = display;
+      if (id == display.id) {
+        if (this.selectedDisplay != display)
+          this.setSelectedDisplay_(display);
+        return;
       }
     }
   },
@@ -355,13 +414,14 @@ Polymer({
    */
   onSelectedModeChange_: function() {
     if (this.currentSelectedModeIndex_ == -1 ||
-        this.currentSelectedModeIndex_ == this.selectedModeIndex_) {
+        this.currentSelectedModeIndex_ == this.selectedModePref_.value) {
       // Don't change the selected display mode until we have received an update
       // from Chrome and the mode differs from the current mode.
       return;
     }
     /** @type {!chrome.system.display.DisplayProperties} */ var properties = {
-      displayMode: this.selectedDisplay.modes[this.selectedModeIndex_]
+      displayMode: this.selectedDisplay.modes[
+          /** @type {number} */(this.selectedModePref_.value)]
     };
     settings.display.systemDisplayApi.setDisplayProperties(
         this.selectedDisplay.id, properties,
@@ -404,6 +464,16 @@ Polymer({
         id, properties, this.setPropertiesCallback_.bind(this));
   },
 
+  /** @private */
+  onUnifiedDesktopTap_: function() {
+    /** @type {!chrome.system.display.DisplayProperties} */ var properties = {
+      isUnified: !this.unifiedDesktopMode_,
+    };
+    settings.display.systemDisplayApi.setDisplayProperties(
+        this.primaryDisplayId, properties,
+        this.setPropertiesCallback_.bind(this));
+  },
+
   /**
    * @param {!Event} e
    * @private
@@ -412,6 +482,11 @@ Polymer({
     e.preventDefault();
     this.overscanDisplayId = this.selectedDisplay.id;
     this.showOverscanDialog_(true);
+  },
+
+  /** @private */
+  onCloseOverscanDialog_: function() {
+    this.$$('#overscan button').focus();
   },
 
   /** @private */
@@ -431,12 +506,11 @@ Polymer({
     }
     this.displayIds = displayIds;
     this.primaryDisplayId = (primaryDisplay && primaryDisplay.id) || '';
-    this.selectedDisplay = selectedDisplay || primaryDisplay ||
+    selectedDisplay = selectedDisplay || primaryDisplay ||
         (this.displays && this.displays[0]);
-    // Save the selected mode index received from Chrome so that we do not
-    // send an unnecessary setDisplayProperties call (which would log an error).
-    this.currentSelectedModeIndex_ =
-        this.getSelectedModeIndex_(this.selectedDisplay);
+    this.setSelectedDisplay_(selectedDisplay);
+
+    this.unifiedDesktopMode_ = !!primaryDisplay && primaryDisplay.isUnified;
 
     this.$.displayLayout.updateDisplays(this.displays, this.layouts);
   },

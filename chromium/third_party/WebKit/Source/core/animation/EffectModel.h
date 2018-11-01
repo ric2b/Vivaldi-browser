@@ -35,7 +35,7 @@
 #include "core/CoreExport.h"
 #include "core/animation/PropertyHandle.h"
 #include "platform/heap/Handle.h"
-#include "wtf/HashMap.h"
+#include "platform/wtf/HashMap.h"
 
 namespace blink {
 
@@ -47,20 +47,20 @@ class Interpolation;
 class CORE_EXPORT EffectModel : public GarbageCollectedFinalized<EffectModel> {
  public:
   enum CompositeOperation {
-    CompositeReplace,
-    CompositeAdd,
+    kCompositeReplace,
+    kCompositeAdd,
   };
 
   EffectModel() {}
   virtual ~EffectModel() {}
-  virtual bool sample(int iteration,
+  virtual bool Sample(int iteration,
                       double fraction,
-                      double iterationDuration,
+                      double iteration_duration,
                       Vector<RefPtr<Interpolation>>&) const = 0;
 
-  virtual bool affects(const PropertyHandle&) const { return false; }
-  virtual bool isTransformRelatedEffect() const { return false; }
-  virtual bool isKeyframeEffectModel() const { return false; }
+  virtual bool Affects(const PropertyHandle&) const { return false; }
+  virtual bool IsTransformRelatedEffect() const { return false; }
+  virtual bool IsKeyframeEffectModel() const { return false; }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 };

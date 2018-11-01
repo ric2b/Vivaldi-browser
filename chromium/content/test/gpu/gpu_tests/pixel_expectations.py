@@ -35,7 +35,7 @@ class PixelExpectations(GpuTestExpectations):
     self.Fail('Pixel_SolidColorBackground', ['mac', 'android'], bug=624256)
 
     self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
-              ['mac', ('nvidia', 0xfe9)], bug=652931)
+        ['mac', ('nvidia', 0xfe9)], bug=706016)
     self.Fail('Pixel_CSSFilterEffects',
         ['mac', ('nvidia', 0xfe9)], bug=690277)
 
@@ -50,27 +50,8 @@ class PixelExpectations(GpuTestExpectations):
     self.Flaky('Pixel_OffscreenCanvas2DResizeOnWorker',
         ['win10', ('intel', 0x1912)], bug=690663)
 
-    # TODO(kainino): temporary expectations due to expected result changes
-    #   http://crrev.com/2707623002
-    self.Fail('Pixel_2DCanvasWebGL', ['android'])
-    self.Fail('Pixel_CSS3DBlueBox', ['android'])
-    self.Fail('Pixel_Canvas2DRedBox', ['android'])
-    self.Fail('Pixel_CanvasDisplayLinearRGBAccelerated2D', ['android'])
-    self.Fail('Pixel_CanvasDisplayLinearRGBUnaccelerated2DGPUCompositing', ['android'])
-    self.Fail('Pixel_OffscreenCanvas2DResizeOnWorker', ['android'])
-    self.Fail('Pixel_OffscreenCanvasAccelerated2D', ['android'])
-    self.Fail('Pixel_OffscreenCanvasAccelerated2DWorker', ['android'])
-    self.Fail('Pixel_OffscreenCanvasTransferAfterStyleResize', ['android'])
-    self.Fail('Pixel_OffscreenCanvasTransferBeforeStyleResize', ['android'])
-    self.Fail('Pixel_OffscreenCanvasTransferToImageBitmap', ['android'])
-    self.Fail('Pixel_OffscreenCanvasTransferToImageBitmapWorker', ['android'])
-    self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositing', ['android'])
-    self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker', ['android'])
-    self.Fail('Pixel_OffscreenCanvasWebGLDefault', ['android'])
-    self.Fail('Pixel_OffscreenCanvasWebGLDefaultWorker', ['android'])
-    self.Fail('Pixel_OffscreenCanvasWebglResizeOnWorker', ['android'])
-    self.Fail('Pixel_WebGLGreenTriangle_AA_Alpha', ['android'])
-    self.Fail('Pixel_WebGLGreenTriangle_AA_NoAlpha', ['android'])
-    self.Fail('Pixel_WebGLGreenTriangle_NoAA_Alpha', ['android'])
-    self.Fail('Pixel_WebGLGreenTriangle_NoAA_NoAlpha', ['android'])
-    self.Fail('Pixel_WebGLTransparentGreenTriangle_NoAlpha_ImplicitClear', ['android'])
+    # TODO(jbauman): Re-enable when references images created.
+    self.Fail('Pixel_DirectComposition_Video_*', ['win'], bug=704389)
+
+    # TODO(zakerinasab): check / generate reference images.
+    self.Fail('Pixel_Canvas2DUntagged', bug=713632)

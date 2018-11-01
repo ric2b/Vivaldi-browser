@@ -9,8 +9,8 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "net/cert/internal/cert_error_params.h"
-#include "net/cert/internal/cert_error_scoper.h"
 #include "net/cert/internal/cert_errors.h"
+#include "net/cert/internal/extended_key_usage.h"
 #include "net/cert/internal/name_constraints.h"
 #include "net/cert/internal/parse_certificate.h"
 #include "net/cert/internal/signature_algorithm.h"
@@ -21,6 +21,9 @@
 #include "net/der/parser.h"
 
 namespace net {
+
+DEFINE_CERT_ERROR_ID(kValidityFailedNotAfter, "Time is after notAfter");
+DEFINE_CERT_ERROR_ID(kValidityFailedNotBefore, "Time is before notBefore");
 
 namespace {
 
@@ -50,51 +53,44 @@ DEFINE_CERT_ERROR_ID(kNotPermittedByNameConstraints,
 DEFINE_CERT_ERROR_ID(kSubjectDoesNotMatchIssuer,
                      "subject does not match issuer");
 DEFINE_CERT_ERROR_ID(kVerifySignedDataFailed, "VerifySignedData failed");
-DEFINE_CERT_ERROR_ID(kValidityFailedNotAfter, "Time is after notAfter");
-DEFINE_CERT_ERROR_ID(kValidityFailedNotBefore, "Time is before notBefore");
 DEFINE_CERT_ERROR_ID(kSignatureAlgorithmsDifferentEncoding,
                      "Certificate.signatureAlgorithm is encoded differently "
                      "than TBSCertificate.signature");
+DEFINE_CERT_ERROR_ID(kEkuLacksServerAuth,
+                     "The extended key usage does not include server auth");
+DEFINE_CERT_ERROR_ID(kEkuLacksClientAuth,
+                     "The extended key usage does not include client auth");
 
-DEFINE_CERT_ERROR_ID(kContextTrustAnchor, "Processing Trust Anchor");
-DEFINE_CERT_ERROR_ID(kContextCertificate, "Processing Certificate");
+bool IsHandledCriticalExtensionOid(const der::Input& oid) {
+  if (oid == BasicConstraintsOid())
+    return true;
+  if (oid == KeyUsageOid())
+    return true;
+  if (oid == ExtKeyUsageOid())
+    return true;
+  if (oid == NameConstraintsOid())
+    return true;
+  // TODO(eroman): SubjectAltName isn't actually used here, but rather is being
+  // checked by a higher layer.
+  if (oid == SubjectAltNameOid())
+    return true;
 
-// This class changes the error scope to indicate which certificate in the
-// chain is currently being processed.
-class CertErrorScoperForCert : public CertErrorScoper {
- public:
-  CertErrorScoperForCert(CertErrors* parent_errors, size_t index)
-      : CertErrorScoper(parent_errors), index_(index) {}
+  // TODO(eroman): Make this more complete.
+  return false;
+}
 
-  std::unique_ptr<CertErrorNode> BuildRootNode() override {
-    return base::MakeUnique<CertErrorNode>(
-        CertErrorNodeType::TYPE_CONTEXT, kContextCertificate,
-        CreateCertErrorParams1SizeT("index", index_));
-  }
-
- private:
-  size_t index_;
-
-  DISALLOW_COPY_AND_ASSIGN(CertErrorScoperForCert);
-};
-
-// Returns true if the certificate does not contain any unconsumed _critical_
+// Adds errors to |errors| if the certificate contains unconsumed _critical_
 // extensions.
-WARN_UNUSED_RESULT bool VerifyNoUnconsumedCriticalExtensions(
-    const ParsedCertificate& cert,
-    CertErrors* errors) {
-  bool has_unconsumed_critical_extensions = false;
-
-  for (const auto& entry : cert.unparsed_extensions()) {
-    if (entry.second.critical) {
-      has_unconsumed_critical_extensions = true;
+void VerifyNoUnconsumedCriticalExtensions(const ParsedCertificate& cert,
+                                          CertErrors* errors) {
+  for (const auto& it : cert.extensions()) {
+    const ParsedExtension& extension = it.second;
+    if (extension.critical && !IsHandledCriticalExtensionOid(extension.oid)) {
       errors->AddError(kUnconsumedCriticalExtension,
-                       CreateCertErrorParams2Der("oid", entry.second.oid,
-                                                 "value", entry.second.value));
+                       CreateCertErrorParams2Der("oid", extension.oid, "value",
+                                                 extension.value));
     }
   }
-
-  return !has_unconsumed_critical_extensions;
 }
 
 // Returns true if |cert| was self-issued. The definition of self-issuance
@@ -112,30 +108,25 @@ WARN_UNUSED_RESULT bool IsSelfIssued(const ParsedCertificate& cert) {
   return cert.normalized_subject() == cert.normalized_issuer();
 }
 
-// Returns true if |cert| is valid at time |time|.
+// Adds errors to |errors| if |cert| is not valid at time |time|.
 //
 // The certificate's validity requirements are described by RFC 5280 section
 // 4.1.2.5:
 //
 //    The validity period for a certificate is the period of time from
 //    notBefore through notAfter, inclusive.
-WARN_UNUSED_RESULT bool VerifyTimeValidity(const ParsedCertificate& cert,
-                                           const der::GeneralizedTime time,
-                                           CertErrors* errors) {
-  if (time < cert.tbs().validity_not_before) {
+void VerifyTimeValidity(const ParsedCertificate& cert,
+                        const der::GeneralizedTime time,
+                        CertErrors* errors) {
+  if (time < cert.tbs().validity_not_before)
     errors->AddError(kValidityFailedNotBefore);
-    return false;
-  }
 
-  if (cert.tbs().validity_not_after < time) {
+  if (cert.tbs().validity_not_after < time)
     errors->AddError(kValidityFailedNotAfter);
-    return false;
-  }
-
-  return true;
 }
 
-// Returns true if |cert| has internally consistent signature algorithms.
+// Adds errors to |errors| if |cert| has internally inconsistent signature
+// algorithms.
 //
 // X.509 certificates contain two different signature algorithms:
 //  (1) The signatureAlgorithm field of Certificate
@@ -154,16 +145,15 @@ WARN_UNUSED_RESULT bool VerifyTimeValidity(const ParsedCertificate& cert,
 // In practice however there are certificates which use different encodings for
 // specifying RSA with SHA1 (different OIDs). This is special-cased for
 // compatibility sake.
-WARN_UNUSED_RESULT bool VerifySignatureAlgorithmsMatch(
-    const ParsedCertificate& cert,
-    CertErrors* errors) {
+void VerifySignatureAlgorithmsMatch(const ParsedCertificate& cert,
+                                    CertErrors* errors) {
   const der::Input& alg1_tlv = cert.signature_algorithm_tlv();
   const der::Input& alg2_tlv = cert.tbs().signature_algorithm_tlv;
 
   // Ensure that the two DER-encoded signature algorithms are byte-for-byte
   // equal.
   if (alg1_tlv == alg2_tlv)
-    return true;
+    return;
 
   // But make a compatibility concession if alternate encodings are used
   // TODO(eroman): Turn this warning into an error.
@@ -173,20 +163,58 @@ WARN_UNUSED_RESULT bool VerifySignatureAlgorithmsMatch(
         kSignatureAlgorithmsDifferentEncoding,
         CreateCertErrorParams2Der("Certificate.algorithm", alg1_tlv,
                                   "TBSCertificate.signature", alg2_tlv));
-    return true;
+    return;
   }
 
   errors->AddError(
       kSignatureAlgorithmMismatch,
       CreateCertErrorParams2Der("Certificate.algorithm", alg1_tlv,
                                 "TBSCertificate.signature", alg2_tlv));
+}
 
-  return false;
+// Verify that |cert| can be used for |required_key_purpose|.
+void VerifyExtendedKeyUsage(const ParsedCertificate& cert,
+                            KeyPurpose required_key_purpose,
+                            CertErrors* errors) {
+  switch (required_key_purpose) {
+    case KeyPurpose::ANY_EKU:
+      return;
+    case KeyPurpose::SERVER_AUTH: {
+      // TODO(eroman): Is it OK for the target certificate to omit the EKU?
+      if (!cert.has_extended_key_usage())
+        return;
+
+      for (const auto& key_purpose_oid : cert.extended_key_usage()) {
+        if (key_purpose_oid == AnyEKU())
+          return;
+        if (key_purpose_oid == ServerAuth())
+          return;
+      }
+
+      errors->AddError(kEkuLacksServerAuth);
+      break;
+    }
+    case KeyPurpose::CLIENT_AUTH: {
+      // TODO(eroman): Is it OK for the target certificate to omit the EKU?
+      if (!cert.has_extended_key_usage())
+        return;
+
+      for (const auto& key_purpose_oid : cert.extended_key_usage()) {
+        if (key_purpose_oid == AnyEKU())
+          return;
+        if (key_purpose_oid == ClientAuth())
+          return;
+      }
+
+      errors->AddError(kEkuLacksClientAuth);
+      break;
+    }
+  }
 }
 
 // This function corresponds to RFC 5280 section 6.1.3's "Basic Certificate
 // Processing" procedure.
-WARN_UNUSED_RESULT bool BasicCertificateProcessing(
+void BasicCertificateProcessing(
     const ParsedCertificate& cert,
     bool is_target_cert,
     const SignaturePolicy* signature_policy,
@@ -198,8 +226,7 @@ WARN_UNUSED_RESULT bool BasicCertificateProcessing(
   // Check that the signature algorithms in Certificate vs TBSCertificate
   // match. This isn't part of RFC 5280 section 6.1.3, but is mandated by
   // sections 4.1.1.2 and 4.1.2.3.
-  if (!VerifySignatureAlgorithmsMatch(cert, errors))
-    return false;
+  VerifySignatureAlgorithmsMatch(cert, errors);
 
   // Verify the digital signature using the previous certificate's key (RFC
   // 5280 section 6.1.3 step a.1).
@@ -207,30 +234,25 @@ WARN_UNUSED_RESULT bool BasicCertificateProcessing(
     errors->AddError(
         kInvalidOrUnsupportedSignatureAlgorithm,
         CreateCertErrorParams1Der("algorithm", cert.signature_algorithm_tlv()));
-    return false;
-  }
-
-  if (!VerifySignedData(cert.signature_algorithm(), cert.tbs_certificate_tlv(),
-                        cert.signature_value(), working_spki, signature_policy,
-                        errors)) {
-    errors->AddError(kVerifySignedDataFailed);
-    return false;
+  } else {
+    if (!VerifySignedData(cert.signature_algorithm(),
+                          cert.tbs_certificate_tlv(), cert.signature_value(),
+                          working_spki, signature_policy, errors)) {
+      errors->AddError(kVerifySignedDataFailed);
+    }
   }
 
   // Check the time range for the certificate's validity, ensuring it is valid
   // at |time|.
   // (RFC 5280 section 6.1.3 step a.2)
-  if (!VerifyTimeValidity(cert, time, errors))
-    return false;
+  VerifyTimeValidity(cert, time, errors);
 
   // TODO(eroman): Check revocation (RFC 5280 section 6.1.3 step a.3)
 
   // Verify the certificate's issuer name matches the issuing certificate's
   // subject name. (RFC 5280 section 6.1.3 step a.4)
-  if (cert.normalized_issuer() != working_normalized_issuer_name) {
+  if (cert.normalized_issuer() != working_normalized_issuer_name)
     errors->AddError(kSubjectDoesNotMatchIssuer);
-    return false;
-  }
 
   // Name constraints (RFC 5280 section 6.1.3 step b & c)
   // If certificate i is self-issued and it is not the final certificate in the
@@ -241,20 +263,17 @@ WARN_UNUSED_RESULT bool BasicCertificateProcessing(
       if (!nc->IsPermittedCert(cert.normalized_subject(),
                                cert.subject_alt_names())) {
         errors->AddError(kNotPermittedByNameConstraints);
-        return false;
       }
     }
   }
 
   // TODO(eroman): Steps d-f are omitted, as policy constraints are not yet
   // implemented.
-
-  return true;
 }
 
 // This function corresponds to RFC 5280 section 6.1.4's "Preparation for
 // Certificate i+1" procedure. |cert| is expected to be an intermediate.
-WARN_UNUSED_RESULT bool PrepareForNextCertificate(
+void PrepareForNextCertificate(
     const ParsedCertificate& cert,
     size_t* max_path_length_ptr,
     der::Input* working_spki,
@@ -300,12 +319,8 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
   // can't contain a BasicConstraints extension.
   if (!cert.has_basic_constraints()) {
     errors->AddError(kMissingBasicConstraints);
-    return false;
-  }
-
-  if (!cert.basic_constraints().is_ca) {
+  } else if (!cert.basic_constraints().is_ca) {
     errors->AddError(kBasicConstraintsIndicatesNotCa);
-    return false;
   }
 
   // From RFC 5280 section 6.1.4 step l:
@@ -316,9 +331,9 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
   if (!IsSelfIssued(cert)) {
     if (*max_path_length_ptr == 0) {
       errors->AddError(kMaxPathLengthViolated);
-      return false;
+    } else {
+      --(*max_path_length_ptr);
     }
-    --(*max_path_length_ptr);
   }
 
   // From RFC 5280 section 6.1.4 step m:
@@ -326,7 +341,7 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
   //    If pathLenConstraint is present in the certificate and is
   //    less than max_path_length, set max_path_length to the value
   //    of pathLenConstraint.
-  if (cert.basic_constraints().has_path_len &&
+  if (cert.has_basic_constraints() && cert.basic_constraints().has_path_len &&
       cert.basic_constraints().path_len < *max_path_length_ptr) {
     *max_path_length_ptr = cert.basic_constraints().path_len;
   }
@@ -338,7 +353,6 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
   if (cert.has_key_usage() &&
       !cert.key_usage().AssertsBit(KEY_USAGE_BIT_KEY_CERT_SIGN)) {
     errors->AddError(kKeyCertSignBitNotSet);
-    return false;
   }
 
   // From RFC 5280 section 6.1.4 step o:
@@ -347,15 +361,12 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
   //    the certificate.  Process any other recognized non-critical
   //    extension present in the certificate that is relevant to path
   //    processing.
-  if (!VerifyNoUnconsumedCriticalExtensions(cert, errors))
-    return false;
-
-  return true;
+  VerifyNoUnconsumedCriticalExtensions(cert, errors);
 }
 
 // Checks that if the target certificate has properties that only a CA should
 // have (keyCertSign, CA=true, pathLenConstraint), then its other properties
-// are consistent with being a CA.
+// are consistent with being a CA. If it does, adds errors to |errors|.
 //
 // This follows from some requirements in RFC 5280 section 4.2.1.9. In
 // particular:
@@ -375,9 +386,8 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
 // TODO(eroman): I don't believe Firefox enforces the keyCertSign restriction
 // for compatibility reasons. Investigate if we need to similarly relax this
 // constraint.
-WARN_UNUSED_RESULT bool VerifyTargetCertHasConsistentCaBits(
-    const ParsedCertificate& cert,
-    CertErrors* errors) {
+void VerifyTargetCertHasConsistentCaBits(const ParsedCertificate& cert,
+                                         CertErrors* errors) {
   // Check if the certificate contains any property specific to CAs.
   bool has_ca_property =
       (cert.has_basic_constraints() &&
@@ -397,17 +407,12 @@ WARN_UNUSED_RESULT bool VerifyTargetCertHasConsistentCaBits(
       // TODO(eroman): Add DER for basic constraints and key usage.
       errors->AddError(kTargetCertInconsistentCaBits);
     }
-
-    return success;
   }
-
-  return true;
 }
 
 // This function corresponds with RFC 5280 section 6.1.5's "Wrap-Up Procedure".
 // It does processing for the final certificate (the target cert).
-WARN_UNUSED_RESULT bool WrapUp(const ParsedCertificate& cert,
-                               CertErrors* errors) {
+void WrapUp(const ParsedCertificate& cert, CertErrors* errors) {
   // TODO(crbug.com/634452): Steps a-b are omitted as policy constraints are not
   // yet implemented.
 
@@ -423,39 +428,37 @@ WARN_UNUSED_RESULT bool WrapUp(const ParsedCertificate& cert,
   //
   // Note that this is duplicated by PrepareForNextCertificate() so as to
   // directly match the procedures in RFC 5280's section 6.1.
-  if (!VerifyNoUnconsumedCriticalExtensions(cert, errors))
-    return false;
+  VerifyNoUnconsumedCriticalExtensions(cert, errors);
 
   // TODO(eroman): Step g is omitted, as policy constraints are not yet
   // implemented.
 
   // The following check is NOT part of RFC 5280 6.1.5's "Wrap-Up Procedure",
   // however is implied by RFC 5280 section 4.2.1.9.
-  if (!VerifyTargetCertHasConsistentCaBits(cert, errors))
-    return false;
-
-  return true;
+  VerifyTargetCertHasConsistentCaBits(cert, errors);
 }
 
 // Initializes the path validation algorithm given anchor constraints. This
 // follows the description in RFC 5937
-WARN_UNUSED_RESULT bool ProcessTrustAnchorConstraints(
+void ProcessTrustAnchorConstraints(
     const TrustAnchor& trust_anchor,
+    KeyPurpose required_key_purpose,
     size_t* max_path_length_ptr,
     std::vector<const NameConstraints*>* name_constraints_list,
     CertErrors* errors) {
-  // Set the trust anchor as the current context for any subsequent errors.
-  CertErrorScoperNoParams error_context(errors, kContextTrustAnchor);
-
   // In RFC 5937 the enforcement of anchor constraints is governed by the input
   // enforceTrustAnchorConstraints to path validation. In our implementation
   // this is always on, and enforcement is controlled solely by whether or not
   // the trust anchor specified constraints.
   if (!trust_anchor.enforces_constraints())
-    return true;
+    return;
 
   // Anchor constraints are encoded via the attached certificate.
   const ParsedCertificate& cert = *trust_anchor.cert();
+
+  // This is not part of RFC 5937 nor RFC 5280, but matches the EKU handling
+  // done for intermediates (described in Web PKI's Baseline Requirements).
+  VerifyExtendedKeyUsage(cert, required_key_purpose, errors);
 
   // The following enforcements follow from RFC 5937 (primarily section 3.2):
 
@@ -491,29 +494,26 @@ WARN_UNUSED_RESULT bool ProcessTrustAnchorConstraints(
   //    Extensions may be marked critical or not critical.  When trust anchor
   //    constraints are enforced, clients MUST reject certification paths
   //    containing a trust anchor with unrecognized critical extensions.
-  if (!VerifyNoUnconsumedCriticalExtensions(cert, errors))
-    return false;
-
-  return true;
+  VerifyNoUnconsumedCriticalExtensions(cert, errors);
 }
-
-}  // namespace
 
 // This implementation is structured to mimic the description of certificate
 // path verification given by RFC 5280 section 6.1.
-bool VerifyCertificateChain(const ParsedCertificateList& certs,
-                            const TrustAnchor* trust_anchor,
-                            const SignaturePolicy* signature_policy,
-                            const der::GeneralizedTime& time,
-                            CertErrors* errors) {
+void VerifyCertificateChainNoReturnValue(
+    const ParsedCertificateList& certs,
+    const TrustAnchor* trust_anchor,
+    const SignaturePolicy* signature_policy,
+    const der::GeneralizedTime& time,
+    KeyPurpose required_key_purpose,
+    CertPathErrors* errors) {
   DCHECK(trust_anchor);
   DCHECK(signature_policy);
   DCHECK(errors);
 
   // An empty chain is necessarily invalid.
   if (certs.empty()) {
-    errors->AddError(kChainIsEmpty);
-    return false;
+    errors->GetOtherErrors()->AddError(kChainIsEmpty);
+    return;
   }
 
   // Will contain a NameConstraints for each previous cert in the chain which
@@ -556,10 +556,13 @@ bool VerifyCertificateChain(const ParsedCertificateList& certs,
   size_t max_path_length = certs.size();
 
   // Apply any trust anchor constraints per RFC 5937.
-  if (!ProcessTrustAnchorConstraints(*trust_anchor, &max_path_length,
-                                     &name_constraints_list, errors)) {
-    return false;
-  }
+  //
+  // TODO(eroman): Errors on the trust anchor are put into a certificate bucket
+  //               GetErrorsForCert(certs.size()). This is a bit magical, and
+  //               has some integration issues.
+  ProcessTrustAnchorConstraints(*trust_anchor, required_key_purpose,
+                                &max_path_length, &name_constraints_list,
+                                errors->GetErrorsForCert(certs.size()));
 
   // Iterate over all the certificates in the reverse direction: starting from
   // the certificate signed by trust anchor and progressing towards the target
@@ -579,28 +582,33 @@ bool VerifyCertificateChain(const ParsedCertificateList& certs,
 
     const ParsedCertificate& cert = *certs[index_into_certs];
 
-    // Set the current certificate as the context for any subsequent errors.
-    CertErrorScoperForCert error_context(errors, i);
+    // Output errors for the current certificate into an error bucket that is
+    // associated with that certificate.
+    CertErrors* cert_errors = errors->GetErrorsForCert(index_into_certs);
 
     // Per RFC 5280 section 6.1:
     //  * Do basic processing for each certificate
     //  * If it is the last certificate in the path (target certificate)
     //     - Then run "Wrap up"
     //     - Otherwise run "Prepare for Next cert"
-    if (!BasicCertificateProcessing(
-            cert, is_target_cert, signature_policy, time, working_spki,
-            working_normalized_issuer_name, name_constraints_list, errors)) {
-      return false;
-    }
+    BasicCertificateProcessing(cert, is_target_cert, signature_policy, time,
+                               working_spki, working_normalized_issuer_name,
+                               name_constraints_list, cert_errors);
+
+    // The key purpose is checked not just for the end-entity certificate, but
+    // also interpreted as a constraint when it appears in intermediates. This
+    // goes beyond what RFC 5280 describes, but is the de-facto standard. See
+    // https://wiki.mozilla.org/CA:CertificatePolicyV2.1#Frequently_Asked_Questions
+    VerifyExtendedKeyUsage(cert, required_key_purpose, cert_errors);
+
     if (!is_target_cert) {
-      if (!PrepareForNextCertificate(cert, &max_path_length, &working_spki,
-                                     &working_normalized_issuer_name,
-                                     &name_constraints_list, errors)) {
-        return false;
-      }
+      PrepareForNextCertificate(cert, &max_path_length, &working_spki,
+                                &working_normalized_issuer_name,
+                                &name_constraints_list, cert_errors);
     } else {
-      if (!WrapUp(cert, errors))
-        return false;
+      WrapUp(cert, cert_errors);
+      // TODO(eroman): Verify the Key Usage on target is consistent with
+      //               key_purpose.
     }
   }
 
@@ -608,8 +616,22 @@ bool VerifyCertificateChain(const ParsedCertificateList& certs,
   //
   //    A certificate MUST NOT appear more than once in a prospective
   //    certification path.
+}
 
-  return true;
+}  // namespace
+
+bool VerifyCertificateChain(const ParsedCertificateList& certs,
+                            const TrustAnchor* trust_anchor,
+                            const SignaturePolicy* signature_policy,
+                            const der::GeneralizedTime& time,
+                            KeyPurpose required_key_purpose,
+                            CertPathErrors* errors) {
+  // TODO(eroman): This function requires that |errors| is empty upon entry,
+  // which is not part of the API contract.
+  DCHECK(!errors->ContainsHighSeverityErrors());
+  VerifyCertificateChainNoReturnValue(certs, trust_anchor, signature_policy,
+                                      time, required_key_purpose, errors);
+  return !errors->ContainsHighSeverityErrors();
 }
 
 }  // namespace net

@@ -38,7 +38,6 @@ namespace extensions {
 class ExtensionActionRunner;
 class BookmarkAppHelper;
 class Extension;
-class LocationBarController;
 class WebstoreInlineInstallerFactory;
 
 // Per-tab extension helper. Also handles non-extension apps.
@@ -50,9 +49,7 @@ class TabHelper : public content::WebContentsObserver,
  public:
   ~TabHelper() override;
 
-  void CreateApplicationShortcuts();
   void CreateHostedAppFromWebContents();
-  bool CanCreateApplicationShortcuts() const;
   bool CanCreateBookmarkApp() const;
 
   void UpdateShortcutOnLoadComplete() {
@@ -97,10 +94,6 @@ class TabHelper : public content::WebContentsObserver,
     return script_executor_.get();
   }
 
-  LocationBarController* location_bar_controller() {
-    return location_bar_controller_.get();
-  }
-
   ExtensionActionRunner* extension_action_runner() {
     return extension_action_runner_.get();
   }
@@ -130,7 +123,6 @@ class TabHelper : public content::WebContentsObserver,
   // OnDidGetApplicationInfo uses this to dispatch calls.
   enum WebAppAction {
     NONE,               // No action at all.
-    CREATE_SHORTCUT,    // Bring up create application shortcut dialog.
     CREATE_HOSTED_APP,  // Create and install a hosted app.
     UPDATE_SHORTCUT     // Update icon for app shortcut.
   };
@@ -246,8 +238,6 @@ class TabHelper : public content::WebContentsObserver,
   content::NotificationRegistrar registrar_;
 
   std::unique_ptr<ScriptExecutor> script_executor_;
-
-  std::unique_ptr<LocationBarController> location_bar_controller_;
 
   std::unique_ptr<ExtensionActionRunner> extension_action_runner_;
 

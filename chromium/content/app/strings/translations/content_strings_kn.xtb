@@ -24,7 +24,7 @@
 <translation id="1821985195704844674">ಟ್ರೀ ಗ್ರಿಡ್</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">ರಿಮೋಟ್ ಸಾಧನದಲ್ಲಿ ಪ್ಲೇ ಮಾಡಿ</translation>
-<translation id="1854180393107901205">ಬಿತ್ತರಿಸುವುದನ್ನು ನಿಲ್ಲಿಸು</translation>
+<translation id="1854180393107901205">ಬಿತ್ತರಿಸುವುದನ್ನು ನಿಲ್ಲಿಸಿ</translation>
 <translation id="1880518467580572141">ಔಟ್‌ಲೈನ್</translation>
 <translation id="1921819250265091946">ದಿದಿ</translation>
 <translation id="1930711995431081526">ಸ್ಥಿತಿ</translation>
@@ -45,6 +45,7 @@
 <translation id="2613802280814924224">ಮಾನ್ಯ ಮೌಲ್ಯವನ್ನು ನಮೂದಿಸಿ. ಹತ್ತಿರದ ಮಾನ್ಯ ಮೌಲ್ಯವು <ph name="VALID_VALUE" /> ಆಗಿದೆ.</translation>
 <translation id="2653659639078652383">ಸಲ್ಲಿಸು</translation>
 <translation id="2674318244760992338">ಅಡಿಟಿಪ್ಪಣಿ</translation>
+<translation id="2709516037105925701">ಸ್ವಯಂತುಂಬುವಿಕೆ</translation>
 <translation id="2723001399770238859">ಆಡಿಯೋ</translation>
 <translation id="2746543609216772311">ಮೌಲ್ಯವು <ph name="MINIMUM_DATE_OR_TIME" /> ಅಥವಾ ನಂತರದ್ದಾಗಿರಬೇಕು.</translation>
 <translation id="2759744352195237655">ಪಾಪ್ ಅಪ್ ಬಟನ್</translation>
@@ -143,6 +144,7 @@
 <translation id="6885760532393684712">ಡೈರೆಕ್ಟರಿ</translation>
 <translation id="6934078000481955284">ಬ್ಲಾಕ್‌ಕೋಟ್</translation>
 <translation id="6941933287844615239">ಮಾಧ್ಯಮ ಡೌನ್‌ಲೋಡ್</translation>
+<translation id="6989848892321993519">ಈ ಪಠ್ಯವನ್ನು <ph name="MIN_CHARACTERS" /> ಅಥವಾ ಇದಕ್ಕಿಂತಲೂ ಹೆಚ್ಚಿನ ಅಕ್ಷರಗಳಿಗೆ ಉದ್ದಗೊಳಿಸಿ (ನೀವು ಪ್ರಸ್ತುತ 1 ಅಕ್ಷರಗಳನ್ನು ಬಳಸುತ್ತಿರುವಿರಿ).</translation>
 <translation id="7057186640035488495">ಚಲನಚಿತ್ರ ಸಮಯ</translation>
 <translation id="709897737746224366">ದಯವಿಟ್ಟು ವಿನಂತಿಸಿದ ಸ್ವರೂಪವನ್ನು ಹೊಂದಿಸಿ.</translation>
 <translation id="7223624360433298498">ಕಳೆದುಹೋದ ಸಮಯ</translation>
@@ -175,6 +177,7 @@
 <translation id="8451268428117625855">ದಯವಿಟ್ಟು ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ.</translation>
 <translation id="8461852803063341183">ರೇಡಿಯೋ ಬಟನ್</translation>
 <translation id="8511325616783751178">ಡ್ರಾಪ್ ಡೌನ್ ಬಟನ್</translation>
+<translation id="8519420564908284378">ಎರಡೂ ಪರದೆಯ ಮೇಲೆ ಪ್ಲೇ ಮಾಡಿ</translation>
 <translation id="8534579021159131403">ನಿಮಿಷಗಳು</translation>
 <translation id="8541249477527128034">ಮಾಧ್ಯಮ ನಿಯಂತ್ರಣ</translation>
 <translation id="8583702881314752957">ವಿವರಣೆ ಪಟ್ಟಿ</translation>
@@ -182,6 +185,7 @@
 <translation id="8613126697340063924">ರಿಮೋಟ್ ಪ್ಲೇಬ್ಯಾಕ್ ನಿಯಂತ್ರಿಸಿ</translation>
 <translation id="8750798805984357768">ದಯವಿಟ್ಟು ಈ ಕೆಳಗಿನ ಆಯ್ಕೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಆರಿಸಿ.</translation>
 <translation id="8785498733064193001">ಪ್ಲೇಬ್ಯಾಕ್ ಪ್ರಾರಂಭಿಸಿ</translation>
+<translation id="8845239796550121995">ಈಗ ನಿಮ್ಮ ಟಿವಿಯನ್ನು ಬಿತ್ತರಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="8851136666856101339">ಮುಖ್ಯ</translation>
 <translation id="8987927404178983737">ತಿಂಗಳು</translation>
 <translation id="901493112792887934">ಸೆಕೆಂಡ್‌ಗಳಲ್ಲಿ ಪ್ರಸ್ತುತ ಸಮಯ</translation>

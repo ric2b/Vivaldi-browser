@@ -43,6 +43,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
 #include "gpu/config/gpu_info.h"
+#include "gpu/config/gpu_util.h"
 #include "media/media_features.h"
 #include "net/http/http_util.h"
 #include "pdf/features.h"
@@ -86,12 +87,12 @@
 #include "chrome/common/widevine_cdm_constants.h"
 #endif
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 #include "chrome/common/media/cdm_host_file_path.h"
 #endif
 
 #if defined(OS_ANDROID)
-#include "chrome/common/chrome_media_client_android.h"
+#include "chrome/common/media/chrome_media_drm_bridge_client.h"
 #endif
 
 #include "base/file_version_info.h"
@@ -474,24 +475,7 @@ void ChromeContentClient::SetActiveURL(const GURL& url) {
 }
 
 void ChromeContentClient::SetGpuInfo(const gpu::GPUInfo& gpu_info) {
-#if !defined(OS_ANDROID)
-  base::debug::SetCrashKeyValue(crash_keys::kGPUVendorID,
-      base::StringPrintf("0x%04x", gpu_info.gpu.vendor_id));
-  base::debug::SetCrashKeyValue(crash_keys::kGPUDeviceID,
-      base::StringPrintf("0x%04x", gpu_info.gpu.device_id));
-#endif
-  base::debug::SetCrashKeyValue(crash_keys::kGPUDriverVersion,
-      gpu_info.driver_version);
-  base::debug::SetCrashKeyValue(crash_keys::kGPUPixelShaderVersion,
-      gpu_info.pixel_shader_version);
-  base::debug::SetCrashKeyValue(crash_keys::kGPUVertexShaderVersion,
-      gpu_info.vertex_shader_version);
-#if defined(OS_MACOSX)
-  base::debug::SetCrashKeyValue(crash_keys::kGPUGLVersion, gpu_info.gl_version);
-#elif defined(OS_POSIX)
-  base::debug::SetCrashKeyValue(crash_keys::kGPUVendor, gpu_info.gl_vendor);
-  base::debug::SetCrashKeyValue(crash_keys::kGPURenderer, gpu_info.gl_renderer);
-#endif
+  gpu::SetKeysForCrashLogging(gpu_info);
 }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -522,8 +506,8 @@ void ChromeContentClient::AddPepperPlugins(
 
   // If flash is disabled, do not try to add any flash plugin.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kDisableBundledPpapiFlash))
-    return;
+  bool disable_bundled_flash =
+      command_line->HasSwitch(switches::kDisableBundledPpapiFlash);
 
   std::vector<std::unique_ptr<content::PepperPluginInfo>> flash_versions;
 
@@ -537,7 +521,8 @@ void ChromeContentClient::AddPepperPlugins(
     return;
 
   auto component_flash = base::MakeUnique<content::PepperPluginInfo>();
-  if (GetComponentUpdatedPepperFlash(component_flash.get()))
+  if (!disable_bundled_flash &&
+      GetComponentUpdatedPepperFlash(component_flash.get()))
     flash_versions.push_back(std::move(component_flash));
 #endif  // defined(OS_LINUX)
 
@@ -586,7 +571,7 @@ void ChromeContentClient::AddPepperPlugins(
   content::PepperPluginInfo* max_flash = FindMostRecentPlugin(flash_versions);
   if (max_flash) {
     plugins->push_back(*max_flash);
-  } else {
+  } else if (!disable_bundled_flash) {
 #if defined(GOOGLE_CHROME_BUILD) && defined(FLAPPER_AVAILABLE)
     // Add a fake Flash plugin even though it doesn't actually exist - if a
     // web page requests it, it will be component-updated on-demand. There is
@@ -627,7 +612,7 @@ void ChromeContentClient::AddContentDecryptionModules(
     // available.
   }
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
   if (cdm_host_file_paths)
     chrome::AddCdmHostFilePaths(cdm_host_file_paths);
 #endif
@@ -666,6 +651,11 @@ void ChromeContentClient::AddAdditionalSchemes(Schemes* schemes) {
   schemes->secure_origins = GetSecureOriginWhitelist();
 
   schemes->no_access_schemes.push_back(chrome::kChromeNativeScheme);
+
+  // chrome-native: is a scheme used for placeholder navigations that allow
+  // UIs to be drawn with platform native widgets instead of HTML.  These pages
+  // should be treated as empty documents that can commit synchronously.
+  schemes->empty_document_schemes.push_back(chrome::kChromeNativeScheme);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (extensions::feature_util::ExtensionServiceWorkersEnabled())
@@ -775,7 +765,7 @@ content::OriginTrialPolicy* ChromeContentClient::GetOriginTrialPolicy() {
 }
 
 #if defined(OS_ANDROID)
-media::MediaClientAndroid* ChromeContentClient::GetMediaClientAndroid() {
-  return new ChromeMediaClientAndroid();
+media::MediaDrmBridgeClient* ChromeContentClient::GetMediaDrmBridgeClient() {
+  return new ChromeMediaDrmBridgeClient();
 }
 #endif  // OS_ANDROID

@@ -197,8 +197,7 @@ RequestCoordinator::RequestCoordinator(
     net::NetworkQualityEstimator::NetworkQualityProvider*
         network_quality_estimator)
     : is_low_end_device_(base::SysInfo::IsLowEndDevice()),
-      is_busy_(false),
-      is_starting_(false),
+      state_(RequestCoordinatorState::IDLE),
       processing_state_(ProcessingWindowState::STOPPED),
       use_test_device_conditions_(false),
       offliner_(std::move(offliner)),
@@ -287,7 +286,7 @@ void RequestCoordinator::GetQueuedRequestsCallback(
 void RequestCoordinator::StopPrerendering(
     const Offliner::CancelCallback& final_callback,
     Offliner::RequestStatus stop_status) {
-  if (offliner_ && is_busy_) {
+  if (offliner_ && state_ == RequestCoordinatorState::OFFLINING) {
     DCHECK(active_request_.get());
     offliner_->Cancel(base::Bind(
         &RequestCoordinator::HandleCancelUpdateStatusCallback,
@@ -415,6 +414,15 @@ void RequestCoordinator::RemoveRequests(
 void RequestCoordinator::PauseRequests(
     const std::vector<int64_t>& request_ids) {
   bool canceled = CancelActiveRequestIfItMatches(request_ids);
+
+  // Remove the paused requests from prioritized list.
+  for (int64_t id : request_ids) {
+    auto it = std::find(prioritized_requests_.begin(),
+                        prioritized_requests_.end(), id);
+    if (it != prioritized_requests_.end())
+      prioritized_requests_.erase(it);
+  }
+
   queue_->ChangeRequestsState(
       request_ids, SavePageRequest::RequestState::PAUSED,
       base::Bind(&RequestCoordinator::UpdateMultipleRequestsCallback,
@@ -434,6 +442,8 @@ void RequestCoordinator::PauseRequests(
 
 void RequestCoordinator::ResumeRequests(
     const std::vector<int64_t>& request_ids) {
+  prioritized_requests_.insert(prioritized_requests_.end(), request_ids.begin(),
+                               request_ids.end());
   queue_->ChangeRequestsState(
       request_ids, SavePageRequest::RequestState::AVAILABLE,
       base::Bind(&RequestCoordinator::UpdateMultipleRequestsCallback,
@@ -544,9 +554,9 @@ void RequestCoordinator::UpdateStatusForCancel(
     RecordOfflinerResultUMA(active_request_->client_id(),
                             active_request_->creation_time(),
                             last_offlining_status_);
-    is_busy_ = false;
     active_request_.reset();
   }
+  state_ = RequestCoordinatorState::IDLE;
 }
 
 void RequestCoordinator::ResetActiveRequestCallback(int64_t offline_id) {
@@ -613,7 +623,7 @@ bool RequestCoordinator::StartImmediateProcessing(
 bool RequestCoordinator::StartProcessingInternal(
     const ProcessingWindowState processing_state,
     const base::Callback<void(bool)>& callback) {
-  if (is_starting_ || is_busy_)
+  if (state_ != RequestCoordinatorState::IDLE)
     return false;
   processing_state_ = processing_state;
   scheduler_callback_ = callback;
@@ -636,7 +646,7 @@ RequestCoordinator::TryImmediateStart(
     const base::Callback<void(bool)>& callback) {
   DVLOG(2) << "Immediate " << __func__;
   // Make sure not already busy processing.
-  if (is_busy_)
+  if (state_ == RequestCoordinatorState::OFFLINING)
     return OfflinerImmediateStartStatus::BUSY;
 
   // Make sure we are not on svelte device to start immediately.
@@ -691,13 +701,10 @@ void RequestCoordinator::UpdateCurrentConditionsFromAndroid() {
 }
 
 void RequestCoordinator::TryNextRequest(bool is_start_of_processing) {
-  is_starting_ = true;
+  state_ = RequestCoordinatorState::PICKING;
 
   // If this is the first call, the device conditions are current, no need to
   // update them.
-  // TODO(petewil): Now that we can get conditions any time, consider getting
-  // them now instead of passing them in earlier when we start scheduled
-  // processing.
   if (!is_start_of_processing) {
     // Get current device conditions from the Java side across the bridge.
     // NetworkChangeNotifier will not have the right conditions if chromium is
@@ -726,7 +733,7 @@ void RequestCoordinator::TryNextRequest(bool is_start_of_processing) {
   if (connection_type ==
           net::NetworkChangeNotifier::ConnectionType::CONNECTION_NONE ||
       (base::Time::Now() - operation_start_time_) > processing_time_budget) {
-    is_starting_ = false;
+    state_ = RequestCoordinatorState::IDLE;
 
     // If we were doing immediate processing, try to start it again
     // when we get connected.
@@ -734,37 +741,34 @@ void RequestCoordinator::TryNextRequest(bool is_start_of_processing) {
       RequestConnectedEventForStarting();
 
     // Let the scheduler know we are done processing.
-    // TODO: Make sure the scheduler callback is valid before running it.
     scheduler_callback_.Run(true);
     DVLOG(2) << " out of time, giving up. " << __func__;
 
     return;
   }
 
-  // Ask request queue to make a new PickRequestTask object, then put it on the
-  // task queue.
+  // Ask request queue to make a new PickRequestTask object, then put it on
+  // the task queue.
   queue_->PickNextRequest(
-      policy_.get(), base::Bind(&RequestCoordinator::RequestPicked,
-                                weak_ptr_factory_.GetWeakPtr()),
+      policy_.get(),
+      base::Bind(&RequestCoordinator::RequestPicked,
+                 weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&RequestCoordinator::RequestNotPicked,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&RequestCoordinator::RequestCounts,
                  weak_ptr_factory_.GetWeakPtr(), is_start_of_processing),
-      *current_conditions_.get(), disabled_requests_);
-  // TODO(petewil): Verify current_conditions has a good value on all calling
-  // paths.  It is really more of a "last known conditions" than "current
-  // conditions".  Consider having a call to Java to check the current
-  // conditions.
+      *current_conditions_.get(), disabled_requests_, prioritized_requests_);
 }
 
 // Called by the request picker when a request has been picked.
 void RequestCoordinator::RequestPicked(const SavePageRequest& request,
                                        bool cleanup_needed) {
   DVLOG(2) << request.url() << " " << __func__;
-  is_starting_ = false;
 
-  // Make sure we were not stopped while picking.
-  if (processing_state_ != ProcessingWindowState::STOPPED) {
+  // Make sure we were not stopped while picking, since any kind of cancel/stop
+  // will reset the state back to IDLE.
+  if (state_ == RequestCoordinatorState::PICKING) {
+    state_ = RequestCoordinatorState::OFFLINING;
     // Send the request on to the offliner.
     SendRequestToOffliner(request);
   }
@@ -778,7 +782,7 @@ void RequestCoordinator::RequestNotPicked(
     bool non_user_requested_tasks_remaining,
     bool cleanup_needed) {
   DVLOG(2) << __func__;
-  is_starting_ = false;
+  state_ = RequestCoordinatorState::IDLE;
 
   // Clear the outstanding "safety" task in the scheduler.
   scheduler_->Unschedule();
@@ -848,21 +852,7 @@ void RequestCoordinator::RequestCounts(bool is_start_of_processing,
 }
 
 void RequestCoordinator::SendRequestToOffliner(const SavePageRequest& request) {
-  // Check that offlining didn't get cancelled while performing some async
-  // steps.
-  if (processing_state_ == ProcessingWindowState::STOPPED)
-    return;
-
-  if (!offliner_) {
-    // TODO(chili,petewil): We should have UMA here to track frequency of this,
-    // if it happens at all.
-    DVLOG(0) << "Offliner crashed. Cannot background offline page.";
-    return;
-  }
-
-  DCHECK(!is_busy_);
-  is_busy_ = true;
-
+  DCHECK(state_ == RequestCoordinatorState::OFFLINING);
   // Record start time if this is first attempt.
   if (request.started_attempt_count() == 0) {
     RecordStartTimeUMA(request);
@@ -884,7 +874,7 @@ void RequestCoordinator::StartOffliner(
       update_result->item_statuses.size() != 1 ||
       update_result->item_statuses.at(0).first != request_id ||
       update_result->item_statuses.at(0).second != ItemActionStatus::SUCCESS) {
-    is_busy_ = false;
+    state_ = RequestCoordinatorState::IDLE;
     StopProcessing(Offliner::QUEUE_UPDATE_FAILED);
     DVLOG(1) << "Failed to mark attempt started: " << request_id;
     UpdateRequestResult request_result =
@@ -924,7 +914,7 @@ void RequestCoordinator::StartOffliner(
     watchdog_timer_.Start(FROM_HERE, timeout, this,
                           &RequestCoordinator::HandleWatchdogTimeout);
   } else {
-    is_busy_ = false;
+    state_ = RequestCoordinatorState::IDLE;
     DVLOG(0) << "Unable to start LoadAndSave";
     StopProcessing(Offliner::LOADING_NOT_ACCEPTED);
 
@@ -947,7 +937,7 @@ void RequestCoordinator::OfflinerDoneCallback(const SavePageRequest& request,
   RecordOfflinerResultUMA(request.client_id(), request.creation_time(),
                           last_offlining_status_);
   watchdog_timer_.Stop();
-  is_busy_ = false;
+  state_ = RequestCoordinatorState::IDLE;
   active_request_.reset(nullptr);
 
   UpdateRequestForCompletedAttempt(request, status);

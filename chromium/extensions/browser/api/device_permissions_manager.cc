@@ -183,7 +183,7 @@ void RemoveDevicePermissionEntry(BrowserContext* context,
 // Clears all DevicePermissionEntries for the app from ExtensionPrefs.
 void ClearDevicePermissionEntries(ExtensionPrefs* prefs,
                                   const std::string& extension_id) {
-  prefs->UpdateExtensionPref(extension_id, kDevices, NULL);
+  prefs->UpdateExtensionPref(extension_id, kDevices, nullptr);
 }
 
 scoped_refptr<DevicePermissionEntry> ReadDevicePermissionEntry(
@@ -254,7 +254,7 @@ std::set<scoped_refptr<DevicePermissionEntry>> GetDevicePermissionEntries(
 
   for (const auto& entry : *devices) {
     const base::DictionaryValue* entry_dict;
-    if (entry->GetAsDictionary(&entry_dict)) {
+    if (entry.GetAsDictionary(&entry_dict)) {
       scoped_refptr<DevicePermissionEntry> device_entry =
           ReadDevicePermissionEntry(entry_dict);
       if (entry_dict) {

@@ -14,5 +14,15 @@ void FakeImageLoaderClient::RegisterComponent(
     const BoolDBusMethodCallback& callback) {
   callback.Run(DBUS_METHOD_CALL_FAILURE, false);
 }
+void FakeImageLoaderClient::LoadComponent(
+    const std::string& name,
+    const StringDBusMethodCallback& callback) {
+  callback.Run(DBUS_METHOD_CALL_FAILURE, "");
+}
+void FakeImageLoaderClient::RequestComponentVersion(
+    const std::string& name,
+    const StringDBusMethodCallback& callback) {
+  callback.Run(DBUS_METHOD_CALL_FAILURE, "");
+}
 
 }  // namespace chromeos

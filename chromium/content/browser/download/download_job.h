@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "content/browser/byte_stream.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_interrupt_reasons.h"
@@ -39,8 +40,22 @@ class CONTENT_EXPORT DownloadJob {
   // WebContents.
   virtual WebContents* GetWebContents() const = 0;
 
+  // Returns whether the download is parallelizable. The download may not send
+  // parallel requests as it can be disabled through flags.
+  virtual bool IsParallelizable() const;
+
+  // Cancel a particular request starts from |offset|, while the download is not
+  // canceled. Used in parallel download.
+  virtual void CancelRequestWithOffset(int64_t offset);
+
  protected:
   void StartDownload() const;
+
+  // Add a byte stream to the download sink. Return false if we start to
+  // destroy download file.
+  bool AddByteStream(std::unique_ptr<ByteStreamReader> stream_reader,
+                     int64_t offset,
+                     int64_t length);
 
   DownloadItemImpl* download_item_;
 

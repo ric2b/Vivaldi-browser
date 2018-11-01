@@ -13,7 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/debug/devtools_instrumentation.h"
+#include "cc/base/devtools_instrumentation.h"
 #include "cc/debug/traced_value.h"
 #include "cc/scheduler/compositor_timing_history.h"
 #include "cc/scheduler/delay_based_time_source.h"
@@ -409,20 +409,19 @@ void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
     return;
   }
 
-  BeginImplFrame(adjusted_args);
+  BeginImplFrame(adjusted_args, now);
 }
 
 void Scheduler::BeginImplFrameSynchronous(const BeginFrameArgs& args) {
   TRACE_EVENT1("cc,benchmark", "Scheduler::BeginImplFrame", "args",
                args.AsValue());
-
   // The main thread currently can't commit before we draw with the
   // synchronous compositor, so never consider the BeginMainFrame fast.
   state_machine_.SetCriticalBeginMainFrameToActivateIsFast(false);
   begin_main_frame_args_ = args;
   begin_main_frame_args_.on_critical_path = !ImplLatencyTakesPriority();
 
-  BeginImplFrame(args);
+  BeginImplFrame(args, Now());
   compositor_timing_history_->WillFinishImplFrame(
       state_machine_.needs_redraw());
   FinishImplFrame();
@@ -456,14 +455,15 @@ void Scheduler::SendBeginFrameAck(const BeginFrameArgs& args,
   }
 
   BeginFrameAck ack(args.source_id, args.sequence_number,
-                    latest_confirmed_sequence_number, 0, did_submit);
+                    latest_confirmed_sequence_number, did_submit);
   begin_frame_source_->DidFinishFrame(this, ack);
 }
 
 // BeginImplFrame starts a compositor frame that will wait up until a deadline
 // for a BeginMainFrame+activation to complete before it times out and draws
 // any asynchronous animation and scroll/pinch updates.
-void Scheduler::BeginImplFrame(const BeginFrameArgs& args) {
+void Scheduler::BeginImplFrame(const BeginFrameArgs& args,
+                               base::TimeTicks now) {
   DCHECK_EQ(state_machine_.begin_impl_frame_state(),
             SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
   DCHECK(begin_impl_frame_deadline_task_.IsCancelled());
@@ -473,7 +473,7 @@ void Scheduler::BeginImplFrame(const BeginFrameArgs& args) {
   state_machine_.OnBeginImplFrame(args.source_id, args.sequence_number);
   devtools_instrumentation::DidBeginFrame(layer_tree_host_id_);
   compositor_timing_history_->WillBeginImplFrame(
-      state_machine_.NewActiveTreeLikely());
+      state_machine_.NewActiveTreeLikely(), args.frame_time, args.type, now);
   client_->WillBeginImplFrame(begin_impl_frame_tracker_.Current());
 
   ProcessScheduledActions();
@@ -698,11 +698,12 @@ Scheduler::AsValue() const {
   state->SetString("inside_action",
                    SchedulerStateMachine::ActionToString(inside_action_));
 
-  state->BeginDictionary("begin_impl_frame_args");
+  state->BeginDictionary("begin_impl_frame_tracker");
   begin_impl_frame_tracker_.AsValueInto(now, state.get());
   state->EndDictionary();
 
-  state->SetString("begin_impl_frame_deadline_mode_",
+
+  state->SetString("begin_impl_frame_deadline_mode",
                    SchedulerStateMachine::BeginImplFrameDeadlineModeToString(
                        begin_impl_frame_deadline_mode_));
   state->EndDictionary();
@@ -796,6 +797,13 @@ bool Scheduler::IsBeginMainFrameSentOrStarted() const {
               SchedulerStateMachine::BEGIN_MAIN_FRAME_STATE_SENT ||
           state_machine_.begin_main_frame_state() ==
               SchedulerStateMachine::BEGIN_MAIN_FRAME_STATE_STARTED);
+}
+
+BeginFrameAck Scheduler::CurrentBeginFrameAckForActiveTree() const {
+  return BeginFrameAck(
+      begin_main_frame_args_.source_id, begin_main_frame_args_.sequence_number,
+      state_machine_.last_begin_frame_sequence_number_active_tree_was_fresh(),
+      true);
 }
 
 }  // namespace cc

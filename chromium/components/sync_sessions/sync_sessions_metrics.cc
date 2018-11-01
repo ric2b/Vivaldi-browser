@@ -9,7 +9,6 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/user_metrics.h"
 #include "base/time/time.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sync_sessions/sessions_sync_manager.h"
@@ -51,7 +50,7 @@ base::Time SyncSessionsMetrics::MaxTabTimestamp(
       break;
     }
     for (const auto& key_value : session->windows) {
-      for (const auto& tab : key_value.second->tabs) {
+      for (const auto& tab : key_value.second->wrapped_window.tabs) {
         best = std::max(best, tab->timestamp);
       }
     }

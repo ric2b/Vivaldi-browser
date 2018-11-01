@@ -7,7 +7,10 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
@@ -16,7 +19,6 @@
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/extension_install_ui_factory.h"
-#include "chrome/common/extensions/api/plugins/plugins_handler.h"
 #include "components/crx_file/id_util.h"
 #include "components/sync/model/string_ordinal.h"
 #include "content/public/browser/browser_thread.h"
@@ -24,10 +26,14 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/install/extension_install_ui.h"
 #include "extensions/browser/install_flag.h"
+#include "extensions/browser/policy_check.h"
+#include "extensions/browser/preload_check_group.h"
+#include "extensions/browser/requirements_checker.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_l10n_util.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/manifest_handlers/plugins_handler.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 
@@ -110,10 +116,10 @@ scoped_refptr<UnpackedInstaller> UnpackedInstaller::Create(
 
 UnpackedInstaller::UnpackedInstaller(ExtensionService* extension_service)
     : service_weak_(extension_service->AsWeakPtr()),
+      profile_(extension_service->profile()),
       prompt_for_plugins_(true),
       require_modern_manifest_version_(true),
-      be_noisy_on_failure_(true),
-      install_checker_(extension_service->profile()) {
+      be_noisy_on_failure_(true) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -149,9 +155,8 @@ bool UnpackedInstaller::LoadFromCommandLine(const base::FilePath& path_in,
   }
 
   std::string error;
-  install_checker_.set_extension(
-      file_util::LoadExtension(
-          extension_path_, Manifest::COMMAND_LINE, GetFlags(), &error).get());
+  extension_ = file_util::LoadExtension(extension_path_, Manifest::COMMAND_LINE,
+                                        GetFlags(), &error);
 
   if (!extension() ||
       !extension_l10n_util::ValidateExtensionLocales(
@@ -195,8 +200,7 @@ void UnpackedInstaller::ShowInstallPrompt() {
       PluginInfo::HasPlugins(extension()) &&
       !disabled_extensions.Contains(extension()->id())) {
     SimpleExtensionLoadPrompt* prompt = new SimpleExtensionLoadPrompt(
-        extension(),
-        install_checker_.profile(),
+        extension(), profile_,
         base::Bind(&UnpackedInstaller::StartInstallChecks, this));
     prompt->ShowPrompt();
     return;
@@ -241,28 +245,34 @@ void UnpackedInstaller::StartInstallChecks() {
     }
   }
 
-  install_checker_.Start(
-      ExtensionInstallChecker::CHECK_REQUIREMENTS |
-          ExtensionInstallChecker::CHECK_MANAGEMENT_POLICY,
-      true /* fail fast */,
-      base::Bind(&UnpackedInstaller::OnInstallChecksComplete, this));
+  policy_check_ = base::MakeUnique<PolicyCheck>(profile_, extension_);
+  requirements_check_ = base::MakeUnique<RequirementsChecker>(extension_);
+
+  check_group_ = base::MakeUnique<PreloadCheckGroup>();
+  check_group_->set_stop_on_first_error(true);
+
+  check_group_->AddCheck(policy_check_.get());
+  check_group_->AddCheck(requirements_check_.get());
+  check_group_->Start(
+      base::BindOnce(&UnpackedInstaller::OnInstallChecksComplete, this));
 }
 
-void UnpackedInstaller::OnInstallChecksComplete(int failed_checks) {
+void UnpackedInstaller::OnInstallChecksComplete(PreloadCheck::Errors errors) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (!install_checker_.policy_error().empty()) {
-    ReportExtensionLoadError(install_checker_.policy_error());
+  if (errors.empty()) {
+    InstallExtension();
     return;
   }
 
-  if (!install_checker_.requirement_errors().empty()) {
-    ReportExtensionLoadError(
-        base::JoinString(install_checker_.requirement_errors(), " "));
-    return;
-  }
+  base::string16 error_message;
+  if (errors.count(PreloadCheck::DISALLOWED_BY_POLICY))
+    error_message = policy_check_->GetErrorMessage();
+  else
+    error_message = requirements_check_->GetErrorMessage();
 
-  InstallExtension();
+  DCHECK(!error_message.empty());
+  ReportExtensionLoadError(base::UTF16ToUTF8(error_message));
 }
 
 int UnpackedInstaller::GetFlags() {
@@ -329,9 +339,8 @@ void UnpackedInstaller::LoadWithFileAccess(int flags) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   std::string error;
-  install_checker_.set_extension(
-      file_util::LoadExtension(
-          extension_path_, Manifest::UNPACKED, flags, &error).get());
+  extension_ = file_util::LoadExtension(extension_path_, Manifest::UNPACKED,
+                                        flags, &error);
 
   if (!extension() ||
       !extension_l10n_util::ValidateExtensionLocales(

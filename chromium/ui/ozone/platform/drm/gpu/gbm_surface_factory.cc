@@ -13,9 +13,11 @@
 #include "build/build_config.h"
 #include "third_party/khronos/EGL/egl.h"
 #include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/native_pixmap.h"
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/common/gl_ozone_egl.h"
+#include "ui/ozone/common/gl_ozone_osmesa.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_proxy.h"
 #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
@@ -24,7 +26,6 @@
 #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
-#include "ui/ozone/public/native_pixmap.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 
 namespace ui {
@@ -75,7 +76,9 @@ class GLOzoneEGLGbm : public GLOzoneEGL {
 }  // namespace
 
 GbmSurfaceFactory::GbmSurfaceFactory(DrmThreadProxy* drm_thread_proxy)
-    : egl_implementation_(new GLOzoneEGLGbm(this, drm_thread_proxy)),
+    : egl_implementation_(
+          base::MakeUnique<GLOzoneEGLGbm>(this, drm_thread_proxy)),
+      osmesa_implementation_(base::MakeUnique<GLOzoneOSMesa>()),
       drm_thread_proxy_(drm_thread_proxy) {}
 
 GbmSurfaceFactory::~GbmSurfaceFactory() {
@@ -104,10 +107,8 @@ GbmSurfaceless* GbmSurfaceFactory::GetSurface(
 std::vector<gl::GLImplementation>
 GbmSurfaceFactory::GetAllowedGLImplementations() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  std::vector<gl::GLImplementation> impls;
-  impls.push_back(gl::kGLImplementationEGLGLES2);
-  impls.push_back(gl::kGLImplementationOSMesaGL);
-  return impls;
+  return std::vector<gl::GLImplementation>{gl::kGLImplementationEGLGLES2,
+                                           gl::kGLImplementationOSMesaGL};
 }
 
 GLOzone* GbmSurfaceFactory::GetGLOzone(gl::GLImplementation implementation) {
@@ -115,6 +116,8 @@ GLOzone* GbmSurfaceFactory::GetGLOzone(gl::GLImplementation implementation) {
   switch (implementation) {
     case gl::kGLImplementationEGLGLES2:
       return egl_implementation_.get();
+    case gl::kGLImplementationOSMesaGL:
+      return osmesa_implementation_.get();
     default:
       return nullptr;
   }
@@ -134,7 +137,7 @@ std::vector<gfx::BufferFormat> GbmSurfaceFactory::GetScanoutFormats(
   return scanout_formats;
 }
 
-scoped_refptr<ui::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
+scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
     gfx::AcceleratedWidget widget,
     gfx::Size size,
     gfx::BufferFormat format,
@@ -153,7 +156,8 @@ scoped_refptr<ui::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
   return make_scoped_refptr(new GbmPixmap(this, buffer));
 }
 
-scoped_refptr<ui::NativePixmap> GbmSurfaceFactory::CreateNativePixmapFromHandle(
+scoped_refptr<gfx::NativePixmap>
+GbmSurfaceFactory::CreateNativePixmapFromHandle(
     gfx::AcceleratedWidget widget,
     gfx::Size size,
     gfx::BufferFormat format,

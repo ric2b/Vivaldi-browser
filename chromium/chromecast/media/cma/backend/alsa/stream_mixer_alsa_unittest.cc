@@ -35,7 +35,11 @@ const int kTestMaxReadSize = 4096;
 
 // kTestSamplesPerSecond needs to be higher than kLowSampleRateCutoff for the
 // mixer to use it.
-const int kTestSamplesPerSecond = 54321;
+const int kTestSamplesPerSecond = 48000;
+
+// Stream mixer alsa will never pull more than this many frames at a time.
+const int kMaxWriteSizeMs = 20;
+const int kMaxChunkSize = kTestSamplesPerSecond * kMaxWriteSizeMs / 1000;
 
 // This array holds |NUM_DATA_SETS| sets of arbitrary interleaved float data.
 // Each set holds |NUM_SAMPLES| / kNumChannels frames of data.
@@ -157,6 +161,9 @@ class MockInputQueue : public StreamMixerAlsa::InputQueue {
                void(const MediaPipelineBackendAlsa::RenderingDelay&
                         mixer_rendering_delay));
   std::string device_id() const override { return device_id_; }
+  AudioContentType content_type() const override {
+    return AudioContentType::kMedia;
+  }
   void set_filter_group(FilterGroup* group) override { filter_group_ = group; }
   FilterGroup* filter_group() override { return filter_group_; }
   int MaxReadSize() override { return max_read_size_; }
@@ -170,6 +177,9 @@ class MockInputQueue : public StreamMixerAlsa::InputQueue {
                         mixer_rendering_delay));
   MOCK_METHOD1(SignalError, void(StreamMixerAlsaInput::MixerError error));
   MOCK_METHOD1(PrepareToDelete, void(const OnReadyToDeleteCb& delete_cb));
+
+  void SetContentTypeVolume(float volume, int fade_ms) override {}
+  void SetMuted(bool muted) override {}
 
   // Setters and getters for test control.
   void SetPaused(bool paused) { paused_ = paused; }
@@ -294,6 +304,7 @@ class StreamMixerAlsaTest : public testing::Test {
       : message_loop_(new base::MessageLoop()),
         mock_alsa_(new testing::NiceMock<MockAlsaWrapper>()) {
     StreamMixerAlsa::MakeSingleThreadedForTest();
+    StreamMixerAlsa::Get()->DisablePostProcessingForTest();
     StreamMixerAlsa::Get()->SetAlsaWrapperForTest(base::WrapUnique(mock_alsa_));
   }
 
@@ -386,18 +397,18 @@ TEST_F(StreamMixerAlsaTest, WriteFrames) {
   // MaxReadSize provided by any of the channels.
   // TODO(slan): Check that the proper number of frames is pulled.
   ASSERT_EQ(3u, inputs.size());
-  inputs[0]->SetMaxReadSize(1024);
-  inputs[1]->SetMaxReadSize(512);
-  inputs[2]->SetMaxReadSize(2048);
+  inputs[0]->SetMaxReadSize(kMaxChunkSize + 1);
+  inputs[1]->SetMaxReadSize(kMaxChunkSize - 1);
+  inputs[2]->SetMaxReadSize(kMaxChunkSize * 2);
   for (auto* input : inputs) {
-    EXPECT_CALL(*input, GetResampledData(_, 512)).Times(1);
-    EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, 512, _))
+    EXPECT_CALL(*input, GetResampledData(_, kMaxChunkSize - 1)).Times(1);
+    EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, kMaxChunkSize - 1, _))
         .Times(kNumChannels);
     EXPECT_CALL(*input, AfterWriteFrames(_)).Times(1);
   }
 
   // TODO(slan): Verify that the data is mixed properly with math.
-  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, 512)).Times(1);
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, kMaxChunkSize - 1)).Times(1);
   mixer->WriteFramesForTest();
 
   // Make two of these streams non-primary, and exhaust a non-primary stream.
@@ -409,14 +420,14 @@ TEST_F(StreamMixerAlsaTest, WriteFrames) {
   inputs[2]->SetPrimary(false);
   for (auto* input : inputs) {
     if (input != inputs[1]) {
-      EXPECT_CALL(*input, GetResampledData(_, 1024)).Times(1);
-      EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, 1024, _))
+      EXPECT_CALL(*input, GetResampledData(_, kMaxChunkSize)).Times(1);
+      EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, kMaxChunkSize, _))
           .Times(kNumChannels);
     }
     EXPECT_CALL(*input, AfterWriteFrames(_)).Times(1);
   }
   // Note that the new smallest stream shall dictate the length of the write.
-  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, 1024)).Times(1);
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, kMaxChunkSize)).Times(1);
   mixer->WriteFramesForTest();
 
   // Exhaust a primary stream. No streams shall be polled for data, and no
@@ -678,11 +689,12 @@ TEST_F(StreamMixerAlsaTest, WriteBuffersOfVaryingLength) {
   EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, 32)).Times(1);
   mixer->WriteFramesForTest();
 
-  input->SetMaxReadSize(1024);
-  EXPECT_CALL(*input, GetResampledData(_, 1024));
-  EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, 1024, _)).Times(kNumChannels);
+  input->SetMaxReadSize(kMaxChunkSize + 1);
+  EXPECT_CALL(*input, GetResampledData(_, kMaxChunkSize));
+  EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, kMaxChunkSize, _))
+      .Times(kNumChannels);
   EXPECT_CALL(*input, AfterWriteFrames(_));
-  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, 1024)).Times(1);
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, kMaxChunkSize)).Times(1);
   mixer->WriteFramesForTest();
 }
 

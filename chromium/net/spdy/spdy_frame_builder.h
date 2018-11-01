@@ -9,12 +9,11 @@
 #include <stdint.h>
 
 #include <memory>
-#include <string>
 
 #include "base/gtest_prod_util.h"
-#include "base/strings/string_piece.h"
 #include "base/sys_byteorder.h"
 #include "net/base/net_export.h"
+#include "net/spdy/platform/api/spdy_string_piece.h"
 #include "net/spdy/spdy_bug_tracker.h"
 #include "net/spdy/spdy_protocol.h"
 #include "net/spdy/zero_copy_output_buffer.h"
@@ -54,13 +53,21 @@ class NET_EXPORT_PRIVATE SpdyFrameBuilder {
                      uint8_t flags,
                      SpdyStreamId stream_id);
 
-  // Populates this frame with a HTTP2 frame prefix with length information.
-  // The given type must be a control frame type.
+  // Populates this frame with a HTTP2 frame prefix with type and length
+  // information.  |type| must be a defined type.
   bool BeginNewFrame(const SpdyFramer& framer,
                      SpdyFrameType type,
                      uint8_t flags,
                      SpdyStreamId stream_id,
                      size_t length);
+
+  // Populates this frame with a HTTP2 frame prefix with type and length
+  // information.  |raw_frame_type| must not be a defined frame type.
+  bool BeginNewExtensionFrame(const SpdyFramer& framer,
+                              uint8_t raw_frame_type,
+                              uint8_t flags,
+                              SpdyStreamId stream_id,
+                              size_t length);
 
   // Takes the buffer from the SpdyFrameBuilder.
   SpdySerializedFrame take() {
@@ -99,8 +106,8 @@ class NET_EXPORT_PRIVATE SpdyFrameBuilder {
     return (WriteBytes(&upper, sizeof(upper)) &&
             WriteBytes(&lower, sizeof(lower)));
   }
-  bool WriteStringPiece16(const base::StringPiece& value);
-  bool WriteStringPiece32(const base::StringPiece& value);
+  bool WriteStringPiece16(const SpdyStringPiece& value);
+  bool WriteStringPiece32(const SpdyStringPiece& value);
   bool WriteBytes(const void* data, uint32_t data_len);
 
   // Update (in-place) the length field in the frame being built to reflect the
@@ -114,6 +121,14 @@ class NET_EXPORT_PRIVATE SpdyFrameBuilder {
   FRIEND_TEST_ALL_PREFIXES(SpdyFrameBuilderTest, GetWritableBuffer);
   FRIEND_TEST_ALL_PREFIXES(SpdyFrameBuilderTest, GetWritableOutput);
   FRIEND_TEST_ALL_PREFIXES(SpdyFrameBuilderTest, GetWritableOutputNegative);
+
+  // Populates this frame with a HTTP2 frame prefix with type and length
+  // information.
+  bool BeginNewFrameInternal(const SpdyFramer& framer,
+                             uint8_t raw_frame_type,
+                             uint8_t flags,
+                             SpdyStreamId stream_id,
+                             size_t length);
 
   // Returns a writeable buffer of given size in bytes, to be appended to the
   // currently written frame. Does bounds checking on length but does not
@@ -138,6 +153,14 @@ class NET_EXPORT_PRIVATE SpdyFrameBuilder {
   size_t capacity_;  // Allocation size of payload, set by constructor.
   size_t length_;    // Length of the latest frame in the buffer.
   size_t offset_;    // Position at which the latest frame begins.
+
+  // Remove all four below after
+  // FLAGS_chromium_http2_flag_remove_rewritelength deprecates.
+  const size_t kLengthFieldLength = 3;
+  char* start_of_current_frame_ = nullptr;
+  size_t bytes_of_length_written_in_first_block_ = kLengthFieldLength;
+  // In case length of a new frame is cross blocks.
+  char* start_of_current_frame_in_next_block_ = nullptr;
 };
 
 }  // namespace net

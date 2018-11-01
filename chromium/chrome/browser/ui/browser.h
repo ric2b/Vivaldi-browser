@@ -28,8 +28,6 @@
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
-#include "chrome/browser/ui/search/search_tab_helper_delegate.h"
-#include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -51,6 +49,10 @@
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+
+#if !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/signin_view_controller.h"
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/extension_registry_observer.h"
@@ -106,7 +108,6 @@ class WebContentsModalDialogHost;
 class Browser : public TabStripModelObserver,
                 public content::WebContentsDelegate,
                 public CoreTabHelperDelegate,
-                public SearchTabHelperDelegate,
                 public ChromeWebModalDialogManagerDelegate,
                 public BookmarkTabHelperDelegate,
                 public zoom::ZoomObserver,
@@ -168,6 +169,8 @@ class Browser : public TabStripModelObserver,
                                      bool user_gesture);
 
     static CreateParams CreateForDevTools(Profile* profile);
+
+    static CreateParams CreateForDevToolsForVivaldi(Profile* profile);
 
     // The browser type.
     Type type;
@@ -292,9 +295,12 @@ class Browser : public TabStripModelObserver,
   extensions::HostedAppBrowserController* hosted_app_controller() {
     return hosted_app_controller_.get();
   }
+
+#if !defined(OS_CHROMEOS)
   SigninViewController* signin_view_controller() {
     return &signin_view_controller_;
   }
+#endif
 
   // Will lazy create the bubble manager.
   ChromeBubbleManager* GetBubbleManager();
@@ -335,25 +341,30 @@ class Browser : public TabStripModelObserver,
 
   // Gives beforeunload handlers the chance to cancel the close. Returns whether
   // to proceed with the close. If called while the process begun by
-  // CallBeforeUnloadHandlers is in progress, returns false without taking
-  // action.
+  // TryToCloseWindow is in progress, returns false without taking action.
   bool ShouldCloseWindow();
 
   // Begins the process of confirming whether the associated browser can be
   // closed. If there are no tabs with beforeunload handlers it will immediately
-  // return false. Otherwise, it starts prompting the user, returns true and
-  // will call |on_close_confirmed| with the result of the user's decision.
+  // return false. If |skip_beforeunload| is true, all beforeunload
+  // handlers will be skipped and window closing will be confirmed without
+  // showing the prompt, the function will return false as well.
+  // Otherwise, it starts prompting the user, returns true and will call
+  // |on_close_confirmed| with the result of the user's decision.
   // After calling this function, if the window will not be closed, call
   // ResetBeforeUnloadHandlers() to reset all beforeunload handlers; calling
   // this function multiple times without an intervening call to
-  // ResetBeforeUnloadHandlers() will run only the beforeunload handlers
+  // ResetTryToCloseWindow() will run only the beforeunload handlers
   // registered since the previous call.
-  bool CallBeforeUnloadHandlers(
-      const base::Callback<void(bool)>& on_close_confirmed);
+  // Note that if the browser window has been used before, users should always
+  // have a chance to save their work before the window is closed without
+  // triggering beforeunload event.
+  bool TryToCloseWindow(bool skip_beforeunload,
+                        const base::Callback<void(bool)>& on_close_confirmed);
 
   // Clears the results of any beforeunload confirmation dialogs triggered by a
-  // CallBeforeUnloadHandlers call.
-  void ResetBeforeUnloadHandlers();
+  // TryToCloseWindow call.
+  void ResetTryToCloseWindow();
 
   // Figure out if there are tabs that have beforeunload handlers.
   // It starts beforeunload/unload processing as a side-effect.
@@ -426,25 +437,6 @@ class Browser : public TabStripModelObserver,
                                   chrome::NavigateParams::WindowAction action,
                                   bool user_initiated);
 
-  // Shows the signin flow for |mode| in a tab-modal dialog.
-  // |access_point| indicates the access point used to open the Gaia sign in
-  // page.
-  void ShowModalSigninWindow(profiles::BubbleViewMode mode,
-                             signin_metrics::AccessPoint access_point);
-
-  // Closes the tab-modal signin flow opened with ShowModalSigninWindow, if it's
-  // open. Does nothing otherwise.
-  void CloseModalSigninWindow();
-
-  // Shows the tab modal sync confirmation dialog that informs the user about
-  // sync and gives them a chance to abort signin under the tab modal signin
-  // flow.
-  void ShowModalSyncConfirmationWindow();
-
-  // Shows the tab modal signin error dialog that informs the user about
-  // signin errors.
-  void ShowModalSigninErrorWindow();
-
   // Used to register a KeepAlive to affect the Chrome lifetime. The KeepAlive
   // is registered when the browser is added to the browser list, and unregisted
   // when it is removed from it.
@@ -486,9 +478,9 @@ class Browser : public TabStripModelObserver,
   bool CanOverscrollContent() const override;
   bool ShouldPreserveAbortedURLs(content::WebContents* source) override;
   void SetFocusToLocationBar(bool select_all) override;
-  bool PreHandleKeyboardEvent(content::WebContents* source,
-                              const content::NativeWebKeyboardEvent& event,
-                              bool* is_keyboard_shortcut) override;
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
   void HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
@@ -693,10 +685,6 @@ class Browser : public TabStripModelObserver,
                                  const std::string& protocol,
                                  const GURL& url,
                                  bool user_gesture) override;
-  void UpdatePreferredSize(content::WebContents* source,
-                           const gfx::Size& pref_size) override;
-  void ResizeDueToAutoResize(content::WebContents* source,
-                             const gfx::Size& new_size) override;
   void FindReply(content::WebContents* web_contents,
                  int request_id,
                  int number_of_matches,
@@ -733,11 +721,6 @@ class Browser : public TabStripModelObserver,
   bool CanReloadContents(content::WebContents* web_contents) const override;
   bool CanSaveContents(content::WebContents* web_contents) const override;
 
-  // Overridden from SearchTabHelperDelegate:
-  void OnWebContentsInstantSupportDisabled(
-      const content::WebContents* web_contents) override;
-  OmniboxView* GetOmniboxView() override;
-
   // Overridden from WebContentsModalDialogManagerDelegate:
   void SetWebContentsBlocked(content::WebContents* web_contents,
                              bool blocked) override;
@@ -767,9 +750,6 @@ class Browser : public TabStripModelObserver,
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Overridden from extensions::ExtensionRegistryObserver:
-  void OnExtensionUninstalled(content::BrowserContext* browser_context,
-                              const extensions::Extension* extension,
-                              extensions::UninstallReason reason) override;
   void OnExtensionLoaded(content::BrowserContext* browser_context,
                          const extensions::Extension* extension) override;
   void OnExtensionUnloaded(
@@ -1046,7 +1026,9 @@ class Browser : public TabStripModelObserver,
 
   base::WeakPtr<ValidationMessageBubble> validation_message_bubble_;
 
+#if !defined(OS_CHROMEOS)
   SigninViewController signin_view_controller_;
+#endif
 
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 

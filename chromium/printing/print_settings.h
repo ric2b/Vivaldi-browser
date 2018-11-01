@@ -5,6 +5,7 @@
 #ifndef PRINTING_PRINT_SETTINGS_H_
 #define PRINTING_PRINT_SETTINGS_H_
 
+#include <algorithm>
 #include <string>
 
 #include "base/strings/string16.h"
@@ -31,7 +32,6 @@ PRINTING_EXPORT void GetColorModelForMode(int color_mode,
 PRINTING_EXPORT void SetAgent(const std::string& user_agent);
 PRINTING_EXPORT const std::string& GetAgent();
 
-// OS-independent print settings.
 class PRINTING_EXPORT PrintSettings {
  public:
 #if defined(OS_WIN)
@@ -99,8 +99,17 @@ class PRINTING_EXPORT PrintSettings {
   }
   const base::string16& device_name() const { return device_name_; }
 
-  void set_dpi(int dpi) { dpi_ = dpi; }
-  int dpi() const { return dpi_; }
+  void set_dpi(int dpi) {
+    dpi_[0] = dpi;
+    dpi_[1] = dpi;
+  }
+  void set_dpi_xy(int dpi_horizontal, int dpi_vertical) {
+    dpi_[0] = dpi_horizontal;
+    dpi_[1] = dpi_vertical;
+  }
+  int dpi() const { return std::min(dpi_[0], dpi_[1]); }
+  int dpi_horizontal() const { return dpi_[0]; }
+  int dpi_vertical() const { return dpi_[1]; }
 
   void set_scale_factor(double scale_factor) { scale_factor_ = scale_factor; }
   double scale_factor() const { return scale_factor_; }
@@ -157,8 +166,6 @@ class PRINTING_EXPORT PrintSettings {
   void set_duplex_mode(DuplexMode duplex_mode) { duplex_mode_ = duplex_mode; }
   DuplexMode duplex_mode() const { return duplex_mode_; }
 
-  int desired_dpi() const { return desired_dpi_; }
-
 #if defined(OS_WIN)
   void set_print_text_with_gdi(bool use_gdi) { print_text_with_gdi_ = use_gdi; }
   bool print_text_with_gdi() const { return print_text_with_gdi_; }
@@ -182,10 +189,6 @@ class PRINTING_EXPORT PrintSettings {
   // Multi-page printing. Each PageRange describes a from-to page combination.
   // This permits printing selected pages only.
   PageRanges ranges_;
-
-  // Desired visible dots per inch rendering for output. Printing should be
-  // scaled to ScreenDpi/dpix*desired_dpi.
-  int desired_dpi_;
 
   // Indicates if the user only wants to print the current selection.
   bool selection_only_;
@@ -224,8 +227,10 @@ class PRINTING_EXPORT PrintSettings {
   // Page setup in device units.
   PageSetup page_setup_device_units_;
 
-  // Printer's device effective dots per inch in both axis.
-  int dpi_;
+  // Printer's device effective dots per inch in both axes. The two values will
+  // generally be identical. However, on Windows, there are a few rare printers
+  // that support resolutions with different DPI in different dimensions.
+  int dpi_[2];
 
   // Scale factor
   double scale_factor_;

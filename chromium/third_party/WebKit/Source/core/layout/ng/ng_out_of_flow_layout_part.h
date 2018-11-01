@@ -10,9 +10,8 @@
 #include "core/layout/ng/ng_absolute_utils.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_layout_algorithm.h"
-#include "core/layout/ng/ng_units.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Optional.h"
+#include "platform/wtf/Optional.h"
 
 namespace blink {
 

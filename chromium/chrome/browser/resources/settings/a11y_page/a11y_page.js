@@ -28,10 +28,18 @@ Polymer({
       notify: true,
     },
 
-    /** @private */
-    isGuest_: {
-      type: Boolean,
-      value: function() { return loadTimeData.getBoolean('isGuest'); }
+    /** @private {!Map<string, string>} */
+    focusConfig_: {
+      type: Object,
+      value: function() {
+        var map = new Map();
+// <if expr="chromeos">
+        map.set(
+            settings.Route.MANAGE_ACCESSIBILITY.path,
+            '#subpage-trigger .subpage-arrow');
+// </if>
+        return map;
+      },
     },
   },
 

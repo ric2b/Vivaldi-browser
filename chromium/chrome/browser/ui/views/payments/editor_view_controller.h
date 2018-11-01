@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PAYMENTS_EDITOR_VIEW_CONTROLLER_H_
 #define CHROME_BROWSER_UI_VIEWS_PAYMENTS_EDITOR_VIEW_CONTROLLER_H_
 
+#include <map>
 #include <memory>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -16,7 +18,6 @@
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
 #include "chrome/browser/ui/views/payments/validation_delegate.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "ui/views/controls/button/vector_icon_button_delegate.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/view.h"
@@ -34,7 +35,8 @@ class View;
 
 namespace payments {
 
-class PaymentRequest;
+class PaymentRequestSpec;
+class PaymentRequestState;
 class PaymentRequestDialogView;
 class ValidatingCombobox;
 class ValidatingTextfield;
@@ -45,12 +47,12 @@ struct EditorField {
   enum class ControlType : int { TEXTFIELD, COMBOBOX };
 
   EditorField(autofill::ServerFieldType type,
-              const base::string16& label,
+              base::string16 label,
               LengthHint length_hint,
               bool required,
               ControlType control_type = ControlType::TEXTFIELD)
       : type(type),
-        label(label),
+        label(std::move(label)),
         length_hint(length_hint),
         required(required),
         control_type(control_type) {}
@@ -62,9 +64,9 @@ struct EditorField {
   };
 
   // Data type in the field.
-  const autofill::ServerFieldType type;
+  autofill::ServerFieldType type;
   // Label to be shown alongside the field.
-  const base::string16 label;
+  base::string16 label;
   // Hint about the length of this field's contents.
   LengthHint length_hint;
   // Whether the field is required.
@@ -87,25 +89,10 @@ class EditorViewController : public PaymentRequestSheetController,
       std::map<const EditorField, views::Label*, EditorField::Compare>;
 
   // Does not take ownership of the arguments, which should outlive this object.
-  EditorViewController(PaymentRequest* request,
+  EditorViewController(PaymentRequestSpec* spec,
+                       PaymentRequestState* state,
                        PaymentRequestDialogView* dialog);
   ~EditorViewController() override;
-
-  // PaymentRequestSheetController:
-  std::unique_ptr<views::View> CreateView() override;
-  std::unique_ptr<views::View> CreateExtraFooterView() override;
-
-  virtual std::unique_ptr<views::View> CreateHeaderView() = 0;
-  // Returns the field definitions used to build the UI.
-  virtual std::vector<EditorField> GetFieldDefinitions() = 0;
-  // Validates the data entered and attempts to save; returns true on success.
-  virtual bool ValidateModelAndSave() = 0;
-  // Creates a ValidationDelegate which knows how to validate for a given
-  // |field| definition.
-  virtual std::unique_ptr<ValidationDelegate> CreateValidationDelegate(
-      const EditorField& field) = 0;
-  virtual std::unique_ptr<ui::ComboboxModel> GetComboboxModelForType(
-      const autofill::ServerFieldType& type) = 0;
 
   // Will display |error_message| alongside the input field represented by
   // |field|.
@@ -116,8 +103,33 @@ class EditorViewController : public PaymentRequestSheetController,
   const TextFieldsMap& text_fields() const { return text_fields_; }
 
  protected:
+  virtual std::unique_ptr<views::View> CreateHeaderView() = 0;
+  // Returns the field definitions used to build the UI.
+  virtual std::vector<EditorField> GetFieldDefinitions() = 0;
+  virtual base::string16 GetInitialValueForType(
+      autofill::ServerFieldType type) = 0;
+  // Validates the data entered and attempts to save; returns true on success.
+  virtual bool ValidateModelAndSave() = 0;
+  // Creates a ValidationDelegate which knows how to validate for a given
+  // |field| definition.
+  virtual std::unique_ptr<ValidationDelegate> CreateValidationDelegate(
+      const EditorField& field) = 0;
+  virtual std::unique_ptr<ui::ComboboxModel> GetComboboxModelForType(
+      const autofill::ServerFieldType& type) = 0;
+
   // PaymentRequestSheetController;
   std::unique_ptr<views::Button> CreatePrimaryButton() override;
+  void FillContentView(views::View* content_view) override;
+  std::unique_ptr<views::View> CreateExtraFooterView() override;
+
+  // views::ComboboxListener:
+  void OnPerformAction(views::Combobox* combobox) override;
+
+  // Update the editor view by removing all it's child views and recreating
+  // the input fields returned by GetFieldDefinitions. Note that
+  // CreateEditorView MUST have been called at least once before calling
+  // UpdateEditorView.
+  virtual void UpdateEditorView();
 
  private:
   // PaymentRequestSheetController:
@@ -126,9 +138,6 @@ class EditorViewController : public PaymentRequestSheetController,
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
                        const base::string16& new_contents) override;
-
-  // views::ComboboxListener:
-  void OnPerformAction(views::Combobox* combobox) override;
 
   // Creates the whole editor view to go within the editor dialog. It
   // encompasses all the input fields created by CreateInputField().

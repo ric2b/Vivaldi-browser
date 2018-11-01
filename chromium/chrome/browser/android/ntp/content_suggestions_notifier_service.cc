@@ -8,6 +8,7 @@
 
 #include "base/android/application_status_listener.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/android/ntp/content_suggestions_notification_helper.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_handler.h"
@@ -15,10 +16,13 @@
 #include "chrome/browser/ntp_snippets/ntp_snippets_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/url_constants.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/variations/variations_associated_data.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -29,7 +33,6 @@ using ntp_snippets::ContentSuggestion;
 using ntp_snippets::ContentSuggestionsNotificationHelper;
 using ntp_snippets::ContentSuggestionsService;
 using ntp_snippets::KnownCategories;
-using params::ntp_snippets::kNotificationsAlwaysNotifyParam;
 using params::ntp_snippets::kNotificationsDailyLimit;
 using params::ntp_snippets::kNotificationsDefaultDailyLimit;
 using params::ntp_snippets::kNotificationsDefaultPriority;
@@ -37,7 +40,9 @@ using params::ntp_snippets::kNotificationsFeature;
 using params::ntp_snippets::kNotificationsKeepWhenFrontmostParam;
 using params::ntp_snippets::kNotificationsOpenToNTPParam;
 using params::ntp_snippets::kNotificationsPriorityParam;
-using params::ntp_snippets::kNotificationsUseSnippetAsTextParam;
+using params::ntp_snippets::kNotificationsTextParam;
+using params::ntp_snippets::kNotificationsTextValueAndMore;
+using params::ntp_snippets::kNotificationsTextValueSnippet;
 
 namespace {
 
@@ -105,8 +110,7 @@ void ConsumeQuota(PrefService* prefs) {
 class ContentSuggestionsNotifierService::NotifyingObserver
     : public ContentSuggestionsService::Observer {
  public:
-  NotifyingObserver(ContentSuggestionsService* service,
-                    Profile* profile)
+  NotifyingObserver(ContentSuggestionsService* service, Profile* profile)
       : service_(service),
         profile_(profile),
         app_status_listener_(base::Bind(&NotifyingObserver::AppStatusChanged,
@@ -132,19 +136,31 @@ class ContentSuggestionsNotifierService::NotifyingObserver
     base::Time timeout_at = suggestion->notification_extra()
                                 ? suggestion->notification_extra()->deadline
                                 : base::Time::Max();
-    bool use_snippet = variations::GetVariationParamByFeatureAsBool(
-        kNotificationsFeature, kNotificationsUseSnippetAsTextParam, false);
+
+    const std::string text_param = variations::GetVariationParamValueByFeature(
+        kNotificationsFeature, kNotificationsTextParam);
+    base::string16 text;
+    if (text_param == kNotificationsTextValueSnippet) {
+      text = suggestion->snippet_text();
+    } else if (text_param == kNotificationsTextValueAndMore) {
+      int extra_count =
+          service_->GetSuggestionsForCategory(category).size() - 1;
+      text = l10n_util::GetStringFUTF16(
+          IDS_NTP_NOTIFICATIONS_READ_THIS_STORY_AND_MORE,
+          suggestion->publisher_name(), base::IntToString16(extra_count));
+    } else {
+      text = suggestion->publisher_name();
+    }
+
     bool open_to_ntp = variations::GetVariationParamByFeatureAsBool(
         kNotificationsFeature, kNotificationsOpenToNTPParam, false);
     service_->FetchSuggestionImage(
         suggestion->id(),
-        base::Bind(&NotifyingObserver::ImageFetched,
-                   weak_ptr_factory_.GetWeakPtr(), suggestion->id(),
-                   open_to_ntp ? GURL("chrome://newtab") : suggestion->url(),
-                   suggestion->title(),
-                   use_snippet ? suggestion->snippet_text()
-                               : suggestion->publisher_name(),
-                   timeout_at));
+        base::Bind(
+            &NotifyingObserver::ImageFetched, weak_ptr_factory_.GetWeakPtr(),
+            suggestion->id(),
+            open_to_ntp ? GURL(chrome::kChromeUINewTabURL) : suggestion->url(),
+            suggestion->title(), text, timeout_at));
   }
 
   void OnCategoryStatusChanged(Category category,
@@ -152,19 +168,9 @@ class ContentSuggestionsNotifierService::NotifyingObserver
     if (!category.IsKnownCategory(KnownCategories::ARTICLES)) {
       return;
     }
-    switch (new_status) {
-      case CategoryStatus::AVAILABLE:
-      case CategoryStatus::AVAILABLE_LOADING:
-        break;  // nothing to do
-      case CategoryStatus::INITIALIZING:
-      case CategoryStatus::ALL_SUGGESTIONS_EXPLICITLY_DISABLED:
-      case CategoryStatus::CATEGORY_EXPLICITLY_DISABLED:
-      case CategoryStatus::LOADING_ERROR:
-      case CategoryStatus::NOT_PROVIDED:
-      case CategoryStatus::SIGNED_OUT:
-        ContentSuggestionsNotificationHelper::HideAllNotifications(
-            CONTENT_SUGGESTIONS_HIDE_DISABLED);
-        break;
+    if (!ntp_snippets::IsCategoryStatusAvailable(new_status)) {
+      ContentSuggestionsNotificationHelper::HideAllNotifications(
+          CONTENT_SUGGESTIONS_HIDE_DISABLED);
     }
   }
 
@@ -187,16 +193,6 @@ class ContentSuggestionsNotifierService::NotifyingObserver
  private:
   const ContentSuggestion* GetSuggestionToNotifyAbout(Category category) {
     const auto& suggestions = service_->GetSuggestionsForCategory(category);
-    // TODO(sfiera): replace with AlwaysNotifyAboutContentSuggestions().
-    if (variations::GetVariationParamByFeatureAsBool(
-            kNotificationsFeature, kNotificationsAlwaysNotifyParam, false)) {
-      if (category.IsKnownCategory(KnownCategories::ARTICLES) &&
-          !suggestions.empty()) {
-        return &suggestions[0];
-      }
-      return nullptr;
-    }
-
     for (const ContentSuggestion& suggestion : suggestions) {
       if (suggestion.notification_extra()) {
         return &suggestion;
@@ -254,9 +250,9 @@ class ContentSuggestionsNotifierService::NotifyingObserver
 ContentSuggestionsNotifierService::ContentSuggestionsNotifierService(
     Profile* profile,
     ContentSuggestionsService* suggestions)
-    : observer_(base::MakeUnique<NotifyingObserver>(suggestions, profile)) {
+    : profile_(profile), suggestions_service_(suggestions) {
   ContentSuggestionsNotificationHelper::FlushCachedMetrics();
-  suggestions->AddObserver(observer_.get());
+  UpdateObserverRegistrationState();
 }
 
 ContentSuggestionsNotifierService::~ContentSuggestionsNotifierService() =
@@ -264,6 +260,8 @@ ContentSuggestionsNotifierService::~ContentSuggestionsNotifierService() =
 
 void ContentSuggestionsNotifierService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(prefs::kContentSuggestionsNotificationsEnabled,
+                                true);
   registry->RegisterIntegerPref(
       prefs::kContentSuggestionsConsecutiveIgnoredPrefName, 0);
   registry->RegisterIntegerPref(prefs::kContentSuggestionsNotificationsSentDay,
@@ -273,4 +271,25 @@ void ContentSuggestionsNotifierService::RegisterProfilePrefs(
 
   // TODO(sfiera): remove after M62; no longer (and never really) used.
   registry->RegisterStringPref(kNotificationIDWithinCategory, std::string());
+}
+
+void ContentSuggestionsNotifierService::SetEnabled(bool enabled) {
+  profile_->GetPrefs()->SetBoolean(
+      prefs::kContentSuggestionsNotificationsEnabled, enabled);
+  UpdateObserverRegistrationState();
+}
+
+bool ContentSuggestionsNotifierService::IsEnabled() const {
+  return profile_->GetPrefs()->GetBoolean(
+      prefs::kContentSuggestionsNotificationsEnabled);
+}
+
+void ContentSuggestionsNotifierService::UpdateObserverRegistrationState() {
+  if (observer_ && !IsEnabled()) {
+    suggestions_service_->RemoveObserver(observer_.get());
+    observer_.reset();
+  } else if (IsEnabled() && !observer_) {
+    observer_.reset(new NotifyingObserver(suggestions_service_, profile_));
+    suggestions_service_->AddObserver(observer_.get());
+  }
 }

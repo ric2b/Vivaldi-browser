@@ -9,17 +9,17 @@
 #include "core/frame/LocalFrame.h"
 #include "modules/ModulesExport.h"
 #include "platform/Supplementable.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Vector.h"
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/installedapp/WebRelatedApplication.h"
 #include "public/platform/modules/installedapp/WebRelatedAppsFetcher.h"
-#include "wtf/RefPtr.h"
-#include "wtf/Vector.h"
+#include "public/platform/modules/installedapp/installed_app_provider.mojom-blink.h"
+#include "public/platform/modules/installedapp/related_application.mojom-blink.h"
 
 #include <memory>
 
 namespace blink {
-
-class SecurityOrigin;
 
 class MODULES_EXPORT InstalledAppController final
     : public GarbageCollectedFinalized<InstalledAppController>,
@@ -31,14 +31,13 @@ class MODULES_EXPORT InstalledAppController final
  public:
   virtual ~InstalledAppController();
 
-  // Gets a list of related apps from a particular origin's manifest that belong
+  // Gets a list of related apps from the current page's manifest that belong
   // to the current underlying platform, and are installed.
-  void getInstalledRelatedApps(WTF::RefPtr<SecurityOrigin>,
-                               std::unique_ptr<AppInstalledCallbacks>);
+  void GetInstalledRelatedApps(std::unique_ptr<AppInstalledCallbacks>);
 
-  static void provideTo(LocalFrame&, WebRelatedAppsFetcher*);
-  static InstalledAppController* from(LocalFrame&);
-  static const char* supplementName();
+  static void ProvideTo(LocalFrame&, WebRelatedAppsFetcher*);
+  static InstalledAppController* From(LocalFrame&);
+  static const char* SupplementName();
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -48,16 +47,22 @@ class MODULES_EXPORT InstalledAppController final
   InstalledAppController(LocalFrame&, WebRelatedAppsFetcher*);
 
   // Inherited from ContextLifecycleObserver.
-  void contextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed(ExecutionContext*) override;
 
-  // For a given security origin, takes a set of related applications and
-  // filters them by those which belong to the current underlying platform, and
-  // are actually installed. Passes the filtered list to the callback.
-  void filterByInstalledApps(WTF::RefPtr<SecurityOrigin>,
-                             const WebVector<WebRelatedApplication>&,
+  // Takes a set of related applications and filters them by those which belong
+  // to the current underlying platform, and are actually installed and related
+  // to the current page's origin. Passes the filtered list to the callback.
+  void FilterByInstalledApps(const WebVector<WebRelatedApplication>&,
                              std::unique_ptr<AppInstalledCallbacks>);
 
-  WebRelatedAppsFetcher* m_relatedAppsFetcher;
+  // Callback from the InstalledAppProvider mojo service.
+  void OnFilterInstalledApps(std::unique_ptr<blink::AppInstalledCallbacks>,
+                             WTF::Vector<mojom::blink::RelatedApplicationPtr>);
+
+  // Handle to the InstalledApp mojo service.
+  mojom::blink::InstalledAppProviderPtr provider_;
+
+  WebRelatedAppsFetcher* related_apps_fetcher_;
 };
 
 }  // namespace blink

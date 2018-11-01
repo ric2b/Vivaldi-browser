@@ -30,12 +30,7 @@
 #include "components/omnibox/browser/in_memory_url_index.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/url_formatter.h"
-
-#if defined(USE_SYSTEM_PROTOBUF)
-#include <google/protobuf/repeated_field.h>
-#else
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
-#endif
 
 namespace {
 
@@ -222,13 +217,11 @@ ScoredHistoryMatches URLIndexPrivateData::HistoryItemsForTerms(
     search_term_cache_.clear();
   } else {
     // Remove any stale SearchTermCacheItems.
-    for (SearchTermCacheMap::iterator cache_iter = search_term_cache_.begin();
-         cache_iter != search_term_cache_.end(); ) {
-      if (!cache_iter->second.used_)
-        cache_iter = search_term_cache_.erase(cache_iter);
-      else
-        ++cache_iter;
-    }
+    base::EraseIf(
+        search_term_cache_,
+        [](const std::pair<base::string16, SearchTermCacheItem>& item) {
+          return !item.second.used_;
+        });
   }
 
   return scored_items;
@@ -483,12 +476,10 @@ HistoryIDVector URLIndexPrivateData::HistoryIDsFromWords(
   // TODO(dyaroshev): write a generic algorithm(crbug.com/696167).
   for (String16Vector::iterator iter = words.begin(); iter != words.end();
        ++iter) {
-    base::string16 uni_word = *iter;
-    HistoryIDSet term_history_set = HistoryIDsForTerm(uni_word);
-    if (term_history_set.empty()) {
-      history_ids.clear();
-      break;
-    }
+    HistoryIDSet term_history_set = HistoryIDsForTerm(*iter);
+    if (term_history_set.empty())
+      return HistoryIDVector();
+
     if (iter == words.begin()) {
       history_ids = {term_history_set.begin(), term_history_set.end()};
     } else {
@@ -588,28 +579,28 @@ HistoryIDSet URLIndexPrivateData::HistoryIDsForTerm(
 
     // We must filter the word list because the resulting word set surely
     // contains words which do not have the search term as a proper subset.
-    for (WordIDSet::iterator word_set_iter = word_id_set.begin();
-         word_set_iter != word_id_set.end(); ) {
-      if (word_list_[*word_set_iter].find(term) == base::string16::npos)
-        word_set_iter = word_id_set.erase(word_set_iter);
-      else
-        ++word_set_iter;
-    }
+    base::EraseIf(word_id_set, [this, &term](WordID word_id) {
+      return word_list_[word_id].find(term) == base::string16::npos;
+    });
   } else {
     word_id_set = WordIDSetForTermChars(Char16SetFromString16(term));
   }
 
   // If any words resulted then we can compose a set of history IDs by unioning
   // the sets from each word.
-  HistoryIDSet history_id_set;
+  // We use |buffer| because it's more efficient to collect everything and then
+  // construct a flat_set than to insert elements one by one.
+  HistoryIDVector buffer;
   for (WordID word_id : word_id_set) {
     WordIDHistoryMap::iterator word_iter = word_id_history_map_.find(word_id);
     if (word_iter != word_id_history_map_.end()) {
       HistoryIDSet& word_history_id_set(word_iter->second);
-      history_id_set.insert(word_history_id_set.begin(),
-                            word_history_id_set.end());
+      buffer.insert(buffer.end(), word_history_id_set.begin(),
+                    word_history_id_set.end());
     }
   }
+  HistoryIDSet history_id_set(buffer.begin(), buffer.end(),
+                              base::KEEP_FIRST_OF_DUPES);
 
   // Record a new cache entry for this word if the term is longer than
   // a single character.
@@ -627,24 +618,19 @@ WordIDSet URLIndexPrivateData::WordIDSetForTermChars(
   for (Char16Set::const_iterator c_iter = term_chars.begin();
        c_iter != term_chars.end(); ++c_iter) {
     CharWordIDMap::iterator char_iter = char_word_map_.find(*c_iter);
-    if (char_iter == char_word_map_.end()) {
-      // A character was not found so there are no matching results: bail.
-      word_id_set.clear();
-      break;
-    }
-    WordIDSet& char_word_id_set(char_iter->second);
+    // A character was not found so there are no matching results: bail.
+    if (char_iter == char_word_map_.end())
+      return WordIDSet();
+
+    const WordIDSet& char_word_id_set(char_iter->second);
     // It is possible for there to no longer be any words associated with
     // a particular character. Give up in that case.
-    if (char_word_id_set.empty()) {
-      word_id_set.clear();
-      break;
-    }
+    if (char_word_id_set.empty())
+      return WordIDSet();
 
     if (c_iter == term_chars.begin()) {
-      // First character results becomes base set of results.
       word_id_set = char_word_id_set;
     } else {
-      // Subsequent character results get intersected in.
       word_id_set =
           base::STLSetIntersection<WordIDSet>(word_id_set, char_word_id_set);
     }
@@ -686,12 +672,9 @@ void URLIndexPrivateData::HistoryIdsToScoredMatches(
                              &lower_terms_to_word_starts_offsets);
 
   // Filter bad matches and other matches we don't want to display.
-  auto filter = [this, template_url_service](const HistoryID history_id) {
+  base::EraseIf(history_ids, [&](const HistoryID history_id) {
     return ShouldFilter(history_id, template_url_service);
-  };
-  history_ids.erase(
-      std::remove_if(history_ids.begin(), history_ids.end(), filter),
-      history_ids.end());
+  });
 
   // Score the matches.
   const size_t num_matches = history_ids.size();
@@ -709,7 +692,7 @@ void URLIndexPrivateData::HistoryIdsToScoredMatches(
         num_matches, now);
     // Filter new matches that ended up scoring 0. (These are usually matches
     // which didn't match the user's raw terms.)
-    if (new_scored_match.raw_score != 0)
+    if (new_scored_match.raw_score > 0)
       scored_items->push_back(std::move(new_scored_match));
   }
 }
@@ -1107,7 +1090,8 @@ bool URLIndexPrivateData::RestoreCharWordMap(
       return false;
     base::char16 uni_char = static_cast<base::char16>(entry.char_16());
     const RepeatedField<int32_t>& word_ids = entry.word_id();
-    char_word_map_[uni_char] = {word_ids.begin(), word_ids.end()};
+    char_word_map_[uni_char] =
+        WordIDSet(word_ids.begin(), word_ids.end(), base::KEEP_FIRST_OF_DUPES);
   }
   return true;
 }
@@ -1128,7 +1112,8 @@ bool URLIndexPrivateData::RestoreWordIDHistoryMap(
       return false;
     WordID word_id = entry.word_id();
     const RepeatedField<int64_t>& history_ids = entry.history_id();
-    word_id_history_map_[word_id] = {history_ids.begin(), history_ids.end()};
+    word_id_history_map_[word_id] = HistoryIDSet(
+        history_ids.begin(), history_ids.end(), base::KEEP_FIRST_OF_DUPES);
     for (HistoryID history_id : history_ids)
       history_id_word_map_[history_id].insert(word_id);
   }

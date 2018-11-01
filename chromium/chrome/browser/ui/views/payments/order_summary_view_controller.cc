@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -82,65 +83,25 @@ std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
 }  // namespace
 
 OrderSummaryViewController::OrderSummaryViewController(
-    PaymentRequest* request,
+    PaymentRequestSpec* spec,
+    PaymentRequestState* state,
     PaymentRequestDialogView* dialog)
-    : PaymentRequestSheetController(request, dialog), pay_button_(nullptr) {
-  request->AddObserver(this);
+    : PaymentRequestSheetController(spec, state, dialog), pay_button_(nullptr) {
+  spec->AddObserver(this);
+  state->AddObserver(this);
 }
 
 OrderSummaryViewController::~OrderSummaryViewController() {
-  request()->RemoveObserver(this);
+  spec()->RemoveObserver(this);
+  state()->RemoveObserver(this);
 }
 
-std::unique_ptr<views::View> OrderSummaryViewController::CreateView() {
-  std::unique_ptr<views::View> content_view = base::MakeUnique<views::View>();
+void OrderSummaryViewController::OnSpecUpdated() {
+  UpdateContentView();
+}
 
-  views::BoxLayout* layout = new views::BoxLayout(
-      views::BoxLayout::kVertical, 0, 0, 0);
-  layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
-  layout->set_cross_axis_alignment(
-      views::BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
-  content_view->SetLayoutManager(layout);
-
-  CurrencyFormatter* formatter = request()->GetOrCreateCurrencyFormatter(
-      request()->details()->total->amount->currency,
-      request()->details()->total->amount->currency_system,
-      g_browser_process->GetApplicationLocale());
-
-  // Set the ID for the first few line items labels, for testing.
-  const std::vector<DialogViewID> line_items{
-      DialogViewID::ORDER_SUMMARY_LINE_ITEM_1,
-      DialogViewID::ORDER_SUMMARY_LINE_ITEM_2,
-      DialogViewID::ORDER_SUMMARY_LINE_ITEM_3};
-  for (size_t i = 0; i < request()->details()->display_items.size(); i++) {
-    DialogViewID view_id =
-        i < line_items.size() ? line_items[i] : DialogViewID::VIEW_ID_NONE;
-    content_view->AddChildView(
-        CreateLineItemView(
-            base::UTF8ToUTF16(request()->details()->display_items[i]->label),
-            formatter->Format(
-                request()->details()->display_items[i]->amount->value),
-            false, view_id)
-            .release());
-  }
-
-  base::string16 total_label_value = l10n_util::GetStringFUTF16(
-      IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT,
-      base::UTF8ToUTF16(request()->details()->total->amount->currency),
-      formatter->Format(request()->details()->total->amount->value));
-
-  content_view->AddChildView(
-      CreateLineItemView(base::UTF8ToUTF16(request()->details()->total->label),
-                         total_label_value, true,
-                         DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL)
-          .release());
-
-  return CreatePaymentView(
-      CreateSheetHeaderView(
-          true,
-          l10n_util::GetStringUTF16(IDS_PAYMENT_REQUEST_ORDER_SUMMARY_TITLE),
-          this),
-      std::move(content_view));
+void OrderSummaryViewController::OnSelectedInformationChanged() {
+  UpdatePayButtonState(state()->is_ready_to_pay());
 }
 
 std::unique_ptr<views::Button>
@@ -151,12 +112,50 @@ OrderSummaryViewController::CreatePrimaryButton() {
   button->set_tag(static_cast<int>(PaymentRequestCommonTags::PAY_BUTTON_TAG));
   button->set_id(static_cast<int>(DialogViewID::PAY_BUTTON));
   pay_button_ = button.get();
-  UpdatePayButtonState(request()->is_ready_to_pay());
+  UpdatePayButtonState(state()->is_ready_to_pay());
   return button;
 }
 
-void OrderSummaryViewController::OnSelectedInformationChanged() {
-  UpdatePayButtonState(request()->is_ready_to_pay());
+base::string16 OrderSummaryViewController::GetSheetTitle() {
+  return l10n_util::GetStringUTF16(IDS_PAYMENT_REQUEST_ORDER_SUMMARY_TITLE);
+}
+
+void OrderSummaryViewController::FillContentView(views::View* content_view) {
+  views::BoxLayout* layout = new views::BoxLayout(
+      views::BoxLayout::kVertical, 0, 0, 0);
+  layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
+  content_view->SetLayoutManager(layout);
+
+  // Set the ID for the first few line items labels, for testing.
+  const std::vector<DialogViewID> line_items{
+      DialogViewID::ORDER_SUMMARY_LINE_ITEM_1,
+      DialogViewID::ORDER_SUMMARY_LINE_ITEM_2,
+      DialogViewID::ORDER_SUMMARY_LINE_ITEM_3};
+  for (size_t i = 0; i < spec()->details().display_items.size(); i++) {
+    DialogViewID view_id =
+        i < line_items.size() ? line_items[i] : DialogViewID::VIEW_ID_NONE;
+    content_view->AddChildView(
+        CreateLineItemView(
+            base::UTF8ToUTF16(spec()->details().display_items[i]->label),
+            spec()->GetFormattedCurrencyAmount(
+                spec()->details().display_items[i]->amount->value),
+            false, view_id)
+            .release());
+  }
+
+  base::string16 total_label_value = l10n_util::GetStringFUTF16(
+      IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT,
+      base::UTF8ToUTF16(spec()->details().total->amount->currency),
+      spec()->GetFormattedCurrencyAmount(
+          spec()->details().total->amount->value));
+
+  content_view->AddChildView(
+      CreateLineItemView(base::UTF8ToUTF16(spec()->details().total->label),
+                         total_label_value, true,
+                         DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL)
+          .release());
 }
 
 void OrderSummaryViewController::UpdatePayButtonState(bool enabled) {

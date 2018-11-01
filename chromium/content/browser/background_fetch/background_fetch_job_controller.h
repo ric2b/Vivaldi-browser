@@ -5,49 +5,112 @@
 #ifndef CONTENT_BROWSER_BACKGROUND_FETCH_BACKGROUND_FETCH_JOB_CONTROLLER_H_
 #define CONTENT_BROWSER_BACKGROUND_FETCH_BACKGROUND_FETCH_JOB_CONTROLLER_H_
 
+#include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
-#include "content/browser/background_fetch/background_fetch_data_manager.h"
+#include "base/callback.h"
+#include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/background_fetch/background_fetch_request_info.h"
+#include "content/common/background_fetch/background_fetch_types.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/browser_thread.h"
+
+namespace net {
+class URLRequestContextGetter;
+}
 
 namespace content {
 
+class BackgroundFetchDataManager;
 class BrowserContext;
-class StoragePartition;
 
 // The JobController will be responsible for coordinating communication with the
-// DownloadManager. It will get requests from the JobData and dispatch them to
-// the DownloadManager.
-// TODO(harkness): The JobController should also observe downloads.
+// DownloadManager. It will get requests from the DataManager and dispatch them
+// to the DownloadManager. It lives entirely on the IO thread.
 class CONTENT_EXPORT BackgroundFetchJobController {
  public:
-  BackgroundFetchJobController(BrowserContext* browser_context,
-                               StoragePartition* storage_partition);
+  enum class State { INITIALIZED, FETCHING, ABORTED, COMPLETED };
+
+  using CompletedCallback =
+      base::OnceCallback<void(BackgroundFetchJobController*)>;
+
+  BackgroundFetchJobController(
+      const BackgroundFetchRegistrationId& registration_id,
+      const BackgroundFetchOptions& options,
+      BackgroundFetchDataManager* data_manager,
+      BrowserContext* browser_context,
+      scoped_refptr<net::URLRequestContextGetter> request_context,
+      CompletedCallback completed_callback);
   ~BackgroundFetchJobController();
 
-  // Start processing on a batch of requests. Some of these may already be in
-  // progress or completed from a previous chromium instance.
-  void ProcessJob(const std::string& job_guid,
-                  BackgroundFetchJobData* job_data);
+  // Starts fetching the |initial_fetches|. The controller will continue to
+  // fetch new content until all requests have been handled.
+  void Start(
+      std::vector<scoped_refptr<BackgroundFetchRequestInfo>> initial_requests);
+
+  // Updates the representation of this Background Fetch in the user interface
+  // to match the given |title|.
+  void UpdateUI(const std::string& title);
+
+  // Immediately aborts this Background Fetch by request of the developer.
+  void Abort();
+
+  // Returns the current state of this Job Controller.
+  State state() const { return state_; }
+
+  // Returns the registration id for which this job is fetching data.
+  const BackgroundFetchRegistrationId& registration_id() const {
+    return registration_id_;
+  }
+
+  // Returns the options with which this job is fetching data.
+  const BackgroundFetchOptions& options() const { return options_; }
 
  private:
-  void ProcessRequest(const std::string& job_guid,
-                      const BackgroundFetchRequestInfo& request);
+  class Core;
 
-  // Pointer to the browser context. The BackgroundFetchJobController is owned
-  // by the BrowserContext via the StoragePartition.
-  BrowserContext* browser_context_;
+  // Requests the download manager to start fetching |request|.
+  void StartRequest(scoped_refptr<BackgroundFetchRequestInfo> request);
 
-  // Pointer to the storage partition. This object is owned by the partition
-  // (through a sequence of other classes).
-  StoragePartition* storage_partition_;
+  // Called when the given |request| has started fetching, after having been
+  // assigned the |download_guid| by the download system.
+  void DidStartRequest(scoped_refptr<BackgroundFetchRequestInfo> request,
+                       const std::string& download_guid);
 
-  // The fetch_map holds any requests which have been sent to the
-  // DownloadManager indexed by the job_guid.
-  std::unordered_map<std::string, BackgroundFetchRequestInfo> fetch_map_;
+  // Called when the given |request| has been completed.
+  void DidCompleteRequest(scoped_refptr<BackgroundFetchRequestInfo> request);
+
+  // Called when a completed download has been marked as such in the DataManager
+  // and the next request, if any, has been read from storage.
+  void DidGetNextRequest(scoped_refptr<BackgroundFetchRequestInfo> request);
+
+  // The registration id on behalf of which this controller is fetching data.
+  BackgroundFetchRegistrationId registration_id_;
+
+  // Options for the represented background fetch registration.
+  BackgroundFetchOptions options_;
+
+  // The current state of this Job Controller.
+  State state_ = State::INITIALIZED;
+
+  // Inner core of this job controller which lives on the UI thread.
+  std::unique_ptr<Core, BrowserThread::DeleteOnUIThread> ui_core_;
+  base::WeakPtr<Core> ui_core_ptr_;
+
+  // The DataManager's lifetime is controlled by the BackgroundFetchContext and
+  // will be kept alive until after the JobController is destroyed.
+  BackgroundFetchDataManager* data_manager_;
+
+  // Number of outstanding acknowledgements we still expect to receive.
+  int pending_completed_file_acknowledgements_ = 0;
+
+  // Callback for when all fetches have been completed.
+  CompletedCallback completed_callback_;
+
+  base::WeakPtrFactory<BackgroundFetchJobController> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundFetchJobController);
 };

@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 
 using autofill::PasswordForm;
 
@@ -59,6 +60,17 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromDataForTesting(
   return form;
 }
 
+std::vector<std::unique_ptr<PasswordForm>> WrapForms(
+    std::vector<PasswordForm> forms) {
+  std::vector<std::unique_ptr<PasswordForm>> results;
+  results.reserve(forms.size());
+  std::transform(forms.begin(), forms.end(), std::back_inserter(results),
+                 [](PasswordForm& form) {
+                   return base::MakeUnique<PasswordForm>(std::move(form));
+                 });
+  return results;
+}
+
 bool ContainsEqualPasswordFormsUnordered(
     const std::vector<std::unique_ptr<PasswordForm>>& expectations,
     const std::vector<std::unique_ptr<PasswordForm>>& actual_values,
@@ -104,8 +116,26 @@ MockPasswordStoreObserver::MockPasswordStoreObserver() {}
 
 MockPasswordStoreObserver::~MockPasswordStoreObserver() {}
 
+// TODO(crbug.com/706392): Fix password reuse detection for Android.
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 MockPasswordReuseDetectorConsumer::MockPasswordReuseDetectorConsumer() {}
 
 MockPasswordReuseDetectorConsumer::~MockPasswordReuseDetectorConsumer() {}
+#endif
 
+HSTSStateManager::HSTSStateManager(net::TransportSecurityState* state,
+                                   bool is_hsts,
+                                   const std::string& host)
+    : state_(state), is_hsts_(is_hsts), host_(host) {
+  if (is_hsts_) {
+    base::Time expiry = base::Time::Max();
+    bool include_subdomains = false;
+    state_->AddHSTS(host_, expiry, include_subdomains);
+  }
+}
+
+HSTSStateManager::~HSTSStateManager() {
+  if (is_hsts_)
+    state_->DeleteDynamicDataForHost(host_);
+}
 }  // namespace password_manager

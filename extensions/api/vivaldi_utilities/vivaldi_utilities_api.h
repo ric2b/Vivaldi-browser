@@ -16,6 +16,7 @@
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/vivaldi_utilities.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
 
 class Browser;
 
@@ -201,6 +202,93 @@ class UtilitiesMapFocusAppWindowToWindowIdFunction
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesMapFocusAppWindowToWindowIdFunction);
+};
+
+class UtilitiesPauseAllDownloadsFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.pauseAllDownloads",
+                             UTILITIES_PAUSEALLDOWNLOADS)
+  UtilitiesPauseAllDownloadsFunction() = default;
+
+ protected:
+  ~UtilitiesPauseAllDownloadsFunction() override = default;
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesPauseAllDownloadsFunction);
+};
+
+class UtilitiesCreateUrlMappingFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.createUrlMapping",
+                             UTILITIES_CREATEURLMAPPING)
+  UtilitiesCreateUrlMappingFunction() = default;
+
+ protected:
+  ~UtilitiesCreateUrlMappingFunction() override = default;
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesCreateUrlMappingFunction);
+};
+
+class UtilitiesRemoveUrlMappingFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.removeUrlMapping",
+                             UTILITIES_REMOVEURLMAPPING)
+  UtilitiesRemoveUrlMappingFunction() = default;
+
+ protected:
+  ~UtilitiesRemoveUrlMappingFunction() override = default;
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesRemoveUrlMappingFunction);
+};
+
+class UtilitiesSelectFileFunction : public ChromeAsyncExtensionFunction,
+                                    public ui::SelectFileDialog::Listener {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.selectFile", UTILITIES_SELECTFILE)
+  UtilitiesSelectFileFunction();
+
+ protected:
+  ~UtilitiesSelectFileFunction() override;
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  // ui::SelectFileDialog::Listener:
+  void FileSelected(const base::FilePath& path,
+                    int index,
+                    void* params) override;
+  void FileSelectionCanceled(void* params) override;
+
+ private:
+  scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectFileFunction);
+};
+
+class UtilitiesGetVersionFunction : public AsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getVersion",
+                             UTILITIES_GETVERSION)
+  UtilitiesGetVersionFunction() = default;
+
+ protected:
+  ~UtilitiesGetVersionFunction() override = default;
+
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetVersionFunction);
 };
 
 }  // namespace extensions

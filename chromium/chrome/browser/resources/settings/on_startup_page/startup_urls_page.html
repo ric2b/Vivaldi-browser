@@ -23,8 +23,7 @@
         border-top: var(--settings-separator-line);
       }
 
-      #container settings-startup-url-entry:not([editable]) {
-        background: none;
+      #container settings-startup-url-entry {
         cursor: default;
       }
     </style>
@@ -33,7 +32,8 @@
         <iron-list items="[[startupPages_]]" scroll-target="container">
           <template>
             <settings-startup-url-entry model="[[item]]"
-                tabindex$="[[tabIndex]]"
+                tabindex$="[[tabIndex]]" iron-list-tab-index="[[tabIndex]]"
+                last-focused="{{lastFocused_}}"
                 editable="[[!prefs.session.startup_urls.controlledBy]]">
             </settings-startup-url-entry>
           </template>

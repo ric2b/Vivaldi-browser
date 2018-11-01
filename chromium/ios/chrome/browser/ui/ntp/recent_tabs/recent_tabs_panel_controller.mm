@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/mac/scoped_nsobject.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -22,13 +21,17 @@
 #import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/synced_sessions_bridge.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @interface RecentTabsPanelController ()<SyncedSessionsObserver,
                                         RecentTabsTableViewControllerDelegate> {
   std::unique_ptr<synced_sessions::SyncedSessionsObserverBridge>
       _syncedSessionsObserver;
   std::unique_ptr<recent_tabs::ClosedTabsObserverBridge> _closedTabsObserver;
   SessionsSyncUserState _userState;
-  base::scoped_nsobject<RecentTabsTableViewController> _tableViewController;
+  RecentTabsTableViewController* _tableViewController;
   ios::ChromeBrowserState* _browserState;  // Weak.
 }
 
@@ -55,21 +58,11 @@
 // Property declared in NewTabPagePanelProtocol.
 @synthesize delegate = _delegate;
 
-- (instancetype)init {
-  NOTREACHED();
-  return nil;
-}
-
-- (instancetype)initWithNibNamed:(NSString*)nibName {
-  NOTREACHED();
-  return nil;
-}
-
 - (instancetype)initWithLoader:(id<UrlLoader>)loader
                   browserState:(ios::ChromeBrowserState*)browserState {
-  return [self initWithController:[[[RecentTabsTableViewController alloc]
+  return [self initWithController:[[RecentTabsTableViewController alloc]
                                       initWithBrowserState:browserState
-                                                    loader:loader] autorelease]
+                                                    loader:loader]
                      browserState:browserState];
 }
 
@@ -80,7 +73,7 @@
     DCHECK(controller);
     DCHECK(browserState);
     _browserState = browserState;
-    _tableViewController.reset([controller retain]);
+    _tableViewController = controller;
     [_tableViewController setDelegate:self];
     [self initObservers];
     [self reloadSessions];
@@ -91,7 +84,6 @@
 - (void)dealloc {
   [_tableViewController setDelegate:nil];
   [self deallocObservers];
-  [super dealloc];
 }
 
 - (void)initObservers {
@@ -188,7 +180,10 @@
   return [_tableViewController view];
 }
 
-#pragma mark
+- (UIViewController*)viewController {
+  return _tableViewController;
+}
+
 #pragma mark - Private
 
 - (BOOL)isSignedIn {

@@ -27,14 +27,15 @@ Sources.JavaScriptCompiler = class {
    * @return {?SDK.RuntimeModel}
    */
   _findRuntimeModel() {
+    // TODO(dgozman): grab correct runtime model from JavaScriptSourceFrame instead.
     var debuggerModels = SDK.targetManager.models(SDK.DebuggerModel);
     var sourceCode = this._sourceFrame.uiSourceCode();
     for (var i = 0; i < debuggerModels.length; ++i) {
       var scriptFile = Bindings.debuggerWorkspaceBinding.scriptFile(sourceCode, debuggerModels[i]);
       if (scriptFile)
-        return debuggerModels[i].target().runtimeModel;
+        return debuggerModels[i].runtimeModel();
     }
-    return SDK.targetManager.mainTarget() ? SDK.targetManager.mainTarget().runtimeModel : null;
+    return SDK.targetManager.mainTarget() ? SDK.targetManager.mainTarget().model(SDK.RuntimeModel) : null;
   }
 
   _compile() {
@@ -63,7 +64,7 @@ Sources.JavaScriptCompiler = class {
       }
       if (!exceptionDetails)
         return;
-      var text = SDK.ConsoleMessage.simpleTextFromException(exceptionDetails);
+      var text = SDK.RuntimeModel.simpleTextFromException(exceptionDetails);
       this._sourceFrame.uiSourceCode().addLineMessage(
           Workspace.UISourceCode.Message.Level.Error, text, exceptionDetails.lineNumber, exceptionDetails.columnNumber);
       this._compilationFinishedForTest();

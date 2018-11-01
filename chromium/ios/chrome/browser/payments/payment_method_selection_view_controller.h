@@ -7,13 +7,13 @@
 
 #import <UIKit/UIKit.h>
 
-#include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
-#include "ios/web/public/payments/payment_request.h"
+
+class PaymentRequest;
 
 namespace autofill {
 class CreditCard;
-}
+}  // namespace autofill
 
 @class PaymentMethodSelectionViewController;
 
@@ -31,6 +31,10 @@ class CreditCard;
 - (void)paymentMethodSelectionViewControllerDidReturn:
     (PaymentMethodSelectionViewController*)controller;
 
+// Notifies the delegate that the user has chosen to add a new credit card.
+- (void)paymentMethodSelectionViewControllerDidSelectAddCard:
+    (PaymentMethodSelectionViewController*)controller;
+
 @end
 
 // View controller responsible for presenting the available payment methods for
@@ -43,9 +47,9 @@ class CreditCard;
 @property(nonatomic, weak)
     id<PaymentMethodSelectionViewControllerDelegate> delegate;
 
-// Initializes this object with an instance of PaymentRequest which owns an
-// instance of web::PaymentRequest as provided by the page invoking the Payment
-// Request API. This object will not take ownership of |paymentRequest|.
+// Initializes this object with an instance of PaymentRequest which has a copy
+// of web::PaymentRequest as provided by the page invoking the Payment Request
+// API. This object will not take ownership of |paymentRequest|.
 - (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
     NS_DESIGNATED_INITIALIZER;
 

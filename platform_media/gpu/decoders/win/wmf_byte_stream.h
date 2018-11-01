@@ -7,6 +7,8 @@
 #ifndef CONTENT_COMMON_GPU_MEDIA_WMF_BYTE_STREAM_H_
 #define CONTENT_COMMON_GPU_MEDIA_WMF_BYTE_STREAM_H_
 
+#include "platform_media/gpu/decoders/win/read_stream_listener.h"
+
 // Windows Media Foundation headers
 #include <mfapi.h>
 #include <mfidl.h>
@@ -16,11 +18,17 @@
 #include "base/threading/thread_checker.h"
 #include "base/win/iunknown_impl.h"
 #include "base/win/scoped_comptr.h"
-#include "media/base/data_source.h"
+
+namespace media {
+class DataSource;
+}
 
 namespace content {
 
-class WMFByteStream : public IMFByteStream,
+class ReadStream;
+
+class WMFByteStream : public ReadStreamListener,
+                      public IMFByteStream,
                       public base::win::IUnknownImpl,
                       public IMFAttributes {
  public:
@@ -113,23 +121,15 @@ class WMFByteStream : public IMFByteStream,
   HRESULT STDMETHODCALLTYPE CopyAllItems(IMFAttributes* dest) override;
 
  private:
-  static const int64_t kUnknownSize;
 
-  void OnReadData(int size);
-
-  media::DataSource* data_source_;
-  media::DataSource::ReadCB read_cb_;
+  void OnReadData(int size) override;
 
   IMFAsyncResult* async_result_;
+  ReadStream* read_stream_;
 
   // We implement IMFAttributes by forwarding all calls to an instance of the
   // standard IMFAttributes class, which we store a reference to here.
   base::win::ScopedComPtr<IMFAttributes> attributes_;
-
-  // Cached position within the data source.
-  int64_t read_position_;
-
-  bool stopped_;
 
   base::ThreadChecker thread_checker_;
 };

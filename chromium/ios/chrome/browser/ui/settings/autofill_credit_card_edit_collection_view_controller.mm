@@ -6,11 +6,10 @@
 
 #include "base/format_macros.h"
 #import "base/ios/block_types.h"
-#import "base/ios/weak_nsobject.h"
 #import "base/mac/foundation_util.h"
 #include "base/mac/scoped_block.h"
-#import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
@@ -18,22 +17,33 @@
 #import "components/autofill/ios/browser/credit_card_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/ui/autofill/autofill_ui_type.h"
+#import "ios/chrome/browser/ui/autofill/autofill_ui_type_util.h"
+#import "ios/chrome/browser/ui/autofill/cells/autofill_edit_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
-#import "ios/chrome/browser/ui/settings/cells/autofill_edit_item.h"
+#import "ios/chrome/browser/ui/settings/autofill_edit_collection_view_controller+protected.h"
 #import "ios/chrome/browser/ui/settings/cells/copied_to_chrome_item.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
+using ::AutofillTypeFromAutofillUIType;
 
 NSString* const kAutofillCreditCardEditCollectionViewId =
     @"kAutofillCreditCardEditCollectionViewId";
+
+const CGFloat kCardTypeIconDimension = 30.0;
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierFields = kSectionIdentifierEnumZero,
@@ -82,8 +92,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (_creditCard.record_type() == autofill::CreditCard::FULL_SERVER_CARD ||
       _creditCard.record_type() == autofill::CreditCard::MASKED_SERVER_CARD) {
     GURL paymentsURL = autofill::payments::GetManageInstrumentsUrl(0);
-    base::scoped_nsobject<OpenUrlCommand> command(
-        [[OpenUrlCommand alloc] initWithURLFromChrome:paymentsURL]);
+    OpenUrlCommand* command =
+        [[OpenUrlCommand alloc] initWithURLFromChrome:paymentsURL];
     [command setTag:IDC_CLOSE_SETTINGS_AND_OPEN_URL];
     [self chromeExecuteCommand:command];
 
@@ -109,7 +119,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
           [NSIndexPath indexPathForItem:itemIndex inSection:section];
       AutofillEditItem* item = base::mac::ObjCCastStrict<AutofillEditItem>(
           [model itemAtIndexPath:path]);
-      _creditCard.SetInfo(autofill::AutofillType(item.autofillType),
+      _creditCard.SetInfo(autofill::AutofillType(AutofillTypeFromAutofillUIType(
+                              item.autofillUIType)),
                           base::SysNSStringToUTF16(item.textFieldValue),
                           GetApplicationContext()->GetApplicationLocale());
     }
@@ -133,20 +144,20 @@ typedef NS_ENUM(NSInteger, ItemType) {
   BOOL isEditing = self.editor.editing;
 
   [model addSectionWithIdentifier:SectionIdentifierFields];
-  AutofillEditItem* cardholderNameitem = [[[AutofillEditItem alloc]
-      initWithType:ItemTypeCardholderName] autorelease];
+  AutofillEditItem* cardholderNameitem =
+      [[AutofillEditItem alloc] initWithType:ItemTypeCardholderName];
   cardholderNameitem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_CARDHOLDER);
   cardholderNameitem.textFieldValue = autofill::GetCreditCardName(
       _creditCard, GetApplicationContext()->GetApplicationLocale());
   cardholderNameitem.textFieldEnabled = isEditing;
-  cardholderNameitem.autofillType = autofill::CREDIT_CARD_NAME_FULL;
+  cardholderNameitem.autofillUIType = AutofillUITypeCreditCardHolderFullName;
   [model addItem:cardholderNameitem
       toSectionWithIdentifier:SectionIdentifierFields];
 
   // Card number (PAN).
   AutofillEditItem* cardNumberitem =
-      [[[AutofillEditItem alloc] initWithType:ItemTypeCardNumber] autorelease];
+      [[AutofillEditItem alloc] initWithType:ItemTypeCardNumber];
   cardNumberitem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_CARD_NUMBER);
   // Never show full card number for Wallet cards, even if copied locally.
@@ -155,42 +166,76 @@ typedef NS_ENUM(NSInteger, ItemType) {
           ? base::SysUTF16ToNSString(_creditCard.number())
           : base::SysUTF16ToNSString(_creditCard.LastFourDigits());
   cardNumberitem.textFieldEnabled = isEditing;
-  cardNumberitem.autofillType = autofill::CREDIT_CARD_NUMBER;
+  cardNumberitem.autofillUIType = AutofillUITypeCreditCardNumber;
+  cardNumberitem.cardTypeIcon =
+      [self cardTypeIconFromCardNumber:cardNumberitem.textFieldValue];
   [model addItem:cardNumberitem
       toSectionWithIdentifier:SectionIdentifierFields];
 
   // Expiration month.
-  AutofillEditItem* expirationMonthItem = [[[AutofillEditItem alloc]
-      initWithType:ItemTypeExpirationMonth] autorelease];
+  AutofillEditItem* expirationMonthItem =
+      [[AutofillEditItem alloc] initWithType:ItemTypeExpirationMonth];
   expirationMonthItem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_EXP_MONTH);
   expirationMonthItem.textFieldValue =
       [NSString stringWithFormat:@"%02d", _creditCard.expiration_month()];
   expirationMonthItem.textFieldEnabled = isEditing;
-  expirationMonthItem.autofillType = autofill::CREDIT_CARD_EXP_MONTH;
+  expirationMonthItem.autofillUIType = AutofillUITypeCreditCardExpMonth;
   [model addItem:expirationMonthItem
       toSectionWithIdentifier:SectionIdentifierFields];
 
   // Expiration year.
-  AutofillEditItem* expirationYearItem = [[[AutofillEditItem alloc]
-      initWithType:ItemTypeExpirationYear] autorelease];
+  AutofillEditItem* expirationYearItem =
+      [[AutofillEditItem alloc] initWithType:ItemTypeExpirationYear];
   expirationYearItem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_EXP_YEAR);
   expirationYearItem.textFieldValue =
       [NSString stringWithFormat:@"%04d", _creditCard.expiration_year()];
   expirationYearItem.textFieldEnabled = isEditing;
-  expirationYearItem.autofillType = autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR;
+  expirationYearItem.autofillUIType = AutofillUITypeCreditCardExpYear;
   [model addItem:expirationYearItem
       toSectionWithIdentifier:SectionIdentifierFields];
 
   if (_creditCard.record_type() == autofill::CreditCard::FULL_SERVER_CARD) {
     // Add CopiedToChrome cell in its own section.
     [model addSectionWithIdentifier:SectionIdentifierCopiedToChrome];
-    CopiedToChromeItem* copiedToChromeItem = [[[CopiedToChromeItem alloc]
-        initWithType:ItemTypeCopiedToChrome] autorelease];
+    CopiedToChromeItem* copiedToChromeItem =
+        [[CopiedToChromeItem alloc] initWithType:ItemTypeCopiedToChrome];
     [model addItem:copiedToChromeItem
         toSectionWithIdentifier:SectionIdentifierCopiedToChrome];
   }
+}
+
+#pragma mark - UITextFieldDelegate
+
+// This method is called as the text is being typed in, pasted, or deleted. Asks
+// the delegate if the text should be changed. Should always return YES. During
+// typing/pasting text, |newText| contains one or more new characters. When user
+// deletes text, |newText| is empty. |range| is the range of characters to be
+// replaced.
+- (BOOL)textField:(UITextField*)textField
+    shouldChangeCharactersInRange:(NSRange)range
+                replacementString:(NSString*)newText {
+  // Find the respective item for the text field.
+  NSIndexPath* indexPath = [self indexPathForCurrentTextField];
+  DCHECK(indexPath);
+  AutofillEditItem* item = base::mac::ObjCCastStrict<AutofillEditItem>(
+      [self.collectionViewModel itemAtIndexPath:indexPath]);
+
+  // If the user is typing in the credit card number field, update the card type
+  // icon (e.g. "Visa") to reflect the number being typed.
+  if (item.autofillUIType == AutofillUITypeCreditCardNumber) {
+    // Obtain the text being typed.
+    NSString* updatedText =
+        [textField.text stringByReplacingCharactersInRange:range
+                                                withString:newText];
+    item.cardTypeIcon = [self cardTypeIconFromCardNumber:updatedText];
+    // Update the cell.
+    [self reconfigureCellsForItems:@[ item ]
+           inSectionWithIdentifier:SectionIdentifierFields];
+  }
+
+  return YES;
 }
 
 #pragma mark - MDCCollectionViewEditingDelegate
@@ -268,6 +313,24 @@ typedef NS_ENUM(NSInteger, ItemType) {
   _creditCard.set_record_type(autofill::CreditCard::MASKED_SERVER_CARD);
   _creditCard.SetNumber(_creditCard.LastFourDigits());
   [self reloadData];
+}
+
+#pragma mark - Helper Methods
+
+- (UIImage*)cardTypeIconFromCardNumber:(NSString*)cardNumber {
+  const char* cardType = autofill::CreditCard::GetCreditCardType(
+      base::SysNSStringToUTF16(cardNumber));
+  if (cardType != autofill::kGenericCard) {
+    int resourceID =
+        autofill::data_util::GetPaymentRequestData(cardType).icon_resource_id;
+    // Resize and set the card type icon.
+    CGFloat dimension = kCardTypeIconDimension;
+    return ResizeImage(NativeImage(resourceID),
+                       CGSizeMake(dimension, dimension),
+                       ProjectionMode::kAspectFillNoClipping);
+  } else {
+    return nil;
+  }
 }
 
 @end

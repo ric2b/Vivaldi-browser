@@ -7,10 +7,11 @@ cr.define('extensions', function() {
 
   /**
    * @constructor
-   * @implements {extensions.ItemDelegate}
-   * @implements {extensions.SidebarDelegate}
-   * @implements {extensions.PackDialogDelegate}
    * @implements {extensions.ErrorPageDelegate}
+   * @implements {extensions.ItemDelegate}
+   * @implements {extensions.LoadErrorDelegate}
+   * @implements {extensions.PackDialogDelegate}
+   * @implements {extensions.ToolbarDelegate}
    */
   function Service() {}
 
@@ -22,9 +23,10 @@ cr.define('extensions', function() {
     managerReady: function(manager) {
       /** @private {extensions.Manager} */
       this.manager_ = manager;
-      this.manager_.sidebar.setDelegate(this);
+      this.manager_.toolbar.setDelegate(this);
       this.manager_.set('itemDelegate', this);
       this.manager_.packDialog.set('delegate', this);
+      this.manager_.loadError.set('delegate', this);
       this.manager_.errorPage.delegate = this;
       var keyboardShortcuts = this.manager_.keyboardShortcuts;
       keyboardShortcuts.addEventListener(
@@ -160,6 +162,28 @@ cr.define('extensions', function() {
       chrome.developerPrivate.setShortcutHandlingSuspended(isCapturing);
     },
 
+    /**
+     * Attempts to load an unpacked extension, optionally as another attempt at
+     * a previously-specified load.
+     * @param {string=} opt_retryGuid
+     * @private
+     */
+    loadUnpackedHelper_: function(opt_retryGuid) {
+      chrome.developerPrivate.loadUnpacked(
+          {failQuietly: true, populateError: true, retryGuid: opt_retryGuid},
+          (loadError) => {
+        if (chrome.runtime.lastError &&
+            chrome.runtime.lastError.message !=
+                'File selection was canceled.') {
+          throw new Error(chrome.runtime.lastError.message);
+        }
+        if (loadError) {
+          this.manager_.loadError.loadError = loadError;
+          this.manager_.loadError.show();
+        }
+      });
+    },
+
     /** @override */
     deleteItem: function(id) {
       if (this.isDeleting_)
@@ -251,7 +275,12 @@ cr.define('extensions', function() {
 
     /** @override */
     loadUnpacked: function() {
-      chrome.developerPrivate.loadUnpacked({failQuietly: true});
+      this.loadUnpackedHelper_();
+    },
+
+    /** @override */
+    retryLoadUnpacked: function(retryGuid) {
+      this.loadUnpackedHelper_(retryGuid);
     },
 
     /** @override */

@@ -17,14 +17,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/saturated_arithmetic.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/media/base/audio_device_ids.h"
 #include "chromecast/media/cma/backend/alsa/alsa_wrapper.h"
-#include "chromecast/media/cma/backend/alsa/audio_filter_factory.h"
 #include "chromecast/media/cma/backend/alsa/filter_group.h"
+#include "chromecast/media/cma/backend/alsa/post_processing_pipeline_parser.h"
 #include "chromecast/media/cma/backend/alsa/stream_mixer_alsa_input_impl.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_bus.h"
@@ -120,54 +119,14 @@ const snd_pcm_format_t kPreferredSampleFormats[] = {SND_PCM_FORMAT_S32,
 
 const int64_t kNoTimestamp = std::numeric_limits<int64_t>::min();
 
+const int kUseDefaultFade = -1;
+const int kMediaDuckFadeMs = 150;
+const int kMediaUnduckFadeMs = 700;
+
 int64_t TimespecToMicroseconds(struct timespec time) {
   return static_cast<int64_t>(time.tv_sec) *
              base::Time::kMicrosecondsPerSecond +
          time.tv_nsec / 1000;
-}
-
-bool GetSwitchValueAsInt(const std::string& switch_name,
-                         int default_value,
-                         int* value) {
-  DCHECK(value);
-  *value = default_value;
-  if (!base::CommandLine::InitializedForCurrentProcess()) {
-    LOG(WARNING) << "No CommandLine for current process.";
-    return false;
-  }
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(switch_name)) {
-    return false;
-  }
-
-  int arg_value;
-  if (!base::StringToInt(command_line->GetSwitchValueASCII(switch_name),
-                         &arg_value)) {
-    LOG(DFATAL) << "--" << switch_name << " only accepts integers as arguments";
-    return false;
-  }
-  *value = arg_value;
-  return true;
-}
-
-bool GetSwitchValueAsNonNegativeInt(const std::string& switch_name,
-                                    int default_value,
-                                    int* value) {
-  DCHECK_GE(default_value, 0) << "--" << switch_name
-                              << " must have a non-negative default value";
-  DCHECK(value);
-
-  if (!GetSwitchValueAsInt(switch_name, default_value, value)) {
-    return false;
-  }
-
-  if (*value < 0) {
-    LOG(DFATAL) << "--" << switch_name << " must have a non-negative value";
-    *value = default_value;
-    return false;
-  }
-  return true;
 }
 
 void VectorAccumulate(const int32_t* source, size_t size, int32_t* dest) {
@@ -185,10 +144,14 @@ class StreamMixerAlsaInstance : public StreamMixerAlsa {
   DISALLOW_COPY_AND_ASSIGN(StreamMixerAlsaInstance);
 };
 
-base::LazyInstance<StreamMixerAlsaInstance> g_mixer_instance =
+base::LazyInstance<StreamMixerAlsaInstance>::DestructorAtExit g_mixer_instance =
     LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
+
+float StreamMixerAlsa::VolumeInfo::GetEffectiveVolume() {
+  return std::min(volume, limit);
+}
 
 // static
 bool StreamMixerAlsa::single_threaded_for_test_ = false;
@@ -214,7 +177,6 @@ StreamMixerAlsa::StreamMixerAlsa()
       pcm_status_(nullptr),
       pcm_format_(SND_PCM_FORMAT_UNKNOWN),
       alsa_buffer_size_(0),
-      alsa_period_explicitly_set(false),
       alsa_period_size_(0),
       alsa_start_threshold_(0),
       alsa_avail_min_(0),
@@ -240,9 +202,8 @@ StreamMixerAlsa::StreamMixerAlsa()
             switches::kAlsaOutputDevice);
   }
 
-  int fixed_samples_per_second;
-  GetSwitchValueAsNonNegativeInt(switches::kAlsaFixedOutputSampleRate,
-                                 kInvalidSampleRate, &fixed_samples_per_second);
+  int fixed_samples_per_second = GetSwitchValueNonNegativeInt(
+      switches::kAlsaFixedOutputSampleRate, kInvalidSampleRate);
   if (fixed_samples_per_second != kInvalidSampleRate) {
     LOG(INFO) << "Setting fixed sample rate to " << fixed_samples_per_second;
   }
@@ -254,24 +215,35 @@ StreamMixerAlsa::StreamMixerAlsa()
           ? kLowSampleRateCutoff
           : 0;
 
+  // Read post-processing configuration file
+  PostProcessingPipelineParser pipeline_parser;
+  pipeline_parser.Initialize();
+
   // Create filter groups.
   // TODO(bshaya): Switch to filter groups based on AudioContentType.
   filter_groups_.push_back(base::MakeUnique<FilterGroup>(
       std::unordered_set<std::string>(
           {::media::AudioDeviceDescription::kCommunicationsDeviceId}),
-      AudioFilterFactory::COMMUNICATION_AUDIO_FILTER));
+      AudioContentType::kMedia, kNumOutputChannels,
+      pipeline_parser.GetPipelineByDeviceId(
+          ::media::AudioDeviceDescription::kCommunicationsDeviceId)));
   filter_groups_.push_back(base::MakeUnique<FilterGroup>(
       std::unordered_set<std::string>({kAlarmAudioDeviceId}),
-      AudioFilterFactory::ALARM_AUDIO_FILTER));
+      AudioContentType::kAlarm, kNumOutputChannels,
+      pipeline_parser.GetPipelineByDeviceId(kAlarmAudioDeviceId)));
   filter_groups_.push_back(base::MakeUnique<FilterGroup>(
       std::unordered_set<std::string>({kTtsAudioDeviceId}),
-      AudioFilterFactory::TTS_AUDIO_FILTER));
+      AudioContentType::kCommunication, kNumOutputChannels,
+      pipeline_parser.GetPipelineByDeviceId(kTtsAudioDeviceId)));
   filter_groups_.push_back(base::MakeUnique<FilterGroup>(
       std::unordered_set<std::string>(
           {::media::AudioDeviceDescription::kDefaultDeviceId,
-           kEarconAudioDeviceId, ""}),
-      AudioFilterFactory::MEDIA_AUDIO_FILTER));
+           kLocalAudioDeviceId, ""}),
+      AudioContentType::kMedia, kNumOutputChannels,
+      pipeline_parser.GetPipelineByDeviceId(
+          ::media::AudioDeviceDescription::kDefaultDeviceId)));
 
+  // TODO(bshaya): Add support for final mix AudioPostProcessor.
   DefineAlsaParameters();
 }
 
@@ -281,52 +253,42 @@ void StreamMixerAlsa::ResetTaskRunnerForTest() {
 
 void StreamMixerAlsa::DefineAlsaParameters() {
   // Get the ALSA output configuration from the command line.
-  int buffer_size;
-  GetSwitchValueAsNonNegativeInt(switches::kAlsaOutputBufferSize,
-                                 kDefaultOutputBufferSizeFrames, &buffer_size);
-  alsa_buffer_size_ = buffer_size;
+  alsa_buffer_size_ = GetSwitchValueNonNegativeInt(
+      switches::kAlsaOutputBufferSize, kDefaultOutputBufferSizeFrames);
 
-  int period_size;
-  if (GetSwitchValueAsNonNegativeInt(switches::kAlsaOutputPeriodSize,
-                                     alsa_buffer_size_ / 16, &period_size)) {
-    if (period_size >= buffer_size) {
-      LOG(DFATAL) << "ALSA period size must be smaller than the buffer size";
-      period_size = buffer_size / 2;
-    } else {
-      alsa_period_explicitly_set = true;
-    }
+  alsa_period_size_ = GetSwitchValueNonNegativeInt(
+      switches::kAlsaOutputPeriodSize, alsa_buffer_size_ / 16);
+  if (alsa_period_size_ >= alsa_buffer_size_) {
+    LOG(DFATAL) << "ALSA period size must be smaller than the buffer size";
+    alsa_period_size_ = alsa_buffer_size_ / 2;
   }
-  alsa_period_size_ = period_size;
 
-  int start_threshold;
-  GetSwitchValueAsNonNegativeInt(switches::kAlsaOutputStartThreshold,
-                                 (buffer_size / period_size) * period_size,
-                                 &start_threshold);
-  if (start_threshold > buffer_size) {
+  alsa_start_threshold_ = GetSwitchValueNonNegativeInt(
+      switches::kAlsaOutputStartThreshold,
+      (alsa_buffer_size_ / alsa_period_size_) * alsa_period_size_);
+  if (alsa_start_threshold_ > alsa_buffer_size_) {
     LOG(DFATAL) << "ALSA start threshold must be no larger than "
                 << "the buffer size";
-    start_threshold = (buffer_size / period_size) * period_size;
+    alsa_start_threshold_ =
+        (alsa_buffer_size_ / alsa_period_size_) * alsa_period_size_;
   }
-  alsa_start_threshold_ = start_threshold;
 
   // By default, allow the transfer when at least period_size samples can be
   // processed.
-  int avail_min;
-  GetSwitchValueAsNonNegativeInt(switches::kAlsaOutputAvailMin, period_size,
-                                 &avail_min);
-  if (avail_min > buffer_size) {
+  alsa_avail_min_ = GetSwitchValueNonNegativeInt(switches::kAlsaOutputAvailMin,
+                                                 alsa_period_size_);
+  if (alsa_avail_min_ > alsa_buffer_size_) {
     LOG(DFATAL) << "ALSA avail min must be no larger than the buffer size";
-    avail_min = alsa_period_size_;
+    alsa_avail_min_ = alsa_period_size_;
   }
-  alsa_avail_min_ = avail_min;
 
   // --accept-resource-provider should imply a check close timeout of 0.
   int default_close_timeout = chromecast::GetSwitchValueBoolean(
                                   switches::kAcceptResourceProvider, false)
                                   ? 0
                                   : kDefaultCheckCloseTimeoutMs;
-  GetSwitchValueAsInt(switches::kAlsaCheckCloseTimeout, default_close_timeout,
-                      &check_close_timeout_);
+  check_close_timeout_ = GetSwitchValueInt(switches::kAlsaCheckCloseTimeout,
+                                           default_close_timeout);
 }
 
 unsigned int StreamMixerAlsa::DetermineOutputRate(unsigned int requested_rate) {
@@ -442,11 +404,7 @@ int StreamMixerAlsa::SetAlsaPlaybackParams() {
                  << " frames). This may lead to an increase in "
                     "either audio latency or audio underruns.";
 
-    // Always try to use the value for period_size that was passed in on the
-    // command line, if any.
-    if (!alsa_period_explicitly_set) {
-      alsa_period_size_ = alsa_buffer_size_ / 16;
-    } else if (alsa_period_size_ >= alsa_buffer_size_) {
+    if (alsa_period_size_ >= alsa_buffer_size_) {
       snd_pcm_uframes_t new_period_size = alsa_buffer_size_ / 2;
       LOG(DFATAL) << "Configured period size (" << alsa_period_size_
                   << ") is >= actual buffer size (" << alsa_buffer_size_
@@ -551,8 +509,7 @@ void StreamMixerAlsa::Start() {
 
   // Initialize filters
   for (auto&& filter_group : filter_groups_) {
-    filter_group->Initialize(output_samples_per_second_,
-                             ::media::SampleFormat::kSampleFormatS32);
+    filter_group->Initialize(output_samples_per_second_);
   }
 
   RETURN_REPORT_ERROR(PcmPrepare, pcm_);
@@ -633,6 +590,12 @@ void StreamMixerAlsa::SetAlsaWrapperForTest(
   alsa_ = std::move(alsa_wrapper);
 }
 
+void StreamMixerAlsa::DisablePostProcessingForTest() {
+  for (auto& filter : filter_groups_) {
+    filter->DisablePostProcessingForTest();
+  }
+}
+
 void StreamMixerAlsa::WriteFramesForTest() {
   RUN_ON_MIXER_THREAD(&StreamMixerAlsa::WriteFramesForTest);
   WriteFrames();
@@ -659,6 +622,15 @@ void StreamMixerAlsa::AddInput(std::unique_ptr<InputQueue> input) {
       fixed_output_samples_per_second_ == kInvalidSampleRate) {
     CheckChangeOutputRate(input->input_samples_per_second());
   }
+
+  auto type = input->content_type();
+  if (input->primary()) {
+    input->SetContentTypeVolume(volume_info_[type].GetEffectiveVolume(),
+                                kUseDefaultFade);
+  } else {
+    input->SetContentTypeVolume(volume_info_[type].volume, kUseDefaultFade);
+  }
+  input->SetMuted(volume_info_[type].muted);
 
   check_close_timer_->Stop();
   switch (state_) {
@@ -930,6 +902,7 @@ void StreamMixerAlsa::UpdateRenderingDelay(int newly_pushed_frames) {
   DCHECK(mixer_task_runner_->BelongsToCurrentThread());
   CHECK_PCM_INITIALIZED();
 
+  // TODO(bshaya): Add rendering delay from post-processors.
   if (alsa_->PcmStatus(pcm_, pcm_status_) != 0 ||
       alsa_->PcmStatusGetState(pcm_status_) != SND_PCM_STATE_RUNNING) {
     rendering_delay_.timestamp_microseconds = kNoTimestamp;
@@ -965,6 +938,66 @@ void StreamMixerAlsa::RemoveLoopbackAudioObserver(
                                         loopback_observers_.end(), observer),
                             loopback_observers_.end());
   observer->OnRemoved();
+}
+
+void StreamMixerAlsa::SetVolume(AudioContentType type, float level) {
+  RUN_ON_MIXER_THREAD(&StreamMixerAlsa::SetVolume, type, level);
+  volume_info_[type].volume = level;
+  float effective_volume = volume_info_[type].GetEffectiveVolume();
+  for (auto&& input : inputs_) {
+    if (input->content_type() == type) {
+      if (input->primary()) {
+        input->SetContentTypeVolume(effective_volume, kUseDefaultFade);
+      } else {
+        // Volume limits don't apply to effects streams.
+        input->SetContentTypeVolume(level, kUseDefaultFade);
+      }
+    }
+  }
+
+  for (auto&& filter : filter_groups_) {
+    if (filter->content_type() == type) {
+      filter->set_volume(effective_volume);
+    }
+  }
+}
+
+void StreamMixerAlsa::SetMuted(AudioContentType type, bool muted) {
+  RUN_ON_MIXER_THREAD(&StreamMixerAlsa::SetMuted, type, muted);
+  volume_info_[type].muted = muted;
+  for (auto&& input : inputs_) {
+    if (input->content_type() == type) {
+      input->SetMuted(muted);
+    }
+  }
+}
+
+void StreamMixerAlsa::SetOutputLimit(AudioContentType type, float limit) {
+  RUN_ON_MIXER_THREAD(&StreamMixerAlsa::SetOutputLimit, type, limit);
+  LOG(INFO) << "Set volume limit for " << static_cast<int>(type) << " to "
+            << limit;
+  volume_info_[type].limit = limit;
+  float effective_volume = volume_info_[type].GetEffectiveVolume();
+  int fade_ms = kUseDefaultFade;
+  if (type == AudioContentType::kMedia) {
+    if (limit >= 1.0f) {  // Unducking.
+      fade_ms = kMediaUnduckFadeMs;
+    } else {
+      fade_ms = kMediaDuckFadeMs;
+    }
+  }
+  for (auto&& input : inputs_) {
+    // Volume limits don't apply to effects streams.
+    if (input->primary() && input->content_type() == type) {
+      input->SetContentTypeVolume(effective_volume, fade_ms);
+    }
+  }
+
+  for (auto&& filter : filter_groups_) {
+    if (filter->content_type() == type) {
+      filter->set_volume(effective_volume);
+    }
+  }
 }
 
 }  // namespace media

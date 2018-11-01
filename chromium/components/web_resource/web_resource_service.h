@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "components/web_resource/resource_request_allowed_notifier.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "url/gurl.h"
 
@@ -47,15 +48,17 @@ class WebResourceService
   // Creates a new WebResourceService.
   // If |application_locale| is not empty, it will be appended as a locale
   // parameter to the resource URL.
-  WebResourceService(PrefService* prefs,
-                     const GURL& web_resource_server,
-                     const std::string& application_locale,  // May be empty
-                     const char* last_update_time_pref_name,
-                     int start_fetch_delay_ms,
-                     int cache_update_delay_ms,
-                     net::URLRequestContextGetter* request_context,
-                     const char* disable_network_switch,
-                     const ParseJSONCallback& parse_json_callback);
+  WebResourceService(
+      PrefService* prefs,
+      const GURL& web_resource_server,
+      const std::string& application_locale,  // May be empty
+      const char* last_update_time_pref_name,
+      int start_fetch_delay_ms,
+      int cache_update_delay_ms,
+      net::URLRequestContextGetter* request_context,
+      const char* disable_network_switch,
+      const ParseJSONCallback& parse_json_callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
   ~WebResourceService() override;
 
@@ -64,10 +67,17 @@ class WebResourceService
   // Then begin updating resources.
   void StartAfterDelay();
 
+  // Sets the ResourceRequestAllowedNotifier to make it configurable.
+  void SetResourceRequestAllowedNotifier(
+      std::unique_ptr<ResourceRequestAllowedNotifier> notifier);
+
  protected:
   PrefService* prefs_;
+  bool GetFetchScheduled() const;
 
  private:
+  friend class WebResourceServiceTest;
+
   // For the subclasses to process the result of a fetch.
   virtual void Unpack(const base::DictionaryValue& parsed_json) = 0;
 
@@ -92,7 +102,15 @@ class WebResourceService
 
   // Helper class used to tell this service if it's allowed to make network
   // resource requests.
-  ResourceRequestAllowedNotifier resource_request_allowed_notifier_;
+  std::unique_ptr<ResourceRequestAllowedNotifier>
+      resource_request_allowed_notifier_;
+
+  // True if we have scheduled a fetch after start_fetch_delay_ms_
+  // or another one in |cache_update_delay_ms_| time. Set to false
+  // before fetching starts so that next fetch is scheduled. This
+  // is to make sure not more than one fetch is scheduled for given
+  // point in time.
+  bool fetch_scheduled_;
 
   // The tool that fetches the url data from the server.
   std::unique_ptr<net::URLFetcher> url_fetcher_;
@@ -123,6 +141,9 @@ class WebResourceService
 
   // Callback used to parse JSON.
   ParseJSONCallback parse_json_callback_;
+
+  // Network traffic annotation for initialization of URLFetcher.
+  const net::NetworkTrafficAnnotationTag traffic_annotation_;
 
   // So that we can delay our start so as not to affect start-up time; also,
   // so that we can schedule future cache updates.

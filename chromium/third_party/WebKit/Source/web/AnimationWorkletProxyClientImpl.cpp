@@ -12,36 +12,23 @@ namespace blink {
 
 AnimationWorkletProxyClientImpl::AnimationWorkletProxyClientImpl(
     CompositorMutatorImpl* mutator)
-    : m_mutator(mutator) {
-  DCHECK(isMainThread());
+    : mutator_(mutator) {
+  DCHECK(IsMainThread());
 }
 
 DEFINE_TRACE(AnimationWorkletProxyClientImpl) {
-  visitor->trace(m_proxies);
-  AnimationWorkletProxyClient::trace(visitor);
-  CompositorAnimator::trace(visitor);
+  AnimationWorkletProxyClient::Trace(visitor);
+  CompositorAnimator::Trace(visitor);
 }
 
-bool AnimationWorkletProxyClientImpl::mutate(
-    double monotonicTimeNow,
+bool AnimationWorkletProxyClientImpl::Mutate(
+    double monotonic_time_now,
     CompositorMutableStateProvider* provider) {
-  DCHECK(!isMainThread());
+  DCHECK(!IsMainThread());
   // TODO(majidvp): actually call JS |animate| callbacks.
 
   // Always request another rAF for now.
   return true;
-}
-
-void AnimationWorkletProxyClientImpl::registerCompositorProxy(
-    CompositorProxy* proxy) {
-  DCHECK(!isMainThread());
-  m_proxies.insert(proxy);
-}
-
-void AnimationWorkletProxyClientImpl::unregisterCompositorProxy(
-    CompositorProxy* proxy) {
-  DCHECK(!isMainThread());
-  m_proxies.erase(proxy);
 }
 
 }  // namespace blink

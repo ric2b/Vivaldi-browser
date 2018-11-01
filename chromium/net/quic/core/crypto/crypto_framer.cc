@@ -9,8 +9,7 @@
 #include "net/quic/core/quic_data_writer.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/platform/api/quic_str_cat.h"
-
-using base::StringPiece;
+#include "net/quic/platform/api/quic_string_piece.h"
 
 namespace net {
 
@@ -51,12 +50,13 @@ CryptoFramer::~CryptoFramer() {}
 
 // static
 std::unique_ptr<CryptoHandshakeMessage> CryptoFramer::ParseMessage(
-    StringPiece in) {
+    QuicStringPiece in,
+    Perspective perspective) {
   OneShotVisitor visitor;
   CryptoFramer framer;
 
   framer.set_visitor(&visitor);
-  if (!framer.ProcessInput(in) || visitor.error() ||
+  if (!framer.ProcessInput(in, perspective) || visitor.error() ||
       framer.InputBytesRemaining()) {
     return nullptr;
   }
@@ -64,12 +64,13 @@ std::unique_ptr<CryptoHandshakeMessage> CryptoFramer::ParseMessage(
   return visitor.release();
 }
 
-bool CryptoFramer::ProcessInput(StringPiece input) {
+bool CryptoFramer::ProcessInput(QuicStringPiece input,
+                                Perspective perspective) {
   DCHECK_EQ(QUIC_NO_ERROR, error_);
   if (error_ != QUIC_NO_ERROR) {
     return false;
   }
-  error_ = Process(input);
+  error_ = Process(input, perspective);
   if (error_ != QUIC_NO_ERROR) {
     DCHECK(!error_detail_.empty());
     visitor_->OnError(this);
@@ -81,7 +82,8 @@ bool CryptoFramer::ProcessInput(StringPiece input) {
 
 // static
 QuicData* CryptoFramer::ConstructHandshakeMessage(
-    const CryptoHandshakeMessage& message) {
+    const CryptoHandshakeMessage& message,
+    Perspective perspective) {
   size_t num_entries = message.tag_value_map().size();
   size_t pad_length = 0;
   bool need_pad_tag = false;
@@ -106,8 +108,8 @@ QuicData* CryptoFramer::ConstructHandshakeMessage(
   }
 
   std::unique_ptr<char[]> buffer(new char[len]);
-  QuicDataWriter writer(len, buffer.get());
-  if (!writer.WriteUInt32(message.tag())) {
+  QuicDataWriter writer(len, buffer.get(), perspective);
+  if (!writer.WriteTag(message.tag())) {
     DCHECK(false) << "Failed to write message tag.";
     return nullptr;
   }
@@ -139,7 +141,7 @@ QuicData* CryptoFramer::ConstructHandshakeMessage(
       }
     }
 
-    if (!writer.WriteUInt32(it->first)) {
+    if (!writer.WriteTag(it->first)) {
       DCHECK(false) << "Failed to write tag.";
       return nullptr;
     }
@@ -191,10 +193,11 @@ void CryptoFramer::Clear() {
   state_ = STATE_READING_TAG;
 }
 
-QuicErrorCode CryptoFramer::Process(StringPiece input) {
+QuicErrorCode CryptoFramer::Process(QuicStringPiece input,
+                                    Perspective perspective) {
   // Add this data to the buffer.
   buffer_.append(input.data(), input.length());
-  QuicDataReader reader(buffer_.data(), buffer_.length());
+  QuicDataReader reader(buffer_.data(), buffer_.length(), perspective);
 
   switch (state_) {
     case STATE_READING_TAG:
@@ -202,7 +205,7 @@ QuicErrorCode CryptoFramer::Process(StringPiece input) {
         break;
       }
       QuicTag message_tag;
-      reader.ReadUInt32(&message_tag);
+      reader.ReadTag(&message_tag);
       message_.set_tag(message_tag);
       state_ = STATE_READING_NUM_ENTRIES;
     case STATE_READING_NUM_ENTRIES:
@@ -229,7 +232,7 @@ QuicErrorCode CryptoFramer::Process(StringPiece input) {
       uint32_t last_end_offset = 0;
       for (unsigned i = 0; i < num_entries_; ++i) {
         QuicTag tag;
-        reader.ReadUInt32(&tag);
+        reader.ReadTag(&tag);
         if (i > 0 && tag <= tags_and_lengths_[i - 1].first) {
           if (tag == tags_and_lengths_[i - 1].first) {
             error_detail_ = QuicStrCat("Duplicate tag:", tag);
@@ -259,7 +262,7 @@ QuicErrorCode CryptoFramer::Process(StringPiece input) {
         break;
       }
       for (const std::pair<QuicTag, size_t>& item : tags_and_lengths_) {
-        StringPiece value;
+        QuicStringPiece value;
         reader.ReadStringPiece(&value, item.second);
         message_.SetStringPiece(item.first, value);
       }
@@ -277,7 +280,7 @@ QuicErrorCode CryptoFramer::Process(StringPiece input) {
 bool CryptoFramer::WritePadTag(QuicDataWriter* writer,
                                size_t pad_length,
                                uint32_t* end_offset) {
-  if (!writer->WriteUInt32(kPAD)) {
+  if (!writer->WriteTag(kPAD)) {
     DCHECK(false) << "Failed to write tag.";
     return false;
   }

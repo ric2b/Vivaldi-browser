@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 
 #include "ash/public/interfaces/constants.mojom.h"
-#include "base/auto_reset.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/extensions/extension_app_icon_loader.h"
@@ -36,7 +35,7 @@ void ChromeLauncherController::Init() {
   OnInit();
 }
 
-void ChromeLauncherController::LaunchApp(ash::AppLauncherId id,
+void ChromeLauncherController::LaunchApp(ash::AppLaunchId id,
                                          ash::ShelfLaunchSource source,
                                          int event_flags) {
   launcher_controller_helper_->LaunchApp(id, source, event_flags);
@@ -100,6 +99,14 @@ void ChromeLauncherController::SetShelfAlignmentFromPrefs() {
 void ChromeLauncherController::SetShelfBehaviorsFromPrefs() {
   SetShelfAutoHideBehaviorFromPrefs();
   SetShelfAlignmentFromPrefs();
+}
+
+ChromeLauncherController::ScopedPinSyncDisabler
+ChromeLauncherController::GetScopedPinSyncDisabler() {
+  // Only one temporary disabler should not exist at a time.
+  DCHECK(should_sync_pin_changes_);
+  return base::MakeUnique<base::AutoReset<bool>>(&should_sync_pin_changes_,
+                                                 false);
 }
 
 void ChromeLauncherController::SetLauncherControllerHelperForTest(

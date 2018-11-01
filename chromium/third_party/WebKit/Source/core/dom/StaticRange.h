@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://discourse.wicg.io/t/proposal-staticrange-to-be-used-instead-of-range-for-new-apis/1472
-
 #ifndef StaticRange_h
 #define StaticRange_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/Range.h"
+#include "core/editing/EphemeralRange.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -22,43 +21,51 @@ class CORE_EXPORT StaticRange final : public GarbageCollected<StaticRange>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static StaticRange* create(Document& document) {
+  static StaticRange* Create(Document& document) {
     return new StaticRange(document);
   }
-  static StaticRange* create(Document& document,
-                             Node* startContainer,
-                             int startOffset,
-                             Node* endContainer,
-                             int endOffset) {
-    return new StaticRange(document, startContainer, startOffset, endContainer,
-                           endOffset);
+  static StaticRange* Create(Document& document,
+                             Node* start_container,
+                             unsigned start_offset,
+                             Node* end_container,
+                             unsigned end_offset) {
+    return new StaticRange(document, start_container, start_offset,
+                           end_container, end_offset);
   }
-  static StaticRange* create(const Range* range) {
-    return new StaticRange(range->ownerDocument(), range->startContainer(),
+  static StaticRange* Create(const Range* range) {
+    return new StaticRange(range->OwnerDocument(), range->startContainer(),
                            range->startOffset(), range->endContainer(),
                            range->endOffset());
   }
-
-  Node* startContainer() const { return m_startContainer.get(); }
-  void setStartContainer(Node* startContainer) {
-    m_startContainer = startContainer;
+  static StaticRange* Create(const EphemeralRange& range) {
+    DCHECK(!range.IsNull());
+    return new StaticRange(range.GetDocument(),
+                           range.StartPosition().ComputeContainerNode(),
+                           range.StartPosition().ComputeOffsetInContainerNode(),
+                           range.EndPosition().ComputeContainerNode(),
+                           range.EndPosition().ComputeOffsetInContainerNode());
   }
 
-  int startOffset() const { return m_startOffset; }
-  void setStartOffset(int startOffset) { m_startOffset = startOffset; }
+  Node* startContainer() const { return start_container_.Get(); }
+  void setStartContainer(Node* start_container) {
+    start_container_ = start_container;
+  }
 
-  Node* endContainer() const { return m_endContainer.get(); }
-  void setEndContainer(Node* endContainer) { m_endContainer = endContainer; }
+  unsigned startOffset() const { return start_offset_; }
+  void setStartOffset(unsigned start_offset) { start_offset_ = start_offset; }
 
-  int endOffset() const { return m_endOffset; }
-  void setEndOffset(int endOffset) { m_endOffset = endOffset; }
+  Node* endContainer() const { return end_container_.Get(); }
+  void setEndContainer(Node* end_container) { end_container_ = end_container; }
+
+  unsigned endOffset() const { return end_offset_; }
+  void setEndOffset(unsigned end_offset) { end_offset_ = end_offset; }
 
   bool collapsed() const {
-    return m_startContainer == m_endContainer && m_startOffset == m_endOffset;
+    return start_container_ == end_container_ && start_offset_ == end_offset_;
   }
 
-  void setStart(Node* container, int offset);
-  void setEnd(Node* container, int offset);
+  void setStart(Node* container, unsigned offset);
+  void setEnd(Node* container, unsigned offset);
 
   Range* toRange(ExceptionState& = ASSERT_NO_EXCEPTION) const;
 
@@ -67,16 +74,16 @@ class CORE_EXPORT StaticRange final : public GarbageCollected<StaticRange>,
  private:
   explicit StaticRange(Document&);
   StaticRange(Document&,
-              Node* startContainer,
-              int startOffset,
-              Node* endContainer,
-              int endOffset);
+              Node* start_container,
+              unsigned start_offset,
+              Node* end_container,
+              unsigned end_offset);
 
-  Member<Document> m_ownerDocument;  // Required by |toRange()|.
-  Member<Node> m_startContainer;
-  int m_startOffset;
-  Member<Node> m_endContainer;
-  int m_endOffset;
+  Member<Document> owner_document_;  // Required by |toRange()|.
+  Member<Node> start_container_;
+  unsigned start_offset_;
+  Member<Node> end_container_;
+  unsigned end_offset_;
 };
 
 using StaticRangeVector = HeapVector<Member<StaticRange>>;

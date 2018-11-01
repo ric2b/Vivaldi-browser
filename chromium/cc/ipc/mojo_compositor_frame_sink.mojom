@@ -35,6 +35,10 @@ interface MojoCompositorFrameSink {
   SubmitCompositorFrame(cc.mojom.LocalSurfaceId local_surface_id,
                         cc.mojom.CompositorFrame frame);
 
+  // Notifies the frame sink that a BeginFrame was completed, but that no
+  // CompositorFrame was produced as a result of it.
+  BeginFrameDidNotSwap(cc.mojom.BeginFrameAck ack);
+
   // Notify that the surface is no longer in use (and is okay to be evicted) so
   // that its resources gets returned in time.
   EvictFrame();
@@ -48,16 +52,13 @@ interface MojoCompositorFrameSinkClient {
   // TODO(fsamuel): This method ought not be necessary with unified BeginFrame.
   // However, there's a fair amount of cleanup and refactoring necessary to get
   // rid of it.
-  DidReceiveCompositorFrameAck();
+  DidReceiveCompositorFrameAck(ReturnedResourceArray resources);
 
   // Notification for the client to generate a CompositorFrame.
   OnBeginFrame(BeginFrameArgs args);
 
   // Returns resources sent to SubmitCompositorFrame to be reused or freed.
   ReclaimResources(ReturnedResourceArray resources);
-
-  // Called when surface is being scheduled for a draw.
-  WillDrawSurface(LocalSurfaceId local_surface_id, gfx.mojom.Rect damage_rect);
 };
 
 // MojoCompositorFrameSinkPrivate is used by the display compositor host to

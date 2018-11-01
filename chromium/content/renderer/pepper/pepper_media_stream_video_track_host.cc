@@ -232,7 +232,7 @@ PepperMediaStreamVideoTrackHost::PepperMediaStreamVideoTrackHost(
       frame_data_size_(0),
       type_(kRead),
       weak_factory_(this) {
-  DCHECK(!track_.isNull());
+  DCHECK(!track_.IsNull());
 }
 
 PepperMediaStreamVideoTrackHost::PepperMediaStreamVideoTrackHost(
@@ -247,7 +247,7 @@ PepperMediaStreamVideoTrackHost::PepperMediaStreamVideoTrackHost(
       type_(kWrite),
       weak_factory_(this) {
   InitBlinkTrack();
-  DCHECK(!track_.isNull());
+  DCHECK(!track_.IsNull());
 }
 
 PepperMediaStreamVideoTrackHost::~PepperMediaStreamVideoTrackHost() {
@@ -443,13 +443,25 @@ class PepperMediaStreamVideoTrackHost::VideoSource final
   }
 
  private:
+  base::Optional<media::VideoCaptureFormat> GetCurrentFormatImpl()
+      const override {
+    DCHECK(!IsOldVideoConstraints());
+    if (host_) {
+      return base::Optional<media::VideoCaptureFormat>(
+          media::VideoCaptureFormat(
+              host_->plugin_frame_size_, kDefaultOutputFrameRate,
+              ToPixelFormat(host_->plugin_frame_format_)));
+    }
+    return base::Optional<media::VideoCaptureFormat>();
+  }
+
   const base::WeakPtr<PepperMediaStreamVideoTrackHost> host_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoSource);
 };
 
 void PepperMediaStreamVideoTrackHost::DidConnectPendingHostToResource() {
-  if (!MediaStreamVideoSink::connected_track().isNull())
+  if (!MediaStreamVideoSink::connected_track().IsNull())
     return;
   MediaStreamVideoSink::ConnectToTrack(
       track_, media::BindToCurrentLoop(
@@ -504,7 +516,7 @@ int32_t PepperMediaStreamVideoTrackHost::OnHostMsgConfigure(
 
   // TODO(ronghuawu): Ask the owner of DOMMediaStreamTrackToResource why
   // source id instead of track id is used there.
-  const std::string id = track_.source().id().utf8();
+  const std::string id = track_.Source().Id().Utf8();
   context->reply_msg = PpapiPluginMsg_MediaStreamVideoTrack_ConfigureReply(id);
   return PP_OK;
 }
@@ -513,23 +525,20 @@ void PepperMediaStreamVideoTrackHost::InitBlinkTrack() {
   std::string source_id;
   base::Base64Encode(base::RandBytesAsString(64), &source_id);
   blink::WebMediaStreamSource webkit_source;
-  webkit_source.initialize(blink::WebString::fromASCII(source_id),
-                           blink::WebMediaStreamSource::TypeVideo,
-                           blink::WebString::fromASCII(kPepperVideoSourceName),
+  webkit_source.Initialize(blink::WebString::FromASCII(source_id),
+                           blink::WebMediaStreamSource::kTypeVideo,
+                           blink::WebString::FromASCII(kPepperVideoSourceName),
                            false /* remote */);
   MediaStreamVideoSource* const source =
       new VideoSource(weak_factory_.GetWeakPtr());
-  webkit_source.setExtraData(source);  // Takes ownership of |source|.
+  webkit_source.SetExtraData(source);  // Takes ownership of |source|.
 
   const bool enabled = true;
-  blink::WebMediaConstraints constraints;
-  constraints.initialize();
   track_ = MediaStreamVideoTrack::CreateVideoTrack(
-       source, constraints,
-       base::Bind(
-           &PepperMediaStreamVideoTrackHost::OnTrackStarted,
-           base::Unretained(this)),
-       enabled);
+      source,
+      base::Bind(&PepperMediaStreamVideoTrackHost::OnTrackStarted,
+                 base::Unretained(this)),
+      enabled);
   // Note: The call to CreateVideoTrack() returned a track that holds a
   // ref-counted reference to |webkit_source| (and, implicitly, |source|).
 }

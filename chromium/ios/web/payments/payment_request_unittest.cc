@@ -8,47 +8,13 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "components/payments/core/basic_card_response.h"
+#include "components/payments/core/payment_address.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace web {
 
 // PaymentRequest parsing tests.
-
-// Tests the success case when populating a PaymentMethodData from a dictionary.
-TEST(PaymentRequestTest, PaymentMethodDataFromDictionaryValueSuccess) {
-  PaymentMethodData expected;
-  std::vector<base::string16> supported_methods;
-  supported_methods.push_back(base::ASCIIToUTF16("Visa"));
-  supported_methods.push_back(base::ASCIIToUTF16("Bitcoin"));
-  expected.supported_methods = supported_methods;
-  expected.data = base::ASCIIToUTF16("{merchantId: 'af22fke9'}");
-
-  base::DictionaryValue method_data_dict;
-  std::unique_ptr<base::ListValue> supported_methods_list(new base::ListValue);
-  supported_methods_list->AppendString("Visa");
-  supported_methods_list->AppendString("Bitcoin");
-  method_data_dict.Set("supportedMethods", std::move(supported_methods_list));
-  method_data_dict.SetString("data", "{merchantId: 'af22fke9'}");
-
-  PaymentMethodData actual;
-  EXPECT_TRUE(actual.FromDictionaryValue(method_data_dict));
-
-  EXPECT_EQ(expected, actual);
-}
-
-// Tests the failure case when populating a PaymentMethodData from a dictionary.
-TEST(PaymentRequestTest, PaymentMethodDataFromDictionaryValueFailure) {
-  // At least one supported method is required.
-  PaymentMethodData actual;
-  base::DictionaryValue method_data_dict;
-  EXPECT_FALSE(actual.FromDictionaryValue(method_data_dict));
-
-  // The value in the supported methods list must be a string.
-  std::unique_ptr<base::ListValue> supported_methods_list(new base::ListValue);
-  supported_methods_list->AppendInteger(13);
-  method_data_dict.Set("supportedMethods", std::move(supported_methods_list));
-  EXPECT_FALSE(actual.FromDictionaryValue(method_data_dict));
-}
 
 // Tests the success case when populating a PaymentCurrencyAmount from a
 // dictionary.
@@ -241,9 +207,9 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
   expected_request.details.total.amount.value = base::ASCIIToUTF16("6.66");
   expected_request.details.error = base::ASCIIToUTF16("Error in details");
 
-  PaymentMethodData method_data;
-  std::vector<base::string16> supported_methods;
-  supported_methods.push_back(base::ASCIIToUTF16("Visa"));
+  payments::PaymentMethodData method_data;
+  std::vector<std::string> supported_methods;
+  supported_methods.push_back("Visa");
   method_data.supported_methods = supported_methods;
   expected_request.method_data.push_back(method_data);
 
@@ -284,7 +250,7 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
   PaymentOptions payment_options;
   payment_options.request_payer_phone = true;
   payment_options.request_shipping = true;
-  payment_options.shipping_type = PaymentShippingType::DELIVERY;
+  payment_options.shipping_type = payments::PaymentShippingType::DELIVERY;
   expected_request.options = payment_options;
 
   EXPECT_TRUE(output_request.FromDictionaryValue(request_dict));
@@ -356,131 +322,6 @@ TEST(PaymentRequestTest, PopulatedResponseDictionary) {
 }
 
 // Value equality tests.
-
-// Tests that two addresses are not equal if their property values differ or
-// one is missing a value present in the other, and equal otherwise.
-TEST(PaymentRequestTest, PaymentAddressEquality) {
-  PaymentAddress address1;
-  PaymentAddress address2;
-  EXPECT_EQ(address1, address2);
-
-  address1.country = base::ASCIIToUTF16("Madagascar");
-  EXPECT_NE(address1, address2);
-  address2.country = base::ASCIIToUTF16("Monaco");
-  EXPECT_NE(address1, address2);
-  address2.country = base::ASCIIToUTF16("Madagascar");
-  EXPECT_EQ(address1, address2);
-
-  std::vector<base::string16> address_line1;
-  address_line1.push_back(base::ASCIIToUTF16("123 Main St."));
-  address_line1.push_back(base::ASCIIToUTF16("Apartment B"));
-  address1.address_line = address_line1;
-  EXPECT_NE(address1, address2);
-  std::vector<base::string16> address_line2;
-  address_line2.push_back(base::ASCIIToUTF16("123 Main St."));
-  address_line2.push_back(base::ASCIIToUTF16("Apartment C"));
-  address2.address_line = address_line2;
-  EXPECT_NE(address1, address2);
-  address2.address_line = address_line1;
-  EXPECT_EQ(address1, address2);
-
-  address1.region = base::ASCIIToUTF16("Quebec");
-  EXPECT_NE(address1, address2);
-  address2.region = base::ASCIIToUTF16("Newfoundland and Labrador");
-  EXPECT_NE(address1, address2);
-  address2.region = base::ASCIIToUTF16("Quebec");
-  EXPECT_EQ(address1, address2);
-
-  address1.city = base::ASCIIToUTF16("Timbuktu");
-  EXPECT_NE(address1, address2);
-  address2.city = base::ASCIIToUTF16("Timbuk 3");
-  EXPECT_NE(address1, address2);
-  address2.city = base::ASCIIToUTF16("Timbuktu");
-  EXPECT_EQ(address1, address2);
-
-  address1.dependent_locality = base::ASCIIToUTF16("Manhattan");
-  EXPECT_NE(address1, address2);
-  address2.dependent_locality = base::ASCIIToUTF16("Queens");
-  EXPECT_NE(address1, address2);
-  address2.dependent_locality = base::ASCIIToUTF16("Manhattan");
-  EXPECT_EQ(address1, address2);
-
-  address1.postal_code = base::ASCIIToUTF16("90210");
-  EXPECT_NE(address1, address2);
-  address2.postal_code = base::ASCIIToUTF16("89049");
-  EXPECT_NE(address1, address2);
-  address2.postal_code = base::ASCIIToUTF16("90210");
-  EXPECT_EQ(address1, address2);
-
-  address1.sorting_code = base::ASCIIToUTF16("14390");
-  EXPECT_NE(address1, address2);
-  address2.sorting_code = base::ASCIIToUTF16("09341");
-  EXPECT_NE(address1, address2);
-  address2.sorting_code = base::ASCIIToUTF16("14390");
-  EXPECT_EQ(address1, address2);
-
-  address1.language_code = base::ASCIIToUTF16("fr");
-  EXPECT_NE(address1, address2);
-  address2.language_code = base::ASCIIToUTF16("zh-HK");
-  EXPECT_NE(address1, address2);
-  address2.language_code = base::ASCIIToUTF16("fr");
-  EXPECT_EQ(address1, address2);
-
-  address1.organization = base::ASCIIToUTF16("The Willy Wonka Candy Company");
-  EXPECT_NE(address1, address2);
-  address2.organization = base::ASCIIToUTF16("Sears");
-  EXPECT_NE(address1, address2);
-  address2.organization = base::ASCIIToUTF16("The Willy Wonka Candy Company");
-  EXPECT_EQ(address1, address2);
-
-  address1.recipient = base::ASCIIToUTF16("Veruca Salt");
-  EXPECT_NE(address1, address2);
-  address2.recipient = base::ASCIIToUTF16("Veronica Mars");
-  EXPECT_NE(address1, address2);
-  address2.recipient = base::ASCIIToUTF16("Veruca Salt");
-  EXPECT_EQ(address1, address2);
-
-  address1.care_of = base::ASCIIToUTF16("Jarvis");
-  EXPECT_NE(address1, address2);
-  address2.care_of = base::ASCIIToUTF16("Tony");
-  EXPECT_NE(address1, address2);
-  address2.care_of = base::ASCIIToUTF16("Jarvis");
-  EXPECT_EQ(address1, address2);
-
-  address1.phone = base::ASCIIToUTF16("888-867-5309");
-  EXPECT_NE(address1, address2);
-  address2.phone = base::ASCIIToUTF16("800-984-3672");
-  EXPECT_NE(address1, address2);
-  address2.phone = base::ASCIIToUTF16("888-867-5309");
-  EXPECT_EQ(address1, address2);
-}
-
-// Tests that two method data objects are not equal if their property values
-// differ or one is missing a value present in the other, and equal otherwise.
-TEST(PaymentRequestTest, PaymentMethodDataEquality) {
-  PaymentMethodData method_data1;
-  PaymentMethodData method_data2;
-  EXPECT_EQ(method_data1, method_data2);
-
-  std::vector<base::string16> supported_methods1;
-  supported_methods1.push_back(base::ASCIIToUTF16("Visa"));
-  supported_methods1.push_back(base::ASCIIToUTF16("BobPay"));
-  method_data1.supported_methods = supported_methods1;
-  EXPECT_NE(method_data1, method_data2);
-  std::vector<base::string16> supported_methods2;
-  supported_methods2.push_back(base::ASCIIToUTF16("BobPay"));
-  method_data2.supported_methods = supported_methods2;
-  EXPECT_NE(method_data1, method_data2);
-  method_data2.supported_methods = supported_methods1;
-  EXPECT_EQ(method_data1, method_data2);
-
-  method_data1.data = base::ASCIIToUTF16("{merchantId: '123456'}");
-  EXPECT_NE(method_data1, method_data2);
-  method_data2.data = base::ASCIIToUTF16("{merchantId: '9999-88'}");
-  EXPECT_NE(method_data1, method_data2);
-  method_data2.data = base::ASCIIToUTF16("{merchantId: '123456'}");
-  EXPECT_EQ(method_data1, method_data2);
-}
 
 // Tests that two currency amount objects are not equal if their property values
 // differ or one is missing a value present in the other, and equal otherwise.
@@ -703,12 +544,13 @@ TEST(PaymentRequestTest, PaymentOptionsEquality) {
   options2.request_shipping = true;
   EXPECT_EQ(options1, options2);
 
-  // PaymentShippingType::SHIPPING is the default value for shipping_type.
-  options1.shipping_type = PaymentShippingType::SHIPPING;
+  // payments::PaymentShippingType::SHIPPING is the default value for
+  // shipping_type.
+  options1.shipping_type = payments::PaymentShippingType::SHIPPING;
   EXPECT_EQ(options1, options2);
-  options1.shipping_type = PaymentShippingType::PICKUP;
+  options1.shipping_type = payments::PaymentShippingType::PICKUP;
   EXPECT_NE(options1, options2);
-  options2.shipping_type = PaymentShippingType::PICKUP;
+  options2.shipping_type = payments::PaymentShippingType::PICKUP;
   EXPECT_EQ(options1, options2);
 }
 
@@ -721,11 +563,11 @@ TEST(PaymentRequestTest, PaymentRequestEquality) {
   PaymentRequest request2;
   EXPECT_EQ(request1, request2);
 
-  PaymentAddress address1;
+  payments::PaymentAddress address1;
   address1.recipient = base::ASCIIToUTF16("Jessica Jones");
   request1.shipping_address = address1;
   EXPECT_NE(request1, request2);
-  PaymentAddress address2;
+  payments::PaymentAddress address2;
   address2.recipient = base::ASCIIToUTF16("Luke Cage");
   request2.shipping_address = address2;
   EXPECT_NE(request1, request2);
@@ -739,13 +581,13 @@ TEST(PaymentRequestTest, PaymentRequestEquality) {
   request2.shipping_option = base::ASCIIToUTF16("2-Day");
   EXPECT_EQ(request1, request2);
 
-  PaymentMethodData method_datum;
-  method_datum.data = base::ASCIIToUTF16("{merchantId: '123456'}");
-  std::vector<PaymentMethodData> method_data1;
+  payments::PaymentMethodData method_datum;
+  method_datum.data = "{merchantId: '123456'}";
+  std::vector<payments::PaymentMethodData> method_data1;
   method_data1.push_back(method_datum);
   request1.method_data = method_data1;
   EXPECT_NE(request1, request2);
-  std::vector<PaymentMethodData> method_data2;
+  std::vector<payments::PaymentMethodData> method_data2;
   request2.method_data = method_data2;
   EXPECT_NE(request1, request2);
   request2.method_data = method_data1;
@@ -770,62 +612,6 @@ TEST(PaymentRequestTest, PaymentRequestEquality) {
   EXPECT_EQ(request1, request2);
 }
 
-// Tests that two credit card response objects are not equal if their property
-// values differ or one is missing a value present in the other, and equal
-// otherwise. Doesn't test all properties of child objects, relying instead on
-// their respective tests.
-TEST(PaymentRequestTest, BasicCardResponseEquality) {
-  BasicCardResponse card_response1;
-  BasicCardResponse card_response2;
-  EXPECT_EQ(card_response1, card_response2);
-
-  card_response1.cardholder_name = base::ASCIIToUTF16("Shadow Moon");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.cardholder_name = base::ASCIIToUTF16("Mad Sweeney");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.cardholder_name = base::ASCIIToUTF16("Shadow Moon");
-  EXPECT_EQ(card_response1, card_response2);
-
-  card_response1.card_number = base::ASCIIToUTF16("4111111111111111");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.card_number = base::ASCIIToUTF16("1111");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.card_number = base::ASCIIToUTF16("4111111111111111");
-  EXPECT_EQ(card_response1, card_response2);
-
-  card_response1.expiry_month = base::ASCIIToUTF16("01");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.expiry_month = base::ASCIIToUTF16("11");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.expiry_month = base::ASCIIToUTF16("01");
-  EXPECT_EQ(card_response1, card_response2);
-
-  card_response1.expiry_year = base::ASCIIToUTF16("27");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.expiry_year = base::ASCIIToUTF16("72");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.expiry_year = base::ASCIIToUTF16("27");
-  EXPECT_EQ(card_response1, card_response2);
-
-  card_response1.expiry_year = base::ASCIIToUTF16("123");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.expiry_year = base::ASCIIToUTF16("999");
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.expiry_year = base::ASCIIToUTF16("123");
-  EXPECT_EQ(card_response1, card_response2);
-
-  PaymentAddress billing_address1;
-  billing_address1.postal_code = base::ASCIIToUTF16("90210");
-  PaymentAddress billing_address2;
-  billing_address2.postal_code = base::ASCIIToUTF16("01209");
-  card_response1.billing_address = billing_address1;
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.billing_address = billing_address2;
-  EXPECT_NE(card_response1, card_response2);
-  card_response2.billing_address = billing_address1;
-  EXPECT_EQ(card_response1, card_response2);
-}
-
 // Tests that two payment response objects are not equal if their property
 // values differ or one is missing a value present in the other, and equal
 // otherwise. Doesn't test all properties of child objects, relying instead on
@@ -842,9 +628,9 @@ TEST(PaymentRequestTest, PaymentResponseEquality) {
   response2.method_name = base::ASCIIToUTF16("Visa");
   EXPECT_EQ(response1, response2);
 
-  BasicCardResponse card_response1;
+  payments::BasicCardResponse card_response1;
   card_response1.card_number = base::ASCIIToUTF16("1234");
-  BasicCardResponse card_response2;
+  payments::BasicCardResponse card_response2;
   card_response2.card_number = base::ASCIIToUTF16("8888");
   response1.details = card_response1;
   EXPECT_NE(response1, response2);

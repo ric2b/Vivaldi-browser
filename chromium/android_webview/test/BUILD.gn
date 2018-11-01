@@ -121,7 +121,6 @@ instrumentation_test_apk("android_webview_test_apk") {
     "//net/android:net_java",
     "//net/android:net_java_test_support",
     "//third_party/android_support_test_runner:runner_java",
-    "//third_party/android_tools:legacy_http_javalib",
     "//ui/android:ui_java",
   ]
   java_files = [
@@ -149,6 +148,7 @@ instrumentation_test_apk("android_webview_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/AwContentsStaticsTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwDebugTest.java",
+    "../javatests/src/org/chromium/android_webview/test/AwFormDatabaseTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwImeTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwJavaBridgeTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwLayoutSizerTest.java",
@@ -203,6 +203,7 @@ instrumentation_test_apk("android_webview_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/WebViewAsynchronousFindApisTest.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewFindApisTestBase.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewModalDialogOverrideTest.java",
+    "../javatests/src/org/chromium/android_webview/test/crash/CrashReceiverServiceTest.java",
     "../javatests/src/org/chromium/android_webview/test/crash/MinidumpUploaderTest.java",
     "../javatests/src/org/chromium/android_webview/test/crash/VisualStateCallbackTest.java",
     "../javatests/src/org/chromium/android_webview/test/util/AwQuotaManagerBridgeTestUtil.java",
@@ -258,6 +259,7 @@ test("android_webview_unittests") {
     "../browser/test/rendering_test.cc",
     "../browser/test/rendering_test.h",
     "../lib/main/webview_tests.cc",
+    "../native/address_parser_unittest.cc",
     "../native/aw_contents_client_bridge_unittest.cc",
     "../native/aw_media_url_interceptor_unittest.cc",
     "../native/input_stream_unittest.cc",

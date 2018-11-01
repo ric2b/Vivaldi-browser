@@ -24,6 +24,7 @@
 #include "core/html/HTMLScriptElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
@@ -40,80 +41,81 @@ namespace blink {
 using namespace HTMLNames;
 
 inline HTMLScriptElement::HTMLScriptElement(Document& document,
-                                            bool wasInsertedByParser,
-                                            bool alreadyStarted,
-                                            bool createdDuringDocumentWrite)
-    : HTMLElement(scriptTag, document),
-      m_loader(ScriptLoader::create(this,
-                                    wasInsertedByParser,
-                                    alreadyStarted,
-                                    createdDuringDocumentWrite)) {}
-
-HTMLScriptElement* HTMLScriptElement::create(Document& document,
-                                             bool wasInsertedByParser,
-                                             bool alreadyStarted,
-                                             bool createdDuringDocumentWrite) {
-  return new HTMLScriptElement(document, wasInsertedByParser, alreadyStarted,
-                               createdDuringDocumentWrite);
+                                            bool was_inserted_by_parser,
+                                            bool already_started,
+                                            bool created_during_document_write)
+    : HTMLElement(scriptTag, document) {
+  InitializeScriptLoader(was_inserted_by_parser, already_started,
+                         created_during_document_write);
 }
 
-bool HTMLScriptElement::isURLAttribute(const Attribute& attribute) const {
-  return attribute.name() == srcAttr || HTMLElement::isURLAttribute(attribute);
+HTMLScriptElement* HTMLScriptElement::Create(
+    Document& document,
+    bool was_inserted_by_parser,
+    bool already_started,
+    bool created_during_document_write) {
+  return new HTMLScriptElement(document, was_inserted_by_parser,
+                               already_started, created_during_document_write);
 }
 
-bool HTMLScriptElement::hasLegalLinkAttribute(const QualifiedName& name) const {
-  return name == srcAttr || HTMLElement::hasLegalLinkAttribute(name);
+bool HTMLScriptElement::IsURLAttribute(const Attribute& attribute) const {
+  return attribute.GetName() == srcAttr ||
+         HTMLElement::IsURLAttribute(attribute);
 }
 
-const QualifiedName& HTMLScriptElement::subResourceAttributeName() const {
+bool HTMLScriptElement::HasLegalLinkAttribute(const QualifiedName& name) const {
+  return name == srcAttr || HTMLElement::HasLegalLinkAttribute(name);
+}
+
+const QualifiedName& HTMLScriptElement::SubResourceAttributeName() const {
   return srcAttr;
 }
 
-void HTMLScriptElement::childrenChanged(const ChildrenChange& change) {
-  HTMLElement::childrenChanged(change);
-  if (change.isChildInsertion())
-    m_loader->childrenChanged();
+void HTMLScriptElement::ChildrenChanged(const ChildrenChange& change) {
+  HTMLElement::ChildrenChanged(change);
+  if (change.IsChildInsertion())
+    loader_->ChildrenChanged();
 }
 
-void HTMLScriptElement::didMoveToNewDocument(Document& oldDocument) {
-  ScriptRunner::movePendingScript(oldDocument, document(), m_loader.get());
-  HTMLElement::didMoveToNewDocument(oldDocument);
+void HTMLScriptElement::DidMoveToNewDocument(Document& old_document) {
+  ScriptRunner::MovePendingScript(old_document, GetDocument(), loader_.Get());
+  HTMLElement::DidMoveToNewDocument(old_document);
 }
 
-void HTMLScriptElement::parseAttribute(
+void HTMLScriptElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == srcAttr) {
-    m_loader->handleSourceAttribute(params.newValue);
-    logUpdateAttributeIfIsolatedWorldAndInDocument("script", params);
+    loader_->HandleSourceAttribute(params.new_value);
+    LogUpdateAttributeIfIsolatedWorldAndInDocument("script", params);
   } else if (params.name == asyncAttr) {
-    m_loader->handleAsyncAttribute();
+    loader_->HandleAsyncAttribute();
   } else if (params.name == nonceAttr) {
-    if (params.newValue == ContentSecurityPolicy::getNonceReplacementString())
+    if (params.new_value == ContentSecurityPolicy::GetNonceReplacementString())
       return;
-    setNonce(params.newValue);
+    setNonce(params.new_value);
     if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled()) {
       setAttribute(nonceAttr,
-                   ContentSecurityPolicy::getNonceReplacementString());
+                   ContentSecurityPolicy::GetNonceReplacementString());
     }
   } else {
-    HTMLElement::parseAttribute(params);
+    HTMLElement::ParseAttribute(params);
   }
 }
 
-Node::InsertionNotificationRequest HTMLScriptElement::insertedInto(
-    ContainerNode* insertionPoint) {
-  if (insertionPoint->isConnected() && hasSourceAttribute() &&
-      !loader()->isScriptTypeSupported(
-          ScriptLoader::DisallowLegacyTypeInTypeAttribute))
-    UseCounter::count(document(),
-                      UseCounter::ScriptElementWithInvalidTypeHasSrc);
-  HTMLElement::insertedInto(insertionPoint);
-  logAddElementIfIsolatedWorldAndInDocument("script", srcAttr);
-  return InsertionShouldCallDidNotifySubtreeInsertions;
+Node::InsertionNotificationRequest HTMLScriptElement::InsertedInto(
+    ContainerNode* insertion_point) {
+  if (insertion_point->isConnected() && HasSourceAttribute() &&
+      !Loader()->IsScriptTypeSupported(
+          ScriptLoader::kDisallowLegacyTypeInTypeAttribute))
+    UseCounter::Count(GetDocument(),
+                      UseCounter::kScriptElementWithInvalidTypeHasSrc);
+  HTMLElement::InsertedInto(insertion_point);
+  LogAddElementIfIsolatedWorldAndInDocument("script", srcAttr);
+  return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
 
-void HTMLScriptElement::didNotifySubtreeInsertionsToDocument() {
-  m_loader->didNotifySubtreeInsertionsToDocument();
+void HTMLScriptElement::DidNotifySubtreeInsertionsToDocument() {
+  loader_->DidNotifySubtreeInsertionsToDocument();
 }
 
 void HTMLScriptElement::setText(const String& value) {
@@ -121,67 +123,121 @@ void HTMLScriptElement::setText(const String& value) {
 }
 
 void HTMLScriptElement::setAsync(bool async) {
-  setBooleanAttribute(asyncAttr, async);
-  m_loader->handleAsyncAttribute();
+  SetBooleanAttribute(asyncAttr, async);
+  loader_->HandleAsyncAttribute();
 }
 
 bool HTMLScriptElement::async() const {
-  return fastHasAttribute(asyncAttr) || m_loader->isNonBlocking();
+  return FastHasAttribute(asyncAttr) || loader_->IsNonBlocking();
 }
 
-KURL HTMLScriptElement::src() const {
-  return document().completeURL(sourceAttributeValue());
+KURL HTMLScriptElement::Src() const {
+  return GetDocument().CompleteURL(SourceAttributeValue());
 }
 
-String HTMLScriptElement::sourceAttributeValue() const {
-  return getAttribute(srcAttr).getString();
+String HTMLScriptElement::SourceAttributeValue() const {
+  return getAttribute(srcAttr).GetString();
 }
 
-String HTMLScriptElement::charsetAttributeValue() const {
-  return getAttribute(charsetAttr).getString();
+String HTMLScriptElement::CharsetAttributeValue() const {
+  return getAttribute(charsetAttr).GetString();
 }
 
-String HTMLScriptElement::typeAttributeValue() const {
-  return getAttribute(typeAttr).getString();
+String HTMLScriptElement::TypeAttributeValue() const {
+  return getAttribute(typeAttr).GetString();
 }
 
-String HTMLScriptElement::languageAttributeValue() const {
-  return getAttribute(languageAttr).getString();
+String HTMLScriptElement::LanguageAttributeValue() const {
+  return getAttribute(languageAttr).GetString();
 }
 
-String HTMLScriptElement::forAttributeValue() const {
-  return getAttribute(forAttr).getString();
+String HTMLScriptElement::ForAttributeValue() const {
+  return getAttribute(forAttr).GetString();
 }
 
-String HTMLScriptElement::eventAttributeValue() const {
-  return getAttribute(eventAttr).getString();
+String HTMLScriptElement::EventAttributeValue() const {
+  return getAttribute(eventAttr).GetString();
 }
 
-bool HTMLScriptElement::asyncAttributeValue() const {
-  return fastHasAttribute(asyncAttr);
+String HTMLScriptElement::CrossOriginAttributeValue() const {
+  return getAttribute(crossoriginAttr);
 }
 
-bool HTMLScriptElement::deferAttributeValue() const {
-  return fastHasAttribute(deferAttr);
+String HTMLScriptElement::IntegrityAttributeValue() const {
+  return getAttribute(integrityAttr);
 }
 
-bool HTMLScriptElement::hasSourceAttribute() const {
-  return fastHasAttribute(srcAttr);
+String HTMLScriptElement::TextFromChildren() {
+  return Element::TextFromChildren();
 }
 
-void HTMLScriptElement::dispatchLoadEvent() {
-  DCHECK(!m_loader->haveFiredLoadEvent());
-  dispatchEvent(Event::create(EventTypeNames::load));
+String HTMLScriptElement::TextContent() const {
+  return Element::textContent();
 }
 
-Element* HTMLScriptElement::cloneElementWithoutAttributesAndChildren() {
-  return new HTMLScriptElement(document(), false, m_loader->alreadyStarted(),
+bool HTMLScriptElement::AsyncAttributeValue() const {
+  return FastHasAttribute(asyncAttr);
+}
+
+bool HTMLScriptElement::DeferAttributeValue() const {
+  return FastHasAttribute(deferAttr);
+}
+
+bool HTMLScriptElement::HasSourceAttribute() const {
+  return FastHasAttribute(srcAttr);
+}
+
+bool HTMLScriptElement::IsConnected() const {
+  return Node::isConnected();
+}
+
+bool HTMLScriptElement::HasChildren() const {
+  return Node::hasChildren();
+}
+
+bool HTMLScriptElement::IsNonceableElement() const {
+  return ContentSecurityPolicy::IsNonceableElement(this);
+}
+
+bool HTMLScriptElement::AllowInlineScriptForCSP(
+    const AtomicString& nonce,
+    const WTF::OrdinalNumber& context_line,
+    const String& script_content) {
+  return GetDocument().GetContentSecurityPolicy()->AllowInlineScript(
+      this, GetDocument().Url(), nonce, context_line, script_content);
+}
+
+AtomicString HTMLScriptElement::InitiatorName() const {
+  return Element::localName();
+}
+
+Document& HTMLScriptElement::GetDocument() const {
+  return Node::GetDocument();
+}
+
+void HTMLScriptElement::DispatchLoadEvent() {
+  DCHECK(!loader_->HaveFiredLoadEvent());
+  DispatchEvent(Event::Create(EventTypeNames::load));
+}
+
+void HTMLScriptElement::DispatchErrorEvent() {
+  DispatchEvent(Event::Create(EventTypeNames::error));
+}
+
+void HTMLScriptElement::SetScriptElementForBinding(
+    HTMLScriptElementOrSVGScriptElement& element) {
+  if (!IsInV1ShadowTree())
+    element.setHTMLScriptElement(this);
+}
+
+Element* HTMLScriptElement::CloneElementWithoutAttributesAndChildren() {
+  return new HTMLScriptElement(GetDocument(), false, loader_->AlreadyStarted(),
                                false);
 }
 
 DEFINE_TRACE(HTMLScriptElement) {
-  visitor->trace(m_loader);
-  HTMLElement::trace(visitor);
+  HTMLElement::Trace(visitor);
+  ScriptElementBase::Trace(visitor);
 }
 
 }  // namespace blink

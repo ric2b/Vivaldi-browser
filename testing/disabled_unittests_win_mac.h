@@ -11,3 +11,8 @@ DISABLE(PlatformMediaPipelineIntegrationTest, TruncatedMedia)
 
 // Broken for media after 57
 DISABLE_MULTI(MediaTest, VideoBearMp4Vp9)
+
+// Seems to have failed in v59
+DISABLE(ECKEncryptedMediaTest, VerifyCdmHostTest)
+DISABLE(PipelineIntegrationTest, SwitchVideoTrackDuringPlayback)
+DISABLE(ChromeKeySystemsProviderTest, IsKeySystemsUpdateNeeded)

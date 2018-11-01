@@ -6,10 +6,11 @@
 #define TableRowPainter_h
 
 #include "core/style/ShadowData.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
+class CellSpan;
 class LayoutPoint;
 class LayoutTableCell;
 class LayoutTableRow;
@@ -19,18 +20,21 @@ class TableRowPainter {
   STACK_ALLOCATED();
 
  public:
-  TableRowPainter(const LayoutTableRow& layoutTableRow)
-      : m_layoutTableRow(layoutTableRow) {}
+  TableRowPainter(const LayoutTableRow& layout_table_row)
+      : layout_table_row_(layout_table_row) {}
 
-  void paint(const PaintInfo&, const LayoutPoint&);
-  void paintOutline(const PaintInfo&, const LayoutPoint&);
-  void paintBoxShadow(const PaintInfo&, const LayoutPoint&, ShadowStyle);
-  void paintBackgroundBehindCell(const LayoutTableCell&,
+  void Paint(const PaintInfo&, const LayoutPoint&);
+  void PaintOutline(const PaintInfo&, const LayoutPoint&);
+  void PaintBoxDecorationBackground(const PaintInfo&,
+                                    const LayoutPoint&,
+                                    const CellSpan& dirtied_columns);
+
+ private:
+  void PaintBackgroundBehindCell(const LayoutTableCell&,
                                  const PaintInfo&,
                                  const LayoutPoint&);
 
- private:
-  const LayoutTableRow& m_layoutTableRow;
+  const LayoutTableRow& layout_table_row_;
 };
 
 }  // namespace blink

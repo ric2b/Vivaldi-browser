@@ -208,18 +208,18 @@ const user_manager::User* SupervisedUserManagerImpl::CreateUserRecord(
       local_state,
       kSupervisedUserManagerDisplayEmails);
 
-  prefs_new_users_update->Insert(
-      0, base::MakeUnique<base::StringValue>(local_user_id));
+  prefs_new_users_update->Insert(0,
+                                 base::MakeUnique<base::Value>(local_user_id));
 
-  sync_id_update->SetWithoutPathExpansion(local_user_id,
-      new base::StringValue(sync_user_id));
+  sync_id_update->SetWithoutPathExpansion(
+      local_user_id, base::MakeUnique<base::Value>(sync_user_id));
   manager_update->SetWithoutPathExpansion(
       local_user_id,
-      new base::StringValue(manager->GetAccountId().GetUserEmail()));
-  manager_name_update->SetWithoutPathExpansion(local_user_id,
-      new base::StringValue(manager->GetDisplayName()));
-  manager_email_update->SetWithoutPathExpansion(local_user_id,
-      new base::StringValue(manager->display_email()));
+      base::MakeUnique<base::Value>(manager->GetAccountId().GetUserEmail()));
+  manager_name_update->SetWithoutPathExpansion(
+      local_user_id, base::MakeUnique<base::Value>(manager->GetDisplayName()));
+  manager_email_update->SetWithoutPathExpansion(
+      local_user_id, base::MakeUnique<base::Value>(manager->display_email()));
 
   owner_->SaveUserDisplayName(AccountId::FromUserEmail(local_user_id),
                               display_name);
@@ -458,7 +458,7 @@ void SupervisedUserManagerImpl::RemoveNonCryptohomeData(
     const std::string& user_id) {
   PrefService* prefs = g_browser_process->local_state();
   ListPrefUpdate prefs_new_users_update(prefs, kSupervisedUsersFirstRun);
-  prefs_new_users_update->Remove(base::StringValue(user_id), NULL);
+  prefs_new_users_update->Remove(base::Value(user_id), NULL);
 
   CleanPref(user_id, kSupervisedUserSyncId);
   CleanPref(user_id, kSupervisedUserManagers);
@@ -481,7 +481,7 @@ void SupervisedUserManagerImpl::CleanPref(const std::string& user_id,
 bool SupervisedUserManagerImpl::CheckForFirstRun(const std::string& user_id) {
   ListPrefUpdate prefs_new_users_update(g_browser_process->local_state(),
                                         kSupervisedUsersFirstRun);
-  return prefs_new_users_update->Remove(base::StringValue(user_id), NULL);
+  return prefs_new_users_update->Remove(base::Value(user_id), NULL);
 }
 
 void SupervisedUserManagerImpl::UpdateManagerName(const std::string& manager_id,
@@ -500,8 +500,7 @@ void SupervisedUserManagerImpl::UpdateManagerName(const std::string& manager_id,
     DCHECK(has_manager_id);
     if (user_id == manager_id) {
       manager_name_update->SetWithoutPathExpansion(
-          it.key(),
-          new base::StringValue(new_display_name));
+          it.key(), base::MakeUnique<base::Value>(new_display_name));
     }
   }
 }

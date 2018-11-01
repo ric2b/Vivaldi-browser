@@ -32,12 +32,11 @@
 /**
  * @unrestricted
  */
-SDK.DOMNode = class extends SDK.SDKObject {
+SDK.DOMNode = class {
   /**
    * @param {!SDK.DOMModel} domModel
    */
   constructor(domModel) {
-    super(domModel.target());
     this._domModel = domModel;
   }
 
@@ -411,6 +410,15 @@ SDK.DOMNode = class extends SDK.SDKObject {
    */
   setAttributeValue(name, value, callback) {
     this._agent.setAttributeValue(this.id, name, value, this._domModel._markRevision(this, callback));
+  }
+
+  /**
+  * @param {string} name
+  * @param {string} value
+  * @return {!Promise<?Protocol.Error>}
+  */
+  setAttributeValuePromise(name, value) {
+    return new Promise(fulfill => this.setAttributeValue(name, value, fulfill));
   }
 
   /**
@@ -858,7 +866,7 @@ SDK.DOMNode = class extends SDK.SDKObject {
       if (error || !object)
         callback(null);
       else
-        callback(this.target().runtimeModel.createRemoteObject(object));
+        callback(this._domModel._runtimeModel.createRemoteObject(object));
     }
   }
 
@@ -949,7 +957,7 @@ SDK.DeferredDOMNode = class {
    * @param {number} backendNodeId
    */
   constructor(target, backendNodeId) {
-    this._domModel = SDK.DOMModel.fromTarget(target);
+    this._domModel = target.model(SDK.DOMModel);
     this._backendNodeId = backendNodeId;
   }
 
@@ -1061,6 +1069,7 @@ SDK.DOMModel = class extends SDK.SDKModel {
     target.registerDOMDispatcher(new SDK.DOMDispatcher(this));
 
     this._inspectModeEnabled = false;
+    this._runtimeModel = /** @type {!SDK.RuntimeModel} */ (target.model(SDK.RuntimeModel));
 
     this._defaultHighlighter = new SDK.DefaultDOMNodeHighlighter(this._agent);
     this._highlighter = this._defaultHighlighter;
@@ -1069,29 +1078,30 @@ SDK.DOMModel = class extends SDK.SDKModel {
   }
 
   /**
+   * @return {!SDK.RuntimeModel}
+   */
+  runtimeModel() {
+    return this._runtimeModel;
+  }
+
+  /**
+   * @return {!SDK.CSSModel}
+   */
+  cssModel() {
+    return /** @type {!SDK.CSSModel} */ (this.target().model(SDK.CSSModel));
+  }
+
+  /**
    * @param {!SDK.RemoteObject} object
    */
   static highlightObjectAsDOMNode(object) {
-    var domModel = SDK.DOMModel.fromTarget(object.target());
+    var domModel = object.runtimeModel().target().model(SDK.DOMModel);
     if (domModel)
       domModel.highlightDOMNode(undefined, undefined, undefined, object.objectId);
   }
 
-  /**
-   * @return {!Array<!SDK.DOMModel>}
-   */
-  static instances() {
-    var result = [];
-    for (var target of SDK.targetManager.targets()) {
-      var domModel = SDK.DOMModel.fromTarget(target);
-      if (domModel)
-        result.push(domModel);
-    }
-    return result;
-  }
-
   static hideDOMNodeHighlight() {
-    for (var domModel of SDK.DOMModel.instances())
+    for (var domModel of SDK.targetManager.models(SDK.DOMModel))
       domModel.highlightDOMNode(0);
   }
 
@@ -1105,16 +1115,8 @@ SDK.DOMModel = class extends SDK.SDKModel {
   }
 
   static cancelSearch() {
-    for (var domModel of SDK.DOMModel.instances())
+    for (var domModel of SDK.targetManager.models(SDK.DOMModel))
       domModel._cancelSearch();
-  }
-
-  /**
-   * @param {!SDK.Target} target
-   * @return {?SDK.DOMModel}
-   */
-  static fromTarget(target) {
-    return target.model(SDK.DOMModel);
   }
 
   /**
@@ -1826,10 +1828,11 @@ SDK.DOMModel = class extends SDK.SDKModel {
   /**
    * @param {number} x
    * @param {number} y
+   * @param {boolean} includeUserAgentShadowDOM
    * @param {function(?SDK.DOMNode)} callback
    */
-  nodeForLocation(x, y, callback) {
-    this._agent.getNodeForLocation(x, y, mycallback.bind(this));
+  nodeForLocation(x, y, includeUserAgentShadowDOM, callback) {
+    this._agent.getNodeForLocation(x, y, includeUserAgentShadowDOM, mycallback.bind(this));
 
     /**
      * @param {?Protocol.Error} error
@@ -1847,13 +1850,15 @@ SDK.DOMModel = class extends SDK.SDKModel {
 
   /**
    * @param {!SDK.RemoteObject} object
-   * @param {function(?SDK.DOMNode)} callback
+   * @return {!Promise<?SDK.DOMNode>}
    */
-  pushObjectAsNodeToFrontend(object, callback) {
-    if (object.isNode())
-      this.pushNodeToFrontend(object.objectId, callback);
-    else
-      callback(null);
+  pushObjectAsNodeToFrontend(object) {
+    return new Promise(fulfill => {
+      if (object.isNode())
+        this.pushNodeToFrontend(/** @type {string} */ (object.objectId), fulfill);
+      else
+        fulfill(null);
+    });
   }
 
   /**
@@ -1908,7 +1913,7 @@ SDK.DOMModel = class extends SDK.SDKModel {
   }
 };
 
-SDK.SDKModel.register(SDK.DOMModel, SDK.Target.Capability.DOM);
+SDK.SDKModel.register(SDK.DOMModel, SDK.Target.Capability.DOM, true);
 
 /** @enum {symbol} */
 SDK.DOMModel.Events = {

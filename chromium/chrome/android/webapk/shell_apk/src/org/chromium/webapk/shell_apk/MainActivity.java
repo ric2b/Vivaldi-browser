@@ -67,11 +67,13 @@ public class MainActivity extends Activity {
      * Launches WebAPK.
      */
     private void launch() {
-        String startUrl = getStartUrl();
+        String overrideUrl = getOverrideUrl();
+        String startUrl = (overrideUrl != null) ? overrideUrl : getStartUrl();
         if (startUrl == null) {
             return;
         }
-        if (launchHostBrowserInWebApkMode(startUrl)) {
+
+        if (launchHostBrowserInWebApkMode(startUrl, overrideUrl)) {
             return;
         }
         if (launchBrowser(startUrl)) {
@@ -84,19 +86,31 @@ public class MainActivity extends Activity {
      * Launches host browser in WebAPK mode.
      * @return True if successful.
      */
-    private boolean launchHostBrowserInWebApkMode(String startUrl) {
+    private boolean launchHostBrowserInWebApkMode(String startUrl, String overrideUrl) {
         Log.v(TAG, "Url of the WebAPK: " + startUrl);
         String packageName = getPackageName();
         Log.v(TAG, "Package name of the WebAPK:" + packageName);
 
         String runtimeHost = WebApkUtils.getHostBrowserPackageName(this);
+        boolean forceNavigation = false;
         int source = getIntent().getIntExtra(WebApkConstants.EXTRA_SOURCE, 0);
+        if (overrideUrl != null) {
+            if (source == WebApkConstants.SHORTCUT_SOURCE_UNKNOWN) {
+                source = WebApkConstants.SHORTCUT_SOURCE_EXTERNAL_INTENT;
+            }
+            forceNavigation = getIntent().getBooleanExtra(
+                    WebApkConstants.EXTRA_WEBAPK_FORCE_NAVIGATION, true);
+        }
+
+        // The override URL is non null when the WebAPK is launched from a deep link. The WebAPK
+        // should navigate to the URL in the deep link even if the WebAPK is already open.
         Intent intent = new Intent();
         intent.setAction(ACTION_START_WEBAPK);
         intent.setPackage(runtimeHost);
         intent.putExtra(WebApkConstants.EXTRA_URL, startUrl)
                 .putExtra(WebApkConstants.EXTRA_SOURCE, source)
-                .putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, packageName);
+                .putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, packageName)
+                .putExtra(WebApkConstants.EXTRA_WEBAPK_FORCE_NAVIGATION, forceNavigation);
 
         try {
             startActivity(intent);
@@ -155,15 +169,17 @@ public class MainActivity extends Activity {
         }
     }
 
-    /**
-     * Returns the URL that the browser should navigate to.
-     */
-    private String getStartUrl() {
+    /** Retrieves URL from the intent's data. Returns null if a URL could not be retrieved. */
+    private String getOverrideUrl() {
         String overrideUrl = getIntent().getDataString();
         if (overrideUrl != null && overrideUrl.startsWith("https:")) {
             return overrideUrl;
         }
+        return null;
+    }
 
+    /** Returns the start URL from the Android Manifest. */
+    private String getStartUrl() {
         ApplicationInfo appInfo;
         try {
             appInfo = getPackageManager().getApplicationInfo(

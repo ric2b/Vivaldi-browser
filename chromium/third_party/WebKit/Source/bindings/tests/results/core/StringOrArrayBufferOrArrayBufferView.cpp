@@ -11,31 +11,14 @@
 // clang-format off
 #include "StringOrArrayBufferOrArrayBufferView.h"
 
-#include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
+#include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
-#include "bindings/core/v8/V8ArrayBufferView.h"
-#include "core/dom/FlexibleArrayBufferView.h"
 
 namespace blink {
 
 StringOrArrayBufferOrArrayBufferView::StringOrArrayBufferOrArrayBufferView() : m_type(SpecificTypeNone) {}
-
-String StringOrArrayBufferOrArrayBufferView::getAsString() const {
-  DCHECK(isString());
-  return m_string;
-}
-
-void StringOrArrayBufferOrArrayBufferView::setString(String value) {
-  DCHECK(isNull());
-  m_string = value;
-  m_type = SpecificTypeString;
-}
-
-StringOrArrayBufferOrArrayBufferView StringOrArrayBufferOrArrayBufferView::fromString(String value) {
-  StringOrArrayBufferOrArrayBufferView container;
-  container.setString(value);
-  return container;
-}
 
 TestArrayBuffer* StringOrArrayBufferOrArrayBufferView::getAsArrayBuffer() const {
   DCHECK(isArrayBuffer());
@@ -54,20 +37,37 @@ StringOrArrayBufferOrArrayBufferView StringOrArrayBufferOrArrayBufferView::fromA
   return container;
 }
 
-TestArrayBufferView* StringOrArrayBufferOrArrayBufferView::getAsArrayBufferView() const {
+NotShared<TestArrayBufferView> StringOrArrayBufferOrArrayBufferView::getAsArrayBufferView() const {
   DCHECK(isArrayBufferView());
   return m_arrayBufferView;
 }
 
-void StringOrArrayBufferOrArrayBufferView::setArrayBufferView(TestArrayBufferView* value) {
+void StringOrArrayBufferOrArrayBufferView::setArrayBufferView(NotShared<TestArrayBufferView> value) {
   DCHECK(isNull());
-  m_arrayBufferView = value;
+  m_arrayBufferView = Member<TestArrayBufferView>(value.View());
   m_type = SpecificTypeArrayBufferView;
 }
 
-StringOrArrayBufferOrArrayBufferView StringOrArrayBufferOrArrayBufferView::fromArrayBufferView(TestArrayBufferView* value) {
+StringOrArrayBufferOrArrayBufferView StringOrArrayBufferOrArrayBufferView::fromArrayBufferView(NotShared<TestArrayBufferView> value) {
   StringOrArrayBufferOrArrayBufferView container;
   container.setArrayBufferView(value);
+  return container;
+}
+
+String StringOrArrayBufferOrArrayBufferView::getAsString() const {
+  DCHECK(isString());
+  return m_string;
+}
+
+void StringOrArrayBufferOrArrayBufferView::setString(String value) {
+  DCHECK(isNull());
+  m_string = value;
+  m_type = SpecificTypeString;
+}
+
+StringOrArrayBufferOrArrayBufferView StringOrArrayBufferOrArrayBufferView::fromString(String value) {
+  StringOrArrayBufferOrArrayBufferView container;
+  container.setString(value);
   return container;
 }
 
@@ -76,15 +76,15 @@ StringOrArrayBufferOrArrayBufferView::~StringOrArrayBufferOrArrayBufferView() = 
 StringOrArrayBufferOrArrayBufferView& StringOrArrayBufferOrArrayBufferView::operator=(const StringOrArrayBufferOrArrayBufferView&) = default;
 
 DEFINE_TRACE(StringOrArrayBufferOrArrayBufferView) {
-  visitor->trace(m_arrayBuffer);
-  visitor->trace(m_arrayBufferView);
+  visitor->Trace(m_arrayBuffer);
+  visitor->Trace(m_arrayBufferView);
 }
 
 void V8StringOrArrayBufferOrArrayBufferView::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, StringOrArrayBufferOrArrayBufferView& impl, UnionTypeConversionMode conversionMode, ExceptionState& exceptionState) {
   if (v8Value.IsEmpty())
     return;
 
-  if (conversionMode == UnionTypeConversionMode::Nullable && isUndefinedOrNull(v8Value))
+  if (conversionMode == UnionTypeConversionMode::kNullable && IsUndefinedOrNull(v8Value))
     return;
 
   if (v8Value->IsArrayBuffer()) {
@@ -94,14 +94,16 @@ void V8StringOrArrayBufferOrArrayBufferView::toImpl(v8::Isolate* isolate, v8::Lo
   }
 
   if (v8Value->IsArrayBufferView()) {
-    TestArrayBufferView* cppValue = V8ArrayBufferView::toImpl(v8::Local<v8::Object>::Cast(v8Value));
+    NotShared<TestArrayBufferView> cppValue = ToNotShared<NotShared<TestArrayBufferView>>(isolate, v8Value, exceptionState);
+    if (exceptionState.HadException())
+      return;
     impl.setArrayBufferView(cppValue);
     return;
   }
 
   {
     V8StringResource<> cppValue = v8Value;
-    if (!cppValue.prepare(exceptionState))
+    if (!cppValue.Prepare(exceptionState))
       return;
     impl.setString(cppValue);
     return;
@@ -112,21 +114,21 @@ v8::Local<v8::Value> ToV8(const StringOrArrayBufferOrArrayBufferView& impl, v8::
   switch (impl.m_type) {
     case StringOrArrayBufferOrArrayBufferView::SpecificTypeNone:
       return v8::Null(isolate);
-    case StringOrArrayBufferOrArrayBufferView::SpecificTypeString:
-      return v8String(isolate, impl.getAsString());
     case StringOrArrayBufferOrArrayBufferView::SpecificTypeArrayBuffer:
       return ToV8(impl.getAsArrayBuffer(), creationContext, isolate);
     case StringOrArrayBufferOrArrayBufferView::SpecificTypeArrayBufferView:
       return ToV8(impl.getAsArrayBufferView(), creationContext, isolate);
+    case StringOrArrayBufferOrArrayBufferView::SpecificTypeString:
+      return V8String(isolate, impl.getAsString());
     default:
       NOTREACHED();
   }
   return v8::Local<v8::Value>();
 }
 
-StringOrArrayBufferOrArrayBufferView NativeValueTraits<StringOrArrayBufferOrArrayBufferView>::nativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
+StringOrArrayBufferOrArrayBufferView NativeValueTraits<StringOrArrayBufferOrArrayBufferView>::NativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState) {
   StringOrArrayBufferOrArrayBufferView impl;
-  V8StringOrArrayBufferOrArrayBufferView::toImpl(isolate, value, impl, UnionTypeConversionMode::NotNullable, exceptionState);
+  V8StringOrArrayBufferOrArrayBufferView::toImpl(isolate, value, impl, UnionTypeConversionMode::kNotNullable, exceptionState);
   return impl;
 }
 

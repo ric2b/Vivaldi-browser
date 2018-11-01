@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
+#include "chrome/common/chrome_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/test/test_launcher.h"
@@ -51,6 +52,7 @@ class MojoTestState : public content::TestState {
             base::TestLauncher::LaunchOptions* test_launch_options) {
     command_line->AppendSwitch(MojoTestConnector::kTestSwitch);
     command_line->AppendSwitch(switches::kChildProcess);
+    command_line->AppendSwitchASCII(switches::kMusConfig, switches::kMash);
 
     platform_channel_ = base::MakeUnique<mojo::edk::PlatformChannelPair>();
 
@@ -67,15 +69,11 @@ class MojoTestState : public content::TestState {
 #else
 #error "Unsupported"
 #endif
-    service_manager::mojom::ServicePtr service =
-        service_manager::PassServiceRequestOnCommandLine(&process_connection_,
-                                                         command_line);
 
-    background_service_manager_->RegisterService(
-        service_manager::Identity(content::mojom::kPackagedServicesServiceName,
-                                  service_manager::mojom::kRootUserID),
-        std::move(service),
-        service_manager::mojom::PIDReceiverRequest(&pid_receiver_));
+    // Create the pipe token, as it must be passed to children processes via the
+    // command line.
+    service_ = service_manager::PassServiceRequestOnCommandLine(
+        &process_connection_, command_line);
 
     // ChildProcessLaunched may be called on an arbitrary thread, so track the
     // current TaskRunner and post back to it when we want to send the PID.
@@ -87,15 +85,26 @@ class MojoTestState : public content::TestState {
   void ChildProcessLaunched(base::ProcessHandle handle,
                             base::ProcessId pid) override {
     platform_channel_->ChildProcessLaunched();
-    process_connection_.Connect(handle, platform_channel_->PassServerHandle());
+    process_connection_.Connect(
+        handle,
+        mojo::edk::ConnectionParams(platform_channel_->PassServerHandle()));
 
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&MojoTestState::SetPID, weak_factory_.GetWeakPtr(), pid));
+    main_task_runner_->PostTask(FROM_HERE,
+                                base::Bind(&MojoTestState::SetupService,
+                                           weak_factory_.GetWeakPtr(), pid));
   }
 
   // Called on the main thread only.
-  void SetPID(base::ProcessId pid) {
+  // This registers the services needed for the test. This is not done until
+  // after ChildProcessLaunched as previous test runs will tear down existing
+  // connections.
+  void SetupService(base::ProcessId pid) {
+    background_service_manager_->RegisterService(
+        service_manager::Identity(content::mojom::kPackagedServicesServiceName,
+                                  service_manager::mojom::kRootUserID),
+        std::move(service_),
+        service_manager::mojom::PIDReceiverRequest(&pid_receiver_));
+
     DCHECK(pid_receiver_.is_bound());
     pid_receiver_->SetPID(pid);
     pid_receiver_.reset();
@@ -103,6 +112,11 @@ class MojoTestState : public content::TestState {
 
   mojo::edk::PendingProcessConnection process_connection_;
   service_manager::BackgroundServiceManager* const background_service_manager_;
+
+  // The ServicePtr must be created before child process launch so that the pipe
+  // can be set on the command line. It is held until SetupService is called at
+  // which point |background_service_manager_| takes over ownership.
+  service_manager::mojom::ServicePtr service_;
 
   // NOTE: HandlePassingInformation must remain valid through process launch,
   // hence it lives here instead of within Init()'s stack.

@@ -167,6 +167,7 @@ class MojomProcessor(object):
             variant=args.variant, bytecode_path=args.bytecode_path,
             for_blink=args.for_blink,
             use_once_callback=args.use_once_callback,
+            use_new_js_bindings=args.use_new_js_bindings,
             export_attribute=args.export_attribute,
             export_header=args.export_header,
             generate_non_variant_code=args.generate_non_variant_code)
@@ -236,6 +237,12 @@ def _Generate(args, remaining_args):
   processor.LoadTypemaps(set(args.typemaps))
   for filename in args.filename:
     processor.ProcessFile(args, remaining_args, generator_modules, filename)
+  if args.depfile:
+    assert args.depfile_target
+    with open(args.depfile, 'w') as f:
+      f.write('%s: %s' % (
+          args.depfile_target,
+          ' '.join(processor._parsed_files.keys())))
 
   return 0
 
@@ -292,6 +299,10 @@ def main():
       "--use_once_callback", action="store_true",
       help="Use base::OnceCallback instead of base::RepeatingCallback.")
   generate_parser.add_argument(
+      "--use_new_js_bindings", action="store_true",
+      help="Use the new module loading approach and the core API exposed by "
+      "Web IDL. This option only affects the JavaScript bindings.")
+  generate_parser.add_argument(
       "--export_attribute", type=str, default="",
       help="Optional attribute to specify on class declaration to export it "
       "for the component build.")
@@ -302,6 +313,12 @@ def main():
   generate_parser.add_argument(
       "--generate_non_variant_code", action="store_true",
       help="Generate code that is shared by different variants.")
+  generate_parser.add_argument(
+      "--depfile", type=str,
+      help="A file into which the list of input files will be written.")
+  generate_parser.add_argument(
+      "--depfile_target", type=str,
+      help="The target name to use in the depfile.")
   generate_parser.set_defaults(func=_Generate)
 
   precompile_parser = subparsers.add_parser("precompile",

@@ -8,6 +8,7 @@ import argparse
 import collections
 import errno
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -20,15 +21,6 @@ import xctest_utils
 
 
 DERIVED_DATA = os.path.expanduser('~/Library/Developer/Xcode/DerivedData')
-
-
-XCTEST_PROJECT = os.path.abspath(os.path.join(
-  os.path.dirname(__file__),
-  'TestProject',
-  'TestProject.xcodeproj',
-))
-
-XCTEST_SCHEME = 'TestProject'
 
 
 class Error(Exception):
@@ -359,16 +351,18 @@ class TestRunner(object):
         else:
           raise
 
-      # Retry failed test cases. Currently, XCTests don't support retries
-      # because there are no arguments to select specific tests to run.
-      if self.retries and failed and not self.xctest_path:
+      # Retry failed test cases.
+      if self.retries and failed:
         print '%s tests failed and will be retried.' % len(failed)
         print
         for i in xrange(self.retries):
-          for test in failed:
+          for test in failed.keys():
             print 'Retry #%s for %s.' % (i + 1, test)
             print
-            self._run(self.get_launch_command(test_filter=[test]))
+            result = self._run(self.get_launch_command(test_filter=[test]))
+            # If the test passed on retry, consider it flake instead of failure.
+            if test in result.passed_tests:
+              flaked[test] = failed.pop(test)
 
       # Build test_results.json.
       self.test_results['interrupted'] = result.crashed
@@ -582,10 +576,16 @@ class SimulatorTestRunner(TestRunner):
     ]
 
     if test_filter:
-      kif_filter = get_kif_test_filter(test_filter, invert=invert)
-      gtest_filter = get_gtest_filter(test_filter, invert=invert)
-      cmd.extend(['-e', 'GKIF_SCENARIO_FILTER=%s' % kif_filter])
-      cmd.extend(['-c', '--gtest_filter=%s' % gtest_filter])
+      if self.xctest_path:
+        # iossim doesn't support inverted filters for XCTests.
+        if not invert:
+          for test in test_filter:
+            cmd.extend(['-o', test])
+      else:
+        kif_filter = get_kif_test_filter(test_filter, invert=invert)
+        gtest_filter = get_gtest_filter(test_filter, invert=invert)
+        cmd.extend(['-e', 'GKIF_SCENARIO_FILTER=%s' % kif_filter])
+        cmd.extend(['-c', '--gtest_filter=%s' % gtest_filter])
 
     for env_var in self.env_vars:
       cmd.extend(['-e', env_var])
@@ -654,6 +654,25 @@ class DeviceTestRunner(TestRunner):
     self.udid = subprocess.check_output(['idevice_id', '--list']).rstrip()
     if len(self.udid.splitlines()) != 1:
       raise DeviceDetectionError(self.udid)
+    if xctest:
+      self.xctestrun_file = tempfile.mkstemp()[1]
+      self.xctestrun_data = {
+        'TestTargetName': {
+          'IsAppHostedTestBundle': True,
+          'TestBundlePath': '%s' % self.xctest_path,
+          'TestHostPath': '%s' % self.app_path,
+          'TestingEnvironmentVariables': {
+            'DYLD_INSERT_LIBRARIES':
+              '__PLATFORMS__/iPhoneOS.platform/Developer/Library/'
+            'PrivateFrameworks/IDEBundleInjection.framework/IDEBundleInjection',
+            'DYLD_LIBRARY_PATH':
+              '__PLATFORMS__/iPhoneOS.platform/Developer/Library',
+            'DYLD_FRAMEWORK_PATH':
+              '__PLATFORMS__/iPhoneOS.platform/Developer/Library/Frameworks',
+            'XCInjectBundleInto':'__TESTHOST__/%s' % self.app_name
+          }
+        }
+      }
 
   def uninstall_apps(self):
     """Uninstalls all apps found on the device."""
@@ -720,13 +739,19 @@ class DeviceTestRunner(TestRunner):
       A list of strings forming the command to launch the test.
     """
     if self.xctest_path:
+      if test_filter:
+        if invert:
+          self.xctestrun_data['TestTargetName'].update(
+            {'SkipTestIdentifiers': test_filter})
+        else:
+          self.xctestrun_data['TestTargetName'].update(
+            {'OnlyTestIdentifiers': test_filter})
+      plistlib.writePlist(self.xctestrun_data, self.xctestrun_file)
       return [
         'xcodebuild',
         'test-without-building',
-        'BUILT_PRODUCTS_DIR=%s' % os.path.dirname(self.app_path),
+        '-xctestrun', self.xctestrun_file,
         '-destination', 'id=%s' % self.udid,
-        '-project', XCTEST_PROJECT,
-        '-scheme', XCTEST_SCHEME,
       ]
 
     cmd = [
@@ -740,7 +765,7 @@ class DeviceTestRunner(TestRunner):
       kif_filter = get_kif_test_filter(test_filter, invert=invert)
       gtest_filter = get_gtest_filter(test_filter, invert=invert)
       cmd.extend(['-D', 'GKIF_SCENARIO_FILTER=%s' % kif_filter])
-      args.append('--gtest-filter=%s' % gtest_filter)
+      args.append('--gtest_filter=%s' % gtest_filter)
 
     for env_var in self.env_vars:
       cmd.extend(['-D', env_var])

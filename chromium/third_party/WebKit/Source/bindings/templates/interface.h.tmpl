@@ -21,6 +21,7 @@ class {{v8_class}}Constructor {
   STATIC_ONLY({{v8_class}}Constructor);
  public:
   static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
+  {{exported}}static void NamedConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>& info);
   {{exported}}static const WrapperTypeInfo wrapperTypeInfo;
 };
 
@@ -38,7 +39,7 @@ class {{v8_class}} {
   {{exported}}static v8::Local<v8::FunctionTemplate> domTemplateForNamedPropertiesObject(v8::Isolate*, const DOMWrapperWorld&);
   {% endif %}
   static {{cpp_class}}* toImpl(v8::Local<v8::Object> object) {
-    return toScriptWrappable(object)->toImpl<{{cpp_class}}>();
+    return ToScriptWrappable(object)->ToImpl<{{cpp_class}}>();
   }
   {% endif %}
   {{exported}}static {{cpp_class}}* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
@@ -47,11 +48,11 @@ class {{v8_class}} {
   {% else %}
   {{exported}}static const WrapperTypeInfo wrapperTypeInfo;
   {% endif %}
-  static void trace(Visitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->trace(scriptWrappable->toImpl<{{cpp_class}}>());
+  static void Trace(Visitor* visitor, ScriptWrappable* scriptWrappable) {
+    visitor->Trace(scriptWrappable->ToImpl<{{cpp_class}}>());
   }
-  static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->traceWrappers(scriptWrappable->toImpl<{{cpp_class}}>());
+  static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
+    visitor->TraceWrappers(scriptWrappable->ToImpl<{{cpp_class}}>());
   }
   {% for method in methods %}
   {% if method.is_custom %}
@@ -119,7 +120,7 @@ class {{v8_class}} {
   {% set custom_internal_field_counter = 0 %}
   {% if is_event_target and not is_node %}
   {# Event listeners on DOM nodes are explicitly supported in the GC controller. #}
-  static const int eventListenerCacheIndex = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
+  static const int eventListenerCacheIndex = kV8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
   {% set custom_internal_field_counter = custom_internal_field_counter + 1 %}
   {% endif %}
   {# persistentHandleIndex must be the last field, if it is present.
@@ -127,7 +128,7 @@ class {{v8_class}} {
      FIXME: Remove this internal field, and share one field for either:
      * a persistent handle (if the object is in oilpan) or
      * a C++ pointer to the DOM object (if the object is not in oilpan) #}
-  static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
+  static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
   {# End custom internal fields #}
   {% if prepare_prototype_and_interface_object_func %}
   {{exported}}static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate);
@@ -159,7 +160,7 @@ class {{v8_class}} {
 
   {% for attribute in attributes %}
   {% if attribute.is_cached_accessor %}
-  {{exported}}static v8::Local<v8::Private> {{attribute.name}}CachedAccessorCallback(v8::Isolate*);
+  {{exported}}static v8::Local<v8::Private> {{attribute.name}}CachedPropertyKey(v8::Isolate*);
   {% endif %}
   {% for world_suffix in attribute.world_suffixes %}
   {% if not attribute.constructor_type %}
@@ -272,6 +273,11 @@ class {{v8_class}} {
 {{exported}}bool initialize{{cpp_class}}({{cpp_class}}Init&, const Dictionary&, ExceptionState&, const v8::FunctionCallbackInfo<v8::Value>& info);
 
 {% endif %}
+template <>
+struct NativeValueTraits<{{cpp_class}}> : public NativeValueTraitsBase<{{cpp_class}}> {
+  {{exported}}static {{cpp_class}}* NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+};
+
 template <>
 struct V8TypeOf<{{cpp_class}}> {
   typedef {{v8_class}} Type;

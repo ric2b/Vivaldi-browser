@@ -6,7 +6,7 @@
 #define DeprecatedScheduleStyleRecalcDuringLayout_h
 
 #include "core/dom/DocumentLifecycle.h"
-#include "wtf/Allocator.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -19,9 +19,9 @@ class DeprecatedScheduleStyleRecalcDuringLayout {
   ~DeprecatedScheduleStyleRecalcDuringLayout();
 
  private:
-  DocumentLifecycle& m_lifecycle;
-  DocumentLifecycle::DeprecatedTransition m_deprecatedTransition;
-  bool m_wasInPerformLayout;
+  DocumentLifecycle& lifecycle_;
+  DocumentLifecycle::DeprecatedTransition deprecated_transition_;
+  bool was_in_perform_layout_;
 };
 
 }  // namespace blink

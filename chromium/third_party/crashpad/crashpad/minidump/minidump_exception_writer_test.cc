@@ -45,15 +45,15 @@ void GetExceptionStream(const std::string& file_contents,
   const size_t kContextOffset =
       kExceptionStreamOffset + sizeof(MINIDUMP_EXCEPTION_STREAM);
   const size_t kFileSize = kContextOffset + sizeof(MinidumpContextX86);
-  ASSERT_EQ(file_contents.size(), kFileSize);
+  ASSERT_EQ(kFileSize, file_contents.size());
 
   const MINIDUMP_DIRECTORY* directory;
   const MINIDUMP_HEADER* header =
       MinidumpHeaderAtStart(file_contents, &directory);
   ASSERT_NO_FATAL_FAILURE(VerifyMinidumpHeader(header, 1, 0));
 
-  ASSERT_EQ(kMinidumpStreamTypeException, directory[0].StreamType);
-  EXPECT_EQ(kExceptionStreamOffset, directory[0].Location.Rva);
+  ASSERT_EQ(directory[0].StreamType, kMinidumpStreamTypeException);
+  EXPECT_EQ(directory[0].Location.Rva, kExceptionStreamOffset);
 
   *exception_stream =
       MinidumpWritableAtLocationDescriptor<MINIDUMP_EXCEPTION_STREAM>(
@@ -68,24 +68,24 @@ void ExpectExceptionStream(const MINIDUMP_EXCEPTION_STREAM* expected,
                            const MINIDUMP_EXCEPTION_STREAM* observed,
                            const std::string& file_contents,
                            const MinidumpContextX86** context) {
-  EXPECT_EQ(expected->ThreadId, observed->ThreadId);
-  EXPECT_EQ(0u, observed->__alignment);
-  EXPECT_EQ(expected->ExceptionRecord.ExceptionCode,
-            observed->ExceptionRecord.ExceptionCode);
-  EXPECT_EQ(expected->ExceptionRecord.ExceptionFlags,
-            observed->ExceptionRecord.ExceptionFlags);
-  EXPECT_EQ(expected->ExceptionRecord.ExceptionRecord,
-            observed->ExceptionRecord.ExceptionRecord);
-  EXPECT_EQ(expected->ExceptionRecord.ExceptionAddress,
-            observed->ExceptionRecord.ExceptionAddress);
-  EXPECT_EQ(expected->ExceptionRecord.NumberParameters,
-            observed->ExceptionRecord.NumberParameters);
-  EXPECT_EQ(0u, observed->ExceptionRecord.__unusedAlignment);
+  EXPECT_EQ(observed->ThreadId, expected->ThreadId);
+  EXPECT_EQ(observed->__alignment, 0u);
+  EXPECT_EQ(observed->ExceptionRecord.ExceptionCode,
+            expected->ExceptionRecord.ExceptionCode);
+  EXPECT_EQ(observed->ExceptionRecord.ExceptionFlags,
+            expected->ExceptionRecord.ExceptionFlags);
+  EXPECT_EQ(observed->ExceptionRecord.ExceptionRecord,
+            expected->ExceptionRecord.ExceptionRecord);
+  EXPECT_EQ(observed->ExceptionRecord.ExceptionAddress,
+            expected->ExceptionRecord.ExceptionAddress);
+  EXPECT_EQ(observed->ExceptionRecord.NumberParameters,
+            expected->ExceptionRecord.NumberParameters);
+  EXPECT_EQ(observed->ExceptionRecord.__unusedAlignment, 0u);
   for (size_t index = 0;
        index < arraysize(observed->ExceptionRecord.ExceptionInformation);
        ++index) {
-    EXPECT_EQ(expected->ExceptionRecord.ExceptionInformation[index],
-              observed->ExceptionRecord.ExceptionInformation[index]);
+    EXPECT_EQ(observed->ExceptionRecord.ExceptionInformation[index],
+              expected->ExceptionRecord.ExceptionInformation[index]);
   }
   *context = MinidumpWritableAtLocationDescriptor<MinidumpContextX86>(
       file_contents, observed->ThreadContext);
@@ -102,7 +102,7 @@ TEST(MinidumpExceptionWriter, Minimal) {
   InitializeMinidumpContextX86(context_x86_writer->context(), kSeed);
   exception_writer->SetContext(std::move(context_x86_writer));
 
-  minidump_file_writer.AddStream(std::move(exception_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(exception_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
@@ -161,7 +161,7 @@ TEST(MinidumpExceptionWriter, Standard) {
   exception_information.push_back(kExceptionInformation2);
   exception_writer->SetExceptionInformation(exception_information);
 
-  minidump_file_writer.AddStream(std::move(exception_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(exception_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
@@ -234,7 +234,7 @@ TEST(MinidumpExceptionWriter, InitializeFromSnapshot) {
   exception_writer->InitializeFromSnapshot(&exception_snapshot, thread_id_map);
 
   MinidumpFileWriter minidump_file_writer;
-  minidump_file_writer.AddStream(std::move(exception_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(exception_writer)));
 
   StringFile string_file;
   ASSERT_TRUE(minidump_file_writer.WriteEverything(&string_file));
@@ -256,7 +256,7 @@ TEST(MinidumpExceptionWriterDeathTest, NoContext) {
   MinidumpFileWriter minidump_file_writer;
   auto exception_writer = base::WrapUnique(new MinidumpExceptionWriter());
 
-  minidump_file_writer.AddStream(std::move(exception_writer));
+  ASSERT_TRUE(minidump_file_writer.AddStream(std::move(exception_writer)));
 
   StringFile string_file;
   ASSERT_DEATH_CHECK(minidump_file_writer.WriteEverything(&string_file),

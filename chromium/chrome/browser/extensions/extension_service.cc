@@ -13,6 +13,8 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -103,11 +105,14 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/extensions/install_limiter.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "storage/browser/fileapi/file_system_backend.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
+#include "components/datasource/vivaldi_data_source.h"
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -439,11 +444,27 @@ void ExtensionService::Init() {
   DCHECK(!is_ready());  // Can't redo init.
   DCHECK_EQ(registry_->enabled_extensions().size(), 0u);
 
-  // LoadAllExtensions() calls OnLoadedInstalledExtensions().
   component_loader_->LoadAll();
-  extensions::InstalledLoader(this).LoadAllExtensions();
+  bool load_saved_extensions = true;
+  bool load_command_line_extensions = extensions_enabled_;
+#if defined(OS_CHROMEOS)
+  if (chromeos::ProfileHelper::IsSigninProfile(profile_)) {
+    load_saved_extensions = false;
+    load_command_line_extensions = false;
+  }
+#endif
+  if (load_saved_extensions) {
+    extensions::InstalledLoader(this).LoadAllExtensions();
+  } else {
+    // InstalledLoader::LoadAllExtensions normally calls
+    // OnLoadedInstalledExtensions itself, but here we circumvent that path.
+    // Call OnLoadedInstalledExtensions directly.
+    // TODO(devlin): LoadInstalledExtensions() is synchronous - we can simplify
+    // this.
+    OnLoadedInstalledExtensions();
+  }
   LoadExtensionsFromCommandLineFlag(switches::kDisableExtensionsExcept);
-  if (extensions_enabled_)
+  if (load_command_line_extensions)
     LoadExtensionsFromCommandLineFlag(switches::kLoadExtension);
   // ChromeDriver has no way of determining the Chrome version until after
   // launch, so it needs to continue passing load-component-extension until it
@@ -640,7 +661,9 @@ void ExtensionService::LoadExtensionsFromCommandLineFlag(
       extensions::UnpackedInstaller::Create(this)->LoadFromCommandLine(
           base::FilePath(t.token()), &extension_id, false /*only-allow-apps*/);
       // Extension id is added to whitelist after its extension is loaded
-      // because code is executed asynchronously.
+      // because code is executed asynchronously. TODO(michaelpg): Remove this
+      // assumption so loading extensions does not have to be asynchronous:
+      // crbug.com/708354.
       if (switch_name == switches::kDisableExtensionsExcept)
         disable_flag_exempted_extensions_.insert(extension_id);
     }
@@ -1150,6 +1173,12 @@ void ExtensionService::NotifyExtensionLoaded(const Extension* extension) {
     content::URLDataSource::Add(profile_, thumbnail_source);
   }
 
+  // Same for chrome://vivaldi-data/ resources.
+  if (permissions_data->HasHostPermission(GURL(vivaldi::kVivaldiUIDataURL))) {
+    VivaldiDataSource* data_source = new VivaldiDataSource(profile_);
+    content::URLDataSource::Add(profile_, data_source);
+  }
+
   // NOTE(andre@vivaldi.com): This is to assign a content prefs map to Vivaldi
   // so that we can always access content settings with. See bug VB-20016
   if (vivaldi::IsVivaldiRunning() && vivaldi::IsVivaldiApp(extension->id())) {
@@ -1321,6 +1350,9 @@ void ExtensionService::CheckForUpdatesSoon() {
 // Errors are reported through ExtensionErrorReporter. Success is not
 // reported.
 void ExtensionService::CheckForExternalUpdates() {
+  if (external_updates_disabled_for_test_)
+    return;
+
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   TRACE_EVENT0("browser,startup", "ExtensionService::CheckForExternalUpdates");
   SCOPED_UMA_HISTOGRAM_TIMER("Extensions.CheckForExternalUpdatesTime");
@@ -1491,6 +1523,26 @@ void ExtensionService::OnLoadedInstalledExtensions() {
 }
 
 void ExtensionService::AddExtension(const Extension* extension) {
+  if (!Manifest::IsValidLocation(extension->location())) {
+    // TODO(devlin): We should *never* add an extension with an invalid
+    // location, but some bugs (e.g. crbug.com/692069) seem to indicate we do.
+    // Track down the cases when this can happen, and remove this
+    // DumpWithoutCrashing() (possibly replacing it with a CHECK).
+    NOTREACHED();
+    char extension_id_copy[33];
+    base::strlcpy(extension_id_copy, extension->id().c_str(),
+                  arraysize(extension_id_copy));
+    Manifest::Location location = extension->location();
+    int creation_flags = extension->creation_flags();
+    Manifest::Type type = extension->manifest()->type();
+    base::debug::Alias(extension_id_copy);
+    base::debug::Alias(&location);
+    base::debug::Alias(&creation_flags);
+    base::debug::Alias(&type);
+    base::debug::DumpWithoutCrashing();
+    return;
+  }
+
   // TODO(jstritar): We may be able to get rid of this branch by overriding the
   // default extension state to DISABLED when the --disable-extensions flag
   // is set (http://crbug.com/29067).

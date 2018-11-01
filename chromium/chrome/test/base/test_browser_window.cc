@@ -5,11 +5,10 @@
 #include "chrome/test/base/test_browser_window.h"
 
 #include "base/memory/ptr_util.h"
-#include "build/build_config.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "ui/gfx/geometry/rect.h"
-
 
 // Helpers --------------------------------------------------------------------
 
@@ -40,11 +39,6 @@ WindowOpenDisposition
 ui::PageTransition
     TestBrowserWindow::TestLocationBar::GetPageTransition() const {
   return ui::PAGE_TRANSITION_LINK;
-}
-
-bool TestBrowserWindow::TestLocationBar::ShowPageActionPopup(
-    const extensions::Extension* extension, bool grant_active_tab) {
-  return false;
 }
 
 const OmniboxView* TestBrowserWindow::TestLocationBar::GetOmniboxView() const {
@@ -127,10 +121,10 @@ ToolbarActionsBar* TestBrowserWindow::GetToolbarActionsBar() {
   return nullptr;
 }
 
-bool TestBrowserWindow::PreHandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event,
-    bool* is_keyboard_shortcut) {
-  return false;
+content::KeyboardEventProcessingResult
+TestBrowserWindow::PreHandleKeyboardEvent(
+    const content::NativeWebKeyboardEvent& event) {
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool TestBrowserWindow::IsBookmarkBarVisible() const {
@@ -146,6 +140,10 @@ bool TestBrowserWindow::IsTabStripEditable() const {
 }
 
 bool TestBrowserWindow::IsToolbarVisible() const {
+  return false;
+}
+
+bool TestBrowserWindow::IsToolbarShowing() const {
   return false;
 }
 

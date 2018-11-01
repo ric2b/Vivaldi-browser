@@ -19,15 +19,18 @@
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
+#include "chrome/common/open_search_description_document_handler.mojom.h"
 #include "chrome/common/prerender_messages.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/renderer/prerender/prerender_helper.h"
 #include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
 #include "components/translate/content/renderer/translate_helper.h"
+#include "content/public/common/associated_interface_provider.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "extensions/common/constants.h"
 #include "printing/features/features.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -76,17 +79,17 @@ namespace {
 SkBitmap Downscale(const blink::WebImage& image,
                    int thumbnail_min_area_pixels,
                    const gfx::Size& thumbnail_max_size_pixels) {
-  if (image.isNull())
+  if (image.IsNull())
     return SkBitmap();
 
-  gfx::Size image_size = image.size();
+  gfx::Size image_size = image.Size();
 
   if (image_size.GetArea() < thumbnail_min_area_pixels)
-    return image.getSkBitmap();
+    return image.GetSkBitmap();
 
   if (image_size.width() <= thumbnail_max_size_pixels.width() &&
       image_size.height() <= thumbnail_max_size_pixels.height())
-    return image.getSkBitmap();
+    return image.GetSkBitmap();
 
   gfx::SizeF scaled_size = gfx::SizeF(image_size);
 
@@ -99,7 +102,7 @@ SkBitmap Downscale(const blink::WebImage& image,
         thumbnail_max_size_pixels.height() / scaled_size.height());
   }
 
-  return skia::ImageOperations::Resize(image.getSkBitmap(),
+  return skia::ImageOperations::Resize(image.GetSkBitmap(),
                                        skia::ImageOperations::RESIZE_GOOD,
                                        static_cast<int>(scaled_size.width()),
                                        static_cast<int>(scaled_size.height()));
@@ -112,7 +115,14 @@ ChromeRenderFrameObserver::ChromeRenderFrameObserver(
     : content::RenderFrameObserver(render_frame),
       translate_helper_(nullptr),
       phishing_classifier_(nullptr) {
-  // Don't do anything for subframes.
+  render_frame->GetInterfaceRegistry()->AddInterface(
+      base::Bind(&ChromeRenderFrameObserver::OnImageContextMenuRendererRequest,
+                 base::Unretained(this)));
+  render_frame->GetInterfaceRegistry()->AddInterface(
+      base::Bind(&ChromeRenderFrameObserver::OnThumbnailCapturerRequest,
+                 base::Unretained(this)));
+
+  // Don't do anything else for subframes.
   if (!render_frame->IsMainFrame())
     return;
 
@@ -139,10 +149,6 @@ bool ChromeRenderFrameObserver::OnMessageReceived(const IPC::Message& message) {
     return false;
 
   IPC_BEGIN_MESSAGE_MAP(ChromeRenderFrameObserver, message)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_RequestReloadImageForContextNode,
-                        OnRequestReloadImageForContextNode)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_RequestThumbnailForContextNode,
-                        OnRequestThumbnailForContextNode)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SetClientSidePhishingDetection,
                         OnSetClientSidePhishingDetection)
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -171,26 +177,26 @@ void ChromeRenderFrameObserver::OnSetIsPrerendering(
   }
 }
 
-void ChromeRenderFrameObserver::OnRequestReloadImageForContextNode() {
+void ChromeRenderFrameObserver::RequestReloadImageForContextNode() {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
   // TODO(dglazkov): This code is clearly in the wrong place. Need
   // to investigate what it is doing and fix (http://crbug.com/606164).
-  WebNode context_node = frame->contextMenuNode();
-  if (!context_node.isNull() && context_node.isElementNode()) {
-    frame->reloadImage(context_node);
+  WebNode context_node = frame->ContextMenuNode();
+  if (!context_node.IsNull() && context_node.IsElementNode()) {
+    frame->ReloadImage(context_node);
   }
 }
 
-void ChromeRenderFrameObserver::OnRequestThumbnailForContextNode(
-    int thumbnail_min_area_pixels,
+void ChromeRenderFrameObserver::RequestThumbnailForContextNode(
+    int32_t thumbnail_min_area_pixels,
     const gfx::Size& thumbnail_max_size_pixels,
-    int callback_id) {
-  WebNode context_node = render_frame()->GetWebFrame()->contextMenuNode();
+    const RequestThumbnailForContextNodeCallback& callback) {
+  WebNode context_node = render_frame()->GetWebFrame()->ContextMenuNode();
   SkBitmap thumbnail;
   gfx::Size original_size;
-  if (!context_node.isNull() && context_node.isElementNode()) {
-    blink::WebImage image = context_node.to<WebElement>().imageContents();
-    original_size = image.size();
+  if (!context_node.IsNull() && context_node.IsElementNode()) {
+    blink::WebImage image = context_node.To<WebElement>().ImageContents();
+    original_size = image.Size();
     thumbnail = Downscale(image,
                           thumbnail_min_area_pixels,
                           thumbnail_max_size_pixels);
@@ -202,7 +208,7 @@ void ChromeRenderFrameObserver::OnRequestThumbnailForContextNode(
   else
     thumbnail.copyTo(&bitmap, kN32_SkColorType);
 
-  std::string thumbnail_data;
+  std::vector<uint8_t> thumbnail_data;
   SkAutoLockPixels lock(bitmap);
   if (bitmap.getPixels()) {
     const int kDefaultQuality = 90;
@@ -210,12 +216,12 @@ void ChromeRenderFrameObserver::OnRequestThumbnailForContextNode(
     if (gfx::JPEGCodec::Encode(
             reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
             gfx::JPEGCodec::FORMAT_SkBitmap, bitmap.width(), bitmap.height(),
-            static_cast<int>(bitmap.rowBytes()), kDefaultQuality, &data))
-      thumbnail_data = std::string(data.begin(), data.end());
+            static_cast<int>(bitmap.rowBytes()), kDefaultQuality, &data)) {
+      thumbnail_data.swap(data);
+    }
   }
 
-  Send(new ChromeViewHostMsg_RequestThumbnailForContextNode_ACK(
-      routing_id(), thumbnail_data, original_size, callback_id));
+  callback.Run(thumbnail_data, original_size);
 }
 
 void ChromeRenderFrameObserver::OnPrintNodeUnderContextMenu() {
@@ -223,7 +229,7 @@ void ChromeRenderFrameObserver::OnPrintNodeUnderContextMenu() {
   printing::PrintWebViewHelper* helper =
       printing::PrintWebViewHelper::Get(render_frame());
   if (helper)
-    helper->PrintNode(render_frame()->GetWebFrame()->contextMenuNode());
+    helper->PrintNode(render_frame()->GetWebFrame()->ContextMenuNode());
 #endif
 }
 
@@ -241,13 +247,17 @@ void ChromeRenderFrameObserver::OnSetClientSidePhishingDetection(
 void ChromeRenderFrameObserver::DidFinishLoad() {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
   // Don't do anything for subframes.
-  if (frame->parent())
+  if (frame->Parent())
     return;
 
-  GURL osdd_url = frame->document().openSearchDescriptionURL();
+  GURL osdd_url = frame->GetDocument().OpenSearchDescriptionURL();
   if (!osdd_url.is_empty()) {
-    Send(new ChromeViewHostMsg_PageHasOSDD(
-        routing_id(), frame->document().url(), osdd_url));
+    chrome::mojom::OpenSearchDescriptionDocumentHandlerAssociatedPtr
+        osdd_handler;
+    render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(
+        &osdd_handler);
+    osdd_handler->PageHasOpenSearchDescriptionDocument(
+        frame->GetDocument().Url(), osdd_url);
   }
 }
 
@@ -258,16 +268,16 @@ void ChromeRenderFrameObserver::DidStartProvisionalLoad(
     return;
 
   translate_helper_->PrepareForUrl(
-      render_frame()->GetWebFrame()->document().url());
+      render_frame()->GetWebFrame()->GetDocument().Url());
 }
 
 void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
     bool is_new_navigation,
-    bool is_same_page_navigation) {
+    bool is_same_document_navigation) {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
 
   // Don't do anything for subframes.
-  if (frame->parent())
+  if (frame->Parent())
     return;
 
   base::debug::SetCrashKeyValue(
@@ -281,16 +291,16 @@ void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
     return;
 
   // Don't capture pages that have pending redirect or location change.
-  if (frame->isNavigationScheduledWithin(kLocationChangeIntervalInSeconds))
+  if (frame->IsNavigationScheduledWithin(kLocationChangeIntervalInSeconds))
     return;
 
   // Don't index/capture pages that are in view source mode.
-  if (frame->isViewSourceModeEnabled())
+  if (frame->IsViewSourceModeEnabled())
     return;
 
   // Don't capture text of the error pages.
-  WebDataSource* ds = frame->dataSource();
-  if (ds && ds->hasUnreachableURL())
+  WebDataSource* ds = frame->DataSource();
+  if (ds && ds->HasUnreachableURL())
     return;
 
   // Don't index/capture pages that are being prerendered.
@@ -304,9 +314,9 @@ void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
   // TODO(dglazkov): WebFrameContentDumper should only be used for
   // testing purposes. See http://crbug.com/585164.
   base::string16 contents =
-      WebFrameContentDumper::deprecatedDumpFrameTreeAsText(frame,
+      WebFrameContentDumper::DeprecatedDumpFrameTreeAsText(frame,
                                                            kMaxIndexChars)
-          .utf16();
+          .Utf16();
 
   UMA_HISTOGRAM_TIMES(kTranslateCaptureText,
                       base::TimeTicks::Now() - capture_begin_time);
@@ -333,10 +343,10 @@ void ChromeRenderFrameObserver::DidMeaningfulLayout(
     return;
 
   switch (layout_type) {
-    case blink::WebMeaningfulLayout::FinishedParsing:
+    case blink::WebMeaningfulLayout::kFinishedParsing:
       CapturePageText(PRELIMINARY_CAPTURE);
       break;
-    case blink::WebMeaningfulLayout::FinishedLoading:
+    case blink::WebMeaningfulLayout::kFinishedLoading:
       CapturePageText(FINAL_CAPTURE);
       break;
     default:
@@ -346,4 +356,14 @@ void ChromeRenderFrameObserver::DidMeaningfulLayout(
 
 void ChromeRenderFrameObserver::OnDestruct() {
   delete this;
+}
+
+void ChromeRenderFrameObserver::OnImageContextMenuRendererRequest(
+    chrome::mojom::ImageContextMenuRendererRequest request) {
+  image_context_menu_renderer_bindings_.AddBinding(this, std::move(request));
+}
+
+void ChromeRenderFrameObserver::OnThumbnailCapturerRequest(
+    chrome::mojom::ThumbnailCapturerRequest request) {
+  thumbnail_capturer_bindings_.AddBinding(this, std::move(request));
 }

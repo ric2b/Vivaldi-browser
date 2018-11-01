@@ -149,31 +149,12 @@ std::string ReplaceHtmlTemplateValues(
 
 namespace viewer {
 
-const std::string GetShowFeedbackFormJs() {
-  base::StringValue question_val(
-      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_QUALITY_QUESTION));
-  base::StringValue no_val(
-      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_QUALITY_ANSWER_NO));
-  base::StringValue yes_val(
-      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_QUALITY_ANSWER_YES));
-
-  std::string question;
-  std::string yes;
-  std::string no;
-
-  base::JSONWriter::Write(question_val, &question);
-  base::JSONWriter::Write(yes_val, &yes);
-  base::JSONWriter::Write(no_val, &no);
-
-  return "showFeedbackForm(" + question + ", " + yes + ", " + no + ");";
-}
-
 const std::string GetUnsafeIncrementalDistilledPageJs(
     const DistilledPageProto* page_proto,
     const bool is_last_page) {
   std::string output(page_proto->html());
   EnsureNonEmptyContent(&output);
-  base::StringValue value(output);
+  base::Value value(output);
   base::JSONWriter::Write(value, &output);
   std::string page_update("addToPage(");
   page_update += output + ");";
@@ -187,28 +168,25 @@ const std::string GetErrorPageJs() {
       IDS_DOM_DISTILLER_VIEWER_FAILED_TO_FIND_ARTICLE_TITLE));
   std::string page_update(GetSetTitleJs(title));
 
-  base::StringValue value(l10n_util::GetStringUTF8(
+  base::Value value(l10n_util::GetStringUTF8(
       IDS_DOM_DISTILLER_VIEWER_FAILED_TO_FIND_ARTICLE_CONTENT));
   std::string output;
   base::JSONWriter::Write(value, &output);
   page_update += "addToPage(" + output + ");";
   page_update += GetSetTextDirectionJs(std::string("auto"));
   page_update += GetToggleLoadingIndicatorJs(true);
-  if (ShouldShowFeedbackForm()) {
-    page_update += GetShowFeedbackFormJs();
-  }
   return page_update;
 }
 
 const std::string GetSetTitleJs(std::string title) {
-  base::StringValue value(title);
+  base::Value value(title);
   std::string output;
   base::JSONWriter::Write(value, &output);
   return "setTitle(" + output + ");";
 }
 
 const std::string GetSetTextDirectionJs(const std::string& direction) {
-  base::StringValue value(direction);
+  base::Value value(direction);
   std::string output;
   base::JSONWriter::Write(value, &output);
   return "setTextDirection(" + output + ");";
@@ -240,7 +218,7 @@ const std::string GetUnsafeArticleContentJs(
 
   std::string output(unsafe_output_stream.str());
   EnsureNonEmptyContent(&output);
-  base::JSONWriter::Write(base::StringValue(output), &output);
+  base::JSONWriter::Write(base::Value(output), &output);
   std::string page_update("addToPage(");
   page_update += output + ");";
   return page_update + GetToggleLoadingIndicatorJs(true);

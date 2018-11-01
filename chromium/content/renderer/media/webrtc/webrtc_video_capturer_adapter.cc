@@ -10,7 +10,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/paint/paint_surface.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "content/renderer/media/webrtc/webrtc_video_frame_adapter.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/timestamp_constants.h"
@@ -101,27 +101,30 @@ class WebRtcVideoCapturerAdapter::TextureFrameCopier
            frame->format() == media::PIXEL_FORMAT_UYVY ||
            frame->format() == media::PIXEL_FORMAT_NV12);
     ScopedWaitableEvent event(waiter);
-    sk_sp<cc::PaintSurface> surface = cc::PaintSurface::MakeRasterN32Premul(
-        frame->visible_rect().width(), frame->visible_rect().height());
 
-    if (!surface || !provider_) {
+    if (!provider_) {
       // Return a black frame (yuv = {0, 0x80, 0x80}).
       *new_frame = media::VideoFrame::CreateColorFrame(
           frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
       return;
     }
 
+    SkBitmap bitmap;
+    bitmap.allocPixels(SkImageInfo::MakeN32Premul(
+        frame->visible_rect().width(), frame->visible_rect().height()));
+    cc::SkiaPaintCanvas paint_canvas(bitmap);
+
     *new_frame = media::VideoFrame::CreateFrame(
         media::PIXEL_FORMAT_I420, frame->coded_size(), frame->visible_rect(),
         frame->natural_size(), frame->timestamp());
     DCHECK(provider_->ContextGL());
     canvas_video_renderer_->Copy(
-        frame.get(), surface->getCanvas(),
+        frame.get(), &paint_canvas,
         media::Context3D(provider_->ContextGL(), provider_->GrContext()));
 
     SkPixmap pixmap;
-    const bool result = surface->getCanvas()->peekPixels(&pixmap);
-    DCHECK(result) << "Error trying to access PaintSurface's pixels";
+    const bool result = bitmap.peekPixels(&pixmap);
+    DCHECK(result) << "Error trying to access SkBitmap's pixels";
     const uint32 source_pixel_format =
         (kN32_SkColorType == kRGBA_8888_SkColorType) ? cricket::FOURCC_ABGR
                                                      : cricket::FOURCC_ARGB;
@@ -322,11 +325,11 @@ bool WebRtcVideoCapturerAdapter::IsScreencast() const {
 bool WebRtcVideoCapturerAdapter::ShouldAdaptResolution() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (content_hint_ ==
-      blink::WebMediaStreamTrack::ContentHintType::VideoMotion) {
+      blink::WebMediaStreamTrack::ContentHintType::kVideoMotion) {
     return true;
   }
   if (content_hint_ ==
-      blink::WebMediaStreamTrack::ContentHintType::VideoDetail) {
+      blink::WebMediaStreamTrack::ContentHintType::kVideoDetail) {
     return false;
   }
   // Screencast does not adapt by default.

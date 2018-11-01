@@ -3,6 +3,7 @@
 <translationbundle lang="hu">
 <translation id="111910763555783249">Értesítési beállítások</translation>
 <translation id="1127811143501539442">{DAYS,plural, =1{1 napja}other{# napja}}</translation>
+<translation id="1156623771253174079">{SECONDS,plural, =1{1 perce}other{# perce}}</translation>
 <translation id="1190609913194133056">Értesítési központ</translation>
 <translation id="1243314992276662751">Feltöltés</translation>
 <translation id="1293699935367580298">Esc</translation>
@@ -13,6 +14,7 @@
 <translation id="1752946267035950200">{MINUTES,plural, =1{1 perc}other{# perc}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> bájt</translation>
 <translation id="1801827354178857021">Időszak</translation>
+<translation id="1803208670097017349">{MONTHS,plural, =1{1 hónap}other{# hónap}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 óra és }other{# óra és }}</translation>
 <translation id="1842960171412779397">Kiválasztás</translation>
@@ -32,6 +34,7 @@
 <translation id="2666092431469916601">Felülre</translation>
 <translation id="2743387203779672305">Másolás a vágólapra</translation>
 <translation id="2803313416453193357">Mappa megnyitása</translation>
+<translation id="2824719307700604149">{YEARS,plural, =1{1 éve}other{# éve}}</translation>
 <translation id="2931838996092594335">kattintás</translation>
 <translation id="2983818520079887040">Beállítások...</translation>
 <translation id="3036649622769666520">Fájlok megnyitása</translation>
@@ -53,9 +56,10 @@
 <translation id="3990502903496589789">Jobb sarok</translation>
 <translation id="4202807286478387388">Mehet</translation>
 <translation id="4250229828105606438">Képernyőkép</translation>
+<translation id="4266252015790371705">{MONTHS,plural, =1{1 hónapja}other{# hónapja}}</translation>
 <translation id="4320177379694898372">Nincs internetkapcsolat</translation>
 <translation id="4588090240171750605">Görgetés jobbra</translation>
-<translation id="459417155289402299">Gyorsfeloldás funkció</translation>
+<translation id="4788285488841504513">{MONTHS,plural, =1{hátralévő idő: 1 hónap}other{hátralévő idő: # hónap}}</translation>
 <translation id="4820616160060340806">Command+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 másodperc}other{# másodperc}}</translation>
 <translation id="4971687151119236543">Előző szám</translation>
@@ -63,6 +67,7 @@
 <translation id="5046499563572181734">Koppintson ide</translation>
 <translation id="5076340679995252485">&amp;Beillesztés</translation>
 <translation id="5120799197269191491">Keresőgomb+<ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5153297660536091054">PIN-kódos feloldási funkció</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="528468243742722775">Befejezés</translation>
 <translation id="5329858601952122676">&amp;Törlés</translation>
@@ -81,11 +86,11 @@
 <translation id="6129953537138746214">Szóköz</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
-<translation id="6203030746557259519">Virtuális kijelző</translation>
 <translation id="6264365405983206840">Össz&amp;es kiválasztása</translation>
 <translation id="6364916375976753737">Görgetés balra</translation>
 <translation id="6394627529324717982">Vessző</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 másodperce}other{# másodperce}}</translation>
+<translation id="6483402905448010557">{SECONDS,plural, =1{1 másodperce}other{# másodperce}}</translation>
 <translation id="6528179044667508675">Ne zavarj</translation>
 <translation id="6612467943526193239">Ha ki szeretne lépni a kalibrálásból, nyomja meg az Esc billentyűt.</translation>
 <translation id="6620110761915583480">Fájl mentése</translation>
@@ -97,6 +102,7 @@
 <translation id="6863590663815976734">{HOURS,plural, =1{1 óra van hátra}other{# óra van hátra}}</translation>
 <translation id="688711909580084195">Névtelen weboldal</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
+<translation id="6917971086528278418">{YEARS,plural, =1{hátralévő idő: 1 év}other{hátralévő idő: # év}}</translation>
 <translation id="6918245111648057970">Értesítések engedélyezése mindegyik felhasználónak a következőtől:</translation>
 <translation id="6945221475159498467">Kiválasztás</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -114,6 +120,7 @@
 <translation id="7814458197256864873">&amp;Másolás</translation>
 <translation id="7850320739366109486">Ne zavarj</translation>
 <translation id="7907591526440419938">Fájl megnyitása</translation>
+<translation id="8054029954190364711">Ujjlenyomatos feloldási funkció</translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{1 órája}other{# órája}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{1 mp van hátra}other{# mp van hátra}}</translation>
 <translation id="815598010540052116">Görgetés lefelé</translation>
@@ -122,6 +129,7 @@
 <translation id="8245914219290430011">Lap</translation>
 <translation id="8328145009876646418">Bal sarok</translation>
 <translation id="8331626408530291785">Görgetés felfelé</translation>
+<translation id="8352146631962686268">{YEARS,plural, =1{1 év}other{# év}}</translation>
 <translation id="8371695176452482769">Most beszéljen</translation>
 <translation id="838869780401515933">Megjelölés</translation>
 <translation id="8392688371657486010">Nincsenek értesítései</translation>

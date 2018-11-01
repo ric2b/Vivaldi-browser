@@ -127,6 +127,9 @@ class CONTENT_EXPORT DownloadUrlParameters {
     etag_ = etag;
   }
 
+  // If the "If-Range" header is used in a partial request.
+  void set_use_if_range(bool use_if_range) { use_if_range_ = use_if_range; }
+
   // HTTP method to use.
   void set_method(const std::string& method) {
     method_ = method;
@@ -202,6 +205,10 @@ class CONTENT_EXPORT DownloadUrlParameters {
     do_not_prompt_for_login_ = do_not_prompt;
   }
 
+  // Sets whether the download is to be treated as transient. A transient
+  // download is short-lived and is not shown in the UI.
+  void set_transient(bool transient) { transient_ = transient; }
+
   // For downloads of blob URLs, the caller can store a BlobDataHandle in the
   // DownloadUrlParameters object so that the blob will remain valid until
   // the download starts. The BlobDataHandle will be attached to the associated
@@ -219,6 +226,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   bool content_initiated() const { return content_initiated_; }
   const std::string& last_modified() const { return last_modified_; }
   const std::string& etag() const { return etag_; }
+  bool use_if_range() const { return use_if_range_; }
   const std::string& method() const { return method_; }
   const std::string& post_body() const { return post_body_; }
   int64_t post_id() const { return post_id_; }
@@ -253,6 +261,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   bool prompt() const { return save_info_.prompt_for_save_location; }
   const GURL& url() const { return url_; }
   bool do_not_prompt_for_login() const { return do_not_prompt_for_login_; }
+  bool is_transient() const { return transient_; }
 
   // STATE_CHANGING: Return the BlobDataHandle.
   std::unique_ptr<storage::BlobDataHandle> GetBlobDataHandle() {
@@ -269,6 +278,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   RequestHeadersType request_headers_;
   std::string last_modified_;
   std::string etag_;
+  bool use_if_range_;
   std::string method_;
   std::string post_body_;
   int64_t post_id_;
@@ -283,6 +293,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   DownloadSaveInfo save_info_;
   GURL url_;
   bool do_not_prompt_for_login_;
+  bool transient_;
   std::unique_ptr<storage::BlobDataHandle> blob_data_handle_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadUrlParameters);

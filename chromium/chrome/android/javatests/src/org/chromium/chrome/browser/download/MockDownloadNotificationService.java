@@ -9,6 +9,7 @@ import android.content.Context;
 import android.util.Pair;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.components.offline_items_collection.ContentId;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -78,8 +79,8 @@ public class MockDownloadNotificationService extends DownloadNotificationService
     }
 
     @Override
-    public void cancelNotification(int notificationId, String downloadGuid) {
-        super.cancelNotification(notificationId, downloadGuid);
+    public void cancelNotification(int notificationId, ContentId id) {
+        super.cancelNotification(notificationId, id);
         mNotificationIds.remove(Integer.valueOf(notificationId));
     }
 
@@ -93,53 +94,50 @@ public class MockDownloadNotificationService extends DownloadNotificationService
     }
 
     @Override
-    public int notifyDownloadSuccessful(
-            final String downloadGuid, final String filePath, final String fileName,
-            final long systemDownloadId, final boolean isOfflinePage,
-            final boolean isSupportedMimeType) {
+    public int notifyDownloadSuccessful(final ContentId id, final String filePath,
+            final String fileName, final long systemDownloadId, final boolean isOffTheRecord,
+            final boolean isSupportedMimeType, final boolean isOpenable) {
         return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Integer>() {
             @Override
             public Integer call() throws Exception {
-                return MockDownloadNotificationService.super.notifyDownloadSuccessful(
-                        downloadGuid, filePath, fileName, systemDownloadId, isOfflinePage,
-                        isSupportedMimeType);
+                return MockDownloadNotificationService.super.notifyDownloadSuccessful(id, filePath,
+                        fileName, systemDownloadId, isOffTheRecord, isSupportedMimeType,
+                        isOpenable);
             }
         });
     }
 
     @Override
-    public void notifyDownloadProgress(final String downloadGuid, final String fileName,
+    public void notifyDownloadProgress(final ContentId id, final String fileName,
             final int percentage, final long bytesReceived, final long timeRemainingInMillis,
             final long startTime, final boolean isOffTheRecord,
-            final boolean canDownloadWhileMetered, final boolean isOfflinePage) {
+            final boolean canDownloadWhileMetered, final boolean isTransient) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                MockDownloadNotificationService.super.notifyDownloadProgress(
-                        downloadGuid, fileName, percentage, bytesReceived, timeRemainingInMillis,
-                        startTime, isOffTheRecord, canDownloadWhileMetered, isOfflinePage);
+                MockDownloadNotificationService.super.notifyDownloadProgress(id, fileName,
+                        percentage, bytesReceived, timeRemainingInMillis, startTime, isOffTheRecord,
+                        canDownloadWhileMetered, isTransient);
             }
         });
     }
 
     @Override
-    public void notifyDownloadFailed(
-            final boolean isOfflinePage, final String downloadGuid, final String fileName) {
+    public void notifyDownloadFailed(final ContentId id, final String fileName) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                MockDownloadNotificationService.super.notifyDownloadFailed(
-                        isOfflinePage, downloadGuid, fileName);
+                MockDownloadNotificationService.super.notifyDownloadFailed(id, fileName);
             }
         });
     }
 
     @Override
-    public void notifyDownloadCanceled(final String downloadGuid) {
+    public void notifyDownloadCanceled(final ContentId id) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                MockDownloadNotificationService.super.notifyDownloadCanceled(downloadGuid);
+                MockDownloadNotificationService.super.notifyDownloadCanceled(id);
             }
         });
     }

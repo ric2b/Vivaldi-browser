@@ -19,16 +19,15 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_factory.h"
-#include "ui/display/display.h"
-#include "ui/display/screen.h"
+#include "ui/base/layout.h"
 #include "ui/gfx/geometry/dip_util.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 #import "ui/native_theme/native_theme_mac.h"
 #import "ui/views/cocoa/bridged_content_view.h"
-#import "ui/views/cocoa/drag_drop_client_mac.h"
 #import "ui/views/cocoa/cocoa_mouse_capture.h"
 #import "ui/views/cocoa/cocoa_window_move_loop.h"
+#import "ui/views/cocoa/drag_drop_client_mac.h"
 #include "ui/views/cocoa/tooltip_manager_mac.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
 #import "ui/views/cocoa/widget_owner_nswindow_adapter.h"
@@ -111,10 +110,7 @@ const int kResizeAreaCornerSize = 12;
 int kWindowPropertiesKey;
 
 float GetDeviceScaleFactorFromView(NSView* view) {
-  display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(view);
-  DCHECK(display.is_valid());
-  return display.device_scale_factor();
+  return ui::GetScaleFactorForNativeView(view);
 }
 
 // Returns true if bounds passed to window in SetBounds should be treated as
@@ -428,6 +424,11 @@ void BridgedNativeWidget::Init(base::scoped_nsobject<NSWindow> window,
     } else {
       parent_ = new WidgetOwnerNSWindowAdapter(this, params.parent);
     }
+    // crbug.com/697829: Widget::ShowInactive() could result in a Space switch
+    // when the widget has a parent, and we're calling -orderWindow:relativeTo:.
+    // Use Transient collection behaviour to prevent that.
+    [window_ setCollectionBehavior:[window_ collectionBehavior] |
+                                   NSWindowCollectionBehaviorTransient];
   }
 
   // OSX likes to put shadows on most things. However, frameless windows (with

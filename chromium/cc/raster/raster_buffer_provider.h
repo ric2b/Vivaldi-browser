@@ -7,8 +7,8 @@
 
 #include <stddef.h>
 
-#include "cc/playback/raster_source.h"
 #include "cc/raster/raster_buffer.h"
+#include "cc/raster/raster_source.h"
 #include "cc/raster/task_graph_runner.h"
 #include "cc/raster/tile_task.h"
 #include "cc/resources/resource_format.h"
@@ -38,8 +38,8 @@ class CC_EXPORT RasterBufferProvider {
       const RasterSource* raster_source,
       const gfx::Rect& canvas_bitmap_rect,
       const gfx::Rect& canvas_playback_rect,
-      float scale,
-      sk_sp<SkColorSpace> color_space,
+      const gfx::AxisTransform2d& transform,
+      const gfx::ColorSpace& target_color_space,
       const RasterSource::PlaybackSettings& playback_settings);
 
   // Acquire raster buffer.

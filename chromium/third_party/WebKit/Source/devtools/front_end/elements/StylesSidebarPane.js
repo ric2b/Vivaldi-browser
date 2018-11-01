@@ -56,6 +56,7 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     this._sectionBlocks = [];
     Elements.StylesSidebarPane._instance = this;
     UI.context.addFlavorChangeListener(SDK.DOMNode, this.forceUpdate, this);
+    this.element.addEventListener('copy', this._clipboardCopy.bind(this));
   }
 
   /**
@@ -424,7 +425,7 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     function onStyleSheetContent(styleSheetId, text) {
       text = text || '';
       var lines = text.split('\n');
-      var range = Common.TextRange.createFromLocation(lines.length - 1, lines[lines.length - 1].length);
+      var range = TextUtils.TextRange.createFromLocation(lines.length - 1, lines[lines.length - 1].length);
       this._addBlankSection(this._sectionBlocks[0].sections[0], styleSheetId, range);
     }
   }
@@ -432,7 +433,7 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   /**
    * @param {!Elements.StylePropertiesSection} insertAfterSection
    * @param {string} styleSheetId
-   * @param {!Common.TextRange} ruleLocation
+   * @param {!TextUtils.TextRange} ruleLocation
    */
   _addBlankSection(insertAfterSection, styleSheetId, ruleLocation) {
     var node = this.node();
@@ -492,6 +493,13 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     for (var block of this._sectionBlocks)
       sections = sections.concat(block.sections);
     return sections;
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  _clipboardCopy(event) {
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.StyleRuleCopied);
   }
 };
 
@@ -685,7 +693,7 @@ Elements.StylePropertiesSection = class {
    * @param {!SDK.CSSModel} cssModel
    * @param {!Components.Linkifier} linkifier
    * @param {string} styleSheetId
-   * @param {!Common.TextRange} ruleLocation
+   * @param {!TextUtils.TextRange} ruleLocation
    * @return {!Node}
    */
   static _linkifyRuleLocation(cssModel, linkifier, styleSheetId, ruleLocation) {
@@ -781,7 +789,7 @@ Elements.StylePropertiesSection = class {
         this._style.styleSheetId ? this._style.cssModel().styleSheetHeaderForId(this._style.styleSheetId) : null;
     if (!header)
       return false;
-    var sourceMap = header.cssModel().sourceMapForHeader(header);
+    var sourceMap = header.cssModel().sourceMapManager().sourceMapForClient(header);
     return sourceMap ? sourceMap.editable() : false;
   }
 
@@ -890,7 +898,7 @@ Elements.StylePropertiesSection = class {
   _onNewRuleClick(event) {
     event.data.consume();
     var rule = this._style.parentRule;
-    var range = Common.TextRange.createFromLocation(rule.style.range.endLine, rule.style.range.endColumn + 1);
+    var range = TextUtils.TextRange.createFromLocation(rule.style.range.endLine, rule.style.range.endColumn + 1);
     this._parentPane._addBlankSection(this, /** @type {string} */ (rule.styleSheetId), range);
   }
 
@@ -1555,7 +1563,7 @@ Elements.BlankStylePropertiesSection = class extends Elements.StylePropertiesSec
    * @param {!SDK.CSSMatchedStyles} matchedStyles
    * @param {string} defaultSelectorText
    * @param {string} styleSheetId
-   * @param {!Common.TextRange} ruleLocation
+   * @param {!TextUtils.TextRange} ruleLocation
    * @param {!SDK.CSSStyleDeclaration} insertAfterStyle
    */
   constructor(stylesPane, matchedStyles, defaultSelectorText, styleSheetId, ruleLocation, insertAfterStyle) {
@@ -1574,13 +1582,13 @@ Elements.BlankStylePropertiesSection = class extends Elements.StylePropertiesSec
   }
 
   /**
-   * @return {!Common.TextRange}
+   * @return {!TextUtils.TextRange}
    */
   _actualRuleLocation() {
     var prefix = this._rulePrefix();
     var lines = prefix.split('\n');
-    var editRange = new Common.TextRange(0, 0, lines.length - 1, lines.peekLast().length);
-    return this._ruleLocation.rebaseAfterTextEdit(Common.TextRange.createFromLocation(0, 0), editRange);
+    var editRange = new TextUtils.TextRange(0, 0, lines.length - 1, lines.peekLast().length);
+    return this._ruleLocation.rebaseAfterTextEdit(TextUtils.TextRange.createFromLocation(0, 0), editRange);
   }
 
   /**
@@ -2364,7 +2372,7 @@ Elements.StylePropertyTreeElement = class extends UI.TreeElement {
 
     // Do not live-edit "content" property of pseudo elements. crbug.com/433889
     if (!isEditingName && (!this._parentPane.node().pseudoType() || this.name !== 'content'))
-      this._prompt.on(UI.TextPrompt.TextChangedEvent, this._applyFreeFlowStyleTextEdit.bind(this));
+      this._prompt.addEventListener(UI.TextPrompt.Events.TextChanged, this._applyFreeFlowStyleTextEdit.bind(this));
 
     var proxyElement = this._prompt.attachAndStartEditing(selectElement, blurListener.bind(this, context));
     this._navigateToSource(selectElement, true);
@@ -3012,7 +3020,7 @@ Elements.StylesSidebarPropertyRenderer = class {
       regexes.push(Common.Color.Regex);
       processors.push(this._colorHandler);
     }
-    var results = Common.TextUtils.splitStringByRegexes(this._propertyValue, regexes);
+    var results = TextUtils.TextUtils.splitStringByRegexes(this._propertyValue, regexes);
     for (var i = 0; i < results.length; i++) {
       var result = results[i];
       var processor = result.regexIndex === -1 ? createTextNode : processors[result.regexIndex];

@@ -14,6 +14,7 @@
 #include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_form_conversion_utils.h"
+#include "components/autofill/content/renderer/provisionally_saved_password_form.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
@@ -114,10 +115,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // a form has been submitted by AJAX without navigation.
   void AJAXSucceeded();
 
-  // Called when the user first interacts with the page after a load. This is a
+  // Called when the user interacts with the page after a load. This is a
   // signal to make autofilled values of password input elements accessible to
   // JavaScript.
-  void FirstUserGestureObserved();
+  void UserGestureObserved();
 
   // Given password form data |form_data| and a supplied key |key| for
   // referencing the password info, returns a set of WebInputElements in
@@ -199,7 +200,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
   void WillCommitProvisionalLoad() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_page_navigation) override;
+                                bool is_same_document_navigation) override;
   void WillSendSubmitEvent(const blink::WebFormElement& form) override;
   void WillSubmitForm(const blink::WebFormElement& form) override;
   void OnDestruct() override;
@@ -239,17 +240,19 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void ClearPreview(blink::WebInputElement* username,
                     blink::WebInputElement* password);
 
-  // Saves |password_form| in |provisionally_saved_form_|, as long as it
-  // satisfies |restriction|.
+  // Saves |password_form|, |form| and |input| in |provisionally_saved_form_|,
+  // as long as it satisfies |restriction|. |form| and |input| are the elements
+  // user has just been interacting with before the form save. |form| or |input|
+  // can be null but not both at the same time. For example: if the form is
+  // unowned, |form| will be null; if the user has submitted the form, |input|
+  // will be null.
   void ProvisionallySavePassword(std::unique_ptr<PasswordForm> password_form,
+                                 const blink::WebFormElement& form,
+                                 const blink::WebInputElement& input,
                                  ProvisionallySaveRestriction restriction);
 
-  // Returns true if |provisionally_saved_form_| has enough information that
-  // it is likely filled out.
-  bool ProvisionallySavedPasswordIsValid();
-
-  // Helper function called when in-page navigation completed
-  void OnSamePageNavigationCompleted();
+  // Helper function called when same-document navigation completed
+  void OnSameDocumentNavigationCompleted();
 
   const mojom::AutofillDriverPtr& GetAutofillDriver();
 
@@ -260,7 +263,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   // Set if the user might be submitting a password form on the current page,
   // but the submit may still fail (i.e. doesn't pass JavaScript validation).
-  std::unique_ptr<PasswordForm> provisionally_saved_form_;
+  ProvisionallySavedPasswordForm provisionally_saved_form_;
 
   // Map WebFormControlElement to the pair of:
   // 1) The most recent text that user typed or PasswordManager autofilled in
@@ -279,6 +282,9 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   bool was_username_autofilled_;
   // True indicates that the password field was autofilled, false otherwise.
   bool was_password_autofilled_;
+
+  // True indicates that a request for credentials has been sent to the store.
+  bool sent_request_to_store_;
 
   // Records the username typed before suggestions preview.
   base::string16 username_query_prefix_;

@@ -85,7 +85,7 @@ void APIBindingsSystem::InitializeType(const std::string& type_name) {
   // will also go away if/when we generate all these specifications.
   std::string::size_type dot = type_name.rfind('.');
   // The type name should be fully qualified (include the API name).
-  DCHECK_NE(std::string::npos, dot);
+  DCHECK_NE(std::string::npos, dot) << type_name;
   DCHECK_LT(dot, type_name.size() - 1);
   std::string api_name = type_name.substr(0, dot);
   // If we've already instantiated the binding, the type should have been in
@@ -103,8 +103,9 @@ void APIBindingsSystem::CompleteRequest(int request_id,
 
 void APIBindingsSystem::FireEventInContext(const std::string& event_name,
                                            v8::Local<v8::Context> context,
-                                           const base::ListValue& response) {
-  event_handler_.FireEventInContext(event_name, context, response);
+                                           const base::ListValue& response,
+                                           const EventFilteringInfo& filter) {
+  event_handler_.FireEventInContext(event_name, context, response, filter);
 }
 
 APIBindingHooks* APIBindingsSystem::GetHooksForAPI(
@@ -122,6 +123,11 @@ void APIBindingsSystem::RegisterCustomType(const std::string& type_name,
   DCHECK(custom_types_.find(type_name) == custom_types_.end())
       << "Custom type already registered: " << type_name;
   custom_types_[type_name] = function;
+}
+
+void APIBindingsSystem::WillReleaseContext(v8::Local<v8::Context> context) {
+  request_handler_.InvalidateContext(context);
+  event_handler_.InvalidateContext(context);
 }
 
 v8::Local<v8::Object> APIBindingsSystem::CreateCustomType(

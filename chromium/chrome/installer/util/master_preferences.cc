@@ -25,8 +25,8 @@ namespace {
 
 const char kFirstRunTabs[] = "first_run_tabs";
 
-base::LazyInstance<installer::MasterPreferences> g_master_preferences =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<installer::MasterPreferences>::DestructorAtExit
+    g_master_preferences = LAZY_INSTANCE_INITIALIZER;
 
 bool GetURLFromValue(const base::Value* in_value, std::string* out_value) {
   return in_value && out_value && in_value->GetAsString(out_value);
@@ -224,6 +224,29 @@ void MasterPreferences::EnforceLegacyPreferences() {
         installer::master_preferences::kDoNotCreateDesktopShortcut, true);
     distribution_->SetBoolean(
         installer::master_preferences::kDoNotCreateQuickLaunchShortcut, true);
+  }
+
+  // Deprecated boolean import master preferences now mapped to their duplicates
+  // in prefs::.
+  static constexpr char kDistroImportHistoryPref[] = "import_history";
+  static constexpr char kDistroImportHomePagePref[] = "import_home_page";
+  static constexpr char kDistroImportSearchPref[] = "import_search_engine";
+  static constexpr char kDistroImportBookmarksPref[] = "import_bookmarks";
+
+  static constexpr struct {
+    const char* old_distro_pref_path;
+    const char* modern_pref_path;
+  } kLegacyDistroImportPrefMappings[] = {
+      {kDistroImportBookmarksPref, prefs::kImportBookmarks},
+      {kDistroImportHistoryPref, prefs::kImportHistory},
+      {kDistroImportHomePagePref, prefs::kImportHomepage},
+      {kDistroImportSearchPref, prefs::kImportSearchEngine},
+  };
+
+  for (const auto& mapping : kLegacyDistroImportPrefMappings) {
+    bool value = false;
+    if (GetBool(mapping.old_distro_pref_path, &value))
+      master_dictionary_->SetBoolean(mapping.modern_pref_path, value);
   }
 
 #if BUILDFLAG(ENABLE_RLZ)

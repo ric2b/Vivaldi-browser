@@ -14,7 +14,6 @@
 
 namespace gpu {
 
-
 class ProprietaryMediaGpuChannel : public GpuChannel
 {
  public:
@@ -30,8 +29,7 @@ class ProprietaryMediaGpuChannel : public GpuChannel
              base::SingleThreadTaskRunner* io_task_runner,
              int32_t client_id,
              uint64_t client_tracing_id,
-             bool allow_view_command_buffers,
-             bool allow_real_time_streams);
+             bool is_gpu_host);
 
    ~ProprietaryMediaGpuChannel() override;
 

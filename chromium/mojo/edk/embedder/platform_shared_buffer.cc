@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
@@ -145,6 +146,7 @@ std::unique_ptr<PlatformSharedBufferMapping> PlatformSharedBuffer::MapNoCheck(
     base::AutoLock locker(lock_);
     handle = base::SharedMemory::DuplicateHandle(shared_memory_->handle());
   }
+
   if (handle == base::SharedMemory::NULLHandle())
     return nullptr;
 
@@ -310,9 +312,9 @@ bool PlatformSharedBufferMapping::Map() {
   size_t real_offset = offset_ - offset_rounding;
   size_t real_length = length_ + offset_rounding;
 
-  if (!shared_memory_.MapAt(static_cast<off_t>(real_offset), real_length))
-    return false;
-
+  bool result =
+      shared_memory_.MapAt(static_cast<off_t>(real_offset), real_length);
+  DCHECK(result);
   base_ = static_cast<char*>(shared_memory_.memory()) + offset_rounding;
   return true;
 }

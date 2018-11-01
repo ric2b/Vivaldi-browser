@@ -28,6 +28,7 @@
 #include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/media/audio_input_device_manager.h"
+#include "content/browser/renderer_host/media/in_process_video_capture_provider.h"
 #include "content/browser/renderer_host/media/media_capture_devices_impl.h"
 #include "content/browser/renderer_host/media/media_devices_manager.h"
 #include "content/browser/renderer_host/media/media_stream_requester.h"
@@ -45,11 +46,12 @@
 #include "content/public/common/media_stream_request.h"
 #include "crypto/hmac.h"
 #include "media/audio/audio_device_description.h"
-#include "media/audio/audio_manager.h"
+#include "media/audio/audio_system.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_switches.h"
 #include "media/capture/video/video_capture_device_factory.h"
+#include "media/capture/video/video_capture_system_impl.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -392,25 +394,37 @@ void MediaStreamManager::SendMessageToNativeLog(const std::string& message) {
   msm->AddLogMessageOnIOThread(message);
 }
 
-MediaStreamManager::MediaStreamManager(media::AudioManager* audio_manager)
-    : audio_manager_(audio_manager),
+MediaStreamManager::MediaStreamManager(media::AudioSystem* audio_system)
+    : MediaStreamManager(audio_system, nullptr) {}
+
+MediaStreamManager::MediaStreamManager(
+    media::AudioSystem* audio_system,
+    std::unique_ptr<VideoCaptureProvider> video_capture_provider)
+    : audio_system_(audio_system),
 #if defined(OS_WIN)
       video_capture_thread_("VideoCaptureThread"),
 #endif
       use_fake_ui_(base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseFakeUIForMediaStream)) {
-  DCHECK(audio_manager_);
+  DCHECK(audio_system_);
 
-  // Some unit tests create the MSM in the IO thread and assumes the
-  // initialization is done synchronously.
-  if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    InitializeDeviceManagersOnIOThread();
-  } else {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&MediaStreamManager::InitializeDeviceManagersOnIOThread,
-                   base::Unretained(this)));
+  if (!video_capture_provider) {
+    scoped_refptr<base::SingleThreadTaskRunner> device_task_runner =
+        audio_system_->GetTaskRunner();
+#if defined(OS_WIN)
+    // Use an STA Video Capture Thread to try to avoid crashes on enumeration of
+    // buggy third party Direct Show modules, http://crbug.com/428958.
+    video_capture_thread_.init_com_with_mta(false);
+    CHECK(video_capture_thread_.Start());
+    device_task_runner = video_capture_thread_.task_runner();
+#endif
+    video_capture_provider = base::MakeUnique<InProcessVideoCaptureProvider>(
+        base::MakeUnique<media::VideoCaptureSystemImpl>(
+            media::VideoCaptureDeviceFactory::CreateFactory(
+                BrowserThread::GetTaskRunnerForThread(BrowserThread::UI))),
+        std::move(device_task_runner));
   }
+  InitializeMaybeAsync(std::move(video_capture_provider));
 
   base::PowerMonitor* power_monitor = base::PowerMonitor::Get();
   // BrowserMainLoop always creates the PowerMonitor instance before creating
@@ -423,7 +437,6 @@ MediaStreamManager::~MediaStreamManager() {
   DCHECK(!BrowserThread::IsThreadInitialized(BrowserThread::IO));
   DVLOG(1) << "~MediaStreamManager";
   DCHECK(requests_.empty());
-  DCHECK(!device_task_runner_.get());
 
   base::PowerMonitor* power_monitor = base::PowerMonitor::Get();
   // The PowerMonitor instance owned by BrowserMainLoops always outlives the
@@ -626,8 +639,8 @@ int MediaStreamManager::VideoDeviceIdToSessionId(
 
   for (const LabeledDeviceRequest& device_request : requests_) {
     for (const StreamDeviceInfo& info : device_request.second->devices) {
-      if (info.device.id == device_id) {
-        DCHECK_EQ(MEDIA_DEVICE_VIDEO_CAPTURE, info.device.type);
+      if (info.device.id == device_id &&
+          info.device.type == MEDIA_DEVICE_VIDEO_CAPTURE) {
         return info.session_id;
       }
     }
@@ -909,14 +922,11 @@ void MediaStreamManager::ReadOutputParamsAndPostRequestToUI(
   // TODO(guidou): MEDIA_TAB_AUDIO_CAPTURE should not be a special case. See
   // crbug.com/584287.
   if (request->audio_type() == MEDIA_TAB_AUDIO_CAPTURE) {
-    // Read output parameters on the correct thread for native audio OS calls.
-    // Using base::Unretained is safe since |audio_manager_| is deleted after
-    // its task runner, and MediaStreamManager is deleted on the UI thread,
-    // after the IO thread has been stopped.
-    base::PostTaskAndReplyWithResult(
-        audio_manager_->GetTaskRunner(), FROM_HERE,
-        base::Bind(&media::AudioManager::GetDefaultOutputStreamParameters,
-                   base::Unretained(audio_manager_)),
+    // Using base::Unretained is safe: |audio_system_| will post
+    // PostRequestToUI() to IO thread, and MediaStreamManager is deleted on the
+    // UI thread, after the IO thread has been stopped.
+    audio_system_->GetOutputStreamParameters(
+        media::AudioDeviceDescription::kDefaultDeviceId,
         base::Bind(&MediaStreamManager::PostRequestToUI, base::Unretained(this),
                    label, request, enumeration));
   } else {
@@ -1218,8 +1228,20 @@ void MediaStreamManager::FinalizeMediaAccessRequest(
   DeleteRequest(label);
 }
 
-void MediaStreamManager::InitializeDeviceManagersOnIOThread() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+void MediaStreamManager::InitializeMaybeAsync(
+    std::unique_ptr<VideoCaptureProvider> video_capture_provider) {
+  // Some unit tests initialize the MSM in the IO thread and assume the
+  // initialization is done synchronously. Other clients call this from a
+  // different thread and expect initialization to run asynchronously.
+  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&MediaStreamManager::InitializeMaybeAsync,
+                   base::Unretained(this),
+                   base::Passed(&video_capture_provider)));
+    return;
+  }
+
   // Store a pointer to |this| on the IO thread to avoid having to jump to the
   // UI thread to fetch a pointer to the MSM. In particular on Android, it can
   // be problematic to post to a UI thread from arbitrary worker threads since
@@ -1232,16 +1254,13 @@ void MediaStreamManager::InitializeDeviceManagersOnIOThread() {
   tracked_objects::ScopedTracker tracking_profile1(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "457525 MediaStreamManager::InitializeDeviceManagersOnIOThread 1"));
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(!device_task_runner_.get());
-  device_task_runner_ = audio_manager_->GetTaskRunner();
 
   // TODO(dalecurtis): Remove ScopedTracker below once crbug.com/457525 is
   // fixed.
   tracked_objects::ScopedTracker tracking_profile2(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "457525 MediaStreamManager::InitializeDeviceManagersOnIOThread 2"));
-  audio_input_device_manager_ = new AudioInputDeviceManager(audio_manager_);
+  audio_input_device_manager_ = new AudioInputDeviceManager(audio_system_);
   audio_input_device_manager_->RegisterListener(this);
 
   // TODO(dalecurtis): Remove ScopedTracker below once crbug.com/457525 is
@@ -1258,26 +1277,13 @@ void MediaStreamManager::InitializeDeviceManagersOnIOThread() {
   tracked_objects::ScopedTracker tracking_profile4(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "457525 MediaStreamManager::InitializeDeviceManagersOnIOThread 4"));
-#if defined(OS_WIN)
-  // Use an STA Video Capture Thread to try to avoid crashes on enumeration of
-  // buggy third party Direct Show modules, http://crbug.com/428958.
-  video_capture_thread_.init_com_with_mta(false);
-  CHECK(video_capture_thread_.Start());
-  video_capture_manager_ = new VideoCaptureManager(
-      media::VideoCaptureDeviceFactory::CreateFactory(
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
-      video_capture_thread_.task_runner());
-#else
-  video_capture_manager_ = new VideoCaptureManager(
-      media::VideoCaptureDeviceFactory::CreateFactory(
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
-      device_task_runner_);
-#endif
 
+  video_capture_manager_ =
+      new VideoCaptureManager(std::move(video_capture_provider));
   video_capture_manager_->RegisterListener(this);
 
   media_devices_manager_.reset(
-      new MediaDevicesManager(audio_manager_, video_capture_manager_, this));
+      new MediaDevicesManager(audio_system_, video_capture_manager_, this));
 }
 
 void MediaStreamManager::Opened(MediaStreamType stream_type,
@@ -1338,6 +1344,7 @@ void MediaStreamManager::HandleRequestDone(const std::string& label,
   switch (request->request_type) {
     case MEDIA_OPEN_DEVICE_PEPPER_ONLY:
       FinalizeOpenDevice(label, request);
+      OnStreamStarted(label);
       break;
     case MEDIA_GENERATE_STREAM: {
       FinalizeGenerateStream(label, request);
@@ -1346,17 +1353,6 @@ void MediaStreamManager::HandleRequestDone(const std::string& label,
     default:
       NOTREACHED();
       break;
-  }
-
-  if (request->ui_proxy.get()) {
-    request->ui_proxy->OnStarted(
-        base::Bind(&MediaStreamManager::StopMediaStreamFromBrowser,
-                   base::Unretained(this),
-                   label),
-        base::Bind(&MediaStreamManager::OnMediaStreamUIWindowId,
-                   base::Unretained(this),
-                   request->video_type(),
-                   request->devices));
   }
 }
 
@@ -1517,7 +1513,7 @@ void MediaStreamManager::HandleAccessRequestResponse(
       }
     }
     device_info.session_id =
-        GetDeviceManager(device_info.device.type)->Open(device_info);
+        GetDeviceManager(device_info.device.type)->Open(device_info.device);
     TranslateDeviceIdToSourceId(request, &device_info.device);
     request->devices.push_back(device_info);
 
@@ -1566,11 +1562,10 @@ void MediaStreamManager::WillDestroyCurrentMessageLoop() {
   if (media_devices_manager_)
     media_devices_manager_->StopMonitoring();
   if (video_capture_manager_)
-    video_capture_manager_->UnregisterListener();
+    video_capture_manager_->UnregisterListener(this);
   if (audio_input_device_manager_)
-    audio_input_device_manager_->UnregisterListener();
+    audio_input_device_manager_->UnregisterListener(this);
 
-  device_task_runner_ = nullptr;
   audio_input_device_manager_ = nullptr;
   video_capture_manager_ = nullptr;
   media_devices_manager_ = nullptr;
@@ -1751,18 +1746,13 @@ void MediaStreamManager::SetGenerateStreamCallbackForTesting(
   generate_stream_test_callback_ = test_callback;
 }
 
-#if defined(OS_WIN)
-void MediaStreamManager::FlushVideoCaptureThreadForTesting() {
-  video_capture_thread_.FlushForTesting();
-}
-#endif
-
 MediaStreamDevices MediaStreamManager::ConvertToMediaStreamDevices(
     MediaStreamType stream_type,
     const MediaDeviceInfoArray& device_infos) {
   MediaStreamDevices devices;
   for (const auto& info : device_infos)
-    devices.emplace_back(stream_type, info.device_id, info.label);
+    devices.emplace_back(stream_type, info.device_id, info.label,
+                         info.video_facing);
 
   if (stream_type != MEDIA_DEVICE_VIDEO_CAPTURE)
     return devices;
@@ -1772,6 +1762,21 @@ MediaStreamDevices MediaStreamManager::ConvertToMediaStreamDevices(
         video_capture_manager()->GetCameraCalibration(device.id);
   }
   return devices;
+}
+
+void MediaStreamManager::OnStreamStarted(const std::string& label) {
+  DeviceRequest* const request = FindRequest(label);
+  if (!request)
+    return;
+
+  if (request->ui_proxy) {
+    request->ui_proxy->OnStarted(
+        base::Bind(&MediaStreamManager::StopMediaStreamFromBrowser,
+                   base::Unretained(this), label),
+        base::Bind(&MediaStreamManager::OnMediaStreamUIWindowId,
+                   base::Unretained(this), request->video_type(),
+                   request->devices));
+  }
 }
 
 }  // namespace content

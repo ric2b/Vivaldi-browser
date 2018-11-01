@@ -23,6 +23,20 @@ class WebStateDelegate {
  public:
   WebStateDelegate();
 
+  // Called when |source| wants to open a new window. |url| is the URL of
+  // the new window; |opener_url| is the URL of the page which requested a
+  // window to be open; |initiated_by_user| is true if action was caused by the
+  // user. |source| will not open a window if this method returns nil. This
+  // method can not return |source|.
+  virtual WebState* CreateNewWebState(WebState* source,
+                                      const GURL& url,
+                                      const GURL& opener_url,
+                                      bool initiated_by_user);
+
+  // Called when the page calls wants to close self by calling window.close()
+  // JavaScript API.
+  virtual void CloseWebState(WebState* source);
+
   // Returns the WebState the URL is opened in, or nullptr if the URL wasn't
   // opened immediately.
   virtual WebState* OpenURLFromWebState(WebState*,

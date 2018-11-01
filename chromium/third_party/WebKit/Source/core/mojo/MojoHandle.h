@@ -11,11 +11,19 @@
 namespace blink {
 
 class ArrayBufferOrArrayBufferView;
+class MojoCreateSharedBufferResult;
+class MojoDiscardDataOptions;
+class MojoDuplicateBufferHandleOptions;
 class MojoHandleSignals;
+class MojoMapBufferResult;
+class MojoReadDataOptions;
+class MojoReadDataResult;
 class MojoReadMessageFlags;
 class MojoReadMessageResult;
 class MojoWatchCallback;
 class MojoWatcher;
+class MojoWriteDataOptions;
+class MojoWriteDataResult;
 class ScriptState;
 
 class MojoHandle final : public GarbageCollectedFinalized<MojoHandle>,
@@ -23,22 +31,41 @@ class MojoHandle final : public GarbageCollectedFinalized<MojoHandle>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  CORE_EXPORT static MojoHandle* create(mojo::ScopedHandle);
+  CORE_EXPORT static MojoHandle* Create(mojo::ScopedHandle);
 
   void close();
   MojoWatcher* watch(ScriptState*,
                      const MojoHandleSignals&,
                      MojoWatchCallback*);
+
+  // MessagePipe handle.
   MojoResult writeMessage(ArrayBufferOrArrayBufferView&,
                           const HeapVector<Member<MojoHandle>>&);
   void readMessage(const MojoReadMessageFlags&, MojoReadMessageResult&);
+
+  // DataPipe handle.
+  void writeData(const ArrayBufferOrArrayBufferView&,
+                 const MojoWriteDataOptions&,
+                 MojoWriteDataResult&);
+  void queryData(MojoReadDataResult&);
+  void discardData(unsigned num_bytes,
+                   const MojoDiscardDataOptions&,
+                   MojoReadDataResult&);
+  void readData(ArrayBufferOrArrayBufferView&,
+                const MojoReadDataOptions&,
+                MojoReadDataResult&);
+
+  // SharedBuffer handle.
+  void mapBuffer(unsigned offset, unsigned num_bytes, MojoMapBufferResult&);
+  void duplicateBufferHandle(const MojoDuplicateBufferHandleOptions&,
+                             MojoCreateSharedBufferResult&);
 
   DEFINE_INLINE_TRACE() {}
 
  private:
   explicit MojoHandle(mojo::ScopedHandle);
 
-  mojo::ScopedHandle m_handle;
+  mojo::ScopedHandle handle_;
 };
 
 }  // namespace blink

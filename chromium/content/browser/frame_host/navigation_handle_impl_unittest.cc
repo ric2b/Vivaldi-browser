@@ -72,7 +72,9 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
         true,   // is_renderer_initiated
         false,  // is_same_page
         base::TimeTicks::Now(), 0,
-        false);  // started_from_context_menu
+        false,                  // started_from_context_menu
+        CSPDisposition::CHECK,  // should_check_main_world_csp
+        false);                 // is_form_submission
     EXPECT_EQ(REQUEST_CONTEXT_TYPE_UNSPECIFIED,
               test_handle_->request_context_type_);
     contents()->GetMainFrame()->InitializeRenderFrameIfNeeded();
@@ -113,7 +115,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     test_handle_->WillStartRequest(
         "GET", nullptr, Referrer(), false, ui::PAGE_TRANSITION_LINK, false,
         REQUEST_CONTEXT_TYPE_LOCATION,
-        blink::WebMixedContentContextType::Blockable,
+        blink::WebMixedContentContextType::kBlockable,
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }

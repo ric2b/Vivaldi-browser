@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/output/overlay_candidate.h"
 #include "cc/output/overlay_processor.h"
 
@@ -22,6 +22,10 @@ class CC_EXPORT OverlayCandidateValidator {
 
   // Returns true if draw quads can be represented as CALayers (Mac only).
   virtual bool AllowCALayerOverlays() = 0;
+
+  // Returns true if draw quads can be represented as Direct Composition
+  // Visuals (Windows only).
+  virtual bool AllowDCLayerOverlays() = 0;
 
   // A list of possible overlay candidates is presented to this function.
   // The expected result is that those candidates that can be in a separate

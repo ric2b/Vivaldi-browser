@@ -6,10 +6,11 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "ipc/ipc_sync_message_filter.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/WebKit/public/platform/WebGamepadListener.h"
 #include "third_party/WebKit/public/platform/WebPlatformEventListener.h"
 
@@ -21,8 +22,8 @@ GamepadSharedMemoryReader::GamepadSharedMemoryReader(RenderThread* thread)
       ever_interacted_with_(false),
       binding_(this) {
   if (thread) {
-    thread->GetRemoteInterfaces()->GetInterface(
-        mojo::MakeRequest(&gamepad_monitor_));
+    thread->GetConnector()->BindInterface(mojom::kBrowserServiceName,
+                                          mojo::MakeRequest(&gamepad_monitor_));
     gamepad_monitor_->SetObserver(binding_.CreateInterfacePtrAndBind());
   }
 }
@@ -106,7 +107,7 @@ void GamepadSharedMemoryReader::SampleGamepads(blink::WebGamepads& gamepads) {
     // gamepads to prevent fingerprinting. The actual data is not cleared.
     // WebKit will only copy out data into the JS buffers for connected
     // gamepads so this is sufficient.
-    for (unsigned i = 0; i < blink::WebGamepads::itemsLengthCap; i++)
+    for (unsigned i = 0; i < blink::WebGamepads::kItemsLengthCap; i++)
       gamepads.items[i].connected = false;
   }
 }
@@ -122,14 +123,14 @@ void GamepadSharedMemoryReader::GamepadConnected(
   ever_interacted_with_ = true;
 
   if (listener())
-    listener()->didConnectGamepad(index, gamepad);
+    listener()->DidConnectGamepad(index, gamepad);
 }
 
 void GamepadSharedMemoryReader::GamepadDisconnected(
     int index,
     const blink::WebGamepad& gamepad) {
   if (listener())
-    listener()->didDisconnectGamepad(index, gamepad);
+    listener()->DidDisconnectGamepad(index, gamepad);
 }
 
 } // namespace content

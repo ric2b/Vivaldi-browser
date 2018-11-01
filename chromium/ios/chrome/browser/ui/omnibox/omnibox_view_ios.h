@@ -161,7 +161,8 @@ class OmniboxViewIOS : public OmniboxView {
   base::scoped_nsobject<OmniboxTextFieldIOS> field_;
   WebOmniboxEditController* controller_;  // weak, owns us
   std::unique_ptr<OmniboxPopupViewIOS> popup_view_;
-  id<PreloadProvider> preloader_;
+  // |preloader_| should be __weak but is included from non-ARC code.
+  __unsafe_unretained id<PreloadProvider> preloader_;
 
   State state_before_change_;
   base::scoped_nsobject<NSString> marked_text_before_change_;
@@ -173,6 +174,10 @@ class OmniboxViewIOS : public OmniboxView {
   // underlying problem, which is that textDidChange: is called when closing the
   // popup, and then remove this hack.  b/5877366.
   BOOL ignore_popup_updates_;
+
+  // iOS 10.3 fails to apply the strikethrough style unless an extra style is
+  // also applied. See https://crbug.com/699702 for discussion.
+  BOOL use_strikethrough_workaround_;
 
   // Bridges delegate method calls from |field_| to C++ land.
   base::scoped_nsobject<AutocompleteTextFieldDelegate> field_delegate_;

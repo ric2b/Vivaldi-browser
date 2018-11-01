@@ -6,8 +6,6 @@
 
 #include <algorithm>
 
-#include "apps/app_restore_service.h"
-#include "apps/app_restore_service_factory.h"
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -17,6 +15,7 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "chrome/browser/apps/browser_context_keyed_service_factories.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/chrome_app_sorting.h"
@@ -28,7 +27,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/extension_system_factory.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/extensions/navigation_observer.h"
 #include "chrome/browser/extensions/shared_module_service.h"
@@ -51,6 +49,7 @@
 #include "extensions/browser/extension_pref_value_map_factory.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/quota_service.h"
 #include "extensions/browser/runtime_data.h"
@@ -197,7 +196,7 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
   ExtensionErrorReporter::Init(allow_noisy_errors);
 
   content_verifier_ = new ContentVerifier(
-      profile_, new ChromeContentVerifierDelegate(profile_));
+      profile_, base::MakeUnique<ChromeContentVerifierDelegate>(profile_));
 
   service_worker_manager_.reset(new ServiceWorkerManager(profile_));
 
@@ -244,8 +243,10 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
 
   bool skip_session_extensions = false;
 #if defined(OS_CHROMEOS)
-  // Skip loading session extensions if we are not in a user session.
-  skip_session_extensions = !chromeos::LoginState::Get()->IsUserLoggedIn();
+  // Skip loading session extensions if we are not in a user session or if the
+  // profile is the sign-in profile, which doesn't correspond to a user session.
+  skip_session_extensions = !chromeos::LoginState::Get()->IsUserLoggedIn() ||
+                            chromeos::ProfileHelper::IsSigninProfile(profile_);
   if (chrome::IsRunningInForcedAppMode()) {
     extension_service_->component_loader()->
         AddDefaultComponentExtensionsForKioskMode(skip_session_extensions);
@@ -335,9 +336,7 @@ void ExtensionSystemImpl::Shared::Observe(
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
   DCHECK_EQ(chrome::NOTIFICATION_APP_TERMINATING, type);
-  CHECK(apps::AppRestoreServiceFactory::GetForProfile(profile_));
-  apps::AppRestoreServiceFactory::GetForProfile(profile_)
-      ->OnApplicationTerminating();
+  chrome_apps::NotifyApplicationTerminating(profile_);
 }
 
 //

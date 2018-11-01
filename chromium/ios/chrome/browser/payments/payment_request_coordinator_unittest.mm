@@ -5,11 +5,16 @@
 #import "ios/chrome/browser/payments/payment_request_coordinator.h"
 
 #include "base/mac/foundation_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/payments/core/payment_address.h"
+#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#include "ios/chrome/browser/payments/payment_request.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
 #import "ios/chrome/browser/payments/payment_request_view_controller.h"
 #import "ios/chrome/test/scoped_key_window.h"
@@ -25,8 +30,6 @@
 #error "This file requires ARC support."
 #endif
 
-typedef PlatformTest PaymentRequestCoordinatorTest;
-
 @interface PaymentRequestCoordinatorDelegateMock<
     PaymentRequestCoordinatorDelegate>:OCMockComplexTypeHelper
 @end
@@ -38,7 +41,7 @@ typedef void (^mock_coordinator_confirm)(PaymentRequestCoordinator*,
                                          web::PaymentResponse);
 typedef void (^mock_coordinator_select_shipping_address)(
     PaymentRequestCoordinator*,
-    web::PaymentAddress);
+    payments::PaymentAddress);
 typedef void (^mock_coordinator_select_shipping_option)(
     PaymentRequestCoordinator*,
     web::PaymentShippingOption);
@@ -56,7 +59,7 @@ typedef void (^mock_coordinator_select_shipping_option)(
 }
 
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
-         didSelectShippingAddress:(web::PaymentAddress)shippingAddress {
+         didSelectShippingAddress:(payments::PaymentAddress)shippingAddress {
   return static_cast<mock_coordinator_select_shipping_address>(
       [self blockForSelector:_cmd])(coordinator, shippingAddress);
 }
@@ -69,20 +72,42 @@ typedef void (^mock_coordinator_select_shipping_option)(
 
 @end
 
+class PaymentRequestCoordinatorTest : public PlatformTest {
+ protected:
+  PaymentRequestCoordinatorTest()
+      : autofill_profile_(autofill::test::GetFullProfile()),
+        credit_card_(autofill::test::GetCreditCard()) {
+    // Add testing profile and credit card to autofill::TestPersonalDataManager.
+    personal_data_manager_.AddTestingProfile(&autofill_profile_);
+    personal_data_manager_.AddTestingCreditCard(&credit_card_);
+
+    payment_request_ = base::MakeUnique<PaymentRequest>(
+        payment_request_test_util::CreateTestWebPaymentRequest(),
+        &personal_data_manager_);
+
+    TestChromeBrowserState::Builder test_cbs_builder;
+    browser_state_ = test_cbs_builder.Build();
+  }
+
+  autofill::AutofillProfile autofill_profile_;
+  autofill::CreditCard credit_card_;
+  autofill::TestPersonalDataManager personal_data_manager_;
+  std::unique_ptr<PaymentRequest> payment_request_;
+  std::unique_ptr<ios::ChromeBrowserState> browser_state_;
+};
+
 // Tests that invoking start and stop on the coordinator presents and
 // dismisses
 // the PaymentRequestViewController, respectively.
-TEST(PaymentRequestCoordinatorTest, StartAndStop) {
-  std::unique_ptr<PaymentRequest> payment_request =
-      payment_request_test_util::CreateTestPaymentRequest();
-
+TEST_F(PaymentRequestCoordinatorTest, StartAndStop) {
   UIViewController* base_view_controller = [[UIViewController alloc] init];
   ScopedKeyWindow scoped_key_window_;
   [scoped_key_window_.Get() setRootViewController:base_view_controller];
 
   PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
       initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request.get()];
+  [coordinator setPaymentRequest:payment_request_.get()];
+  [coordinator setBrowserState:browser_state_.get()];
 
   [coordinator start];
   // Short delay to allow animation to complete.
@@ -109,17 +134,14 @@ TEST(PaymentRequestCoordinatorTest, StartAndStop) {
 // Tests that calling the card unmasking delegate method which notifies the
 // coordinator about successful unmasking of a credit card invokes the
 // appropriate coordinator delegate method with the expected information.
-TEST(PaymentRequestCoordinatorTest, FullCardRequestDidSucceed) {
-  std::unique_ptr<PaymentRequest> payment_request =
-      payment_request_test_util::CreateTestPaymentRequest();
-
+TEST_F(PaymentRequestCoordinatorTest, FullCardRequestDidSucceed) {
   UIViewController* base_view_controller = [[UIViewController alloc] init];
   ScopedKeyWindow scoped_key_window_;
   [scoped_key_window_.Get() setRootViewController:base_view_controller];
 
   PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
       initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request.get()];
+  [coordinator setPaymentRequest:payment_request_.get()];
 
   id delegate = [OCMockObject
       mockForProtocol:@protocol(PaymentMethodSelectionCoordinatorDelegate)];
@@ -130,13 +152,13 @@ TEST(PaymentRequestCoordinatorTest, FullCardRequestDidSucceed) {
   [delegate_mock onSelector:selector
        callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator,
                               web::PaymentResponse paymentResponse) {
-         EXPECT_EQ(base::ASCIIToUTF16("411111111111"),
+         EXPECT_EQ(base::ASCIIToUTF16("4111111111111111"),
                    paymentResponse.details.card_number);
-         EXPECT_EQ(base::ASCIIToUTF16("John Doe"),
+         EXPECT_EQ(base::ASCIIToUTF16("Test User"),
                    paymentResponse.details.cardholder_name);
-         EXPECT_EQ(base::ASCIIToUTF16("01"),
+         EXPECT_EQ(base::ASCIIToUTF16("11"),
                    paymentResponse.details.expiry_month);
-         EXPECT_EQ(base::ASCIIToUTF16("2999"),
+         EXPECT_EQ(base::ASCIIToUTF16("2022"),
                    paymentResponse.details.expiry_year);
          EXPECT_EQ(base::ASCIIToUTF16("123"),
                    paymentResponse.details.card_security_code);
@@ -145,26 +167,21 @@ TEST(PaymentRequestCoordinatorTest, FullCardRequestDidSucceed) {
   [coordinator setDelegate:delegate_mock];
 
   // Call the card unmasking delegate method.
-  std::unique_ptr<autofill::CreditCard> card =
-      payment_request_test_util::CreateTestCreditCard();
-  [coordinator fullCardRequestDidSucceedWithCard:*card
+  [coordinator fullCardRequestDidSucceedWithCard:credit_card_
                                              CVC:base::ASCIIToUTF16("123")];
 }
 
 // Tests that calling the ShippingAddressSelectionCoordinator delegate method
 // which notifies the coordinator about selection of a shipping address invokes
 // the corresponding coordinator delegate method with the expected information.
-TEST(PaymentRequestCoordinatorTest, DidSelectShippingAddress) {
-  std::unique_ptr<PaymentRequest> payment_request =
-      payment_request_test_util::CreateTestPaymentRequest();
-
+TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingAddress) {
   UIViewController* base_view_controller = [[UIViewController alloc] init];
   ScopedKeyWindow scoped_key_window_;
   [scoped_key_window_.Get() setRootViewController:base_view_controller];
 
   PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
       initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request.get()];
+  [coordinator setPaymentRequest:payment_request_.get()];
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -172,47 +189,42 @@ TEST(PaymentRequestCoordinatorTest, DidSelectShippingAddress) {
   id delegate_mock([[PaymentRequestCoordinatorDelegateMock alloc]
       initWithRepresentedObject:delegate]);
   SEL selector = @selector(paymentRequestCoordinator:didSelectShippingAddress:);
-  [delegate_mock onSelector:selector
-       callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator,
-                              web::PaymentAddress shippingAddress) {
-         EXPECT_EQ(base::ASCIIToUTF16("John Mitchell Doe"),
-                   shippingAddress.recipient);
-         EXPECT_EQ(base::ASCIIToUTF16("Fox"), shippingAddress.organization);
-         ASSERT_EQ(2U, shippingAddress.address_line.size());
-         EXPECT_EQ(base::ASCIIToUTF16("123 Zoo St"),
-                   shippingAddress.address_line[0]);
-         EXPECT_EQ(base::ASCIIToUTF16("unit 5"),
-                   shippingAddress.address_line[1]);
-         EXPECT_EQ(base::ASCIIToUTF16("12345678910"), shippingAddress.phone);
-         EXPECT_EQ(base::ASCIIToUTF16("Hollywood"), shippingAddress.city);
-         EXPECT_EQ(base::ASCIIToUTF16("CA"), shippingAddress.region);
-         EXPECT_EQ(base::ASCIIToUTF16("US"), shippingAddress.country);
-         EXPECT_EQ(base::ASCIIToUTF16("91601"), shippingAddress.postal_code);
-         EXPECT_EQ(coordinator, callerCoordinator);
-       }];
+  [delegate_mock
+                onSelector:selector
+      callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator,
+                             payments::PaymentAddress shippingAddress) {
+        EXPECT_EQ(base::ASCIIToUTF16("John H. Doe"), shippingAddress.recipient);
+        EXPECT_EQ(base::ASCIIToUTF16("Underworld"),
+                  shippingAddress.organization);
+        ASSERT_EQ(2U, shippingAddress.address_line.size());
+        EXPECT_EQ(base::ASCIIToUTF16("666 Erebus St."),
+                  shippingAddress.address_line[0]);
+        EXPECT_EQ(base::ASCIIToUTF16("Apt 8"), shippingAddress.address_line[1]);
+        EXPECT_EQ(base::ASCIIToUTF16("16502111111"), shippingAddress.phone);
+        EXPECT_EQ(base::ASCIIToUTF16("Elysium"), shippingAddress.city);
+        EXPECT_EQ(base::ASCIIToUTF16("CA"), shippingAddress.region);
+        EXPECT_EQ(base::ASCIIToUTF16("US"), shippingAddress.country);
+        EXPECT_EQ(base::ASCIIToUTF16("91111"), shippingAddress.postal_code);
+        EXPECT_EQ(coordinator, callerCoordinator);
+      }];
   [coordinator setDelegate:delegate_mock];
 
   // Call the ShippingAddressSelectionCoordinator delegate method.
-  std::unique_ptr<autofill::AutofillProfile> profile =
-      payment_request_test_util::CreateTestAutofillProfile();
   [coordinator shippingAddressSelectionCoordinator:nil
-                          didSelectShippingAddress:profile.get()];
+                          didSelectShippingAddress:&autofill_profile_];
 }
 
 // Tests that calling the ShippingOptionSelectionCoordinator delegate method
 // which notifies the coordinator about selection of a shipping option invokes
 // the corresponding coordinator delegate method with the expected information.
-TEST(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
-  std::unique_ptr<PaymentRequest> payment_request =
-      payment_request_test_util::CreateTestPaymentRequest();
-
+TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
   UIViewController* base_view_controller = [[UIViewController alloc] init];
   ScopedKeyWindow scoped_key_window_;
   [scoped_key_window_.Get() setRootViewController:base_view_controller];
 
   PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
       initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request.get()];
+  [coordinator setPaymentRequest:payment_request_.get()];
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -244,17 +256,14 @@ TEST(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
 // Tests that calling the view controller delegate method which notifies the
 // coordinator about cancellation of the PaymentRequest invokes the
 // corresponding coordinator delegate method.
-TEST(PaymentRequestCoordinatorTest, DidCancel) {
-  std::unique_ptr<PaymentRequest> payment_request =
-      payment_request_test_util::CreateTestPaymentRequest();
-
+TEST_F(PaymentRequestCoordinatorTest, DidCancel) {
   UIViewController* base_view_controller = [[UIViewController alloc] init];
   ScopedKeyWindow scoped_key_window_;
   [scoped_key_window_.Get() setRootViewController:base_view_controller];
 
   PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
       initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request.get()];
+  [coordinator setPaymentRequest:payment_request_.get()];
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -267,6 +276,7 @@ TEST(PaymentRequestCoordinatorTest, DidCancel) {
          EXPECT_EQ(coordinator, callerCoordinator);
        }];
   [coordinator setDelegate:delegate_mock];
+  [coordinator setBrowserState:browser_state_.get()];
 
   [coordinator start];
   // Short delay to allow animation to complete.

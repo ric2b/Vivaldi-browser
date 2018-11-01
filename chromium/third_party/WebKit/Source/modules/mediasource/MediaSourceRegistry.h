@@ -33,9 +33,9 @@
 
 #include "core/html/URLRegistry.h"
 #include "platform/heap/Handle.h"
-#include "wtf/HashMap.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/text/StringHash.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/text/StringHash.h"
 
 namespace blink {
 
@@ -45,16 +45,16 @@ class MediaSource;
 class MediaSourceRegistry final : public URLRegistry {
  public:
   // Returns a single instance of MediaSourceRegistry.
-  static MediaSourceRegistry& registry();
+  static MediaSourceRegistry& Registry();
 
   // Registers a blob URL referring to the specified media source.
-  void registerURL(SecurityOrigin*, const KURL&, URLRegistrable*) override;
-  void unregisterURL(const KURL&) override;
-  URLRegistrable* lookup(const String&) override;
+  void RegisterURL(SecurityOrigin*, const KURL&, URLRegistrable*) override;
+  void UnregisterURL(const KURL&) override;
+  URLRegistrable* Lookup(const String&) override;
 
  private:
   MediaSourceRegistry();
-  PersistentHeapHashMap<String, Member<MediaSource>> m_mediaSources;
+  PersistentHeapHashMap<String, Member<MediaSource>> media_sources_;
 };
 
 }  // namespace blink

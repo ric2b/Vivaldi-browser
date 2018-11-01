@@ -6,9 +6,9 @@
 #define CC_OUTPUT_SOFTWARE_RENDERER_H_
 
 #include "base/macros.h"
-#include "cc/base/cc_export.h"
+#include "cc/cc_export.h"
 #include "cc/output/direct_renderer.h"
-#include "ui/events/latency_info.h"
+#include "ui/latency/latency_info.h"
 
 namespace cc {
 class DebugBorderDrawQuad;
@@ -51,6 +51,7 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   void EnsureScissorTestDisabled() override;
   void CopyCurrentRenderPassToBitmap(
       std::unique_ptr<CopyOutputRequest> request) override;
+  void SetEnableDCLayers(bool enable) override;
   void DidChangeVisibility() override;
 
  private:

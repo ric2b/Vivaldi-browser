@@ -11,6 +11,7 @@
 
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -244,9 +245,9 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyDisabled) {
 
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
-  prefs->SetUserPref(
-      prefs::kCloudPrintEmail,
-      new base::StringValue(MockServiceProcessControl::EnabledUserId()));
+  prefs->SetUserPref(prefs::kCloudPrintEmail,
+                     base::MakeUnique<base::Value>(
+                         MockServiceProcessControl::EnabledUserId()));
 
   service.Initialize();
 
@@ -262,7 +263,7 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyEnabled) {
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
-                     new base::StringValue(std::string()));
+                     base::MakeUnique<base::Value>(std::string()));
 
   service.Initialize();
   service.RefreshStatusFromService();
@@ -280,8 +281,9 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithPolicySetProxyDisabled) {
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
-                     new base::StringValue(std::string()));
-  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled, new base::Value(false));
+                     base::MakeUnique<base::Value>(std::string()));
+  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
+                        base::MakeUnique<base::Value>(false));
 
   service.Initialize();
 
@@ -298,8 +300,9 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithPolicySetProxyEnabled) {
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
-                     new base::StringValue(std::string()));
-  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled, new base::Value(false));
+                     base::MakeUnique<base::Value>(std::string()));
+  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
+                        base::MakeUnique<base::Value>(false));
 
   service.Initialize();
 
@@ -314,15 +317,16 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyDisabledThenSetPolicy) {
 
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
-  prefs->SetUserPref(
-      prefs::kCloudPrintEmail,
-      new base::StringValue(MockServiceProcessControl::EnabledUserId()));
+  prefs->SetUserPref(prefs::kCloudPrintEmail,
+                     base::MakeUnique<base::Value>(
+                         MockServiceProcessControl::EnabledUserId()));
 
   service.Initialize();
 
   EXPECT_EQ(std::string(), prefs->GetString(prefs::kCloudPrintEmail));
 
-  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled, new base::Value(false));
+  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
+                        base::MakeUnique<base::Value>(false));
 
   EXPECT_EQ(std::string(), prefs->GetString(prefs::kCloudPrintEmail));
 }
@@ -336,7 +340,7 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyEnabledThenSetPolicy) {
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
-                     new base::StringValue(std::string()));
+                     base::MakeUnique<base::Value>(std::string()));
 
   service.Initialize();
   service.RefreshStatusFromService();
@@ -345,7 +349,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyEnabledThenSetPolicy) {
             prefs->GetString(prefs::kCloudPrintEmail));
 
   service.GetMockServiceProcessControl()->SetWillBeDisabledExpectations();
-  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled, new base::Value(false));
+  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
+                        base::MakeUnique<base::Value>(false));
 
   EXPECT_EQ(std::string(), prefs->GetString(prefs::kCloudPrintEmail));
 }
@@ -360,8 +365,9 @@ TEST_F(CloudPrintProxyPolicyTest,
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
-                     new base::StringValue(std::string()));
-  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled, new base::Value(false));
+                     base::MakeUnique<base::Value>(std::string()));
+  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
+                        base::MakeUnique<base::Value>(false));
 
   service.Initialize();
 
@@ -381,8 +387,9 @@ TEST_F(CloudPrintProxyPolicyTest,
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
-                     new base::StringValue(std::string()));
-  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled, new base::Value(false));
+                     base::MakeUnique<base::Value>(std::string()));
+  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
+                        base::MakeUnique<base::Value>(false));
 
   service.Initialize();
 
@@ -399,9 +406,9 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyDisabledThenEnable) {
 
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
-  prefs->SetUserPref(
-      prefs::kCloudPrintEmail,
-      new base::StringValue(MockServiceProcessControl::EnabledUserId()));
+  prefs->SetUserPref(prefs::kCloudPrintEmail,
+                     base::MakeUnique<base::Value>(
+                         MockServiceProcessControl::EnabledUserId()));
 
   service.Initialize();
   EXPECT_EQ(std::string(), prefs->GetString(prefs::kCloudPrintEmail));
@@ -424,8 +431,9 @@ TEST_F(CloudPrintProxyPolicyTest,
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
-                     new base::StringValue(std::string()));
-  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled, new base::Value(false));
+                     base::MakeUnique<base::Value>(std::string()));
+  prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
+                        base::MakeUnique<base::Value>(false));
 
   service.Initialize();
 

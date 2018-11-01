@@ -51,7 +51,7 @@ def run_single_test(
     try:
         return runner.run()
     except DeviceFailure as error:
-        _log.error("device failed: %s", error)
+        _log.error('device failed: %s', error)
         return TestResult(test_input.test_name, device_failed=True)
 
 
@@ -70,6 +70,7 @@ class SingleTestRunner(object):
         self._worker_name = worker_name
         self._test_name = test_input.test_name
         self._should_run_pixel_test = test_input.should_run_pixel_test
+        self._should_run_pixel_test_first = test_input.should_run_pixel_test_first
         self._reference_files = test_input.reference_files
         self._should_add_missing_baselines = test_input.should_add_missing_baselines
         self._stop_when_done = stop_when_done
@@ -228,7 +229,7 @@ class SingleTestRunner(object):
             raise AssertionError('unrecognized baseline location: %s' % location)
 
         fs.maybe_make_directory(output_dir)
-        output_basename = fs.basename(fs.splitext(self._test_name)[0] + "-expected" + extension)
+        output_basename = fs.basename(fs.splitext(self._test_name)[0] + '-expected' + extension)
         output_path = fs.join(output_dir, output_basename)
         _log.info('Writing new expected result "%s"', port.relative_test_filename(output_path))
         port.update_baseline(output_path, data)
@@ -257,17 +258,17 @@ class SingleTestRunner(object):
                                                        driver_output.crashed_pid,
                                                        self._port.output_contains_sanitizer_messages(driver_output.crash_log)))
             if driver_output.error:
-                _log.debug("%s %s crashed, (stderr lines):", self._worker_name, testname)
+                _log.debug('%s %s crashed, (stderr lines):', self._worker_name, testname)
             else:
-                _log.debug("%s %s crashed, (no stderr)", self._worker_name, testname)
+                _log.debug('%s %s crashed, (no stderr)', self._worker_name, testname)
         elif driver_output.leak:
             failures.append(test_failures.FailureLeak(bool(reference_filename),
                                                       driver_output.leak_log))
-            _log.debug("%s %s leaked", self._worker_name, testname)
+            _log.debug('%s %s leaked', self._worker_name, testname)
         elif driver_output.error:
-            _log.debug("%s %s output stderr lines:", self._worker_name, testname)
+            _log.debug('%s %s output stderr lines:', self._worker_name, testname)
         for line in driver_output.error.splitlines():
-            _log.debug("  %s", line)
+            _log.debug('  %s', line)
         return failures
 
     def _compare_output(self, expected_driver_output, driver_output):
@@ -283,11 +284,27 @@ class SingleTestRunner(object):
         is_testharness_test, testharness_failures = self._compare_testharness_test(driver_output, expected_driver_output)
         if is_testharness_test:
             failures.extend(testharness_failures)
+
+        compare_functions = []
+        compare_image_fn = (self._compare_image, (expected_driver_output, driver_output))
+        compare_txt_fn = (self._compare_text, (expected_driver_output.text, driver_output.text))
+        compare_audio_fn = (self._compare_audio, (expected_driver_output.audio, driver_output.audio))
+
+        if self._should_run_pixel_test_first:
+            if driver_output.image_hash and self._should_run_pixel_test:
+                compare_functions.append(compare_image_fn)
+            elif not is_testharness_test:
+                compare_functions.append(compare_txt_fn)
         else:
-            failures.extend(self._compare_text(expected_driver_output.text, driver_output.text))
-        failures.extend(self._compare_audio(expected_driver_output.audio, driver_output.audio))
-        if self._should_run_pixel_test:
-            failures.extend(self._compare_image(expected_driver_output, driver_output))
+            if not is_testharness_test:
+                compare_functions.append(compare_txt_fn)
+            if self._should_run_pixel_test:
+                compare_functions.append(compare_image_fn)
+        compare_functions.append(compare_audio_fn)
+
+        for func, args in compare_functions:
+            failures.extend(func(*args))
+
         has_repaint_overlay = (repaint_overlay.result_contains_repaint_rects(expected_driver_output.text) or
                                repaint_overlay.result_contains_repaint_rects(driver_output.text))
         return TestResult(self._test_name, failures, driver_output.test_time, driver_output.has_stderr(),
@@ -309,7 +326,7 @@ class SingleTestRunner(object):
         return True, []
 
     def _is_render_tree(self, text):
-        return text and "layer at (0,0) size 800x600" in text
+        return text and 'layer at (0,0) size 800x600' in text
 
     def _compare_text(self, expected_text, actual_text):
         failures = []
@@ -338,7 +355,7 @@ class SingleTestRunner(object):
         # changed to "\r\n" by our system (Python/Cygwin), resulting in
         # "\r\r\n", when, in fact, we wanted to compare the text output with
         # the normalized text expectation files.
-        return output.replace("\r\r\n", "\r\n").replace("\r\n", "\n")
+        return output.replace('\r\r\n', '\r\n').replace('\r\n', '\n')
 
     # FIXME: This function also creates the image diff. Maybe that work should
     # be handled elsewhere?
@@ -441,8 +458,10 @@ class SingleTestRunner(object):
         if failures:
             return TestResult(self._test_name, failures, 0, has_stderr, pid=actual_driver_output.pid)
 
-        if not reference_driver_output.image_hash and not actual_driver_output.image_hash:
-            failures.append(test_failures.FailureReftestNoImagesGenerated(reference_filename))
+        if not actual_driver_output.image_hash:
+            failures.append(test_failures.FailureReftestNoImageGenerated(reference_filename))
+        elif not reference_driver_output.image_hash:
+            failures.append(test_failures.FailureReftestNoReferenceImageGenerated(reference_filename))
         elif mismatch:
             if reference_driver_output.image_hash == actual_driver_output.image_hash:
                 failures.append(test_failures.FailureReftestMismatchDidNotOccur(reference_filename))

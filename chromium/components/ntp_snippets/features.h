@@ -24,14 +24,7 @@ extern const base::Feature kArticleSuggestionsFeature;
 extern const base::Feature kBookmarkSuggestionsFeature;
 extern const base::Feature kRecentOfflineTabSuggestionsFeature;
 extern const base::Feature kPhysicalWebPageSuggestionsFeature;
-extern const base::Feature kForeignSessionsSuggestionsFeature;;
-
-// Feature to allow the 'save to offline' option to appear in the snippets
-// context menu.
-extern const base::Feature kSaveToOfflineFeature;
-
-// Feature to allow offline badges to appear on snippets.
-extern const base::Feature kOfflineBadgeFeature;
+extern const base::Feature kForeignSessionsSuggestionsFeature;
 
 // Feature to allow UI as specified here: https://crbug.com/660837.
 extern const base::Feature kIncreasedVisibility;
@@ -41,6 +34,9 @@ extern const base::Feature kPreferAmpUrlsFeature;
 
 // Feature to choose a category ranker.
 extern const base::Feature kCategoryRanker;
+
+// Feature to allow the new Google favicon server for fetching publisher icons.
+extern const base::Feature kPublisherFaviconsFromNewServerFeature;
 
 // Parameter and its values for the kCategoryRanker feature flag.
 extern const char kCategoryRankerParameter[];

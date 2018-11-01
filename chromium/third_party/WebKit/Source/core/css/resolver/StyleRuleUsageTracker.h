@@ -13,14 +13,18 @@ class StyleRule;
 
 class StyleRuleUsageTracker : public GarbageCollected<StyleRuleUsageTracker> {
  public:
-  void track(StyleRule* rule) { m_ruleList.insert(rule); }
+  using RuleListByStyleSheet = HeapHashMap<Member<const CSSStyleSheet>,
+                                           HeapVector<Member<const StyleRule>>>;
 
-  bool contains(StyleRule*) const;
+  void Track(const CSSStyleSheet*, const StyleRule*);
+  RuleListByStyleSheet TakeDelta();
 
   DECLARE_TRACE();
 
  private:
-  HeapHashSet<Member<StyleRule>> m_ruleList;
+  HeapHashSet<std::pair<Member<const CSSStyleSheet>, Member<const StyleRule>>>
+      used_rules_;
+  RuleListByStyleSheet used_rules_delta_;
 };
 
 }  // namespace blink
